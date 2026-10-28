@@ -128,6 +128,12 @@ async fn main() {
         about: about_page,
     });
 
+    // Disabled unless an explicit private rehearsal configuration is supplied.
+    // This router can qualify external identity only; it never grants app access.
+    let qualification = genui::auth_qualification::from_environment().unwrap_or_else(|reason| {
+        eprintln!("auth qualification configuration refused: {reason}");
+        std::process::exit(1);
+    });
     let app = Router::new()
         .route("/", get(home))
         .route("/health/live", get(|| async { StatusCode::OK }))
@@ -145,7 +151,8 @@ async fn main() {
         .route("/favicon.ico", get(favicon))
         .route("/sw.js", get(sw::serve_sw::<Assets>))
         .route("/_assets/{*filename}", get(assets::serve_asset::<Assets>))
-        .with_state(state);
+        .with_state(state)
+        .merge(qualification);
 
     // Port zero asks the OS for an available port; useful for isolated tests.
     let port = match std::env::var("FORMA_PORT") {

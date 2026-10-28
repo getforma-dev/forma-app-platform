@@ -1,0 +1,48 @@
+{
+  "reviewer": "GenUI managed_restore_ops_review; independent of operation preparation",
+  "reviewed_at_utc": "2026-10-28T23:46:32.715185+00:00",
+  "verdict": "no blocking findings in the exact prepared bounded restore operation",
+  "scope": "Preparation review only; no AWS calls by reviewer and no restore acceptance inferred.",
+  "input_sha256": {
+    "restore-snapshot-request.json": "03f2765d589f22a9af2ade058a7090f57d623879b19c1619bb9987620d77a5a2",
+    "restore-instance-request.json": "c0c756e2d5cd3c462b01db4926f62093d26ab1d51423b13abd5fe79f86051cd7",
+    "restore-operation-intent.json": "fe276338648540a444716bb4b0639da12c9abe75d2337ff491f7aed5e36c8c4e",
+    "restore-source-database.json": "48a56dea7786c749e0550e7d48701f864ee6886c69603e091b50fc715ff2932f",
+    "restore-source-current.json": "d47cccff058832b7d9471383e55a3498c9736cf01b0c6ef0e104f8ef2da2e4fb",
+    "restore-source-report.json": "e9b445c746b0e8e612f82abee8f50628061b260a874344fc487671bf1a99fe82",
+    "restore-manifest-register-request.json": "bef0753bc5be3bcc6ab244704a3f4ea70f58d2646dcbf12858626fcaef445fa2",
+    "restore-manifest-register-receipt.json": "50578f229df3923d6d0679c5c2c890fb653b6c4ceb62942bd551eff4509c60c6",
+    "restore-source-request.json": "567253d1a6cfb32df83a693e2b18a8efc314e295b065f80bc9a0229dffde044e"
+  },
+  "checks": [
+    "Exact source DB binding",
+    "Distinct fixed snapshot and target identities",
+    "Available encrypted source on exact engine/storage",
+    "Matching private subnet group and security group only",
+    "Matching parameter group and CA",
+    "Bounded restored instance shape",
+    "Password is not read or reset",
+    "Task execution and migration roles preserved",
+    "Exact reviewed helper and immutable image",
+    "Task identity/read-only root/size/architecture preserved",
+    "Exactly existing password secret injection",
+    "Source endpoint binding and actual task completion",
+    "Actual source manifest passes and hash recomputes",
+    "Explicit two/four-hour budget bounds and preserved expiry",
+    "No reseeding or IAM expansion before comparison"
+  ],
+  "source_manifest_sha256": "0e63225223c8efb8f648077951b6f1cb83330916808226650ed21bc898647555",
+  "required_execution_evidence": [
+    "Before restore, the exact snapshot must be available and identify the expected source DB/engine/version/encryption/KMS key.",
+    "Before the restored manifest, verify the actual restored instance is available and matches private subnet/security/parameter group,16.13,20GiB,gp3,encrypted key,CA,small single-AZ,IAM and explicit disable flags.",
+    "Run exact same reviewed task definition with only the actual restored PGHOST override, preserving password execution-secret injection; no migration or seeding first.",
+    "Bind actual restored endpoint and new DB resource ID to stopped exit-zero task and compare complete validated manifests plus their digests.",
+    "Observe owned tasks stopped, delete only exact temporary restored DB/snapshot and its automated backups, verify absence, then deregister the temporary definition; preserve source DB/shared network/parameter group/key/secret and original expiry.",
+    "Unknown outcomes require exact-ID reconciliation; cleanup deadline/escalation does not automatically enforce itself."
+  ],
+  "limitations": [
+    "The source instance has AutoMinorVersionUpgrade=true; the prepared trial restore explicitly disables it. This review does not claim the source flag is disabled.",
+    "No restored endpoint/resource exists at review time. Encryption/version inherited from the snapshot require actual post-restore confirmation.",
+    "This is initial role/schema foundation recovery, not later application/audit recovery or APP-008 RLS acceptance."
+  ]
+}

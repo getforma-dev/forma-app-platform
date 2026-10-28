@@ -1,0 +1,238 @@
+{
+  "recorded_at": "2026-10-28T23:49:27.392233+00:00",
+  "scope": "local APP-006 callback and canonical verifier checks; no hosted acceptance",
+  "source_sha256": {
+    ".dockerignore": "5665f3bfea45b181d6c55817f5265873efccfe6477e7bd47b88c619f9845d819",
+    "app/Cargo.toml": "1049e0f7a93284183456be8d2d45a93571f8896df945d3101170e70d89ca78be",
+    "app/Cargo.lock": "cbcffaa97848413578aceb5d52fe4d396ff5c821d9f978580d0eb5c027552ea6",
+    "app/Dockerfile": "d507566be86285de7f9f2e2c84ab9022a550666a944fd5c1f0bfcc7e1feb4225",
+    "app/src/lib.rs": "70c08fdb2cb4e15502667305046c6c8649b208c8a34fd7339686ca9ce82bb278",
+    "app/src/main.rs": "ee4ab55eb64570e6649dea3a50fb81d7a4e2906b5595136cf9756630bdbeddf3",
+    "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+    "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+    "app/README.md": "4fdb97e50111a6a196b42b350d40527e34a159f3aba4e36a794f69b5ffb634f0",
+    "spikes/APP-006/Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+    "spikes/APP-006/src/lib.rs": "484ef0aa0a3b78cf01212435315f756245be50b59a9c46f4932573a5cc751542"
+  },
+  "source_is_uncommitted_candidate": true,
+  "callback_identity_fixture": "cfg(test) FixedIdentity; not integrated canonical cryptography",
+  "canonical_verifier_checks": "separate unchanged crate with real Ed25519 and loopback transport",
+  "commands": [
+    {
+      "cwd": "app",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "cwd": "app",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "clippy",
+        "--locked",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s\n"
+    },
+    {
+      "cwd": "app",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "test",
+        "--locked",
+        "--",
+        "--test-threads=2"
+      ],
+      "exit_code": 0,
+      "stdout": "\nrunning 14 tests\ntest auth_qualification::tests::concurrent_and_sequential_replay_exchange_exactly_once ... ok\ntest auth_qualification::tests::canceled_exchange_or_verification_keeps_cleanup_unresolved ... ok\ntest auth_qualification::tests::existing_login_uses_server_bound_pkce_and_expected_subject ... ok\ntest auth_qualification::tests::expiry_restart_and_attempt_limits_fail_closed ... ok\ntest auth_qualification::tests::operator_and_caller_selected_inputs_never_start_provider_work ... ok\ntest auth_qualification::tests::production_configuration_cannot_select_test_transport_or_identity ... ok\ntest auth_qualification::tests::foreign_verified_tenant_is_refused_and_logout_is_requested ... ok\ntest auth_qualification::tests::state_cookie_and_parser_refusals_never_exchange ... ok\ntest auth_qualification::tests::real_router_and_backend_par_exchange_create_no_app_authority ... ok\ntest auth_qualification::tests::token_shape_binding_redirect_body_and_cleanup_refusals ... ok\ntest config::tests::file_reader_rejects_fifo_symlink_and_oversized_input ... ok\ntest config::tests::refuse_expiry_shared_credentials_and_role_interchange_without_disclosure ... ok\ntest readiness::tests::late_or_other_generation_probe_cannot_extend_credentials ... ok\ntest auth_qualification::tests::token_and_logout_timeouts_are_bounded_and_never_retry ... ok\n\ntest result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.04s\n\n\nrunning 1 test\ntest tests::required_native_routes_refuse_browser_and_missing_outputs ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+      "stderr": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s\n     Running unittests src/lib.rs (target/debug/deps/genui-a645589cdd9bf49a)\n     Running unittests src/main.rs (target/debug/deps/forma_app_platform-06686398b186f440)\n   Doc-tests genui\n"
+    },
+    {
+      "cwd": "app",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "build",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s\n"
+    },
+    {
+      "cwd": "spikes/APP-006",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "test",
+        "--locked",
+        "--",
+        "--test-threads=2"
+      ],
+      "exit_code": 0,
+      "stdout": "\nrunning 23 tests\ntest tests::access_only_profile_prepublication_overlap_and_observed_retirement ... ok\ntest tests::acquired_key_lease_is_refused_after_authoritative_refresh ... ok\ntest tests::access_only_set_has_bounded_unique_validated_keys_and_atomic_replacement ... ok\ntest tests::actual_ed25519_identity_contract_and_fresh_key_cache ... ok\ntest tests::cache_headers_cannot_create_unbounded_or_stale_lifetimes ... ok\ntest tests::cancellation_reserves_budget_and_leaves_no_authority ... ok\ntest tests::actual_http_redirect_status_invalid_and_streamed_oversize_are_refused ... ok\ntest tests::concurrent_unknown_keys_share_one_attempt_budget_and_recover ... ok\ntest tests::expiry_is_rechecked_after_fetch_before_identity_release ... ok\ntest tests::invalid_signature_and_claims_never_become_identity ... ok\ntest tests::jwks_closed_shapes_duplicate_fields_and_mixed_key_purpose_refuse ... ok\ntest tests::key_expiry_is_rechecked_after_signature_before_identity_release ... ok\ntest tests::deadline_covers_concurrent_cache_lock_wait_without_launching_fetch ... ok\ntest tests::production_configuration_is_explicit_https_fixed_endpoint_only ... ok\ntest tests::public_source_profile_vector_has_independent_key_identity ... ok\ntest tests::roles_email_and_unknown_subject_do_not_create_membership ... ok\ntest tests::ssf_signature_with_access_type_and_claims_cannot_select_access_key ... ok\ntest tests::stale_cache_is_never_grace_authority_and_freshness_starts_at_request ... ok\ntest tests::unknown_key_cooldown_rotation_and_authoritative_replacement ... ok\ntest tests::unknown_key_failure_cannot_poison_extend_or_keep_cached_signin_authority ... ok\ntest tests::unknown_key_success_never_installs_untrusted_request_key ... ok\ntest tests::wrong_algorithm_type_external_keys_and_ambiguous_json_refuse_before_fetch ... ok\ntest tests::partial_trickle_cannot_reset_total_network_deadline ... ok\n\ntest result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.26s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+      "stderr": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running unittests src/lib.rs (target/debug/deps/genui_auth_verifier-59c478626679fd82)\n   Doc-tests genui_auth_verifier\n"
+    },
+    {
+      "cwd": ".",
+      "command": [
+        "python3",
+        "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/evidence/APP-006/hosted-callback/http_probe.py",
+        "--binary",
+        "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app/target/debug/forma-app-platform"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"enabled_process_restarted\": true, \"passed\": true, \"private_files_removed\": true, \"runs\": [{\"callback_status\": 404, \"enabled\": false, \"managed_readiness_without_probe\": 503, \"protected_routes\": 404, \"provider_requests\": 0}, {\"callback_status\": 303, \"enabled\": true, \"managed_readiness_without_probe\": 503, \"protected_routes\": 404, \"provider_requests\": 0}, {\"callback_status\": 303, \"enabled\": true, \"managed_readiness_without_probe\": 503, \"protected_routes\": 404, \"provider_requests\": 0}], \"scope\": \"local native HTTP routing, default-off and privacy; no hosted identity or mailbox evidence\", \"synthetic_capabilities_in_native_output\": false}\n",
+      "stderr": ""
+    },
+    {
+      "cwd": ".",
+      "command": [
+        "docker",
+        "build",
+        "--tag",
+        "genui-app006-callback:local-20261028",
+        "--file",
+        "app/Dockerfile",
+        "."
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "#0 building with \"desktop-linux\" instance using docker driver\n\n#1 [internal] load build definition from Dockerfile\n#1 transferring dockerfile: 1.93kB done\n#1 DONE 0.0s\n\n#2 [internal] load metadata for docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b\n#2 DONE 0.0s\n\n#3 [internal] load metadata for docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d\n#3 DONE 0.1s\n\n#4 [internal] load metadata for docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31\n#4 DONE 0.1s\n\n#5 [internal] load .dockerignore\n#5 transferring context: 1.25kB done\n#5 DONE 0.0s\n\n#6 [internal] load build context\n#6 DONE 0.0s\n\n#7 [stage-2 1/9] FROM docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d\n#7 resolve docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d 0.0s done\n#7 DONE 0.0s\n\n#8 [browser 1/8] FROM docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b\n#8 resolve docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b 0.0s done\n#8 DONE 0.0s\n\n#9 [native 1/8] FROM docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31\n#9 resolve docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31 0.0s done\n#9 DONE 0.0s\n\n#6 [internal] load build context\n#6 transferring context: 1.43kB done\n#6 DONE 0.0s\n\n#10 [browser 7/8] COPY app/admin/src ./src\n#10 CACHED\n\n#11 [browser 4/8] COPY app/admin/package.json app/admin/package-lock.json ./\n#11 CACHED\n\n#12 [browser 2/8] WORKDIR /source/admin\n#12 CACHED\n\n#13 [browser 3/8] RUN npm install --global npm@11.6.2\n#13 CACHED\n\n#14 [browser 6/8] COPY app/admin/build.ts app/admin/tsconfig.json ./\n#14 CACHED\n\n#15 [browser 5/8] RUN npm ci\n#15 CACHED\n\n#16 [browser 8/8] RUN npm run typecheck && npm run build\n#16 CACHED\n\n#17 [native 4/8] COPY app/src ./src\n#17 CACHED\n\n#18 [native 2/8] WORKDIR /source/app\n#18 CACHED\n\n#19 [native 3/8] COPY app/Cargo.toml app/Cargo.lock ./\n#19 CACHED\n\n#20 [native 5/8] COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml\n#20 CACHED\n\n#21 [native 6/8] COPY spikes/APP-006/src /source/spikes/APP-006/src\n#21 DONE 0.0s\n\n#22 [native 7/8] COPY --from=browser /source/admin/dist ./admin/dist\n#22 DONE 0.0s\n\n#23 [native 8/8] RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=genui-cargo-target-arm64,target=/source/app/target cargo build --release --locked && cp /source/app/target/release/forma-app-platform /source/genui\n#23 0.552     Finished `release` profile [optimized] target(s) in 0.30s\n#23 DONE 0.6s\n\n#24 [stage-2 3/9] COPY app/runtime/requirements.lock ./requirements.lock\n#24 CACHED\n\n#25 [stage-2 4/9] RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r requirements.lock\n#25 CACHED\n\n#26 [stage-2 2/9] WORKDIR /app\n#26 CACHED\n\n#27 [stage-2 8/9] COPY app/certs/rds-global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem\n#27 CACHED\n\n#28 [stage-2 7/9] COPY app/migrations /app/migrations\n#28 CACHED\n\n#29 [stage-2 5/9] COPY --from=native /source/genui /app/genui\n#29 CACHED\n\n#30 [stage-2 6/9] COPY app/runtime/runtime.py /app/runtime.py\n#30 CACHED\n\n#31 [stage-2 9/9] RUN mkdir -p /run/genui && chown 65532:65532 /run/genui && chmod 0700 /run/genui\n#31 CACHED\n\n#32 exporting to image\n#32 exporting layers done\n#32 exporting manifest sha256:ed9652e1a2df304110b52b52284af4fa2b9a49bda7d7835c4a81083b1c441e0d done\n#32 exporting config sha256:5dbf7525ace7e319bc97d0fc5505d5749d1b5f9a2c7d501ef7eea93320c98f1d done\n#32 exporting attestation manifest sha256:1c8962250cbd97153e964eed031ae6a12d6f377fd73b675404b00a3a0083bd21 done\n#32 exporting manifest list sha256:94aa02172556744b78a1d85233e7eb57f97f47cc39c55d0ceb5fd3062e862ae3 done\n#32 naming to docker.io/library/genui-app006-callback:local-20261028 done\n#32 unpacking to docker.io/library/genui-app006-callback:local-20261028 done\n#32 DONE 0.0s\n"
+    },
+    {
+      "cwd": ".",
+      "command": [
+        "docker",
+        "image",
+        "inspect",
+        "genui-app006-callback:local-20261028"
+      ],
+      "exit_code": 0,
+      "stdout": "[\n    {\n        \"Id\": \"sha256:94aa02172556744b78a1d85233e7eb57f97f47cc39c55d0ceb5fd3062e862ae3\",\n        \"RepoTags\": [\n            \"genui-app006-callback:local-20261028\"\n        ],\n        \"RepoDigests\": [\n            \"genui-app006-callback@sha256:94aa02172556744b78a1d85233e7eb57f97f47cc39c55d0ceb5fd3062e862ae3\"\n        ],\n        \"Comment\": \"buildkit.dockerfile.v0\",\n        \"Created\": \"2026-10-28T23:43:18.568319129Z\",\n        \"Config\": {\n            \"User\": \"65532:65532\",\n            \"ExposedPorts\": {\n                \"3000/tcp\": {}\n            },\n            \"Env\": [\n                \"PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n                \"LANG=C.UTF-8\",\n                \"GPG_KEY=A035C8C19219BA821ECEA86B64E628F8D684696D\",\n                \"PYTHON_VERSION=3.11.14\",\n                \"PYTHON_SHA256=8d3ed8ec5c88c1c95f5e558612a725450d2452813ddad5e58fdb1a53b1209b78\",\n                \"PYTHONDONTWRITEBYTECODE=1\",\n                \"PYTHONUNBUFFERED=1\",\n                \"GENUI_RUNTIME_CONFIG_FILE=/run/genui/credentials.json\",\n                \"GENUI_RDS_CA_FILE=/etc/ssl/certs/rds-global-bundle.pem\",\n                \"AWS_CONFIG_FILE=/dev/null\",\n                \"AWS_SHARED_CREDENTIALS_FILE=/dev/null\"\n            ],\n            \"Entrypoint\": [\n                \"python3\",\n                \"/app/runtime.py\"\n            ],\n            \"Cmd\": [\n                \"serve\"\n            ],\n            \"Volumes\": {\n                \"/run/genui\": {}\n            },\n            \"WorkingDir\": \"/app\",\n            \"ArgsEscaped\": true\n        },\n        \"Architecture\": \"arm64\",\n        \"Os\": \"linux\",\n        \"Size\": 339079193,\n        \"RootFS\": {\n            \"Type\": \"layers\",\n            \"Layers\": [\n                \"sha256:100031c9cce7b091dd637c1afa21331c3448979cc0953828264b5868ec3f225e\",\n                \"sha256:f8111a85e9bc52eccb91547cd3cf52c0a5f8d398311461d3663cf9a021933468\",\n                \"sha256:3c703117864a349f06e74757d557fa4dd952fee2e46e565127cf6a4214308a70\",\n                \"sha256:a89b04f273af3a609264537416c063b1ae400031c6e6aa22e5160d1f127ebe1e\",\n                \"sha256:1ab9eadef3507f66c5ab90d0a7841663b710af6bf421c16bb2c012ef002e5f7e\",\n                \"sha256:da5d270f594d71723e5e1f7ddc8a6c6ca76602ef5ac29fcef867e06ab23ba0a7\",\n                \"sha256:5cfcba74e58f18d8fd8b4a8986159d855582218f5b14339e2ee89565622afe31\",\n                \"sha256:3317c917d54256b2cd30460ed4660b841924d784c53105b15deb80a3ca1e0cf9\",\n                \"sha256:d0f9dfb993e2584f58637a97ebbb06dee2526893d2a0f05afe1e08e287b488c4\",\n                \"sha256:3882240b58075a0053d4ca3edb2585c44d8cafaf66645423f52121c596c6ffc2\",\n                \"sha256:3bffc32487b618cf23798158bd04378372308250ff64867a41202199b978bfff\",\n                \"sha256:4a22dc6c96152978c90f61edfedad81731a133a1f2c7590a6c6fd52dcc87c81a\"\n            ]\n        },\n        \"Metadata\": {\n            \"LastTagTime\": \"2026-10-28T23:49:38.609314347Z\"\n        },\n        \"Descriptor\": {\n            \"mediaType\": \"application/vnd.oci.image.index.v1+json\",\n            \"digest\": \"sha256:94aa02172556744b78a1d85233e7eb57f97f47cc39c55d0ceb5fd3062e862ae3\",\n            \"size\": 856\n        },\n        \"Identity\": {\n            \"Build\": [\n                {\n                    \"Ref\": \"sbnzdtc5layoctnzgicd4fwul\",\n                    \"CreatedAt\": \"2026-10-28T23:49:38.616264305Z\"\n                }\n            ]\n        }\n    }\n]\n",
+      "stderr": ""
+    },
+    {
+      "cwd": ".",
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "-i",
+        "--network=none",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--cpus=2",
+        "--memory=1g",
+        "--pids-limit=128",
+        "--tmpfs",
+        "/tmp:rw,noexec,nosuid,size=16777216,mode=1777",
+        "--entrypoint",
+        "python3",
+        "genui-app006-callback:local-20261028",
+        "-",
+        "--binary",
+        "/app/genui",
+        "--directory",
+        "/tmp"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"enabled_process_restarted\": true, \"passed\": true, \"private_files_removed\": true, \"runs\": [{\"callback_status\": 404, \"enabled\": false, \"managed_readiness_without_probe\": 503, \"protected_routes\": 404, \"provider_requests\": 0}, {\"callback_status\": 303, \"enabled\": true, \"managed_readiness_without_probe\": 503, \"protected_routes\": 404, \"provider_requests\": 0}, {\"callback_status\": 303, \"enabled\": true, \"managed_readiness_without_probe\": 503, \"protected_routes\": 404, \"provider_requests\": 0}], \"scope\": \"local native HTTP routing, default-off and privacy; no hosted identity or mailbox evidence\", \"synthetic_capabilities_in_native_output\": false}\n",
+      "stderr": ""
+    },
+    {
+      "cwd": ".",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "passed": true,
+  "native_http": {
+    "enabled_process_restarted": true,
+    "passed": true,
+    "private_files_removed": true,
+    "runs": [
+      {
+        "callback_status": 404,
+        "enabled": false,
+        "managed_readiness_without_probe": 503,
+        "protected_routes": 404,
+        "provider_requests": 0
+      },
+      {
+        "callback_status": 303,
+        "enabled": true,
+        "managed_readiness_without_probe": 503,
+        "protected_routes": 404,
+        "provider_requests": 0
+      },
+      {
+        "callback_status": 303,
+        "enabled": true,
+        "managed_readiness_without_probe": 503,
+        "protected_routes": 404,
+        "provider_requests": 0
+      }
+    ],
+    "scope": "local native HTTP routing, default-off and privacy; no hosted identity or mailbox evidence",
+    "synthetic_capabilities_in_native_output": false
+  },
+  "local_image": {
+    "tag": "genui-app006-callback:local-20261028",
+    "id": "sha256:94aa02172556744b78a1d85233e7eb57f97f47cc39c55d0ceb5fd3062e862ae3",
+    "architecture": "arm64",
+    "os": "linux",
+    "registry_publication": false
+  },
+  "image_http": {
+    "enabled_process_restarted": true,
+    "passed": true,
+    "private_files_removed": true,
+    "runs": [
+      {
+        "callback_status": 404,
+        "enabled": false,
+        "managed_readiness_without_probe": 503,
+        "protected_routes": 404,
+        "provider_requests": 0
+      },
+      {
+        "callback_status": 303,
+        "enabled": true,
+        "managed_readiness_without_probe": 503,
+        "protected_routes": 404,
+        "provider_requests": 0
+      },
+      {
+        "callback_status": 303,
+        "enabled": true,
+        "managed_readiness_without_probe": 503,
+        "protected_routes": 404,
+        "provider_requests": 0
+      }
+    ],
+    "scope": "local native HTTP routing, default-off and privacy; no hosted identity or mailbox evidence",
+    "synthetic_capabilities_in_native_output": false
+  }
+}

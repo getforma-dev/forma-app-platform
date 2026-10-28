@@ -1,0 +1,9 @@
+{
+  "scope": "independent local Docker context export",
+  "prior_attempt": "timed out after 60 seconds; no cause established",
+  "passed": false,
+  "result": "timed out after 30 seconds",
+  "partial_stdout": null,
+  "partial_stderr": "#0 building with \"desktop-linux\" instance using docker driver\n\n#1 [internal] load build definition from Dockerfile\n#1 transferring dockerfile: 74B done\n#1 DONE 0.0s\n\n#2 [internal] load .dockerignore\n#2 transferring context: 675B done\n#2 DONE 0.0s\n\n#3 [internal] load build context\n#3 transferring context: 474.07MB 5.1s\n#3 transferring context: 1.03GB 10.2s\n#3 transferring context: 1.57GB 15.3s\n#3 transferring context: 2.10GB 20.3s\n#3 transferring context: 2.64GB 25.5s\n",
+  "temporary_export_removed": true
+}

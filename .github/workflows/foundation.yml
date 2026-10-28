@@ -28,7 +28,7 @@ jobs:
       - name: Verify restore manifest SQL and column privilege refusal
         run: python3 evidence/APP-007/restore-local-sql/qualify.py --output-dir evidence/APP-007/restore-sql-ci
       - name: Build immutable-source runtime image locally
-        run: docker build --tag genui-foundation-ci --file app/Dockerfile app
+        run: docker build --tag genui-foundation-ci --file app/Dockerfile .
       - name: Exercise image with no network and a read-only root
         run: python3 app/runtime/qualify_image.py --image genui-foundation-ci --output evidence/APP-007/image-qualification.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

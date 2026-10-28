@@ -64,7 +64,7 @@ export class GenuiFoundation extends Stack {
       credentials: rds.Credentials.fromSecret(migrationSecret), databaseName: 'genui',
       allocatedStorage: 20, storageEncrypted: true, storageType: rds.StorageType.GP3,
       publiclyAccessible: false, multiAz: false, iamAuthentication: true, backupRetention: Duration.days(7),
-      deletionProtection: true, removalPolicy: RemovalPolicy.RETAIN,
+      autoMinorVersionUpgrade: false, deletionProtection: true, removalPolicy: RemovalPolicy.RETAIN,
       parameters: { 'rds.force_ssl': '1' },
     });
     const tenantIds = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'];

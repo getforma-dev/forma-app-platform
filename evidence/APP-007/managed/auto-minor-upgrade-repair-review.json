@@ -1,0 +1,16 @@
+{
+  "at_utc": "2026-10-28T23:53:33.237870+00:00",
+  "reviewer": "root independent of minimal repair author",
+  "review": "Inspected exact source/test diff; fresh synthesis equals the deployed prepared template except explicit database AutoMinorVersionUpgrade:false. All image/network/role/storage/expiry properties unchanged.",
+  "synthesized_difference": {
+    "resource": "DatabaseB269D8BB",
+    "property": "AutoMinorVersionUpgrade",
+    "before": "omitted; actual source database true",
+    "after": false
+  },
+  "source_files": {
+    "infra/src/stack.ts": "2445028a2222fb7630af084bd5d5bf5df09694878e2bd90c9723c58399e8ff58",
+    "infra/test/security.test.ts": "2ca5189746f9112dda0d202c6e9ceacd1fc5587ffcc2e495ee8f11ace0dbafe4"
+  },
+  "managed_update_pending": true
+}

@@ -1,0 +1,613 @@
+{
+  "observed_at_utc": "2026-10-28T23:42:12.417236+00:00",
+  "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/514ea59a988141aa8d1584eb38089cd2",
+  "task_definition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiApp007ManagedSqlTrial:1",
+  "image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "started_at": "2026-10-28T19:39:51.515000-04:00",
+  "stopped_at": "2026-10-28T19:40:17.253000-04:00",
+  "exit_code": 0,
+  "report": {
+    "schema_version": 1,
+    "scope": "APP-007 managed SQL role qualification",
+    "run_id": "1e76d4ae-9bc3-4edd-92d5-9a40510b61da",
+    "app008_acceptance": false,
+    "passed": true,
+    "checks": [
+      {
+        "name": "explicit_invocation_and_runtime",
+        "passed": true
+      },
+      {
+        "name": "fresh_private_credentials",
+        "passed": true
+      },
+      {
+        "name": "connect_tls_verify_full",
+        "passed": true,
+        "role": "genui_workspace"
+      },
+      {
+        "name": "identity_flags_noinherit_write_enabled",
+        "passed": true,
+        "role": "genui_workspace"
+      },
+      {
+        "name": "connect_usage_select_and_create_temp_absence",
+        "passed": true,
+        "role": "genui_workspace"
+      },
+      {
+        "name": "metadata_table_and_column_mutation_grants_absent",
+        "passed": true,
+        "role": "genui_workspace"
+      },
+      {
+        "name": "only_rds_iam_membership_without_admin_or_inherit",
+        "passed": true,
+        "role": "genui_workspace"
+      },
+      {
+        "name": "tls_hostname_mismatch_rejected",
+        "passed": true,
+        "role": "genui_workspace"
+      },
+      {
+        "name": "forbidden_role_targets_exist",
+        "passed": true,
+        "role": "genui_workspace"
+      },
+      {
+        "name": "set_role_genui_owner",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_migration",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_rds_superuser",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_control",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_data",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_worker",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_schema",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_temporary_table",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_public_table",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_metadata_table",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "insert_metadata",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "update_metadata",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "delete_metadata",
+        "passed": true,
+        "role": "genui_workspace",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "metadata_unchanged_after_rollback",
+        "passed": true,
+        "role": "genui_workspace"
+      },
+      {
+        "name": "connect_tls_verify_full",
+        "passed": true,
+        "role": "genui_control"
+      },
+      {
+        "name": "identity_flags_noinherit_write_enabled",
+        "passed": true,
+        "role": "genui_control"
+      },
+      {
+        "name": "connect_usage_select_and_create_temp_absence",
+        "passed": true,
+        "role": "genui_control"
+      },
+      {
+        "name": "metadata_table_and_column_mutation_grants_absent",
+        "passed": true,
+        "role": "genui_control"
+      },
+      {
+        "name": "only_rds_iam_membership_without_admin_or_inherit",
+        "passed": true,
+        "role": "genui_control"
+      },
+      {
+        "name": "tls_hostname_mismatch_rejected",
+        "passed": true,
+        "role": "genui_control"
+      },
+      {
+        "name": "forbidden_role_targets_exist",
+        "passed": true,
+        "role": "genui_control"
+      },
+      {
+        "name": "set_role_genui_owner",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_migration",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_rds_superuser",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_workspace",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_data",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_worker",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_schema",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_temporary_table",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_public_table",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_metadata_table",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "insert_metadata",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "update_metadata",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "delete_metadata",
+        "passed": true,
+        "role": "genui_control",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "metadata_unchanged_after_rollback",
+        "passed": true,
+        "role": "genui_control"
+      },
+      {
+        "name": "connect_tls_verify_full",
+        "passed": true,
+        "role": "genui_data"
+      },
+      {
+        "name": "identity_flags_noinherit_write_enabled",
+        "passed": true,
+        "role": "genui_data"
+      },
+      {
+        "name": "connect_usage_select_and_create_temp_absence",
+        "passed": true,
+        "role": "genui_data"
+      },
+      {
+        "name": "metadata_table_and_column_mutation_grants_absent",
+        "passed": true,
+        "role": "genui_data"
+      },
+      {
+        "name": "only_rds_iam_membership_without_admin_or_inherit",
+        "passed": true,
+        "role": "genui_data"
+      },
+      {
+        "name": "tls_hostname_mismatch_rejected",
+        "passed": true,
+        "role": "genui_data"
+      },
+      {
+        "name": "forbidden_role_targets_exist",
+        "passed": true,
+        "role": "genui_data"
+      },
+      {
+        "name": "set_role_genui_owner",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_migration",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_rds_superuser",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_workspace",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_control",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_worker",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_schema",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_temporary_table",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_public_table",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_metadata_table",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "insert_metadata",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "update_metadata",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "delete_metadata",
+        "passed": true,
+        "role": "genui_data",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "metadata_unchanged_after_rollback",
+        "passed": true,
+        "role": "genui_data"
+      },
+      {
+        "name": "connect_tls_verify_full",
+        "passed": true,
+        "role": "genui_worker"
+      },
+      {
+        "name": "identity_flags_noinherit_write_enabled",
+        "passed": true,
+        "role": "genui_worker"
+      },
+      {
+        "name": "connect_usage_select_and_create_temp_absence",
+        "passed": true,
+        "role": "genui_worker"
+      },
+      {
+        "name": "metadata_table_and_column_mutation_grants_absent",
+        "passed": true,
+        "role": "genui_worker"
+      },
+      {
+        "name": "only_rds_iam_membership_without_admin_or_inherit",
+        "passed": true,
+        "role": "genui_worker"
+      },
+      {
+        "name": "tls_hostname_mismatch_rejected",
+        "passed": true,
+        "role": "genui_worker"
+      },
+      {
+        "name": "forbidden_role_targets_exist",
+        "passed": true,
+        "role": "genui_worker"
+      },
+      {
+        "name": "set_role_genui_owner",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_migration",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_rds_superuser",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_workspace",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_control",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "set_role_genui_data",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_schema",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_temporary_table",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_public_table",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "create_metadata_table",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "insert_metadata",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "update_metadata",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "delete_metadata",
+        "passed": true,
+        "role": "genui_worker",
+        "sqlstate": "42501",
+        "rolled_back": true,
+        "read_only": false
+      },
+      {
+        "name": "metadata_unchanged_after_rollback",
+        "passed": true,
+        "role": "genui_worker"
+      },
+      {
+        "name": "same_valid_credential_generation",
+        "passed": true
+      },
+      {
+        "name": "private_credential_file_removed",
+        "passed": true
+      }
+    ]
+  },
+  "app008_tenant_rls_acceptance": false,
+  "temporary_task_definition_deregistered": true,
+  "helper_source_sha256": "89ebf77678144d3769b2c59dd2b27f8b972083d45fc037fe2df7ae1f636a9cd1"
+}

@@ -1,0 +1,81 @@
+{
+  "observed_at_utc": "2026-10-28T23:42:12.416417+00:00",
+  "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/522a644501364a6486e58fa10e16f6fd",
+  "task_definition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationTaskE2459512:2",
+  "image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "started_at": "2026-10-28T19:39:51.812000-04:00",
+  "stopped_at": "2026-10-28T19:40:18.206000-04:00",
+  "exit_code": 0,
+  "report": {
+    "schema_version": 1,
+    "scope": "APP-007 synthetic managed qualification",
+    "run_id": "386eb519-15e9-4ce8-b7c3-766b7487b245",
+    "passed": true,
+    "checks": [
+      {
+        "name": "four distinct TLS database identities and migration",
+        "passed": true
+      },
+      {
+        "name": "own encrypted object write/read",
+        "organization_id": "00000000-0000-4000-8000-000000000001",
+        "passed": true
+      },
+      {
+        "name": "own encrypted object write/read",
+        "organization_id": "00000000-0000-4000-8000-000000000002",
+        "passed": true
+      },
+      {
+        "name": "other tenant existing object",
+        "denied": true
+      },
+      {
+        "name": "other tenant listing",
+        "denied": true
+      },
+      {
+        "name": "wrong tenant key on own prefix",
+        "denied": true
+      },
+      {
+        "name": "other tenant KMS key",
+        "denied": true
+      },
+      {
+        "name": "other tenant existing object",
+        "denied": true
+      },
+      {
+        "name": "other tenant listing",
+        "denied": true
+      },
+      {
+        "name": "wrong tenant key on own prefix",
+        "denied": true
+      },
+      {
+        "name": "other tenant KMS key",
+        "denied": true
+      }
+    ],
+    "cleanup": [
+      {
+        "Bucket": "genuisyntheticfoundation-evidence4cc26d68-p1jacwjbl56s",
+        "Key": "o/00000000-0000-4000-8000-000000000001/_qualification/386eb519-15e9-4ce8-b7c3-766b7487b245/probe.bin",
+        "VersionId": "8PIuVp9pvjPIRF8uAzF0xBW_5YoJIC_S"
+      },
+      {
+        "Bucket": "genuisyntheticfoundation-evidence4cc26d68-p1jacwjbl56s",
+        "Key": "o/00000000-0000-4000-8000-000000000002/_qualification/386eb519-15e9-4ce8-b7c3-766b7487b245/probe.bin",
+        "VersionId": "0CLJPft43z8y0870Xj_qVFBRsErDUvO5"
+      }
+    ]
+  },
+  "app008_tenant_rls_acceptance": false,
+  "cleanup": {
+    "exact_created_versions_deleted": 2,
+    "qualification_prefixes_empty": true,
+    "no_delete_markers": true
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "scope": "Independent APP-006 bounded hosted callback source review",
+  "reviewer": "managed_trial_plan; did not author callback implementation",
+  "base_commit": "76bd1cf1e5912b830ebb703c66f43a15836864b5",
+  "reviewed_worktree_is_uncommitted": true,
+  "verdict": "No remaining blocking finding in reviewed APP-006 app/build sources; exact-candidate CI and managed acceptance remain open",
+  "source_sha256": {
+    "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+    "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+    "app/src/lib.rs": "70c08fdb2cb4e15502667305046c6c8649b208c8a34fd7339686ca9ce82bb278",
+    "app/src/main.rs": "ee4ab55eb64570e6649dea3a50fb81d7a4e2906b5595136cf9756630bdbeddf3",
+    "app/Cargo.toml": "1049e0f7a93284183456be8d2d45a93571f8896df945d3101170e70d89ca78be",
+    "app/Cargo.lock": "cbcffaa97848413578aceb5d52fe4d396ff5c821d9f978580d0eb5c027552ea6",
+    "app/Dockerfile": "d507566be86285de7f9f2e2c84ab9022a550666a944fd5c1f0bfcc7e1feb4225",
+    ".dockerignore": "5665f3bfea45b181d6c55817f5265873efccfe6477e7bd47b88c619f9845d819",
+    "app/README.md": "4fdb97e50111a6a196b42b350d40527e34a159f3aba4e36a794f69b5ffb634f0",
+    "spikes/APP-006/Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+    "spikes/APP-006/src/lib.rs": "484ef0aa0a3b78cf01212435315f756245be50b59a9c46f4932573a5cc751542"
+  },
+  "checks": [
+    {
+      "command": "CARGO_BUILD_JOBS=2 cargo test --manifest-path app/Cargo.toml --locked auth_qualification -- --test-threads=1",
+      "exit_code": 0,
+      "focused_tests_passed": 11,
+      "focused_tests_failed": 0,
+      "duration_seconds": 6.08,
+      "includes_cancellation_test": true
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    {
+      "command": "docker build --progress=plain --file <temporary scratch Context.Dockerfile> --output type=local,dest=<temporary export> .",
+      "result": "Timed out after 60 seconds; subprocess killed and temporary directory removed",
+      "passed": false,
+      "qualification_claim": false
+    },
+    {
+      "command": "docker build --progress=plain --file - --output type=local,dest=<temporary export> .",
+      "result": "Second scratch-only attempt timed out after 30 seconds; no cause established; temporary export removed",
+      "passed": false,
+      "qualification_claim": false,
+      "evidence": "independent-context.json"
+    },
+    {
+      "command": "docker build --progress=plain --file - --output type=local,dest=<temporary export> .; Dockerfile: FROM scratch / COPY . /review-context/",
+      "exit_code": 0,
+      "passed": true,
+      "exported_file_count": 24,
+      "unexpected_files": [],
+      "missing_required_files": [],
+      "all_exported_hashes_match": true,
+      "temporary_export_removed": true,
+      "evidence": "independent-context.json"
+    }
+  ],
+  "resolved_findings": [
+    {
+      "finding": "Cancellation after token exchange began could leave remote refresh cleanup unresolved without cleanup_unknown being recorded.",
+      "repair": "Author reserves cleanup_unknown before any exchange await and clears only after logout acknowledgement.",
+      "evidence": "Independent 11-test rerun includes aborts during token exchange and pending identity verification."
+    },
+    {
+      "finding": "Dockerfile now requires repository-root context; previous invocation used app/.",
+      "repair": "Author corrected app README command; root owns foundation.yml correction and final image qualification.",
+      "evidence": "Static Dockerfile/root ignore review; no successful independent image/context build."
+    },
+    {
+      "finding": "Root Docker ignore parent negations re-included broad descendants; actual COPY . transferred2.64GB and timed out.",
+      "repair": "Author added recursive descendant exclusion after every parent exception and exact filename exceptions.",
+      "evidence": "Actual independent scratch COPY . exported exactly24 expected files with matching hashes. Initial failure preserved in independent-context-initial-failure.json."
+    }
+  ],
+  "nonblocking_scope_notes": [
+    "Malformed callback syntax is refused before flow lookup; single-use applies to valid-shape continuations with identified cookie, including mismatched state and all later failures.",
+    "State and request/attempt counters are process-local and lost on restart; this is a bounded operator rehearsal, not durable rate limiting or application sessions.",
+    "Canonical verifier is the only production IdentityCheck; cfg(test) FixedIdentity callback tests are not cryptographic integration evidence.",
+    "Provider logout204 is acknowledgement only; status always says provider_revocation_proved:false.",
+    "Configured source pins require separate deployment/image receipts; external ten_/usr_ identities are not application organization mappings."
+  ],
+  "limitations": [
+    "No AWS calls, credential reads, hosted provider, browser/TLS callback, real mail or public signup test.",
+    "No app source edits, staging, commit or deployment by reviewer.",
+    "Root must complete exact-candidate CI, bind the accepted image/deployment receipts, and obtain actual bounded hosted exchange/denial/cleanup evidence before managed acceptance."
+  ],
+  "author_evidence_inspected": {
+    "record": "local-checks.json",
+    "passed": true,
+    "qualified_runtime_build_inputs_still_match": false,
+    "only_post_check_change": [
+      "app/README.md"
+    ],
+    "local_image": {
+      "tag": "genui-app006-callback:local-20261028",
+      "id": "sha256:e1267eef293e3a54763b773a810484a25b51acdb6b69bfd18b6b6b28a6f349b2",
+      "architecture": "arm64",
+      "os": "linux",
+      "registry_publication": false
+    },
+    "scope": "Author evidence inspected; not independently rerun full image/crypto campaign",
+    "post_check_changes": [
+      "app/README.md documentation",
+      "root .dockerignore allowlist repair"
+    ],
+    "current_status": "Initial full local/image campaign was inspected; author is refreshing image evidence after root ignore repair."
+  },
+  "open_findings": []
+}

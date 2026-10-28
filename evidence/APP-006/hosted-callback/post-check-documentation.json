@@ -1,0 +1,10 @@
+{
+  "changes": {
+    "app/README.md": {
+      "qualified_sha256": "aaade3adc9e6ec5625eedb799a3d1a1cf31187d0954c8176cdbc3d07396ff321",
+      "current_sha256": "4fdb97e50111a6a196b42b350d40527e34a159f3aba4e36a794f69b5ffb634f0"
+    }
+  },
+  "reason": "Corrected stale context description and linked the disabled-by-default harness after successful qualification. app/README.md is excluded from the image context.",
+  "runtime_and_build_inputs_unchanged": true
+}

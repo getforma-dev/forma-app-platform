@@ -1,6 +1,6 @@
 # APP-007 application foundation — managed acceptance pending
 
-The application is one Rust business binary with strict native Forma 3.2.0 pages. Native route admission and typed page finalization complete before listening; page responses retain their nonce/CSP/no-store policy. The only routes are a labeled synthetic foundation page, its about/assets routes and health checks. Authentication, tenant tables, queries, commands and generation remain with their owning tickets.
+The application is one Rust business binary with strict native Forma 3.2.0 pages. Native route admission and typed page finalization complete before listening; page responses retain their nonce/CSP/no-store policy. Default routes are a labeled synthetic foundation page, its about/assets routes and health checks. Authentication, tenant tables, queries, commands and generation remain with their owning tickets. The optional [APP-006 operator callback harness](../evidence/APP-006/hosted-callback/README.md) is disabled unless its separate private configuration is supplied; it qualifies external identity without granting application access.
 
 A small Python support process delivers temporary credentials and supervises the Rust binary. It is not a second business service. This explicit deployment detail preserves the demo's one business process, while avoiding a large unqualified Rust AWS SDK addition. Both processes share the task's trust boundary: a process compromise can reach the task's six permitted assumed roles. Logical role separation does not replace application authorization or future process isolation.
 
@@ -10,14 +10,14 @@ Python 3.11, Node 22.21.0/npm 11.6.2, Rust 1.93.1 and Docker are the qualified t
 
 ```sh
 python3 scripts/check-foundation.py
-docker build --tag genui-app007-local:qualification --file app/Dockerfile app
+docker build --tag genui-app007-local:qualification --file app/Dockerfile .
 docker run --rm --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges --entrypoint python3 genui-app007-local:qualification -c "import os,stat; p=os.stat('/run/genui'); assert os.getuid()==65532 and p.st_uid==65532 and stat.S_IMODE(p.st_mode)==0o700"
 docker run --rm -i --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges --entrypoint python3 genui-app007-local:qualification - --binary /app/genui --directory /run/genui < app/runtime/smoke_http.py
 ```
 
 These checks install hash-locked packages, typecheck/build native browser assets, run Rust/configuration and Python failure-path tests, exercise the actual HTTP nonce/no-store response, verify readiness stays 503 without a successful dependency probe, and check CDK templates. The image trial uses fake unit credentials and a deliberately absent probe, with no network. **It cannot pass managed acceptance.** Linux ARM64 local and AMD64 CI builds are separate image artifacts; the deployment parameter must match the selected digest's architecture.
 
-The Dockerfile pins all three base image digests and builds source/lockfiles in a curated `app/` context. No home, AWS credential directory, environment file, build cache or private runtime file enters that context. The image is UID65532 with a read-only root and a declared `/run/genui` volume initialized mode0700/owner65532. Only that volume is writable during normal startup. Dependencies are in `runtime/requirements.lock`; public RDS roots and dependency metadata are recorded in `evidence/APP-007/runtime-dependencies.json`. The RDS bundle is public trust material, not a credential; update it deliberately with a reviewed digest.
+The Dockerfile pins all three base image digests and builds source/lockfiles in a repository-root context restricted by the root `.dockerignore` allowlist, including the canonical APP-006 verifier beside app sources. No home, AWS credential directory, environment file, build cache or private runtime file enters that context. The image is UID65532 with a read-only root and a declared `/run/genui` volume initialized mode0700/owner65532. Only that volume is writable during normal startup. Dependencies are in `runtime/requirements.lock`; public RDS roots and dependency metadata are recorded in `evidence/APP-007/runtime-dependencies.json`. The RDS bundle is public trust material, not a credential; update it deliberately with a reviewed digest.
 
 ## Credentials, reload and health
 

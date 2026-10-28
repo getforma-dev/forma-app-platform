@@ -1,0 +1,55 @@
+{
+  "author": "managed_restore_ops_review; narrow implementation requested by root after restore preparation review",
+  "created_at_utc": "2026-10-28T23:49:22.384211+00:00",
+  "base_commit": "76bd1cf1e5912b830ebb703c66f43a15836864b5",
+  "change": "Explicitly set autoMinorVersionUpgrade:false on the CDK RDS instance and assert AutoMinorVersionUpgrade:false in the existing managed-data template test.",
+  "reason": "The actual source DB receipt showed auto minor upgrades enabled even though the foundation pins PostgreSQL16.13.",
+  "source_sha256_before": {
+    "infra/src/stack.ts": "a95100ace186a4f2f95d23a77440f4c6ede412670d10b3b5792ed416443f9526",
+    "infra/test/security.test.ts": "60e608391782919d9c17d86ff1800b0138d465e4d8c20bb39d3cf19a05038d3a"
+  },
+  "source_sha256_after": {
+    "infra/src/stack.ts": "2445028a2222fb7630af084bd5d5bf5df09694878e2bd90c9723c58399e8ff58",
+    "infra/test/security.test.ts": "2ca5189746f9112dda0d202c6e9ceacd1fc5587ffcc2e495ee8f11ace0dbafe4"
+  },
+  "toolchains": {
+    "node": "22.21.0",
+    "npm": "11.6.2"
+  },
+  "checks": [
+    {
+      "command": "./node_modules/.bin/tsx --test --test-name-pattern='managed data stays private, encrypted, retained and versioned' test/security.test.ts",
+      "cwd": "infra",
+      "stage": "new assertion before source repair",
+      "exit_code": 1,
+      "tests": 1,
+      "failed": 1,
+      "diagnostic": "Missing key 'AutoMinorVersionUpgrade'; synthesized property was undefined."
+    },
+    {
+      "command": "./node_modules/.bin/tsx --test --test-name-pattern='managed data stays private, encrypted, retained and versioned' test/security.test.ts",
+      "cwd": "infra",
+      "stage": "after explicit source repair",
+      "exit_code": 0,
+      "tests": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "cwd": "infra",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "cwd": ".",
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "No AWS calls, staging, commits or live parameter changes by author.",
+    "Root will independently review source/diff/synthesis and apply the change only through the reviewed update sequence.",
+    "Existing source DB receipt retains its original true setting; this local source change does not prove the live setting changed.",
+    "Previously reviewed bounded restore request already explicitly disables auto minor upgrades and its hashes are unchanged."
+  ]
+}
