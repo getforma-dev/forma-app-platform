@@ -1,6 +1,6 @@
 # Forma app platform work board
 
-This is the implementation board for Forma's company app platform and its Northstar/Spend Review proof. The repository is prepared for work; implementation tickets are **Backlog or explicitly Blocked by upstream dependencies**. Creating this board did not scaffold the application, implement features, run application acceptance tests, or deploy a service.
+This is the implementation board for Forma's company app platform and its Northstar/Spend Review proof. Phase 1 implementation has started with APP-001’s isolated baseline harness. The current status folders and evidence records distinguish completed qualification from planned application behavior; upstream consumers remain explicitly blocked until accepted evidence arrives. Creating the original board did not run application acceptance or deploy a service.
 
 ## Start here
 

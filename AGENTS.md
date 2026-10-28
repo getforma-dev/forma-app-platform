@@ -3,7 +3,7 @@
 Read README.md, Tickets/README.md and the assigned ticket first. Use the forma-stack skill for implementation and the released package contracts documented in docs/architecture/FRAMEWORK-BASELINE.md.
 
 - This is the app platform, not the Forma framework or a donor canvas prototype. Own changes here; route framework/auth changes to their existing owners.
-- The current checkpoint is preparation. Implement only the ticket requested in a later work session; do not start the whole roadmap because it is present.
+- Phase 1 implementation is authorized. Work through ready tickets and their reviews; the presence of later phases alone does not authorize their implementation.
 - Ticket Markdown in status folders is authoritative. Keep one ticket file per APP ID; regenerate tracker, phase/sprint/category pages, coverage and index.json through Tickets/_tools/board.py.
 - Read the dependencies and source references. Do not treat a planned checkbox, a design assumption or a framework release as proof that application behavior exists.
 - Frozen design snapshots are evidence. Record new decisions in docs/architecture or docs/planning; do not silently rewrite design history. Later delivered design text outranks stale preparation prose.

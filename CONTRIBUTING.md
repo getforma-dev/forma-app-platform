@@ -1,6 +1,6 @@
 # Contributing
 
-This repository prepares the Forma company app platform from its delivered design. The current milestone is an organized workspace and implementation backlog. **No application runtime is claimed to exist yet.** Implementation work is Backlog or explicitly Blocked on an upstream gate; the first future implementation starts by selecting a ready ticket, initially APP-001.
+This repository prepares the Forma company app platform from its delivered design. Phase 1 implementation has started with APP-001’s isolated baseline harness. **No integrated application runtime is claimed yet.** Select work from the current board after its dependencies have completed; keep upstream integration gates explicit.
 
 Read [Tickets](Tickets/README.md), the [source guide](docs/planning/SOURCE-GUIDE.md) and [existing work](docs/planning/EXISTING-WORK.md) before choosing work. The platform's architecture is typed `AppDefinition` interpreted by trusted first-party renderers, immutable Parquet/DuckDB source revisions, and PostgreSQL for work, records, publication and audit. Northstar and Spend Review prove the same platform, not separate product codebases.
 

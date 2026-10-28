@@ -2,7 +2,7 @@
 
 The company app platform built on Forma Stack: teams create, run, adapt and share their own apps. Northstar and Spend Review prove the same platform through two different workflows.
 
-**Preparation checkpoint — October 28, 2026.** This repository contains the delivered design, its companion demo, and the ordered implementation board. Application implementation has not started. The intended baseline is published Forma **3.2.0** with typed Rust/FMIR rendering and a native canvas island.
+**Phase 1 started — October 28, 2026.** This repository contains the delivered design, its companion demo, the ordered implementation board and an isolated published Forma **3.2.0** qualification harness. APP-001 establishes the baseline; the application scaffold and full canvas remain separate tickets. See [baseline evidence](evidence/APP-001/README.md) and the live board for review status.
 
 ## Start here
 
