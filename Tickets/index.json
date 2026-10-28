@@ -31,8 +31,8 @@
         "APP-014"
       ],
       "ticket_count": 14,
-      "done_count": 4,
-      "blocked_count": 3
+      "done_count": 5,
+      "blocked_count": 2
     },
     {
       "id": "PH02",
@@ -252,11 +252,11 @@
     {
       "id": "APP-003",
       "title": "Qualify a 3.2 native canvas with the full required primitive library",
-      "path": "9-blocked/APP-003.md",
+      "path": "4-done/APP-003.md",
       "Field": "Value",
       "---": "---",
       "Epic": "UX",
-      "Status": "Blocked",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Spike",
       "Sprint": "S01",
@@ -269,10 +269,10 @@
       "Depends on": "APP-001",
       "External dependencies": "FORMA-246; FORMA-232 (budget disposition required; expanded cap feature conditional)",
       "Assignee": "GenUI \u2014 native canvas qualification agent",
-      "Branch / PR": "phase-one-spikes; isolated spikes/APP-003 consumer preparation",
+      "Branch / PR": "Landed on main at 74a7231; unchanged spike at 49389c6",
       "Team": "GenUI",
-      "Blocked by": "FormaStack team: final FORMA-246 reviewed merge/CI receipt pending. Full consumer qualification and no-override budget disposition pass; the ticket remains blocked until the conformance handback is accepted.",
-      "Unblock evidence": "FORMA-246 supplies passing 3.2 native conformance at an exact consumable ref. FORMA-232 supplies released budget support OR a measured no-override-needed GenUI route disposition. GenUI reruns its full canvas/adoption checks; broader budget work may remain open if the shipped cap fits.",
+      "Blocked by": "None \u2014 required upstream and consumer evidence accepted",
+      "Unblock evidence": "Accepted FORMA-246 reviewed merge/published replay and FORMA-232 measured no-override disposition; see final acceptance record.",
       "dependencies": [
         "APP-001"
       ]

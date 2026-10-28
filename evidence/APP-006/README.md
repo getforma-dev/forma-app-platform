@@ -2,7 +2,11 @@
 
 **Blocked acceptance; locally qualified candidate.** No deployed auth service, environment client, browser login, app session, app membership or live rollback was exercised. The reusable verifier and its limits are documented in [the spike](../../spikes/APP-006/README.md). All source fixtures are synthetic or public-only; ephemeral private keys and signed test tokens exist only in test memory.
 
-## Recorded run
+## Current reviewed source
+
+Implementation `49389c6` is on `main`. [Independent review](review.md) found no blocking local-consumer issue, and all eight [source CI checks](ci.json) passed. The [Linux run](ci-49389c6/qualification.json) passed the same 23 tests and matched all 13 input hashes; it explicitly reports no upstream checkout available there. Local producer and reviewer checks independently verified the 21 pinned upstream blobs. These results leave all hosted/member/session acceptance blocked.
+
+## Recorded local run
 
 [local/qualification.json](local/qualification.json) identifies the exact input SHA-256 values, registry dependency versions/checksums/license metadata, base app HEAD, platform and toolchain. The run used macOS ARM64, Rust 1.93.1 and two Cargo jobs. It rechecked two public fixture hashes and twenty-one immutable upstream Git blobs against the independently available GateWasm repository. An app HEAD is context only: candidate file hashes identify these uncommitted implementation inputs.
 

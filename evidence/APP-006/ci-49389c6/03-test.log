@@ -1,0 +1,116 @@
+   Compiling stable_deref_trait v1.2.1
+   Compiling zerofrom v0.1.8
+   Compiling libc v0.2.191
+   Compiling yoke v0.8.4
+   Compiling zerovec v0.11.9
+   Compiling pin-project-lite v0.2.17
+   Compiling bytes v1.12.1
+   Compiling futures-core v0.3.34
+   Compiling itoa v1.0.18
+   Compiling tinystr v0.8.5
+   Compiling writeable v0.6.4
+   Compiling litemap v0.8.3
+   Compiling smallvec v1.16.4
+   Compiling icu_locale_core v2.1.1
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.4
+   Compiling zerotrie v0.2.5
+   Compiling potential_utf v0.1.6
+   Compiling tokio v1.53.3
+   Compiling icu_provider v2.1.1
+   Compiling icu_collections v2.1.1
+   Compiling http v1.5.0
+   Compiling percent-encoding v2.3.2
+   Compiling zeroize v1.9.1
+   Compiling cfg-if v1.0.5
+   Compiling once_cell v1.21.4
+   Compiling getrandom v0.2.17
+   Compiling rustls-pki-types v1.15.1
+   Compiling http-body v1.1.0
+   Compiling icu_normalizer_data v2.1.1
+   Compiling icu_properties_data v2.1.2
+   Compiling futures-task v0.3.34
+   Compiling untrusted v0.9.0
+   Compiling slab v0.4.12
+   Compiling futures-util v0.3.34
+   Compiling ring v0.17.14
+   Compiling icu_properties v2.1.2
+   Compiling icu_normalizer v2.1.1
+   Compiling try-lock v0.2.5
+   Compiling tower-service v0.3.3
+   Compiling want v0.3.2
+   Compiling idna_adapter v1.2.1
+   Compiling rustls-webpki v0.103.16
+   Compiling serde_core v1.0.229
+   Compiling httparse v1.10.1
+   Compiling tracing-core v0.1.36
+   Compiling form_urlencoded v1.2.2
+   Compiling subtle v2.6.1
+   Compiling atomic-waker v1.1.2
+   Compiling utf8_iter v1.0.4
+   Compiling idna v1.1.0
+   Compiling hyper v1.12.0
+   Compiling rustls v0.23.46
+   Compiling tracing v0.1.44
+   Compiling sync_wrapper v1.0.2
+   Compiling futures-channel v0.3.34
+   Compiling tower-layer v0.3.3
+   Compiling ipnet v2.12.2
+   Compiling base64 v0.23.1
+   Compiling hyper-util v0.1.21
+   Compiling tokio-rustls v0.26.6
+   Compiling tower v0.5.3
+   Compiling serde v1.0.229
+   Compiling url v2.5.8
+   Compiling webpki-roots v1.0.11
+   Compiling bitflags v2.13.2
+   Compiling ryu v1.0.23
+   Compiling serde_urlencoded v0.7.1
+   Compiling tower-http v0.6.11
+   Compiling hyper-rustls v0.27.10
+   Compiling zmij v1.0.23
+   Compiling http-body-util v0.1.5
+   Compiling memchr v2.8.3
+   Compiling base64 v0.22.1
+   Compiling log v0.4.34
+   Compiling reqwest v0.12.28
+   Compiling serde_json v1.0.154
+   Compiling genui-auth-verifier v0.1.0 (/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-006)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 28.93s
+     Running unittests src/lib.rs (target/debug/deps/genui_auth_verifier-64957660d91b64d4)
+
+running 23 tests
+test tests::access_only_profile_prepublication_overlap_and_observed_retirement ... ok
+test tests::acquired_key_lease_is_refused_after_authoritative_refresh ... ok
+test tests::actual_ed25519_identity_contract_and_fresh_key_cache ... ok
+test tests::access_only_set_has_bounded_unique_validated_keys_and_atomic_replacement ... ok
+test tests::cache_headers_cannot_create_unbounded_or_stale_lifetimes ... ok
+test tests::cancellation_reserves_budget_and_leaves_no_authority ... ok
+test tests::actual_http_redirect_status_invalid_and_streamed_oversize_are_refused ... ok
+test tests::concurrent_unknown_keys_share_one_attempt_budget_and_recover ... ok
+test tests::expiry_is_rechecked_after_fetch_before_identity_release ... ok
+test tests::invalid_signature_and_claims_never_become_identity ... ok
+test tests::jwks_closed_shapes_duplicate_fields_and_mixed_key_purpose_refuse ... ok
+test tests::key_expiry_is_rechecked_after_signature_before_identity_release ... ok
+cache_lock_refusal_ms=2001
+test tests::deadline_covers_concurrent_cache_lock_wait_without_launching_fetch ... ok
+test tests::production_configuration_is_explicit_https_fixed_endpoint_only ... ok
+test tests::public_source_profile_vector_has_independent_key_identity ... ok
+test tests::roles_email_and_unknown_subject_do_not_create_membership ... ok
+test tests::ssf_signature_with_access_type_and_claims_cannot_select_access_key ... ok
+test tests::stale_cache_is_never_grace_authority_and_freshness_starts_at_request ... ok
+test tests::unknown_key_cooldown_rotation_and_authoritative_replacement ... ok
+test tests::unknown_key_failure_cannot_poison_extend_or_keep_cached_signin_authority ... ok
+test tests::unknown_key_success_never_installs_untrusted_request_key ... ok
+test tests::wrong_algorithm_type_external_keys_and_ambiguous_json_refuse_before_fetch ... ok
+slow_body_refusal_ms=2001
+test tests::partial_trickle_cannot_reset_total_network_deadline ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.24s
+
+   Doc-tests genui_auth_verifier
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

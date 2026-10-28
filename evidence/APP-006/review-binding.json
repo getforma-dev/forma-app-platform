@@ -1,0 +1,81 @@
+{
+  "reviewed_commit": "49389c6ed2b098d7d8251c708c8a38063a680111",
+  "recorded_at": "2026-10-28T21:03:13.798459+00:00",
+  "source_checks": {
+    "spikes/APP-006/.gitignore": {
+      "expected": "02e7b40893c74a993a139de7b0f85d8cf2eaea57d544effd576920a514872af4",
+      "commit_sha256": "02e7b40893c74a993a139de7b0f85d8cf2eaea57d544effd576920a514872af4",
+      "working_sha256": "02e7b40893c74a993a139de7b0f85d8cf2eaea57d544effd576920a514872af4"
+    },
+    "spikes/APP-006/Cargo.lock": {
+      "expected": "caec3dcdcb3228c1e98b7ef177517408485ecc3ac5af5b48927d81e87e050b8d",
+      "commit_sha256": "caec3dcdcb3228c1e98b7ef177517408485ecc3ac5af5b48927d81e87e050b8d",
+      "working_sha256": "caec3dcdcb3228c1e98b7ef177517408485ecc3ac5af5b48927d81e87e050b8d"
+    },
+    "spikes/APP-006/Cargo.toml": {
+      "expected": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+      "commit_sha256": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+      "working_sha256": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b"
+    },
+    "spikes/APP-006/README.md": {
+      "expected": "4c6b031a5e7b2ff61b9571d2c34e424738f94e820608de16b2e7df1a09cd81af",
+      "commit_sha256": "4c6b031a5e7b2ff61b9571d2c34e424738f94e820608de16b2e7df1a09cd81af",
+      "working_sha256": "4c6b031a5e7b2ff61b9571d2c34e424738f94e820608de16b2e7df1a09cd81af"
+    },
+    "spikes/APP-006/fixtures/claims-247.json": {
+      "expected": "e70283baad967aab03b51d5e8588b2d164ae4f315ea073a6ac08a29c857efad7",
+      "commit_sha256": "e70283baad967aab03b51d5e8588b2d164ae4f315ea073a6ac08a29c857efad7",
+      "working_sha256": "e70283baad967aab03b51d5e8588b2d164ae4f315ea073a6ac08a29c857efad7"
+    },
+    "spikes/APP-006/fixtures/jwks-247.json": {
+      "expected": "1edd0a6d624738c9322756ee38de2d8bc712edee0a319ba0211d2b29020f9f85",
+      "commit_sha256": "1edd0a6d624738c9322756ee38de2d8bc712edee0a319ba0211d2b29020f9f85",
+      "working_sha256": "1edd0a6d624738c9322756ee38de2d8bc712edee0a319ba0211d2b29020f9f85"
+    },
+    "spikes/APP-006/qualify.py": {
+      "expected": "0c09f00a3e07d741df2f5c9c7dd3f3977346fe66fe5f38271a4053f4c537c51d",
+      "commit_sha256": "0c09f00a3e07d741df2f5c9c7dd3f3977346fe66fe5f38271a4053f4c537c51d",
+      "working_sha256": "0c09f00a3e07d741df2f5c9c7dd3f3977346fe66fe5f38271a4053f4c537c51d"
+    },
+    "spikes/APP-006/rust-toolchain.toml": {
+      "expected": "162713004a236937311e636866219dc019297684304d082e2fc31eb23c91ebcf",
+      "commit_sha256": "162713004a236937311e636866219dc019297684304d082e2fc31eb23c91ebcf",
+      "working_sha256": "162713004a236937311e636866219dc019297684304d082e2fc31eb23c91ebcf"
+    },
+    "spikes/APP-006/source-contract.json": {
+      "expected": "a168a8638dd45a5f48334efbbe667ea452cc75a4911c4b9f8c88fcc93aa3143b",
+      "commit_sha256": "a168a8638dd45a5f48334efbbe667ea452cc75a4911c4b9f8c88fcc93aa3143b",
+      "working_sha256": "a168a8638dd45a5f48334efbbe667ea452cc75a4911c4b9f8c88fcc93aa3143b"
+    },
+    "spikes/APP-006/src/lib.rs": {
+      "expected": "484ef0aa0a3b78cf01212435315f756245be50b59a9c46f4932573a5cc751542",
+      "commit_sha256": "484ef0aa0a3b78cf01212435315f756245be50b59a9c46f4932573a5cc751542",
+      "working_sha256": "484ef0aa0a3b78cf01212435315f756245be50b59a9c46f4932573a5cc751542"
+    },
+    "spikes/APP-006/src/tests.rs": {
+      "expected": "7d0894ea8ee479bda5e56b023679164cb7d3adf6bba85cd72ecf321b1b2eb30d",
+      "commit_sha256": "7d0894ea8ee479bda5e56b023679164cb7d3adf6bba85cd72ecf321b1b2eb30d",
+      "working_sha256": "7d0894ea8ee479bda5e56b023679164cb7d3adf6bba85cd72ecf321b1b2eb30d"
+    },
+    "spikes/APP-006/verify_source.py": {
+      "expected": "c15184c886d9ed4158e49908bdb9c11087ef84cb5098d4c21ab12caa4d5f937b",
+      "commit_sha256": "c15184c886d9ed4158e49908bdb9c11087ef84cb5098d4c21ab12caa4d5f937b",
+      "working_sha256": "c15184c886d9ed4158e49908bdb9c11087ef84cb5098d4c21ab12caa4d5f937b"
+    },
+    ".github/workflows/auth-contract.yml": {
+      "expected": "7978c4c1b069f592c732aaec47babfda079afe4a1f94d08a10b637ffd2022378",
+      "commit_sha256": "7978c4c1b069f592c732aaec47babfda079afe4a1f94d08a10b637ffd2022378",
+      "working_sha256": "7978c4c1b069f592c732aaec47babfda079afe4a1f94d08a10b637ffd2022378"
+    }
+  },
+  "support_sha256": {
+    "review-probes.rs": "b0a70479a77d1e5b35a7ff42098c7dfa9db4098b2609977a69f66bb05a87a7f5",
+    "review-probes.py": "53bdf36985a7d53c45257755a202fca61f43493ccbac489e7cd0a606545bc0e8",
+    "review-probes.json": "a7d1532aa633a05573ce3232a012da3a4489b5e8c590399e3fa153c7f22c58a0",
+    "review-access-profile.json": "bb161f3c4171283b53a5ad036e59b20d1608e1ea260b1578bd389763ac1b40ec",
+    "review-access-profile-shared-test-artifact.json": "db4aa5d7c59a28b9679d4ab3b82fbf9318fab6fb964c0a90fab15a73d316519e"
+  },
+  "ci_at_review": "pending; lead will attach exact run receipt",
+  "verdict": "no blocking findings in local consumer scope",
+  "hosted_acceptance": false
+}

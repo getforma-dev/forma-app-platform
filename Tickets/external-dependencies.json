@@ -5,12 +5,12 @@
   "gates": [
     {
       "id": "FORMA-246",
-      "state": "open",
+      "state": "cleared",
       "blocks": [
         "APP-003"
       ],
       "kind": "required",
-      "evidence": "",
+      "evidence": "evidence/APP-003/ACCEPTANCE.md",
       "condition": "Native composition conformance evidence plus exact consumable ref and GenUI integration checks."
     },
     {

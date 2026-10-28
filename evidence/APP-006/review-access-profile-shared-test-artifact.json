@@ -1,0 +1,34 @@
+{
+  "scope": "Independent replay of frozen access-only rotation and SSF cross-purpose controls",
+  "lib_sha256": "484ef0aa0a3b78cf01212435315f756245be50b59a9c46f4932573a5cc751542",
+  "tests_sha256": "7d0894ea8ee479bda5e56b023679164cb7d3adf6bba85cd72ecf321b1b2eb30d",
+  "checks": [
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "access_only",
+        "--",
+        "--test-threads=2",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "output": "\nrunning 2 tests\ntest tests::access_only_profile_prepublication_overlap_and_observed_retirement ... ok\ntest tests::access_only_set_has_bounded_unique_validated_keys_and_atomic_replacement ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.04s\n\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s\n     Running unittests src/lib.rs (target/debug/deps/genui_auth_verifier-59c478626679fd82)\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "ssf_signature_with_access_type_and_claims_cannot_select_access_key",
+        "--",
+        "--test-threads=2",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "output": "\nrunning 1 test\ntest tests::ssf_signature_with_access_type_and_claims_cannot_select_access_key ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.01s\n\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s\n     Running unittests src/lib.rs (target/debug/deps/genui_auth_verifier-59c478626679fd82)\n"
+    }
+  ],
+  "passed": true
+}

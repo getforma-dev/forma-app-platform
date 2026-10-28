@@ -1,0 +1,56 @@
+{
+  "captured_at": "2026-10-28T21:09:46.507928+00:00",
+  "scope": "Unmodified source-team evidence received by GenUI; Markdown captured as text to preserve original-relative links without rebasing evidence.",
+  "files": [
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-246/evidence/current-main/HANDOFF.md",
+      "saved_as": "handoff.txt",
+      "sha256": "7809e6741cc3a308163956087e62559b7252534f3e85493aa2370c19d743282d"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-246/evidence/current-main/independent-review.md",
+      "saved_as": "independent-review.txt",
+      "sha256": "aa6175d19a634da798abd12051d2deed0ab8ee5275e7f8867dc0508b11524f21"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-246/evidence/current-main/ci-final.json",
+      "saved_as": "ci-final.json",
+      "sha256": "c0d5477d4cee52600bf1cef591f4326ce6b1dd7168251f7cc25dd51fa17b6fc6"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-246/evidence/current-main/merge-final.json",
+      "saved_as": "merge-final.json",
+      "sha256": "9e6c73f6542770643a21f18d7eb7f63b6cf19a3271e711b1de365c1c2ccdb03e"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-246/evidence/published-3.2/HANDOFF.md",
+      "saved_as": "published-handoff.txt",
+      "sha256": "5fe85e0dc16e08df001517a6198d26871833f0831fd07b5272f085bf907be6dc"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-246/evidence/published-3.2/conformance-summary.json",
+      "saved_as": "published-conformance-summary.json",
+      "sha256": "0fed7d6c95641e5405e427f966a5b57be6cfedd39a470e1afb3e4f941f84b8ae"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-246/evidence/published-3.2/identity.json",
+      "saved_as": "published-identity.json",
+      "sha256": "2cde1c947228da1ebec1e7df9dff22ef946b1950a1da043b535169e1ea7afae0"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-246/evidence/published-3.2/conformance-chromium.json",
+      "saved_as": "published-chromium.json",
+      "sha256": "4d6a3e42622bb93781ffd8bb08f43ff959c12e9cd6188735db74a1060af97fd7"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-246/evidence/published-3.2/conformance-firefox.json",
+      "saved_as": "published-firefox.json",
+      "sha256": "d95c5ec15c7b76c6d5039689461c75f7912f6c41eb9faf3fa2ff461a65febced"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-246/evidence/published-3.2/conformance-webkit.json",
+      "saved_as": "published-webkit.json",
+      "sha256": "dfc4eacafdd6061badab0488b73dc7b07f954df81c89342aa7b53a0f867d7a64"
+    }
+  ]
+}

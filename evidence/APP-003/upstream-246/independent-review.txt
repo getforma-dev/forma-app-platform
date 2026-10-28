@@ -1,0 +1,25 @@
+# FORMA-246 independent review
+
+Reviewer: Codex FormaStack lead `/root`, separate from implementation agent `/root/canvas`. Reviewed source `d94e09db14dbb11fefeb8b649f421c273b6c1b93` and its merge of reviewed budget main at `f1421c3791228211c211f4bf2bc3b4082c9099b1` in [PR 214](https://github.com/getforma-dev/forma/pull/214), 2026-10-28. The only conflict was compiler changelog text; both entries are retained. The combined diagnostic catalogue and canvas tests pass 179/179; current-head CI completed successfully (30/30); see final receipt below.
+
+The conformance implementation is approved; all30 exact-head CI checks passed. It changes reusable fixtures, tests, the cold-client parity harness, documentation and line-ending policy. It does not change production compiler/runtime semantics. A registry release is unnecessary to execute the qualified pattern; independent exact-registry 3.2.0 replay passed in all three engines.
+
+Reviewed the named resolved states and strict zero-diagnostic admission, emitted FMIR/JavaScript pairing, Rust typed body assertions and PageResponse policy, P1/P2 coverage, all-node identity, zero initial writes, real focus events, label associations, SVG namespace, two-instance isolation, and diagnostic controls. The generic no-setter P3 result is not counted as an interaction pass; the dedicated real-event test supplies that evidence. Generated products are emitted through the compiler, not hand-edited.
+
+Review findings addressed:
+
+- Compare the island root and every descendant including text/comment nodes, rather than selected elements alone.
+- Recompile the actual client module during fixture checking; a source edit affecting only JavaScript must invalidate the frozen pair. The producer killed and restored that mutation control.
+- Use the existing production JSX namespace transform for the cold-client twin. The initial SVG title mismatch was a harness omission, not a released runtime defect; eager SVG title syntax is retained.
+- Canonical style strings are an explicit fixture input requirement for exact attribute parity. No comparator exemption or hidden CSS normalization was added.
+- Preserve exact frozen product bytes on Windows and pin fixture source to LF because signal identity contains source offsets. The first CI failure authenticated a CRLF-rewritten product; the next exposed CRLF-shifted source offsets. The final actual `core.autocrlf=true` checkout control is byte-identical and Windows Node CI now passes. The strict comparison remains intact.
+
+Producer evidence: 179 focused compiler checks, 19 Rust tests, TypeScript checks, four-state parity/real-event suites (three tests per engine) in Chromium/Firefox/WebKit, 22 affected parity regressions, and killed source mutations. Current Windows Rust CI passes workspace/all-target/all-feature Clippy with warnings denied and the Rust suite; another local full compile would duplicate that evidence.
+
+Independent execution: `/root` built and served the unchanged spike with exact published npm/crates.io 3.2.0, validated native body/state/CSP and three-browser activation retaining 189 nodes, then replayed the amended named fixture against exact registry compiler/core/server 3.2.0. All four states pass P1/P2 in all three engines; seeded mismatches are detected and two-instance real events preserve identity/isolation. See `../published-3.2/HANDOFF.md` and `../published-3.2/conformance-summary.json` for inputs, hashes, setup failures and results.
+
+This review does not assert full GenUI primitive-library fit, APP-003 acceptance or a new package release. GenUI owns application integration and FORMA-232's separate budget disposition applies.
+
+## Final reviewed merge — 2026-10-28
+
+PR214 merged at `166cec8741462a5ebc4449c4fd553af482a978bd` on 2026-10-28 21:06:20 UTC (5:06:20 p.m. America/New_York), from reviewed head `f1421c3791228211c211f4bf2bc3b4082c9099b1`. All **30/30** exact-head checks completed successfully: CI run40764076025, E2E/parity run40764075989, security mutations run40764075968 and two Socket checks. Machine receipts: `ci-final.json` and `merge-final.json`. The independent approval condition is satisfied. FORMA-246 is Done. This additive conformance work proves the documented pattern on unchanged published3.2.0; no package publication is required. GenUI independently owns APP-003 acceptance.

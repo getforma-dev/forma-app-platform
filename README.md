@@ -2,7 +2,7 @@
 
 The company app platform built on Forma Stack: teams create, run, adapt and share their own apps. Northstar and Spend Review prove the same platform through two different workflows.
 
-**Phase 1 is underway — October 28, 2026.** This repository contains the delivered design, ordered tickets, published Forma **3.2.0** baseline, locked data contracts, isolated parser/query qualifications, and a minimal application plus AWS CDK setup. The [live board](Tickets/TRACKER.md) records actual review/completion state. The full canvas, hosted authentication and managed integration remain gated; a scaffold or passing unit test does not establish those capabilities.
+**Phase 1 is underway — October 28, 2026.** APP-001–005 are complete: published Forma **3.2.0**, locked data contracts, and native canvas/parser/query qualifications. The repository also contains reviewed local authentication and application/CDK preparation. The [live board](Tickets/TRACKER.md) records actual review/completion state. Hosted authentication, managed tenant storage and the integrated saved workflow remain gated; local preparation does not establish those capabilities.
 
 ## Start here
 

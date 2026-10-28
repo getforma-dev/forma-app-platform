@@ -1,0 +1,31 @@
+# FORMA-246 — independent published 3.2 replay
+
+The registry-published 3.2.0 compiler, browser runtime and Rust server support this native canvas pattern. The exact original spike builds and activates successfully. The amended conformance fixture also passes cold-client/native parity (P1), zero-write adoption (P2), and real two-instance interactions in Chromium, Firefox and WebKit.
+
+## Original spike
+
+The source under `design-doc-factory/tasks/forma-generative-app-platform-v2/review/spike-native-composition` was preserved. A fresh `@getforma/create-app@3.2.0` minimal scaffold was pinned to exact npm/crates.io 3.2.0; original `app.tsx`, `build.ts`, and `main.rs` were copied unchanged. Source/lock hashes are in `identity.json`; resolved npm versions and Cargo.lock are retained beside the replay.
+
+- Strict build: zero diagnostics; home FMIR 4,752 bytes, one island; about 415 bytes, zero islands.
+- Ordinary-page budget: estimated Forma 28,021 / 28,420 gzip bytes; total JavaScript 30,451 / 76,800, including the 1,533-byte worker. No canvas or navigation-group cap was substituted.
+- Rust typed bind, finalize and render passed. The response contains the visible summary, cells, six SVG bars/titles and label/control pairs, one inert `data-island-state` envelope, no-store and fresh nonce CSP.
+- Each browser preserved the original root and all 189 descendant nodes with zero initial DOM writes, completed the actual activation promise, and handled four focus clicks without page errors or CSP violations. `browser-adoption.json` is specifically adoption/interaction evidence, not a cold-client parity claim for the unchanged style strings.
+- Enum-derived condition refusal remains BUILD-610. A pure local four-component nesting control refuses BUILD-403/610. The initially attempted wrapper around an island boundary was not a valid depth control and is retained separately; it was not counted as a passing refusal.
+
+## Amended named fixture
+
+The approved fixture source and tests are from framework commit `d25a3a75ebe55bef5edade15615b3a92de915fac` (PR 214). It retains eager SVG titles and uses canonical CSS style strings so exact attribute parity is meaningful. Named states cover 8, 0, 12 and 8 cards, repeated kinds, empty nested collections, long and non-ASCII text. This is a source amendment, not a runtime or comparator waiver.
+
+The standalone replay uses registry compiler/core 3.2.0 and exact Rust `forma-ir`/`forma-server` 3.2.0. The Rust parity example, JSX namespace helper, shared helper and normalization vector were taken from tag `v3.2.0` (`fc76ea8531f0e3a85d0224087384e41f52040e3c`). The test harness uses the qualified PR's existing namespace transform for the cold client twin. The original harness's plain esbuild twin omitted that production transform; the fix changes the test harness only.
+
+The replay corpus selects just this fixture and emits fresh FMIR using the exact published compiler. Its optional frozen-IR path is removed because this standalone registry replay does not have the repository's frozen fixture tree. The qualification PR separately checks its frozen Rust FMIR/JavaScript pair. No runtime source was substituted. `conformance-summary.json` records input hashes, exact identities, each P1/P2 result and expected mutation-control failure.
+
+All three engine runs pass three tests each: all four named states have equal P1/P2 results and successful activation; a seeded wrong attribute is detected; two Canvas instances preserve their roots and nodes, labels, SVG namespace and isolation across real focus transitions. The generic P3 setter result is `no-setter`; the separate real-event test supplies the interaction evidence.
+
+## Reproduction and retained failures
+
+Replay checkout: `/Users/victorvillacis/dev/Forma/work/FORMA-246/published-3.2/conformance`. Use Node 24.22.0, `CARGO_BUILD_JOBS=3`, the retained composition-spike target directory, `FORMA_PARITY_BROWSER` set to each engine, and `node --test e2e/parity/tests/composition-canvas.test.mts`. `FORMA_CANVAS_REPORT` writes the machine-readable result.
+
+The original scaffold's first incomplete lock/install attempt and two standalone harness setup failures (missing normalization vector, then missing frozen IR) are retained. Subsequent complete lock installation and corrected replay setup passed; none is presented as a product regression.
+
+This evidence does not merge or publish PR 214 and does not clear GenUI's consumer gate. GenUI owns replaying its own module, lockfiles and integration checks. The source-qualified pattern is already executable with published 3.2.0; the new reusable fixture/CI coverage is awaiting PR qualification.

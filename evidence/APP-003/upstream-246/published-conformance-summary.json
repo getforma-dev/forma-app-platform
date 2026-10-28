@@ -1,0 +1,426 @@
+{
+  "registryRuntime": "npm/crates.io exact 3.2.0",
+  "qualificationSource": "d25a3a75ebe55bef5edade15615b3a92de915fac",
+  "tagSource": "fc76ea8531f0e3a85d0224087384e41f52040e3c",
+  "compiler": "../composition-spike/admin/node_modules/@getforma/compiler/dist/index.js",
+  "rust": "forma-ir =3.2.0; forma-server =3.2.0",
+  "nativeArtifact": "fresh exact-registry compiler emission; frozen IR field removed for this standalone replay",
+  "results": [
+    {
+      "engine": "chromium",
+      "passed": true,
+      "results": [
+        {
+          "engine": "chromium",
+          "kind": "parity",
+          "reports": [
+            {
+              "index": 0,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 1,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 1,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 2,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 2,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 3,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 3,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P3",
+              "verdict": "no-setter",
+              "count": 0,
+              "serverPath": "typed"
+            }
+          ]
+        },
+        {
+          "engine": "chromium",
+          "kind": "seeded-wrong-attribute",
+          "reports": [
+            {
+              "index": 0,
+              "check": "P1",
+              "verdict": "different",
+              "count": 1,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P2",
+              "verdict": "different",
+              "count": 3,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P3",
+              "verdict": "no-setter",
+              "count": 0,
+              "serverPath": "typed"
+            }
+          ]
+        },
+        {
+          "engine": "chromium",
+          "kind": "interaction-initial",
+          "initial": {
+            "initialWrites": 0,
+            "rootIdentity": true,
+            "identities": true,
+            "controlled": true,
+            "errors": [],
+            "activated": 2,
+            "labels": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "states": 1,
+            "svg": true
+          }
+        },
+        {
+          "engine": "chromium",
+          "kind": "interaction-final",
+          "first": "timeline-0",
+          "second": "secondary-summary-0",
+          "console": []
+        }
+      ]
+    },
+    {
+      "engine": "firefox",
+      "passed": true,
+      "results": [
+        {
+          "engine": "firefox",
+          "kind": "parity",
+          "reports": [
+            {
+              "index": 0,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 1,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 1,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 2,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 2,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 3,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 3,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P3",
+              "verdict": "no-setter",
+              "count": 0,
+              "serverPath": "typed"
+            }
+          ]
+        },
+        {
+          "engine": "firefox",
+          "kind": "seeded-wrong-attribute",
+          "reports": [
+            {
+              "index": 0,
+              "check": "P1",
+              "verdict": "different",
+              "count": 1,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P2",
+              "verdict": "different",
+              "count": 3,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P3",
+              "verdict": "no-setter",
+              "count": 0,
+              "serverPath": "typed"
+            }
+          ]
+        },
+        {
+          "engine": "firefox",
+          "kind": "interaction-initial",
+          "initial": {
+            "initialWrites": 0,
+            "rootIdentity": true,
+            "identities": true,
+            "controlled": true,
+            "errors": [],
+            "activated": 2,
+            "labels": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "states": 1,
+            "svg": true
+          }
+        },
+        {
+          "engine": "firefox",
+          "kind": "interaction-final",
+          "first": "timeline-0",
+          "second": "secondary-summary-0",
+          "console": []
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "passed": true,
+      "results": [
+        {
+          "engine": "webkit",
+          "kind": "parity",
+          "reports": [
+            {
+              "index": 0,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 1,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 1,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 2,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 2,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 3,
+              "check": "P1",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 3,
+              "check": "P2",
+              "verdict": "equal",
+              "count": 0,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P3",
+              "verdict": "no-setter",
+              "count": 0,
+              "serverPath": "typed"
+            }
+          ]
+        },
+        {
+          "engine": "webkit",
+          "kind": "seeded-wrong-attribute",
+          "reports": [
+            {
+              "index": 0,
+              "check": "P1",
+              "verdict": "different",
+              "count": 1,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P2",
+              "verdict": "different",
+              "count": 3,
+              "serverPath": "typed"
+            },
+            {
+              "index": 0,
+              "check": "P3",
+              "verdict": "no-setter",
+              "count": 0,
+              "serverPath": "typed"
+            }
+          ]
+        },
+        {
+          "engine": "webkit",
+          "kind": "interaction-initial",
+          "initial": {
+            "initialWrites": 0,
+            "rootIdentity": true,
+            "identities": true,
+            "controlled": true,
+            "errors": [],
+            "activated": 2,
+            "labels": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "states": 1,
+            "svg": true
+          }
+        },
+        {
+          "engine": "webkit",
+          "kind": "interaction-final",
+          "first": "timeline-0",
+          "second": "secondary-summary-0",
+          "console": [
+            "The Content Security Policy 'require-trusted-types-for 'script'; trusted-types forma forma-runtime' was delivered in report-only mode, but does not specify a 'report-to'; the policy will have no effect. Please either add a 'report-to' directive, or deliver the policy via the 'Content-Security-Policy' header."
+          ]
+        }
+      ]
+    }
+  ],
+  "sha256": {
+    "Cargo.toml": "b828fee20421d4ec8db86a91e57df4763e6af8402325cb4cfdddc487eb5194bc",
+    "Cargo.lock": "b0d780bfa7d125185759324028f0d8e5eea4004251e8e2cae6179d9d208a4055",
+    "e2e/parity/corpus.json": "e2184bc0718e3443b997bd927ff5c59b862a495560a5be6622fb9a7bb8a167b2",
+    "e2e/parity/src/bundle.mts": "7e3e0162d6ad37762abf99ae1fc4bfa88d61aae23da96359f30b573e3de72c97",
+    "e2e/parity/src/server.mts": "88f973ab5b2905faf4cfc53558ae25bf025df62b36b27603f6aba5313f63740e",
+    "e2e/parity/src/suite.mts": "35b5c0e59a2777efce5083b5374c1c7068d94ca7f1c219fc28cabff52afcb9b3",
+    "e2e/parity/tests/composition-canvas.test.mts": "46432d8571d52c4e4ca379e3e9d7d433cdcdc3809739dd62fdadc57f44712406",
+    "examples/parity_render.rs": "98fac60c0eaeed9441ddab0e547cd53a1c16c9ba63cd2c9a2e189cff7747389c",
+    "packages/build/src/jsx-namespace.ts": "3bbfb54f677d736e09eeec1ee718f8274b3bf556b382e9dd698acfb0fdfb0b50",
+    "packages/shared/jsx-namespace.mjs": "c75a1a47de1f673adbb1f8c4b6efca6aef85044147ebb86f5276cb286cacea6e",
+    "packages/compiler/tests/fixtures/conformance/composition-canvas/page.tsx": "9653fce5fe2724adfd797434e2f5a34b5e669f4d415f55c575a36645c17973f0",
+    "packages/compiler/tests/fixtures/conformance/composition-canvas/app.tsx": "864fb8892c10a28b41d846ec453b2ea36adb1d08cffbf6a932d588febba5ec0b",
+    "packages/compiler/tests/fixtures/conformance/composition-canvas/states.json": "c8082e1349e6e0febd2f5090876f732277d541f29d330d460e307f94a26765a9"
+  }
+}

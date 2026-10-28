@@ -1,0 +1,25 @@
+{
+  "scope": "independent supplemental local verifier probes; no implementation edits, hosted auth or credentials",
+  "app_head": "74a72316c5f4bda03edc0c97db60f1e727bd22c3",
+  "candidate_source_sha256": {
+    "Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+    "Cargo.lock": "caec3dcdcb3228c1e98b7ef177517408485ecc3ac5af5b48927d81e87e050b8d",
+    "rust-toolchain.toml": "162713004a236937311e636866219dc019297684304d082e2fc31eb23c91ebcf",
+    "src/lib.rs": "484ef0aa0a3b78cf01212435315f756245be50b59a9c46f4932573a5cc751542",
+    "src/tests.rs": "7d0894ea8ee479bda5e56b023679164cb7d3adf6bba85cd72ecf321b1b2eb30d",
+    "source-contract.json": "a168a8638dd45a5f48334efbbe667ea452cc75a4911c4b9f8c88fcc93aa3143b"
+  },
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "review_",
+    "--",
+    "--test-threads=1",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "output": "   Compiling proc-macro2 v1.0.107\n   Compiling unicode-ident v1.0.27\n   Compiling quote v1.0.47\n   Compiling libc v0.2.191\n   Compiling stable_deref_trait v1.2.1\n   Compiling syn v3.0.9\n   Compiling bytes v1.12.1\n   Compiling pin-project-lite v0.2.17\n   Compiling shlex v2.0.1\n   Compiling futures-core v0.3.34\n   Compiling itoa v1.0.18\n   Compiling find-msvc-tools v0.1.15\n   Compiling cc v1.10.0\n   Compiling synstructure v0.14.0\n   Compiling smallvec v1.16.4\n   Compiling writeable v0.6.4\n   Compiling litemap v0.8.3\n   Compiling ring v0.17.14\n   Compiling mio v1.2.4\n   Compiling zerofrom-derive v0.1.8\n   Compiling yoke-derive v0.8.4\n   Compiling zerofrom v0.1.8\n   Compiling zerovec-derive v0.11.7\n   Compiling yoke v0.8.4\n   Compiling displaydoc v0.2.7\n   Compiling zerovec v0.11.9\n   Compiling zerotrie v0.2.5\n   Compiling tokio-macros v2.7.2\n   Compiling tinystr v0.8.5\n   Compiling icu_locale_core v2.1.1\n   Compiling potential_utf v0.1.6\n   Compiling socket2 v0.6.5\n   Compiling icu_properties_data v2.1.2\n   Compiling icu_normalizer_data v2.1.1\n   Compiling icu_provider v2.1.1\n   Compiling tokio v1.53.3\n   Compiling icu_collections v2.1.1\n   Compiling http v1.5.0\n   Compiling zeroize v1.9.1\n   Compiling cfg-if v1.0.5\n   Compiling once_cell v1.21.4\n   Compiling percent-encoding v2.3.2\n   Compiling getrandom v0.2.17\n   Compiling rustls-pki-types v1.15.1\n   Compiling http-body v1.1.0\n   Compiling slab v0.4.12\n   Compiling serde_core v1.0.229\n   Compiling futures-task v0.3.34\n   Compiling untrusted v0.9.0\n   Compiling httparse v1.10.1\n   Compiling futures-util v0.3.34\n   Compiling icu_properties v2.1.2\n   Compiling icu_normalizer v2.1.1\n   Compiling tower-service v0.3.3\n   Compiling rustls v0.23.46\n   Compiling try-lock v0.2.5\n   Compiling idna_adapter v1.2.1\n   Compiling want v0.3.2\n   Compiling rustls-webpki v0.103.16\n   Compiling form_urlencoded v1.2.2\n   Compiling tracing-core v0.1.36\n   Compiling atomic-waker v1.1.2\n   Compiling subtle v2.6.1\n   Compiling serde v1.0.229\n   Compiling utf8_iter v1.0.4\n   Compiling idna v1.1.0\n   Compiling hyper v1.12.0\n   Compiling tracing v0.1.44\n   Compiling serde_derive v1.0.229\n   Compiling futures-channel v0.3.34\n   Compiling sync_wrapper v1.0.2\n   Compiling ipnet v2.12.2\n   Compiling tower-layer v0.3.3\n   Compiling base64 v0.23.1\n   Compiling zmij v1.0.23\n   Compiling hyper-util v0.1.21\n   Compiling tower v0.5.3\n   Compiling tokio-rustls v0.26.6\n   Compiling url v2.5.8\n   Compiling webpki-roots v1.0.11\n   Compiling serde_json v1.0.154\n   Compiling bitflags v2.13.2\n   Compiling ryu v1.0.23\n   Compiling serde_urlencoded v0.7.1\n   Compiling tower-http v0.6.11\n   Compiling hyper-rustls v0.27.10\n   Compiling http-body-util v0.1.5\n   Compiling base64 v0.22.1\n   Compiling memchr v2.8.3\n   Compiling log v0.4.34\n   Compiling reqwest v0.12.28\n   Compiling genui-auth-verifier v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/evidence/APP-006/.cache/review-q8pq8cuv)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 21.93s\n     Running unittests src/lib.rs (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/evidence/APP-006/.cache/target/debug/deps/genui_auth_verifier-59c478626679fd82)\n\nrunning 3 tests\ntest tests::review_delayed_release_and_failed_refresh_are_serialized ... ok\ntest tests::review_external_critical_headers_and_optional_duplicates_are_closed ... ok\ntest tests::review_short_jwks_ttl_expires_before_identity_release ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 23 filtered out; finished in 1.15s\n\n",
+  "candidate_unchanged": true,
+  "passed": true
+}

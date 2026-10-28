@@ -1,0 +1,52 @@
+{
+  "revision": "49389c6ed2b098d7d8251c708c8a38063a680111",
+  "source_landed_on": "origin/main",
+  "checks": [
+    {
+      "name": "planning",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40768504976"
+    },
+    {
+      "name": "contracts",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40768504998"
+    },
+    {
+      "name": "baseline",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40768505019"
+    },
+    {
+      "name": "query",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40768504952"
+    },
+    {
+      "name": "auth-contract",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40768505113"
+    },
+    {
+      "name": "canvas",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40768504980"
+    },
+    {
+      "name": "foundation",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40768504995"
+    },
+    {
+      "name": "parser",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40768505005"
+    }
+  ],
+  "review": "review.md",
+  "linux_result": "ci-49389c6/qualification.json",
+  "upstream_blobs_rechecked_in_ci": 0,
+  "upstream_blobs_rechecked_locally": 21,
+  "status": "Blocked",
+  "scope": "Local verifier only; hosted auth, membership, session and managed custody acceptance unrun."
+}

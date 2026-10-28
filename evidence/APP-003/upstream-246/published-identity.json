@@ -1,0 +1,11 @@
+{
+  "baseline": "published npm/crates.io =3.2.0",
+  "tag": "fc76ea8531f0e3a85d0224087384e41f52040e3c",
+  "sha256": {
+    "app.tsx": "f2caf8286046afb42dd99396996981c1fb598ba301eaa883bf7bef255b42b34d",
+    "main.rs": "7e36ae823f9b3da132fe4c2b430154097588828d8c08c719dabec91ef164f5c5",
+    "build.ts": "934711b02bdef4ddbcc76b845b0ce045b1ebeb95a3cb9f0ba782ce49fd6ab0c0",
+    "package-lock.json": "ef1c58f036ac656212c88d7eb55abc912210d333013d9d28323941b751ca41cd",
+    "Cargo.lock": "b5bc1976cb983d9fc02be3fc8ed129e0d99429fd983cc73ec978841ed4053897"
+  }
+}
