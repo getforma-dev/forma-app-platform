@@ -31,7 +31,7 @@
         "APP-014"
       ],
       "ticket_count": 14,
-      "done_count": 1,
+      "done_count": 2,
       "blocked_count": 2
     },
     {
@@ -193,7 +193,11 @@
       "blocked_count": 0
     }
   ],
-  "ready_by_local_dependencies": [],
+  "ready_by_local_dependencies": [
+    "APP-004",
+    "APP-005",
+    "APP-007"
+  ],
   "tickets": [
     {
       "id": "APP-001",
@@ -224,11 +228,11 @@
     {
       "id": "APP-002",
       "title": "Freeze implementation contracts and unresolved decisions",
-      "path": "3-in-review/APP-002.md",
+      "path": "4-done/APP-002.md",
       "Field": "Value",
       "---": "---",
       "Epic": "FND",
-      "Status": "In review",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Spike",
       "Sprint": "S01",
@@ -241,7 +245,7 @@
       "Depends on": "APP-001",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Codex contract implementation and review",
-      "Branch / PR": "app-002-contracts",
+      "Branch / PR": "app-002-contracts; reviewed implementation a71c7c2, landed on main",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
