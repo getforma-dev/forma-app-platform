@@ -1,0 +1,141 @@
+{
+  "recorded_on": "2026-10-28",
+  "passed": true,
+  "engine": "DuckDB 2.0.0",
+  "sample_count_cold": 5,
+  "sample_count_warm_bursts": 5,
+  "cold_engine_seconds": {
+    "minimum": 0.02661125000008724,
+    "maximum": 0.03111483399993631
+  },
+  "cold_process_seconds": {
+    "minimum": 0.18114416699995672,
+    "maximum": 0.19069379200004732
+  },
+  "warm_six_declared_view_seconds": {
+    "minimum": 0.603492999999844,
+    "maximum": 0.6432602919999226
+  },
+  "checks": {
+    "OS confinement": true,
+    "closed typed refusals": true,
+    "engine defense in depth": true,
+    "admission and resource recovery": true,
+    "queued deadline expires before worker launch": true,
+    "real deadline and outer process backstop": true,
+    "actual engine spill reclamation": true,
+    "unresponsive worker kill control": true,
+    "S02 exact arithmetic and receipt identity": true
+  },
+  "fixture": {
+    "fixture_version": 1,
+    "duckdb_generator": "2.0.0",
+    "source_semantics": "complete synthetic event bytes, UTC, half-open ten-minute window",
+    "files": {
+      "empty.duckdb": {
+        "digest": "sha256:33e8ae5f6937a1b9409cda9029e861bf48e00509b8b1a5a973053c1544e178fd",
+        "bytes": 274432
+      },
+      "s02.parquet": {
+        "digest": "sha256:275027a01a681ca8ca63ad59f22b03a3767c7e215455dfaa51d621764d6bdbe9",
+        "bytes": 800
+      },
+      "million.parquet": {
+        "digest": "sha256:da2e0c14aa31f0f8cd737a9bfe38efbd55129e959300631f8a8c4084bad27546",
+        "bytes": 1160103
+      }
+    },
+    "million": {
+      "rows": 1000000,
+      "total": 500500000,
+      "minimum": 1,
+      "maximum": 1000,
+      "destinations": {
+        "203.0.113.10": 124750000,
+        "203.0.113.20": 125000000,
+        "198.51.100.7": 125250000,
+        "198.51.100.8": 125500000
+      },
+      "minute_totals": [
+        43046610,
+        49047810,
+        55049010,
+        47730210,
+        47071410,
+        53072610,
+        52393600,
+        45031980,
+        51029580,
+        57027180
+      ],
+      "row_groups": [
+        [
+          0,
+          100352
+        ],
+        [
+          1,
+          100352
+        ],
+        [
+          2,
+          100352
+        ],
+        [
+          3,
+          100352
+        ],
+        [
+          4,
+          100352
+        ],
+        [
+          5,
+          100352
+        ],
+        [
+          6,
+          100352
+        ],
+        [
+          7,
+          100352
+        ],
+        [
+          8,
+          100352
+        ],
+        [
+          9,
+          96832
+        ]
+      ]
+    },
+    "s02": {
+      "included_rows": 5,
+      "total": 1140000,
+      "filtered_destination_total": 900000,
+      "whole_window_bytes_per_minute": 114000,
+      "timeline": [
+        60000,
+        120000,
+        300000,
+        600000,
+        0,
+        60000,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "inventory_scope": "Exact/CIDR matching is a future registered operator, not implemented or timed by this spike."
+  },
+  "limitations": [
+    "Five samples are diagnostics, not p99 estimates.",
+    "OS page cache not flushed; byte digest reads source before engine execution.",
+    "No RDS authorization, S3/KMS, network, real browser delivery or full Northstar CIDR workload.",
+    "The full managed six-view N3 gate remains open."
+  ],
+  "campaign": "container-reviewed"
+}

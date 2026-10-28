@@ -1,0 +1,718 @@
+{
+  "recorded_at": "2026-10-28T19:29:59.600723+00:00",
+  "account": "877573132739",
+  "region": "us-east-1",
+  "checks": {
+    "active_stacks": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "cloudformation",
+        "list-stacks",
+        "--query",
+        "StackSummaries[?StackStatus!='DELETE_COMPLETE'].{Name:StackName,Status:StackStatus}"
+      ],
+      "exit_code": 0,
+      "result": [
+        {
+          "Name": "CDKToolkit",
+          "Status": "CREATE_COMPLETE"
+        }
+      ],
+      "error": null
+    },
+    "app_runner_services": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "apprunner",
+        "list-services",
+        "--query",
+        "ServiceSummaryList[].{Name:ServiceName,Status:Status}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "app_runner_vpc_connectors": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "apprunner",
+        "list-vpc-connectors",
+        "--query",
+        "VpcConnectors[].{Name:VpcConnectorName,Status:Status}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "rds_instances": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "rds",
+        "describe-db-instances",
+        "--query",
+        "DBInstances[].{Id:DBInstanceIdentifier,Status:DBInstanceStatus}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "rds_snapshots": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "rds",
+        "describe-db-snapshots",
+        "--query",
+        "DBSnapshots[?DBInstanceIdentifier=='gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz'].{Id:DBSnapshotIdentifier,Status:Status}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "rds_automated_backups": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "rds",
+        "describe-db-instance-automated-backups",
+        "--query",
+        "DBInstanceAutomatedBackups[].{Id:DBInstanceIdentifier,Status:Status}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "rds_subnet_groups": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "rds",
+        "describe-db-subnet-groups",
+        "--query",
+        "DBSubnetGroups[?starts_with(DBSubnetGroupName, 'gatewasm')].DBSubnetGroupName"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "rds_parameter_groups": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "rds",
+        "describe-db-parameter-groups",
+        "--query",
+        "DBParameterGroups[?starts_with(DBParameterGroupName, 'gatewasm')].DBParameterGroupName"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "s3_buckets": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "s3api",
+        "list-buckets",
+        "--query",
+        "Buckets[].Name"
+      ],
+      "exit_code": 0,
+      "result": [
+        "cdk-hnb659fds-assets-877573132739-us-east-1"
+      ],
+      "error": null
+    },
+    "ecr_repositories": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "ecr",
+        "describe-repositories",
+        "--query",
+        "repositories[].repositoryName"
+      ],
+      "exit_code": 0,
+      "result": [
+        "cdk-hnb659fds-container-assets-877573132739-us-east-1"
+      ],
+      "error": null
+    },
+    "log_groups": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "logs",
+        "describe-log-groups",
+        "--query",
+        "logGroups[?contains(logGroupName, 'gatewasm') || contains(logGroupName, 'Gatewasm')].{Name:logGroupName,StoredBytes:storedBytes}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "secrets_metadata": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "secretsmanager",
+        "list-secrets",
+        "--include-planned-deletion",
+        "--query",
+        "SecretList[?starts_with(Name, 'gatewasm/')].{Name:Name,ARN:ARN,DeletedDate:DeletedDate}"
+      ],
+      "exit_code": 0,
+      "result": [
+        {
+          "Name": "gatewasm/ed25519-key",
+          "ARN": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/ed25519-key-l8JTmP",
+          "DeletedDate": "2026-10-28T15:20:29.159000-04:00"
+        },
+        {
+          "Name": "gatewasm/oauth-google",
+          "ARN": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/oauth-google-WPVMOG",
+          "DeletedDate": "2026-10-28T15:20:29.724000-04:00"
+        },
+        {
+          "Name": "gatewasm/platform-admin-key",
+          "ARN": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/platform-admin-key-vqaj0u",
+          "DeletedDate": "2026-10-28T15:20:30.293000-04:00"
+        },
+        {
+          "Name": "gatewasm/csrf-secret",
+          "ARN": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/csrf-secret-NCZisI",
+          "DeletedDate": "2026-10-28T15:20:30.851000-04:00"
+        },
+        {
+          "Name": "gatewasm/oauth-github",
+          "ARN": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/oauth-github-CAhDkJ",
+          "DeletedDate": "2026-10-28T15:20:31.398000-04:00"
+        },
+        {
+          "Name": "gatewasm/smtp",
+          "ARN": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/smtp-nGIKBw",
+          "DeletedDate": "2026-10-28T15:20:31.989000-04:00"
+        },
+        {
+          "Name": "gatewasm/mfa-encryption-key",
+          "ARN": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/mfa-encryption-key-yXXycq",
+          "DeletedDate": "2026-10-28T15:20:32.534000-04:00"
+        }
+      ],
+      "error": null
+    },
+    "ec2_gatewasm": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "ec2",
+        "describe-instances",
+        "--filters",
+        "Name=vpc-id,Values=vpc-01375b2f8d7f55ac2",
+        "--query",
+        "Reservations[].Instances[].{Id:InstanceId,State:State.Name}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "volumes": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "ec2",
+        "describe-volumes",
+        "--query",
+        "Volumes[].{Id:VolumeId,State:State,Size:Size}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "elastic_ips": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "ec2",
+        "describe-addresses",
+        "--query",
+        "Addresses[].AllocationId"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "nat_asg": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "autoscaling",
+        "describe-auto-scaling-groups",
+        "--auto-scaling-group-names",
+        "GatewasmStack-NetworkingVpcPublicSubnet1FckNatAsgASG05589C7A-qznP667LvRay",
+        "--query",
+        "AutoScalingGroups[].{Name:AutoScalingGroupName,Desired:DesiredCapacity,Instances:Instances[].InstanceId}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "network_interfaces": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "ec2",
+        "describe-network-interfaces",
+        "--filters",
+        "Name=vpc-id,Values=vpc-01375b2f8d7f55ac2",
+        "--query",
+        "NetworkInterfaces[].{Id:NetworkInterfaceId,Status:Status,Description:Description}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "vpc": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "ec2",
+        "describe-vpcs",
+        "--filters",
+        "Name=vpc-id,Values=vpc-01375b2f8d7f55ac2",
+        "--query",
+        "Vpcs[].{Id:VpcId,State:State}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "cloudfront": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "cloudfront",
+        "list-distributions",
+        "--query",
+        "DistributionList.Items[?Id=='E1S9CR5SIFOUMC'].{Id:Id,Status:Status} || `[]`"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "lambda": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "lambda",
+        "list-functions",
+        "--query",
+        "Functions[?starts_with(FunctionName, 'Gatewasm')].FunctionName"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "alarms": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "cloudwatch",
+        "describe-alarms",
+        "--alarm-name-prefix",
+        "gatewasm",
+        "--query",
+        "MetricAlarms[].AlarmName"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "topics": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "sns",
+        "list-topics",
+        "--query",
+        "Topics[?contains(TopicArn, 'gatewasm')].TopicArn"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    },
+    "stack_GatewasmServiceStack": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "cloudformation",
+        "describe-stacks",
+        "--stack-name",
+        "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmServiceStack/68690560-177d-11f1-9e60-12999b134f5f",
+        "--query",
+        "Stacks[].{Name:StackName,Id:StackId,Status:StackStatus,DeletionTime:DeletionTime}"
+      ],
+      "exit_code": 0,
+      "result": [
+        {
+          "Name": "GatewasmServiceStack",
+          "Id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmServiceStack/68690560-177d-11f1-9e60-12999b134f5f",
+          "Status": "DELETE_COMPLETE",
+          "DeletionTime": "2026-10-28T19:18:01.294000+00:00"
+        }
+      ],
+      "error": null
+    },
+    "stack_GatewasmDatabaseStack": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "cloudformation",
+        "describe-stacks",
+        "--stack-name",
+        "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmDatabaseStack/3105a380-177d-11f1-afde-0afff2f905bd",
+        "--query",
+        "Stacks[].{Name:StackName,Id:StackId,Status:StackStatus,DeletionTime:DeletionTime}"
+      ],
+      "exit_code": 0,
+      "result": [
+        {
+          "Name": "GatewasmDatabaseStack",
+          "Id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmDatabaseStack/3105a380-177d-11f1-afde-0afff2f905bd",
+          "Status": "DELETE_COMPLETE",
+          "DeletionTime": "2026-10-28T19:26:39.012000+00:00"
+        }
+      ],
+      "error": null
+    },
+    "stack_GatewasmNetworkStack": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "cloudformation",
+        "describe-stacks",
+        "--stack-name",
+        "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmNetworkStack/cdd41d50-177c-11f1-a1ad-0e4db1a15765",
+        "--query",
+        "Stacks[].{Name:StackName,Id:StackId,Status:StackStatus,DeletionTime:DeletionTime}"
+      ],
+      "exit_code": 0,
+      "result": [
+        {
+          "Name": "GatewasmNetworkStack",
+          "Id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmNetworkStack/cdd41d50-177c-11f1-a1ad-0e4db1a15765",
+          "Status": "DELETE_COMPLETE",
+          "DeletionTime": "2026-10-28T19:27:07.595000+00:00"
+        }
+      ],
+      "error": null
+    },
+    "stack_GatewasmCdnStack": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "--cli-connect-timeout",
+        "10",
+        "--cli-read-timeout",
+        "20",
+        "cloudformation",
+        "describe-stacks",
+        "--stack-name",
+        "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmCdnStack/6acdfaa0-1781-11f1-90e3-12c87b13bb83",
+        "--query",
+        "Stacks[].{Name:StackName,Id:StackId,Status:StackStatus,DeletionTime:DeletionTime}"
+      ],
+      "exit_code": 0,
+      "result": [
+        {
+          "Name": "GatewasmCdnStack",
+          "Id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmCdnStack/6acdfaa0-1781-11f1-90e3-12c87b13bb83",
+          "Status": "DELETE_COMPLETE",
+          "DeletionTime": "2026-10-28T19:18:02.007000+00:00"
+        }
+      ],
+      "error": null
+    },
+    "active_ec2": {
+      "command": [
+        "aws",
+        "--region",
+        "us-east-1",
+        "--profile",
+        "default",
+        "--output",
+        "json",
+        "--no-cli-pager",
+        "ec2",
+        "describe-instances",
+        "--filters",
+        "Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down",
+        "--query",
+        "Reservations[].Instances[].{Id:InstanceId,State:State.Name,VpcId:VpcId}"
+      ],
+      "exit_code": 0,
+      "result": [],
+      "error": null
+    }
+  }
+}

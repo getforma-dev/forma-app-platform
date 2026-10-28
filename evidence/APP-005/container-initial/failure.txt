@@ -1,0 +1,10 @@
+
+Traceback (most recent call last):
+  File "/app/worker.py", line 16, in <module>
+    from query import Admission, ContractError, Deadline, Refused, authorized_source, compile_query, connect, digest, execute_query, field_ref, measure, run_sql, typed_query
+  File "/app/query.py", line 19, in <module>
+    CONTRACTS = Path(os.environ.get("FORMA_CONTRACTS", str(Path(__file__).resolve().parents[2] / "contracts")))
+                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "/usr/local/lib/python3.11/pathlib.py", line 445, in __getitem__
+    raise IndexError(idx)
+IndexError: 2

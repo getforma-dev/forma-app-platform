@@ -1,0 +1,15 @@
+{
+  "recorded_on": "2026-10-28",
+  "image_id": "sha256:c0656f19af4f46cc1903093eddc6f5745494df6ec12257b5d39bbf9c279b4393",
+  "base_image": "python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d",
+  "artifacts": {
+    "spikes/APP-005/.gitignore": "4bd853235df97cb203fc69a2f36d1561f270a7a68ccd6f4a4c50d96d64328686",
+    "spikes/APP-005/Dockerfile": "b743d666d1e4514cb4a9834f2437b144e6d34b2e23ebb9f674a19dcda7fee20b",
+    "spikes/APP-005/fixture.py": "b098e8cef77e130f4c41f7c9c8098d26086da7b906c427a87676733c8d3f916b",
+    "spikes/APP-005/query.py": "cd40e72eb8fa9997cec0adecd836193ac5432dde81abef096141b4a10221f799",
+    "spikes/APP-005/requirements.lock": "06295e1e9bf322670a74bff06616b94ec32b7a912cc4d43afb90d25a25118ca3",
+    "spikes/APP-005/run.py": "03b443c844cbbadacec2cf8cc413e929f11f2f3c5fd30e96476f090914db5899",
+    "spikes/APP-005/worker.py": "51306a92c368261b98ef2e310250d675c441636d8979f9a91b8cc08778230000",
+    "contracts/implementation-lock.json": "9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45"
+  }
+}

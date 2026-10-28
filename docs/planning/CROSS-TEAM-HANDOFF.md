@@ -47,3 +47,11 @@ The original upstream board's older clone, attribution and release instructions 
 4. Regenerate and validate the board. Never close a blocked APP ticket merely because the upstream work was assigned or the framework version increased.
 
 Actual product choices, access or spending decisions are recorded separately. They are not automatically routed to Victor through the cross-team blocker folder.
+
+## Current hosted-auth operating state
+
+2026-10-28: At Victor’s explicit request, GenUI is pausing unused GateWasm AWS resources to reduce charges, preserving data. FORMA-247/248 now carry the stop/coordination notice. FormaStack should continue isolated local work and coordinate the next hosted-auth test window before restarting these services. Auth gates remain open; the shutdown is not delivery evidence.
+
+2026-10-28 update: the user subsequently authorized full GateWasm application teardown because it has no real data. This supersedes the temporary-pause plan above. GenUI owns teardown; FORMA-247/248 carry the current coordination notice and remain open for later reprovisioning and qualification. CDK/source and shared bootstrap are preserved.
+
+Teardown completed at 2026-10-28 19:29:59 UTC (four deleted application stacks, 27 final checks). FORMA-247/248 now include exact rebuild prerequisites and the external-secret recovery window. The GenUI report is `evidence/APP-007/gatewasm-teardown.md`; no hosted auth availability is claimed.

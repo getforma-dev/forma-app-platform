@@ -1,0 +1,245 @@
+{
+  "account": "877573132739",
+  "region": "us-east-1",
+  "actions": [
+    {
+      "recorded_at": "2026-10-28T19:20:29.223750+00:00",
+      "action": "schedule_secret_deletion",
+      "name": "gatewasm/ed25519-key",
+      "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/ed25519-key-l8JTmP",
+      "deletion_date": "2026-11-27T14:20:29.124000-05:00",
+      "recovery_days": 30
+    },
+    {
+      "recorded_at": "2026-10-28T19:20:29.755028+00:00",
+      "action": "schedule_secret_deletion",
+      "name": "gatewasm/oauth-google",
+      "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/oauth-google-WPVMOG",
+      "deletion_date": "2026-11-27T14:20:29.715000-05:00",
+      "recovery_days": 30
+    },
+    {
+      "recorded_at": "2026-10-28T19:20:30.348616+00:00",
+      "action": "schedule_secret_deletion",
+      "name": "gatewasm/platform-admin-key",
+      "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/platform-admin-key-vqaj0u",
+      "deletion_date": "2026-11-27T14:20:30.286000-05:00",
+      "recovery_days": 30
+    },
+    {
+      "recorded_at": "2026-10-28T19:20:30.894193+00:00",
+      "action": "schedule_secret_deletion",
+      "name": "gatewasm/csrf-secret",
+      "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/csrf-secret-NCZisI",
+      "deletion_date": "2026-11-27T14:20:30.843000-05:00",
+      "recovery_days": 30
+    },
+    {
+      "recorded_at": "2026-10-28T19:20:31.469949+00:00",
+      "action": "schedule_secret_deletion",
+      "name": "gatewasm/oauth-github",
+      "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/oauth-github-CAhDkJ",
+      "deletion_date": "2026-11-27T14:20:31.390000-05:00",
+      "recovery_days": 30
+    },
+    {
+      "recorded_at": "2026-10-28T19:20:32.035674+00:00",
+      "action": "schedule_secret_deletion",
+      "name": "gatewasm/smtp",
+      "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/smtp-nGIKBw",
+      "deletion_date": "2026-11-27T14:20:31.982000-05:00",
+      "recovery_days": 30
+    },
+    {
+      "recorded_at": "2026-10-28T19:20:32.573204+00:00",
+      "action": "schedule_secret_deletion",
+      "name": "gatewasm/mfa-encryption-key",
+      "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/mfa-encryption-key-yXXycq",
+      "deletion_date": "2026-11-27T14:20:32.528000-05:00",
+      "recovery_days": 30
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:25.917312+00:00",
+      "action": "delete_manual_snapshot",
+      "id": "gatewasm-pre-migration-20260303",
+      "status": "deleted"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:26.587793+00:00",
+      "action": "delete_manual_snapshot",
+      "id": "gatewasm-prewipe-20260306-225723",
+      "status": "deleted"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:27.258169+00:00",
+      "action": "delete_manual_snapshot",
+      "id": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-drill-20260307200501",
+      "status": "deleted"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:28.039373+00:00",
+      "action": "delete_manual_snapshot",
+      "id": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-drill-20260307200903",
+      "status": "deleted"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:28.671687+00:00",
+      "action": "delete_repository",
+      "name": "gatewasm-server"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:29.284478+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/12167e5e0d054d6980037929037f741c/application"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:29.829565+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/12167e5e0d054d6980037929037f741c/service"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:30.369884+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/297a55799aad49a59ef6a37d375688d7/application"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:30.967918+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/297a55799aad49a59ef6a37d375688d7/service"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:31.521522+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/3e9ab43e01d3499b8674958570beb0b7/application"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:32.061618+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/3e9ab43e01d3499b8674958570beb0b7/service"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:32.597220+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/5aa90e0556b742a3948692d834069e60/application"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:33.139492+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/5aa90e0556b742a3948692d834069e60/service"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:33.681237+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/5c70db1742a34faf852412a03a5e4220/service"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:34.235033+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/7cf6cfb205964690b4672686d06c5379/application"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:34.773449+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/7cf6cfb205964690b4672686d06c5379/service"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:35.319829+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/91a9ad4cb1ba4e4fae6a15ef500aca87/service"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:35.853019+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/97e4377befc64de494551262d31ddb3b/application"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:36.426611+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/97e4377befc64de494551262d31ddb3b/service"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:36.960915+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/ab34edd5527846268257784adde68107/application"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:37.496928+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/ab34edd5527846268257784adde68107/service"
+    },
+    {
+      "recorded_at": "2026-10-28T19:21:38.028941+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/apprunner/gatewasm-server/fe6e79b6413149d8aeb689eaff583fd6/service"
+    },
+    {
+      "recorded_at": "2026-10-28T19:26:39.093926+00:00",
+      "action": "delete_stack_requested",
+      "name": "GatewasmDatabaseStack",
+      "client_request_token": "gatewasm-teardown-20261028-database"
+    },
+    {
+      "recorded_at": "2026-10-28T19:26:39.696002+00:00",
+      "action": "delete_retained_db_subnet_group",
+      "name": "gatewasmstack-databaseinstancesubnetgroupde121bb6-sjlu5lsyorgb"
+    },
+    {
+      "recorded_at": "2026-10-28T19:26:41.386099+00:00",
+      "action": "delete_retained_bucket_versions",
+      "name": "gatewasmcdnstack-cdnassetsc2a92191-icrhemaa0yt7",
+      "count": 3
+    },
+    {
+      "recorded_at": "2026-10-28T19:26:42.647956+00:00",
+      "action": "delete_retained_bucket",
+      "name": "gatewasmcdnstack-cdnassetsc2a92191-icrhemaa0yt7"
+    },
+    {
+      "recorded_at": "2026-10-28T19:26:43.263386+00:00",
+      "action": "delete_log_group",
+      "name": "/aws/lambda/GatewasmCdnStack-CustomCDKBucketDeployment8693BB64-wZNe87TNVyTg"
+    },
+    {
+      "recorded_at": "2026-10-28T19:27:06.871789+00:00",
+      "action": "resume_only_terminate_for_stack_teardown",
+      "asg": "GatewasmStack-NetworkingVpcPublicSubnet1FckNatAsgASG05589C7A-qznP667LvRay",
+      "other_processes_remain_suspended": true
+    },
+    {
+      "recorded_at": "2026-10-28T19:27:07.676925+00:00",
+      "action": "delete_stack_requested",
+      "name": "GatewasmNetworkStack",
+      "client_request_token": "gatewasm-teardown-20261028-network"
+    },
+    {
+      "recorded_at": "2026-10-28T19:28:48.540393+00:00",
+      "action": "delete_obsolete_gatewasm_rds_group",
+      "kind": "subnet",
+      "name": "gatewasmstack-databaseinstancesubnetgroupde121bb6-9ptsoicszddb"
+    },
+    {
+      "recorded_at": "2026-10-28T19:28:49.151474+00:00",
+      "action": "delete_obsolete_gatewasm_rds_group",
+      "kind": "subnet",
+      "name": "gatewasmstack-databaseinstancesubnetgroupde121bb6-9ujexqgsodml"
+    },
+    {
+      "recorded_at": "2026-10-28T19:28:49.725127+00:00",
+      "action": "delete_obsolete_gatewasm_rds_group",
+      "kind": "subnet",
+      "name": "gatewasmstack-databaseinstancesubnetgroupde121bb6-mm4if7sumtra"
+    },
+    {
+      "recorded_at": "2026-10-28T19:28:50.288628+00:00",
+      "action": "delete_obsolete_gatewasm_rds_group",
+      "kind": "subnet",
+      "name": "gatewasmstack-databaseinstancesubnetgroupde121bb6-ommrhhfx1mp9"
+    },
+    {
+      "recorded_at": "2026-10-28T19:28:50.856660+00:00",
+      "action": "delete_obsolete_gatewasm_rds_group",
+      "kind": "parameter",
+      "name": "gatewasmstack-databaseparams4a0c7523-cbu45olgovtx"
+    }
+  ]
+}

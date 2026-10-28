@@ -1,0 +1,1009 @@
+{
+  "recorded_at": "2026-10-28T19:16:46.517138+00:00",
+  "account": "877573132739",
+  "region": "us-east-1",
+  "source_revision": "b750ca534ae89066714f100eb2b76ee71edf1ab1",
+  "preserve": [
+    "CDKToolkit",
+    "shared account IAM and AWS-managed KMS keys",
+    "external/shared DNS and imported ACM certificates; no Route 53 hosted zones were found in this account",
+    "local source and credentials"
+  ],
+  "stacks": [
+    {
+      "name": "GatewasmServiceStack",
+      "stack_id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmServiceStack/68690560-177d-11f1-9e60-12999b134f5f",
+      "state": "UPDATE_COMPLETE",
+      "termination_protection": false,
+      "resources": [
+        {
+          "logical_id": "CDKMetadata",
+          "type": "AWS::CDK::Metadata",
+          "physical_id": "68690560-177d-11f1-9e60-12999b134f5f",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "MonitoringAuthAlertsTopicEEAF2E6E",
+          "type": "AWS::SNS::Topic",
+          "physical_id": "arn:aws:sns:us-east-1:877573132739:gatewasm-prod-auth-alerts",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "MonitoringMfaFailureAlarm8B471B84",
+          "type": "AWS::CloudWatch::Alarm",
+          "physical_id": "gatewasm-prod-mfa-failures",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "MonitoringMfaFailureFilter03F881E0",
+          "type": "AWS::Logs::MetricFilter",
+          "physical_id": "MonitoringMfaFailureFilter03F881E0-580mVXGvEIHj",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "MonitoringMissingCookieFilter18F0CD48",
+          "type": "AWS::Logs::MetricFilter",
+          "physical_id": "MonitoringMissingCookieFilter18F0CD48-W5RXXdXYgiKF",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "MonitoringOwnerMissingCookieAlarm401E42C3",
+          "type": "AWS::CloudWatch::Alarm",
+          "physical_id": "gatewasm-prod-owner-missing-cookie",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "MonitoringTokenErrorAlarm6B7A8D25",
+          "type": "AWS::CloudWatch::Alarm",
+          "physical_id": "gatewasm-prod-token-errors",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "MonitoringTokenErrorFilterF3AFB78F",
+          "type": "AWS::Logs::MetricFilter",
+          "physical_id": "MonitoringTokenErrorFilterF3AFB78F-KEi0ZRrdzk9E",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "ServiceAccessRole4763579D",
+          "type": "AWS::IAM::Role",
+          "physical_id": "GatewasmStack-ServiceAccessRole4763579D-aAoHYQLoTCP6",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "ServiceAccessRoleDefaultPolicy9C214812",
+          "type": "AWS::IAM::Policy",
+          "physical_id": "Gatew-Servi-xoJDPh0Z8CiK",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "ServiceAppRunnerC1939DEF",
+          "type": "AWS::AppRunner::Service",
+          "physical_id": "arn:aws:apprunner:us-east-1:877573132739:service/gatewasm-server/7cf6cfb205964690b4672686d06c5379",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "ServiceAutoScalingE72BA36D",
+          "type": "AWS::AppRunner::AutoScalingConfiguration",
+          "physical_id": "arn:aws:apprunner:us-east-1:877573132739:autoscalingconfiguration/ServiceAutoScalingE-tfeomCUwTCvu/1/288421dd81ad43379f8805078be352e9",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "ServiceInstanceRoleDFA90CEC",
+          "type": "AWS::IAM::Role",
+          "physical_id": "GatewasmStack-ServiceInstanceRoleDFA90CEC-FV0LgAJUl5yX",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "ServiceInstanceRoleDefaultPolicy1485DD18",
+          "type": "AWS::IAM::Policy",
+          "physical_id": "Gatew-Servi-IsXDUut10w4o",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "ServiceVpcConnector9E4738C4",
+          "type": "AWS::AppRunner::VpcConnector",
+          "physical_id": "arn:aws:apprunner:us-east-1:877573132739:vpcconnector/ServiceVpcConnector9E4738C4-I9hUghnCgJkU/1/719f4dec676e4f77a2d89bb238e6fac2",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        }
+      ]
+    },
+    {
+      "name": "GatewasmDatabaseStack",
+      "stack_id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmDatabaseStack/3105a380-177d-11f1-afde-0afff2f905bd",
+      "state": "UPDATE_COMPLETE",
+      "termination_protection": false,
+      "resources": [
+        {
+          "logical_id": "CDKMetadata",
+          "type": "AWS::CDK::Metadata",
+          "physical_id": "3105a380-177d-11f1-afde-0afff2f905bd",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "DatabaseInstanceAA8A5FDE",
+          "type": "AWS::RDS::DBInstance",
+          "physical_id": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Retain",
+          "update_replace_policy": "Retain"
+        },
+        {
+          "logical_id": "DatabaseInstanceSecretAttachmentFCA06D38",
+          "type": "AWS::SecretsManager::SecretTargetAttachment",
+          "physical_id": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/rds-credentials-WSOZ4v",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "DatabaseInstanceSubnetGroupDE121BB6",
+          "type": "AWS::RDS::DBSubnetGroup",
+          "physical_id": "gatewasmstack-databaseinstancesubnetgroupde121bb6-sjlu5lsyorgb",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Retain",
+          "update_replace_policy": "Retain"
+        },
+        {
+          "logical_id": "DatabaseParams4A0C7523",
+          "type": "AWS::RDS::DBParameterGroup",
+          "physical_id": "gatewasmstack-databaseparams4a0c7523-yaoddqlqdqw1",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "GatewasmStackDatabaseInstanceSecretBC64EE913fdaad7efa858a3daf9490cf0a702aeb",
+          "type": "AWS::SecretsManager::Secret",
+          "physical_id": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/rds-credentials-WSOZ4v",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": "Delete"
+        }
+      ]
+    },
+    {
+      "name": "GatewasmNetworkStack",
+      "stack_id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmNetworkStack/cdd41d50-177c-11f1-a1ad-0e4db1a15765",
+      "state": "UPDATE_COMPLETE",
+      "termination_protection": false,
+      "resources": [
+        {
+          "logical_id": "CDKMetadata",
+          "type": "AWS::CDK::Metadata",
+          "physical_id": "cdd41d50-177c-11f1-a1ad-0e4db1a15765",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingRdsSgD4894777",
+          "type": "AWS::EC2::SecurityGroup",
+          "physical_id": "sg-0779b314f84b314d2",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingRdsSgfromGatewasmNetworkStackNetworkingVpcConnectorSgC4FA350F543202DB0906",
+          "type": "AWS::EC2::SecurityGroupIngress",
+          "physical_id": "sgr-02d16e58697d96342",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpc6B5E6F44",
+          "type": "AWS::EC2::VPC",
+          "physical_id": "vpc-01375b2f8d7f55ac2",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcConnectorSgC7400825",
+          "type": "AWS::EC2::SecurityGroup",
+          "physical_id": "sg-01c3b4a286524dfd6",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcConnectorSgtoGatewasmNetworkStackNetworkingRdsSgAB47C7FB543237F98CF2",
+          "type": "AWS::EC2::SecurityGroupEgress",
+          "physical_id": "sgr-02bfdca5c130662e5",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcIGW21218DAB",
+          "type": "AWS::EC2::InternetGateway",
+          "physical_id": "igw-09ce53243fc7acff0",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcNatRoleA943BABF",
+          "type": "AWS::IAM::Role",
+          "physical_id": "GatewasmStack-NetworkingVpcNatRoleA943BABF-nnTWGGgz1sv9",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcNatSecurityGroup30637D44",
+          "type": "AWS::EC2::SecurityGroup",
+          "physical_id": "sg-04580b3ef571888c9",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPrivateSubnet1DefaultRouteDE58E6A0",
+          "type": "AWS::EC2::Route",
+          "physical_id": "rtb-06f53ea01de67a6f3|0.0.0.0/0",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPrivateSubnet1RouteTable69CC9A73",
+          "type": "AWS::EC2::RouteTable",
+          "physical_id": "rtb-06f53ea01de67a6f3",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPrivateSubnet1RouteTableAssociation761725EA",
+          "type": "AWS::EC2::SubnetRouteTableAssociation",
+          "physical_id": "rtbassoc-0ad9a81ca156e4379",
+          "status": "IMPORT_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPrivateSubnet1Subnet717BCE48",
+          "type": "AWS::EC2::Subnet",
+          "physical_id": "subnet-0102611073df0638e",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPrivateSubnet2DefaultRoute5BF16047",
+          "type": "AWS::EC2::Route",
+          "physical_id": "rtb-0052454946d3065f9|0.0.0.0/0",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPrivateSubnet2RouteTableAE92CE40",
+          "type": "AWS::EC2::RouteTable",
+          "physical_id": "rtb-0052454946d3065f9",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPrivateSubnet2RouteTableAssociation9EFBB61D",
+          "type": "AWS::EC2::SubnetRouteTableAssociation",
+          "physical_id": "rtbassoc-073df6b4d69c658f5",
+          "status": "IMPORT_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPrivateSubnet2Subnet4313381B",
+          "type": "AWS::EC2::Subnet",
+          "physical_id": "subnet-08be61795a85f0b2f",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet1DefaultRoute80C01FA6",
+          "type": "AWS::EC2::Route",
+          "physical_id": "rtb-0b4537a5528dd46bf|0.0.0.0/0",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet1FckNatAsgASG05589C7A",
+          "type": "AWS::AutoScaling::AutoScalingGroup",
+          "physical_id": "GatewasmStack-NetworkingVpcPublicSubnet1FckNatAsgASG05589C7A-qznP667LvRay",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet1FckNatInterface7DDA5F0F",
+          "type": "AWS::EC2::NetworkInterface",
+          "physical_id": "eni-0dc722e9ba5d55ee9",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet1FckNatLaunchTemplateF77B05F1",
+          "type": "AWS::EC2::LaunchTemplate",
+          "physical_id": "lt-05303f6a29bbc1767",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet1FckNatLaunchTemplateProfile8DC25F4D",
+          "type": "AWS::IAM::InstanceProfile",
+          "physical_id": "GatewasmStack-NetworkingVpcPublicSubnet1FckNatLaunchTemplateProfile8DC25F4D-4FHYL8rBGCdl",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet1RouteTable8FB3C18A",
+          "type": "AWS::EC2::RouteTable",
+          "physical_id": "rtb-0b4537a5528dd46bf",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet1RouteTableAssociationD13830EA",
+          "type": "AWS::EC2::SubnetRouteTableAssociation",
+          "physical_id": "rtbassoc-0def99efe85d61f07",
+          "status": "IMPORT_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet1Subnet918289EE",
+          "type": "AWS::EC2::Subnet",
+          "physical_id": "subnet-014cac46e827127cb",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet2DefaultRouteDF98F60F",
+          "type": "AWS::EC2::Route",
+          "physical_id": "rtb-0aa2d33a77e1a6f8e|0.0.0.0/0",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet2RouteTable22886677",
+          "type": "AWS::EC2::RouteTable",
+          "physical_id": "rtb-0aa2d33a77e1a6f8e",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet2RouteTableAssociation2D4CEA06",
+          "type": "AWS::EC2::SubnetRouteTableAssociation",
+          "physical_id": "rtbassoc-095e60958748901c9",
+          "status": "IMPORT_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcPublicSubnet2Subnet9D9E5AFB",
+          "type": "AWS::EC2::Subnet",
+          "physical_id": "subnet-01ae32361c16e82d5",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "NetworkingVpcVPCGW12E561D8",
+          "type": "AWS::EC2::VPCGatewayAttachment",
+          "physical_id": "vpc-01375b2f8d7f55ac2|IGW",
+          "status": "UPDATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        }
+      ]
+    },
+    {
+      "name": "GatewasmCdnStack",
+      "stack_id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmCdnStack/6acdfaa0-1781-11f1-90e3-12c87b13bb83",
+      "state": "CREATE_COMPLETE",
+      "termination_protection": false,
+      "resources": [
+        {
+          "logical_id": "CDKMetadata",
+          "type": "AWS::CDK::Metadata",
+          "physical_id": "6acdfaa0-1781-11f1-90e3-12c87b13bb83",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "CdnAssetsC2A92191",
+          "type": "AWS::S3::Bucket",
+          "physical_id": "gatewasmcdnstack-cdnassetsc2a92191-icrhemaa0yt7",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Retain",
+          "update_replace_policy": "Retain"
+        },
+        {
+          "logical_id": "CdnAssetsPolicy288A424C",
+          "type": "AWS::S3::BucketPolicy",
+          "physical_id": "gatewasmcdnstack-cdnassetsc2a92191-icrhemaa0yt7",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "CdnCachePolicy957D7474",
+          "type": "AWS::CloudFront::CachePolicy",
+          "physical_id": "07c8b0c5-eb50-4ddf-8a58-25057affd484",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "CdnCorsHeaders5F852E76",
+          "type": "AWS::CloudFront::ResponseHeadersPolicy",
+          "physical_id": "167850b7-6167-46a3-9501-a274cea3ba2f",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "CdnDeployBridgeAwsCliLayer117C1B91",
+          "type": "AWS::Lambda::LayerVersion",
+          "physical_id": "arn:aws:lambda:us-east-1:877573132739:layer:CdnDeployBridgeAwsCliLayer117C1B91:1",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "CdnDeployBridgeCustomResource84BEE6BD",
+          "type": "Custom::CDKBucketDeployment",
+          "physical_id": "aws.cdk.s3deployment.35454231-0314-4334-9425-126983f9d098",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": "Delete"
+        },
+        {
+          "logical_id": "CdnDistribution149FA6C8",
+          "type": "AWS::CloudFront::Distribution",
+          "physical_id": "E1S9CR5SIFOUMC",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "CdnDistributionOrigin1S3OriginAccessControlFA39EED2",
+          "type": "AWS::CloudFront::OriginAccessControl",
+          "physical_id": "E94UQR920Z2U4",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536",
+          "type": "AWS::Lambda::Function",
+          "physical_id": "GatewasmCdnStack-CustomCDKBucketDeployment8693BB64-wZNe87TNVyTg",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265",
+          "type": "AWS::IAM::Role",
+          "physical_id": "GatewasmCdnStack-CustomCDKBucketDeployment8693BB649-IoB9ZcM8rHOb",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        },
+        {
+          "logical_id": "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRoleDefaultPolicy88902FDF",
+          "type": "AWS::IAM::Policy",
+          "physical_id": "Gatew-Custo-moCj8EH2DQdj",
+          "status": "CREATE_COMPLETE",
+          "deletion_policy": "Delete",
+          "update_replace_policy": null
+        }
+      ]
+    }
+  ],
+  "external_owned_candidates": {
+    "secrets": [
+      {
+        "name": "gatewasm/ed25519-key",
+        "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/ed25519-key-l8JTmP",
+        "tags": [
+          {
+            "Key": "aws:cloudformation:stack-id",
+            "Value": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmStack/ccd1a870-172f-11f1-b8af-0e78702dcab1"
+          },
+          {
+            "Key": "aws:cloudformation:stack-name",
+            "Value": "GatewasmStack"
+          },
+          {
+            "Key": "aws:cloudformation:logical-id",
+            "Value": "SecretsEd25519Key73266917"
+          }
+        ]
+      },
+      {
+        "name": "gatewasm/oauth-google",
+        "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/oauth-google-WPVMOG",
+        "tags": [
+          {
+            "Key": "aws:cloudformation:stack-id",
+            "Value": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmStack/ccd1a870-172f-11f1-b8af-0e78702dcab1"
+          },
+          {
+            "Key": "aws:cloudformation:stack-name",
+            "Value": "GatewasmStack"
+          },
+          {
+            "Key": "aws:cloudformation:logical-id",
+            "Value": "SecretsOAuthGoogleC11B8275"
+          }
+        ]
+      },
+      {
+        "name": "gatewasm/platform-admin-key",
+        "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/platform-admin-key-vqaj0u",
+        "tags": [
+          {
+            "Key": "aws:cloudformation:stack-id",
+            "Value": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmStack/ccd1a870-172f-11f1-b8af-0e78702dcab1"
+          },
+          {
+            "Key": "aws:cloudformation:stack-name",
+            "Value": "GatewasmStack"
+          },
+          {
+            "Key": "aws:cloudformation:logical-id",
+            "Value": "SecretsPlatformAdminKeyD99612E5"
+          }
+        ]
+      },
+      {
+        "name": "gatewasm/csrf-secret",
+        "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/csrf-secret-NCZisI",
+        "tags": [
+          {
+            "Key": "aws:cloudformation:stack-id",
+            "Value": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmStack/ccd1a870-172f-11f1-b8af-0e78702dcab1"
+          },
+          {
+            "Key": "aws:cloudformation:stack-name",
+            "Value": "GatewasmStack"
+          },
+          {
+            "Key": "aws:cloudformation:logical-id",
+            "Value": "SecretsCsrfSecretA6026C56"
+          }
+        ]
+      },
+      {
+        "name": "gatewasm/oauth-github",
+        "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/oauth-github-CAhDkJ",
+        "tags": [
+          {
+            "Key": "aws:cloudformation:stack-id",
+            "Value": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmStack/ccd1a870-172f-11f1-b8af-0e78702dcab1"
+          },
+          {
+            "Key": "aws:cloudformation:stack-name",
+            "Value": "GatewasmStack"
+          },
+          {
+            "Key": "aws:cloudformation:logical-id",
+            "Value": "SecretsOAuthGithub2D92F400"
+          }
+        ]
+      },
+      {
+        "name": "gatewasm/rds-credentials",
+        "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/rds-credentials-WSOZ4v",
+        "tags": [
+          {
+            "Key": "aws:cloudformation:stack-id",
+            "Value": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmDatabaseStack/3105a380-177d-11f1-afde-0afff2f905bd"
+          },
+          {
+            "Key": "aws:cloudformation:stack-name",
+            "Value": "GatewasmDatabaseStack"
+          },
+          {
+            "Key": "aws:cloudformation:logical-id",
+            "Value": "GatewasmStackDatabaseInstanceSecretBC64EE913fdaad7efa858a3daf9490cf0a702aeb"
+          }
+        ]
+      },
+      {
+        "name": "gatewasm/smtp",
+        "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/smtp-nGIKBw",
+        "tags": null
+      },
+      {
+        "name": "gatewasm/mfa-encryption-key",
+        "arn": "arn:aws:secretsmanager:us-east-1:877573132739:secret:gatewasm/mfa-encryption-key-yXXycq",
+        "tags": null
+      }
+    ],
+    "snapshots": [
+      {
+        "id": "gatewasm-pre-migration-20260303",
+        "type": "manual",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      },
+      {
+        "id": "gatewasm-prewipe-20260306-225723",
+        "type": "manual",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      },
+      {
+        "id": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-drill-20260307200501",
+        "type": "manual",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      },
+      {
+        "id": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-drill-20260307200903",
+        "type": "manual",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      },
+      {
+        "id": "rds:gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-2026-10-21-07-06",
+        "type": "automated",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      },
+      {
+        "id": "rds:gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-2026-10-22-07-06",
+        "type": "automated",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      },
+      {
+        "id": "rds:gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-2026-10-23-07-06",
+        "type": "automated",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      },
+      {
+        "id": "rds:gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-2026-10-24-07-06",
+        "type": "automated",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      },
+      {
+        "id": "rds:gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-2026-10-25-07-06",
+        "type": "automated",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      },
+      {
+        "id": "rds:gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-2026-10-26-07-06",
+        "type": "automated",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      },
+      {
+        "id": "rds:gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-2026-10-27-07-06",
+        "type": "automated",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      },
+      {
+        "id": "rds:gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz-2026-10-28-07-06",
+        "type": "automated",
+        "source": "gatewasmstack-databaseinstanceaa8a5fde-vv99npqcxrxz"
+      }
+    ],
+    "repositories": [
+      {
+        "name": "gatewasm-server",
+        "arn": "arn:aws:ecr:us-east-1:877573132739:repository/gatewasm-server"
+      }
+    ],
+    "log_groups": [
+      {
+        "name": "/aws/apprunner/gatewasm-server/12167e5e0d054d6980037929037f741c/application",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/12167e5e0d054d6980037929037f741c/application:*",
+        "stored_bytes": 694
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/12167e5e0d054d6980037929037f741c/service",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/12167e5e0d054d6980037929037f741c/service:*",
+        "stored_bytes": 2100
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/297a55799aad49a59ef6a37d375688d7/application",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/297a55799aad49a59ef6a37d375688d7/application:*",
+        "stored_bytes": 1383
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/297a55799aad49a59ef6a37d375688d7/service",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/297a55799aad49a59ef6a37d375688d7/service:*",
+        "stored_bytes": 2100
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/3e9ab43e01d3499b8674958570beb0b7/application",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/3e9ab43e01d3499b8674958570beb0b7/application:*",
+        "stored_bytes": 175
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/3e9ab43e01d3499b8674958570beb0b7/service",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/3e9ab43e01d3499b8674958570beb0b7/service:*",
+        "stored_bytes": 2095
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/5aa90e0556b742a3948692d834069e60/application",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/5aa90e0556b742a3948692d834069e60/application:*",
+        "stored_bytes": 568
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/5aa90e0556b742a3948692d834069e60/service",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/5aa90e0556b742a3948692d834069e60/service:*",
+        "stored_bytes": 758
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/5c70db1742a34faf852412a03a5e4220/service",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/5c70db1742a34faf852412a03a5e4220/service:*",
+        "stored_bytes": 2508
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/7cf6cfb205964690b4672686d06c5379/application",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/7cf6cfb205964690b4672686d06c5379/application:*",
+        "stored_bytes": 784618577
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/7cf6cfb205964690b4672686d06c5379/service",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/7cf6cfb205964690b4672686d06c5379/service:*",
+        "stored_bytes": 132276
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/91a9ad4cb1ba4e4fae6a15ef500aca87/service",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/91a9ad4cb1ba4e4fae6a15ef500aca87/service:*",
+        "stored_bytes": 2214
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/97e4377befc64de494551262d31ddb3b/application",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/97e4377befc64de494551262d31ddb3b/application:*",
+        "stored_bytes": 1653
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/97e4377befc64de494551262d31ddb3b/service",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/97e4377befc64de494551262d31ddb3b/service:*",
+        "stored_bytes": 2105
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/ab34edd5527846268257784adde68107/application",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/ab34edd5527846268257784adde68107/application:*",
+        "stored_bytes": 1399
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/ab34edd5527846268257784adde68107/service",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/ab34edd5527846268257784adde68107/service:*",
+        "stored_bytes": 2102
+      },
+      {
+        "name": "/aws/apprunner/gatewasm-server/fe6e79b6413149d8aeb689eaff583fd6/service",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/apprunner/gatewasm-server/fe6e79b6413149d8aeb689eaff583fd6/service:*",
+        "stored_bytes": 1451
+      },
+      {
+        "name": "/aws/lambda/GatewasmCdnStack-CustomCDKBucketDeployment8693BB64-wZNe87TNVyTg",
+        "arn": "arn:aws:logs:us-east-1:877573132739:log-group:/aws/lambda/GatewasmCdnStack-CustomCDKBucketDeployment8693BB64-wZNe87TNVyTg:*",
+        "stored_bytes": 2954
+      }
+    ],
+    "repository_images": [
+      {
+        "imageDigest": "sha256:a0a3b2a87101b58bedb27a6a5b726e97e2da9feb0d6e1f4b040ea4d8bc5d6f08",
+        "imageTags": null,
+        "imageSizeInBytes": 37085322
+      },
+      {
+        "imageDigest": "sha256:9333674f485d05f40688a5845546bed43640406243bc9144874483aa2b80e5d5",
+        "imageTags": null,
+        "imageSizeInBytes": 37088027
+      },
+      {
+        "imageDigest": "sha256:c892f0bf3951858fdda61874afbb9dd45c5667552e4ddee5302cb562089abfab",
+        "imageTags": null,
+        "imageSizeInBytes": 37346943
+      },
+      {
+        "imageDigest": "sha256:045faa80892de348262259dca89a9e22681a4ba59a70941135fbaeb5ef6a339e",
+        "imageTags": null,
+        "imageSizeInBytes": 1607
+      },
+      {
+        "imageDigest": "sha256:5d6a8f612a34c998c7c38b53361b7470fb883c634bc17106c2916dd636a44feb",
+        "imageTags": null,
+        "imageSizeInBytes": 1532
+      },
+      {
+        "imageDigest": "sha256:9bfc200916216c757ddf51fde1c2a15c732dba3d5e8ea8d2f1412e693062fe24",
+        "imageTags": null,
+        "imageSizeInBytes": 37087095
+      },
+      {
+        "imageDigest": "sha256:a97fb1069d895ffbfb7e10e8db6ec8b0c5ca0312b6e8b2d424c7ba385ad43ac0",
+        "imageTags": null,
+        "imageSizeInBytes": 1532
+      },
+      {
+        "imageDigest": "sha256:1d57087cc763b15c2bae76bb45ddb89b7d4ffa55cbf833836e1e9e9670dc843c",
+        "imageTags": null,
+        "imageSizeInBytes": 37088027
+      },
+      {
+        "imageDigest": "sha256:50741987fab216cef71ecc958bdba22155077a9b5c60ec3bb36b500a1a2761b5",
+        "imageTags": null,
+        "imageSizeInBytes": 37085322
+      },
+      {
+        "imageDigest": "sha256:6d25f25e660138e35c64aad24b7b24aa3ea311b39e6e76955790b719830d8f3a",
+        "imageTags": null,
+        "imageSizeInBytes": 1532
+      },
+      {
+        "imageDigest": "sha256:7303e1b4eff6e9f73a76f92fc915642c6f9019a0780933773899557485ad51a0",
+        "imageTags": [
+          "latest"
+        ],
+        "imageSizeInBytes": 37087095
+      },
+      {
+        "imageDigest": "sha256:cd416efb7cbb59fe365ec24cc1a26c5deb50cd35873cf940b7c13f900cb71584",
+        "imageTags": [
+          "release-20260310-013940-69f3b0c16afe"
+        ],
+        "imageSizeInBytes": 37346943
+      }
+    ]
+  },
+  "source_file_sha256": {
+    "infra/package-lock.json": "3e21295128fc6843c16ce6b5d2c46c71c666c67ca99fd93aff3ed7ce259423d3",
+    "infra/cdk.json": "8ee754e20241b33dc4f51f238023a6182ae9934c9601f4a2778298ac8c5ab66f",
+    "infra/bin/gatewasm-infra.ts": "0d12b5a5d0ccb1fb2e236d69720aa100f31981cf7c0d2c50130052a4b1d3ab23",
+    "infra/lib/constructs/database.ts": "ace877e4b27c4377014e84b00ea29e7caf3e4f134a4dd028626083a931fd467f",
+    "infra/lib/constructs/networking.ts": "f0a4cfa10af2ec92ccc62752c72108d86872b7facf3cbb4f1f266f250ede3780",
+    "infra/lib/constructs/service.ts": "aca36af5a08da855f9e7357072a9f8ec61cbc2b2118cdb303fce5797d7f25f08",
+    "infra/lib/constructs/cdn.ts": "d071fe01d057ed29c377fb276c4eaa5cd1203ea20051bdd6b6fa745bcc138f3e"
+  },
+  "later_discovered_obsolete_rds_groups": [
+    {
+      "kind": "subnet",
+      "name": "gatewasmstack-databaseinstancesubnetgroupde121bb6-9ptsoicszddb",
+      "arn": "arn:aws:rds:us-east-1:877573132739:subgrp:gatewasmstack-databaseinstancesubnetgroupde121bb6-9ptsoicszddb",
+      "vpc": "vpc-083529243686a64fc",
+      "tags": [
+        {
+          "Key": "aws:cloudformation:stack-name",
+          "Value": "GatewasmStack"
+        },
+        {
+          "Key": "aws:cloudformation:logical-id",
+          "Value": "DatabaseInstanceSubnetGroupDE121BB6"
+        },
+        {
+          "Key": "aws:cloudformation:stack-id",
+          "Value": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmStack/877b24d0-16cc-11f1-b1a4-0affd6222619"
+        }
+      ]
+    },
+    {
+      "kind": "subnet",
+      "name": "gatewasmstack-databaseinstancesubnetgroupde121bb6-9ujexqgsodml",
+      "arn": "arn:aws:rds:us-east-1:877573132739:subgrp:gatewasmstack-databaseinstancesubnetgroupde121bb6-9ujexqgsodml",
+      "vpc": "vpc-0d312b9f4f07bb6c0",
+      "tags": [
+        {
+          "Key": "aws:cloudformation:stack-name",
+          "Value": "GatewasmStack"
+        },
+        {
+          "Key": "aws:cloudformation:logical-id",
+          "Value": "DatabaseInstanceSubnetGroupDE121BB6"
+        },
+        {
+          "Key": "aws:cloudformation:stack-id",
+          "Value": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmStack/8d8882d0-1737-11f1-aa43-0ef8b37bcd63"
+        }
+      ]
+    },
+    {
+      "kind": "subnet",
+      "name": "gatewasmstack-databaseinstancesubnetgroupde121bb6-mm4if7sumtra",
+      "arn": "arn:aws:rds:us-east-1:877573132739:subgrp:gatewasmstack-databaseinstancesubnetgroupde121bb6-mm4if7sumtra",
+      "vpc": "vpc-0bd589648a4526277",
+      "tags": [
+        {
+          "Key": "aws:cloudformation:stack-name",
+          "Value": "GatewasmStack"
+        },
+        {
+          "Key": "aws:cloudformation:logical-id",
+          "Value": "DatabaseInstanceSubnetGroupDE121BB6"
+        },
+        {
+          "Key": "aws:cloudformation:stack-id",
+          "Value": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmStack/ccd1a870-172f-11f1-b8af-0e78702dcab1"
+        }
+      ]
+    },
+    {
+      "kind": "subnet",
+      "name": "gatewasmstack-databaseinstancesubnetgroupde121bb6-ommrhhfx1mp9",
+      "arn": "arn:aws:rds:us-east-1:877573132739:subgrp:gatewasmstack-databaseinstancesubnetgroupde121bb6-ommrhhfx1mp9",
+      "vpc": "vpc-063b41d89788f086f",
+      "tags": [
+        {
+          "Key": "aws:cloudformation:stack-name",
+          "Value": "GatewasmStack"
+        },
+        {
+          "Key": "aws:cloudformation:logical-id",
+          "Value": "DatabaseInstanceSubnetGroupDE121BB6"
+        },
+        {
+          "Key": "aws:cloudformation:stack-id",
+          "Value": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmStack/223c0270-171b-11f1-87a4-0affe982eeed"
+        }
+      ]
+    },
+    {
+      "kind": "parameter",
+      "name": "gatewasmstack-databaseparams4a0c7523-cbu45olgovtx",
+      "arn": "arn:aws:rds:us-east-1:877573132739:pg:gatewasmstack-databaseparams4a0c7523-cbu45olgovtx",
+      "vpc": null,
+      "tags": [
+        {
+          "Key": "aws:cloudformation:stack-name",
+          "Value": "GatewasmStack"
+        },
+        {
+          "Key": "aws:cloudformation:logical-id",
+          "Value": "DatabaseParams4A0C7523"
+        },
+        {
+          "Key": "aws:cloudformation:stack-id",
+          "Value": "arn:aws:cloudformation:us-east-1:877573132739:stack/GatewasmStack/223c0270-171b-11f1-87a4-0affe982eeed"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+# APP-005 bounded query qualification
+
+This isolated synthetic spike measures a closed subset of the APP-002 query contract over immutable local Parquet revisions. It qualifies DuckDB 2.0.0, exact integer results, truthful receipts, deadlines, admission and container confinement. It does not implement the application data service or prove the full Northstar six-view/client latency target.
+
+## Reproduce
+
+Python 3.11, Docker Engine/Desktop, and the Docker CLI are required. The published dependencies are exact and hash-locked. From the repository root:
+
+```sh
+python3 -m venv spikes/APP-005/.venv
+spikes/APP-005/.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r contracts/requirements.lock -r spikes/APP-005/requirements.lock
+spikes/APP-005/.venv/bin/python spikes/APP-005/run.py --output evidence/APP-005/reproduction
+```
+
+The runner generates only synthetic fixtures in its ignored `.scratch/` folder, sends a curated source list to Docker, runs one named container, retains results/settings/source identities, then removes its own container, temporary fixtures and image tag. Docker must already be running; this script does not change Docker settings or start another host service. The base image is pinned to `python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d`; the actual derived image ID and architecture are recorded per run. The container has no mounted repository/home/credentials: only one synthetic organization revision directory, read-only. Dependency downloads occur during the image build; the query worker has no network.
+
+## Admitted boundary
+
+`execute_query` accepts APP-002 typed query objects, never user SQL. The initial implemented subset is one registered `events` input, typed literal filters, projection, count/sum/min/max aggregates, bounded grouping, UTC time buckets, stable sorting and a final page limit. Source names resolve through a trusted two-revision catalog, with canonical path and byte-digest checks. Fields and identifiers come from the fixed schema; values are bound parameters. Unknown fields, operation tags, executable fields, source paths/URLs, post-projection missing fields and unsupported operators fail closed. A literal containing SQL-looking text remains a parameter.
+
+CIDR lookup/join, multi-input queries, general arithmetic/ratios and full application admission are **not qualified here**. Their tags remain in the shared contract, but invoking them in this compiler is refused. Business integers in the selected columns are signed 64-bit; exact sums use DuckDB integer arithmetic and returned business numbers are decimal strings. The million-row oracle is independently computed with Python integers, not from a DuckDB query.
+
+Pagination occurs only after the calculation/filter pipeline. Reading one page never changes a separate full-input total. A limit fetches one extra row to mark `truncated_page` correctly; a result above the unpaged 500-row cap is refused rather than silently truncated. Receipts use the locked canonical encoding, actual Parquet byte digest, actual query/definition content and actual returned result digest; they are explicitly `synthetic_preview` receipts with synthetic context IDs. They do not claim that a real principal was authenticated or a publication/work transaction occurred. APP-009/012 and the managed environment must supply fresh authorization, source capabilities, commit snapshots and delivery checks.
+
+## Engine and operating-system controls
+
+Each query has a private copy of an empty database opened **read-only**, its own DuckDB instance, two engine threads, 1 GiB engine memory and a 2 GiB spill ceiling. Automatic extension installation/loading, unsigned/community extensions and persistent secrets are disabled. The trusted initializer installs the exact source allowlist, disables external access and then locks configuration with no mutable configuration exceptions. DuckDB 2.0 requires some settings after opening a database; no untrusted query executes before the lock.
+
+DuckDB automatically adds its own private database/WAL files and spill directory to the effective allowlist. Qualification checks those effective additions are confined to the disposable per-query directory, alongside only the selected Parquet file. It does not falsely claim `allowed_directories` remains empty. Direct-engine controls try an existing other-organization file, path traversal, symlinks, process environment, URLs, globbing, ATTACH, COPY, INSTALL/LOAD and configuration changes; legitimate typed queries still work afterward. Extension filesystem enumeration is itself denied under this policy.
+
+Engine settings are defense in depth, not protection from an engine memory-safety exploit. The worker additionally runs non-root (65532), with no capabilities, no new privileges, a read-only image filesystem, no network, two CPUs, 3 GiB container memory with no swap allowance, 64 PIDs and a 2 GiB non-executable private tmpfs. The runner verifies Docker's effective configuration; inside the container, the probe verifies identity/capabilities, no cloud credential environment, denied network and denied root writes. The image contains only public runtime/code and explicitly synthetic negative controls.
+
+Scheduled operations have a monotonic 1.8-second caller deadline including queue wait, process startup, input verification, execution and result validation. Admission stamps enqueue time itself and rejects expired queued work before calling its worker; an earlier caller deadline can shorten but cannot extend that origin. A timer calls DuckDB's actual `interrupt()`; late results are withheld. Each scheduled operation also runs in an independently supervised process: a five-second backstop kills/reaps a stuck process and removes its private scratch. Admission allows two running and twenty queued operations; excess work returns a 429-class refusal. Tests hold admission deliberately, observe 22 admitted/2 rejected, record correct completions separately from queued deadline expirations, and prove subsequent admission. A separate 2.05-second queue hold must refuse the expired query without launching a worker and restore all slots. These gates are a single-organization qualification, not a production multi-tenant fairness proof.
+
+The heavy-query control must interrupt at the actual 1.8-second deadline, leave no scratch, and permit a subsequent query. A separate forced-unresponsive process proves kill/reap behavior. A tighter **16 MiB** diagnostic forces real spill files and then either completes, interrupts or refuses on the memory cap; it must demonstrate nonzero observed spill bytes and remove all scratch. It does not lower or raise the ordinary 1 GiB policy. Failure never certifies a partial numeric result.
+
+## Declared measurement plan and interpretation
+
+One million rows: deterministic event IDs, UTC times in a ten-minute window, four destinations, byte values 1–1000 repeating; total **500,500,000**. The generator requests 100,000-row Parquet groups and records actual groups and file bytes. The S02 fixture retains all six source rows, including the excluded upper-boundary event. Tests require five included events, **1,140,000** bytes, the selected destination's **900,000**, the specified timeline, and unchanged full total after pagination. The **114,000 bytes/minute** whole-window value is an independently declared oracle; ratio execution and CIDR classification are not falsely claimed as implemented.
+
+The bounded campaign is declared in code: **five** fresh-process/engine samples with no result cache, then one excluded warm-up and **five** six-query bursts, two active at a time. The six measured analytical views are total, event count, destination totals, minute totals, minimum and maximum. They are not relabeled as the complete Northstar canvas. Every value is checked against the independent oracle; all failures remain in the report.
+
+“Cold” means engine/result-cache cold with the immutable revision already on local storage. The OS page cache is **not** flushed, and digest verification itself reads the file. Process wall time is reported separately from engine-path time. “Warm” means the local revision was primed; every scheduled query still gets a fresh supervised process/engine and no result cache. Burst elapsed includes process startup, queueing, digest checks, contract checks, engine work, receipt validation and delivery. Five samples are diagnostic ranges, never p99 claims.
+
+No RDS authorization reads, S3/KMS fetch/decryption, network round trips, real browser delivery or CIDR/join costs are measured. Therefore this qualification cannot clear the full managed N3 gate. APP-012 and later full-journey/performance tickets must repeat the actual supported application workload with those costs and cold storage. If the full workload misses its envelope, reduce admitted shapes/capacity or add a versioned, receipt-preserving preaggregation design; do not raise deadlines or invent an unmeasured speedup. This spike selects the bounded single-input shape as qualified, with full-workflow latency explicitly still open.
+
+## Sources
+
+- Frozen platform §§5.2,6.3,13.2; N3 and demo S02; APP-002 implementation edition.
+- [DuckDB 2.0 configuration](https://duckdb.org/docs/2.0/configuration/overview): exact allowlists, configuration lock, extension and memory/spill controls.
+- [DuckDB Python API](https://duckdb.org/docs/2.0/clients/python/reference/): read-only connection and `interrupt()`.
+- [Published DuckDB 2.0.0 metadata](https://pypi.org/pypi/duckdb/2.0.0/json): MIT license, release artifacts and hashes, retained in the evidence directory.
