@@ -34,3 +34,7 @@ The earlier [AWS discovery](aws-discovery.md), [temporary shutdown](gatewasm-shu
 ## Infrastructure review correction
 
 Independent review found that an autoscaling maximum equal to the 20-GiB allocation would be rejected by AWS. The final template omits that setting, keeping storage fixed instead of raising the budget. A negative template assertion now requires its absence; infrastructure typecheck, all ten tests and synthesis pass in [follow-up evidence](storage-review-fix.json). The prior identity/template are retained alongside the refreshed current source identity. Application/image bytes are unchanged; live managed acceptance remains unrun. See [AWS autoscaling constraints](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PIOPS.Autoscaling.html).
+
+## Final local review and CI
+
+[Independent review](review.md) approves the local preparation at `8139067`, with all 39 source hashes checked, 24 focused tests repeated and the local immutable image independently exercised. All six [source CI checks](ci.json) pass. The retained [Linux/x86 preparation](ci-8139067/local-preparation.json) passes all fourteen steps; its separately built [image trial](ci-8139067/image-qualification.json) also passes. That source landed on `origin/main`. APP-007 remains Blocked for the inputs and managed acceptance above; CI ran no cloud deployment, migration or managed service trial.

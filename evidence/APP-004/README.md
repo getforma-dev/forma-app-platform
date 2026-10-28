@@ -78,3 +78,7 @@ No framework/auth change, upstream release, cloud resource, production deploymen
 ## Committed candidate and independent acceptance
 
 Candidate `05c95a4bfaad81cdd103b8c1194e75922e84f023` passed [Linux parser CI](https://github.com/getforma-dev/forma-app-platform/actions/runs/40759765118), baseline, contract and planning checks. [Independent review](review.md) found no remaining parser blockers after the timing and numeric fixes. The separate APP-005 query check failed and is not reported as passing; [all CI states](ci.json) are retained. Ticket closure still requires landing.
+
+## Final acceptance and landing
+
+[Independent review](review.md) found no blocking issue in `05c95a4`; the parser source is unchanged in `8139067`. All six [final source CI checks](ci.json) pass, including the parser qualification, and `8139067` landed on `origin/main`. APP-004 is Done for the isolated parser spike. No managed import or persisted SourceRevision acceptance is implied. Prior CI is retained in `ci-before-final.json`.

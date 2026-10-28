@@ -1,0 +1,39 @@
+{
+  "reviewed_revision": "8139067448a77e101a14acef1f892e8b6a943558",
+  "scope": "Independent local-preparation review only; no managed calls or deployment",
+  "source_artifact_count": 39,
+  "source_artifacts_match_committed_revision": true,
+  "identity_record_sha256": "786808a877269693670272a29081e16b88cbcb0145db2a33edbfcf0127f7a8a9",
+  "image": "sha256:8d8e2f3905ec1764e14d4207915439022be6edff0791e743b502716c929f2afb",
+  "checks": [
+    {
+      "command": "app/runtime/.venv/bin/python -m unittest discover -s app/runtime -v",
+      "result": "10 tests passed, including false-superuser-flags plus rds_superuser membership refusal",
+      "managed_calls": false
+    },
+    {
+      "command": "cargo test --locked",
+      "cwd": "app",
+      "result": "4 tests passed; zero failures"
+    },
+    {
+      "command": "npm test",
+      "cwd": "infra",
+      "result": "10 template tests passed; zero failures"
+    },
+    {
+      "command": "python3 app/runtime/qualify_image.py --image sha256:8d8e2f3905ec1764e14d4207915439022be6edff0791e743b502716c929f2afb --output /tmp/genui-app007-independent-image.json",
+      "result": "passed; independently repeated actual immutable image/volume/HTTP controls; temporary volume removed"
+    },
+    {
+      "check": "Parse final synthesized RDS resource",
+      "result": "AllocatedStorage 20; MaxAllocatedStorage absent"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "managed_acceptance": "not run; remains blocked",
+  "ci": "separate root-owned exact-revision result; not inferred by this local review"
+}

@@ -1,0 +1,139 @@
+{
+  "scope": "Independent Linux process controls with exact query module and dependencies; no analytical benchmark claim",
+  "source_hashes": {
+    "spikes/APP-005/requirements.lock": "06295e1e9bf322670a74bff06616b94ec32b7a912cc4d43afb90d25a25118ca3",
+    "spikes/APP-005/fixture.py": "b098e8cef77e130f4c41f7c9c8098d26086da7b906c427a87676733c8d3f916b",
+    "spikes/APP-005/query.py": "d7d724b9e34c3bdb73316eb9f3017c082dfedc3a7b79503cea584d67e06cf187",
+    "spikes/APP-005/processes.py": "74e9e1d2cdb78706b43ed8575ab63e63ed046f1921670a3dde908cc4f4f10be8",
+    "spikes/APP-005/test_processes.py": "e6783347e9859fb1e8f5bdc14482ff3d8ba4f2436d76eb021753c3deeefdf8d2",
+    "contracts/requirements.lock": "8254cb9a13753eafff6514939b2f687b33fc40c1a9ea5e329219f3265ae5ed12",
+    "contracts/schema.json": "2ccc496d5ef1ec50e591905edf6f7253416b90e71269a235a8454c1b8ddf2188",
+    "contracts/validate.py": "2d833eb3aaad4779880b40bde4dc4528cb6f3b620794c5508d0ba640851ed997"
+  },
+  "dockerfile": "FROM python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d\nWORKDIR /app\nCOPY requirements.lock /app/requirements.lock\nCOPY contracts/requirements.lock /app/contracts/requirements.lock\nRUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r /app/requirements.lock -r /app/contracts/requirements.lock\nCOPY contracts /app/contracts\nCOPY fixture.py query.py processes.py test_processes.py /app/\nENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 FORMA_CONTRACTS=/app/contracts FORMA_QUERY_TMP=/tmp\nUSER 65532:65532\nENTRYPOINT [\"python\",\"/app/test_processes.py\"]\n",
+  "image_id": "sha256:35f1d3c9c0af6992b0885cab56379da8fbbed3a0fb8e5bee3f79e9d50a71c7e1",
+  "exit_code": 0,
+  "stderr": "",
+  "controls": {
+    "passed": true,
+    "scope": "Linux process/IPC/cleanup controls, no engine performance claim",
+    "controls": [
+      {
+        "control": "sanitized child exit status",
+        "passed": true,
+        "reason": "query worker failed; exit_code=23"
+      },
+      {
+        "control": "fifo result refused with recovery",
+        "passed": true
+      },
+      {
+        "control": "symlink result refused with recovery",
+        "passed": true
+      },
+      {
+        "control": "oversize result refused with recovery",
+        "passed": true
+      },
+      {
+        "control": "partial oversized malformed request frames",
+        "passed": true
+      },
+      {
+        "control": "slow-trickle request has one absolute frame deadline",
+        "passed": true,
+        "observed_seconds": 0.12160654099989188
+      },
+      {
+        "control": "partial oversized malformed response frames",
+        "passed": true
+      },
+      {
+        "control": "broker stopped before request acceptance",
+        "passed": true,
+        "elapsed_seconds": 5.016122584999721,
+        "broker_reaped": true,
+        "no_late_launch": true,
+        "explicit_recovery": {
+          "broker_native_threads": 1,
+          "start_method": "owned_linux_fork_broker",
+          "startup_seconds": 0.16090887500013196
+        }
+      },
+      {
+        "control": "stopped broker and child with concurrent callers",
+        "passed": true,
+        "elapsed_seconds": 5.255630252000628,
+        "failures": [
+          "Deadline",
+          "Deadline"
+        ],
+        "process_group_reaped": true,
+        "scratch_reclaimed": true,
+        "slots_recovered": true,
+        "explicit_recovery": {
+          "broker_native_threads": 1,
+          "start_method": "owned_linux_fork_broker",
+          "startup_seconds": 0.21322416699968016
+        }
+      },
+      {
+        "control": "broker death while child running",
+        "passed": true,
+        "child_reaped": true,
+        "explicit_recovery": true
+      },
+      {
+        "control": "PDEATHSIG before group cleanup",
+        "passed": true,
+        "terminated_before_group_cleanup": true,
+        "adopted_child_reaped": true
+      },
+      {
+        "control": "stuck ordinary child backstop",
+        "passed": true,
+        "elapsed_seconds": 5.015222336000079,
+        "reason": "5-second request/start/run/IPC backstop; broker group killed and reaped",
+        "process_group_reaped": true,
+        "scratch_reclaimed": true,
+        "explicit_readiness_recovered": {
+          "broker_native_threads": 1,
+          "start_method": "owned_linux_fork_broker",
+          "startup_seconds": 0.17650441600017075
+        }
+      }
+    ]
+  },
+  "container_state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-10-28T20:22:28.69114822Z",
+    "FinishedAt": "2026-10-28T20:22:45.642293339Z"
+  },
+  "host_config": {
+    "NetworkMode": "none",
+    "ReadonlyRootfs": true,
+    "Memory": 1073741824,
+    "MemorySwap": 1073741824,
+    "NanoCpus": 2000000000,
+    "PidsLimit": 64,
+    "CapDrop": [
+      "ALL"
+    ],
+    "SecurityOpt": [
+      "no-new-privileges"
+    ],
+    "Tmpfs": {
+      "/tmp": "rw,noexec,nosuid,nodev,size=134217728,uid=65532,gid=65532,mode=700"
+    }
+  },
+  "container_removed": true,
+  "image_removed": true
+}

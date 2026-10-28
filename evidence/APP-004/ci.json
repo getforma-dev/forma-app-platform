@@ -1,31 +1,42 @@
 {
-  "revision": "05c95a4bfaad81cdd103b8c1194e75922e84f023",
+  "revision": "8139067448a77e101a14acef1f892e8b6a943558",
   "checks": [
     {
-      "name": "parser",
-      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40759765118",
-      "conclusion": "success"
-    },
-    {
-      "name": "baseline",
-      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40759765044",
-      "conclusion": "success"
+      "name": "planning",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986846"
     },
     {
       "name": "contracts",
-      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40759764975",
-      "conclusion": "success"
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986707"
     },
     {
-      "name": "planning",
-      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40759765025",
-      "conclusion": "success"
+      "name": "baseline",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986873"
     },
     {
       "name": "query",
-      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40759765095",
-      "conclusion": "failure"
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986751"
+    },
+    {
+      "name": "foundation",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986676"
+    },
+    {
+      "name": "parser",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986710"
     }
   ],
-  "note": "Parser, baseline, contract and planning passed. Query failure belongs to APP-005 and is retained there; no all-green claim."
+  "source_landed_on": "origin/main",
+  "source_landed_revision": "8139067448a77e101a14acef1f892e8b6a943558",
+  "scope": "Synthetic/local source qualification only; no managed deployment or phase gate accepted.",
+  "reviewed_revision": "05c95a4bfaad81cdd103b8c1194e75922e84f023",
+  "review": "review.md",
+  "source_unchanged_since_review": true,
+  "historical_ci": "ci-before-final.json"
 }

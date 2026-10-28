@@ -1,0 +1,43 @@
+{
+  "revision": "8139067448a77e101a14acef1f892e8b6a943558",
+  "checks": [
+    {
+      "name": "planning",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986846"
+    },
+    {
+      "name": "contracts",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986707"
+    },
+    {
+      "name": "baseline",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986873"
+    },
+    {
+      "name": "query",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986751"
+    },
+    {
+      "name": "foundation",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986676"
+    },
+    {
+      "name": "parser",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40762986710"
+    }
+  ],
+  "source_landed_on": "origin/main",
+  "source_landed_revision": "8139067448a77e101a14acef1f892e8b6a943558",
+  "scope": "Synthetic/local source qualification only; no managed deployment or phase gate accepted.",
+  "review": "review.md",
+  "local_result": "ci-8139067/local-preparation.json",
+  "image_result": "ci-8139067/image-qualification.json",
+  "status": "Blocked",
+  "managed_acceptance_run": false
+}

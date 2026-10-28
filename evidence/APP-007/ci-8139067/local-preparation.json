@@ -1,0 +1,155 @@
+{
+  "scope": "Local scaffold only; managed acceptance pending",
+  "steps": [
+    {
+      "cwd": ".",
+      "command": [
+        "/opt/hostedtoolcache/Python/3.11.14/x64/bin/python3.11",
+        "-m",
+        "venv",
+        "app/runtime/.venv"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "cwd": ".",
+      "command": [
+        "/home/runner/work/forma-app-platform/forma-app-platform/app/runtime/.venv/bin/python",
+        "-m",
+        "pip",
+        "install",
+        "--require-hashes",
+        "--only-binary=:all:",
+        "-r",
+        "app/runtime/requirements.lock"
+      ],
+      "exit": 0,
+      "output": "Collecting boto3==1.43.121 (from -r app/runtime/requirements.lock (line 2))\n  Downloading boto3-1.43.121-py3-none-any.whl (140 kB)\n     \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 140.0/140.0 kB 8.8 MB/s eta 0:00:00\nCollecting botocore==1.43.121 (from -r app/runtime/requirements.lock (line 4))\n  Downloading botocore-1.43.121-py3-none-any.whl (16.2 MB)\n     \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 16.2/16.2 MB 155.7 MB/s eta 0:00:00\nCollecting jmespath==1.1.0 (from -r app/runtime/requirements.lock (line 6))\n  Downloading jmespath-1.1.0-py3-none-any.whl (20 kB)\nCollecting psycopg==3.3.6 (from -r app/runtime/requirements.lock (line 8))\n  Downloading psycopg-3.3.6-py3-none-any.whl (215 kB)\n     \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 215.5/215.5 kB 74.2 MB/s eta 0:00:00\nCollecting psycopg-binary==3.3.6 (from -r app/runtime/requirements.lock (line 10))\n  Downloading psycopg_binary-3.3.6-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.3 MB)\n     \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 5.3/5.3 MB 196.7 MB/s eta 0:00:00\nCollecting python-dateutil==2.9.0.post0 (from -r app/runtime/requirements.lock (line 77))\n  Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)\n     \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 229.9/229.9 kB 78.1 MB/s eta 0:00:00\nCollecting s3transfer==0.19.3 (from -r app/runtime/requirements.lock (line 79))\n  Downloading s3transfer-0.19.3-py3-none-any.whl (90 kB)\n     \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 90.3/90.3 kB 37.0 MB/s eta 0:00:00\nCollecting six==1.17.0 (from -r app/runtime/requirements.lock (line 81))\n  Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)\nCollecting typing-extensions==4.16.0 (from -r app/runtime/requirements.lock (line 83))\n  Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)\n     \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 45.6/45.6 kB 17.0 MB/s eta 0:00:00\nCollecting urllib3==2.8.0 (from -r app/runtime/requirements.lock (line 85))\n  Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)\n     \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 135.7/135.7 kB 52.4 MB/s eta 0:00:00\nInstalling collected packages: urllib3, typing-extensions, six, psycopg-binary, jmespath, python-dateutil, psycopg, botocore, s3transfer, boto3\nSuccessfully installed boto3-1.43.121 botocore-1.43.121 jmespath-1.1.0 psycopg-3.3.6 psycopg-binary-3.3.6 python-dateutil-2.9.0.post0 s3transfer-0.19.3 six-1.17.0 typing-extensions-4.16.0 urllib3-2.8.0\n\n[notice] A new release of pip is available: 24.0 -> 26.2.2\n[notice] To update, run: python -m pip install --upgrade pip\n"
+    },
+    {
+      "cwd": ".",
+      "command": [
+        "/home/runner/work/forma-app-platform/forma-app-platform/app/runtime/.venv/bin/python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "app/runtime",
+        "-v"
+      ],
+      "exit": 0,
+      "output": "test_cleanup_rejects_an_unrelated_bucket_before_aws_client (test_runtime.RuntimeTests.test_cleanup_rejects_an_unrelated_bucket_before_aws_client) ... ok\ntest_expired_future_overlong_and_role_interchange_refused (test_runtime.RuntimeTests.test_expired_future_overlong_and_role_interchange_refused) ... ok\ntest_fifo_and_oversized_file_are_refused_without_blocking (test_runtime.RuntimeTests.test_fifo_and_oversized_file_are_refused_without_blocking) ... ok\ntest_generation_change_refused_before_network (test_runtime.RuntimeTests.test_generation_change_refused_before_network) ... ok\ntest_mutating_qualification_is_not_a_readiness_side_effect (test_runtime.RuntimeTests.test_mutating_qualification_is_not_a_readiness_side_effect) ... ok\ntest_permission_and_symlink_denial (test_runtime.RuntimeTests.test_permission_and_symlink_denial) ... ok\ntest_private_atomic_rotation_changes_identity (test_runtime.RuntimeTests.test_private_atomic_rotation_changes_identity) ... ok\ntest_rds_superuser_membership_refused_even_with_false_superuser_flags (test_runtime.RuntimeTests.test_rds_superuser_membership_refused_even_with_false_superuser_flags) ... ok\ntest_real_probe_refuses_unexpected_db_identity_before_storage (test_runtime.RuntimeTests.test_real_probe_refuses_unexpected_db_identity_before_storage) ... ok\ntest_same_generation_byte_change_has_distinct_fingerprint (test_runtime.RuntimeTests.test_same_generation_byte_change_has_distinct_fingerprint) ... ok\n\n----------------------------------------------------------------------\nRan 10 tests in 0.263s\n\nOK\n"
+    },
+    {
+      "cwd": "app/admin",
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "exit": 0,
+      "output": "\nadded 27 packages, and audited 28 packages in 1s\n\n1 package is looking for funding\n  run `npm fund` for details\n\nfound 0 vulnerabilities\n"
+    },
+    {
+      "cwd": "app/admin",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "exit": 0,
+      "output": "\n> typecheck\n> tsc --noEmit\n\n"
+    },
+    {
+      "cwd": "app/admin",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exit": 0,
+      "output": "\n> build\n> tsx build.ts --ssr --strict\n\nSSR mode enabled \u2014 emitting IR files\n   IR emitted (real): home.ir (726 bytes, 1 islands)\n   IR emitted (real): about.ir (410 bytes, 0 islands)\n\n   dist/home.1acfec60.js  77.6kb\n\n   4 assets hashed\n   2 files compressed (brotli 11 + gzip 9)\n\n   Size report (gzip -9, Brotli beside it; 1 KB = 1,000 B, 1 KiB = 1,024 B). Forma code is @getforma/core, @getforma/router and alien-signals as bundled;\n   N2's ceilings are policy (DR-35 and the 3.1 performance decision): Forma code 28,420 B, the JavaScript of a page 76,800 B, of a canvas 373,760 B, a route with no interactive region none.\n   /       islands                Forma 26,514 of 28,420 B  JavaScript 28,168 of 76,800 B  (Brotli: Forma 23,739, JavaScript 25,160)  home.1acfec60.js\n   /about  no interactive region  no JavaScript\n   Service worker   sw.js  3,221 B raw, 1,531 B gzip, 1,311 B Brotli; counted in the JavaScript of each route that has JavaScript\n   Build time       578 ms: bundle 457 ms, hash 1 ms, compress 119 ms, manifest 1 ms\n\nManifest written: dist/manifest.json (build: 527ae43e9c76...)\nSize report written: dist/size-report.json\n   SW generated: dist/sw.js (verified on-demand assets)\n"
+    },
+    {
+      "cwd": "app",
+      "command": [
+        "cargo",
+        "fmt",
+        "--check"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "cwd": "app",
+      "command": [
+        "cargo",
+        "test",
+        "--locked"
+      ],
+      "exit": 0,
+      "output": "    Updating crates.io index\n Downloading crates ...\n  Downloaded base64 v0.22.1\n  Downloaded const-oid v0.10.2\n  Downloaded unicode-ident v1.0.27\n  Downloaded unicase v2.10.0\n  Downloaded tracing-attributes v0.1.31\n  Downloaded tower-layer v0.3.3\n  Downloaded zmij v1.0.23\n  Downloaded tracing-log v0.2.0\n  Downloaded smallvec v1.16.3\n  Downloaded tracing-core v0.1.36\n  Downloaded serde_json v1.0.154\n  Downloaded typenum v1.20.1\n  Downloaded mio v1.2.4\n  Downloaded futures-util v0.3.34\n  Downloaded hyper-util v0.1.21\n  Downloaded hyper v1.12.0\n  Downloaded tracing-subscriber v0.3.23\n  Downloaded forma-ir v3.2.0\n  Downloaded http v1.5.0\n  Downloaded tower v0.5.3\n  Downloaded ryu-js v1.0.3\n  Downloaded syn v3.0.9\n  Downloaded memchr v2.8.3\n  Downloaded syn v2.0.119\n  Downloaded log v0.4.34\n  Downloaded hybrid-array v0.4.15\n  Downloaded sharded-slab v0.1.7\n  Downloaded serde_derive v1.0.229\n  Downloaded ryu v1.0.23\n  Downloaded parking_lot v0.12.5\n  Downloaded lock_api v0.4.14\n  Downloaded httparse v1.10.1\n  Downloaded tracing v0.1.44\n  Downloaded serde v1.0.229\n  Downloaded quote v1.0.47\n  Downloaded percent-encoding v2.3.2\n  Downloaded parking_lot_core v0.9.12\n  Downloaded once_cell v1.21.4\n  Downloaded nu-ansi-term v0.50.3\n  Downloaded matchit v0.8.4\n  Downloaded itoa v1.0.18\n  Downloaded futures-task v0.3.34\n  Downloaded walkdir v2.5.0\n  Downloaded untrusted v0.9.0\n  Downloaded tokio-macros v2.7.2\n  Downloaded thread_local v1.1.10\n  Downloaded same-file v1.0.6\n  Downloaded pin-project-lite v0.2.17\n  Downloaded mime_guess v2.0.5\n  Downloaded lazy_static v1.5.1\n  Downloaded http-body-util v0.1.5\n  Downloaded http-body v1.1.0\n  Downloaded libc v0.2.190\n  Downloaded tokio v1.53.3\n  Downloaded rust-embed v8.13.0\n  Downloaded serde_urlencoded v0.7.1\n  Downloaded httpdate v1.0.3\n  Downloaded tower-service v0.3.3\n  Downloaded signal-hook-registry v1.4.8\n  Downloaded sha2 v0.11.0\n  Downloaded rust-embed-utils v8.13.0\n  Downloaded rust-embed-impl v8.13.0\n  Downloaded proc-macro2 v1.0.107\n  Downloaded mime v0.3.17\n  Downloaded forma-server v3.2.0\n  Downloaded forma-ir-derive v3.2.0\n  Downloaded form_urlencoded v1.2.2\n  Downloaded find-msvc-tools v0.1.14\n  Downloaded cfg-if v1.0.5\n  Downloaded cc v1.8.0\n  Downloaded bytes v1.12.1\n  Downloaded block-buffer v0.12.1\n  Downloaded sync_wrapper v1.0.2\n  Downloaded socket2 v0.6.5\n  Downloaded slab v0.4.12\n  Downloaded shlex v2.0.1\n  Downloaded serde_path_to_error v0.1.20\n  Downloaded serde_core v1.0.229\n  Downloaded scopeguard v1.2.0\n  Downloaded getrandom v0.2.17\n  Downloaded futures-core v0.3.34\n  Downloaded errno v0.3.14\n  Downloaded digest v0.11.3\n  Downloaded crypto-common v0.2.2\n  Downloaded cpufeatures v0.3.1\n  Downloaded axum-core v0.5.6\n  Downloaded axum v0.8.9\n  Downloaded atomic-waker v1.1.2\n  Downloaded ring v0.17.14\n   Compiling proc-macro2 v1.0.107\n   Compiling quote v1.0.47\n   Compiling unicode-ident v1.0.27\n   Compiling cfg-if v1.0.5\n   Compiling libc v0.2.190\n   Compiling itoa v1.0.18\n   Compiling pin-project-lite v0.2.17\n   Compiling syn v3.0.9\n   Compiling syn v2.0.119\n   Compiling bytes v1.12.1\n   Compiling typenum v1.20.1\n   Compiling smallvec v1.16.3\n   Compiling parking_lot_core v0.9.12\n   Compiling once_cell v1.21.4\n   Compiling serde_core v1.0.229\n   Compiling tracing-core v0.1.36\n   Compiling hybrid-array v0.4.15\n   Compiling scopeguard v1.2.0\n   Compiling futures-core v0.3.34\n   Compiling log v0.4.34\n   Compiling lock_api v0.4.14\n   Compiling http v1.5.0\n   Compiling errno v0.3.14\n   Compiling signal-hook-registry v1.4.8\n   Compiling http-body v1.1.0\n   Compiling parking_lot v0.12.5\n   Compiling crypto-common v0.2.2\n   Compiling block-buffer v0.12.1\n   Compiling tracing-attributes v0.1.31\n   Compiling tokio-macros v2.7.2\n   Compiling socket2 v0.6.5\n   Compiling mio v1.2.4\n   Compiling httparse v1.10.1\n   Compiling unicase v2.10.0\n   Compiling mime v0.3.17\n   Compiling const-oid v0.10.2\n   Compiling zmij v1.0.23\n   Compiling digest v0.11.3\n   Compiling mime_guess v2.0.5\n   Compiling tokio v1.53.3\n   Compiling tracing v0.1.44\n   Compiling same-file v1.0.6\n   Compiling tower-service v0.3.3\n   Compiling serde_json v1.0.154\n   Compiling shlex v2.0.1\n   Compiling serde v1.0.229\n   Compiling find-msvc-tools v0.1.14\n   Compiling cpufeatures v0.3.1\n   Compiling sha2 v0.11.0\n   Compiling cc v1.8.0\n   Compiling walkdir v2.5.0\n   Compiling serde_derive v1.0.229\n   Compiling futures-task v0.3.34\n   Compiling percent-encoding v2.3.2\n   Compiling httpdate v1.0.3\n   Compiling memchr v2.8.3\n   Compiling tower-layer v0.3.3\n   Compiling sync_wrapper v1.0.2\n   Compiling atomic-waker v1.1.2\n   Compiling slab v0.4.12\n   Compiling futures-util v0.3.34\n   Compiling hyper v1.12.0\n   Compiling form_urlencoded v1.2.2\n   Compiling rust-embed-utils v8.13.0\n   Compiling ring v0.17.14\n   Compiling http-body-util v0.1.5\n   Compiling ryu v1.0.23\n   Compiling serde_urlencoded v0.7.1\n   Compiling axum-core v0.5.6\n   Compiling rust-embed-impl v8.13.0\n   Compiling hyper-util v0.1.21\n   Compiling tower v0.5.3\n   Compiling serde_path_to_error v0.1.20\n   Compiling forma-ir-derive v3.2.0\n   Compiling getrandom v0.2.17\n   Compiling ryu-js v1.0.3\n   Compiling matchit v0.8.4\n   Compiling untrusted v0.9.0\n   Compiling lazy_static v1.5.1\n   Compiling sharded-slab v0.1.7\n   Compiling axum v0.8.9\n   Compiling forma-ir v3.2.0\n   Compiling rust-embed v8.13.0\n   Compiling tracing-log v0.2.0\n   Compiling thread_local v1.1.10\n   Compiling nu-ansi-term v0.50.3\n   Compiling base64 v0.22.1\n   Compiling tracing-subscriber v0.3.23\n   Compiling forma-server v3.2.0\n   Compiling forma-app-platform v0.1.0 (/home/runner/work/forma-app-platform/forma-app-platform/app)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 40.44s\n     Running unittests src/lib.rs (target/debug/deps/genui-e0aa0899a5a9e8ce)\n\nrunning 3 tests\ntest config::tests::refuse_expiry_shared_credentials_and_role_interchange_without_disclosure ... ok\ntest config::tests::file_reader_rejects_fifo_symlink_and_oversized_input ... ok\ntest readiness::tests::late_or_other_generation_probe_cannot_extend_credentials ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n     Running unittests src/main.rs (target/debug/deps/forma_app_platform-f271666f03570e9c)\n\nrunning 1 test\ntest tests::required_native_routes_refuse_browser_and_missing_outputs ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n   Doc-tests genui\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n"
+    },
+    {
+      "cwd": "app",
+      "command": [
+        "cargo",
+        "build",
+        "--locked"
+      ],
+      "exit": 0,
+      "output": "   Compiling forma-app-platform v0.1.0 (/home/runner/work/forma-app-platform/forma-app-platform/app)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.26s\n"
+    },
+    {
+      "cwd": ".",
+      "command": [
+        "/home/runner/work/forma-app-platform/forma-app-platform/app/runtime/.venv/bin/python",
+        "app/runtime/smoke_http.py",
+        "--binary",
+        "/home/runner/work/forma-app-platform/forma-app-platform/app/target/debug/forma-app-platform"
+      ],
+      "exit": 0,
+      "output": "{\"scope\": \"synthetic local HTTP denial smoke; not managed acceptance\", \"live\": 200, \"ready_without_probe\": 503, \"native_html_count\": 7, \"fresh_csp_nonces\": true, \"no_store\": true}\n{\"scope\": \"startup credential permission failure\", \"passed\": true, \"credential_values_disclosed\": false}\n"
+    },
+    {
+      "cwd": "infra",
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "exit": 0,
+      "output": "\nadded 14 packages, and audited 36 packages in 6s\n\n3 packages are looking for funding\n  run `npm fund` for details\n\nfound 0 vulnerabilities\n"
+    },
+    {
+      "cwd": "infra",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "exit": 0,
+      "output": "\n> typecheck\n> tsc --noEmit\n\n"
+    },
+    {
+      "cwd": "infra",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "exit": 0,
+      "output": "\n> test\n> tsx --test test/*.test.ts\n\nTAP version 13\n# Subtest: managed data stays private, encrypted, retained and versioned\nok 1 - managed data stays private, encrypted, retained and versioned\n  ---\n  duration_ms: 13.73855\n  type: 'test'\n  ...\n# Subtest: ingress is exactly operator HTTPS, ALB-to-task and task-to-database\nok 2 - ingress is exactly operator HTTPS, ALB-to-task and task-to-database\n  ---\n  duration_ms: 1.540554\n  type: 'test'\n  ...\n# Subtest: operator and certificate are required; broad/private/placeholder networks fail\nok 3 - operator and certificate are required; broad/private/placeholder networks fail\n  ---\n  duration_ms: 1.153139\n  type: 'test'\n  ...\n# Subtest: digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints\nok 4 - digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints\n  ---\n  duration_ms: 2.913734\n  type: 'test'\n  ...\n# Subtest: task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it\nok 5 - task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it\n  ---\n  duration_ms: 1.540993\n  type: 'test'\n  ...\n# Subtest: each DB identity connects only as its fixed username on this database\nok 6 - each DB identity connects only as its fixed username on this database\n  ---\n  duration_ms: 0.768208\n  type: 'test'\n  ...\n# Subtest: tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required\nok 7 - tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required\n  ---\n  duration_ms: 2.322771\n  type: 'test'\n  ...\n# Subtest: execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants\nok 8 - execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants\n  ---\n  duration_ms: 0.624852\n  type: 'test'\n  ...\n# Subtest: only migration execution role receives admin secret; migration has no tenant AWS authority\nok 9 - only migration execution role receives admin secret; migration has no tenant AWS authority\n  ---\n  duration_ms: 0.720927\n  type: 'test'\n  ...\n# Subtest: app environment contains identities only and one private ephemeral credential mount\nok 10 - app environment contains identities only and one private ephemeral credential mount\n  ---\n  duration_ms: 1.581674\n  type: 'test'\n  ...\n1..10\n# tests 10\n# suites 0\n# pass 10\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 4352.964079\n"
+    },
+    {
+      "cwd": "infra",
+      "command": [
+        "npm",
+        "run",
+        "synth",
+        "--",
+        "--quiet"
+      ],
+      "exit": 0,
+      "output": "\n> synth\n> cdk synth --no-lookups --quiet\n\n84 feature flags are not configured. Run 'cdk flags --unstable=flags' to learn more.\n"
+    }
+  ]
+}
