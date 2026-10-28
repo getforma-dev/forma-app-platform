@@ -198,11 +198,11 @@
     {
       "id": "APP-001",
       "title": "Record the released Forma 3.2 baseline and amend design assumptions",
-      "path": "2-in-progress/APP-001.md",
+      "path": "3-in-review/APP-001.md",
       "Field": "Value",
       "---": "---",
       "Epic": "FND",
-      "Status": "In progress",
+      "Status": "In review",
       "Priority": "P0",
       "Type": "Spike",
       "Sprint": "S01",
