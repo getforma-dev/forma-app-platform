@@ -137,5 +137,7 @@
     "No RDS authorization, S3/KMS, network, real browser delivery or full Northstar CIDR workload.",
     "The full managed six-view N3 gate remains open."
   ],
-  "campaign": "container-reviewed"
+  "campaign": "container-reviewed",
+  "superseded_by": "container-forkserver-reviewed/results.json",
+  "historical_scope": "Pre-forkserver local campaign; retained unchanged numerical observations are historical."
 }

@@ -27,7 +27,7 @@ def run(output):
     shutil.copyfile(root / "s02.parquet", scratch / "canary-secret.parquet")
     # Only these explicit sources enter Docker's context. No user home, repository
     # checkout, credentials, unrelated data or environment files are mounted.
-    for name in ("Dockerfile", "requirements.lock", "fixture.py", "query.py", "worker.py"):
+    for name in ("Dockerfile", "requirements.lock", "fixture.py", "query.py", "worker.py", "processes.py"):
         shutil.copyfile(HERE / name, context / name)
     (context / "contracts").mkdir()
     for name in ("schema.json", "validate.py", "requirements.lock"):

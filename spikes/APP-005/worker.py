@@ -15,34 +15,7 @@ import time
 
 from query import Admission, ContractError, Deadline, Refused, authorized_source, compile_query, connect, digest, execute_query, field_ref, measure, run_sql, typed_query
 import duckdb
-
-
-def supervised_query(root, name, query, manifest, epoch=1, start=None):
-    """Every scheduled query gets an independently killable process backstop."""
-    start = start or time.monotonic()
-    if time.monotonic() - start >= 1.8:
-        raise Deadline("deadline expired in admission queue")
-    request = {"name": name, "query": query, "epoch": epoch, "start": start}
-    scratch = Path(tempfile.mkdtemp(prefix="supervised-", dir=os.environ.get("FORMA_QUERY_TMP")))
-    process = subprocess.Popen([sys.executable, __file__, str(root), "--query-request"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env={**os.environ, "FORMA_QUERY_TMP": str(scratch)})
-    try:
-        try:
-            out, err = process.communicate(json.dumps(request), timeout=5)
-        except subprocess.TimeoutExpired as exc:
-            process.kill(); process.communicate()
-            raise Deadline("unresponsive query worker killed and reaped by 5-second backstop") from exc
-    finally:
-        shutil.rmtree(scratch)
-    if process.returncode:
-        failure = json.loads(out) if out else {"error": "engine_failure", "reason": err[:500]}
-        if failure["error"] == "deadline":
-            raise Deadline(failure["reason"])
-        raise Refused(failure["error"] + ": " + failure["reason"])
-    value = json.loads(out)
-    if time.monotonic() - start >= 1.8:
-        raise Deadline("result arrived after deadline and was withheld")
-    value["elapsed_seconds"] = time.monotonic() - start
-    return value
+from processes import backstop_probe, start_workers, supervised_query
 
 
 def workloads():
@@ -286,8 +259,9 @@ def os_probe():
 
 
 def suite(root, container=False):
+    worker_startup = start_workers()
     manifest = json.loads((root / "manifest.json").read_text())
-    report = {"duckdb": duckdb.__version__, "python": sys.version, "fixture": manifest, "qualification_scope": "local authorized immutable revision; no service/auth/cloud/network overhead; no full Northstar CIDR workload"}
+    report = {"duckdb": duckdb.__version__, "python": sys.version, "fixture": manifest, "worker_startup": worker_startup, "qualification_scope": "local authorized immutable revision; no service/auth/cloud/network overhead; no full Northstar CIDR workload"}
     checks = []
     def check(name, function):
         try:
@@ -300,6 +274,7 @@ def suite(root, container=False):
     check("engine defense in depth", lambda: security(root, manifest, container))
     check("admission and resource recovery", lambda: admission_probe(root, manifest))
     check("queued deadline expires before worker launch", lambda: queued_deadline_probe(root, manifest))
+    check("ordinary supervisor kills and reaps a stuck child", backstop_probe)
     def timeout():
         started = time.monotonic()
         proc = subprocess.Popen([sys.executable, __file__, str(root), "--deadline-probe"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -376,7 +351,7 @@ def suite(root, container=False):
     report.update({"checks": checks, "cold_samples": cold, "warm_six_view_samples": warm,
                    "peak_rss_native_units": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
                    "passed": all(x["passed"] for x in checks + cold) and all(v["passed"] for x in warm for v in x["views"]),
-                   "latency_definition": "Cold: fresh process/engine and empty result cache, immutable revision already local, OS page cache NOT reset; process wall separately. Warm: primed local revision, six declared analytical views with two active slots, independently supervised fresh process/engine per query and no result cache; elapsed includes process startup, digest verification, contract validation, queue, engine work, receipt validation and delivery. This is not the full Northstar six-view or managed client p99."})
+                   "latency_definition": "Cold: fresh process/engine and empty result cache, immutable revision already local, OS page cache NOT reset; process wall separately. Warm: primed local revision, six declared analytical views with two active slots, independently supervised fresh child/engine per query from a preloaded data-free fork server and no result cache; server readiness startup is reported separately; elapsed includes process startup, digest verification, contract validation, queue, engine work, receipt validation and delivery. This is not the full Northstar six-view or managed client p99."})
     return report
 
 
