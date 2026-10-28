@@ -122,8 +122,10 @@ def _broker_main(directory, expected_parent):
             continue
         connection, _ = listener.accept(); connection.settimeout(0.1)
         try:
+            frame_deadline = time.monotonic() + 0.1
             message = b""
             while b"\n" not in message and len(message) <= 128:
+                connection.settimeout(_remaining(frame_deadline))
                 part = connection.recv(129 - len(message))
                 if not part:
                     raise Refused("incomplete broker request")

@@ -8,6 +8,7 @@ import concurrent.futures
 import json
 import os
 from pathlib import Path
+import select
 import signal
 import socket
 import shutil
@@ -81,6 +82,24 @@ def run():
                     pass
             assert p._supervise(p._write, {"healthy": True}) == {"healthy": True}
         records.append({"control": "partial oversized malformed request frames", "passed": True})
+
+        with socket.socket(socket.AF_UNIX) as connection:
+            connection.settimeout(0.4)
+            connection.connect(str(p._BROKER.directory / "control"))
+            started = time.monotonic()
+            while time.monotonic() - started < 0.3:
+                try:
+                    connection.sendall(b"x")
+                except BrokenPipeError:
+                    break
+                time.sleep(0.04)
+                if select.select([connection], [], [], 0)[0]:
+                    assert connection.recv(1024) == b""
+                    break
+            elapsed = time.monotonic() - started
+            assert elapsed < 0.25, "per-byte traffic extended the broker's frame deadline"
+        assert p._supervise(p._write, {"healthy": True}) == {"healthy": True}
+        records.append({"control": "slow-trickle request has one absolute frame deadline", "passed": True, "observed_seconds": elapsed})
 
         for payload in (b"{", b"x" * 1024, b"{}\n{}\n"):
             sender, receiver = socket.socketpair()

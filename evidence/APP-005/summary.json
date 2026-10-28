@@ -138,6 +138,6 @@
     "The full managed six-view N3 gate remains open."
   ],
   "campaign": "container-reviewed",
-  "superseded_by": "container-broker/results.json",
+  "superseded_by": "container-broker-final/results.json",
   "historical_scope": "Pre-forkserver local campaign; retained unchanged numerical observations are historical."
 }

@@ -1,0 +1,41 @@
+{
+  "state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-10-28T20:20:47.088917464Z",
+    "FinishedAt": "2026-10-28T20:21:17.821479215Z"
+  },
+  "image": "sha256:a880e06cf19ed1fd7844ef4d67389b6324a54ea06ed13a2d6774627612f461f7",
+  "architecture": "arm64",
+  "host_config": {
+    "NetworkMode": "none",
+    "ReadonlyRootfs": true,
+    "Memory": 3221225472,
+    "MemorySwap": 3221225472,
+    "NanoCpus": 2000000000,
+    "PidsLimit": 64,
+    "CapDrop": [
+      "ALL"
+    ],
+    "SecurityOpt": [
+      "no-new-privileges"
+    ],
+    "Tmpfs": {
+      "/tmp": "rw,noexec,nosuid,nodev,size=2147483648,uid=65532,gid=65532,mode=700"
+    }
+  },
+  "mounts": [
+    {
+      "destination": "/data/org",
+      "read_write": false
+    }
+  ],
+  "elapsed_seconds": 30.859057249996113
+}
