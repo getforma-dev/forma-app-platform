@@ -4,7 +4,7 @@ COPY requirements.lock /app/requirements.lock
 COPY contracts/requirements.lock /app/contracts/requirements.lock
 RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r /app/requirements.lock -r /app/contracts/requirements.lock
 COPY contracts /app/contracts
-COPY fixture.py query.py worker.py processes.py /app/
+COPY fixture.py query.py worker.py processes.py test_processes.py /app/
 COPY canary.csv /protected/canary.csv
 COPY canary-secret.parquet /data/canary-secret.parquet
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 FORMA_CONTRACTS=/app/contracts FORMA_QUERY_TMP=/tmp

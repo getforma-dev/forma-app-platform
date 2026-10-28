@@ -348,10 +348,14 @@ def suite(root, container=False):
         finally:
             broker.close()
         warm.append({"sample": sample, "elapsed_seconds": time.monotonic() - started, "max_running": broker.max_active, "views": values})
+    # Fault controls deliberately stop/kill the owned launcher and retire it;
+    # run them after latency samples so they neither prime nor pollute timings.
+    from test_processes import run as process_fault_controls
+    check("launcher startup IPC death and concurrent recovery", process_fault_controls)
     report.update({"checks": checks, "cold_samples": cold, "warm_six_view_samples": warm,
                    "peak_rss_native_units": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
                    "passed": all(x["passed"] for x in checks + cold) and all(v["passed"] for x in warm for v in x["views"]),
-                   "latency_definition": "Cold: fresh process/engine and empty result cache, immutable revision already local, OS page cache NOT reset; process wall separately. Warm: primed local revision, six declared analytical views with two active slots, independently supervised fresh child/engine per query from a preloaded data-free fork server and no result cache; server readiness startup is reported separately; elapsed includes process startup, digest verification, contract validation, queue, engine work, receipt validation and delivery. This is not the full Northstar six-view or managed client p99."})
+                   "latency_definition": "Cold: fresh process/engine and empty result cache, immutable revision already local, OS page cache NOT reset; process wall separately. Warm: primed local revision, six declared analytical views with two active slots, independently supervised fresh child/engine per query from a preloaded data-free owned Linux fork broker and no result cache; broker readiness startup is reported separately; elapsed includes process startup, digest verification, contract validation, queue, engine work, receipt validation and delivery. This is not the full Northstar six-view or managed client p99."})
     return report
 
 

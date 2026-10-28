@@ -1,0 +1,1 @@
+{"scope": "exact reviewed supervisor; query import stubbed; no database query", "initial_child": {"ok": 1}, "still_blocked_after_5s_backstop": true, "observed_seconds_before_resuming_owned_server": 6.203098294999563, "result_after_server_resumed": [{"ok": 2}], "joined": true}
