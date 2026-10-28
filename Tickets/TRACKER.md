@@ -6,7 +6,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 
 | Order | Ticket | Phase | Sprint | Category | Priority | Size | Status | Depends on |
 |---|---|---|---|---|---|---|---|---|
-| 1 | [APP-001: Record the released Forma 3.2 baseline and amend design assumptions](3-in-review/APP-001.md) | [PH01](phases/PH01.md) | S01 | FND | P0 | M | In review | None |
+| 1 | [APP-001: Record the released Forma 3.2 baseline and amend design assumptions](4-done/APP-001.md) | [PH01](phases/PH01.md) | S01 | FND | P0 | M | Done | None |
 | 2 | [APP-002: Freeze implementation contracts and unresolved decisions](0-backlog/APP-002.md) | [PH01](phases/PH01.md) | S01 | FND | P0 | M | Backlog | APP-001 |
 | 3 | [APP-003: Qualify a 3.2 native canvas with the full required primitive library](9-blocked/APP-003.md) | [PH01](phases/PH01.md) | S01 | UX | P0 | M | Blocked | APP-001 |
 | 4 | [APP-004: Qualify the WASM CSV/XLSX parser boundary](0-backlog/APP-004.md) | [PH01](phases/PH01.md) | S01 | ING | P0 | M | Backlog | APP-002 |

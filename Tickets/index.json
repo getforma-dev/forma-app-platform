@@ -31,7 +31,7 @@
         "APP-014"
       ],
       "ticket_count": 14,
-      "done_count": 0,
+      "done_count": 1,
       "blocked_count": 2
     },
     {
@@ -193,16 +193,18 @@
       "blocked_count": 0
     }
   ],
-  "ready_by_local_dependencies": [],
+  "ready_by_local_dependencies": [
+    "APP-002"
+  ],
   "tickets": [
     {
       "id": "APP-001",
       "title": "Record the released Forma 3.2 baseline and amend design assumptions",
-      "path": "3-in-review/APP-001.md",
+      "path": "4-done/APP-001.md",
       "Field": "Value",
       "---": "---",
       "Epic": "FND",
-      "Status": "In review",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Spike",
       "Sprint": "S01",
@@ -215,7 +217,7 @@
       "Depends on": "None",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Codex implementation agent",
-      "Branch / PR": "app-001-phase-one; local review before landing",
+      "Branch / PR": "app-001-phase-one; reviewed implementation d220722, landed on main",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
