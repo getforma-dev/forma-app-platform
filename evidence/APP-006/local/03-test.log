@@ -1,0 +1,38 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+     Running unittests src/lib.rs (target/debug/deps/genui_auth_verifier-59c478626679fd82)
+
+running 23 tests
+test tests::access_only_profile_prepublication_overlap_and_observed_retirement ... ok
+test tests::acquired_key_lease_is_refused_after_authoritative_refresh ... ok
+test tests::access_only_set_has_bounded_unique_validated_keys_and_atomic_replacement ... ok
+test tests::actual_ed25519_identity_contract_and_fresh_key_cache ... ok
+test tests::cache_headers_cannot_create_unbounded_or_stale_lifetimes ... ok
+test tests::cancellation_reserves_budget_and_leaves_no_authority ... ok
+test tests::actual_http_redirect_status_invalid_and_streamed_oversize_are_refused ... ok
+test tests::concurrent_unknown_keys_share_one_attempt_budget_and_recover ... ok
+test tests::expiry_is_rechecked_after_fetch_before_identity_release ... ok
+test tests::invalid_signature_and_claims_never_become_identity ... ok
+test tests::jwks_closed_shapes_duplicate_fields_and_mixed_key_purpose_refuse ... ok
+test tests::key_expiry_is_rechecked_after_signature_before_identity_release ... ok
+cache_lock_refusal_ms=2003
+test tests::deadline_covers_concurrent_cache_lock_wait_without_launching_fetch ... ok
+test tests::production_configuration_is_explicit_https_fixed_endpoint_only ... ok
+test tests::public_source_profile_vector_has_independent_key_identity ... ok
+test tests::roles_email_and_unknown_subject_do_not_create_membership ... ok
+test tests::ssf_signature_with_access_type_and_claims_cannot_select_access_key ... ok
+test tests::stale_cache_is_never_grace_authority_and_freshness_starts_at_request ... ok
+test tests::unknown_key_cooldown_rotation_and_authoritative_replacement ... ok
+test tests::unknown_key_failure_cannot_poison_extend_or_keep_cached_signin_authority ... ok
+test tests::unknown_key_success_never_installs_untrusted_request_key ... ok
+test tests::wrong_algorithm_type_external_keys_and_ambiguous_json_refuse_before_fetch ... ok
+slow_body_refusal_ms=2004
+test tests::partial_trickle_cannot_reset_total_network_deadline ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.25s
+
+   Doc-tests genui_auth_verifier
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

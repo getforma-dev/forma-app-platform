@@ -1,0 +1,83 @@
+{
+  "scope": "APP-003 consumer preparation, not upstream acceptance",
+  "environment": {
+    "platform": "macOS-26.1-arm64-arm-64bit"
+  },
+  "steps": [
+    {
+      "command": [
+        "node",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "v22.21.0\n"
+    },
+    {
+      "command": [
+        "npm",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "11.6.2\n"
+    },
+    {
+      "command": [
+        "rustc",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "rustc 1.93.1 (01f6ddf75 2026-02-11)\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "cargo 1.93.1 (083ac5135 2025-12-15)\n"
+    },
+    {
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "\nadded 30 packages, and audited 31 packages in 730ms\n\n1 package is looking for funding\n  run `npm fund` for details\n\nfound 0 vulnerabilities\n"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "\n> typecheck\n> tsc --noEmit\n\n"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "\n> build\n> tsx build.ts --ssr --strict\n\nSSR mode enabled \u2014 emitting IR files\n   IR emitted (real): home.ir (8026 bytes, 1 islands)\n\n   dist/home.57701d13.js  87.2kb\n\n   3 assets hashed\n   2 files compressed (brotli 11 + gzip 9)\n\n   Size report (gzip -9, Brotli beside it; 1 KB = 1,000 B, 1 KiB = 1,024 B). Forma code is @getforma/core, @getforma/router and alien-signals as bundled;\n   N2's ceilings are policy (DR-35 and the 3.1 performance decision): Forma code 28,420 B, the JavaScript of a page 76,800 B, of a canvas 373,760 B, a route with no interactive region none.\n   /  islands, canvas  Forma 27,938 of 28,420 B  JavaScript 31,176 of 373,760 B  (Brotli: Forma 24,941, JavaScript 27,773)  home.57701d13.js\n   Service worker   sw.js  3,237 B raw, 1,538 B gzip, 1,314 B Brotli; counted in the JavaScript of each route that has JavaScript\n   Build time       515 ms: bundle 408 ms, hash 1 ms, compress 105 ms, manifest 1 ms\n\nManifest written: dist/manifest.json (build: c41a339d7bd3...)\nSize report written: dist/size-report.json\n   SW generated: dist/sw.js (verified on-demand assets)\n"
+    },
+    {
+      "command": [
+        "node",
+        "refusals.mjs"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 1,
+      "output": "file:///Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/node_modules/@getforma/build/dist/index.js:2245\n    throw new Error(\n          ^\n\nError: @getforma/build: invalid config\n  - routes['/'].css is missing: list the route's CSS base names, or [] for none\n    at validateConfig (file:///Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/node_modules/@getforma/build/dist/index.js:2245:11)\n    at build4 (file:///Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/node_modules/@getforma/build/dist/index.js:2313:3)\n    at file:///Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/refusals.mjs:22:17\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v22.21.0\n"
+    }
+  ],
+  "passed": false
+}

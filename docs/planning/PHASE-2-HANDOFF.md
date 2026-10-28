@@ -6,6 +6,8 @@ Audit: 2026-10-28, repository snapshot `441c82e`. This is an evidence checklist,
 
 The audit ran only the read-only board readiness command and inspected tickets, architecture and retained evidence. It did not run new runtime tests, deploy resources, change ticket states or accept a phase.
 
+Subsequent October 28 evidence: APP-003's full nine-renderer consumer passed independent review and all seven CI checks at `74a7231`, now on `main`. The [measured budget disposition](../../evidence/APP-003/budget-disposition.md) clears the FORMA-232 consumer condition without an override. APP-003 remains Blocked only on the final FORMA-246 handback; its local browser/render/budget results are available in [review](../../evidence/APP-003/review.md) and [CI](../../evidence/APP-003/ci.json). APP-006's local verifier preparation does not clear hosted-auth acceptance.
+
 ## Evidence already available — reuse it
 
 | Accepted or prepared boundary | Existing handoff material | Practical limit for the next owner |

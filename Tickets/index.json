@@ -271,7 +271,7 @@
       "Assignee": "GenUI \u2014 native canvas qualification agent",
       "Branch / PR": "phase-one-spikes; isolated spikes/APP-003 consumer preparation",
       "Team": "GenUI",
-      "Blocked by": "FormaStack team: final FORMA-246 reviewed merge/CI receipt pending; GenUI must measure the full library under published caps before the FORMA-232 consumer disposition can clear. Local consumer preparation is underway; acceptance remains blocked.",
+      "Blocked by": "FormaStack team: final FORMA-246 reviewed merge/CI receipt pending. Full consumer qualification and no-override budget disposition pass; the ticket remains blocked until the conformance handback is accepted.",
       "Unblock evidence": "FORMA-246 supplies passing 3.2 native conformance at an exact consumable ref. FORMA-232 supplies released budget support OR a measured no-override-needed GenUI route disposition. GenUI reruns its full canvas/adoption checks; broader budget work may remain open if the shipped cap fits.",
       "dependencies": [
         "APP-001"

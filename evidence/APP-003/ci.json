@@ -1,0 +1,48 @@
+{
+  "revision": "74a72316c5f4bda03edc0c97db60f1e727bd22c3",
+  "source_landed_on": "origin/main",
+  "checks": [
+    {
+      "name": "canvas",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40766373154"
+    },
+    {
+      "name": "foundation",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40766373221"
+    },
+    {
+      "name": "parser",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40766373253"
+    },
+    {
+      "name": "planning",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40766372917"
+    },
+    {
+      "name": "contracts",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40766373008"
+    },
+    {
+      "name": "baseline",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40766372945"
+    },
+    {
+      "name": "query",
+      "conclusion": "success",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40766372928"
+    }
+  ],
+  "consumer_report": "ci-74a7231/qualification.json",
+  "review": "review.md",
+  "scope": "Nine-renderer native consumer qualification only; no managed application or phase gate acceptance.",
+  "captured_artifact_renames": {
+    "README.md": "README-captured.txt"
+  },
+  "capture_note": "README bytes preserved as text because original relative Markdown links are based on the source evidence directory; CI identity retains original archive names."
+}

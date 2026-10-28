@@ -1,0 +1,114 @@
+{
+  "edition": "genui-auth-consumer-v1",
+  "repository": "https://github.com/getforma-dev/gatewasm",
+  "source_identity_kind": "locally available immutable Git objects; not a deployed service receipt",
+  "profiles": [
+    {
+      "label": "FORMA-247",
+      "commit": "f65c1948181554d30ad62549e35717eb8132f4f6",
+      "files": {
+        "crates/server/src/jwt/signing.rs": {
+          "sha256": "90af90ba233fc3005215d0b5a38808a609d169a21ba3d868a8cf9279fb004df4",
+          "bytes": 3103
+        },
+        "crates/server/src/jwt/keys.rs": {
+          "sha256": "69aaf6319e0968fda8d8f90b64b7bbb8355b81ccdca4957f405a2f11596c161c",
+          "bytes": 5842
+        },
+        "crates/server/src/handlers/jwks.rs": {
+          "sha256": "e2ed76b260b2002500665b87c271d8874bd3e6d374f0d29d751c7848ff577b6d",
+          "bytes": 720
+        },
+        "crates/server/src/handlers/token.rs": {
+          "sha256": "6d60b85448e0448902f0375d31c5fea6bc57217839abfe924b93d06acd0b6ef2",
+          "bytes": 29367
+        },
+        "crates/server/src/config.rs": {
+          "sha256": "a6a1e2470cb844c85e7efcccf8268de7da061b9e6310044d2eca7c3c5c7f633a",
+          "bytes": 10464
+        },
+        "crates/server/src/types.rs": {
+          "sha256": "c46fc8972609f1af137ae1ad7f1749d50c43cb078926f44139330bc6eab1b54b",
+          "bytes": 3066
+        },
+        "handoff/forma-247/README.md": {
+          "sha256": "0fd3a801f5aef52390733610ed209bd25f13d708d3ab512f812d801b56304785",
+          "bytes": 5733
+        },
+        "Cargo.lock": {
+          "sha256": "cfa10eda1655b2e97663ac8b17372e63b98ce0a1018a0d77fad0138082cae391",
+          "bytes": 102188
+        }
+      }
+    },
+    {
+      "label": "FORMA-248 compatibility finding only",
+      "commit": "22652f8ef44bfb48184485045bf0f7f71eaf8e03",
+      "files": {
+        "crates/server/src/jwt/signing.rs": {
+          "sha256": "733bd2361e50cce10c0321cb1aae6b24b3731e480fa71d13c6019daedebcab50",
+          "bytes": 3353
+        },
+        "crates/server/src/jwt/keys.rs": {
+          "sha256": "2c0ae8a01de10c58cab8fa486a8764ca8a7cb881b7a27cfb9c0f84429b966c67",
+          "bytes": 18063
+        },
+        "crates/server/src/handlers/jwks.rs": {
+          "sha256": "7b8d2401446fed823325a7d4cb2e2b5c5bb360a6c339c63592b4a06839050fa7",
+          "bytes": 1177
+        },
+        "handoff/forma-248/README.md": {
+          "sha256": "2603e2553ac26d544e0aa352efc2628ea8a9925c39ab85b86844a1f376a5dfc9",
+          "bytes": 12540
+        }
+      }
+    },
+    {
+      "label": "FORMA-248 access-only compatibility profile",
+      "commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "files": {
+        "crates/server/src/jwt/signing.rs": {
+          "sha256": "733bd2361e50cce10c0321cb1aae6b24b3731e480fa71d13c6019daedebcab50",
+          "bytes": 3353
+        },
+        "crates/server/src/jwt/keys.rs": {
+          "sha256": "a5adf363d66ef6bc58d7141a03e517b8075482eb9b826960b1dfa1a4ede16b93",
+          "bytes": 18809
+        },
+        "crates/server/src/jwt/kms.rs": {
+          "sha256": "3c58d5d3e5b3ca011e15c91de129c646972e7f70fa5dd925b0b55d8ffcb40707",
+          "bytes": 22410
+        },
+        "crates/server/src/handlers/jwks.rs": {
+          "sha256": "4955f54bfe038e32575fa4a5db5d38a2cf9114c9d8b2f7f295a1d3805800456d",
+          "bytes": 1715
+        },
+        "crates/server/src/handlers/mod.rs": {
+          "sha256": "40fe277f7be0c24a9bdf57761e0da344bbfb1f55369dc46c6596893ca164e41f",
+          "bytes": 32319
+        },
+        "crates/server/src/types.rs": {
+          "sha256": "c46fc8972609f1af137ae1ad7f1749d50c43cb078926f44139330bc6eab1b54b",
+          "bytes": 3066
+        },
+        "crates/server/tests/integration.rs": {
+          "sha256": "50264f622bc96ff2aa31250c995310e71c1de149cdac2c1e84adc3d3bfa0a590",
+          "bytes": 452247
+        },
+        "docs/handoff/FORMA-248.md": {
+          "sha256": "beaf24e97aaca9a722dada3f380eae631a1700f6d499ee9625e355919063c0d1",
+          "bytes": 5023
+        },
+        "handoff/forma-248/README.md": {
+          "sha256": "6913d39ae3bdf9cc3a44d6f910104fb3681d3e63441029a3deb1995b9faac633",
+          "bytes": 13844
+        }
+      }
+    }
+  ],
+  "fixtures": {
+    "fixtures/claims-247.json": "e70283baad967aab03b51d5e8588b2d164ae4f315ea073a6ac08a29c857efad7",
+    "fixtures/jwks-247.json": "1edd0a6d624738c9322756ee38de2d8bc712edee0a319ba0211d2b29020f9f85"
+  },
+  "public_vector_origin": "RFC 8032 section 7.1 test 1 public key only; SHA-256 kid independently generated with Python hashlib, not the verifier key_id function. No private material or JWT retained."
+}

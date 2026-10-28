@@ -1,0 +1,21 @@
+{
+  "source_sha256": {
+    ".github/workflows/canvas.yml": "b864b2705bcfb34274ad3b6d684aa51c33a42b38f0f0b7aed7b874736b331588",
+    "spikes/APP-003/Cargo.lock": "12ba0e8118a59c8e98375d92495c120e5e56c4af5abd1ad5948beb23f7ac92ca",
+    "spikes/APP-003/Cargo.toml": "915093d3939f69e6f8cd978e9bfbe864019888b0f3c94105f1d396439014ad6b",
+    "spikes/APP-003/README.md": "e8dacdf21142f60265c94ebad8d90c5c088e3b5b5612572570a0422d58e161f5",
+    "spikes/APP-003/admin/build.ts": "cd0e92d9d332ddd6081dca638a2c03870d1844f9e3898c57eba4ffff26f3f4ca",
+    "spikes/APP-003/admin/package-lock.json": "7629159d545ab177135b390c0788b763f40895fcab011d958a9f2b54dacaa45c",
+    "spikes/APP-003/admin/package.json": "5e5e46193e319a8c4b0e3fc2dea157b805c92e2ee817c4e0891d811695454c5b",
+    "spikes/APP-003/admin/refusals.mjs": "910dca534a5355f9f6c0e62ce605aee00909da7ddb46f1910a820f70418109f5",
+    "spikes/APP-003/admin/src/forma-types.d.ts": "c6a2147992b4ab14f29315b8349051600bd67e8f0e363f99d9b34af5dcbe5f0a",
+    "spikes/APP-003/admin/src/home/app.tsx": "d551300763f3d8c62b173c50caa0a09bf77904ced5c6b3f056edebb1e6d9b512",
+    "spikes/APP-003/admin/src/styles/app.css": "df55fe5225df7c3ceae690cc2b8ad4225fc821922463faf86b8b95eb99ea184e",
+    "spikes/APP-003/admin/tsconfig.json": "8f54953b133871cc1c728d72bf59b8e03eb929a85a60da177368619f5a2049a4",
+    "spikes/APP-003/src/main.rs": "c21ba0572f2dc1aff93b6636485be03998e48e37a13ce0a0c4ac75b029a6bc02",
+    "spikes/APP-003/verify.py": "4dc2fe4feb263e6f9f3213fdbd72dce6afad21f04245e51ac373e748f0479578",
+    "spikes/APP-003/verify_browser.mjs": "1a5775f61bd9171607e754e19684d5663412cdb9c2e2a644c481f154466d48f8"
+  },
+  "base_commit": "74a72316c5f4bda03edc0c97db60f1e727bd22c3",
+  "qualification_passed": true
+}

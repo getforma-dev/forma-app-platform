@@ -1,0 +1,742 @@
+{
+  "scope": "Published 3.2 native consumer adoption and synthetic interactions; not cold-client parity, persistence, auth or client SLO proof",
+  "results": [
+    {
+      "engine": "chromium",
+      "version": "156.0.8078.4",
+      "states": [
+        {
+          "state": "normal",
+          "initial": {
+            "nodes": 464,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 6524
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": {
+            "form_keyboard_submit": true,
+            "linked_filter_stale_epoch_refused": true,
+            "keyboard_focus": "view-form",
+            "original_nodes_remain_connected": true,
+            "numeric_svg": [
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "0.5",
+                "width": "12.5",
+                "height": "10",
+                "title": "bucket 0: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "35.5",
+                "width": "12.5",
+                "height": "19",
+                "title": "bucket 1: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "70.5",
+                "width": "12.5",
+                "height": "28",
+                "title": "bucket 2: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "105.5",
+                "width": "12.5",
+                "height": "37",
+                "title": "bucket 3: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "140.5",
+                "width": "12.5",
+                "height": "46",
+                "title": "bucket 4: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "175.5",
+                "width": "12.5",
+                "height": "55",
+                "title": "bucket 5: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "0.5",
+                "width": "12.5",
+                "height": "10",
+                "title": "bucket 0: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "35.5",
+                "width": "12.5",
+                "height": "19",
+                "title": "bucket 1: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "70.5",
+                "width": "12.5",
+                "height": "28",
+                "title": "bucket 2: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "105.5",
+                "width": "12.5",
+                "height": "37",
+                "title": "bucket 3: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "140.5",
+                "width": "12.5",
+                "height": "46",
+                "title": "bucket 4: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "175.5",
+                "width": "12.5",
+                "height": "55",
+                "title": "bucket 5: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              }
+            ],
+            "accessible_state": "- status: \"Linked scope: All: 1,140,000 bytes\"\n- region \"summary view\":\n  - heading \"summary view\" [level=2]\n  - term: Total bytes\n  - definition: 1,140,000\n  - term: Asset\n  - definition: Café 東京 <script>globalThis.pwned=true</script> & \"onmouseover=alert(1)\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"table view\":\n  - heading \"table view\" [level=2]\n  - table \"table view\":\n    - caption: table view\n    - rowgroup:\n      - row \"Asset Evidence\":\n        - columnheader \"Asset\"\n        - columnheader \"Evidence\"\n    - rowgroup:\n      - row \"asset-0 Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\":\n        - cell \"asset-0\"\n        - cell \"Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\"\n      - row \"asset-1 Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\":\n        - cell \"asset-1\"\n        - cell \"Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\"\n      - row \"asset-2 Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\":\n        - cell \"asset-2\"\n        - cell \"Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"detail view\":\n  - heading \"detail view\" [level=2]\n  - term: Total bytes\n  - definition: 1,140,000\n  - term: Asset\n  - definition: Café 東京 <script>globalThis.pwned=true</script> & \"onmouseover=alert(1)\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"timeline view\":\n  - heading \"timeline view\" [level=2]\n  - img \"timeline view\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"chart view\":\n  - heading \"chart view\" [level=2]\n  - img \"chart view\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"filter view\":\n  - heading \"filter view\" [level=2]\n  - text: Linked destination\n  - combobox \"Linked destination\":\n    - option \"All destinations\" [selected]\n    - option \"Unmatched destinations\"\n  - paragraph: Applies to all six linked views.\n  - button \"Focus view\"\n- region \"form view\":\n  - heading \"form view\" [level=2]\n  - text: Observation\n  - textbox \"Observation\": Keyboard observation 東京\n  - text: Decision\n  - combobox \"Decision\":\n    - option \"Needs review\"\n    - option \"Accepted\" [selected]\n  - button \"Save observation\"\n  - status: Synthetic observation accepted\n  - button \"Focus view\"\n- region \"note view\":\n  - heading \"note view\" [level=2]\n  - paragraph: Café 東京 <script>globalThis.pwned=true</script> & \"onmouseover=alert(1)\"\n  - button \"Focus view\"\n- region \"status view\":\n  - heading \"status view\" [level=2]\n  - status: Ready for review\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"",
+            "hostile_literal": true
+          },
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "empty",
+          "initial": {
+            "nodes": 8,
+            "kinds": [],
+            "state_utf8_bytes": 145
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "nested-empty",
+          "initial": {
+            "nodes": 329,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 4350
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "long",
+          "initial": {
+            "nodes": 464,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 20207
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "rows500",
+          "initial": {
+            "nodes": 5931,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 92297
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        }
+      ],
+      "no_javascript_form_post": true,
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "version": "157.0",
+      "states": [
+        {
+          "state": "normal",
+          "initial": {
+            "nodes": 464,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 6524
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": {
+            "form_keyboard_submit": true,
+            "linked_filter_stale_epoch_refused": true,
+            "keyboard_focus": "view-form",
+            "original_nodes_remain_connected": true,
+            "numeric_svg": [
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "0.5",
+                "width": "12.5",
+                "height": "10",
+                "title": "bucket 0: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "35.5",
+                "width": "12.5",
+                "height": "19",
+                "title": "bucket 1: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "70.5",
+                "width": "12.5",
+                "height": "28",
+                "title": "bucket 2: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "105.5",
+                "width": "12.5",
+                "height": "37",
+                "title": "bucket 3: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "140.5",
+                "width": "12.5",
+                "height": "46",
+                "title": "bucket 4: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "175.5",
+                "width": "12.5",
+                "height": "55",
+                "title": "bucket 5: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "0.5",
+                "width": "12.5",
+                "height": "10",
+                "title": "bucket 0: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "35.5",
+                "width": "12.5",
+                "height": "19",
+                "title": "bucket 1: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "70.5",
+                "width": "12.5",
+                "height": "28",
+                "title": "bucket 2: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "105.5",
+                "width": "12.5",
+                "height": "37",
+                "title": "bucket 3: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "140.5",
+                "width": "12.5",
+                "height": "46",
+                "title": "bucket 4: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "175.5",
+                "width": "12.5",
+                "height": "55",
+                "title": "bucket 5: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              }
+            ],
+            "accessible_state": "- status: \"Linked scope: All: 1,140,000 bytes\"\n- region \"summary view\":\n  - heading \"summary view\" [level=2]\n  - term: Total bytes\n  - definition: 1,140,000\n  - term: Asset\n  - definition: Café 東京 <script>globalThis.pwned=true</script> & \"onmouseover=alert(1)\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"table view\":\n  - heading \"table view\" [level=2]\n  - table \"table view\":\n    - caption: table view\n    - rowgroup:\n      - row \"Asset Evidence\":\n        - columnheader \"Asset\"\n        - columnheader \"Evidence\"\n    - rowgroup:\n      - row \"asset-0 Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\":\n        - cell \"asset-0\"\n        - cell \"Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\"\n      - row \"asset-1 Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\":\n        - cell \"asset-1\"\n        - cell \"Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\"\n      - row \"asset-2 Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\":\n        - cell \"asset-2\"\n        - cell \"Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"detail view\":\n  - heading \"detail view\" [level=2]\n  - term: Total bytes\n  - definition: 1,140,000\n  - term: Asset\n  - definition: Café 東京 <script>globalThis.pwned=true</script> & \"onmouseover=alert(1)\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"timeline view\":\n  - heading \"timeline view\" [level=2]\n  - img \"timeline view\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"chart view\":\n  - heading \"chart view\" [level=2]\n  - img \"chart view\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"filter view\":\n  - heading \"filter view\" [level=2]\n  - text: Linked destination\n  - combobox \"Linked destination\":\n    - option \"All destinations\" [selected]\n    - option \"Unmatched destinations\"\n  - paragraph: Applies to all six linked views.\n  - button \"Focus view\"\n- region \"form view\":\n  - heading \"form view\" [level=2]\n  - text: Observation\n  - textbox \"Observation\": Keyboard observation 東京\n  - text: Decision\n  - combobox \"Decision\":\n    - option \"Needs review\"\n    - option \"Accepted\" [selected]\n  - button \"Save observation\"\n  - status: Synthetic observation accepted\n  - button \"Focus view\"\n- region \"note view\":\n  - heading \"note view\" [level=2]\n  - paragraph: Café 東京 <script>globalThis.pwned=true</script> & \"onmouseover=alert(1)\"\n  - button \"Focus view\"\n- region \"status view\":\n  - heading \"status view\" [level=2]\n  - status: Ready for review\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"",
+            "hostile_literal": true
+          },
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "empty",
+          "initial": {
+            "nodes": 8,
+            "kinds": [],
+            "state_utf8_bytes": 145
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "nested-empty",
+          "initial": {
+            "nodes": 329,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 4350
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "long",
+          "initial": {
+            "nodes": 464,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 20207
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "rows500",
+          "initial": {
+            "nodes": 5931,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 92297
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        }
+      ],
+      "no_javascript_form_post": true,
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "version": "27.2",
+      "states": [
+        {
+          "state": "normal",
+          "initial": {
+            "nodes": 464,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 6524
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": {
+            "form_keyboard_submit": true,
+            "linked_filter_stale_epoch_refused": true,
+            "keyboard_focus": "view-form",
+            "original_nodes_remain_connected": true,
+            "numeric_svg": [
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "0.5",
+                "width": "12.5",
+                "height": "10",
+                "title": "bucket 0: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "35.5",
+                "width": "12.5",
+                "height": "19",
+                "title": "bucket 1: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "70.5",
+                "width": "12.5",
+                "height": "28",
+                "title": "bucket 2: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "105.5",
+                "width": "12.5",
+                "height": "37",
+                "title": "bucket 3: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "140.5",
+                "width": "12.5",
+                "height": "46",
+                "title": "bucket 4: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "175.5",
+                "width": "12.5",
+                "height": "55",
+                "title": "bucket 5: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "0.5",
+                "width": "12.5",
+                "height": "10",
+                "title": "bucket 0: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "35.5",
+                "width": "12.5",
+                "height": "19",
+                "title": "bucket 1: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "70.5",
+                "width": "12.5",
+                "height": "28",
+                "title": "bucket 2: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "105.5",
+                "width": "12.5",
+                "height": "37",
+                "title": "bucket 3: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "140.5",
+                "width": "12.5",
+                "height": "46",
+                "title": "bucket 4: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              },
+              {
+                "namespace": "http://www.w3.org/2000/svg",
+                "x": "175.5",
+                "width": "12.5",
+                "height": "55",
+                "title": "bucket 5: server value",
+                "titleNamespace": "http://www.w3.org/2000/svg"
+              }
+            ],
+            "accessible_state": "- status: \"Linked scope: All: 1,140,000 bytes\"\n- region \"summary view\":\n  - heading \"summary view\" [level=2]\n  - term: Total bytes\n  - definition: 1,140,000\n  - term: Asset\n  - definition: Café 東京 <script>globalThis.pwned=true</script> & \"onmouseover=alert(1)\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"table view\":\n  - heading \"table view\" [level=2]\n  - table \"table view\":\n    - caption: table view\n    - rowgroup:\n      - row \"Asset Evidence\":\n        - columnheader \"Asset\"\n        - columnheader \"Evidence\"\n    - rowgroup:\n      - row \"asset-0 Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\":\n        - cell \"asset-0\"\n        - cell \"Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\"\n      - row \"asset-1 Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\":\n        - cell \"asset-1\"\n        - cell \"Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\"\n      - row \"asset-2 Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\":\n        - cell \"asset-2\"\n        - cell \"Café 東京 <script>globalThis.pwned=true</script> & \\\"onmouseover=alert(1)\\\"\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"detail view\":\n  - heading \"detail view\" [level=2]\n  - term: Total bytes\n  - definition: 1,140,000\n  - term: Asset\n  - definition: Café 東京 <script>globalThis.pwned=true</script> & \"onmouseover=alert(1)\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"timeline view\":\n  - heading \"timeline view\" [level=2]\n  - img \"timeline view\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"chart view\":\n  - heading \"chart view\" [level=2]\n  - img \"chart view\"\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"\n- region \"filter view\":\n  - heading \"filter view\" [level=2]\n  - text: Linked destination\n  - combobox \"Linked destination\":\n    - option \"All destinations\" [selected]\n    - option \"Unmatched destinations\"\n  - paragraph: Applies to all six linked views.\n  - button \"Focus view\"\n- region \"form view\":\n  - heading \"form view\" [level=2]\n  - text: Observation\n  - textbox \"Observation\": Keyboard observation 東京\n  - text: Decision\n  - combobox \"Decision\":\n    - option \"Needs review\"\n    - option \"Accepted\" [selected]\n  - button \"Save observation\"\n  - status: Synthetic observation accepted\n  - button \"Focus view\"\n- region \"note view\":\n  - heading \"note view\" [level=2]\n  - paragraph: Café 東京 <script>globalThis.pwned=true</script> & \"onmouseover=alert(1)\"\n  - button \"Focus view\"\n- region \"status view\":\n  - heading \"status view\" [level=2]\n  - status: Ready for review\n  - paragraph: \"All: 1,140,000 bytes\"\n  - button \"Focus view\"",
+            "hostile_literal": true
+          },
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "empty",
+          "initial": {
+            "nodes": 8,
+            "kinds": [],
+            "state_utf8_bytes": 145
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "nested-empty",
+          "initial": {
+            "nodes": 329,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 4350
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "long",
+          "initial": {
+            "nodes": 464,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 20207
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        },
+        {
+          "state": "rows500",
+          "initial": {
+            "nodes": 5931,
+            "kinds": [
+              "summary",
+              "table",
+              "detail",
+              "timeline",
+              "chart",
+              "filter",
+              "form",
+              "note",
+              "status"
+            ],
+            "state_utf8_bytes": 92297
+          },
+          "adoption": {
+            "same_root": true,
+            "same_nodes": true,
+            "initial_writes": [],
+            "observer_positive_control": true
+          },
+          "interactions": null,
+          "page_errors": [],
+          "csp_violations": [],
+          "passed": true
+        }
+      ],
+      "no_javascript_form_post": true,
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "response": {
+    "native_html_bytes": 17596,
+    "state_envelope_utf8_bytes": 6524,
+    "no_store": true,
+    "fresh_nonce": true,
+    "full_csp": "default-src 'none'; script-src 'nonce-pAYNjwBZuRnXMja8vbLVn4S1hk9hAwdverUoYZjq2WA=' 'strict-dynamic' 'self'; style-src 'nonce-pAYNjwBZuRnXMja8vbLVn4S1hk9hAwdverUoYZjq2WA=' 'self'; style-src-attr 'unsafe-inline'; worker-src 'self'; object-src 'none'; connect-src 'self'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; require-trusted-types-for 'script'; trusted-types forma forma-runtime"
+  }
+}

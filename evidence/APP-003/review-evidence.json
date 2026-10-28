@@ -1,0 +1,35 @@
+{
+  "reviewed_revision": "74a72316c5f4bda03edc0c97db60f1e727bd22c3",
+  "scope": "Independent source, bound producer evidence and focused consumer checks; no upstream merge/CI or managed acceptance inferred",
+  "identity_sha256": "d2cfe3900b8085d7e7779f4fbf844db2d77a4e6181ff71ab45ac304b154cf0a1",
+  "source_artifacts_verified": 15,
+  "listed_evidence_artifacts_verified": 13,
+  "manifest_asset_integrities_verified": 3,
+  "independent_commands": [
+    {
+      "command": "cargo test --locked",
+      "cwd": "spikes/APP-003",
+      "result": "3 tests passed; 0 failures"
+    },
+    {
+      "command": "node evidence/APP-003/review-probe.mjs",
+      "result": "passed; exact locked Chromium156.0.8078.4, owned loopback server terminated/reaped"
+    },
+    {
+      "command": "Node22.21.0 gzipSync(level:9) over manifest route JS and worker",
+      "result": {
+        "home_js_gzip": 29638,
+        "worker_gzip": 1538,
+        "total_gzip": 31176,
+        "node_zlib": "1.3.1-470d3a2"
+      }
+    }
+  ],
+  "review_observation": {
+    "initial_python_cross_compressor_equality_assertion": "failed; Python gzip level9 measured29626+1540, not the report29638+1538",
+    "python": "3.11.0",
+    "python_zlib": "1.2.12",
+    "disposition": "Recomputed with the candidate pinned Node22.21.0/zlib algorithm and matched exactly. Different compressors can produce different compressed bytes; this was a reviewer-tool mismatch, not a candidate regression."
+  },
+  "verdict": "No blocking source/consumer qualification finding. APP003 final closure still requires accepted upstream receipt and exact-revision CI."
+}

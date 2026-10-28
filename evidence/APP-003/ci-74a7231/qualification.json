@@ -1,0 +1,142 @@
+{
+  "scope": "APP-003 consumer preparation, not upstream acceptance",
+  "environment": {
+    "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39"
+  },
+  "steps": [
+    {
+      "command": [
+        "node",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "v22.21.0\n"
+    },
+    {
+      "command": [
+        "npm",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "11.6.2\n"
+    },
+    {
+      "command": [
+        "rustc",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "rustc 1.93.1 (01f6ddf75 2026-02-11)\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "cargo 1.93.1 (083ac5135 2025-12-15)\n"
+    },
+    {
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "\nadded 29 packages, and audited 30 packages in 1s\n\n1 package is looking for funding\n  run `npm fund` for details\n\nfound 0 vulnerabilities\n"
+    },
+    {
+      "command": [
+        "npm",
+        "ls",
+        "--json"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "{\n  \"name\": \"admin\",\n  \"dependencies\": {\n    \"@getforma/build\": {\n      \"version\": \"3.2.0\",\n      \"resolved\": \"https://registry.npmjs.org/@getforma/build/-/build-3.2.0.tgz\",\n      \"overridden\": false\n    },\n    \"@getforma/compiler\": {\n      \"version\": \"3.2.0\",\n      \"resolved\": \"https://registry.npmjs.org/@getforma/compiler/-/compiler-3.2.0.tgz\",\n      \"overridden\": false\n    },\n    \"@getforma/core\": {\n      \"version\": \"3.2.0\",\n      \"resolved\": \"https://registry.npmjs.org/@getforma/core/-/core-3.2.0.tgz\",\n      \"overridden\": false\n    },\n    \"esbuild\": {\n      \"version\": \"0.28.2\",\n      \"resolved\": \"https://registry.npmjs.org/esbuild/-/esbuild-0.28.2.tgz\",\n      \"overridden\": false\n    },\n    \"playwright\": {\n      \"version\": \"1.64.1\",\n      \"resolved\": \"https://registry.npmjs.org/playwright/-/playwright-1.64.1.tgz\",\n      \"overridden\": false\n    },\n    \"tsx\": {\n      \"version\": \"4.23.15\",\n      \"resolved\": \"https://registry.npmjs.org/tsx/-/tsx-4.23.15.tgz\",\n      \"overridden\": false\n    },\n    \"typescript\": {\n      \"version\": \"5.9.3\",\n      \"resolved\": \"https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz\",\n      \"overridden\": false\n    }\n  }\n}\n"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "\n> typecheck\n> tsc --noEmit\n\n"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "\n> build\n> tsx build.ts --ssr --strict\n\nSSR mode enabled \u2014 emitting IR files\n   IR emitted (real): home.ir (8026 bytes, 1 islands)\n\n   dist/home.57701d13.js  87.2kb\n\n   3 assets hashed\n   2 files compressed (brotli 11 + gzip 9)\n\n   Size report (gzip -9, Brotli beside it; 1 KB = 1,000 B, 1 KiB = 1,024 B). Forma code is @getforma/core, @getforma/router and alien-signals as bundled;\n   N2's ceilings are policy (DR-35 and the 3.1 performance decision): Forma code 28,420 B, the JavaScript of a page 76,800 B, of a canvas 373,760 B, a route with no interactive region none.\n   /  islands, canvas  Forma 27,938 of 28,420 B  JavaScript 31,176 of 373,760 B  (Brotli: Forma 24,941, JavaScript 27,773)  home.57701d13.js\n   Service worker   sw.js  3,237 B raw, 1,538 B gzip, 1,314 B Brotli; counted in the JavaScript of each route that has JavaScript\n   Build time       790 ms: bundle 678 ms, hash 1 ms, compress 110 ms, manifest 1 ms\n\nManifest written: dist/manifest.json (build: c41a339d7bd3...)\nSize report written: dist/size-report.json\n   SW generated: dist/sw.js (verified on-demand assets)\n"
+    },
+    {
+      "command": [
+        "node",
+        "refusals.mjs"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "SSR mode enabled \u2014 emitting IR files\n   IR: BUILD-610 BUILD-610 /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/enum-condition/app.tsx:51:27: computed declared values remain outside the native subset\n   IR: BUILD-610 BUILD-610 /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/enum-condition/app.tsx:51:27: computed declared values remain outside the native subset\nSSR mode enabled \u2014 emitting IR files\n   IR: BUILD-403 component Fourth(...) nests deeper than the 3-level inlining limit (chain: Page > First > Second > Third > Fourth) in /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx:3:32 \u2014 refused with BUILD-610 because it cannot produce a declared native island contract \u2014 flatten the component tree if it needs to render server-side\n   IR: BUILD-610 BUILD-610 /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx:3:32: Fourth cannot be represented by a declared native island; use a registered browserOnly component for a client-only body\n   IR: BUILD-610 BUILD-610 /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx:3:32: Fourth cannot be represented by a declared native island; use a registered browserOnly component for a client-only body\nSSR mode enabled \u2014 emitting IR files\n   IR: BUILD-610 BUILD-610 /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/reassigned-declared-local/app.tsx:29:21: declared prop binding requested is reassigned; pass an immutable value to SSR\n   IR: BUILD-610 BUILD-610 /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/reassigned-declared-local/app.tsx:29:21: declared prop binding requested is reassigned; pass an immutable value to SSR\nSSR mode enabled \u2014 emitting IR files\n   IR: BUILD-207 attribute 'tabindex' on <section> is a bare '-' expression (not wrapped in a function), which the compiler cannot evaluate in /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/negative-literal-attribute/app.tsx:49:117 \u2014 the attribute is OMITTED from the server-rendered HTML and hydration does not re-apply a non-function prop, so it never appears \u2014 inline the literal, use a module-level const, or wrap it in a function (`() => \u2026`) for a reactive binding\n   IR emitted (real): home.ir (8020 bytes, 1 islands)\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--check"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "    Updating crates.io index\n Downloading crates ...\n  Downloaded block-buffer v0.12.1\n  Downloaded cfg-if v1.0.5\n  Downloaded atomic-waker v1.1.2\n  Downloaded axum-core v0.5.6\n  Downloaded itoa v1.0.18\n  Downloaded http-body v1.1.0\n  Downloaded crypto-common v0.2.2\n  Downloaded percent-encoding v2.3.2\n  Downloaded httpdate v1.0.3\n  Downloaded futures-core v0.3.34\n  Downloaded rust-embed-utils v8.13.0\n  Downloaded rust-embed-impl v8.13.0\n  Downloaded errno v0.3.14\n  Downloaded sync_wrapper v1.0.2\n  Downloaded futures-task v0.3.34\n  Downloaded mime v0.3.17\n  Downloaded thread_local v1.1.10\n  Downloaded form_urlencoded v1.2.2\n  Downloaded lazy_static v1.5.1\n  Downloaded serde_urlencoded v0.7.1\n  Downloaded forma-ir-derive v3.2.0\n  Downloaded scopeguard v1.2.0\n  Downloaded tower-layer v0.3.3\n  Downloaded untrusted v0.9.0\n  Downloaded tower-service v0.3.3\n  Downloaded cpufeatures v0.3.1\n  Downloaded same-file v1.0.6\n  Downloaded unicase v2.10.0\n  Downloaded walkdir v2.5.0\n  Downloaded slab v0.4.12\n  Downloaded unicode-ident v1.0.27\n  Downloaded sha2 v0.11.0\n  Downloaded zmij v1.0.23\n  Downloaded sharded-slab v0.1.7\n  Downloaded socket2 v0.6.5\n  Downloaded typenum v1.20.1\n  Downloaded tower v0.5.3\n  Downloaded mio v1.2.4\n  Downloaded serde_json v1.0.154\n  Downloaded futures-util v0.3.34\n  Downloaded hyper v1.12.0\n  Downloaded axum v0.8.9\n  Downloaded tracing-subscriber v0.3.23\n  Downloaded forma-server v3.2.0\n  Downloaded hyper-util v0.1.21\n  Downloaded serde v1.0.229\n  Downloaded syn v3.0.9\n  Downloaded syn v2.0.119\n  Downloaded forma-ir v3.2.0\n  Downloaded memchr v2.8.3\n  Downloaded http v1.5.0\n  Downloaded cc v1.10.0\n  Downloaded ryu-js v1.0.3\n  Downloaded nu-ansi-term v0.50.3\n  Downloaded serde_derive v1.0.229\n  Downloaded serde_core v1.0.229\n  Downloaded tracing v0.1.44\n  Downloaded ryu v1.0.23\n  Downloaded proc-macro2 v1.0.107\n  Downloaded parking_lot v0.12.5\n  Downloaded log v0.4.34\n  Downloaded base64 v0.22.1\n  Downloaded tracing-core v0.1.36\n  Downloaded tracing-attributes v0.1.31\n  Downloaded smallvec v1.16.4\n  Downloaded hybrid-array v0.4.15\n  Downloaded matchit v0.8.4\n  Downloaded httparse v1.10.1\n  Downloaded getrandom v0.2.17\n  Downloaded signal-hook-registry v1.4.8\n  Downloaded shlex v2.0.1\n  Downloaded parking_lot_core v0.9.12\n  Downloaded once_cell v1.21.4\n  Downloaded const-oid v0.10.2\n  Downloaded bytes v1.12.1\n  Downloaded tracing-log v0.2.0\n  Downloaded libc v0.2.190\n  Downloaded find-msvc-tools v0.1.15\n  Downloaded serde_path_to_error v0.1.20\n  Downloaded tokio v1.54.1\n  Downloaded rust-embed v8.13.0\n  Downloaded lock_api v0.4.14\n  Downloaded quote v1.0.47\n  Downloaded mime_guess v2.0.5\n  Downloaded http-body-util v0.1.5\n  Downloaded digest v0.11.3\n  Downloaded pin-project-lite v0.2.17\n  Downloaded tokio-macros v2.7.2\n  Downloaded ring v0.17.14\n   Compiling proc-macro2 v1.0.107\n   Compiling quote v1.0.47\n   Compiling unicode-ident v1.0.27\n   Compiling cfg-if v1.0.5\n   Compiling libc v0.2.190\n   Compiling itoa v1.0.18\n   Compiling pin-project-lite v0.2.17\n   Compiling syn v2.0.119\n   Compiling syn v3.0.9\n   Compiling bytes v1.12.1\n   Compiling once_cell v1.21.4\n   Compiling smallvec v1.16.4\n   Compiling typenum v1.20.1\n   Compiling parking_lot_core v0.9.12\n   Compiling serde_core v1.0.229\n   Compiling tracing-core v0.1.36\n   Compiling hybrid-array v0.4.15\n   Compiling scopeguard v1.2.0\n   Compiling futures-core v0.3.34\n   Compiling log v0.4.34\n   Compiling lock_api v0.4.14\n   Compiling http v1.5.0\n   Compiling errno v0.3.14\n   Compiling signal-hook-registry v1.4.8\n   Compiling http-body v1.1.0\n   Compiling parking_lot v0.12.5\n   Compiling block-buffer v0.12.1\n   Compiling crypto-common v0.2.2\n   Compiling tracing-attributes v0.1.31\n   Compiling tokio-macros v2.7.2\n   Compiling socket2 v0.6.5\n   Compiling mio v1.2.4\n   Compiling mime v0.3.17\n   Compiling unicase v2.10.0\n   Compiling httparse v1.10.1\n   Compiling const-oid v0.10.2\n   Compiling zmij v1.0.23\n   Compiling digest v0.11.3\n   Compiling mime_guess v2.0.5\n   Compiling tokio v1.54.1\n   Compiling tracing v0.1.44\n   Compiling find-msvc-tools v0.1.15\n   Compiling cpufeatures v0.3.1\n   Compiling tower-service v0.3.3\n   Compiling serde_json v1.0.154\n   Compiling shlex v2.0.1\n   Compiling serde v1.0.229\n   Compiling same-file v1.0.6\n   Compiling walkdir v2.5.0\n   Compiling cc v1.10.0\n   Compiling sha2 v0.11.0\n   Compiling serde_derive v1.0.229\n   Compiling httpdate v1.0.3\n   Compiling percent-encoding v2.3.2\n   Compiling sync_wrapper v1.0.2\n   Compiling futures-task v0.3.34\n   Compiling slab v0.4.12\n   Compiling tower-layer v0.3.3\n   Compiling atomic-waker v1.1.2\n   Compiling memchr v2.8.3\n   Compiling hyper v1.12.0\n   Compiling futures-util v0.3.34\n   Compiling form_urlencoded v1.2.2\n   Compiling rust-embed-utils v8.13.0\n   Compiling ring v0.17.14\n   Compiling http-body-util v0.1.5\n   Compiling ryu v1.0.23\n   Compiling axum-core v0.5.6\n   Compiling serde_urlencoded v0.7.1\n   Compiling rust-embed-impl v8.13.0\n   Compiling tower v0.5.3\n   Compiling hyper-util v0.1.21\n   Compiling serde_path_to_error v0.1.20\n   Compiling forma-ir-derive v3.2.0\n   Compiling getrandom v0.2.17\n   Compiling matchit v0.8.4\n   Compiling ryu-js v1.0.3\n   Compiling lazy_static v1.5.1\n   Compiling untrusted v0.9.0\n   Compiling sharded-slab v0.1.7\n   Compiling forma-ir v3.2.0\n   Compiling axum v0.8.9\n   Compiling rust-embed v8.13.0\n   Compiling tracing-log v0.2.0\n   Compiling thread_local v1.1.10\n   Compiling nu-ansi-term v0.50.3\n   Compiling base64 v0.22.1\n   Compiling tracing-subscriber v0.3.23\n   Compiling forma-server v3.2.0\n   Compiling genui-canvas-spike v0.1.0 (/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 36.92s\n     Running unittests src/main.rs (target/debug/deps/genui_canvas_spike-dcd40d5a563ffedd)\n\nrunning 3 tests\ntest tests::geometry_rows_keys_are_bounded ... ok\ntest tests::native_mode_is_mandatory ... ok\ntest tests::actual_native_schema_and_unbound_route_refuse_before_listening ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "   Compiling proc-macro2 v1.0.107\n   Compiling unicode-ident v1.0.27\n   Compiling quote v1.0.47\n   Compiling libc v0.2.190\n   Compiling cfg-if v1.0.5\n   Compiling itoa v1.0.18\n   Compiling pin-project-lite v0.2.17\n   Compiling syn v2.0.119\n   Compiling syn v3.0.9\n   Compiling bytes v1.12.1\n   Compiling parking_lot_core v0.9.12\n   Compiling typenum v1.20.1\n   Compiling smallvec v1.16.4\n   Compiling once_cell v1.21.4\n   Compiling serde_core v1.0.229\n   Compiling tracing-core v0.1.36\n   Compiling hybrid-array v0.4.15\n   Compiling scopeguard v1.2.0\n   Compiling futures-core v0.3.34\n   Compiling log v0.4.34\n   Compiling lock_api v0.4.14\n   Compiling http v1.5.0\n   Compiling errno v0.3.14\n   Compiling signal-hook-registry v1.4.8\n   Compiling http-body v1.1.0\n   Compiling parking_lot v0.12.5\n   Compiling crypto-common v0.2.2\n   Compiling block-buffer v0.12.1\n   Compiling tracing-attributes v0.1.31\n   Compiling tokio-macros v2.7.2\n   Compiling socket2 v0.6.5\n   Compiling mio v1.2.4\n   Compiling zmij v1.0.23\n   Compiling const-oid v0.10.2\n   Compiling unicase v2.10.0\n   Compiling httparse v1.10.1\n   Compiling mime_guess v2.0.5\n   Compiling digest v0.11.3\n   Compiling tokio v1.54.1\n   Compiling tracing v0.1.44\n   Compiling serde_json v1.0.154\n   Compiling shlex v2.0.1\n   Compiling cpufeatures v0.3.1\n   Compiling same-file v1.0.6\n   Compiling find-msvc-tools v0.1.15\n   Compiling serde v1.0.229\n   Compiling tower-service v0.3.3\n   Compiling sha2 v0.11.0\n   Compiling cc v1.10.0\n   Compiling walkdir v2.5.0\n   Compiling serde_derive v1.0.229\n   Compiling sync_wrapper v1.0.2\n   Compiling mime v0.3.17\n   Compiling tower-layer v0.3.3\n   Compiling slab v0.4.12\n   Compiling futures-task v0.3.34\n   Compiling httpdate v1.0.3\n   Compiling memchr v2.8.3\n   Compiling atomic-waker v1.1.2\n   Compiling percent-encoding v2.3.2\n   Compiling form_urlencoded v1.2.2\n   Compiling hyper v1.12.0\n   Compiling futures-util v0.3.34\n   Compiling rust-embed-utils v8.13.0\n   Compiling ring v0.17.14\n   Compiling http-body-util v0.1.5\n   Compiling ryu v1.0.23\n   Compiling serde_urlencoded v0.7.1\n   Compiling axum-core v0.5.6\n   Compiling rust-embed-impl v8.13.0\n   Compiling tower v0.5.3\n   Compiling hyper-util v0.1.21\n   Compiling serde_path_to_error v0.1.20\n   Compiling forma-ir-derive v3.2.0\n   Compiling getrandom v0.2.17\n   Compiling untrusted v0.9.0\n   Compiling matchit v0.8.4\n   Compiling ryu-js v1.0.3\n   Compiling lazy_static v1.5.1\n   Compiling sharded-slab v0.1.7\n   Compiling forma-ir v3.2.0\n   Compiling axum v0.8.9\n   Compiling rust-embed v8.13.0\n   Compiling tracing-log v0.2.0\n   Compiling thread_local v1.1.10\n   Compiling base64 v0.22.1\n   Compiling nu-ansi-term v0.50.3\n   Compiling tracing-subscriber v0.3.23\n   Compiling forma-server v3.2.0\n   Compiling genui-canvas-spike v0.1.0 (/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003)\n    Finished `release` profile [optimized] target(s) in 58.67s\n"
+    },
+    {
+      "command": [
+        "target/release/genui-canvas-spike",
+        "--bench"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "\u001b[2m2026-10-28T20:50:28.006361Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mforma_server::ir\u001b[0m\u001b[2m:\u001b[0m Loaded IR module for SSR \u001b[3mroute\u001b[0m\u001b[2m=\u001b[0m/ \u001b[3mir_file\u001b[0m\u001b[2m=\u001b[0mhome.9e0cf186.ir\n\u001b[2m2026-10-28T20:50:28.006377Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mforma_server::ir\u001b[0m\u001b[2m:\u001b[0m Phase 2 SSR enabled for 1 route(s) \u001b[3mssr_routes\u001b[0m\u001b[2m=\u001b[0m1\nBENCH_JSON {\"over_cap\":{\"code\":\"RENDER-502\",\"refused\":true,\"typed_json_utf8_bytes\":1206304},\"scope\":\"local sequential release renderer, no network/database/browser or client SLO claim\",\"states\":[{\"elapsed_seconds\":0.045561096,\"first_render_us\":325,\"iterations\":200,\"median_render_ns\":227977,\"native_walk_html_bytes\":10131,\"p99_local_sample_ns\":257278,\"process_lifetime_peak_rss_bytes\":17059840,\"renders_per_second\":4389.710028046735,\"state\":\"normal\",\"typed_json_utf8_bytes\":6382},{\"elapsed_seconds\":0.001916195,\"first_render_us\":23,\"iterations\":200,\"median_render_ns\":9434,\"native_walk_html_bytes\":520,\"p99_local_sample_ns\":13810,\"process_lifetime_peak_rss_bytes\":17059840,\"renders_per_second\":104373.51104663147,\"state\":\"empty\",\"typed_json_utf8_bytes\":95},{\"elapsed_seconds\":0.027639234,\"first_render_us\":161,\"iterations\":200,\"median_render_ns\":136548,\"native_walk_html_bytes\":6719,\"p99_local_sample_ns\":154189,\"process_lifetime_peak_rss_bytes\":17059840,\"renders_per_second\":7236.090551568832,\"state\":\"nested-empty\",\"typed_json_utf8_bytes\":4210},{\"elapsed_seconds\":0.071141036,\"first_render_us\":425,\"iterations\":200,\"median_render_ns\":350594,\"native_walk_html_bytes\":42251,\"p99_local_sample_ns\":444684,\"process_lifetime_peak_rss_bytes\":17059840,\"renders_per_second\":2811.3169451173017,\"state\":\"long\",\"typed_json_utf8_bytes\":19975},{\"elapsed_seconds\":0.569771962,\"first_render_us\":3507,\"iterations\":200,\"median_render_ns\":2822395,\"native_walk_html_bytes\":143616,\"p99_local_sample_ns\":3467834,\"process_lifetime_peak_rss_bytes\":17059840,\"renders_per_second\":351.01762343300425,\"state\":\"rows500\",\"typed_json_utf8_bytes\":87185}]}\n"
+    },
+    {
+      "command": [
+        "node",
+        "verify_browser.mjs"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "{\"passed\":true,\"engines\":[\"chromium\",\"firefox\",\"webkit\"]}\n"
+    }
+  ],
+  "passed": true
+}

@@ -23,7 +23,7 @@ APP-003, APP-006 and APP-058 start in `Tickets/9-blocked/`. Their downstream tic
 
 ## Ready-to-pick-up instructions
 
-Each authoritative FORMA ticket has a **2026-10-28 execution handoff** section with ordered implementation steps, required checks, exact handback evidence and ownership boundaries. The FormaStack agent has claimed the work. At the latest coordination check, FORMA-232 was Done, FORMA-246/247 In review and FORMA-248 In progress; consult the original board for later moves. FORMA-232's configurable-budget source is merged but its package is unreleased. APP-003 now prepares the full-library consumer fixture using registry 3.2.0; only its actual shipped-cap measurement can establish a no-override disposition. No app gate is cleared by the upstream status alone.
+Each authoritative FORMA ticket has a **2026-10-28 execution handoff** section with ordered implementation steps, required checks, exact handback evidence and ownership boundaries. The FormaStack agent has claimed the work. At the latest coordination check, FORMA-232 was Done, FORMA-246/247 In review and FORMA-248 In progress; consult the original board for later moves. FORMA-232's configurable-budget source is merged but its package is unreleased. APP-003's full-library consumer using registry 3.2.0 now passes review and CI at `74a7231`: [27,938 B estimated Forma](../../evidence/APP-003/budget-disposition.md) fits both unchanged targets, so this consumer requires no override and its FORMA-232 gate is cleared. The final FORMA-246 handback remains open. No app gate is cleared by an upstream status alone.
 
 | Start order | Authoritative local ticket | Writable ownership |
 |---|---|---|

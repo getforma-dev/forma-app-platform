@@ -1,0 +1,146 @@
+{
+  "results": [
+    {
+      "name": "enum-condition",
+      "refused": true,
+      "codes": [
+        "BUILD-610"
+      ],
+      "expected": [
+        "BUILD-610"
+      ],
+      "diagnostics": [
+        {
+          "code": "BUILD-610",
+          "severity": "error",
+          "page": "home",
+          "file": "/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/enum-condition/app.tsx",
+          "line": 51,
+          "column": 27,
+          "message": "BUILD-610 /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/enum-condition/app.tsx:51:27: computed declared values remain outside the native subset",
+          "why": "The declared data or expression cannot be represented by the closed native contract; publication is refused.",
+          "fix": "Declare supported typed props and pass computed values as their own props from the handler, use a closed literal-default signal, or move the component behind a registered browserOnly() boundary."
+        }
+      ],
+      "source": "import { h, mount, activateIslands, createSignal, createShow, createList } from '@getforma/core';\n\ntype Cell = { id: string; text: string };\ntype Row = { id: string; cells: Cell[] };\ntype Bar = { id: string; x: number; y: number; width: number; height: number; label: string };\ntype Choice = { id: string; label: string };\ntype Field = { id: string; label: string; isText: boolean; isEnum: boolean; choices: Choice[] };\ntype Item = { id: string; label: string; value: string };\ntype Card = {\n  id: string; title: string; kind: string; style: string; tabIndex: number;\n  isSummary: boolean; isTable: boolean; isDetail: boolean; isTimeline: boolean;\n  isLinked: boolean; isChart: boolean; isFilter: boolean; isForm: boolean; isNote: boolean; isStatus: boolean;\n  items: Item[]; rows: Row[]; bars: Bar[]; fields: Field[];\n  text: string; status: string; filterId: string;\n};\ntype CanvasProps = { cards: Card[]; filter: string; epoch: number; linked: string; outcome: string };\n\n// Presentation values are resolved on the server. These events exercise the\n// synthetic endpoint, not authorization, query admission or durable commands.\nfunction Canvas(props: CanvasProps) {\n  const [selected, setSelected] = createSignal('');\n  const [filter, setFilter] = createSignal(props.filter);\n  const [epoch, setEpoch] = createSignal(props.epoch);\n  const [linked, setLinked] = createSignal(props.linked);\n  const [outcome, setOutcome] = createSignal(props.outcome);\n  const [requested, setRequested] = createSignal(props.epoch);\n  async function changeFilter(event: Event) {\n    const value = (event.currentTarget as HTMLSelectElement).value;\n    const current = requested() + 1; setRequested(current);\n    setFilter(value);\n    const response = await fetch(`/linked?filter=${encodeURIComponent(value)}&epoch=${current}`);\n    if (!response.ok) return;\n    const data = await response.json();\n    if (data.epoch !== requested()) return;\n    setEpoch(data.epoch); setLinked(data.label);\n  }\n  async function submit(event: Event) {\n    event.preventDefault();\n    const data = new FormData(event.currentTarget as HTMLFormElement);\n    const body = new URLSearchParams();\n    for (const [key, value] of data) body.set(key, String(value));\n    const response = await fetch('/commands', { method: 'POST', body });\n    if (!response.ok) { setOutcome('Refused'); return; }\n    const result = await response.json(); setOutcome(result.outcome);\n  }\n  return <div class=\"canvas\" data-selected={() => selected()} data-filter={() => filter()} data-epoch={() => epoch()}>\n    <p role=\"status\" aria-live=\"polite\" class=\"linked-scope\">Linked scope: {() => linked()}</p>\n    {createList(() => props.cards, card => card.id, card => (\n      <section class=\"card\" id={card.id} data-kind={card.kind} style={card.style} aria-label={card.title} tabIndex={card.tabIndex}>\n        <h2>{card.title}</h2>\n        {createShow(() => card.kind === 'summary', () => <dl>{createList(() => card.items, item => item.id, item => <div><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>)}\n        {createShow(() => card.isTable, () => <table><caption>{card.title}</caption><thead><tr><th scope=\"col\">Asset</th><th scope=\"col\">Evidence</th></tr></thead><tbody>{createList(() => card.rows, row => row.id, row => <tr>{createList(() => row.cells, cell => cell.id, cell => <td>{cell.text}</td>)}</tr>)}</tbody></table>)}\n        {createShow(() => card.isDetail, () => <dl class=\"detail\">{createList(() => card.items, item => item.id, item => <div><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>)}\n        {createShow(() => card.isTimeline, () => <svg viewBox=\"0 0 600 120\" role=\"img\" aria-label={card.title}>{createList(() => card.bars, bar => bar.id, bar => <rect x={bar.x} y={bar.y} width={bar.width} height={bar.height}><title>{bar.label}</title></rect>)}</svg>)}\n        {createShow(() => card.isChart, () => <svg viewBox=\"0 0 600 120\" role=\"img\" aria-label={card.title}>{createList(() => card.bars, bar => bar.id, bar => <rect x={bar.x} y={bar.y} width={bar.width} height={bar.height}><title>{bar.label}</title></rect>)}</svg>)}\n        {createShow(() => card.isFilter, () => <div><label for={card.filterId}>Linked destination</label><select id={card.filterId} name=\"destination\" onChange={changeFilter}><option value=\"all\">All destinations</option><option value=\"unmatched\">Unmatched destinations</option></select><p>Applies to all six linked views.</p></div>)}\n        {createShow(() => card.isForm, () => <form method=\"post\" action=\"/commands\" onSubmit={submit}>\n          <input type=\"hidden\" name=\"Idempotency-Key\" value=\"synthetic-render-key\" />\n          {createList(() => card.fields, field => field.id, field => <div><label for={field.id}>{field.label}</label>\n            {createShow(() => field.isText, () => <input id={field.id} name={field.id} type=\"text\" required />)}\n            {createShow(() => field.isEnum, () => <select id={field.id} name={field.id}>{createList(() => field.choices, choice => choice.id, choice => <option value={choice.id}>{choice.label}</option>)}</select>)}\n          </div>)}<button type=\"submit\">Save observation</button><output aria-live=\"polite\">{() => outcome()}</output>\n        </form>)}\n        {createShow(() => card.isNote, () => <p class=\"note\">{card.text}</p>)}\n        {createShow(() => card.isStatus, () => <p role=\"status\" class=\"status\">{card.status}</p>)}\n        {createShow(() => card.isLinked, () => <p class=\"linked-result\" data-epoch={() => epoch()}>{() => linked()}</p>)}\n        <button type=\"button\" onClick={() => { setSelected(card.id); document.getElementById(card.id)?.focus(); }}>Focus view</button>\n      </section>\n    ))}\n  </div>;\n}\nfunction Home(props: CanvasProps) {\n  return <main><h1>Launch renderer qualification</h1><p>Synthetic presentation fixture; no customer data or durable write.</p><Canvas cards={props.cards} filter={props.filter} epoch={props.epoch} linked={props.linked} outcome={props.outcome} /></main>;\n}\nawait activateIslands({ Canvas });\nmount(() => Home({ cards: [], filter: 'all', epoch: 0, linked: 'All: 1,140,000 bytes', outcome: 'Not submitted' }), '#app');\n"
+    },
+    {
+      "name": "four-component-depth",
+      "refused": true,
+      "codes": [
+        "BUILD-403",
+        "BUILD-610"
+      ],
+      "expected": [
+        "BUILD-403",
+        "BUILD-610"
+      ],
+      "diagnostics": [
+        {
+          "code": "BUILD-403",
+          "severity": "error",
+          "page": "home",
+          "file": "/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx",
+          "line": 3,
+          "column": 32,
+          "message": "component Fourth(...) nests deeper than the 3-level inlining limit (chain: Page > First > Second > Third > Fourth) in /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx:3:32 — refused with BUILD-610 because it cannot produce a declared native island contract — flatten the component tree if it needs to render server-side",
+          "why": "This unsupported native construct is reported at its source and ends the build with BUILD-610; no fallback island body is emitted.",
+          "fix": "Flatten the chain so the component sits at depth 3 or less, or declare the component with browserOnly() (`const X = browserOnly(Impl)` from @getforma/core) and register it in activateIslands, so it renders in the browser alone.",
+          "chain": [
+            {
+              "component": "Page",
+              "file": "/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx",
+              "line": 6,
+              "column": 1
+            },
+            {
+              "component": "First",
+              "file": "/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx",
+              "line": 6,
+              "column": 32
+            },
+            {
+              "component": "Second",
+              "file": "/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx",
+              "line": 5,
+              "column": 36
+            },
+            {
+              "component": "Third",
+              "file": "/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx",
+              "line": 4,
+              "column": 37
+            },
+            {
+              "component": "Fourth",
+              "file": "/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx",
+              "line": 3,
+              "column": 32
+            }
+          ]
+        },
+        {
+          "code": "BUILD-610",
+          "severity": "error",
+          "page": "home",
+          "file": "/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx",
+          "line": 3,
+          "column": 32,
+          "message": "BUILD-610 /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx:3:32: Fourth cannot be represented by a declared native island; use a registered browserOnly component for a client-only body",
+          "why": "The declared data or expression cannot be represented by the closed native contract; publication is refused.",
+          "fix": "Declare supported typed props and pass computed values as their own props from the handler, use a closed literal-default signal, or move the component behind a registered browserOnly() boundary."
+        }
+      ],
+      "source": "import { h, mount } from '@getforma/core';\nfunction Fourth() { return <strong>four levels</strong>; }\nfunction Third() { return <div><Fourth /></div>; }\nfunction Second() { return <section><Third /></section>; }\nfunction First() { return <article><Second /></article>; }\nfunction Page() { return <main><First /></main>; }\nmount(() => Page(), '#app');"
+    },
+    {
+      "name": "reassigned-declared-local",
+      "refused": true,
+      "codes": [
+        "BUILD-610"
+      ],
+      "expected": [
+        "BUILD-610"
+      ],
+      "diagnostics": [
+        {
+          "code": "BUILD-610",
+          "severity": "error",
+          "page": "home",
+          "file": "/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/reassigned-declared-local/app.tsx",
+          "line": 29,
+          "column": 21,
+          "message": "BUILD-610 /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/reassigned-declared-local/app.tsx:29:21: declared prop binding requested is reassigned; pass an immutable value to SSR",
+          "why": "The declared data or expression cannot be represented by the closed native contract; publication is refused.",
+          "fix": "Declare supported typed props and pass computed values as their own props from the handler, use a closed literal-default signal, or move the component behind a registered browserOnly() boundary."
+        }
+      ],
+      "source": "import { h, mount, activateIslands, createSignal, createShow, createList } from '@getforma/core';\n\ntype Cell = { id: string; text: string };\ntype Row = { id: string; cells: Cell[] };\ntype Bar = { id: string; x: number; y: number; width: number; height: number; label: string };\ntype Choice = { id: string; label: string };\ntype Field = { id: string; label: string; isText: boolean; isEnum: boolean; choices: Choice[] };\ntype Item = { id: string; label: string; value: string };\ntype Card = {\n  id: string; title: string; kind: string; style: string; tabIndex: number;\n  isSummary: boolean; isTable: boolean; isDetail: boolean; isTimeline: boolean;\n  isLinked: boolean; isChart: boolean; isFilter: boolean; isForm: boolean; isNote: boolean; isStatus: boolean;\n  items: Item[]; rows: Row[]; bars: Bar[]; fields: Field[];\n  text: string; status: string; filterId: string;\n};\ntype CanvasProps = { cards: Card[]; filter: string; epoch: number; linked: string; outcome: string };\n\n// Presentation values are resolved on the server. These events exercise the\n// synthetic endpoint, not authorization, query admission or durable commands.\nfunction Canvas(props: CanvasProps) {\n  const [selected, setSelected] = createSignal('');\n  const [filter, setFilter] = createSignal(props.filter);\n  const [epoch, setEpoch] = createSignal(props.epoch);\n  const [linked, setLinked] = createSignal(props.linked);\n  const [outcome, setOutcome] = createSignal(props.outcome);\n  let requested = props.epoch;\n  async function changeFilter(event: Event) {\n    const value = (event.currentTarget as HTMLSelectElement).value;\n    const current = ++requested;\n    setFilter(value);\n    const response = await fetch(`/linked?filter=${encodeURIComponent(value)}&epoch=${current}`);\n    if (!response.ok) return;\n    const data = await response.json();\n    if (data.epoch !== requested) return;\n    setEpoch(data.epoch); setLinked(data.label);\n  }\n  async function submit(event: Event) {\n    event.preventDefault();\n    const data = new FormData(event.currentTarget as HTMLFormElement);\n    const body = new URLSearchParams();\n    for (const [key, value] of data) body.set(key, String(value));\n    const response = await fetch('/commands', { method: 'POST', body });\n    if (!response.ok) { setOutcome('Refused'); return; }\n    const result = await response.json(); setOutcome(result.outcome);\n  }\n  return <div class=\"canvas\" data-selected={() => selected()} data-filter={() => filter()} data-epoch={() => epoch()}>\n    <p role=\"status\" aria-live=\"polite\" class=\"linked-scope\">Linked scope: {() => linked()}</p>\n    {createList(() => props.cards, card => card.id, card => (\n      <section class=\"card\" id={card.id} data-kind={card.kind} style={card.style} aria-label={card.title} tabIndex={card.tabIndex}>\n        <h2>{card.title}</h2>\n        {createShow(() => card.isSummary, () => <dl>{createList(() => card.items, item => item.id, item => <div><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>)}\n        {createShow(() => card.isTable, () => <table><caption>{card.title}</caption><thead><tr><th scope=\"col\">Asset</th><th scope=\"col\">Evidence</th></tr></thead><tbody>{createList(() => card.rows, row => row.id, row => <tr>{createList(() => row.cells, cell => cell.id, cell => <td>{cell.text}</td>)}</tr>)}</tbody></table>)}\n        {createShow(() => card.isDetail, () => <dl class=\"detail\">{createList(() => card.items, item => item.id, item => <div><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>)}\n        {createShow(() => card.isTimeline, () => <svg viewBox=\"0 0 600 120\" role=\"img\" aria-label={card.title}>{createList(() => card.bars, bar => bar.id, bar => <rect x={bar.x} y={bar.y} width={bar.width} height={bar.height}><title>{bar.label}</title></rect>)}</svg>)}\n        {createShow(() => card.isChart, () => <svg viewBox=\"0 0 600 120\" role=\"img\" aria-label={card.title}>{createList(() => card.bars, bar => bar.id, bar => <rect x={bar.x} y={bar.y} width={bar.width} height={bar.height}><title>{bar.label}</title></rect>)}</svg>)}\n        {createShow(() => card.isFilter, () => <div><label for={card.filterId}>Linked destination</label><select id={card.filterId} name=\"destination\" onChange={changeFilter}><option value=\"all\">All destinations</option><option value=\"unmatched\">Unmatched destinations</option></select><p>Applies to all six linked views.</p></div>)}\n        {createShow(() => card.isForm, () => <form method=\"post\" action=\"/commands\" onSubmit={submit}>\n          <input type=\"hidden\" name=\"Idempotency-Key\" value=\"synthetic-render-key\" />\n          {createList(() => card.fields, field => field.id, field => <div><label for={field.id}>{field.label}</label>\n            {createShow(() => field.isText, () => <input id={field.id} name={field.id} type=\"text\" required />)}\n            {createShow(() => field.isEnum, () => <select id={field.id} name={field.id}>{createList(() => field.choices, choice => choice.id, choice => <option value={choice.id}>{choice.label}</option>)}</select>)}\n          </div>)}<button type=\"submit\">Save observation</button><output aria-live=\"polite\">{() => outcome()}</output>\n        </form>)}\n        {createShow(() => card.isNote, () => <p class=\"note\">{card.text}</p>)}\n        {createShow(() => card.isStatus, () => <p role=\"status\" class=\"status\">{card.status}</p>)}\n        {createShow(() => card.isLinked, () => <p class=\"linked-result\" data-epoch={() => epoch()}>{() => linked()}</p>)}\n        <button type=\"button\" onClick={() => { setSelected(card.id); document.getElementById(card.id)?.focus(); }}>Focus view</button>\n      </section>\n    ))}\n  </div>;\n}\nfunction Home(props: CanvasProps) {\n  return <main><h1>Launch renderer qualification</h1><p>Synthetic presentation fixture; no customer data or durable write.</p><Canvas cards={props.cards} filter={props.filter} epoch={props.epoch} linked={props.linked} outcome={props.outcome} /></main>;\n}\nawait activateIslands({ Canvas });\nmount(() => Home({ cards: [], filter: 'all', epoch: 0, linked: 'All: 1,140,000 bytes', outcome: 'Not submitted' }), '#app');\n"
+    },
+    {
+      "name": "negative-literal-attribute",
+      "refused": true,
+      "codes": [
+        "BUILD-207"
+      ],
+      "expected": [
+        "BUILD-207"
+      ],
+      "diagnostics": [
+        {
+          "code": "BUILD-207",
+          "severity": "error",
+          "page": "home",
+          "file": "/home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/negative-literal-attribute/app.tsx",
+          "line": 49,
+          "column": 117,
+          "message": "attribute 'tabindex' on <section> is a bare '-' expression (not wrapped in a function), which the compiler cannot evaluate in /home/runner/work/forma-app-platform/forma-app-platform/spikes/APP-003/admin/.cache/refusals/negative-literal-attribute/app.tsx:49:117 — the attribute is OMITTED from the server-rendered HTML and hydration does not re-apply a non-function prop, so it never appears — inline the literal, use a module-level const, or wrap it in a function (`() => …`) for a reactive binding",
+          "why": "The attribute has no supported native value, so the build refuses the page instead of publishing HTML with an omitted attribute.",
+          "fix": "Pass the computed value as its own declared prop, inline a literal or module-level const, or declare the component with browserOnly() (`const X = browserOnly(Impl)` from @getforma/core) and register it in activateIslands, so it renders in the browser alone."
+        }
+      ],
+      "source": "import { h, mount, activateIslands, createSignal, createShow, createList } from '@getforma/core';\n\ntype Cell = { id: string; text: string };\ntype Row = { id: string; cells: Cell[] };\ntype Bar = { id: string; x: number; y: number; width: number; height: number; label: string };\ntype Choice = { id: string; label: string };\ntype Field = { id: string; label: string; isText: boolean; isEnum: boolean; choices: Choice[] };\ntype Item = { id: string; label: string; value: string };\ntype Card = {\n  id: string; title: string; kind: string; style: string; tabIndex: number;\n  isSummary: boolean; isTable: boolean; isDetail: boolean; isTimeline: boolean;\n  isLinked: boolean; isChart: boolean; isFilter: boolean; isForm: boolean; isNote: boolean; isStatus: boolean;\n  items: Item[]; rows: Row[]; bars: Bar[]; fields: Field[];\n  text: string; status: string; filterId: string;\n};\ntype CanvasProps = { cards: Card[]; filter: string; epoch: number; linked: string; outcome: string };\n\n// Presentation values are resolved on the server. These events exercise the\n// synthetic endpoint, not authorization, query admission or durable commands.\nfunction Canvas(props: CanvasProps) {\n  const [selected, setSelected] = createSignal('');\n  const [filter, setFilter] = createSignal(props.filter);\n  const [epoch, setEpoch] = createSignal(props.epoch);\n  const [linked, setLinked] = createSignal(props.linked);\n  const [outcome, setOutcome] = createSignal(props.outcome);\n  const [requested, setRequested] = createSignal(props.epoch);\n  async function changeFilter(event: Event) {\n    const value = (event.currentTarget as HTMLSelectElement).value;\n    const current = requested() + 1; setRequested(current);\n    setFilter(value);\n    const response = await fetch(`/linked?filter=${encodeURIComponent(value)}&epoch=${current}`);\n    if (!response.ok) return;\n    const data = await response.json();\n    if (data.epoch !== requested()) return;\n    setEpoch(data.epoch); setLinked(data.label);\n  }\n  async function submit(event: Event) {\n    event.preventDefault();\n    const data = new FormData(event.currentTarget as HTMLFormElement);\n    const body = new URLSearchParams();\n    for (const [key, value] of data) body.set(key, String(value));\n    const response = await fetch('/commands', { method: 'POST', body });\n    if (!response.ok) { setOutcome('Refused'); return; }\n    const result = await response.json(); setOutcome(result.outcome);\n  }\n  return <div class=\"canvas\" data-selected={() => selected()} data-filter={() => filter()} data-epoch={() => epoch()}>\n    <p role=\"status\" aria-live=\"polite\" class=\"linked-scope\">Linked scope: {() => linked()}</p>\n    {createList(() => props.cards, card => card.id, card => (\n      <section class=\"card\" id={card.id} data-kind={card.kind} style={card.style} aria-label={card.title} tabIndex={-1}>\n        <h2>{card.title}</h2>\n        {createShow(() => card.isSummary, () => <dl>{createList(() => card.items, item => item.id, item => <div><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>)}\n        {createShow(() => card.isTable, () => <table><caption>{card.title}</caption><thead><tr><th scope=\"col\">Asset</th><th scope=\"col\">Evidence</th></tr></thead><tbody>{createList(() => card.rows, row => row.id, row => <tr>{createList(() => row.cells, cell => cell.id, cell => <td>{cell.text}</td>)}</tr>)}</tbody></table>)}\n        {createShow(() => card.isDetail, () => <dl class=\"detail\">{createList(() => card.items, item => item.id, item => <div><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>)}\n        {createShow(() => card.isTimeline, () => <svg viewBox=\"0 0 600 120\" role=\"img\" aria-label={card.title}>{createList(() => card.bars, bar => bar.id, bar => <rect x={bar.x} y={bar.y} width={bar.width} height={bar.height}><title>{bar.label}</title></rect>)}</svg>)}\n        {createShow(() => card.isChart, () => <svg viewBox=\"0 0 600 120\" role=\"img\" aria-label={card.title}>{createList(() => card.bars, bar => bar.id, bar => <rect x={bar.x} y={bar.y} width={bar.width} height={bar.height}><title>{bar.label}</title></rect>)}</svg>)}\n        {createShow(() => card.isFilter, () => <div><label for={card.filterId}>Linked destination</label><select id={card.filterId} name=\"destination\" onChange={changeFilter}><option value=\"all\">All destinations</option><option value=\"unmatched\">Unmatched destinations</option></select><p>Applies to all six linked views.</p></div>)}\n        {createShow(() => card.isForm, () => <form method=\"post\" action=\"/commands\" onSubmit={submit}>\n          <input type=\"hidden\" name=\"Idempotency-Key\" value=\"synthetic-render-key\" />\n          {createList(() => card.fields, field => field.id, field => <div><label for={field.id}>{field.label}</label>\n            {createShow(() => field.isText, () => <input id={field.id} name={field.id} type=\"text\" required />)}\n            {createShow(() => field.isEnum, () => <select id={field.id} name={field.id}>{createList(() => field.choices, choice => choice.id, choice => <option value={choice.id}>{choice.label}</option>)}</select>)}\n          </div>)}<button type=\"submit\">Save observation</button><output aria-live=\"polite\">{() => outcome()}</output>\n        </form>)}\n        {createShow(() => card.isNote, () => <p class=\"note\">{card.text}</p>)}\n        {createShow(() => card.isStatus, () => <p role=\"status\" class=\"status\">{card.status}</p>)}\n        {createShow(() => card.isLinked, () => <p class=\"linked-result\" data-epoch={() => epoch()}>{() => linked()}</p>)}\n        <button type=\"button\" onClick={() => { setSelected(card.id); document.getElementById(card.id)?.focus(); }}>Focus view</button>\n      </section>\n    ))}\n  </div>;\n}\nfunction Home(props: CanvasProps) {\n  return <main><h1>Launch renderer qualification</h1><p>Synthetic presentation fixture; no customer data or durable write.</p><Canvas cards={props.cards} filter={props.filter} epoch={props.epoch} linked={props.linked} outcome={props.outcome} /></main>;\n}\nawait activateIslands({ Canvas });\nmount(() => Home({ cards: [], filter: 'all', epoch: 0, linked: 'All: 1,140,000 bytes', outcome: 'Not submitted' }), '#app');\n"
+    }
+  ],
+  "passed": true
+}

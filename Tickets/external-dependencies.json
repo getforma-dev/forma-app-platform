@@ -3,9 +3,45 @@
   "consumer_team": "GenUI",
   "owner_team": "FormaStack",
   "gates": [
-    {"id": "FORMA-246", "state": "open", "blocks": ["APP-003"], "kind": "required", "evidence": "", "condition": "Native composition conformance evidence plus exact consumable ref and GenUI integration checks."},
-    {"id": "FORMA-232", "state": "open", "blocks": ["APP-003"], "kind": "required-disposition", "evidence": "", "condition": "Shipped budget support OR measured no-override-needed consumer disposition; broader feature may remain open."},
-    {"id": "FORMA-247", "state": "open", "blocks": ["APP-006"], "kind": "required", "evidence": "", "condition": "Deployed auth revision, client, PKCE, tenant claims, canary and rollback evidence."},
-    {"id": "FORMA-248", "state": "open", "blocks": ["APP-058"], "kind": "required-before-real-data", "evidence": "", "condition": "Production key custody/rotation/outage evidence before real-organization sign-in."}
+    {
+      "id": "FORMA-246",
+      "state": "open",
+      "blocks": [
+        "APP-003"
+      ],
+      "kind": "required",
+      "evidence": "",
+      "condition": "Native composition conformance evidence plus exact consumable ref and GenUI integration checks."
+    },
+    {
+      "id": "FORMA-232",
+      "state": "cleared",
+      "blocks": [
+        "APP-003"
+      ],
+      "kind": "required-disposition",
+      "evidence": "evidence/APP-003/budget-disposition.md",
+      "condition": "Shipped budget support OR measured no-override-needed consumer disposition; broader feature may remain open."
+    },
+    {
+      "id": "FORMA-247",
+      "state": "open",
+      "blocks": [
+        "APP-006"
+      ],
+      "kind": "required",
+      "evidence": "",
+      "condition": "Deployed auth revision, client, PKCE, tenant claims, canary and rollback evidence."
+    },
+    {
+      "id": "FORMA-248",
+      "state": "open",
+      "blocks": [
+        "APP-058"
+      ],
+      "kind": "required-before-real-data",
+      "evidence": "",
+      "condition": "Production key custody/rotation/outage evidence before real-organization sign-in."
+    }
   ]
 }

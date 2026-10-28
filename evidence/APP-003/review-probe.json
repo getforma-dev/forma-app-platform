@@ -1,0 +1,160 @@
+{
+  "scope": "Independent focused native/keyboard/filter replay; no durable commands or managed acceptance",
+  "passed": true,
+  "keyboard": {
+    "tabs_to_observation": 8,
+    "explicit_submit": true,
+    "acknowledgement": "Synthetic observation accepted"
+  },
+  "changed_filter": [
+    "Unmatched: 900,000 bytes",
+    "Unmatched: 900,000 bytes",
+    "Unmatched: 900,000 bytes",
+    "Unmatched: 900,000 bytes",
+    "Unmatched: 900,000 bytes",
+    "Unmatched: 900,000 bytes"
+  ],
+  "stale_response": {
+    "old_response_fully_delivered_after_new": true,
+    "resulting_epoch": 2,
+    "six_views_still_current": true
+  },
+  "kinds": [
+    "summary",
+    "table",
+    "detail",
+    "timeline",
+    "chart",
+    "filter",
+    "form",
+    "note",
+    "status"
+  ],
+  "numeric_svg": [
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        0.5,
+        0,
+        12.5,
+        10
+      ]
+    },
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        35.5,
+        0,
+        12.5,
+        19
+      ]
+    },
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        70.5,
+        0,
+        12.5,
+        28
+      ]
+    },
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        105.5,
+        0,
+        12.5,
+        37
+      ]
+    },
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        140.5,
+        0,
+        12.5,
+        46
+      ]
+    },
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        175.5,
+        0,
+        12.5,
+        55
+      ]
+    },
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        0.5,
+        0,
+        12.5,
+        10
+      ]
+    },
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        35.5,
+        0,
+        12.5,
+        19
+      ]
+    },
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        70.5,
+        0,
+        12.5,
+        28
+      ]
+    },
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        105.5,
+        0,
+        12.5,
+        37
+      ]
+    },
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        140.5,
+        0,
+        12.5,
+        46
+      ]
+    },
+    {
+      "namespace": "http://www.w3.org/2000/svg",
+      "titleNamespace": "http://www.w3.org/2000/svg",
+      "values": [
+        175.5,
+        0,
+        12.5,
+        55
+      ]
+    }
+  ],
+  "invalid_filter_status": 400,
+  "invalid_command_status": 422,
+  "page_errors": [],
+  "csp_violations": [],
+  "browser": "156.0.8078.4"
+}

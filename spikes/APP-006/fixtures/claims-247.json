@@ -1,0 +1,13 @@
+{
+  "sub": "00000000-0000-4000-8000-000000000011",
+  "email": "synthetic-user@example.invalid",
+  "name": "Synthetic local identity",
+  "tenant_id": "00000000-0000-4000-8000-000000000001",
+  "iss": "synthetic-fauth-issuer",
+  "aud": "synthetic-genui-audience",
+  "exp": 1800000900,
+  "iat": 1800000000,
+  "roles": ["user"],
+  "auth_method": "password",
+  "mfa_verified": false
+}

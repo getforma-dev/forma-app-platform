@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "ceilings": {
+    "forma": 28420,
+    "page": 76800,
+    "canvas": 373760
+  },
+  "routes": [
+    {
+      "route": "/",
+      "class": "islands",
+      "canvas": true,
+      "files": [
+        {
+          "file": "home.57701d13.js",
+          "raw": 89259,
+          "gzip": 29638,
+          "brotli": 26459,
+          "forma": {
+            "raw": 84139,
+            "gzip": 27938,
+            "brotli": 24941
+          },
+          "router": {
+            "raw": 0,
+            "gzip": 0,
+            "brotli": 0
+          }
+        }
+      ],
+      "raw": 89259,
+      "gzip": 29638,
+      "brotli": 26459,
+      "forma": {
+        "raw": 84139,
+        "gzip": 27938,
+        "brotli": 24941
+      },
+      "core": {
+        "raw": 84139,
+        "gzip": 27938,
+        "brotli": 24941
+      },
+      "router": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "application": {
+        "raw": 5120,
+        "gzip": 1700,
+        "brotli": 1518
+      },
+      "worker": {
+        "raw": 3237,
+        "gzip": 1538,
+        "brotli": 1314
+      },
+      "javascript": {
+        "raw": 92496,
+        "gzip": 31176,
+        "brotli": 27773
+      },
+      "ceilings": {
+        "forma": 28420,
+        "javascript": 373760
+      },
+      "exceeded": [],
+      "over": false
+    }
+  ],
+  "worker": {
+    "file": "sw.js",
+    "raw": 3237,
+    "gzip": 1538,
+    "brotli": 1314
+  }
+}
