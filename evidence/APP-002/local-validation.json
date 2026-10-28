@@ -1,0 +1,120 @@
+{
+  "recorded_on": "2026-10-28",
+  "platform": "macOS-26.1-arm64-arm-64bit",
+  "python": "3.11.0",
+  "node": "v22.21.0",
+  "commands": [
+    {
+      "command": [
+        "<fresh-venv>/bin/python",
+        "-m",
+        "pip",
+        "install",
+        "--require-hashes",
+        "--only-binary=:all:",
+        "-r",
+        "contracts/requirements.lock"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.376,
+      "output": "Collecting jsonschema==4.26.0\n  Using cached jsonschema-4.26.0-py3-none-any.whl (90 kB)\nCollecting attrs==26.1.0\n  Using cached attrs-26.1.0-py3-none-any.whl (67 kB)\nCollecting jsonschema-specifications==2025.9.1\n  Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)\nCollecting referencing==0.37.0\n  Using cached referencing-0.37.0-py3-none-any.whl (26 kB)\nCollecting rpds-py==2026.9.1\n  Using cached rpds_py-2026.9.1-cp311-cp311-macosx_11_0_arm64.whl (346 kB)\nCollecting typing-extensions==4.16.0\n  Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)\nInstalling collected packages: typing-extensions, rpds-py, attrs, referencing, jsonschema-specifications, jsonschema\nSuccessfully installed attrs-26.1.0 jsonschema-4.26.0 jsonschema-specifications-2025.9.1 referencing-0.37.0 rpds-py-2026.9.1 typing-extensions-4.16.0\n\n[notice] A new release of pip available: 22.3 -> 26.2.2\n[notice] To update, run: /private<fresh-venv>/bin/python -m pip install --upgrade pip\n"
+    },
+    {
+      "command": [
+        "<fresh-venv>/bin/python",
+        "-m",
+        "pip",
+        "check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.246,
+      "output": "No broken requirements found.\n"
+    },
+    {
+      "command": [
+        "<fresh-venv>/bin/python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "contracts",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.48,
+      "output": "test_ambiguous_json_refusals (test_contracts.CanonicalTests.test_ambiguous_json_refusals) ... ok\ntest_array_order_domains_and_unicode_meaning_preserved (test_contracts.CanonicalTests.test_array_order_domains_and_unicode_meaning_preserved) ... ok\ntest_depth_limit (test_contracts.CanonicalTests.test_depth_limit) ... ok\ntest_floats_and_unregistered_domains_refused (test_contracts.CanonicalTests.test_floats_and_unregistered_domains_refused) ... ok\ntest_golden_vectors (test_contracts.CanonicalTests.test_golden_vectors) ... ok\ntest_key_order_does_not_change_digest (test_contracts.CanonicalTests.test_key_order_does_not_change_digest) ... ok\ntest_all_registered_renderer_tags_have_shape (test_contracts.ContractTests.test_all_registered_renderer_tags_have_shape) ... ok\ntest_command_payload_hash_binds_versions_and_values_not_retry_key (test_contracts.ContractTests.test_command_payload_hash_binds_versions_and_values_not_retry_key) ... ok\ntest_complete_job_requires_result_failure_requires_reason (test_contracts.ContractTests.test_complete_job_requires_result_failure_requires_reason) ... ok\ntest_exact_definition_size_boundary (test_contracts.ContractTests.test_exact_definition_size_boundary) ... ok\ntest_negative_fixture_vectors (test_contracts.ContractTests.test_negative_fixture_vectors) ... ok\ntest_parameter_values_are_not_executable (test_contracts.ContractTests.test_parameter_values_are_not_executable) ... ok\ntest_preview_receipt_has_no_publication_claim (test_contracts.ContractTests.test_preview_receipt_has_no_publication_claim) ... ok\ntest_schema_source_matches_published_artifact (test_contracts.ContractTests.test_schema_source_matches_published_artifact) ... ok\ntest_two_distinct_apps_share_contract (test_contracts.ContractTests.test_two_distinct_apps_share_contract) ... ok\ntest_valid_owner_publication_policy (test_contracts.ContractTests.test_valid_owner_publication_policy) ... ok\n\n----------------------------------------------------------------------\nRan 16 tests in 0.335s\n\nOK\n"
+    },
+    {
+      "command": [
+        "node",
+        "contracts/verify_vectors.mjs"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.034,
+      "output": "6 canonical byte/digest vectors match independently in JavaScript\n"
+    },
+    {
+      "command": [
+        "<fresh-venv>/bin/python",
+        "contracts/lock.py",
+        "check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.03,
+      "output": "Contract edition lock matches 17 artifacts and both frozen source identities\n"
+    }
+  ],
+  "limitations": [
+    "Synthetic contract qualification only; no application authorization, persistence, browser adoption or query execution.",
+    "Linux CI has not run at local evidence capture.",
+    "No hosted resources provisioned."
+  ],
+  "initial_test_methods": 16,
+  "initial_negative_vectors": 55,
+  "initial_canonical_vectors": 6,
+  "final_verification": {
+    "test_methods": 17,
+    "negative_vectors": 57,
+    "canonical_vectors": 6,
+    "commands": [
+      {
+        "command": [
+          "contracts/.venv/bin/python",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "contracts",
+          "-p",
+          "test_*.py",
+          "-v"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.506,
+        "output": "test_ambiguous_json_refusals (test_contracts.CanonicalTests.test_ambiguous_json_refusals) ... ok\ntest_array_order_domains_and_unicode_meaning_preserved (test_contracts.CanonicalTests.test_array_order_domains_and_unicode_meaning_preserved) ... ok\ntest_depth_limit (test_contracts.CanonicalTests.test_depth_limit) ... ok\ntest_floats_and_unregistered_domains_refused (test_contracts.CanonicalTests.test_floats_and_unregistered_domains_refused) ... ok\ntest_golden_vectors (test_contracts.CanonicalTests.test_golden_vectors) ... ok\ntest_key_order_does_not_change_digest (test_contracts.CanonicalTests.test_key_order_does_not_change_digest) ... ok\ntest_all_registered_renderer_tags_have_shape (test_contracts.ContractTests.test_all_registered_renderer_tags_have_shape) ... ok\ntest_command_payload_hash_binds_versions_and_values_not_retry_key (test_contracts.ContractTests.test_command_payload_hash_binds_versions_and_values_not_retry_key) ... ok\ntest_complete_job_requires_result_failure_requires_reason (test_contracts.ContractTests.test_complete_job_requires_result_failure_requires_reason) ... ok\ntest_definition_byte_cap (test_contracts.ContractTests.test_definition_byte_cap) ... ok\ntest_half_open_window_requires_increasing_valid_instants (test_contracts.ContractTests.test_half_open_window_requires_increasing_valid_instants) ... ok\ntest_negative_fixture_vectors (test_contracts.ContractTests.test_negative_fixture_vectors) ... ok\ntest_parameter_values_are_not_executable (test_contracts.ContractTests.test_parameter_values_are_not_executable) ... ok\ntest_preview_receipt_has_no_publication_claim (test_contracts.ContractTests.test_preview_receipt_has_no_publication_claim) ... ok\ntest_schema_source_matches_published_artifact (test_contracts.ContractTests.test_schema_source_matches_published_artifact) ... ok\ntest_two_distinct_apps_share_contract (test_contracts.ContractTests.test_two_distinct_apps_share_contract) ... ok\ntest_valid_owner_publication_policy (test_contracts.ContractTests.test_valid_owner_publication_policy) ... ok\n\n----------------------------------------------------------------------\nRan 17 tests in 0.350s\n\nOK\n"
+      },
+      {
+        "command": [
+          "node",
+          "contracts/verify_vectors.mjs"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.034,
+        "output": "6 canonical byte/digest vectors match independently in JavaScript\n"
+      },
+      {
+        "command": [
+          "contracts/.venv/bin/python",
+          "contracts/lock.py",
+          "check"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.03,
+        "output": "Contract edition lock matches 17 artifacts and both frozen source identities\n"
+      }
+    ],
+    "implementation_lock_sha256": "9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45"
+  }
+}

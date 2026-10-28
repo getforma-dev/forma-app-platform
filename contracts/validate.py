@@ -1,0 +1,319 @@
+"""Contract checks for synthetic fixture qualification, not an authorization service."""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+from jsonschema import Draft202012Validator, FormatChecker
+
+ROOT = Path(__file__).resolve().parent
+SCHEMA = json.loads((ROOT / "schema.json").read_text())
+Draft202012Validator.check_schema(SCHEMA)
+FORMATS = FormatChecker()
+
+
+@FORMATS.checks("date-time", raises=ValueError)
+def valid_timestamp(value):
+    if not isinstance(value, str):
+        return True
+    datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return True
+
+
+@FORMATS.checks("date", raises=ValueError)
+def valid_date(value):
+    if not isinstance(value, str):
+        return True
+    date.fromisoformat(value)
+    return True
+
+
+VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FORMATS)
+DOMAINS = {name: f"forma:{name}:v1" for name in (
+    "app-definition", "input-contract", "record-schema", "query", "query-receipt",
+    "command-payload", "source-binding", "result")}
+
+
+class ContractError(ValueError):
+    pass
+
+
+def require(condition, message):
+    if not condition:
+        raise ContractError(message)
+
+
+def _duplicates(pairs):
+    result = {}
+    for key, value in pairs:
+        require(key not in result, "duplicate object key: " + key)
+        result[key] = value
+    return result
+
+
+def loads(raw):
+    """Decode bounded UTF-8 JSON before schema validation, refusing ambiguous input."""
+    if isinstance(raw, bytes):
+        require(len(raw) <= 1024 * 1024, "document exceeds 1 MiB")
+        raw = raw.decode("utf-8", errors="strict")
+    require(len(raw.encode("utf-8")) <= 1024 * 1024, "document exceeds 1 MiB")
+    try:
+        value = json.loads(raw, object_pairs_hook=_duplicates,
+                           parse_float=lambda _: (_ for _ in ()).throw(ContractError("floating-point number refused")),
+                           parse_constant=lambda _: (_ for _ in ()).throw(ContractError("non-finite number refused")))
+    except RecursionError as exc:
+        raise ContractError("JSON nesting exceeds decoder limit") from exc
+    canonical(value)
+    return value
+
+
+def canonical(value):
+    """forma-json-v1: restricted JSON; deliberately not RFC 8785/JCS."""
+    def check(item, depth=0):
+        require(depth <= 32, "JSON nesting exceeds 32")
+        if item is None or isinstance(item, bool):
+            return
+        if isinstance(item, str):
+            try:
+                item.encode("utf-8", errors="strict")
+            except UnicodeEncodeError as exc:
+                raise ContractError("unpaired Unicode surrogate") from exc
+        elif type(item) is int:
+            require(abs(item) <= 9007199254740991, "unsafe JSON integer")
+        elif isinstance(item, list):
+            for child in item:
+                check(child, depth + 1)
+        elif isinstance(item, dict):
+            for key, child in item.items():
+                require(isinstance(key, str) and re.fullmatch(r"[a-z][a-z0-9_]*", key), "non-ASCII or invalid object key")
+                check(child, depth + 1)
+        else:
+            raise ContractError("unsupported JSON type (floats are refused)")
+    check(value)
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def digest(domain, value):
+    require(domain in DOMAINS, "unregistered digest domain")
+    return "sha256:" + hashlib.sha256(DOMAINS[domain].encode("ascii") + b"\x00" + canonical(value)).hexdigest()
+
+
+def payload_digest(command):
+    return digest("command-payload", {k: v for k, v in command.items() if k != "idempotency_key"})
+
+
+def unique(items, key, label):
+    values = [item[key] for item in items]
+    require(len(set(values)) == len(values), "duplicate " + label)
+    return {item[key]: item for item in items}
+
+
+def compatible(value, field):
+    if value["type"] == "null":
+        return field["nullable"]
+    expected = field["value_type"]
+    if value["type"] != expected["type"]:
+        return False
+    if expected["type"] == "enum":
+        return value["value"] in expected["values"]
+    if expected["type"] == "reference":
+        return value["input_id"] == expected["target_input"]
+    return all(value.get(k) == v for k, v in expected.items() if k != "type")
+
+
+def _definition(content):
+    inputs = unique(content["inputs"], "id", "input id")
+    fields = {name: unique(item["fields"], "id", "input field") for name, item in inputs.items()}
+    records = unique(content["record_schemas"], "id", "record schema")
+    record_fields = {name: unique(item["fields"], "id", "record field") for name, item in records.items()}
+    views = unique(content["views"], "id", "view id")
+    commands = unique(content["commands"], "id", "command id")
+    for collection in [*inputs.values(), *records.values()]:
+        for field in collection["fields"]:
+            if field["value_type"]["type"] == "reference":
+                require(field["value_type"]["target_input"] in inputs, "unknown reference target")
+    for command in commands.values():
+        require(command["record_schema_id"] in records, "unknown record schema")
+        writable = record_fields[command["record_schema_id"]]
+        require(set(command["writable_fields"]) <= writable.keys(), "unknown writable field")
+        for transition in command["transitions"]:
+            field = writable.get(transition["field_id"])
+            require(field is not None and field["value_type"]["type"] == "enum", "transition requires enum field")
+            require(transition["field_id"] in command["writable_fields"], "transition field is not writable")
+            require({transition["from"], transition["to"]} <= set(field["value_type"]["values"]), "unknown transition value")
+    for view in views.values():
+        if view["kind"] == "form":
+            require(view.get("command_id") in commands and "query" not in view, "form requires declared command without query")
+        else:
+            require("command_id" not in view, "only a form invokes a command")
+        if view["kind"] == "note":
+            require("text" in view and "query" not in view, "note requires literal text")
+        else:
+            require("text" not in view, "literal text only belongs to notes")
+        if view["kind"] not in ("form", "note"):
+            require("query" in view, "data view requires query")
+        if "query" not in view:
+            continue
+        query = view["query"]
+        require(set(query["inputs"]) <= inputs.keys(), "query names unknown input")
+        if "window" in query:
+            require(query["window"]["start"] < query["window"]["end"], "time window must be increasing")
+        measures = set()
+        def lookup(field):
+            require(field["input_id"] in query["inputs"], "field uses undeclared query input")
+            require(field["field_id"] in fields[field["input_id"]], "unknown query field")
+            return fields[field["input_id"]][field["field_id"]]
+        for op in query["operations"]:
+            kind = op["type"]
+            if kind == "project":
+                for field in op["fields"]:
+                    lookup(field)
+            elif kind == "filter":
+                require(compatible(op["value"], lookup(op["field"])), "filter value type/unit mismatch")
+            elif kind == "aggregate":
+                for field in op["group_by"]:
+                    lookup(field)
+                unique(op["measures"], "id", "measure id")
+                for measure in op["measures"]:
+                    field = lookup(measure["field"])
+                    if measure["operation"] == "sum":
+                        require(field["value_type"]["type"] in ("integer", "decimal", "money"), "sum requires numeric field")
+                    require(measure["id"] not in measures, "duplicate derived measure")
+                    measures.add(measure["id"])
+            elif kind == "sort":
+                for field in op["fields"]:
+                    lookup(field["field"])
+                lookup(op["stable_tiebreak"])
+            elif kind == "time_bucket":
+                require(lookup(op["field"])["value_type"]["type"] == "timestamp", "time bucket requires timestamp")
+            elif kind == "lookup":
+                left, right = lookup(op["left"]), lookup(op["right"])
+                require(left["value_type"] == right["value_type"], "lookup type mismatch")
+                if op["rule"] == "cidr_exact_then_longest":
+                    require(left["value_type"]["type"] == "text", "CIDR requires text fields")
+            elif kind == "ratio":
+                require(op["numerator"] in measures, "ratio requires prior declared numerator")
+                if op["denominator"]["type"] == "measure":
+                    require(op["denominator"]["id"] in measures, "ratio requires prior declared denominator")
+                require(op["output_field"] not in measures, "duplicate derived measure")
+                measures.add(op["output_field"])
+    layout = unique(content["default_layout"], "view_id", "layout view")
+    require(layout.keys() == views.keys(), "layout must name each view exactly once")
+    for position in layout.values():
+        require(position["column"] + position["width"] <= 12, "layout exceeds grid")
+    for link in content["links"]:
+        require(link["from_view"] in views and link["to_view"] in views and link["input_id"] in inputs, "unknown link target")
+
+
+def validate(entity):
+    raw = canonical(entity)
+    require(len(raw) <= 1024 * 1024, "document exceeds 1 MiB")
+    errors = sorted(VALIDATOR.iter_errors(entity), key=lambda e: str(list(e.path)))
+    if errors:
+        raise ContractError("schema: " + errors[0].message)
+    kind = entity["kind"]
+    if kind == "app_definition":
+        require(len(canonical(entity["content"])) <= 256 * 1024, "definition exceeds 256 KiB")
+        _definition(entity["content"])
+        require(entity["digest"] == digest("app-definition", entity["content"]), "definition digest mismatch")
+    elif kind == "publication":
+        if entity["policy"]["kind"] == "independent_review":
+            require(entity["author_id"] != entity["approver_id"], "independent reviewer must differ from author")
+        unique(entity["input_contract_digests"], "input_id", "publication input")
+        unique(entity["record_schema_digests"], "schema_id", "publication record schema")
+    elif kind == "saved_work":
+        unique(entity["bindings"], "input_id", "binding input")
+        unique(entity["record_collections"], "id", "record collection")
+        unique(entity["source_dependencies"], "input_id", "source dependency")
+    elif kind == "source_revision":
+        require(entity["input_contract"]["kind"] == "source", "source revision needs source contract")
+        unique(entity["input_contract"]["fields"], "id", "source field")
+        require(entity["row_count"] <= (1000000 if entity["format"] == "csv" else 10000), "source row cap exceeded")
+        for coord in entity["provenance_sample"]:
+            require(coord["type"] == entity["format"], "coordinate format mismatch")
+            if coord["type"] == "csv":
+                require(coord["physical_line_start"] <= coord["physical_line_end"], "inverted physical span")
+            else:
+                require(coord["row"] <= 10000 and coord["column"] <= 32, "XLSX coordinate out of bounds")
+    elif kind == "query_receipt":
+        require((entity["mode"] == "published") == ("publication_id" in entity), "only published receipt names publication")
+        unique(entity["source_revisions"], "input_id", "receipt source")
+        unique(entity["parameters"], "field_id", "receipt parameter")
+        require(entity["digest"] == digest("query-receipt", {k: v for k, v in entity.items() if k != "digest"}), "receipt digest mismatch")
+    elif kind == "command_request":
+        unique(entity["values"], "field_id", "command field")
+    elif kind == "command_outcome":
+        start = datetime.fromisoformat(entity["committed_at"].replace("Z", "+00:00"))
+        end = datetime.fromisoformat(entity["retry_expires_at"].replace("Z", "+00:00"))
+        require(end - start == timedelta(hours=24), "retry horizon must be 24 hours")
+    elif kind == "job_state":
+        require((entity["state"] == "done") == ("result_digest" in entity), "done iff committed result reference exists")
+        require((entity["state"] == "failed") == ("failure_code" in entity), "failed iff failure code exists")
+    return entity
+
+
+def validate_bundle(bundle):
+    """Cross-artifact consistency for one synthetic fixture, not live authority."""
+    require(set(bundle) == {"context", "definition", "publication", "work", "sources", "receipt", "command", "outcome"}, "unexpected bundle members")
+    context = bundle["context"]
+    require(set(context) == {"organization_id", "principal_id"}, "invalid trusted fixture context")
+    entities = [bundle[k] for k in ("definition", "publication", "work", "receipt", "command", "outcome")] + bundle["sources"]
+    for item in entities:
+        validate(item)
+        if "organization_id" in item:
+            require(item["organization_id"] == context["organization_id"], "cross-organization reference")
+    definition, pub, work = (bundle[k] for k in ("definition", "publication", "work"))
+    receipt, command, outcome = (bundle[k] for k in ("receipt", "command", "outcome"))
+    for item in (pub, work, receipt, command, outcome):
+        require(item["app_id"] == definition["app_id"], "cross-app reference")
+    for item in (receipt, command, outcome):
+        require(item["work_id"] == work["work_id"], "cross-work reference")
+    for item in (work, receipt, command):
+        require(item["publication_id"] == pub["publication_id"], "publication pin mismatch")
+    require(pub["definition_revision_id"] == definition["revision_id"] and pub["definition_digest"] == definition["digest"] == receipt["definition_digest"], "definition pin mismatch")
+    content = definition["content"]
+    inputs = {x["id"]: x for x in content["inputs"]}
+    expected_inputs = {name: digest("input-contract", item) for name, item in inputs.items()}
+    require({x["input_id"]: x["digest"] for x in pub["input_contract_digests"]} == expected_inputs, "publication input contract mismatch")
+    schemas = {x["id"]: x for x in content["record_schemas"]}
+    require({x["schema_id"]: x["digest"] for x in pub["record_schema_digests"]} == {name: digest("record-schema", item) for name, item in schemas.items()}, "publication record schema mismatch")
+    collections = unique(work["record_collections"], "schema_id", "collection schema")
+    require(collections.keys() == schemas.keys(), "work must have one collection per declared record schema")
+    require(all(item["schema_version"] == schemas[name]["version"] for name, item in collections.items()), "collection schema version mismatch")
+    bindings = {x["input_id"]: x for x in work["bindings"]}
+    require(bindings.keys() == inputs.keys(), "work must bind each input")
+    sources = unique(bundle["sources"], "revision_id", "source revision")
+    required_sources = []
+    for name, binding in bindings.items():
+        require(binding["kind"] == inputs[name]["kind"] and binding["contract_digest"] == expected_inputs[name], "binding contract mismatch")
+        if binding["kind"] == "source":
+            source = sources.get(binding["source_revision_id"])
+            require(source is not None, "source revision missing")
+            require(source["source_id"] == binding["source_id"] and source["normalized_digest"] == binding["source_digest"], "source identity mismatch")
+            require(digest("input-contract", source["input_contract"]) == expected_inputs[name], "source schema mismatch")
+            require("deleted_at" not in source, "deleted source cannot satisfy current fixture")
+            required_sources.append({k: binding[k] for k in ("input_id", "source_id", "source_revision_id", "source_digest")})
+        else:
+            require(any(c["id"] == binding["collection_id"] and c["schema_id"] == binding["schema_id"] and c["schema_version"] == binding["schema_version"] for c in work["record_collections"]), "record collection mismatch")
+            require(binding["schema_id"] in schemas and schemas[binding["schema_id"]]["fields"] == inputs[name]["fields"], "record input schema mismatch")
+    require(work["source_dependencies"] == required_sources == receipt["source_revisions"], "source evidence dependency mismatch")
+    views = {x["id"]: x for x in content["views"]}
+    require(receipt["view_id"] in views and "query" in views[receipt["view_id"]], "receipt must name query view")
+    require(receipt["provenance"]["query_digest"] == digest("query", views[receipt["view_id"]]["query"]), "receipt query mismatch")
+    declaration = next((x for x in content["commands"] if x["id"] == command["command_id"]), None)
+    require(declaration is not None and declaration["record_schema_id"] == command["schema_id"], "command is undeclared")
+    require((declaration["operation"] == "create") == (command["expected_record_version"] == 0), "create expects absent record; update expects an existing version")
+    fields = {x["id"]: x for x in schemas[command["schema_id"]]["fields"]}
+    for item in command["values"]:
+        require(item["field_id"] in declaration["writable_fields"], "command field is not writable")
+        require(compatible(item["value"], fields[item["field_id"]]), "command value type/unit mismatch")
+    require(command["expected_work_version"] == work["version"], "work version mismatch")
+    require(outcome["payload_digest"] == payload_digest(command), "command payload mismatch")
+    require(outcome["idempotency_key"] == command["idempotency_key"] and outcome["command_id"] == command["command_id"] and outcome["record_id"] == command["record_id"], "outcome command identity mismatch")
+    require(outcome["record_version"] == command["expected_record_version"] + 1, "record version mismatch")
+    require(outcome["work_version"] == work["version"], "outcome work version mismatch")
+    require(outcome["principal_id"] == receipt["principal_id"] == context["principal_id"], "cross-principal reference")
+    return bundle

@@ -1,6 +1,6 @@
 # Forma 3.2 baseline for the app-platform implementation
 
-Assessed 2026-10-28. This is a preparation record, not an app build or framework release qualification. The delivered design remains an immutable historical baseline; implementation refinements belong in a new ADR rather than edits that make old measurements appear current.
+Assessed 2026-10-28. This is a preparation record, not an app build or framework release qualification. Subsequent APP-001 implementation and measurements are recorded separately in [ADR-001](ADR-001-RELEASED-BASELINE.md) and [its evidence](../../evidence/APP-001/README.md). The delivered design remains an immutable historical baseline; implementation refinements belong in a new ADR rather than edits that make old measurements appear current.
 
 ## Verified release
 

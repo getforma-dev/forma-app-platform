@@ -1,0 +1,56 @@
+[
+  {
+    "name": "jsonschema",
+    "version": "4.26.0",
+    "source": "https://pypi.org/pypi/jsonschema/4.26.0/json",
+    "requires_python": ">=3.10",
+    "license_expression": "MIT",
+    "license": null,
+    "wheel_hash_count": 1
+  },
+  {
+    "name": "attrs",
+    "version": "26.1.0",
+    "source": "https://pypi.org/pypi/attrs/26.1.0/json",
+    "requires_python": ">=3.9",
+    "license_expression": "MIT",
+    "license": null,
+    "wheel_hash_count": 1
+  },
+  {
+    "name": "jsonschema-specifications",
+    "version": "2025.9.1",
+    "source": "https://pypi.org/pypi/jsonschema-specifications/2025.9.1/json",
+    "requires_python": ">=3.9",
+    "license_expression": "MIT",
+    "license": null,
+    "wheel_hash_count": 1
+  },
+  {
+    "name": "referencing",
+    "version": "0.37.0",
+    "source": "https://pypi.org/pypi/referencing/0.37.0/json",
+    "requires_python": ">=3.10",
+    "license_expression": "MIT",
+    "license": null,
+    "wheel_hash_count": 1
+  },
+  {
+    "name": "rpds-py",
+    "version": "2026.9.1",
+    "source": "https://pypi.org/pypi/rpds-py/2026.9.1/json",
+    "requires_python": ">=3.11",
+    "license_expression": "MIT",
+    "license": null,
+    "wheel_hash_count": 127
+  },
+  {
+    "name": "typing-extensions",
+    "version": "4.16.0",
+    "source": "https://pypi.org/pypi/typing-extensions/4.16.0/json",
+    "requires_python": ">=3.9",
+    "license_expression": "PSF-2.0",
+    "license": null,
+    "wheel_hash_count": 1
+  }
+]

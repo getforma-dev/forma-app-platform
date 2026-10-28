@@ -1,0 +1,2151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://getforma.dev/contracts/impl-2026-10-28.1/schema.json",
+  "$defs": {
+    "value": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "text"
+            },
+            "value": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "boolean"
+            },
+            "value": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "integer"
+            },
+            "value": {
+              "type": "string",
+              "pattern": "^(0|-[1-9][0-9]{0,37}|[1-9][0-9]{0,37})(?![\\s\\S])"
+            },
+            "unit": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+            }
+          },
+          "required": [
+            "type",
+            "value",
+            "unit"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "decimal"
+            },
+            "coefficient": {
+              "type": "string",
+              "pattern": "^(0|-[1-9][0-9]{0,37}|[1-9][0-9]{0,37})(?![\\s\\S])"
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18
+            },
+            "unit": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+            }
+          },
+          "required": [
+            "type",
+            "coefficient",
+            "scale",
+            "unit"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "date"
+            },
+            "value": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(?![\\s\\S])",
+              "format": "date"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "timestamp"
+            },
+            "value": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(?![\\s\\S])",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "enum"
+            },
+            "value": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "reference"
+            },
+            "input_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+            },
+            "record_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+            }
+          },
+          "required": [
+            "type",
+            "input_id",
+            "record_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "money"
+            },
+            "minor_units": {
+              "type": "string",
+              "pattern": "^(0|-[1-9][0-9]{0,37}|[1-9][0-9]{0,37})(?![\\s\\S])"
+            },
+            "currency": {
+              "enum": [
+                "USD"
+              ]
+            },
+            "minor_unit_exponent": {
+              "const": 2
+            }
+          },
+          "required": [
+            "type",
+            "minor_units",
+            "currency",
+            "minor_unit_exponent"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "null"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "field": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "value_type": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "text"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "boolean"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "integer"
+                },
+                "unit": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                }
+              },
+              "required": [
+                "type",
+                "unit"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "decimal"
+                },
+                "unit": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                },
+                "scale": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 18
+                }
+              },
+              "required": [
+                "type",
+                "unit",
+                "scale"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "date"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "timestamp"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "enum"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                  },
+                  "minItems": 1,
+                  "maxItems": 32,
+                  "uniqueItems": true
+                }
+              },
+              "required": [
+                "type",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "reference"
+                },
+                "target_input": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                }
+              },
+              "required": [
+                "type",
+                "target_input"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "money"
+                },
+                "currency": {
+                  "enum": [
+                    "USD"
+                  ]
+                },
+                "minor_unit_exponent": {
+                  "const": 2
+                }
+              },
+              "required": [
+                "type",
+                "currency",
+                "minor_unit_exponent"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "nullable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "value_type",
+        "nullable"
+      ],
+      "additionalProperties": false
+    },
+    "input_contract": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "contract_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "contract_version": {
+          "const": 1
+        },
+        "kind": {
+          "enum": [
+            "source",
+            "records"
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "id",
+        "contract_id",
+        "contract_version",
+        "kind",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "record_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "version": {
+          "const": 1
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "command_declaration": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "record_schema_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "operation": {
+          "enum": [
+            "create",
+            "update"
+          ]
+        },
+        "writable_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+          },
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "from": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "to": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              }
+            },
+            "required": [
+              "field_id",
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "id",
+        "record_schema_id",
+        "operation",
+        "writable_fields",
+        "transitions"
+      ],
+      "additionalProperties": false
+    },
+    "query": {
+      "type": "object",
+      "properties": {
+        "operator_version": {
+          "const": 1
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+          },
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "project"
+                  },
+                  "fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "input_id": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                        },
+                        "field_id": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                        }
+                      },
+                      "required": [
+                        "input_id",
+                        "field_id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 32
+                  }
+                },
+                "required": [
+                  "type",
+                  "fields"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "filter"
+                  },
+                  "field": {
+                    "type": "object",
+                    "properties": {
+                      "input_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      },
+                      "field_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      }
+                    },
+                    "required": [
+                      "input_id",
+                      "field_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "comparison": {
+                    "enum": [
+                      "eq",
+                      "ne",
+                      "lt",
+                      "lte",
+                      "gt",
+                      "gte"
+                    ]
+                  },
+                  "value": {
+                    "$ref": "#/$defs/value"
+                  }
+                },
+                "required": [
+                  "type",
+                  "field",
+                  "comparison",
+                  "value"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "aggregate"
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "input_id": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                        },
+                        "field_id": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                        }
+                      },
+                      "required": [
+                        "input_id",
+                        "field_id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 0,
+                    "maxItems": 4
+                  },
+                  "measures": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                        },
+                        "operation": {
+                          "enum": [
+                            "count",
+                            "sum",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "field": {
+                          "type": "object",
+                          "properties": {
+                            "input_id": {
+                              "type": "string",
+                              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                            },
+                            "field_id": {
+                              "type": "string",
+                              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                            }
+                          },
+                          "required": [
+                            "input_id",
+                            "field_id"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "operation",
+                        "field"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 8
+                  }
+                },
+                "required": [
+                  "type",
+                  "group_by",
+                  "measures"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "sort"
+                  },
+                  "fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "field": {
+                          "type": "object",
+                          "properties": {
+                            "input_id": {
+                              "type": "string",
+                              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                            },
+                            "field_id": {
+                              "type": "string",
+                              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                            }
+                          },
+                          "required": [
+                            "input_id",
+                            "field_id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "direction": {
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "field",
+                        "direction"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 4
+                  },
+                  "stable_tiebreak": {
+                    "type": "object",
+                    "properties": {
+                      "input_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      },
+                      "field_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      }
+                    },
+                    "required": [
+                      "input_id",
+                      "field_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type",
+                  "fields",
+                  "stable_tiebreak"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "limit"
+                  },
+                  "rows": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500
+                  }
+                },
+                "required": [
+                  "type",
+                  "rows"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "time_bucket"
+                  },
+                  "field": {
+                    "type": "object",
+                    "properties": {
+                      "input_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      },
+                      "field_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      }
+                    },
+                    "required": [
+                      "input_id",
+                      "field_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "seconds": {
+                    "enum": [
+                      60,
+                      300,
+                      3600,
+                      86400
+                    ]
+                  },
+                  "timezone": {
+                    "const": "UTC"
+                  },
+                  "output_field": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                  }
+                },
+                "required": [
+                  "type",
+                  "field",
+                  "seconds",
+                  "timezone",
+                  "output_field"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "ratio"
+                  },
+                  "numerator": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                  },
+                  "denominator": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "const": "measure"
+                          },
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "const": "constant"
+                          },
+                          "value": {
+                            "type": "string",
+                            "pattern": "^[1-9][0-9]{0,17}(?![\\s\\S])"
+                          },
+                          "unit": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "value",
+                          "unit"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "output_field": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                  },
+                  "output_unit": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                  },
+                  "zero_denominator": {
+                    "const": "error"
+                  },
+                  "rounding": {
+                    "const": "exact_rational"
+                  }
+                },
+                "required": [
+                  "type",
+                  "numerator",
+                  "denominator",
+                  "output_field",
+                  "output_unit",
+                  "zero_denominator",
+                  "rounding"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "lookup"
+                  },
+                  "left": {
+                    "type": "object",
+                    "properties": {
+                      "input_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      },
+                      "field_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      }
+                    },
+                    "required": [
+                      "input_id",
+                      "field_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "right": {
+                    "type": "object",
+                    "properties": {
+                      "input_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      },
+                      "field_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      }
+                    },
+                    "required": [
+                      "input_id",
+                      "field_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "rule": {
+                    "enum": [
+                      "exact",
+                      "cidr_exact_then_longest"
+                    ]
+                  },
+                  "cardinality": {
+                    "const": "at_most_one"
+                  }
+                },
+                "required": [
+                  "type",
+                  "left",
+                  "right",
+                  "rule",
+                  "cardinality"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "null_policy": {
+          "const": "unknown"
+        },
+        "window": {
+          "type": "object",
+          "properties": {
+            "start": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(?![\\s\\S])",
+              "format": "date-time"
+            },
+            "end": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(?![\\s\\S])",
+              "format": "date-time"
+            },
+            "bounds": {
+              "const": "half_open"
+            }
+          },
+          "required": [
+            "start",
+            "end",
+            "bounds"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "operator_version",
+        "inputs",
+        "operations",
+        "null_policy"
+      ],
+      "additionalProperties": false
+    },
+    "view": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "kind": {
+          "enum": [
+            "summary",
+            "table",
+            "detail",
+            "timeline",
+            "chart",
+            "filter",
+            "form",
+            "note",
+            "status"
+          ]
+        },
+        "renderer_version": {
+          "const": 1
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "query": {
+          "$ref": "#/$defs/query"
+        },
+        "command_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "renderer_version",
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "definition_content": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/input_contract"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/view"
+          },
+          "minItems": 1,
+          "maxItems": 24
+        },
+        "record_schemas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record_schema"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/command_declaration"
+          },
+          "minItems": 0,
+          "maxItems": 16
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from_view": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "to_view": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "input_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              }
+            },
+            "required": [
+              "from_view",
+              "to_view",
+              "input_id"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 48
+        },
+        "default_layout": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "view_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "column": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 11
+              },
+              "row": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 12
+              }
+            },
+            "required": [
+              "view_id",
+              "column",
+              "row",
+              "width"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 24
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "inputs",
+        "views",
+        "record_schemas",
+        "commands",
+        "links",
+        "default_layout"
+      ],
+      "additionalProperties": false
+    },
+    "binding": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "input_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+            },
+            "kind": {
+              "const": "source"
+            },
+            "contract_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+            },
+            "source_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+            },
+            "source_revision_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+            },
+            "source_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+            }
+          },
+          "required": [
+            "input_id",
+            "kind",
+            "contract_digest",
+            "source_id",
+            "source_revision_id",
+            "source_digest"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "input_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+            },
+            "kind": {
+              "const": "records"
+            },
+            "contract_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+            },
+            "collection_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+            },
+            "schema_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+            },
+            "schema_version": {
+              "const": 1
+            },
+            "revision_policy": {
+              "const": "committed_snapshot"
+            }
+          },
+          "required": [
+            "input_id",
+            "kind",
+            "contract_digest",
+            "collection_id",
+            "schema_id",
+            "schema_version",
+            "revision_policy"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "source_dependency": {
+      "type": "object",
+      "properties": {
+        "input_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "source_revision_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "source_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "input_id",
+        "source_id",
+        "source_revision_id",
+        "source_digest"
+      ],
+      "additionalProperties": false
+    },
+    "named_value": {
+      "type": "object",
+      "properties": {
+        "field_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "value": {
+          "$ref": "#/$defs/value"
+        }
+      },
+      "required": [
+        "field_id",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "source_coordinate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "csv"
+            },
+            "logical_record": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "physical_line_start": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "physical_line_end": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "type",
+            "logical_record",
+            "physical_line_start",
+            "physical_line_end"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "xlsx"
+            },
+            "sheet": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "column": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "type",
+            "sheet",
+            "row",
+            "column"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "app_definition": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "app_definition"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "organization_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "app_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "revision_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "content": {
+          "$ref": "#/$defs/definition_content"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "kind",
+        "schema_version",
+        "organization_id",
+        "app_id",
+        "revision_id",
+        "content",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "publication": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "publication"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "organization_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "app_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "publication_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "definition_revision_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "definition_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "input_contract_digests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "input_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+              }
+            },
+            "required": [
+              "input_id",
+              "digest"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "record_schema_digests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "schema_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+              }
+            },
+            "required": [
+              "schema_id",
+              "digest"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "renderer_version": {
+          "const": 1
+        },
+        "operator_version": {
+          "const": 1
+        },
+        "admission_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "policy": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "kind": {
+              "enum": [
+                "owner_publish",
+                "independent_review"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "version",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "author_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "approver_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "approver_epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "published_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(?![\\s\\S])",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "kind",
+        "schema_version",
+        "organization_id",
+        "app_id",
+        "publication_id",
+        "definition_revision_id",
+        "definition_digest",
+        "input_contract_digests",
+        "record_schema_digests",
+        "renderer_version",
+        "operator_version",
+        "admission_digest",
+        "policy",
+        "author_id",
+        "approver_id",
+        "approver_epoch",
+        "published_at"
+      ],
+      "additionalProperties": false
+    },
+    "saved_work": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "saved_work"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "organization_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "app_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "work_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "publication_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "context": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/binding"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "record_collections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+              },
+              "schema_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "schema_version": {
+                "const": 1
+              }
+            },
+            "required": [
+              "id",
+              "schema_id",
+              "schema_version"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "source_dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source_dependency"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        }
+      },
+      "required": [
+        "kind",
+        "schema_version",
+        "organization_id",
+        "app_id",
+        "work_id",
+        "publication_id",
+        "version",
+        "context",
+        "bindings",
+        "record_collections",
+        "source_dependencies"
+      ],
+      "additionalProperties": false
+    },
+    "source_revision": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "source_revision"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "organization_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "revision_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "content_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "normalized_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "input_contract": {
+          "$ref": "#/$defs/input_contract"
+        },
+        "parser_version": {
+          "const": 1
+        },
+        "mapping_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "format": {
+          "enum": [
+            "csv",
+            "xlsx"
+          ]
+        },
+        "formula_policy": {
+          "const": "reject"
+        },
+        "row_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "timezone": {
+          "const": "UTC"
+        },
+        "time_semantics": {
+          "enum": [
+            "event",
+            "interval",
+            "none"
+          ]
+        },
+        "units_confirmed": {
+          "const": true
+        },
+        "created_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(?![\\s\\S])",
+          "format": "date-time"
+        },
+        "provenance_sample": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source_coordinate"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "deleted_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(?![\\s\\S])",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "kind",
+        "schema_version",
+        "organization_id",
+        "source_id",
+        "revision_id",
+        "content_digest",
+        "normalized_digest",
+        "input_contract",
+        "parser_version",
+        "mapping_version",
+        "format",
+        "formula_policy",
+        "row_count",
+        "timezone",
+        "time_semantics",
+        "units_confirmed",
+        "created_at",
+        "provenance_sample"
+      ],
+      "additionalProperties": false
+    },
+    "query_receipt": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "query_receipt"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "organization_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "app_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "work_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "mode": {
+          "enum": [
+            "published",
+            "synthetic_preview",
+            "authorized_read_preview"
+          ]
+        },
+        "definition_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "publication_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "view_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "operator_version": {
+          "const": 1
+        },
+        "source_revisions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source_dependency"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "record_snapshot_sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/named_value"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "principal_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "membership_epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "policy_epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "filter_epoch": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "result_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "partial": {
+          "const": false
+        },
+        "truncated_page": {
+          "type": "boolean"
+        },
+        "total_scope": {
+          "const": "full_authorized_filtered_input"
+        },
+        "provenance": {
+          "type": "object",
+          "properties": {
+            "query_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+            },
+            "predicate_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+            }
+          },
+          "required": [
+            "query_digest",
+            "predicate_digest"
+          ],
+          "additionalProperties": false
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "kind",
+        "schema_version",
+        "organization_id",
+        "app_id",
+        "work_id",
+        "mode",
+        "definition_digest",
+        "view_id",
+        "operator_version",
+        "source_revisions",
+        "record_snapshot_sequence",
+        "parameters",
+        "principal_id",
+        "membership_epoch",
+        "policy_epoch",
+        "filter_epoch",
+        "result_digest",
+        "partial",
+        "truncated_page",
+        "total_scope",
+        "provenance",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "command_request": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "command_request"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "app_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "work_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "publication_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "command_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "schema_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "schema_version_expected": {
+          "const": 1
+        },
+        "record_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "expected_record_version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expected_work_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/named_value"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "kind",
+        "schema_version",
+        "app_id",
+        "work_id",
+        "publication_id",
+        "command_id",
+        "schema_id",
+        "schema_version_expected",
+        "record_id",
+        "expected_record_version",
+        "expected_work_version",
+        "values",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    },
+    "command_outcome": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "command_outcome"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "organization_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "app_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "work_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "principal_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "command_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}(?![\\s\\S])"
+        },
+        "payload_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "state": {
+          "const": "committed"
+        },
+        "record_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "record_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "work_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "commit_sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "audit_event_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "committed_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(?![\\s\\S])",
+          "format": "date-time"
+        },
+        "retry_expires_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(?![\\s\\S])",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "kind",
+        "schema_version",
+        "organization_id",
+        "app_id",
+        "work_id",
+        "principal_id",
+        "command_id",
+        "idempotency_key",
+        "payload_digest",
+        "state",
+        "record_id",
+        "record_version",
+        "work_version",
+        "commit_sequence",
+        "audit_event_id",
+        "committed_at",
+        "retry_expires_at"
+      ],
+      "additionalProperties": false
+    },
+    "job_state": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "job_state"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "organization_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "job_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "state": {
+          "enum": [
+            "queued",
+            "running",
+            "failed",
+            "done"
+          ]
+        },
+        "claim_sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "result_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "failure_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "kind",
+        "schema_version",
+        "organization_id",
+        "job_id",
+        "state",
+        "claim_sequence"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/app_definition"
+    },
+    {
+      "$ref": "#/$defs/publication"
+    },
+    {
+      "$ref": "#/$defs/saved_work"
+    },
+    {
+      "$ref": "#/$defs/source_revision"
+    },
+    {
+      "$ref": "#/$defs/query_receipt"
+    },
+    {
+      "$ref": "#/$defs/command_request"
+    },
+    {
+      "$ref": "#/$defs/command_outcome"
+    },
+    {
+      "$ref": "#/$defs/job_state"
+    }
+  ]
+}
