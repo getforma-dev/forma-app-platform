@@ -1,0 +1,30 @@
+    Updating crates.io index
+     Locking 4 packages to latest compatible versions
+ Downgrading calamine v0.37.0 -> v0.36.1 (available: v0.37.0)
+      Adding quick-xml v0.41.0
+ Downgrading typed-path v0.13.0 -> v0.12.4
+ Downgrading zip v9.1.3 -> v8.6.0 (available: v9.1.3)
+ Downloading crates ...
+  Downloaded typed-path v0.12.4
+  Downloaded calamine v0.36.1
+  Downloaded zip v8.6.0
+  Downloaded quick-xml v0.41.0
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling typed-path v0.12.4
+   Compiling syn v2.0.119
+   Compiling zip v8.6.0
+   Compiling serde_derive v1.0.228
+   Compiling quick-xml v0.41.0
+   Compiling serde v1.0.228
+   Compiling calamine v0.36.1
+   Compiling quick-xml v0.42.0
+   Compiling parser-guest v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-004/guest)
+error[E0599]: no method named `map_err` found for reference `&str` in the current scope
+   --> guest/src/lib.rs:176:31
+    |
+176 |         let name=entry.name().map_err(|_|"archive_filename_utf8")?.into_owned();let lower=name.to_ascii_lowercase();
+    |                               ^^^^^^^ method not found in `&str`
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `parser-guest` (lib) due to 1 previous error

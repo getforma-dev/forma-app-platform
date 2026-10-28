@@ -1,0 +1,17 @@
+{
+  "scope": "Final source built in the normal exact-toolchain target and a newly empty second target directory, same recorded 1.93.1 toolchain/configuration. No cross-host byte identity claimed.",
+  "command": "CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR=target/reproducibility cargo build --locked -p parser-guest --target wasm32-unknown-unknown --release",
+  "equal": true,
+  "artifacts": [
+    {
+      "path": "target/wasm32-unknown-unknown/release/parser_guest.wasm",
+      "sha256": "aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba",
+      "bytes": 854630
+    },
+    {
+      "path": "target/reproducibility/wasm32-unknown-unknown/release/parser_guest.wasm",
+      "sha256": "aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba",
+      "bytes": 854630
+    }
+  ]
+}

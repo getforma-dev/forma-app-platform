@@ -1,0 +1,74 @@
+{
+  "captured_utc": "2026-10-28T19:55:47.725381+00:00",
+  "status": "local_checks_passed_pending_committed_candidate_review_and_ci",
+  "tests": {
+    "integration": 16,
+    "native_decode_deadline": 1,
+    "bounded_mutations": 256,
+    "failures": 0
+  },
+  "wasm_sha256": "sha256:aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba",
+  "cargo_lock_sha256": "sha256:d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+  "source_identity": "build-metadata.json source_files_sha256; final committed candidate pending parent",
+  "commands": [
+    {
+      "command": "python3 verify_vendor.py",
+      "exit_code": 0,
+      "evidence": "vendor-verification.txt"
+    },
+    {
+      "command": "cargo fmt --all --check",
+      "exit_code": 0,
+      "evidence": "format-final.log"
+    },
+    {
+      "command": "CARGO_BUILD_JOBS=2 cargo build --locked -p parser-guest --target wasm32-unknown-unknown --release",
+      "exit_code": 0,
+      "evidence": "guest-build-final.log"
+    },
+    {
+      "command": "CARGO_BUILD_JOBS=2 cargo clippy --locked --workspace --all-targets -- -D warnings",
+      "exit_code": 0,
+      "evidence": "clippy-final.log"
+    },
+    {
+      "command": "CARGO_BUILD_JOBS=2 cargo clippy --locked -p parser-guest --target wasm32-unknown-unknown -- -D warnings",
+      "exit_code": 0,
+      "evidence": "guest-clippy-final.log"
+    },
+    {
+      "command": "CARGO_BUILD_JOBS=2 cargo test --locked -p parser-host -- --test-threads=1 --nocapture",
+      "exit_code": 0,
+      "evidence": "complete-suite-final.log"
+    },
+    {
+      "command": "CARGO_BUILD_JOBS=2 cargo test --locked -p parser-host --lib -- --test-threads=1 --nocapture",
+      "exit_code": 0,
+      "evidence": "deadline-review-regression.log"
+    },
+    {
+      "command": "/usr/bin/time -l /Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-004/target/debug/deps/qualification-39a1bfb7d4fa8c13 --test-threads=1 --nocapture",
+      "exit_code": 0,
+      "evidence": "qualification-final.log"
+    },
+    {
+      "command": "CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR=target/reproducibility cargo build --locked -p parser-guest --target wasm32-unknown-unknown --release",
+      "exit_code": 0,
+      "evidence": "clean-rebuild.log"
+    }
+  ],
+  "reproducible_same_environment": true,
+  "guest_imports": [],
+  "named_profiles": [
+    "demo",
+    "platform"
+  ],
+  "measured_integration_test_process_max_rss_bytes": 97091584,
+  "limits": [
+    "No production/cloud deployment or full 2vCPU/8GiB envelope qualification.",
+    "2GiB guest memory and 120s wall defaults exercised with smaller failure controls; actual demo expanded cap exercised.",
+    "Inspection output only; confirmed source mapping, Parquet/revision persistence, organization storage and audit remain integration work.",
+    "Locally patched ZIP 9.1.3 manifest; no upstream release claim.",
+    "Bounded mutation smoke corpus, not coverage-guided or exhaustive fuzzing."
+  ]
+}

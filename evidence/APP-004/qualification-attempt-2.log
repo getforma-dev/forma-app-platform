@@ -1,0 +1,54 @@
+   Compiling libc v0.2.191
+   Compiling typed-path v0.12.4
+   Compiling errno v0.3.14
+   Compiling mach2 v0.4.3
+   Compiling rustix v1.1.6
+   Compiling cpufeatures v0.2.17
+   Compiling wasmtime-internal-jit-icache-coherence v36.0.19
+   Compiling sha2 v0.10.9
+   Compiling wasmtime v36.0.19
+   Compiling zip v8.6.0
+   Compiling parser-host v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-004/host)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.42s
+     Running unittests src/lib.rs (target/debug/deps/parser_host-58b88ab3b5e68260)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/parser_host-0ac775432593dd99)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/qualification.rs (target/debug/deps/qualification-f1f0cb5c68a0ce05)
+
+running 10 tests
+test active_content_and_unbounded_metadata_are_refused_before_calamine ... ok
+test actual_guest_fuel_failure_isolated_then_recovery ... ok
+test archive_paths_counts_and_actual_expansion_are_bounded ... ok
+test csv_keeps_literal_text_logical_records_and_physical_spans ... 
+thread 'csv_keeps_literal_text_logical_records_and_physical_spans' (1336015) panicked at host/tests/qualification.rs:26:69:
+assertion `left == right` failed
+  left: Object {"logical_record": Number(2), "physical_line_end": Number(3), "physical_line_start": Number(1), "type": String("csv")}
+ right: Object {"logical_record": Number(2), "physical_line_end": Number(3), "physical_line_start": Number(2), "type": String("csv")}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test demo_actual_compressed_envelope_and_fifty_mib_refusal ... DEMO_BOMB compressed_bytes=4246502 expanded_bytes=57671680 report={"result":{"no_revision_created":true,"reason":"expanded_limit","status":"refused"},"elapsed_ms":0,"memory_bytes":5570560,"fuel_consumed":12722,"wasm_sha256":"sha256:1a568b508388e9ad7d00cb88f30ead5eb7b8d428011c1552f7a26eb767e9b1f2","input_sha256":"sha256:981df24d337091d12c0736e325a07e33e96fc5de1c35fdf0c0fd9234ddb4cd6c","config_sha256":"sha256:db577f075efa896639eb03c6d9d3854848d931ac129e76108f49382b7a3f3110"}
+ok
+test deterministic_mutation_fuzz_corpus_stays_inside_wasm_and_recovers ... FUZZ 256 deterministic mutation cases; seed=0x7a614c32; two actual parser formats; memory/fuel/wall caps active
+ok
+test infinite_loop_deadline_and_memory_growth_trap_without_killing_host ... ok
+test resource_profiles_have_explicit_lower_only_controls ... ok
+test runtime_refuses_system_imports ... ok
+test selected_sheet_literals_preserve_exact_numbers_and_coordinates ... ok
+
+failures:
+
+failures:
+    csv_keeps_literal_text_logical_records_and_physical_spans
+
+test result: FAILED. 9 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.19s
+
+error: test failed, to rerun pass `-p parser-host --test qualification`

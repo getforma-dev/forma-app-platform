@@ -1,0 +1,44 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running unittests src/lib.rs (target/debug/deps/parser_host-2febe6888662d114)
+
+running 1 test
+test tests::native_decode_finishing_after_deadline_cannot_return_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+     Running unittests src/main.rs (target/debug/deps/parser_host-ef91781f5440faaa)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/qualification.rs (target/debug/deps/qualification-39a1bfb7d4fa8c13)
+
+running 16 tests
+test active_content_and_unbounded_metadata_are_refused_before_calamine ... ok
+test actual_guest_fuel_and_deadline_failures_isolated_then_recovery ... ok
+test actual_guest_memory_and_output_failure_are_isolated ... ok
+test archive_advisory_regressions_are_refused_before_dependency_read ... ok
+test archive_paths_counts_and_actual_expansion_are_bounded ... ok
+test csv_keeps_literal_text_logical_records_and_physical_spans ... ok
+test demo_actual_compressed_envelope_and_fifty_mib_refusal ... DEMO_BOMB compressed_bytes=4248454 expanded_bytes=57673592 report={"result":{"no_revision_created":true,"reason":"expanded_limit","status":"refused"},"elapsed_ms":227,"memory_bytes":5570560,"fuel_consumed":68023093,"wasm_sha256":"sha256:aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba","interface_imports":[],"resource_limits":{"fuel":5000000000,"guest_linear_memory_bytes":2147483648,"input_bytes":5242880,"output_bytes":134217728,"wall_clock_ms":120000},"input_sha256":"sha256:ea828becd1d2e8ff3177faae75a86b8acc70c7a42b9284ce8a1abdbb286b3d0a","config_sha256":"sha256:db577f075efa896639eb03c6d9d3854848d931ac129e76108f49382b7a3f3110"}
+ok
+test deterministic_mutation_fuzz_corpus_stays_inside_wasm_and_recovers ... FUZZ 256 deterministic mutation cases; seed=0x7a614c32; two actual parser formats; memory/fuel/wall caps active
+ok
+test host_limit_overrides_cannot_expand_the_admitted_envelope ... ok
+test infinite_loop_deadline_and_memory_growth_trap_without_killing_host ... ok
+test metadata_counts_and_selection_need_actual_validated_content ... ok
+test resource_profiles_have_explicit_lower_only_controls ... ok
+test review_duplicate_cell_values_are_refused_before_literal_selection ... ok
+test review_zero_exponents_are_canonical_in_actual_xlsx ... ok
+test runtime_refuses_system_imports ... ok
+test selected_sheet_literals_preserve_exact_numbers_and_coordinates ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.82s
+
+   Doc-tests parser_host
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

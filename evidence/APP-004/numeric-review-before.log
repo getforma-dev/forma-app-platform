@@ -1,0 +1,28 @@
+   Compiling parser-host v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-004/host)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.13s
+     Running tests/qualification.rs (target/debug/deps/qualification-39a1bfb7d4fa8c13)
+
+running 2 tests
+test review_duplicate_cell_values_are_refused_before_literal_selection ... 
+thread 'review_duplicate_cell_values_are_refused_before_literal_selection' (1473757) panicked at host/tests/qualification.rs:36:5:
+assertion `left == right` failed: {"contract_edition":"impl-2026-10-28.1","parser_version":1,"profile":"demo","result":{"available_sheets":["Inventory","Other"],"cells":[{"coordinate":{"column":1,"row":1,"sheet":"Inventory","type":"xlsx"},"interpretation":"literal","original":"α & team","value":{"type":"text","value":"α & team"}},{"coordinate":{"column":2,"row":1,"sheet":"Inventory","type":"xlsx"},"interpretation":"unit_unconfirmed","original":"9007199254740993","value":{"type":"integer","unit":"unconfirmed","value":"9007199254740993"}},{"coordinate":{"column":3,"row":1,"sheet":"Inventory","type":"xlsx"},"interpretation":"literal","original":true,"value":{"type":"boolean","value":true}},{"coordinate":{"column":1,"row":2,"sheet":"Inventory","type":"xlsx"},"interpretation":"literal","original":"literal =SUM(A1)","value":{"type":"text","value":"literal =SUM(A1)"}},{"coordinate":{"column":2,"row":2,"sheet":"Inventory","type":"xlsx"},"interpretation":"unit_unconfirmed","original":"999","value":{"type":"integer","unit":"unconfirmed","value":"999"}},{"coordinate":{"column":3,"row":2,"sheet":"Inventory","type":"xlsx"},"interpretation":"unit_unconfirmed","original":"-1.25e2","value":{"type":"integer","unit":"unconfirmed","value":"-125"}}],"date_epoch_1904":false,"expanded_bytes":1922,"format":"xlsx","formula_policy":"reject","mapping_status":"inspection_required","rows":2,"selected_sheet":"Inventory"},"status":"parsed"}
+  left: String("parsed")
+ right: "refused"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test review_zero_exponents_are_canonical_in_actual_xlsx ... 
+thread 'review_zero_exponents_are_canonical_in_actual_xlsx' (1475022) panicked at host/tests/qualification.rs:513:9:
+assertion `left == right` failed
+  left: String("0000")
+ right: "0"
+FAILED
+
+failures:
+
+failures:
+    review_duplicate_cell_values_are_refused_before_literal_selection
+    review_zero_exponents_are_canonical_in_actual_xlsx
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 14 filtered out; finished in 11.42s
+
+error: test failed, to rerun pass `-p parser-host --test qualification`

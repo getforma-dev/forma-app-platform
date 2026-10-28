@@ -1,0 +1,166 @@
+{
+  "result": {
+    "contract_edition": "impl-2026-10-28.1",
+    "parser_version": 1,
+    "profile": "demo",
+    "result": {
+      "cells": [
+        {
+          "column": 1,
+          "coordinate": {
+            "logical_record": 1,
+            "physical_line_end": 1,
+            "physical_line_start": 1,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "name",
+          "value": {
+            "type": "text",
+            "value": "name"
+          }
+        },
+        {
+          "column": 2,
+          "coordinate": {
+            "logical_record": 1,
+            "physical_line_end": 1,
+            "physical_line_start": 1,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "note",
+          "value": {
+            "type": "text",
+            "value": "note"
+          }
+        },
+        {
+          "column": 3,
+          "coordinate": {
+            "logical_record": 1,
+            "physical_line_end": 1,
+            "physical_line_start": 1,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "large",
+          "value": {
+            "type": "text",
+            "value": "large"
+          }
+        },
+        {
+          "column": 1,
+          "coordinate": {
+            "logical_record": 2,
+            "physical_line_end": 3,
+            "physical_line_start": 2,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "α",
+          "value": {
+            "type": "text",
+            "value": "α"
+          }
+        },
+        {
+          "column": 2,
+          "coordinate": {
+            "logical_record": 2,
+            "physical_line_end": 3,
+            "physical_line_start": 2,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "two\nlines",
+          "value": {
+            "type": "text",
+            "value": "two\nlines"
+          }
+        },
+        {
+          "column": 3,
+          "coordinate": {
+            "logical_record": 2,
+            "physical_line_end": 3,
+            "physical_line_start": 2,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "9007199254740993",
+          "value": {
+            "type": "text",
+            "value": "9007199254740993"
+          }
+        },
+        {
+          "column": 1,
+          "coordinate": {
+            "logical_record": 3,
+            "physical_line_end": 4,
+            "physical_line_start": 4,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "=SUM(A1)",
+          "value": {
+            "type": "text",
+            "value": "=SUM(A1)"
+          }
+        },
+        {
+          "column": 2,
+          "coordinate": {
+            "logical_record": 3,
+            "physical_line_end": 4,
+            "physical_line_start": 4,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "quoted \"text\"",
+          "value": {
+            "type": "text",
+            "value": "quoted \"text\""
+          }
+        },
+        {
+          "column": 3,
+          "coordinate": {
+            "logical_record": 3,
+            "physical_line_end": 4,
+            "physical_line_start": 4,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "42",
+          "value": {
+            "type": "text",
+            "value": "42"
+          }
+        }
+      ],
+      "csv_dialect": "csv-core-0.1.13-permissive-utf8",
+      "format": "csv",
+      "formula_policy": "reject",
+      "mapping_status": "inspection_required",
+      "rows": 3
+    },
+    "status": "parsed"
+  },
+  "elapsed_ms": 1,
+  "memory_bytes": 1376256,
+  "fuel_consumed": 1127453,
+  "wasm_sha256": "sha256:aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba",
+  "interface_imports": [],
+  "resource_limits": {
+    "fuel": 5000000000,
+    "guest_linear_memory_bytes": 2147483648,
+    "input_bytes": 10485760,
+    "output_bytes": 134217728,
+    "wall_clock_ms": 120000
+  },
+  "input_sha256": "sha256:7a3c349a1a025e56f8eb61007319222a3853560f9a346260eb64f3ba587e88d0",
+  "config_sha256": "sha256:27dbe0880d995f2a75cae9aa1cc603264dc9d62e575dca5118c393c661a0d3d5"
+}

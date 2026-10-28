@@ -1,0 +1,1 @@
+/usr/bin/time -l /Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-004/target/debug/deps/qualification-39a1bfb7d4fa8c13 --test-threads=1 --nocapture

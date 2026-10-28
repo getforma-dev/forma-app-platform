@@ -1,0 +1,42 @@
+   Compiling zip v9.1.3 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-004/vendor/zip-9.1.3)
+   Compiling parser-host v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-004/host)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.28s
+     Running unittests src/lib.rs (target/debug/deps/parser_host-2febe6888662d114)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/parser_host-ef91781f5440faaa)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/qualification.rs (target/debug/deps/qualification-39a1bfb7d4fa8c13)
+
+running 13 tests
+test active_content_and_unbounded_metadata_are_refused_before_calamine ... ok
+test actual_guest_fuel_failure_isolated_then_recovery ... ok
+test actual_guest_memory_and_output_failure_are_isolated ... ok
+test archive_advisory_regressions_are_refused_before_dependency_read ... ok
+test archive_paths_counts_and_actual_expansion_are_bounded ... ok
+test csv_keeps_literal_text_logical_records_and_physical_spans ... ok
+test demo_actual_compressed_envelope_and_fifty_mib_refusal ... DEMO_BOMB compressed_bytes=4246502 expanded_bytes=57671680 report={"result":{"no_revision_created":true,"reason":"expanded_limit","status":"refused"},"elapsed_ms":7,"memory_bytes":5570560,"fuel_consumed":67956209,"wasm_sha256":"sha256:9d790b2bdf51e79eb52d62d4050bdae6a2d765bf302c2f3457a85a1c26d677e7","input_sha256":"sha256:981df24d337091d12c0736e325a07e33e96fc5de1c35fdf0c0fd9234ddb4cd6c","config_sha256":"sha256:db577f075efa896639eb03c6d9d3854848d931ac129e76108f49382b7a3f3110"}
+ok
+test deterministic_mutation_fuzz_corpus_stays_inside_wasm_and_recovers ... FUZZ 256 deterministic mutation cases; seed=0x7a614c32; two actual parser formats; memory/fuel/wall caps active
+ok
+test infinite_loop_deadline_and_memory_growth_trap_without_killing_host ... ok
+test metadata_counts_and_selection_need_actual_validated_content ... ok
+test resource_profiles_have_explicit_lower_only_controls ... ok
+test runtime_refuses_system_imports ... ok
+test selected_sheet_literals_preserve_exact_numbers_and_coordinates ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.23s
+
+   Doc-tests parser_host
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,9 @@
+   Compiling parser-host v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-004/host)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.97s
+     Running unittests src/lib.rs (target/debug/deps/parser_host-2febe6888662d114)
+
+running 1 test
+test tests::native_decode_finishing_after_deadline_cannot_return_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+

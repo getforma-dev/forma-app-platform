@@ -1,0 +1,3 @@
+# Read-only WASM parser has no entropy or JS interface. Scope only this target.
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="unsupported"']

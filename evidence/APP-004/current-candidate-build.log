@@ -1,0 +1,35 @@
+    Updating crates.io index
+     Locking 7 packages to latest compatible versions
+    Updating calamine v0.36.1 -> v0.37.0
+      Adding cfg_aliases v0.2.2
+      Adding getrandom v0.4.3
+      Adding nix v0.31.3
+      Adding r-efi v6.0.0
+      Adding typed-path v0.13.0
+      Adding zip v9.1.3 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-004/vendor/zip-9.1.3)
+   Compiling getrandom v0.4.3
+   Compiling typed-path v0.13.0
+   Compiling debug_unsafe v0.1.4
+   Compiling atoi_simd v0.18.1
+   Compiling zip v9.1.3 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-004/vendor/zip-9.1.3)
+   Compiling serde_json v1.0.145
+   Compiling serde v1.0.228
+   Compiling quick-xml v0.42.0
+   Compiling codepage v0.1.3
+   Compiling byteorder v1.5.0
+   Compiling typed-path v0.12.4
+   Compiling itoa v1.0.18
+   Compiling fast-float2 v0.2.4
+   Compiling ryu v1.0.23
+   Compiling zip v8.6.0
+   Compiling calamine v0.37.0
+   Compiling csv-core v0.1.13
+   Compiling parser-guest v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-004/guest)
+error[E0599]: no method named `map_err` found for reference `&str` in the current scope
+   --> guest/src/lib.rs:440:33
+    |
+440 |         let name = entry.name().map_err(|_|"archive_filename")?.to_string();
+    |                                 ^^^^^^^ method not found in `&str`
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `parser-guest` (lib) due to 1 previous error

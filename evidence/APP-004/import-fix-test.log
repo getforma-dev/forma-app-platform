@@ -1,0 +1,30 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running unittests src/lib.rs (target/debug/deps/parser_host-0d83d4888483c6cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/parser_host-188a26e7cd098b38)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/qualification.rs (target/debug/deps/qualification-eb08f935a31b4def)
+
+running 1 test
+test selected_sheet_literals_preserve_exact_numbers_and_coordinates ... 
+thread 'selected_sheet_literals_preserve_exact_numbers_and_coordinates' (1325019) panicked at host/tests/qualification.rs:8:114:
+actual guest has no imports: forbidden_import: __wbindgen_placeholder__::__wbindgen_describe
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    selected_sheet_literals_preserve_exact_numbers_and_coordinates
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 10.22s
+
+error: test failed, to rerun pass `-p parser-host --test qualification`

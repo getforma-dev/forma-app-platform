@@ -280,11 +280,11 @@
     {
       "id": "APP-004",
       "title": "Qualify the WASM CSV/XLSX parser boundary",
-      "path": "2-in-progress/APP-004.md",
+      "path": "3-in-review/APP-004.md",
       "Field": "Value",
       "---": "---",
       "Epic": "ING",
-      "Status": "In progress",
+      "Status": "In review",
       "Priority": "P0",
       "Type": "Spike",
       "Sprint": "S01",

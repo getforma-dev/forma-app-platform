@@ -1,0 +1,16 @@
+{
+  "equal": false,
+  "artifacts": [
+    {
+      "path": "target/wasm32-unknown-unknown/release/parser_guest.wasm",
+      "sha256": "8119d381fc37f563fac85888a0eb2ea280f15084fbe81600263c04bf73b22ccb",
+      "bytes": 854310
+    },
+    {
+      "path": "target/reproducibility/wasm32-unknown-unknown/release/parser_guest.wasm",
+      "sha256": "2ed216182cacd5a592ab906c5ece45d62687be16eab092873ac846b958f89bc9",
+      "bytes": 854115
+    }
+  ],
+  "finding": "The normal target cache had artifacts built with the stable alias before rust-toolchain.toml existed. Although rustc versions matched, the installed wasm std libraries embedded different source paths. Cargo did not invalidate those cached objects. Rebuild the entire owned wasm target cache under the exact 1.93.1 toolchain and compare again."
+}
