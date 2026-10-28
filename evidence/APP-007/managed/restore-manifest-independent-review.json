@@ -1,0 +1,19 @@
+{
+  "reviewer": "GenUI root, independent of validator author",
+  "recorded_at_utc": "2026-10-28T22:46:53.674666+00:00",
+  "source_sha256": "1523f47de2899801486663e976151e436ed01fa8ee916b95d2521aab551758d4",
+  "verdict": "accepted for bounded synthetic source/restore manifest trial",
+  "checks": [
+    "AST parsing and actual unarmed refusal before importing database driver or reading the password",
+    "Explicit uid, opt-in, database/user/port/region and packaged-CA gates",
+    "Verified TLS plus server SSL observation; read-only repeatable-read transaction and unconditional rollback",
+    "Fixed catalog queries scoped to the five foundation roles and metadata; OIDs mapped to names",
+    "Canonical row/object sorting and digest exclude endpoints, secrets, connection-specific data and timestamps",
+    "No raw exception text or password catalog access; connection/process/statement bounds"
+  ],
+  "limits": [
+    "Actual RDS SQL execution and equality across a restored snapshot are unproved.",
+    "This verifies the initial foundation only; APP-053 owns later application-data/audit restore.",
+    "Use only the existing migration execution-secret channel and record exact source/restore identities before invoking."
+  ]
+}

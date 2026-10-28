@@ -1,0 +1,28 @@
+foundation	Verify migration as a non-superuser PostgreSQL administrator	﻿2026-10-28T22:40:56.8183973Z ##[group]Run python3 app/runtime/qualify_migration.py --output evidence/APP-007/migration-repair/ci-postgresql16.json
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:40:56.8185439Z [36;1mpython3 app/runtime/qualify_migration.py --output evidence/APP-007/migration-repair/ci-postgresql16.json[0m
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:40:56.8216888Z shell: /usr/bin/bash -e {0}
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:40:56.8217351Z env:
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:40:56.8217824Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:40:56.8218858Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:40:56.8219600Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:40:56.8220246Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:40:56.8220926Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:40:56.8221573Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:40:56.8222129Z ##[endgroup]
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4585217Z Traceback (most recent call last):
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4589610Z   File "/home/runner/work/forma-app-platform/forma-app-platform/app/runtime/qualify_migration.py", line 152, in <module>
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4609868Z     result = qualify(args.image)
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4610801Z              ^^^^^^^^^^^^^^^^^^^
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4613932Z   File "/home/runner/work/forma-app-platform/forma-app-platform/app/runtime/qualify_migration.py", line 61, in qualify
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4622652Z     report["server_version"] = sql("SHOW server_version;", user="postgres", database="postgres").stdout.strip()
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4623891Z                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4625323Z   File "/home/runner/work/forma-app-platform/forma-app-platform/app/runtime/qualify_migration.py", line 34, in sql
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4626563Z     return command(args, source=source, check=check)
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4648176Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4652829Z   File "/home/runner/work/forma-app-platform/forma-app-platform/app/runtime/qualify_migration.py", line 25, in command
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4654299Z     raise RuntimeError(f"Command failed: {args!r}\n{result.stderr}")
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4656805Z RuntimeError: Command failed: ['docker', 'exec', '-i', 'genui-app007-migration-74ea7d02d788', 'psql', '--no-psqlrc', '--set=ON_ERROR_STOP=1', '--set=VERBOSITY=verbose', '--tuples-only', '--no-align', '--username', 'postgres', '--dbname', 'postgres', '--file=-', '--single-transaction']
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4659607Z psql: error: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: No such file or directory
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4660946Z 	Is the server running locally and accepting connections on that socket?
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4661637Z 
+foundation	Verify migration as a non-superuser PostgreSQL administrator	2026-10-28T22:41:06.4705101Z ##[error]Process completed with exit code 1.

@@ -1,0 +1,462 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-28T22:44:33.414085+00:00",
+  "reviewer": "Independent Codex /root/managed_sql_trial",
+  "scope": "Local PostgreSQL migration-harness readiness repair",
+  "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "source_sha256": "b8a28d82f47968bea1e6c6d6b4d2c4f2a8c8405ea9193d0999388bb9b978fdbe",
+  "ci_failure_sha256": "9c0525743af198ccb62608fcd59e6555081532929908b9ed061231696e4b8086",
+  "base_commit": "45dd49f1314d9cd0405e4471dab110123a98185b",
+  "container": "genui-app007-tcp-review-8db5830f08d5",
+  "passed": true,
+  "managed_acceptance": false,
+  "aws_calls_performed": false,
+  "commands": [
+    {
+      "argv": [
+        "docker",
+        "run",
+        "--detach",
+        "--rm",
+        "--name",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "--network=none",
+        "--memory=512m",
+        "--cpus=1",
+        "--tmpfs=/var/lib/postgresql/data:rw,noexec,nosuid,size=256m",
+        "--env=POSTGRES_HOST_AUTH_METHOD=trust",
+        "--mount",
+        "type=bind,src=/var/folders/rh/_w3bj3lx0fg0z2vvj9wkbvmr0000gn/T/app007-tcp-readiness-kzk6ud3o/001-delay.sql,dst=/docker-entrypoint-initdb.d/001-delay.sql,readonly",
+        "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "inspect",
+        "genui-app007-tcp-review-8db5830f08d5"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "cat",
+        "/usr/local/bin/docker-entrypoint.sh"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "psql",
+        "--no-psqlrc",
+        "--tuples-only",
+        "--no-align",
+        "--username=postgres",
+        "--dbname=postgres",
+        "--command=SHOW listen_addresses;"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-tcp-review-8db5830f08d5",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--tuples-only",
+        "--no-align",
+        "--username=postgres",
+        "--dbname=postgres",
+        "--file=-"
+      ],
+      "stdin": "SHOW server_version;\nSHOW listen_addresses;\nSELECT 1;\n"
+    },
+    {
+      "argv": [
+        "docker",
+        "logs",
+        "genui-app007-tcp-review-8db5830f08d5"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "rm",
+        "--force",
+        "--volumes",
+        "genui-app007-tcp-review-8db5830f08d5"
+      ]
+    },
+    {
+      "argv": [
+        "docker",
+        "inspect",
+        "genui-app007-tcp-review-8db5830f08d5"
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "phase": "temporary_init_server",
+      "elapsed_seconds": 1.074,
+      "unix_ready_exit": 0,
+      "tcp_ready_exit": 2,
+      "listen_addresses": ""
+    },
+    {
+      "phase": "final_server",
+      "elapsed_seconds": 4.088,
+      "unix_ready_exit": 0,
+      "tcp_ready_exit": 0,
+      "server_version": "16.13 (Debian 16.13-1.pgdg13+1)",
+      "listen_addresses": "*",
+      "subsequent_socket_query": 1
+    }
+  ],
+  "fixture_sql": "SELECT 'review_init_fixture_begin';\nSELECT pg_sleep(3);\nSELECT 'review_init_fixture_end';\n",
+  "isolation": {
+    "network_mode": "none",
+    "port_bindings": {},
+    "tmpfs": {
+      "/var/lib/postgresql/data": "rw,noexec,nosuid,size=256m"
+    },
+    "memory_bytes": 536870912,
+    "nano_cpus": 1000000000
+  },
+  "entrypoint_sha256": "aa35cfa675a64ac7687909c83a98798c9ff72ab3855722a0d9643e48408b6c12",
+  "entrypoint_tcp_disabled_line": "set -- \"$@\" -c listen_addresses='' -p \"${PGPORT:-5432}\"",
+  "init_fixture_executed": true,
+  "cleanup": {
+    "remove_exit_code": 0,
+    "subsequent_inspect_exit_code": 1,
+    "container_removed": true,
+    "fixture_directory_removed": true
+  },
+  "disposition": "accepted_for_ci_retry",
+  "source_review": {
+    "passed": true,
+    "only_behavioral_change": "Add --host=127.0.0.1 to pg_isready in the existing bounded startup loop.",
+    "baseline_equivalence_check": "Removing the two explanatory comments and the single new host argument from current source exactly reproduces HEAD:app/runtime/qualify_migration.py.",
+    "syntax_check": "Python ast.parse passed.",
+    "secondary_read_only_review": "Separate subagent found no blocker; no source edits or Docker/AWS calls."
+  },
+  "limitations": [
+    "This checks the local test-fixture startup gate only; it does not qualify managed PostgreSQL, production images, application runtime or infrastructure.",
+    "The prior CI failure occurred on the first version query before migration; repaired candidate CI remains required.",
+    "The controlled experiment ran on local Linux/ARM64 Docker with the exact pinned PostgreSQL16.13 image. The retained GitHub failure ran on x64; final CI must validate that environment.",
+    "The delayed initialization fixture deliberately widens the temporary-server window; it does not claim identical timing to CI.",
+    "Root is independently rerunning the existing full migration harness; this reviewer did not repeat that campaign.",
+    "Network none still permits loopback inside this container. No host port, external network, AWS call or credential was used.",
+    "A later independent server failure remains possible after readiness; this patch fixes the observed initialization transition rather than guaranteeing future availability."
+  ]
+}

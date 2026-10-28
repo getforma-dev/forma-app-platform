@@ -53,7 +53,9 @@ def qualify(image):
                  "--memory=512m", "--cpus=1", "--tmpfs=/var/lib/postgresql/data:rw,noexec,nosuid,size=256m",
                  "--env=POSTGRES_HOST_AUTH_METHOD=trust", image])
         for _ in range(60):
-            if command(["docker", "exec", name, "pg_isready", "--username=postgres"], check=False).returncode == 0:
+            # The image's temporary initialization server accepts Unix-socket
+            # connections, then stops. Only the final server listens on TCP.
+            if command(["docker", "exec", name, "pg_isready", "--host=127.0.0.1", "--username=postgres"], check=False).returncode == 0:
                 break
             time.sleep(0.25)
         else:
