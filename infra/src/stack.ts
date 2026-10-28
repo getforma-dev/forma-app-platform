@@ -190,7 +190,9 @@ export class GenuiFoundation extends Stack {
     new CfnOutput(this, 'ServiceName', { value: service.serviceName });
     new CfnOutput(this, 'SelectedIngressMode', { value: ingressMode.valueAsString });
     new CfnOutput(this, 'ScheduledExpiryUtc', { value: expiresAt.valueAsString });
-    new CfnOutput(this, 'DeploymentExpiryScheduleArn', { value: expiry.attrArn });
+    // Ref returns each generated Name. Avoid the observed grouped-schedule
+    // GetAtt Arn lookup failure; preflight still verifies this ARN live.
+    new CfnOutput(this, 'DeploymentExpiryScheduleArn', { value: Fn.join('', ['arn:', this.partition, ':scheduler:', this.region, ':', this.account, ':schedule/', expiryGroup.ref, '/', expiry.ref]) });
     new CfnOutput(this, 'DeploymentExpiryGroup', { value: expiryGroup.ref });
     new CfnOutput(this, 'DeploymentExpiryRoleArn', { value: expiryRole.roleArn });
     new CfnOutput(this, 'LoadBalancerDnsName', { value: alb.loadBalancerDnsName });

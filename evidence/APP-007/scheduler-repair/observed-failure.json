@@ -1,0 +1,46 @@
+{
+  "scope": "Sanitized subset of the first count-zero CloudFormation rollback events",
+  "source": "Private operator evidence .cache/operations/beta/initial-rollback-events.json; not copied into Git",
+  "source_sha256": "66883d29ce0c8273e9157c1e345e2ec19fdc64c82cc05743749ef0d66e3f999a",
+  "observed_ecs_service_desired_counts": [
+    "0"
+  ],
+  "events": [
+    {
+      "LogicalResourceId": "ExpiryScheduleGroup",
+      "ResourceType": "AWS::Scheduler::ScheduleGroup",
+      "ResourceStatus": "CREATE_COMPLETE",
+      "Timestamp": "2026-10-28T22:16:46.535000+00:00"
+    },
+    {
+      "LogicalResourceId": "DeploymentExpiry",
+      "ResourceType": "AWS::Scheduler::Schedule",
+      "ResourceStatus": "CREATE_COMPLETE",
+      "Timestamp": "2026-10-28T22:26:35.872000+00:00"
+    },
+    {
+      "LogicalResourceId": "GenuiSyntheticFoundation",
+      "ResourceType": "AWS::CloudFormation::Stack",
+      "ResourceStatus": "ROLLBACK_IN_PROGRESS",
+      "Timestamp": "2026-10-28T22:26:51.633000+00:00",
+      "ResourceStatusReason": "Unable to retrieve Arn attribute for AWS::Scheduler::Schedule, with error message Resource of type 'AWS::Scheduler::Schedule' with identifier 'GenuiSyntheticFoundation-DeploymentExpiry-5WAIY41RP77J' was not found.. Rollback requested by user."
+    },
+    {
+      "LogicalResourceId": "DeploymentExpiry",
+      "ResourceType": "AWS::Scheduler::Schedule",
+      "ResourceStatus": "DELETE_COMPLETE",
+      "Timestamp": "2026-10-28T22:26:54.808000+00:00"
+    },
+    {
+      "LogicalResourceId": "ExpiryScheduleGroup",
+      "ResourceType": "AWS::Scheduler::ScheduleGroup",
+      "ResourceStatus": "DELETE_COMPLETE",
+      "Timestamp": "2026-10-28T22:27:21.133000+00:00"
+    }
+  ],
+  "limits": "Only selected event identity/type/status/timestamps/reason and ECS DesiredCount are retained. No full ResourceProperties, parameters, operator IP, secret reference or credential value is retained. No live AWS request was made by this repair author.",
+  "related_get_schedule_evidence": {
+    "path": "evidence/APP-007/managed/initial-scheduler-lookup.json",
+    "sha256": "40eed5c94b082ba640d25d1179a15c3cfe2dc4fc2e6e0b51f47c16c22a2d4c31"
+  }
+}

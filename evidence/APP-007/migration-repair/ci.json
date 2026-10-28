@@ -1,0 +1,71 @@
+{
+  "source_commit": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+  "observed_at_utc": "2026-10-28T22:35:09.103487+00:00",
+  "scope": "Source CI including actual PostgreSQL16.13 migration regression and local image; no managed acceptance",
+  "runs": [
+    {
+      "conclusion": "success",
+      "databaseId": 40780085452,
+      "headSha": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40780085452",
+      "workflowName": "Bounded query qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40780085374,
+      "headSha": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40780085374",
+      "workflowName": "Auth consumer qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40780085351,
+      "headSha": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40780085351",
+      "workflowName": "Planning integrity"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40780085402,
+      "headSha": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40780085402",
+      "workflowName": "Contract qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40780085423,
+      "headSha": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40780085423",
+      "workflowName": "Released baseline"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40780085399,
+      "headSha": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40780085399",
+      "workflowName": "Foundation preparation"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40780085368,
+      "headSha": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40780085368",
+      "workflowName": "Published canvas consumer"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40780085514,
+      "headSha": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40780085514",
+      "workflowName": "Parser qualification"
+    }
+  ]
+}

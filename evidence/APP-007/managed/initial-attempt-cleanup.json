@@ -1,0 +1,79 @@
+{
+  "scope": "Initial empty GenUI attempt cleanup; shared bootstrap, certificate and ECR preserved",
+  "observed_at_utc": "2026-10-28T22:37:11.980515+00:00",
+  "stack_id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GenuiSyntheticFoundation/19ff2560-d31d-11f1-b9e5-0afffa733a75",
+  "no_app_task_or_migration_was_invoked": true,
+  "database_and_bucket_empty_by_construction_or_inventory": true,
+  "checks": [
+    {
+      "check": "stack",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "check": "database",
+      "passed": true,
+      "returncode": 254
+    },
+    {
+      "check": "database-backups",
+      "passed": true,
+      "returncode": 254
+    },
+    {
+      "check": "subnet-group",
+      "passed": true,
+      "returncode": 254
+    },
+    {
+      "check": "parameter-group",
+      "passed": true,
+      "returncode": 254
+    },
+    {
+      "check": "empty-bucket",
+      "passed": true,
+      "returncode": 254
+    },
+    {
+      "check": "empty-log-group",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "check": "migration-secret-recovery",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "check": "northstar-key-recovery",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "check": "canary-key-recovery",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "check": "vpc",
+      "passed": true,
+      "returncode": 254
+    },
+    {
+      "check": "load-balancer",
+      "passed": true,
+      "returncode": 254
+    },
+    {
+      "check": "schedule-group",
+      "passed": true,
+      "returncode": 254
+    }
+  ],
+  "passed": true,
+  "limits": [
+    "Two tenant storage keys and the generated migration secret are in recoverable pending-deletion state for seven days.",
+    "This is cleanup of a failed creation; no successful managed runtime, restore or scheduled-stop acceptance is claimed."
+  ]
+}

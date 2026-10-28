@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-28T22:34:34.892763+00:00",
+  "scope": "APP-007 Scheduler ARN output repair: local source qualification only",
+  "base_commit": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+  "passed": true,
+  "managed_deployment_passed": false,
+  "independent_review": "pending; this report was written by the repair author",
+  "source_sha256": {
+    "infra/src/stack.ts": "a95100ace186a4f2f95d23a77440f4c6ede412670d10b3b5792ed416443f9526",
+    "infra/test/security.test.ts": "60e608391782919d9c17d86ff1800b0138d465e4d8c20bb39d3cf19a05038d3a",
+    "infra/test/preflight_test.py": "21b6b483bf295f78b3c77dc7f854f4235c9cb1b2073284b0a3e574bd82bbb0c6"
+  },
+  "context_sha256": {
+    "infra/scripts/preflight.py": "14493d0ccd105bdf8c05c2c95132f6e188a7aed6f60c726807d0872e7b0bf1fb",
+    "infra/package.json": "4c06daa14e04b8f79f13286033628a212ad24a32ca9d7fa01595780b5861b5fd",
+    "infra/package-lock.json": "cf171e2d3fa5064c60a9896a788ae84b38cc24b0c67d21463fd77c1361ee839a",
+    "infra/src/main.ts": "3080fe33f5d266dbbba63db823b2195b83bcdf3aea3f7f80a9530dd8161417d8"
+  },
+  "observed_failure_sha256": "ef9124d6cd67f24b1d85921ac93970c2de2c86cdc4bcf64098763e60e386281d",
+  "environment": {
+    "node": "22.21.0",
+    "npm": "11.6.2",
+    "python": "3.11.0",
+    "aws_cdk_lib": "2.275.0",
+    "aws_cdk_cli": "2.1146.1"
+  },
+  "commands": [
+    {
+      "cwd": "infra",
+      "command": "./node_modules/.bin/tsx --test --test-name-pattern='expiry schedule ARN' test/security.test.ts",
+      "source_state": "New focused test with original expiry.attrArn implementation",
+      "exit_code": 1,
+      "expected_failure": true,
+      "result": "1 test failed: output still contains Fn::GetAtt (true !== false)."
+    },
+    {
+      "cwd": "infra",
+      "command": "npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "cwd": "infra",
+      "command": "npm test",
+      "source_state": "Final repaired source and tests",
+      "exit_code": 0,
+      "node_subtests": 13,
+      "python_preflight_tests_via_wrapper": 15,
+      "result": "All passed; includes exact group/name lookup, schedule ARN mismatch and group mismatch denial cases."
+    },
+    {
+      "cwd": "infra",
+      "command": "python3 -m unittest discover -s test -p '*_test.py' -v",
+      "source_state": "Repair and ARN-output test applied; before adding the final two preflight identity mismatch cases (which were then run by final npm test)",
+      "exit_code": 0,
+      "tests": 15
+    },
+    {
+      "cwd": "infra",
+      "command": "env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u AWS_PROFILE -u AWS_DEFAULT_PROFILE AWS_CONFIG_FILE=/dev/null AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_EC2_METADATA_DISABLED=true CDK_DISABLE_VERSION_CHECK=true npm run synth -- --quiet --output /tmp/genui-app007-scheduler-repair-synth",
+      "exit_code": 0,
+      "result": "Environment-agnostic CDK synth with --no-lookups passed; no deployment or credential-file read."
+    },
+    {
+      "cwd": "infra",
+      "command": "node --input-type=module - (before/after template comparison program on standard input)",
+      "exit_code": 0,
+      "result": "Compile baseline Git stack and current stack with the same TypeScript settings, instantiate separate Apps with identical GenuiSyntheticFoundation stack IDs, synthesize Template.fromStack, remove only DeploymentExpiryScheduleArn output from each and assert.deepEqual the remainder."
+    },
+    {
+      "cwd": "repository root",
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "template_comparison": {
+    "only_changed_path": "Outputs.DeploymentExpiryScheduleArn.Value",
+    "before": {
+      "Fn::GetAtt": [
+        "DeploymentExpiry",
+        "Arn"
+      ]
+    },
+    "after": {
+      "Fn::Join": [
+        "",
+        [
+          "arn:",
+          {
+            "Ref": "AWS::Partition"
+          },
+          ":scheduler:",
+          {
+            "Ref": "AWS::Region"
+          },
+          ":",
+          {
+            "Ref": "AWS::AccountId"
+          },
+          ":schedule/",
+          {
+            "Ref": "ExpiryScheduleGroup"
+          },
+          "/",
+          {
+            "Ref": "DeploymentExpiry"
+          }
+        ]
+      ]
+    },
+    "all_other_template_fields_unchanged": true,
+    "synthesized_template_sha256": "6785203e356feedf77f649fab009a184c4e6923bb11132d745cfeeaba1f18276"
+  },
+  "official_contracts": {
+    "schedule_ref": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-scheduler-schedule.html#aws-resource-scheduler-schedule-return-values",
+    "group_ref": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-scheduler-schedulegroup.html#aws-resource-scheduler-schedulegroup-return-values",
+    "arn_format": "https://docs.aws.amazon.com/service-authorization/latest/reference/list_scheduler.html",
+    "group_trust": "https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html",
+    "get_schedule_group": "https://docs.aws.amazon.com/scheduler/latest/APIReference/API_GetSchedule.html"
+  },
+  "observed_vs_inferred": {
+    "observed": "Scheduler group and schedule reached CREATE_COMPLETE; CloudFormation then reported inability to retrieve schedule Arn and began rollback. Service DesiredCount in retained events is zero. Schedule/group later reached DELETE_COMPLETE. Sanitized CloudTrail evidence shows a successful CloudFormation GetSchedule with group_name at 22:26:35, then a failed GetSchedule with group_name absent and ResourceNotFoundException at 22:26:51; rollback reads supplied the group again.",
+    "inferred": "The missing group name in the failed request is now directly observed. AWS documents that omitting GroupName searches the default group, consistent with not finding this dedicated-group schedule. The internal provider reason for omitting it and broader provider behavior have not been established.",
+    "repair": "Construct the documented ARN with partition, region, account, actual group Ref and schedule Ref. This eliminates the output GetAtt while retaining the name references and live GetSchedule verification."
+  },
+  "limits": [
+    "No cloud mutations, credential reads, stack retry, scheduled stop or actual activation were performed by this repair author.",
+    "Scoped group/account trust, exact ECS service/cluster policy and live preflight validation remain unchanged.",
+    "Synthetic alternate partition fixtures validate ARN construction only; they do not qualify this application stack for another AWS partition.",
+    "Managed retry and independent review remain required."
+  ],
+  "get_schedule_evidence": {
+    "path": "evidence/APP-007/managed/initial-scheduler-lookup.json",
+    "sha256": "40eed5c94b082ba640d25d1179a15c3cfe2dc4fc2e6e0b51f47c16c22a2d4c31"
+  }
+}

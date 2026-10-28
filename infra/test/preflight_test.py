@@ -66,13 +66,17 @@ class Preflight(unittest.TestCase):
         outcome = preflight.activate(config, report, call, lambda: NOW)
         self.assertEqual(outcome['status'], 'activation_requested_not_healthy')
         self.assertEqual([x[:2] for x in calls], [('sts', 'get-caller-identity'), ('cloudformation', 'describe-stacks'), ('scheduler', 'get-schedule'), ('ecs', 'describe-services'), ('ecs', 'update-service'), ('ecs', 'describe-services')])
+        self.assertEqual(calls[2], ('scheduler', 'get-schedule', '--group-name', 'owned-group', '--name', 'expiry'))
 
     def test_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry(self):
-        for mutation in ('stack', 'disabled', 'target', 'role', 'task', 'near_expiry'):
+        for mutation in ('stack', 'disabled', 'schedule_arn', 'group', 'target', 'role', 'task', 'near_expiry'):
             config, report, stack, schedule, current, calls, call = self.activation_fixture()
             clock = lambda: NOW
             if mutation == 'stack': stack['StackStatus'] = 'CREATE_IN_PROGRESS'
             if mutation == 'disabled': schedule['State'] = 'DISABLED'
+            if mutation == 'schedule_arn': schedule['Arn'] += '-another-schedule'
+            if mutation == 'group':
+                next(item for item in stack['Outputs'] if item['OutputKey'] == 'DeploymentExpiryGroup')['OutputValue'] = 'default'
             if mutation == 'target': schedule['Target']['Input'] = json.dumps({'Cluster': current['clusterArn'], 'Service': 'another-service', 'DesiredCount': 0})
             if mutation == 'role': schedule['Target']['RoleArn'] = 'arn:aws:iam::877573132739:role/another-role'
             if mutation == 'task': current['taskDefinition'] += '9'

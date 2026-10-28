@@ -102,6 +102,20 @@ test('expiry is one UTC execution that can update only this service in this clus
   assert.deepEqual(document.Resources[expiryRole].Properties.AssumeRolePolicyDocument.Statement, [{ Action: 'sts:AssumeRole', Effect: 'Allow', Principal: { Service: 'scheduler.amazonaws.com' }, Condition: { StringEquals: { 'aws:SourceAccount': { Ref: 'AWS::AccountId' } }, ArnEquals: { 'aws:SourceArn': { 'Fn::GetAtt': [group, 'Arn'] } } } }]);
 });
 
+test('expiry schedule ARN output uses the actual group and schedule names without GetAtt', () => {
+  const group = one('AWS::Scheduler::ScheduleGroup')[0], schedule = one('AWS::Scheduler::Schedule')[0];
+  const output = document.Outputs.DeploymentExpiryScheduleArn.Value;
+  assert.equal(JSON.stringify(output).includes('Fn::GetAtt'), false);
+  for (const [partition, region, account, groupName, scheduleName] of [
+    ['aws', 'us-east-1', '123456789012', 'generated-group_1', 'generated-schedule.2'],
+    ['aws-us-gov', 'us-gov-west-1', '210987654321', 'another-group', 'another-schedule'],
+  ]) {
+    assert.equal(resolve(output, { 'AWS::Partition': partition, 'AWS::Region': region, 'AWS::AccountId': account, [group]: groupName, [schedule]: scheduleName }),
+      `arn:${partition}:scheduler:${region}:${account}:schedule/${groupName}/${scheduleName}`);
+  }
+  assert.deepEqual(document.Outputs.DeploymentExpiryGroup.Value, { Ref: group });
+});
+
 test('digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints', () => {
   for (const type of ['AWS::EC2::NatGateway', 'AWS::EC2::VPCEndpoint', 'AWS::EC2::Instance', 'AWS::AppRunner::Service', 'AWS::Route53::RecordSet', 'AWS::CertificateManager::Certificate']) template.resourceCountIs(type, 0);
   template.resourceCountIs('AWS::ECS::Service', 1); template.resourceCountIs('AWS::ElasticLoadBalancingV2::Listener', 1);

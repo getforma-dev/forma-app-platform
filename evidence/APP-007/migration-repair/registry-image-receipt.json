@@ -1,0 +1,22 @@
+{
+  "source_commit": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+  "published_at_utc": "2026-10-28T22:27:51.424626+00:00",
+  "registry_image": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "tag": "app007-8f8c34b-arm64",
+  "local_image_id": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "architecture": "arm64",
+  "image_size_bytes": 78502267,
+  "source_sha256": {
+    "app/Dockerfile": "0adc6ae93ab0c1fcd853b56c7211d949eddda328608ca495af57507e16aab874",
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/runtime/runtime.py": "83df42285e43af81118b055a29a0b2f2e99aea1d37d6a7ead5fa7354c38a84d4",
+    "app/runtime/requirements.lock": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+    "app/Cargo.toml": "ff90dc02f0c0805d32f9e3ecc7f7ee87b65868f1cfc9d5520c53214ddb312f15",
+    "app/Cargo.lock": "0565e1680ec5587c5caa9e31b4143fc8b48c21b896957e182d66b20be75883ea"
+  },
+  "local_qualification": "image-qualification.json",
+  "limits": [
+    "Registry presence and local tests do not prove managed migration/runtime acceptance.",
+    "No vulnerability-scan success is inferred."
+  ]
+}

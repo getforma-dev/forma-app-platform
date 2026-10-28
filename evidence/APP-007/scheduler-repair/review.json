@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-28T22:36:06.933158+00:00",
+  "reviewer": "Independent Codex reviewer /root/managed_sql_trial; did not author scheduler repair",
+  "scope": "APP-007 Scheduler ARN output repair and retained activation identity controls",
+  "base_commit": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+  "disposition": "accepted_for_scoped_managed_trial",
+  "blocking_findings": [],
+  "managed_deployment_passed": false,
+  "aws_calls_performed": false,
+  "credential_reads_performed": false,
+  "source_edits_performed": false,
+  "reviewed_sha256": {
+    "infra/src/stack.ts": "a95100ace186a4f2f95d23a77440f4c6ede412670d10b3b5792ed416443f9526",
+    "infra/test/security.test.ts": "60e608391782919d9c17d86ff1800b0138d465e4d8c20bb39d3cf19a05038d3a",
+    "infra/test/preflight_test.py": "21b6b483bf295f78b3c77dc7f854f4235c9cb1b2073284b0a3e574bd82bbb0c6",
+    "infra/scripts/preflight.py": "14493d0ccd105bdf8c05c2c95132f6e188a7aed6f60c726807d0872e7b0bf1fb",
+    "infra/package.json": "4c06daa14e04b8f79f13286033628a212ad24a32ca9d7fa01595780b5861b5fd",
+    "infra/package-lock.json": "cf171e2d3fa5064c60a9896a788ae84b38cc24b0c67d21463fd77c1361ee839a",
+    "evidence/APP-007/scheduler-repair/README.md": "cfc6f26daab28db7e6b100b9bd92cf9b471239498ebba92b09c1f0a3a2c96307",
+    "evidence/APP-007/scheduler-repair/qualification.json": "6b731c78db227a3a45afb0a3d5f4b8265ef5b0242a69d518f77949baf56b8c05",
+    "evidence/APP-007/scheduler-repair/observed-failure.json": "ef9124d6cd67f24b1d85921ac93970c2de2c86cdc4bcf64098763e60e386281d",
+    "evidence/APP-007/managed/initial-scheduler-lookup.json": "40eed5c94b082ba640d25d1179a15c3cfe2dc4fc2e6e0b51f47c16c22a2d4c31"
+  },
+  "checks": [
+    {
+      "name": "documented_arn_and_ref_contract",
+      "passed": true,
+      "result": "Schedule and ScheduleGroup Ref return actual names; schedule ARN includes partition, region, account, group, schedule."
+    },
+    {
+      "name": "source_diff_narrowness",
+      "passed": true,
+      "result": "Only production source change replaces the schedule output attrArn with the documented ARN join. Existing preflight source is unchanged."
+    },
+    {
+      "name": "focused_expiry_tests",
+      "cwd": "infra",
+      "command": "./node_modules/.bin/tsx --test --test-name-pattern='expiry' test/security.test.ts",
+      "exit_code": 0,
+      "tests_passed": 2
+    },
+    {
+      "name": "typecheck",
+      "cwd": "infra",
+      "command": "./node_modules/.bin/tsc --noEmit",
+      "exit_code": 0
+    },
+    {
+      "name": "activation_identity_tests",
+      "cwd": "repository root",
+      "command": "python3 -m unittest infra.test.preflight_test.Preflight.test_activation_checks_live_stop_and_service_before_count_one infra.test.preflight_test.Preflight.test_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry -v",
+      "exit_code": 0,
+      "tests_passed": 2,
+      "refusal_mutations": 8,
+      "result": "Exact custom group/name lookup asserted; stale stack, disabled schedule, wrong returned ARN, wrong group output, wrong target, wrong role, wrong task and near expiry each stop before update-service."
+    },
+    {
+      "name": "independent_full_template_comparison",
+      "cwd": "infra",
+      "command": "node --input-type=commonjs (comparison program in template_comparison_program below)",
+      "exit_code": 0,
+      "unchanged_resource_count": 64,
+      "only_changed_path": "Outputs.DeploymentExpiryScheduleArn.Value",
+      "result": "Transpiled HEAD and current stack in memory, instantiated separate Apps with identical stack IDs, and deep-compared entire templates after removing only the named output."
+    },
+    {
+      "name": "observed_failure_evidence",
+      "passed": true,
+      "result": "Sanitized events record successful group-qualified CloudFormation GetSchedule at 22:26:35Z and ResourceNotFoundException without groupName at 22:26:51Z, matching documented default-group behavior. Internal provider cause remains unestablished."
+    },
+    {
+      "name": "frozen_source_identity",
+      "passed": true,
+      "result": "All three reviewed source hashes match the frozen author qualification report."
+    }
+  ],
+  "template_comparison_program": "const assert = require('node:assert/strict');\nconst fs = require('node:fs');\nconst path = require('node:path');\nconst Module = require('node:module');\nconst {execFileSync} = require('node:child_process');\nconst ts = require('typescript');\nconst {App} = require('aws-cdk-lib');\nconst {Template} = require('aws-cdk-lib/assertions');\nconst file = path.resolve('src/stack.ts');\nfunction synth(source) {\n  const compiled = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022}}).outputText;\n  const mod = new Module(file, module);\n  mod.filename = file;\n  mod.paths = Module._nodeModulePaths(path.dirname(file));\n  mod._compile(compiled, file);\n  return Template.fromStack(new mod.exports.GenuiFoundation(new App(), 'IndependentSchedulerReview')).toJSON();\n}\nconst before = synth(execFileSync('git', ['show', 'HEAD:infra/src/stack.ts'], {encoding: 'utf8'}));\nconst after = synth(fs.readFileSync(file, 'utf8'));\nconst previous = before.Outputs.DeploymentExpiryScheduleArn.Value;\nconst current = after.Outputs.DeploymentExpiryScheduleArn.Value;\nassert.ok(previous['Fn::GetAtt']);\nassert.ok(current['Fn::Join']);\nassert.notDeepEqual(previous, current);\ndelete before.Outputs.DeploymentExpiryScheduleArn;\ndelete after.Outputs.DeploymentExpiryScheduleArn;\nassert.deepEqual(after, before);\nconsole.log(JSON.stringify({passed:true, unchanged_outside:'Outputs.DeploymentExpiryScheduleArn', resource_count:Object.keys(after.Resources).length, old_value:previous, new_value:current}));",
+  "official_sources": {
+    "schedule_ref": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-scheduler-schedule.html#aws-resource-scheduler-schedule-return-values",
+    "group_ref": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-scheduler-schedulegroup.html#aws-resource-scheduler-schedulegroup-return-values",
+    "arn_format": "https://docs.aws.amazon.com/service-authorization/latest/reference/list_scheduler.html",
+    "group_trust": "https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html",
+    "get_schedule_group": "https://docs.aws.amazon.com/scheduler/latest/APIReference/API_GetSchedule.html"
+  },
+  "limits": [
+    "This independent source review accepts only the scoped repair for the next managed trial; it does not establish successful stack creation, activation, readiness, scheduled stopping, rollback cleanup or APP-007 acceptance.",
+    "No AWS call, private operational state, credential file or mutation was used in this review. Only the sanitized retained failure records were inspected.",
+    "The constructed output is an expected identity. Live group-qualified GetSchedule and exact ARN/target/expiry checks remain mandatory before count-one activation.",
+    "The schedule still has minute-level delivery precision, retries and retained-resource charges after compute stops. The repair changes none of those limits.",
+    "ARN tests using alternate partitions only exercise formatting; they do not qualify deployment outside the approved account and region.",
+    "Future provider changes or another CloudFormation lifecycle phase might expose a separate issue; actual managed retry is required and failed outcomes must be retained."
+  ]
+}

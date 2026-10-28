@@ -1,0 +1,59 @@
+{
+  "scope": "Sanitized matching GetSchedule events; no identity/access-key data retained",
+  "events": [
+    {
+      "time": "2026-10-28T22:26:54Z",
+      "event_name": "GetSchedule",
+      "name": "GenuiSyntheticFoundation-DeploymentExpiry-5WAIY41RP77J",
+      "group_name": "GenuiSyntheticFoundation-ExpiryScheduleGroup-1OH0GQMWQJKT8",
+      "error_code": null,
+      "error_message": null,
+      "user_agent": "cloudformation.amazonaws.com"
+    },
+    {
+      "time": "2026-10-28T22:26:54Z",
+      "event_name": "GetSchedule",
+      "name": "GenuiSyntheticFoundation-DeploymentExpiry-5WAIY41RP77J",
+      "group_name": "GenuiSyntheticFoundation-ExpiryScheduleGroup-1OH0GQMWQJKT8",
+      "error_code": "ResourceNotFoundException",
+      "error_message": "Schedule GenuiSyntheticFoundation-DeploymentExpiry-5WAIY41RP77J does not exist.",
+      "user_agent": "cloudformation.amazonaws.com"
+    },
+    {
+      "time": "2026-10-28T22:26:51Z",
+      "event_name": "GetSchedule",
+      "name": "GenuiSyntheticFoundation-DeploymentExpiry-5WAIY41RP77J",
+      "group_name": null,
+      "error_code": "ResourceNotFoundException",
+      "error_message": "Schedule GenuiSyntheticFoundation-DeploymentExpiry-5WAIY41RP77J does not exist.",
+      "user_agent": "cloudformation.amazonaws.com"
+    },
+    {
+      "time": "2026-10-28T22:26:35Z",
+      "event_name": "GetSchedule",
+      "name": "GenuiSyntheticFoundation-DeploymentExpiry-5WAIY41RP77J",
+      "group_name": "GenuiSyntheticFoundation-ExpiryScheduleGroup-1OH0GQMWQJKT8",
+      "error_code": null,
+      "error_message": null,
+      "user_agent": "cloudformation.amazonaws.com"
+    },
+    {
+      "time": "2026-10-28T22:26:34Z",
+      "event_name": "GetSchedule",
+      "name": "GenuiSyntheticFoundation-DeploymentExpiry-5WAIY41RP77J",
+      "group_name": "GenuiSyntheticFoundation-ExpiryScheduleGroup-1OH0GQMWQJKT8",
+      "error_code": null,
+      "error_message": null,
+      "user_agent": "cloudformation.amazonaws.com"
+    },
+    {
+      "time": "2026-10-28T22:26:34Z",
+      "event_name": "GetSchedule",
+      "name": "GenuiSyntheticFoundation-DeploymentExpiry-5WAIY41RP77J",
+      "group_name": "GenuiSyntheticFoundation-ExpiryScheduleGroup-1OH0GQMWQJKT8",
+      "error_code": "ResourceNotFoundException",
+      "error_message": "Schedule GenuiSyntheticFoundation-DeploymentExpiry-5WAIY41RP77J does not exist.",
+      "user_agent": "cloudformation.amazonaws.com"
+    }
+  ]
+}
