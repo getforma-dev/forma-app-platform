@@ -1,0 +1,23 @@
+{
+  "retrieved_on": "2026-10-28",
+  "region": "us-east-1",
+  "source": "AWS Price List Query API, AmazonRDS, Single-AZ PostgreSQL",
+  "rates": [
+    {
+      "sku": "S9H3AXMBHSKRFJTA",
+      "usage": "InstanceUsage:db.t4g.small",
+      "effective_date": "2026-10-01T00:00:00Z",
+      "unit": "Hrs",
+      "usd": "0.0320000000",
+      "description": "$ 0.032 per RDS db.t4g.small Single-AZ instance hour (or partial hour) running PostgreSQL"
+    },
+    {
+      "sku": "KYVYY29G957PKY3B",
+      "usage": "RDS:GP3-Storage",
+      "effective_date": "2026-10-01T00:00:00Z",
+      "unit": "GB-Mo",
+      "usd": "0.1150000000",
+      "description": "$0.115 per GB-month of provisioned GP3 storage running PostgreSQL"
+    }
+  ]
+}

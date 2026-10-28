@@ -1,0 +1,82 @@
+/* Plain CSS, concatenated and hashed by @getforma/build.
+   Served from /_assets and linked by the Rust server.
+
+   Put styling here rather than in `style="..."` attributes. The CSP that
+   forma-server sends refuses inline <style> blocks and third-party
+   stylesheets (`style-src` is nonce-only), and permits style attributes
+   through a separate `style-src-attr 'unsafe-inline'` — so an attribute
+   works, but a stylesheet is cached, hashed and served from /_assets
+   instead of repeating in every response. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1b1b1b;
+  --muted: #5c5c5c;
+  --accent: #2d6a4f;
+  --border: #dcdcdc;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181c;
+    --fg: #e8e6e3;
+    --muted: #9aa0a6;
+    --accent: #7ee2a8;
+    --border: #2c3038;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.6 system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+.page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
+}
+
+.page h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.lede {
+  margin: 0 0 2rem;
+  color: var(--muted);
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.25rem;
+}
+
+.count span {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.actions button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

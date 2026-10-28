@@ -1,0 +1,104 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.75kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+#3 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31
+#4 DONE 0.0s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 348B done
+#5 DONE 0.0s
+
+#6 [native 1/6] FROM docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31
+#6 resolve docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31 done
+#6 DONE 0.0s
+
+#7 [browser 1/8] FROM docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b
+#7 resolve docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b 0.0s done
+#7 DONE 0.0s
+
+#8 [stage-2 1/9] FROM docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+#8 resolve docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d 0.0s done
+#8 DONE 0.0s
+
+#9 [internal] load build context
+#9 transferring context: 18.94kB done
+#9 DONE 0.0s
+
+#10 [browser 7/8] COPY admin/src ./src
+#10 CACHED
+
+#11 [stage-2 3/9] COPY runtime/requirements.lock ./requirements.lock
+#11 CACHED
+
+#12 [native 2/6] WORKDIR /source
+#12 CACHED
+
+#13 [browser 8/8] RUN npm run typecheck && npm run build
+#13 CACHED
+
+#14 [browser 5/8] RUN npm ci
+#14 CACHED
+
+#15 [native 5/6] COPY --from=browser /source/admin/dist ./admin/dist
+#15 CACHED
+
+#16 [stage-2 4/9] RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r requirements.lock
+#16 CACHED
+
+#17 [native 3/6] COPY Cargo.toml Cargo.lock ./
+#17 CACHED
+
+#18 [browser 3/8] RUN npm install --global npm@11.6.2
+#18 CACHED
+
+#19 [native 6/6] RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=genui-cargo-target-arm64,target=/source/target cargo build --release --locked && cp /source/target/release/forma-app-platform /source/genui
+#19 CACHED
+
+#20 [browser 4/8] COPY admin/package.json admin/package-lock.json ./
+#20 CACHED
+
+#21 [native 4/6] COPY src ./src
+#21 CACHED
+
+#22 [browser 2/8] WORKDIR /source/admin
+#22 CACHED
+
+#23 [browser 6/8] COPY admin/build.ts admin/tsconfig.json ./
+#23 CACHED
+
+#24 [stage-2 2/9] WORKDIR /app
+#24 CACHED
+
+#25 [stage-2 5/9] COPY --from=native /source/genui /app/genui
+#25 CACHED
+
+#26 [stage-2 6/9] COPY runtime/runtime.py /app/runtime.py
+#26 DONE 0.0s
+
+#27 [stage-2 7/9] COPY migrations /app/migrations
+#27 DONE 0.0s
+
+#28 [stage-2 8/9] COPY certs/rds-global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
+#28 DONE 0.0s
+
+#29 [stage-2 9/9] RUN mkdir -p /run/genui && chown 65532:65532 /run/genui && chmod 0700 /run/genui
+#29 DONE 0.1s
+
+#30 exporting to image
+#30 exporting layers 0.0s done
+#30 exporting manifest sha256:88d8833f6ad7556f241f62fdabde155ba0e6c640d2b2e2f5fdd40fc81331b23a done
+#30 exporting config sha256:0e92a072c86e64555d7c946373e52c0029f34cd325a0b46b18e032c9ab633ad2 done
+#30 exporting attestation manifest sha256:86fd8b52c37715bb736ed5a2e67e0e9bc4bc41dd709717c5c52ce4f5a61e2c59 done
+#30 exporting manifest list sha256:8d8e2f3905ec1764e14d4207915439022be6edff0791e743b502716c929f2afb done
+#30 naming to docker.io/library/genui-app007-local:qualification done
+#30 unpacking to docker.io/library/genui-app007-local:qualification 0.0s done
+#30 DONE 0.1s

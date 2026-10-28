@@ -1,0 +1,6 @@
+
+> synth
+> cdk synth --no-lookups --quiet
+
+AI agent detected
+84 feature flags are not configured. Run 'cdk flags --unstable=flags' to learn more.

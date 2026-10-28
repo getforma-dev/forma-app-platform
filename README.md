@@ -2,7 +2,7 @@
 
 The company app platform built on Forma Stack: teams create, run, adapt and share their own apps. Northstar and Spend Review prove the same platform through two different workflows.
 
-**Phase 1 started — October 28, 2026.** This repository contains the delivered design, its companion demo, the ordered implementation board and an isolated published Forma **3.2.0** qualification harness. APP-001 establishes the baseline; the application scaffold and full canvas remain separate tickets. See [baseline evidence](evidence/APP-001/README.md) and the live board for review status.
+**Phase 1 is underway — October 28, 2026.** This repository contains the delivered design, ordered tickets, published Forma **3.2.0** baseline, locked data contracts, isolated parser/query qualifications, and a minimal application plus AWS CDK setup. The [live board](Tickets/TRACKER.md) records actual review/completion state. The full canvas, hosted authentication and managed integration remain gated; a scaffold or passing unit test does not establish those capabilities.
 
 ## Start here
 
@@ -22,15 +22,19 @@ The ticket Markdown files in `Tickets/` are the source of truth. Each of the 72 
 | `Tickets/` | Familiar status folders, ordered tracker, phase/sprint/category views and requirement coverage |
 | `docs/planning/` | Roadmap, pickup instructions, dependencies, decisions and verification gates |
 | `docs/architecture/` | Current implementation baseline and design reconciliation |
-| `fixtures/` | Entry point for synthetic acceptance inputs to be materialized in the foundation sprint |
-| `evidence/` | Preparation and future ticket verification records |
-| `.github/` | Planning checks and pull request template |
+| `contracts/` | Locked schema/encoding edition, synthetic fixtures and cross-language vectors |
+| `spikes/` | Reproducible released-baseline, WASM parser and confined query qualifications |
+| `app/` | Minimal native SSR Rust/browser scaffold, role configuration, migration and managed-check helpers |
+| `infra/` | Pinned TypeScript AWS CDK for the isolated GenUI synthetic environment |
+| `fixtures/` | Entry point for later integrated synthetic acceptance inputs |
+| `evidence/` | Actual checks, failures, reviews, source identities and operational records |
+| `.github/` | Ticket-specific qualification CI and pull request template |
 
-No paid infrastructure, live organization data, application scaffold or model integration is provisioned by this checkpoint. Those actions have explicit tickets and gates.
+No GenUI AWS resources or model integration have been deployed. The [environment plan](docs/planning/SYNTHETIC-ENVIRONMENT.md) and [cost estimate](docs/planning/SYNTHETIC-ENVIRONMENT-COST.md) identify the remaining deployment inputs. At Victor’s separate request, unused GateWasm application resources were [torn down](evidence/APP-007/gatewasm-teardown.md); the [FormaStack handoff](docs/planning/CROSS-TEAM-HANDOFF.md) records rebuild prerequisites and team boundaries.
 
 ## Check the preparation
 
-Python 3.10+ is sufficient; no application packages are needed yet.
+Python 3.10+ is sufficient for board checks. Runtime/qualification toolchains and exact commands are documented in each ticket’s owning directory; board checks do not replace them.
 
 ```sh
 python3 Tickets/_tools/board.py check

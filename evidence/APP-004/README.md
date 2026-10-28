@@ -74,3 +74,7 @@ The parser emits inspection-required values, original text and coordinates; it d
 The default 2 GiB guest limit is verified through the runtime configuration and reduced-budget refusal paths, not by allocating 2 GiB locally. The 120 s deadline is exercised at shorter test deadlines on the same path. Actual demo expanded-cap refusal is measured; full platform maximum capacity and demo §11.2's combined 2 vCPU / 8 GiB task require later environment trials. Library-format compatibility is intentionally conservative and documented. JIT/native host RSS, concurrent job scheduling, a fixed artifact allowlist, HTTP transport limits, audit/alert routing and sustained fuzzing remain integration/security-review obligations.
 
 No framework/auth change, upstream release, cloud resource, production deployment or customer data was used. FormaStack-blocked tickets remain independently blocked; this qualification does not unblock them.
+
+## Committed candidate and independent acceptance
+
+Candidate `05c95a4bfaad81cdd103b8c1194e75922e84f023` passed [Linux parser CI](https://github.com/getforma-dev/forma-app-platform/actions/runs/40759765118), baseline, contract and planning checks. [Independent review](review.md) found no remaining parser blockers after the timing and numeric fixes. The separate APP-005 query check failed and is not reported as passing; [all CI states](ci.json) are retained. Ticket closure still requires landing.

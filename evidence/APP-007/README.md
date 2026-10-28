@@ -1,0 +1,32 @@
+# APP-007 local preparation and managed gate
+
+**Local preparation is reviewable; APP-007 is not complete.** No GenUI AWS resource was created, no migration was applied to RDS, and no live readiness/two-tenant qualification was run. The budget/operator and deployment inputs must be settled before the managed acceptance campaign.
+
+The candidate supplies strict native Forma 3.2.0 browser/Rust source, fixed role interfaces with atomic credential-file reload, a pinned credential helper and actual dependency probes, initial SQL migration, separate mutating qualification/cleanup commands, and deployable CDK ECS/Fargate/RDS/S3/KMS/TLS configuration. One Rust business binary plus a local Python support process share the demo task's trust boundary; no per-process or application authorization claim follows from logical role credentials.
+
+## Checks actually run
+
+- `python3 scripts/check-foundation.py`: **14/14 steps passed**. The retained [local report](local-preparation.json) includes exact commands and output: hash-locked Python installation, ten Python unit failure-path tests, four Rust tests, native browser typecheck/build, Rust format/build, real local HTTP response checks, and ten CDK security template tests plus lookup-free synthesis.
+- `docker build --tag genui-app007-local:qualification --file app/Dockerfile app`: completed on Linux ARM64 from pinned Node/Rust/Python base digests and lockfiles. The runtime image is **`sha256:8d8e2f3905ec1764e14d4207915439022be6edff0791e743b502716c929f2afb`**. It was built locally, not pushed or deployed. The owned local image remains available for independent review.
+- `python3 app/runtime/qualify_image.py --image genui-app007-local:qualification --output evidence/APP-007/image-qualification.json`: **passed** with the actual image and a named Docker volume. [Image evidence](image-qualification.json) records UID65532, initialized volume owner/mode0700, atomic file mode0600, read-only root, no network, no capabilities/new privileges, and the synthetic HTTP trial. Temporary containers and the volume were removed. The local smoke is bounded to 2 CPUs/1 GiB and is not a measurement of the planned 2-vCPU/8-GiB deployment.
+- Native HTML contains the fixture's server-rendered 7; two responses have fresh CSP nonces and no-store. Liveness is 200, missing managed evidence keeps readiness at 503, and an insecure credential file prevents startup without exposing its values. All credentials in these tests are explicitly fake unit data, with the managed probe deliberately unavailable.
+- Credential readers reject expiry, wrong/shared identities, symlinks, FIFOs, unsafe permissions and oversized files. Nonblocking file open and a 65,537-byte read bound prevent special-file or growth hangs. Readiness also binds generation, original expiry and file SHA-256 so a delayed result cannot certify a replaced credential file.
+- `git diff --check` passed. [Source identity](local-source-identity.json) binds the final candidate files and base images. [Runtime dependency metadata](runtime-dependencies.json) records the published package hashes and public RDS CA digest.
+
+Independent review also identified that `rolsuper=false` alone does not exclude the RDS `rds_superuser` group. The managed probe now refuses every catalog membership except the fixed login and `rds_iam`; a local control with ordinary flags false but `rds_superuser` membership is refused. This is tested locally, not a claim that real RDS grants have been observed. The final image/source identities include that repair; the runtime helper copied from the stopped image matches the candidate SHA-256 recorded in the image evidence.
+
+## Retained implementation failures
+
+The initial release-image HTTP smoke assumed the listener marker would be the first stdout line. Forma's release build emits SSR-module load messages first. The harness now drains startup lines and waits for the explicit bound-listener marker under its existing deadline; the application did not change to conceal those logs. [Initial failure record](image-initial-failure.json). The final named-volume/image trial passed afterward.
+
+The first SHA-256 formatting attempt used a trait not implemented by the selected sha2 0.11 output; compilation refused it. Explicit byte-to-hex encoding fixed the build, with no dependency downgrade. An initial local metadata fetch used a Python environment missing its default CA installation; the retry used the system trust bundle, never disabled TLS verification. Hash-locked installation and the final image build subsequently passed.
+
+## Prepared, not exercised against AWS
+
+[App instructions](../../app/README.md) contain the secret-free startup contract, initial operator-only migration, mutating `qualify` task override, paired own-object/read and other-prefix/key denials, and exact-version cleanup. Readiness performs positive dependency checks without persistent S3 writes. Qualification is separate and must retain its run UUID and reconcile exact keys/versions after any transport-unknown write outcome before retrying or cleaning up.
+
+[Infrastructure instructions](../../infra/README.md) require actual operator CIDR, existing issued certificate/hostname, reviewed image digest/architecture and budget/operator values. The service defaults to desired count0 so migration precedes service startup; that does not make the ALB/RDS deployment free. The task has no migration secret or direct store grants, only permission to assume its six constrained roles. The migration execution role alone receives the generated database password. The app has no revision-delete permission; cleanup uses a separate authorized operator identity.
+
+The remaining acceptance includes real migration/SQL grants, two-tenant denials, credential refresh/expiry, managed readiness, operator-only TLS ingress, image rollout/rollback and actual cleanup/restore evidence. Template assertions and fake unit credentials cannot supply those results. Full platform auth/business schemas remain separate tickets and FormaStack gates stay open. Foundation CI is configured but was not claimed passed before the candidate is committed/pushed.
+
+The earlier [AWS discovery](aws-discovery.md), [temporary shutdown](gatewasm-shutdown.md) and [authorized GateWASM teardown](gatewasm-teardown.md) are historical records, not GenUI provisioning. GateWASM removal left account access available but no app database/network to reuse.

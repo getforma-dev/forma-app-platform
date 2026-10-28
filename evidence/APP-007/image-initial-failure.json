@@ -1,0 +1,7 @@
+{
+  "scope": "initial local release-image smoke",
+  "failure": "The harness incorrectly required the first stdout line to be the listener marker; release-mode Forma emitted SSR module-load logs first.",
+  "disposition": "Wait for the explicit listener marker under a 15-second deadline while draining startup lines. No application security behavior was changed.",
+  "named_volume_ownership_and_atomic_write": "passed before the HTTP harness assertion",
+  "temporary_resources": "owned containers and volume removed by finally cleanup"
+}

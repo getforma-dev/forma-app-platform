@@ -32,7 +32,7 @@
       ],
       "ticket_count": 14,
       "done_count": 2,
-      "blocked_count": 2
+      "blocked_count": 3
     },
     {
       "id": "PH02",
@@ -364,11 +364,11 @@
     {
       "id": "APP-007",
       "title": "Scaffold reproducible browser/Rust workspace and one binary's role interfaces",
-      "path": "2-in-progress/APP-007.md",
+      "path": "9-blocked/APP-007.md",
       "Field": "Value",
       "---": "---",
       "Epic": "FND",
-      "Status": "In progress",
+      "Status": "Blocked",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S02",
@@ -383,8 +383,8 @@
       "Assignee": "GenUI \u2014 Codex scaffold lead",
       "Branch / PR": "phase-one-spikes; independently owned ticket paths",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
-      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "Blocked by": "GenUI deployment inputs \u2014 Victor\u2019s monthly budget; operator-owned app hostname/TLS certificate and restricted operator CIDR; actual managed qualification",
+      "Unblock evidence": "Record budget and deployment inputs, then reviewed CDK deployment, migration, real role/tenant denials, TLS/readiness/refresh and cleanup/rollback evidence. Local checks alone do not clear this gate.",
       "dependencies": [
         "APP-001",
         "APP-002"

@@ -1,0 +1,31 @@
+{
+  "revision": "05c95a4bfaad81cdd103b8c1194e75922e84f023",
+  "checks": [
+    {
+      "name": "parser",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40759765118",
+      "conclusion": "success"
+    },
+    {
+      "name": "baseline",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40759765044",
+      "conclusion": "success"
+    },
+    {
+      "name": "contracts",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40759764975",
+      "conclusion": "success"
+    },
+    {
+      "name": "planning",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40759765025",
+      "conclusion": "success"
+    },
+    {
+      "name": "query",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40759765095",
+      "conclusion": "failure"
+    }
+  ],
+  "note": "Parser, baseline, contract and planning passed. Query failure belongs to APP-005 and is retained there; no all-green claim."
+}

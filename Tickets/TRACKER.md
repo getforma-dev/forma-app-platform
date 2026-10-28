@@ -12,7 +12,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 4 | [APP-004: Qualify the WASM CSV/XLSX parser boundary](3-in-review/APP-004.md) | [PH01](phases/PH01.md) | S01 | ING | P0 | M | In review | APP-002 |
 | 5 | [APP-005: Measure the cold million-row DuckDB path and confinement](3-in-review/APP-005.md) | [PH01](phases/PH01.md) | S01 | QRY | P0 | M | In review | APP-002 |
 | 6 | [APP-006: Revalidate fAuth contract and integration prerequisites](9-blocked/APP-006.md) | [PH01](phases/PH01.md) | S01 | IAM | P0 | M | Blocked | APP-001 |
-| 7 | [APP-007: Scaffold reproducible browser/Rust workspace and one binary's role interfaces](2-in-progress/APP-007.md) | [PH01](phases/PH01.md) | S02 | FND | P0 | L | In progress | APP-001, APP-002 |
+| 7 | [APP-007: Scaffold reproducible browser/Rust workspace and one binary's role interfaces](9-blocked/APP-007.md) | [PH01](phases/PH01.md) | S02 | FND | P0 | L | Blocked | APP-001, APP-002 |
 | 8 | [APP-008: Establish tenant-bearing schema, database roles and deny-by-default authorization](0-backlog/APP-008.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-007 |
 | 9 | [APP-009: Implement fAuth-backed session lifecycle](0-backlog/APP-009.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-006, APP-008 |
 | 10 | [APP-010: Persist and admit a minimal typed definition and work binding](0-backlog/APP-010.md) | [PH01](phases/PH01.md) | S02 | FND | P0 | L | Backlog | APP-002, APP-008 |
