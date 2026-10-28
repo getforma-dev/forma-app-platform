@@ -1,0 +1,37 @@
+{
+  "reason": "AWS rejects an autoscaling maximum equal to allocation; fixed20GiB keeps autoscaling disabled by omission",
+  "scope": "Infrastructure-only follow-up; application image unchanged",
+  "steps": [
+    {
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "exit": 0,
+      "stdout": "\n> typecheck\n> tsc --noEmit\n\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "npm",
+        "test"
+      ],
+      "exit": 0,
+      "stdout": "\n> test\n> tsx --test test/*.test.ts\n\nTAP version 13\n# Subtest: managed data stays private, encrypted, retained and versioned\nok 1 - managed data stays private, encrypted, retained and versioned\n  ---\n  duration_ms: 5.952209\n  type: 'test'\n  ...\n# Subtest: ingress is exactly operator HTTPS, ALB-to-task and task-to-database\nok 2 - ingress is exactly operator HTTPS, ALB-to-task and task-to-database\n  ---\n  duration_ms: 0.819041\n  type: 'test'\n  ...\n# Subtest: operator and certificate are required; broad/private/placeholder networks fail\nok 3 - operator and certificate are required; broad/private/placeholder networks fail\n  ---\n  duration_ms: 0.683209\n  type: 'test'\n  ...\n# Subtest: digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints\nok 4 - digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints\n  ---\n  duration_ms: 1.5635\n  type: 'test'\n  ...\n# Subtest: task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it\nok 5 - task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it\n  ---\n  duration_ms: 1.431584\n  type: 'test'\n  ...\n# Subtest: each DB identity connects only as its fixed username on this database\nok 6 - each DB identity connects only as its fixed username on this database\n  ---\n  duration_ms: 0.693333\n  type: 'test'\n  ...\n# Subtest: tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required\nok 7 - tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required\n  ---\n  duration_ms: 1.273666\n  type: 'test'\n  ...\n# Subtest: execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants\nok 8 - execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants\n  ---\n  duration_ms: 0.736625\n  type: 'test'\n  ...\n# Subtest: only migration execution role receives admin secret; migration has no tenant AWS authority\nok 9 - only migration execution role receives admin secret; migration has no tenant AWS authority\n  ---\n  duration_ms: 1.537709\n  type: 'test'\n  ...\n# Subtest: app environment contains identities only and one private ephemeral credential mount\nok 10 - app environment contains identities only and one private ephemeral credential mount\n  ---\n  duration_ms: 0.599916\n  type: 'test'\n  ...\n1..10\n# tests 10\n# suites 0\n# pass 10\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2191.964959\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "synth",
+        "--",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "\n> synth\n> cdk synth --no-lookups --quiet\n\n",
+      "stderr": "AI agent detected\n84 feature flags are not configured. Run 'cdk flags --unstable=flags' to learn more.\n"
+    }
+  ]
+}

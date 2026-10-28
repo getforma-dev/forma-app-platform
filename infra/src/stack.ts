@@ -57,7 +57,7 @@ export class GenuiFoundation extends Stack {
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.SMALL),
       vpc, vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED }, securityGroups: [databaseSecurity],
       credentials: rds.Credentials.fromSecret(migrationSecret), databaseName: 'genui',
-      allocatedStorage: 20, maxAllocatedStorage: 20, storageEncrypted: true, storageType: rds.StorageType.GP3,
+      allocatedStorage: 20, storageEncrypted: true, storageType: rds.StorageType.GP3,
       publiclyAccessible: false, multiAz: false, iamAuthentication: true, backupRetention: Duration.days(7),
       deletionProtection: true, removalPolicy: RemovalPolicy.RETAIN,
       parameters: { 'rds.force_ssl': '1' },

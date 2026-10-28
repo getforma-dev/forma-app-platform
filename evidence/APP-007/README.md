@@ -30,3 +30,7 @@ The first SHA-256 formatting attempt used a trait not implemented by the selecte
 The remaining acceptance includes real migration/SQL grants, two-tenant denials, credential refresh/expiry, managed readiness, operator-only TLS ingress, image rollout/rollback and actual cleanup/restore evidence. Template assertions and fake unit credentials cannot supply those results. Full platform auth/business schemas remain separate tickets and FormaStack gates stay open. Foundation CI is configured but was not claimed passed before the candidate is committed/pushed.
 
 The earlier [AWS discovery](aws-discovery.md), [temporary shutdown](gatewasm-shutdown.md) and [authorized GateWASM teardown](gatewasm-teardown.md) are historical records, not GenUI provisioning. GateWASM removal left account access available but no app database/network to reuse.
+
+## Infrastructure review correction
+
+Independent review found that an autoscaling maximum equal to the 20-GiB allocation would be rejected by AWS. The final template omits that setting, keeping storage fixed instead of raising the budget. A negative template assertion now requires its absence; infrastructure typecheck, all ten tests and synthesis pass in [follow-up evidence](storage-review-fix.json). The prior identity/template are retained alongside the refreshed current source identity. Application/image bytes are unchanged; live managed acceptance remains unrun. See [AWS autoscaling constraints](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PIOPS.Autoscaling.html).

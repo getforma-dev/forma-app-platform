@@ -34,6 +34,9 @@ function resolve(value: any, parameters: Record<string, string>): any {
 
 test('managed data stays private, encrypted, retained and versioned', () => {
   template.hasResourceProperties('AWS::RDS::DBInstance', { PubliclyAccessible: false, StorageEncrypted: true, EnableIAMDatabaseAuthentication: true, DeletionProtection: true, BackupRetentionPeriod: 7, DBInstanceClass: 'db.t4g.small', AllocatedStorage: '20', MultiAZ: false });
+  // A maximum equal to allocated storage is an invalid autoscaling request.
+  // Omission keeps the intended fixed 20-GiB allocation without enabling it.
+  assert.equal(one('AWS::RDS::DBInstance')[1].Properties.MaxAllocatedStorage, undefined);
   template.hasResourceProperties('AWS::RDS::DBParameterGroup', { Parameters: { 'rds.force_ssl': '1' } });
   template.resourceCountIs('AWS::KMS::Key', 2);
   for (const [, key] of entries('AWS::KMS::Key')) assert.equal(key.Properties.EnableKeyRotation, true);

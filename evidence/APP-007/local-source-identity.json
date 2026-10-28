@@ -1,7 +1,7 @@
 {
-  "recorded_at": "2026-10-28T20:20:59.594678+00:00",
+  "recorded_at": "2026-10-28T20:24:20.008288+00:00",
   "scope": "APP-007 local preparation; not deployment or managed acceptance",
-  "base_commit": "ea5d27c17fda8c6d81a5a58fdda8c7ed1cc9ce36",
+  "base_commit": "0595392e1d1c78a45c2de1815a503e33b5d5932d",
   "artifacts": {
     ".github/workflows/foundation.yml": "db2b45f33dea9ce56e02884a336dce0c8d75c90aeeba0e54db315d1c4b189f45",
     "app/.dockerignore": "5243f0fe3e26e7c3733a8050d7149bb6c39d166bc70a4daefc58a65e3bbe61ae",
@@ -33,13 +33,13 @@
     "app/src/roles.rs": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216",
     "infra/.gitignore": "1edc5ed519f60470e8f67ade2641c5c2de50eeeed2583dbf5b4f737bcce7a235",
     "infra/.npmrc": "b962362ebe7560b534e834c2ede51186c2e3fceb94e12cc434a11180f22391f2",
-    "infra/README.md": "0691a2970d325276d5696967c62ae6ae029289b6a60431c1602b22b375a24e6c",
+    "infra/README.md": "8342a2a53efccfc18a134a36a5b920d45672ed2835bc6b1e79e925ac808ec7a6",
     "infra/cdk.json": "218be47a43c2178de8ed04f0015c0501aa8809e22815817a34ce1dd136fb116c",
     "infra/package-lock.json": "cf171e2d3fa5064c60a9896a788ae84b38cc24b0c67d21463fd77c1361ee839a",
     "infra/package.json": "4c06daa14e04b8f79f13286033628a212ad24a32ca9d7fa01595780b5861b5fd",
     "infra/src/main.ts": "3080fe33f5d266dbbba63db823b2195b83bcdf3aea3f7f80a9530dd8161417d8",
-    "infra/src/stack.ts": "420c2a7d8de3533ddcac7917f38f5bb9e83e4edabe7face695707d5017d67875",
-    "infra/test/security.test.ts": "bf685aacedcd7c540c6e3606b663d2eb57d59dcf97d3751bfb409f9237f9863e",
+    "infra/src/stack.ts": "0a2f6452d6c8884079b78e3ecc4cb5e0f4d1fdfa3831b17ba34f5e9c65a42e47",
+    "infra/test/security.test.ts": "54aac72a40503fc504611fd78781f972a23c2a45344bdbcedcfc14e270cc1d3b",
     "infra/tsconfig.json": "7494f3c4db6888ba330c03a98b723a6ac92cba2490e29696bac66b5b4033b96c",
     "scripts/check-foundation.py": "2aed1971ade8d4038100c2e40d7a60908a267b3a242293dbe3e0a8d8cd755738"
   },
@@ -48,5 +48,6 @@
     "node": "node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b",
     "rust": "rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31",
     "python": "python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d"
-  }
+  },
+  "storage_review_followup": "storage-review-fix.json; prior identity retained; runtime/image unchanged"
 }
