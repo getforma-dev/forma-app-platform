@@ -1,0 +1,191 @@
+{
+  "scope": "APP-007 local restore-manifest SQL/catalog compatibility",
+  "passed": false,
+  "managed_acceptance": false,
+  "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "container": "genui-app007-restore-sql-846325a8a22e",
+  "network": "none",
+  "published_ports": [],
+  "commands": [
+    {
+      "argv": [
+        "docker",
+        "run",
+        "--detach",
+        "--rm",
+        "--name",
+        "genui-app007-restore-sql-846325a8a22e",
+        "--network=none",
+        "--memory=512m",
+        "--cpus=1",
+        "--tmpfs=/var/lib/postgresql/data:rw,noexec,nosuid,size=256m",
+        "--env=POSTGRES_HOST_AUTH_METHOD=trust",
+        "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 0,
+      "stdout": "91ff9022b357883daa4a1091eae9c80b2f10aa742d407ec10e29c8b7132c0404\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-restore-sql-846325a8a22e",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 2,
+      "stdout": "127.0.0.1:5432 - no response\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-restore-sql-846325a8a22e",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 2,
+      "stdout": "127.0.0.1:5432 - no response\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-restore-sql-846325a8a22e",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 2,
+      "stdout": "127.0.0.1:5432 - no response\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-restore-sql-846325a8a22e",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 0,
+      "stdout": "127.0.0.1:5432 - accepting connections\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-846325a8a22e",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "postgres",
+        "--dbname",
+        "postgres",
+        "--file=-"
+      ],
+      "stdin_sha256": "dda3572d8abc689749bfd57d76aa9c2a9c66df00dc20a9af64be6a0ff4b513c7",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-846325a8a22e",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "genui_migration",
+        "--dbname",
+        "genui",
+        "--file=-"
+      ],
+      "stdin_sha256": "8c771c01d0967028f9fe826765254d3d470adece502e420f045d0e75c1240652",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-846325a8a22e",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "genui_migration",
+        "--dbname",
+        "genui",
+        "--file=-"
+      ],
+      "stdin_sha256": "9290acfdd59a082fef7466db1900754940092b8ad0e9154c938a1d3734c53093",
+      "exit_code": 3,
+      "stdout": "{\"identity\" : {\"session_user\" : \"genui_migration\", \"current_user\" : \"genui_migration\", \"database\" : \"genui\", \"read_only\" : \"on\", \"server_version_num\" : 160013}}\n{\"name\" : \"schema_version\", \"rows\" : [{\"singleton\":true,\"version\":1}]}\n{\"name\" : \"roles\", \"rows\" : [{\"name\":\"genui_owner\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":false,\"rolinherit\":true,\"rolconnlimit\":-1}, {\"name\":\"genui_workspace\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_control\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_data\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_worker\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}]}\n{\"name\" : \"memberships\", \"rows\" : [{\"role\":\"genui_owner\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_owner\",\"member\":\"genui_migration\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":true,\"set_option\":true}, {\"role\":\"genui_workspace\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_control\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_data\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_worker\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"rds_iam\",\"member\":\"genui_workspace\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_control\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_data\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_worker\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}]}\n{\"name\" : \"membership_closure\", \"rows\" : [{\"member\":\"genui_workspace\",\"role\":\"rds_iam\"}, {\"member\":\"genui_control\",\"role\":\"rds_iam\"}, {\"member\":\"genui_data\",\"role\":\"rds_iam\"}, {\"member\":\"genui_worker\",\"role\":\"rds_iam\"}]}\n{\"name\" : \"database\", \"rows\" : [{\"name\":\"genui\",\"owner\":\"genui_migration\"}]}\n{\"name\" : \"database_grants\", \"rows\" : [{\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"TEMPORARY\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_control\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_data\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_worker\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}]}\n{\"name\" : \"schemas\", \"rows\" : [{\"name\":\"public\",\"owner\":\"pg_database_owner\"}, {\"name\":\"genui_meta\",\"owner\":\"genui_owner\"}]}\n{\"name\" : \"schema_grants\", \"rows\" : [{\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"pg_database_owner\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"pg_database_owner\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"PUBLIC\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_control\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_data\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_worker\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}]}\n{\"name\" : \"tables\", \"rows\" : [{\"schema\":\"genui_meta\",\"name\":\"schema_version\",\"kind\":\"r\",\"owner\":\"genui_owner\",\"relrowsecurity\":false,\"relforcerowsecurity\":false}]}\n{\"name\" : \"table_grants\", \"rows\" : [{\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"INSERT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"UPDATE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"DELETE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"TRUNCATE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"REFERENCES\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"TRIGGER\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_control\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_data\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_worker\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}]}\n{\"name\" : \"columns\", \"rows\" : [{\"name\":\"singleton\",\"position\":1,\"table_owner\":\"genui_owner\",\"type\":\"boolean\",\"attnotnull\":true,\"attidentity\":\"\",\"attgenerated\":\"\",\"default_expression\":null}, {\"name\":\"version\",\"position\":2,\"table_owner\":\"genui_owner\",\"type\":\"integer\",\"attnotnull\":true,\"attidentity\":\"\",\"attgenerated\":\"\",\"default_expression\":null}]}\n",
+      "stderr": "psql:<stdin>:53: ERROR:  22023: ACL arrays must be one-dimensional\nLOCATION:  check_acl, acl.c:588\n"
+    },
+    {
+      "argv": [
+        "docker",
+        "rm",
+        "--force",
+        "--volumes",
+        "genui-app007-restore-sql-846325a8a22e"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 0,
+      "stdout": "genui-app007-restore-sql-846325a8a22e\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "ps",
+        "-a",
+        "--filter",
+        "name=^/genui-app007-restore-sql-846325a8a22e$",
+        "--format",
+        "{{.Names}}"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "validator_sha256": "1523f47de2899801486663e976151e436ed01fa8ee916b95d2521aab551758d4",
+  "migration_sha256": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+  "failure_type": "RuntimeError",
+  "cleanup_confirmed": true
+}

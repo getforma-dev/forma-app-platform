@@ -1,0 +1,49 @@
+{
+  "at_utc": "2026-10-28T23:40:18.235824+00:00",
+  "scope": "APP-007 initial managed role foundation; not APP-008 tenant/RLS acceptance",
+  "stack_id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GenuiSyntheticFoundation/9158dbd0-d320-11f1-a006-0affc4587aaf",
+  "stack_status": "CREATE_COMPLETE",
+  "cluster": "GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN",
+  "service": "GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF",
+  "service_counts": {
+    "desiredCount": 0,
+    "runningCount": 0,
+    "pendingCount": 0
+  },
+  "schedule_arn": "arn:aws:scheduler:us-east-1:877573132739:schedule/GenuiSyntheticFoundation-ExpiryScheduleGroup-1GXBT2YNEMFEK/GenuiSyntheticFoundation-DeploymentExpiry-P2FWIBRKKAC1",
+  "schedule_enabled": true,
+  "scheduled_expiry_utc": "2026-10-29T04:39:50Z",
+  "migration_source": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+  "migration_sql_sha256": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+  "runs": [
+    {
+      "purpose": "initial migration",
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/b4a7a4fa8f294721ac05de6c69e2e647",
+      "task_definition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationMigrationTask99B85AB9:2",
+      "image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+      "last_status": "STOPPED",
+      "exit_code": 0,
+      "started_at": "2026-10-28T19:32:22.648000-04:00",
+      "stopped_at": "2026-10-28T19:32:49.222000-04:00",
+      "completion_marker": "initial_role_migration_complete",
+      "log_event_count": 1
+    },
+    {
+      "purpose": "idempotent repeat",
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/b5aca40940f340c8ad0ccc2be9907c57",
+      "task_definition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationMigrationTask99B85AB9:2",
+      "image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+      "last_status": "STOPPED",
+      "exit_code": 0,
+      "started_at": "2026-10-28T19:37:59.865000-04:00",
+      "stopped_at": "2026-10-28T19:38:24.331000-04:00",
+      "completion_marker": "initial_role_migration_complete",
+      "log_event_count": 1
+    }
+  ],
+  "limits": [
+    "Both tasks used the dedicated migration execution secret channel; no operator password read.",
+    "Schedule existence is not evidence of actual stop delivery.",
+    "Managed SQL effective grants, tenant storage boundaries, TLS/refresh/restore and public app acceptance remain separate checks."
+  ]
+}

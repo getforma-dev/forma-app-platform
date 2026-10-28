@@ -4,7 +4,7 @@ Prepared 2026-10-28. This is preparation for the bounded foundation snapshot/res
 
 ## Implementation
 
-`infra/scripts/foundation_restore_manifest.py` uses only Python standard-library modules and the existing image's pinned psycopg dependency. Its source SHA-256 is `1523f47de2899801486663e976151e436ed01fa8ee916b95d2521aab551758d4` (10,725 bytes).
+`infra/scripts/foundation_restore_manifest.py` uses only Python standard-library modules and the existing image's pinned psycopg dependency. Its original source SHA-256 was `1523f47de2899801486663e976151e436ed01fa8ee916b95d2521aab551758d4` (10,725 bytes). The subsequently authorized column-ACL repair below produces SHA-256 `87d62d667e0a65235a9718bed6ec9f301db732aff974acc346e7a04c5c7fc70c` (10,744 bytes).
 
 The program requires the explicit `GENUI_QUALIFY_SYNTHETIC=APP-007` marker, effective UID 65532, `PGUSER=genui_migration`, `PGDATABASE=genui`, port 5432, an us-east-1 RDS hostname and the image's existing RDS CA path. It reads `PGPASSWORD` only inside the task's connection call; this remains an ECS execution-secret injection, never an override or operator argument.
 
@@ -39,3 +39,11 @@ Run once on the migrated source before snapshot creation, then once on the exact
 An in-memory fixture harness exercised **18 checks**, with psycopg's connection replaced by a stub and environment values replaced by explicitly synthetic placeholders. Checks covered complete canonical output; reversed row-order equality; grant-drift digest changes; wrong identity/database/engine; missing TLS/read-only/timeouts; privileged role; unexpected membership; missing column; PUBLIC database grant; app write grant; UID/opt-in preconnection refusal; explicit TLS/timeout arguments and rollback; and exception redaction. No real password was read. `git diff --check` passed.
 
 These fixtures establish Python behavior only. SQL execution, actual catalog shape, RDS16.13 role semantics, TLS, snapshot completeness, manifest equality and cleanup remain managed trial obligations. This foundation manifest does not prove later APP-053 application/audit/deletion-ledger recovery.
+
+## Subsequent local SQL compatibility and repair
+
+At root's request, a no-network/no-host-port PostgreSQL 16.13 fixture executed the actual catalog queries after the repaired migration. The first run found a SQL bug in the original column-grant expression: `aclexplode('{}'::aclitem[])` rejects the zero-dimensional array used as a fallback for ordinary NULL column ACLs. The failure was reported before source changes and is retained in [the SQL regression evidence](restore-local-sql/README.md).
+
+Root authorized the minimal repair: use `aclexplode(a.attacl)` directly and explicitly require an empty column-grant list for this initial foundation baseline. All 14 real queries now execute, validate and canonicalize; repeated full manifests match. A deliberately introduced column UPDATE grant appears in the query, changes the digest and is refused by validation. After revocation, all queries pass and the original manifest returns exactly. Both named fixture containers and their volumes were removed; cleanup inventories are retained.
+
+This follow-up establishes local PostgreSQL16.13 SQL/catalog compatibility only. It uses a simulated `rds_iam`, local socket/trust authentication and does not invoke `run()`/`collect()` or prove TLS, RDS, ECS secrets, snapshot/restore or managed cleanup. No AWS calls or credential reads occurred.

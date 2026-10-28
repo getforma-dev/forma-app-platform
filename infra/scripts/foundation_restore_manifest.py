@@ -57,7 +57,7 @@ QUERIES = {
       CASE WHEN g.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(g.grantee) END AS grantee,
       g.privilege_type, g.is_grantable FROM pg_attribute a
       JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace,
-      LATERAL aclexplode(COALESCE(a.attacl,'{}'::aclitem[])) g
+      LATERAL aclexplode(a.attacl) g
       WHERE n.nspname='genui_meta' AND c.relname='schema_version' AND a.attnum>0 AND NOT a.attisdropped""",
     "constraints": """SELECT k.conname AS name, k.contype AS type,
       pg_get_constraintdef(k.oid,true) AS definition, k.convalidated AS validated
@@ -104,6 +104,7 @@ def validate(manifest):
                                    "owner": "genui_owner", "relrowsecurity": False, "relforcerowsecurity": False}])
     require({(c["name"], c["type"], c["position"], c["attnotnull"]) for c in manifest["columns"]} ==
             {("singleton", "boolean", 1, True), ("version", "integer", 2, True)})
+    require(manifest["column_grants"] == [])
     require(len(manifest["effective_app_grants"]) == 4)
     for row in manifest["effective_app_grants"]:
         require(row == {"role": row["role"], "connect": True, "database_write": False,

@@ -1,0 +1,16 @@
+{
+  "source_files": {
+    "infra/scripts/foundation_restore_manifest.py": "87d62d667e0a65235a9718bed6ec9f301db732aff974acc346e7a04c5c7fc70c",
+    "evidence/APP-007/restore-local-sql/qualify.py": "bd4626f86690c349c5cb59b44f54d9dbed6a60620570e3e81acb935ebde168fc",
+    ".github/workflows/foundation.yml": "a94aefc323e0807c51a968d71f76e6d7c3a940d8ec9c69579b91de92efb9ed37"
+  },
+  "recheck": {
+    "passed": true,
+    "actual_query_count": 14,
+    "server_version_num": 160013,
+    "manifest_sha256": "c167e503ea2485f2cae0871969ad36da2758cea4cf7c1805deee3ae2a26f0f53",
+    "cleanup_confirmed": true
+  },
+  "historical_author_result_preserved": true,
+  "managed_acceptance": false
+}

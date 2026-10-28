@@ -25,6 +25,8 @@ jobs:
         run: python3 scripts/check-foundation.py
       - name: Verify migration as a non-superuser PostgreSQL administrator
         run: python3 app/runtime/qualify_migration.py --output evidence/APP-007/migration-repair/ci-postgresql16.json
+      - name: Verify restore manifest SQL and column privilege refusal
+        run: python3 evidence/APP-007/restore-local-sql/qualify.py --output-dir evidence/APP-007/restore-sql-ci
       - name: Build immutable-source runtime image locally
         run: docker build --tag genui-foundation-ci --file app/Dockerfile app
       - name: Exercise image with no network and a read-only root
@@ -37,4 +39,5 @@ jobs:
             evidence/APP-007/local-preparation.json
             evidence/APP-007/image-qualification.json
             evidence/APP-007/migration-repair/ci-postgresql16.json
+            evidence/APP-007/restore-sql-ci/results.json
           retention-days: 14

@@ -1,0 +1,34 @@
+{
+  "stack_id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GenuiSyntheticFoundation/9158dbd0-d320-11f1-a006-0affc4587aaf",
+  "change_set_id": "arn:aws:cloudformation:us-east-1:877573132739:changeSet/genui-foundation-f84517f4-263b-4133-b5bc-c93cda64dd05/e9b7ea42-d53f-4abe-a1f5-8470462e216b",
+  "ci_source": "3cd15124d39d4799d2b4e9cbe786b1b808f5b582",
+  "prepared_infra_source": "45dd49f1314d9cd0405e4471dab110123a98185b",
+  "image_source": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+  "at_utc": "2026-10-28T22:53:15.523417+00:00",
+  "status": "retry creation requested; completion pending",
+  "window_id": "f84517f4-263b-4133-b5bc-c93cda64dd05",
+  "expires_at_utc": "2026-10-29T04:39:50Z",
+  "desired_count": 0,
+  "ingress_mode": "operator",
+  "image_digest": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "cost_by_month": {
+    "2026-10": {
+      "retained_core_full_month_cents": 5229,
+      "all_window_compute_reservations_cents": 219,
+      "prior_extra_spend_cents": 101,
+      "variable_reserve_cents": 1200,
+      "genui_total_cents": 6749,
+      "auth_spent_or_reserved_cents": 500,
+      "unallocated_cents": 2500,
+      "project_total_cents": 9749
+    }
+  },
+  "prior_failed_attempt_cleaned": true,
+  "all_prior_window_reservations_retained": true,
+  "template_and_parameters_verified_against_prepared_change_set": true,
+  "limits": [
+    "The $1 failed-attempt allowance is conservative accounting, not a reported invoice.",
+    "The variable reserve includes an extra $2 for the bounded foundation restore trial.",
+    "No app task, managed migration, TLS, tenant denial or scheduled stop acceptance is inferred."
+  ]
+}

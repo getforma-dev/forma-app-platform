@@ -1,0 +1,850 @@
+{
+  "scope": "APP-007 local restore-manifest SQL/catalog compatibility",
+  "passed": true,
+  "managed_acceptance": false,
+  "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "container": "genui-app007-restore-sql-e287a861cb15",
+  "network": "none",
+  "published_ports": [],
+  "commands": [
+    {
+      "argv": [
+        "docker",
+        "run",
+        "--detach",
+        "--rm",
+        "--name",
+        "genui-app007-restore-sql-e287a861cb15",
+        "--network=none",
+        "--memory=512m",
+        "--cpus=1",
+        "--tmpfs=/var/lib/postgresql/data:rw,noexec,nosuid,size=256m",
+        "--env=POSTGRES_HOST_AUTH_METHOD=trust",
+        "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 0,
+      "stdout": "f1b15aad3a08396133c4c2ca4f2e9a20b5f84777ccfbfcf6ae982aa86760354d\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-restore-sql-e287a861cb15",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 2,
+      "stdout": "127.0.0.1:5432 - no response\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-restore-sql-e287a861cb15",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 2,
+      "stdout": "127.0.0.1:5432 - no response\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-restore-sql-e287a861cb15",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 2,
+      "stdout": "127.0.0.1:5432 - no response\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "genui-app007-restore-sql-e287a861cb15",
+        "pg_isready",
+        "--host=127.0.0.1",
+        "--username=postgres"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 0,
+      "stdout": "127.0.0.1:5432 - accepting connections\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-e287a861cb15",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "postgres",
+        "--dbname",
+        "postgres",
+        "--file=-"
+      ],
+      "stdin_sha256": "dda3572d8abc689749bfd57d76aa9c2a9c66df00dc20a9af64be6a0ff4b513c7",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-e287a861cb15",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "genui_migration",
+        "--dbname",
+        "genui",
+        "--file=-"
+      ],
+      "stdin_sha256": "8c771c01d0967028f9fe826765254d3d470adece502e420f045d0e75c1240652",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-e287a861cb15",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "genui_migration",
+        "--dbname",
+        "genui",
+        "--file=-"
+      ],
+      "stdin_sha256": "356d2e7761d21dd23de40e66da3caba6d30914f37be078c85a30307c38be6647",
+      "exit_code": 0,
+      "stdout": "{\"identity\" : {\"session_user\" : \"genui_migration\", \"current_user\" : \"genui_migration\", \"database\" : \"genui\", \"read_only\" : \"on\", \"server_version_num\" : 160013}}\n{\"name\" : \"schema_version\", \"rows\" : [{\"singleton\":true,\"version\":1}]}\n{\"name\" : \"roles\", \"rows\" : [{\"name\":\"genui_owner\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":false,\"rolinherit\":true,\"rolconnlimit\":-1}, {\"name\":\"genui_workspace\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_control\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_data\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_worker\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}]}\n{\"name\" : \"memberships\", \"rows\" : [{\"role\":\"genui_owner\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_owner\",\"member\":\"genui_migration\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":true,\"set_option\":true}, {\"role\":\"genui_workspace\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_control\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_data\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_worker\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"rds_iam\",\"member\":\"genui_workspace\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_control\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_data\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_worker\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}]}\n{\"name\" : \"membership_closure\", \"rows\" : [{\"member\":\"genui_workspace\",\"role\":\"rds_iam\"}, {\"member\":\"genui_control\",\"role\":\"rds_iam\"}, {\"member\":\"genui_data\",\"role\":\"rds_iam\"}, {\"member\":\"genui_worker\",\"role\":\"rds_iam\"}]}\n{\"name\" : \"database\", \"rows\" : [{\"name\":\"genui\",\"owner\":\"genui_migration\"}]}\n{\"name\" : \"database_grants\", \"rows\" : [{\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"TEMPORARY\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_control\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_data\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_worker\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}]}\n{\"name\" : \"schemas\", \"rows\" : [{\"name\":\"public\",\"owner\":\"pg_database_owner\"}, {\"name\":\"genui_meta\",\"owner\":\"genui_owner\"}]}\n{\"name\" : \"schema_grants\", \"rows\" : [{\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"pg_database_owner\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"pg_database_owner\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"PUBLIC\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_control\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_data\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_worker\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}]}\n{\"name\" : \"tables\", \"rows\" : [{\"schema\":\"genui_meta\",\"name\":\"schema_version\",\"kind\":\"r\",\"owner\":\"genui_owner\",\"relrowsecurity\":false,\"relforcerowsecurity\":false}]}\n{\"name\" : \"table_grants\", \"rows\" : [{\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"INSERT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"UPDATE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"DELETE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"TRUNCATE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"REFERENCES\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"TRIGGER\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_control\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_data\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_worker\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}]}\n{\"name\" : \"columns\", \"rows\" : [{\"name\":\"singleton\",\"position\":1,\"table_owner\":\"genui_owner\",\"type\":\"boolean\",\"attnotnull\":true,\"attidentity\":\"\",\"attgenerated\":\"\",\"default_expression\":null}, {\"name\":\"version\",\"position\":2,\"table_owner\":\"genui_owner\",\"type\":\"integer\",\"attnotnull\":true,\"attidentity\":\"\",\"attgenerated\":\"\",\"default_expression\":null}]}\n{\"name\" : \"column_grants\", \"rows\" : []}\n{\"name\" : \"constraints\", \"rows\" : [{\"name\":\"schema_version_singleton_check\",\"type\":\"c\",\"definition\":\"CHECK (singleton)\",\"validated\":true}, {\"name\":\"schema_version_version_check\",\"type\":\"c\",\"definition\":\"CHECK (version = 1)\",\"validated\":true}, {\"name\":\"schema_version_pkey\",\"type\":\"p\",\"definition\":\"PRIMARY KEY (singleton)\",\"validated\":true}]}\n{\"name\" : \"effective_app_grants\", \"rows\" : [{\"role\":\"genui_workspace\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_control\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_data\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_worker\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}]}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-e287a861cb15",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "genui_migration",
+        "--dbname",
+        "genui",
+        "--file=-"
+      ],
+      "stdin_sha256": "356d2e7761d21dd23de40e66da3caba6d30914f37be078c85a30307c38be6647",
+      "exit_code": 0,
+      "stdout": "{\"identity\" : {\"session_user\" : \"genui_migration\", \"current_user\" : \"genui_migration\", \"database\" : \"genui\", \"read_only\" : \"on\", \"server_version_num\" : 160013}}\n{\"name\" : \"schema_version\", \"rows\" : [{\"singleton\":true,\"version\":1}]}\n{\"name\" : \"roles\", \"rows\" : [{\"name\":\"genui_owner\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":false,\"rolinherit\":true,\"rolconnlimit\":-1}, {\"name\":\"genui_workspace\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_control\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_data\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_worker\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}]}\n{\"name\" : \"memberships\", \"rows\" : [{\"role\":\"genui_owner\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_owner\",\"member\":\"genui_migration\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":true,\"set_option\":true}, {\"role\":\"genui_workspace\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_control\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_data\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_worker\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"rds_iam\",\"member\":\"genui_workspace\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_control\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_data\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_worker\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}]}\n{\"name\" : \"membership_closure\", \"rows\" : [{\"member\":\"genui_workspace\",\"role\":\"rds_iam\"}, {\"member\":\"genui_control\",\"role\":\"rds_iam\"}, {\"member\":\"genui_data\",\"role\":\"rds_iam\"}, {\"member\":\"genui_worker\",\"role\":\"rds_iam\"}]}\n{\"name\" : \"database\", \"rows\" : [{\"name\":\"genui\",\"owner\":\"genui_migration\"}]}\n{\"name\" : \"database_grants\", \"rows\" : [{\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"TEMPORARY\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_control\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_data\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_worker\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}]}\n{\"name\" : \"schemas\", \"rows\" : [{\"name\":\"public\",\"owner\":\"pg_database_owner\"}, {\"name\":\"genui_meta\",\"owner\":\"genui_owner\"}]}\n{\"name\" : \"schema_grants\", \"rows\" : [{\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"pg_database_owner\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"pg_database_owner\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"PUBLIC\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_control\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_data\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_worker\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}]}\n{\"name\" : \"tables\", \"rows\" : [{\"schema\":\"genui_meta\",\"name\":\"schema_version\",\"kind\":\"r\",\"owner\":\"genui_owner\",\"relrowsecurity\":false,\"relforcerowsecurity\":false}]}\n{\"name\" : \"table_grants\", \"rows\" : [{\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"INSERT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"UPDATE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"DELETE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"TRUNCATE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"REFERENCES\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"TRIGGER\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_control\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_data\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_worker\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}]}\n{\"name\" : \"columns\", \"rows\" : [{\"name\":\"singleton\",\"position\":1,\"table_owner\":\"genui_owner\",\"type\":\"boolean\",\"attnotnull\":true,\"attidentity\":\"\",\"attgenerated\":\"\",\"default_expression\":null}, {\"name\":\"version\",\"position\":2,\"table_owner\":\"genui_owner\",\"type\":\"integer\",\"attnotnull\":true,\"attidentity\":\"\",\"attgenerated\":\"\",\"default_expression\":null}]}\n{\"name\" : \"column_grants\", \"rows\" : []}\n{\"name\" : \"constraints\", \"rows\" : [{\"name\":\"schema_version_singleton_check\",\"type\":\"c\",\"definition\":\"CHECK (singleton)\",\"validated\":true}, {\"name\":\"schema_version_version_check\",\"type\":\"c\",\"definition\":\"CHECK (version = 1)\",\"validated\":true}, {\"name\":\"schema_version_pkey\",\"type\":\"p\",\"definition\":\"PRIMARY KEY (singleton)\",\"validated\":true}]}\n{\"name\" : \"effective_app_grants\", \"rows\" : [{\"role\":\"genui_workspace\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_control\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_data\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_worker\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}]}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-e287a861cb15",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "genui_migration",
+        "--dbname",
+        "genui",
+        "--file=-"
+      ],
+      "stdin_sha256": "54624e35bc69429727760394f3b8f942ae57ecfdb5107fff95d359b43457e772",
+      "exit_code": 0,
+      "stdout": "2\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-e287a861cb15",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "genui_migration",
+        "--dbname",
+        "genui",
+        "--file=-"
+      ],
+      "stdin_sha256": "03dfe391cece7b361f6df5f09f4d3e956023b1642330d6c5b9b872fcd84c202a",
+      "exit_code": 0,
+      "stdout": "0\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-e287a861cb15",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "genui_migration",
+        "--dbname",
+        "genui",
+        "--file=-"
+      ],
+      "stdin_sha256": "c14fc589c2b10e96cf19e8bb6a8ee985760e11afe15dea118704d6bbefe65eb7",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-e287a861cb15",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "genui_migration",
+        "--dbname",
+        "genui",
+        "--file=-"
+      ],
+      "stdin_sha256": "356d2e7761d21dd23de40e66da3caba6d30914f37be078c85a30307c38be6647",
+      "exit_code": 0,
+      "stdout": "{\"identity\" : {\"session_user\" : \"genui_migration\", \"current_user\" : \"genui_migration\", \"database\" : \"genui\", \"read_only\" : \"on\", \"server_version_num\" : 160013}}\n{\"name\" : \"schema_version\", \"rows\" : [{\"singleton\":true,\"version\":1}]}\n{\"name\" : \"roles\", \"rows\" : [{\"name\":\"genui_owner\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":false,\"rolinherit\":true,\"rolconnlimit\":-1}, {\"name\":\"genui_workspace\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_control\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_data\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_worker\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}]}\n{\"name\" : \"memberships\", \"rows\" : [{\"role\":\"genui_owner\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_owner\",\"member\":\"genui_migration\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":true,\"set_option\":true}, {\"role\":\"genui_workspace\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_control\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_data\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_worker\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"rds_iam\",\"member\":\"genui_workspace\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_control\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_data\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_worker\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}]}\n{\"name\" : \"membership_closure\", \"rows\" : [{\"member\":\"genui_workspace\",\"role\":\"rds_iam\"}, {\"member\":\"genui_control\",\"role\":\"rds_iam\"}, {\"member\":\"genui_data\",\"role\":\"rds_iam\"}, {\"member\":\"genui_worker\",\"role\":\"rds_iam\"}]}\n{\"name\" : \"database\", \"rows\" : [{\"name\":\"genui\",\"owner\":\"genui_migration\"}]}\n{\"name\" : \"database_grants\", \"rows\" : [{\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"TEMPORARY\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_control\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_data\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_worker\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}]}\n{\"name\" : \"schemas\", \"rows\" : [{\"name\":\"public\",\"owner\":\"pg_database_owner\"}, {\"name\":\"genui_meta\",\"owner\":\"genui_owner\"}]}\n{\"name\" : \"schema_grants\", \"rows\" : [{\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"pg_database_owner\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"pg_database_owner\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"PUBLIC\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_control\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_data\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_worker\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}]}\n{\"name\" : \"tables\", \"rows\" : [{\"schema\":\"genui_meta\",\"name\":\"schema_version\",\"kind\":\"r\",\"owner\":\"genui_owner\",\"relrowsecurity\":false,\"relforcerowsecurity\":false}]}\n{\"name\" : \"table_grants\", \"rows\" : [{\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"INSERT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"UPDATE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"DELETE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"TRUNCATE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"REFERENCES\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"TRIGGER\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_control\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_data\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_worker\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}]}\n{\"name\" : \"columns\", \"rows\" : [{\"name\":\"singleton\",\"position\":1,\"table_owner\":\"genui_owner\",\"type\":\"boolean\",\"attnotnull\":true,\"attidentity\":\"\",\"attgenerated\":\"\",\"default_expression\":null}, {\"name\":\"version\",\"position\":2,\"table_owner\":\"genui_owner\",\"type\":\"integer\",\"attnotnull\":true,\"attidentity\":\"\",\"attgenerated\":\"\",\"default_expression\":null}]}\n{\"name\" : \"column_grants\", \"rows\" : [{\"column\":\"version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_data\",\"privilege_type\":\"UPDATE\",\"is_grantable\":false}]}\n{\"name\" : \"constraints\", \"rows\" : [{\"name\":\"schema_version_singleton_check\",\"type\":\"c\",\"definition\":\"CHECK (singleton)\",\"validated\":true}, {\"name\":\"schema_version_version_check\",\"type\":\"c\",\"definition\":\"CHECK (version = 1)\",\"validated\":true}, {\"name\":\"schema_version_pkey\",\"type\":\"p\",\"definition\":\"PRIMARY KEY (singleton)\",\"validated\":true}]}\n{\"name\" : \"effective_app_grants\", \"rows\" : [{\"role\":\"genui_workspace\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_control\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_data\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_worker\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}]}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-e287a861cb15",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "genui_migration",
+        "--dbname",
+        "genui",
+        "--file=-"
+      ],
+      "stdin_sha256": "b778d421430ccde5ecdf4659e205a57c3708e4d322ad81016c456ccbd5239c0e",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "exec",
+        "-i",
+        "genui-app007-restore-sql-e287a861cb15",
+        "psql",
+        "--no-psqlrc",
+        "--set=ON_ERROR_STOP=1",
+        "--set=VERBOSITY=verbose",
+        "--quiet",
+        "--tuples-only",
+        "--no-align",
+        "--username",
+        "genui_migration",
+        "--dbname",
+        "genui",
+        "--file=-"
+      ],
+      "stdin_sha256": "356d2e7761d21dd23de40e66da3caba6d30914f37be078c85a30307c38be6647",
+      "exit_code": 0,
+      "stdout": "{\"identity\" : {\"session_user\" : \"genui_migration\", \"current_user\" : \"genui_migration\", \"database\" : \"genui\", \"read_only\" : \"on\", \"server_version_num\" : 160013}}\n{\"name\" : \"schema_version\", \"rows\" : [{\"singleton\":true,\"version\":1}]}\n{\"name\" : \"roles\", \"rows\" : [{\"name\":\"genui_owner\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":false,\"rolinherit\":true,\"rolconnlimit\":-1}, {\"name\":\"genui_workspace\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_control\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_data\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}, {\"name\":\"genui_worker\",\"rolsuper\":false,\"rolcreatedb\":false,\"rolcreaterole\":false,\"rolreplication\":false,\"rolbypassrls\":false,\"rolcanlogin\":true,\"rolinherit\":false,\"rolconnlimit\":-1}]}\n{\"name\" : \"memberships\", \"rows\" : [{\"role\":\"genui_owner\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_owner\",\"member\":\"genui_migration\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":true,\"set_option\":true}, {\"role\":\"genui_workspace\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_control\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_data\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"genui_worker\",\"member\":\"genui_migration\",\"grantor\":\"postgres\",\"admin_option\":true,\"inherit_option\":false,\"set_option\":false}, {\"role\":\"rds_iam\",\"member\":\"genui_workspace\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_control\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_data\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}, {\"role\":\"rds_iam\",\"member\":\"genui_worker\",\"grantor\":\"genui_migration\",\"admin_option\":false,\"inherit_option\":false,\"set_option\":true}]}\n{\"name\" : \"membership_closure\", \"rows\" : [{\"member\":\"genui_workspace\",\"role\":\"rds_iam\"}, {\"member\":\"genui_control\",\"role\":\"rds_iam\"}, {\"member\":\"genui_data\",\"role\":\"rds_iam\"}, {\"member\":\"genui_worker\",\"role\":\"rds_iam\"}]}\n{\"name\" : \"database\", \"rows\" : [{\"name\":\"genui\",\"owner\":\"genui_migration\"}]}\n{\"name\" : \"database_grants\", \"rows\" : [{\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"TEMPORARY\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_migration\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_control\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_data\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}, {\"grantor\":\"genui_migration\",\"grantee\":\"genui_worker\",\"privilege_type\":\"CONNECT\",\"is_grantable\":false}]}\n{\"name\" : \"schemas\", \"rows\" : [{\"name\":\"public\",\"owner\":\"pg_database_owner\"}, {\"name\":\"genui_meta\",\"owner\":\"genui_owner\"}]}\n{\"name\" : \"schema_grants\", \"rows\" : [{\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"pg_database_owner\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"pg_database_owner\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"schema\":\"public\",\"grantor\":\"pg_database_owner\",\"grantee\":\"PUBLIC\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"CREATE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_control\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_data\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}, {\"schema\":\"genui_meta\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_worker\",\"privilege_type\":\"USAGE\",\"is_grantable\":false}]}\n{\"name\" : \"tables\", \"rows\" : [{\"schema\":\"genui_meta\",\"name\":\"schema_version\",\"kind\":\"r\",\"owner\":\"genui_owner\",\"relrowsecurity\":false,\"relforcerowsecurity\":false}]}\n{\"name\" : \"table_grants\", \"rows\" : [{\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"INSERT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"UPDATE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"DELETE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"TRUNCATE\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"REFERENCES\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_owner\",\"privilege_type\":\"TRIGGER\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_workspace\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_control\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_data\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}, {\"table\":\"schema_version\",\"grantor\":\"genui_owner\",\"grantee\":\"genui_worker\",\"privilege_type\":\"SELECT\",\"is_grantable\":false}]}\n{\"name\" : \"columns\", \"rows\" : [{\"name\":\"singleton\",\"position\":1,\"table_owner\":\"genui_owner\",\"type\":\"boolean\",\"attnotnull\":true,\"attidentity\":\"\",\"attgenerated\":\"\",\"default_expression\":null}, {\"name\":\"version\",\"position\":2,\"table_owner\":\"genui_owner\",\"type\":\"integer\",\"attnotnull\":true,\"attidentity\":\"\",\"attgenerated\":\"\",\"default_expression\":null}]}\n{\"name\" : \"column_grants\", \"rows\" : []}\n{\"name\" : \"constraints\", \"rows\" : [{\"name\":\"schema_version_singleton_check\",\"type\":\"c\",\"definition\":\"CHECK (singleton)\",\"validated\":true}, {\"name\":\"schema_version_version_check\",\"type\":\"c\",\"definition\":\"CHECK (version = 1)\",\"validated\":true}, {\"name\":\"schema_version_pkey\",\"type\":\"p\",\"definition\":\"PRIMARY KEY (singleton)\",\"validated\":true}]}\n{\"name\" : \"effective_app_grants\", \"rows\" : [{\"role\":\"genui_workspace\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_control\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_data\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}, {\"role\":\"genui_worker\",\"connect\":true,\"database_write\":false,\"metadata_usage\":true,\"metadata_create\":false,\"public_create\":false,\"metadata_select\":true,\"metadata_write\":false}]}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "rm",
+        "--force",
+        "--volumes",
+        "genui-app007-restore-sql-e287a861cb15"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 0,
+      "stdout": "genui-app007-restore-sql-e287a861cb15\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "docker",
+        "ps",
+        "-a",
+        "--filter",
+        "name=^/genui-app007-restore-sql-e287a861cb15$",
+        "--format",
+        "{{.Names}}"
+      ],
+      "stdin_sha256": null,
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "validator_sha256": "87d62d667e0a65235a9718bed6ec9f301db732aff974acc346e7a04c5c7fc70c",
+  "migration_sha256": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+  "server_version_num": 160013,
+  "actual_query_count": 14,
+  "repeated_manifest_equal": true,
+  "manifest_sha256": "c167e503ea2485f2cae0871969ad36da2758cea4cf7c1805deee3ae2a26f0f53",
+  "manifest": {
+    "manifest_version": 1,
+    "server_version_num": 160013,
+    "schema_version": [
+      {
+        "singleton": true,
+        "version": 1
+      }
+    ],
+    "roles": [
+      {
+        "name": "genui_control",
+        "rolsuper": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false,
+        "rolbypassrls": false,
+        "rolcanlogin": true,
+        "rolinherit": false,
+        "rolconnlimit": -1
+      },
+      {
+        "name": "genui_data",
+        "rolsuper": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false,
+        "rolbypassrls": false,
+        "rolcanlogin": true,
+        "rolinherit": false,
+        "rolconnlimit": -1
+      },
+      {
+        "name": "genui_owner",
+        "rolsuper": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false,
+        "rolbypassrls": false,
+        "rolcanlogin": false,
+        "rolinherit": true,
+        "rolconnlimit": -1
+      },
+      {
+        "name": "genui_worker",
+        "rolsuper": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false,
+        "rolbypassrls": false,
+        "rolcanlogin": true,
+        "rolinherit": false,
+        "rolconnlimit": -1
+      },
+      {
+        "name": "genui_workspace",
+        "rolsuper": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false,
+        "rolbypassrls": false,
+        "rolcanlogin": true,
+        "rolinherit": false,
+        "rolconnlimit": -1
+      }
+    ],
+    "memberships": [
+      {
+        "role": "rds_iam",
+        "member": "genui_control",
+        "grantor": "genui_migration",
+        "admin_option": false,
+        "inherit_option": false,
+        "set_option": true
+      },
+      {
+        "role": "rds_iam",
+        "member": "genui_data",
+        "grantor": "genui_migration",
+        "admin_option": false,
+        "inherit_option": false,
+        "set_option": true
+      },
+      {
+        "role": "rds_iam",
+        "member": "genui_worker",
+        "grantor": "genui_migration",
+        "admin_option": false,
+        "inherit_option": false,
+        "set_option": true
+      },
+      {
+        "role": "rds_iam",
+        "member": "genui_workspace",
+        "grantor": "genui_migration",
+        "admin_option": false,
+        "inherit_option": false,
+        "set_option": true
+      },
+      {
+        "role": "genui_owner",
+        "member": "genui_migration",
+        "grantor": "genui_migration",
+        "admin_option": false,
+        "inherit_option": true,
+        "set_option": true
+      },
+      {
+        "role": "genui_control",
+        "member": "genui_migration",
+        "grantor": "postgres",
+        "admin_option": true,
+        "inherit_option": false,
+        "set_option": false
+      },
+      {
+        "role": "genui_data",
+        "member": "genui_migration",
+        "grantor": "postgres",
+        "admin_option": true,
+        "inherit_option": false,
+        "set_option": false
+      },
+      {
+        "role": "genui_owner",
+        "member": "genui_migration",
+        "grantor": "postgres",
+        "admin_option": true,
+        "inherit_option": false,
+        "set_option": false
+      },
+      {
+        "role": "genui_worker",
+        "member": "genui_migration",
+        "grantor": "postgres",
+        "admin_option": true,
+        "inherit_option": false,
+        "set_option": false
+      },
+      {
+        "role": "genui_workspace",
+        "member": "genui_migration",
+        "grantor": "postgres",
+        "admin_option": true,
+        "inherit_option": false,
+        "set_option": false
+      }
+    ],
+    "membership_closure": [
+      {
+        "member": "genui_control",
+        "role": "rds_iam"
+      },
+      {
+        "member": "genui_data",
+        "role": "rds_iam"
+      },
+      {
+        "member": "genui_worker",
+        "role": "rds_iam"
+      },
+      {
+        "member": "genui_workspace",
+        "role": "rds_iam"
+      }
+    ],
+    "database": [
+      {
+        "name": "genui",
+        "owner": "genui_migration"
+      }
+    ],
+    "database_grants": [
+      {
+        "grantor": "genui_migration",
+        "grantee": "genui_control",
+        "privilege_type": "CONNECT",
+        "is_grantable": false
+      },
+      {
+        "grantor": "genui_migration",
+        "grantee": "genui_data",
+        "privilege_type": "CONNECT",
+        "is_grantable": false
+      },
+      {
+        "grantor": "genui_migration",
+        "grantee": "genui_migration",
+        "privilege_type": "CONNECT",
+        "is_grantable": false
+      },
+      {
+        "grantor": "genui_migration",
+        "grantee": "genui_migration",
+        "privilege_type": "CREATE",
+        "is_grantable": false
+      },
+      {
+        "grantor": "genui_migration",
+        "grantee": "genui_migration",
+        "privilege_type": "TEMPORARY",
+        "is_grantable": false
+      },
+      {
+        "grantor": "genui_migration",
+        "grantee": "genui_worker",
+        "privilege_type": "CONNECT",
+        "is_grantable": false
+      },
+      {
+        "grantor": "genui_migration",
+        "grantee": "genui_workspace",
+        "privilege_type": "CONNECT",
+        "is_grantable": false
+      }
+    ],
+    "schemas": [
+      {
+        "name": "genui_meta",
+        "owner": "genui_owner"
+      },
+      {
+        "name": "public",
+        "owner": "pg_database_owner"
+      }
+    ],
+    "schema_grants": [
+      {
+        "schema": "public",
+        "grantor": "pg_database_owner",
+        "grantee": "PUBLIC",
+        "privilege_type": "USAGE",
+        "is_grantable": false
+      },
+      {
+        "schema": "genui_meta",
+        "grantor": "genui_owner",
+        "grantee": "genui_control",
+        "privilege_type": "USAGE",
+        "is_grantable": false
+      },
+      {
+        "schema": "genui_meta",
+        "grantor": "genui_owner",
+        "grantee": "genui_data",
+        "privilege_type": "USAGE",
+        "is_grantable": false
+      },
+      {
+        "schema": "genui_meta",
+        "grantor": "genui_owner",
+        "grantee": "genui_owner",
+        "privilege_type": "CREATE",
+        "is_grantable": false
+      },
+      {
+        "schema": "genui_meta",
+        "grantor": "genui_owner",
+        "grantee": "genui_owner",
+        "privilege_type": "USAGE",
+        "is_grantable": false
+      },
+      {
+        "schema": "genui_meta",
+        "grantor": "genui_owner",
+        "grantee": "genui_worker",
+        "privilege_type": "USAGE",
+        "is_grantable": false
+      },
+      {
+        "schema": "genui_meta",
+        "grantor": "genui_owner",
+        "grantee": "genui_workspace",
+        "privilege_type": "USAGE",
+        "is_grantable": false
+      },
+      {
+        "schema": "public",
+        "grantor": "pg_database_owner",
+        "grantee": "pg_database_owner",
+        "privilege_type": "CREATE",
+        "is_grantable": false
+      },
+      {
+        "schema": "public",
+        "grantor": "pg_database_owner",
+        "grantee": "pg_database_owner",
+        "privilege_type": "USAGE",
+        "is_grantable": false
+      }
+    ],
+    "tables": [
+      {
+        "schema": "genui_meta",
+        "name": "schema_version",
+        "kind": "r",
+        "owner": "genui_owner",
+        "relrowsecurity": false,
+        "relforcerowsecurity": false
+      }
+    ],
+    "table_grants": [
+      {
+        "table": "schema_version",
+        "grantor": "genui_owner",
+        "grantee": "genui_control",
+        "privilege_type": "SELECT",
+        "is_grantable": false
+      },
+      {
+        "table": "schema_version",
+        "grantor": "genui_owner",
+        "grantee": "genui_data",
+        "privilege_type": "SELECT",
+        "is_grantable": false
+      },
+      {
+        "table": "schema_version",
+        "grantor": "genui_owner",
+        "grantee": "genui_owner",
+        "privilege_type": "DELETE",
+        "is_grantable": false
+      },
+      {
+        "table": "schema_version",
+        "grantor": "genui_owner",
+        "grantee": "genui_owner",
+        "privilege_type": "INSERT",
+        "is_grantable": false
+      },
+      {
+        "table": "schema_version",
+        "grantor": "genui_owner",
+        "grantee": "genui_owner",
+        "privilege_type": "REFERENCES",
+        "is_grantable": false
+      },
+      {
+        "table": "schema_version",
+        "grantor": "genui_owner",
+        "grantee": "genui_owner",
+        "privilege_type": "SELECT",
+        "is_grantable": false
+      },
+      {
+        "table": "schema_version",
+        "grantor": "genui_owner",
+        "grantee": "genui_owner",
+        "privilege_type": "TRIGGER",
+        "is_grantable": false
+      },
+      {
+        "table": "schema_version",
+        "grantor": "genui_owner",
+        "grantee": "genui_owner",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": false
+      },
+      {
+        "table": "schema_version",
+        "grantor": "genui_owner",
+        "grantee": "genui_owner",
+        "privilege_type": "UPDATE",
+        "is_grantable": false
+      },
+      {
+        "table": "schema_version",
+        "grantor": "genui_owner",
+        "grantee": "genui_worker",
+        "privilege_type": "SELECT",
+        "is_grantable": false
+      },
+      {
+        "table": "schema_version",
+        "grantor": "genui_owner",
+        "grantee": "genui_workspace",
+        "privilege_type": "SELECT",
+        "is_grantable": false
+      }
+    ],
+    "columns": [
+      {
+        "name": "singleton",
+        "position": 1,
+        "table_owner": "genui_owner",
+        "type": "boolean",
+        "attnotnull": true,
+        "attidentity": "",
+        "attgenerated": "",
+        "default_expression": null
+      },
+      {
+        "name": "version",
+        "position": 2,
+        "table_owner": "genui_owner",
+        "type": "integer",
+        "attnotnull": true,
+        "attidentity": "",
+        "attgenerated": "",
+        "default_expression": null
+      }
+    ],
+    "column_grants": [],
+    "constraints": [
+      {
+        "name": "schema_version_singleton_check",
+        "type": "c",
+        "definition": "CHECK (singleton)",
+        "validated": true
+      },
+      {
+        "name": "schema_version_version_check",
+        "type": "c",
+        "definition": "CHECK (version = 1)",
+        "validated": true
+      },
+      {
+        "name": "schema_version_pkey",
+        "type": "p",
+        "definition": "PRIMARY KEY (singleton)",
+        "validated": true
+      }
+    ],
+    "effective_app_grants": [
+      {
+        "role": "genui_control",
+        "connect": true,
+        "database_write": false,
+        "metadata_usage": true,
+        "metadata_create": false,
+        "public_create": false,
+        "metadata_select": true,
+        "metadata_write": false
+      },
+      {
+        "role": "genui_data",
+        "connect": true,
+        "database_write": false,
+        "metadata_usage": true,
+        "metadata_create": false,
+        "public_create": false,
+        "metadata_select": true,
+        "metadata_write": false
+      },
+      {
+        "role": "genui_worker",
+        "connect": true,
+        "database_write": false,
+        "metadata_usage": true,
+        "metadata_create": false,
+        "public_create": false,
+        "metadata_select": true,
+        "metadata_write": false
+      },
+      {
+        "role": "genui_workspace",
+        "connect": true,
+        "database_write": false,
+        "metadata_usage": true,
+        "metadata_create": false,
+        "public_create": false,
+        "metadata_select": true,
+        "metadata_write": false
+      }
+    ]
+  },
+  "null_column_acl_count": 2,
+  "column_update_trial": {
+    "query_reported_grant": true,
+    "validation_refused": true,
+    "changed_manifest_sha256": "d0c8d7699d8f3df1052ccf82a80cb1f8647cb11c3932b99144f81a3023476f23",
+    "grant": [
+      {
+        "column": "version",
+        "grantor": "genui_owner",
+        "grantee": "genui_data",
+        "privilege_type": "UPDATE",
+        "is_grantable": false
+      }
+    ],
+    "all_queries_pass_after_revoke": true,
+    "restored_original_manifest": true
+  },
+  "limitations": [
+    "Simulated rds_iam; local Unix-socket trust authentication.",
+    "Calls actual QUERIES plus validate/canonical only, not run() or collect().",
+    "No verified TLS, ECS secret channel, RDS, snapshot or restore acceptance."
+  ],
+  "cleanup_confirmed": true
+}

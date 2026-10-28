@@ -1,0 +1,71 @@
+{
+  "source_commit": "3cd15124d39d4799d2b4e9cbe786b1b808f5b582",
+  "observed_at_utc": "2026-10-28T22:53:15.522900+00:00",
+  "scope": "Includes repaired TCP migration fixture; infrastructure inputs match prepared45dd49f change set, app image matches8f8c34b",
+  "runs": [
+    {
+      "conclusion": "success",
+      "databaseId": 40782568572,
+      "headSha": "3cd15124d39d4799d2b4e9cbe786b1b808f5b582",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40782568572",
+      "workflowName": "Parser qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40782568539,
+      "headSha": "3cd15124d39d4799d2b4e9cbe786b1b808f5b582",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40782568539",
+      "workflowName": "Foundation preparation"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40782568558,
+      "headSha": "3cd15124d39d4799d2b4e9cbe786b1b808f5b582",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40782568558",
+      "workflowName": "Planning integrity"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40782568468,
+      "headSha": "3cd15124d39d4799d2b4e9cbe786b1b808f5b582",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40782568468",
+      "workflowName": "Contract qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40782568512,
+      "headSha": "3cd15124d39d4799d2b4e9cbe786b1b808f5b582",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40782568512",
+      "workflowName": "Released baseline"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40782568531,
+      "headSha": "3cd15124d39d4799d2b4e9cbe786b1b808f5b582",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40782568531",
+      "workflowName": "Bounded query qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40782568541,
+      "headSha": "3cd15124d39d4799d2b4e9cbe786b1b808f5b582",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40782568541",
+      "workflowName": "Auth consumer qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40782568685,
+      "headSha": "3cd15124d39d4799d2b4e9cbe786b1b808f5b582",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40782568685",
+      "workflowName": "Published canvas consumer"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "reviewer": "GenUI root; independent of restore helper implementer",
+  "at_utc": "2026-10-28T22:54:30.459627+00:00",
+  "source_sha256": "87d62d667e0a65235a9718bed6ec9f301db732aff974acc346e7a04c5c7fc70c",
+  "verdict": "no blocking source findings for the repaired bounded foundation manifest trial",
+  "change": "Use aclexplode(NULL) as no column ACL rows and refuse any explicit column grants in initial foundation baseline",
+  "evidence": "../restore-local-sql/results.json",
+  "checks": [
+    "Inspected exact two-line diff; other gates/timeouts/rollback/sanitization unchanged",
+    "Inspected real PostgreSQL16.13 evidence for all14 catalog queries, NULL ACL case, actual column UPDATE grant detection/refusal and canonical drift/recovery",
+    "AST parse and actual unarmed refusal passed"
+  ],
+  "limits": [
+    "Previous source review is preserved; real SQL testing exposed its NULL-ACL gap before managed execution.",
+    "Local socket/simulated IAM role is not TLS, ECS-secret-channel or actual snapshot restore evidence.",
+    "Full RDS source/restore manifests and cleanup are still required."
+  ]
+}
