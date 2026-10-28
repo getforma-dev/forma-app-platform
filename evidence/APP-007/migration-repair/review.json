@@ -1,0 +1,713 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-28T22:25:37.947610+00:00",
+  "scope": "Independent source and local PostgreSQL review of APP-007 role-migration compatibility repair; not managed acceptance",
+  "reviewer": "Independent reviewer, separate from migration implementation author",
+  "base_commit": "7e105bf607a7a70982b57fbf66621a13b7e58b1a",
+  "revision_kind": "uncommitted working-tree files identified by exact SHA-256",
+  "verdict": "no blocking findings",
+  "findings": [],
+  "reviewed_files_sha256": {
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/runtime/qualify_migration.py": "fd9192cad2d0999d2da1ff0f0517b79464a95ef275984958f76263c93cb34a8e",
+    ".github/workflows/foundation.yml": "102c247c78d9188bac0ecc9dfb1c34c714ecaea9ca2245221d96d239e2884c85",
+    "evidence/APP-007/migration-repair/README.md": "dcde319a7b03b08a259c56e9428ec4dc401fcf75e17d0995b4c385290c91459b",
+    "evidence/APP-007/migration-repair/local-postgresql16.json": "e4dc71c95797af2d3b0b6ecda4073990d64e0ebbb809dba91517ac3f80d5c5bd",
+    "evidence/APP-007/migration-repair/image-qualification.json": "fd4f588ff6fc1675e2e71ec29eaf632e031614fbff3e89dbbae8084d35054c03"
+  },
+  "context_files_sha256": {
+    "app/runtime/runtime.py": "83df42285e43af81118b055a29a0b2f2e99aea1d37d6a7ead5fa7354c38a84d4",
+    "app/Dockerfile": "0adc6ae93ab0c1fcd853b56c7211d949eddda328608ca495af57507e16aab874",
+    "infra/src/stack.ts": "c0b8893ee96a257927da7023e7e53495e3bf850c6f4c8794e5b35bebfbb4598b"
+  },
+  "ci_state": "Workflow source inspected; hosted CI for this uncommitted repair has not been observed.",
+  "commands": [
+    {
+      "command": "docker buildx imagetools inspect postgres:16.13",
+      "result": "Verified official image manifest list and ARM64 platform manifest."
+    },
+    {
+      "command": "docker pull postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+      "result": "Succeeded."
+    },
+    {
+      "command": "python3 app/runtime/qualify_migration.py --image postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59 --output /tmp/genui-app007-review-authored-16.13.json",
+      "result": "43 checks passed; exact output retained in authored_regression below."
+    },
+    {
+      "command": "python3 - (independent SQL matrix supplied on standard input)",
+      "result": "48 checks passed; fixture, probes, assertion method and exact result retained below."
+    },
+    {
+      "command": "git diff --check",
+      "result": "Passed."
+    },
+    {
+      "command": "docker ps -a --filter name=genui-app007-review-e646e4010644 --filter name=genui-app007-migration-39bcc26b74b8 --format '{{.Names}}'",
+      "result": "No remaining containers."
+    },
+    {
+      "command": "docker run --rm --name genui-app007-review-image-hash --network=none --read-only --cap-drop=ALL --security-opt no-new-privileges --memory=128m --cpus=1 --entrypoint python3 sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22 -c 'import hashlib; from pathlib import Path; print(hashlib.sha256(Path(\"/app/migrations/0001_role_foundation.sql\").read_bytes()).hexdigest())'",
+      "result": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963"
+    }
+  ],
+  "authored_regression": {
+    "scope": "APP-007 local PostgreSQL migration regression",
+    "managed_acceptance": false,
+    "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+    "container": "genui-app007-migration-39bcc26b74b8",
+    "network": "none",
+    "published_ports": [],
+    "migration_sha256": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "checks": [
+      {
+        "name": "legacy ALTER NOSUPERUSER",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "legacy ALTER NOBYPASSRLS",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "fresh migration refuses existing elevated role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "first migration as non-superuser administrator",
+        "passed": true
+      },
+      {
+        "name": "repeat migration preserves role state and version",
+        "passed": true
+      },
+      {
+        "name": "genui_workspace denied owner role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_workspace denied migration role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_workspace denied sibling role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_workspace denied schema creation",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_workspace denied temporary table",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_workspace denied metadata write",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_control denied owner role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_control denied migration role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_control denied sibling role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_control denied schema creation",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_control denied temporary table",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_control denied metadata write",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_data denied owner role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_data denied migration role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_data denied sibling role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_data denied schema creation",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_data denied temporary table",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_data denied metadata write",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_worker denied owner role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_worker denied migration role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_worker denied sibling role",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_worker denied schema creation",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_worker denied temporary table",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "genui_worker denied metadata write",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses app SUPERUSER",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses app BYPASSRLS",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses app CREATEDB",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses app CREATEROLE",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses app REPLICATION",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses app INHERIT",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses app NOLOGIN",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses owner login",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses owner privilege",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses app unexpected membership",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses owner unexpected membership",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses IAM grant admin option",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "migration refuses IAM grant inherit option",
+        "denied": true,
+        "sqlstate": "42501"
+      },
+      {
+        "name": "safe migration remains repeatable after test cleanup",
+        "passed": true
+      }
+    ],
+    "passed": true,
+    "server_version": "16.13 (Debian 16.13-1.pgdg13+1)",
+    "administrator": "genui_migration|genui_migration|f|t|f",
+    "legacy_failures": [
+      {
+        "attribute": "NOSUPERUSER",
+        "diagnostic": "psql:<stdin>:1: ERROR:  42501: permission denied to alter role\nDETAIL:  Only roles with the SUPERUSER attribute may change the SUPERUSER attribute.\nLOCATION:  AlterRole, user.c:764"
+      },
+      {
+        "attribute": "NOBYPASSRLS",
+        "diagnostic": "psql:<stdin>:1: ERROR:  42501: permission denied to alter role\nDETAIL:  Only roles with the BYPASSRLS attribute may change the BYPASSRLS attribute.\nLOCATION:  AlterRole, user.c:814"
+      }
+    ],
+    "role_grants": [
+      "genui_workspace|genui_workspace|t|f|f|t|f|f|t|f|f|f|1",
+      "genui_control|genui_control|t|f|f|t|f|f|t|f|f|f|1",
+      "genui_data|genui_data|t|f|f|t|f|f|t|f|f|f|1",
+      "genui_worker|genui_worker|t|f|f|t|f|f|t|f|f|f|1"
+    ],
+    "container_removed": true
+  },
+  "independent_regression": {
+    "scope": "independent role drift matrix",
+    "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+    "container": "genui-app007-review-e646e4010644",
+    "network": "none",
+    "published_ports": [],
+    "migration_sha256": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "checks": [
+      {
+        "name": "fresh application and exact repeat preserve catalog",
+        "passed": true
+      },
+      {
+        "name": "genui_owner rejects SUPERUSER",
+        "passed": true
+      },
+      {
+        "name": "genui_owner rejects CREATEDB",
+        "passed": true
+      },
+      {
+        "name": "genui_owner rejects CREATEROLE",
+        "passed": true
+      },
+      {
+        "name": "genui_owner rejects REPLICATION",
+        "passed": true
+      },
+      {
+        "name": "genui_owner rejects BYPASSRLS",
+        "passed": true
+      },
+      {
+        "name": "genui_owner rejects LOGIN",
+        "passed": true
+      },
+      {
+        "name": "genui_owner rejects NOINHERIT",
+        "passed": true
+      },
+      {
+        "name": "genui_workspace rejects SUPERUSER",
+        "passed": true
+      },
+      {
+        "name": "genui_workspace rejects CREATEDB",
+        "passed": true
+      },
+      {
+        "name": "genui_workspace rejects CREATEROLE",
+        "passed": true
+      },
+      {
+        "name": "genui_workspace rejects REPLICATION",
+        "passed": true
+      },
+      {
+        "name": "genui_workspace rejects BYPASSRLS",
+        "passed": true
+      },
+      {
+        "name": "genui_workspace rejects NOLOGIN",
+        "passed": true
+      },
+      {
+        "name": "genui_workspace rejects INHERIT",
+        "passed": true
+      },
+      {
+        "name": "genui_control rejects SUPERUSER",
+        "passed": true
+      },
+      {
+        "name": "genui_control rejects CREATEDB",
+        "passed": true
+      },
+      {
+        "name": "genui_control rejects CREATEROLE",
+        "passed": true
+      },
+      {
+        "name": "genui_control rejects REPLICATION",
+        "passed": true
+      },
+      {
+        "name": "genui_control rejects BYPASSRLS",
+        "passed": true
+      },
+      {
+        "name": "genui_control rejects NOLOGIN",
+        "passed": true
+      },
+      {
+        "name": "genui_control rejects INHERIT",
+        "passed": true
+      },
+      {
+        "name": "genui_data rejects SUPERUSER",
+        "passed": true
+      },
+      {
+        "name": "genui_data rejects CREATEDB",
+        "passed": true
+      },
+      {
+        "name": "genui_data rejects CREATEROLE",
+        "passed": true
+      },
+      {
+        "name": "genui_data rejects REPLICATION",
+        "passed": true
+      },
+      {
+        "name": "genui_data rejects BYPASSRLS",
+        "passed": true
+      },
+      {
+        "name": "genui_data rejects NOLOGIN",
+        "passed": true
+      },
+      {
+        "name": "genui_data rejects INHERIT",
+        "passed": true
+      },
+      {
+        "name": "genui_worker rejects SUPERUSER",
+        "passed": true
+      },
+      {
+        "name": "genui_worker rejects CREATEDB",
+        "passed": true
+      },
+      {
+        "name": "genui_worker rejects CREATEROLE",
+        "passed": true
+      },
+      {
+        "name": "genui_worker rejects REPLICATION",
+        "passed": true
+      },
+      {
+        "name": "genui_worker rejects BYPASSRLS",
+        "passed": true
+      },
+      {
+        "name": "genui_worker rejects NOLOGIN",
+        "passed": true
+      },
+      {
+        "name": "genui_worker rejects INHERIT",
+        "passed": true
+      },
+      {
+        "name": "genui_owner rejects unreachable privileged membership",
+        "passed": true
+      },
+      {
+        "name": "genui_workspace rejects unreachable privileged membership",
+        "passed": true
+      },
+      {
+        "name": "genui_control rejects unreachable privileged membership",
+        "passed": true
+      },
+      {
+        "name": "genui_data rejects unreachable privileged membership",
+        "passed": true
+      },
+      {
+        "name": "genui_worker rejects unreachable privileged membership",
+        "passed": true
+      },
+      {
+        "name": "app detects indirect IAM ancestor even without SET or INHERIT",
+        "passed": true
+      },
+      {
+        "name": "owner rejects IAM membership",
+        "passed": true
+      },
+      {
+        "name": "safe final migration succeeds after restoring all perturbations",
+        "passed": true
+      },
+      {
+        "name": "genui_workspace lacks extra metadata object privileges",
+        "passed": true
+      },
+      {
+        "name": "genui_control lacks extra metadata object privileges",
+        "passed": true
+      },
+      {
+        "name": "genui_data lacks extra metadata object privileges",
+        "passed": true
+      },
+      {
+        "name": "genui_worker lacks extra metadata object privileges",
+        "passed": true
+      }
+    ],
+    "passed": true,
+    "server_version": "16.13 (Debian 16.13-1.pgdg13+1)",
+    "image_platform": "arm64",
+    "container_removed": true
+  },
+  "independent_method": {
+    "container_controls": [
+      "--rm",
+      "--network=none",
+      "--memory=512m",
+      "--cpus=1",
+      "--tmpfs=/var/lib/postgresql/data:rw,noexec,nosuid,size=256m",
+      "--env=POSTGRES_HOST_AUTH_METHOD=trust"
+    ],
+    "psql_options": [
+      "-X",
+      "-v ON_ERROR_STOP=1",
+      "-v VERBOSITY=verbose",
+      "-At",
+      "-f -",
+      "-1"
+    ],
+    "fixture_sql": "CREATE ROLE genui_migration LOGIN INHERIT CREATEDB CREATEROLE NOSUPERUSER NOBYPASSRLS; CREATE ROLE rds_iam NOLOGIN; GRANT rds_iam TO genui_migration WITH ADMIN TRUE; CREATE DATABASE genui OWNER genui_migration;",
+    "fixture_execution": "postgres login against postgres database, without single transaction because CREATE DATABASE requires it; all subsequent SQL uses genui database and transactions.",
+    "baseline": "Apply reviewed migration twice as genui_migration; require equal catalog snapshots.",
+    "drift_execution": "For each probe, introduce and restore using fixture postgres. Between those steps, run the reviewed migration as genui_migration and require nonzero result with SQLSTATE 42501 plus byte-identical before/after catalog snapshot. Apply safe migration once more after restoring all probes.",
+    "snapshot_sql": "SELECT jsonb_agg(to_jsonb(r) ORDER BY rolname) FROM (SELECT * FROM pg_roles WHERE rolname LIKE 'genui_%') r; SELECT jsonb_agg(to_jsonb(m) ORDER BY roleid,member,grantor) FROM pg_auth_members m; SELECT jsonb_agg(to_jsonb(v)) FROM genui_meta.schema_version v;",
+    "drift_probes": [
+      {
+        "introduce": "ALTER ROLE genui_owner SUPERUSER",
+        "restore": "ALTER ROLE genui_owner NOSUPERUSER"
+      },
+      {
+        "introduce": "ALTER ROLE genui_owner CREATEDB",
+        "restore": "ALTER ROLE genui_owner NOCREATEDB"
+      },
+      {
+        "introduce": "ALTER ROLE genui_owner CREATEROLE",
+        "restore": "ALTER ROLE genui_owner NOCREATEROLE"
+      },
+      {
+        "introduce": "ALTER ROLE genui_owner REPLICATION",
+        "restore": "ALTER ROLE genui_owner NOREPLICATION"
+      },
+      {
+        "introduce": "ALTER ROLE genui_owner BYPASSRLS",
+        "restore": "ALTER ROLE genui_owner NOBYPASSRLS"
+      },
+      {
+        "introduce": "ALTER ROLE genui_owner LOGIN",
+        "restore": "ALTER ROLE genui_owner NOLOGIN"
+      },
+      {
+        "introduce": "ALTER ROLE genui_owner NOINHERIT",
+        "restore": "ALTER ROLE genui_owner INHERIT"
+      },
+      {
+        "introduce": "ALTER ROLE genui_workspace SUPERUSER",
+        "restore": "ALTER ROLE genui_workspace NOSUPERUSER"
+      },
+      {
+        "introduce": "ALTER ROLE genui_workspace CREATEDB",
+        "restore": "ALTER ROLE genui_workspace NOCREATEDB"
+      },
+      {
+        "introduce": "ALTER ROLE genui_workspace CREATEROLE",
+        "restore": "ALTER ROLE genui_workspace NOCREATEROLE"
+      },
+      {
+        "introduce": "ALTER ROLE genui_workspace REPLICATION",
+        "restore": "ALTER ROLE genui_workspace NOREPLICATION"
+      },
+      {
+        "introduce": "ALTER ROLE genui_workspace BYPASSRLS",
+        "restore": "ALTER ROLE genui_workspace NOBYPASSRLS"
+      },
+      {
+        "introduce": "ALTER ROLE genui_workspace NOLOGIN",
+        "restore": "ALTER ROLE genui_workspace LOGIN"
+      },
+      {
+        "introduce": "ALTER ROLE genui_workspace INHERIT",
+        "restore": "ALTER ROLE genui_workspace NOINHERIT"
+      },
+      {
+        "introduce": "ALTER ROLE genui_control SUPERUSER",
+        "restore": "ALTER ROLE genui_control NOSUPERUSER"
+      },
+      {
+        "introduce": "ALTER ROLE genui_control CREATEDB",
+        "restore": "ALTER ROLE genui_control NOCREATEDB"
+      },
+      {
+        "introduce": "ALTER ROLE genui_control CREATEROLE",
+        "restore": "ALTER ROLE genui_control NOCREATEROLE"
+      },
+      {
+        "introduce": "ALTER ROLE genui_control REPLICATION",
+        "restore": "ALTER ROLE genui_control NOREPLICATION"
+      },
+      {
+        "introduce": "ALTER ROLE genui_control BYPASSRLS",
+        "restore": "ALTER ROLE genui_control NOBYPASSRLS"
+      },
+      {
+        "introduce": "ALTER ROLE genui_control NOLOGIN",
+        "restore": "ALTER ROLE genui_control LOGIN"
+      },
+      {
+        "introduce": "ALTER ROLE genui_control INHERIT",
+        "restore": "ALTER ROLE genui_control NOINHERIT"
+      },
+      {
+        "introduce": "ALTER ROLE genui_data SUPERUSER",
+        "restore": "ALTER ROLE genui_data NOSUPERUSER"
+      },
+      {
+        "introduce": "ALTER ROLE genui_data CREATEDB",
+        "restore": "ALTER ROLE genui_data NOCREATEDB"
+      },
+      {
+        "introduce": "ALTER ROLE genui_data CREATEROLE",
+        "restore": "ALTER ROLE genui_data NOCREATEROLE"
+      },
+      {
+        "introduce": "ALTER ROLE genui_data REPLICATION",
+        "restore": "ALTER ROLE genui_data NOREPLICATION"
+      },
+      {
+        "introduce": "ALTER ROLE genui_data BYPASSRLS",
+        "restore": "ALTER ROLE genui_data NOBYPASSRLS"
+      },
+      {
+        "introduce": "ALTER ROLE genui_data NOLOGIN",
+        "restore": "ALTER ROLE genui_data LOGIN"
+      },
+      {
+        "introduce": "ALTER ROLE genui_data INHERIT",
+        "restore": "ALTER ROLE genui_data NOINHERIT"
+      },
+      {
+        "introduce": "ALTER ROLE genui_worker SUPERUSER",
+        "restore": "ALTER ROLE genui_worker NOSUPERUSER"
+      },
+      {
+        "introduce": "ALTER ROLE genui_worker CREATEDB",
+        "restore": "ALTER ROLE genui_worker NOCREATEDB"
+      },
+      {
+        "introduce": "ALTER ROLE genui_worker CREATEROLE",
+        "restore": "ALTER ROLE genui_worker NOCREATEROLE"
+      },
+      {
+        "introduce": "ALTER ROLE genui_worker REPLICATION",
+        "restore": "ALTER ROLE genui_worker NOREPLICATION"
+      },
+      {
+        "introduce": "ALTER ROLE genui_worker BYPASSRLS",
+        "restore": "ALTER ROLE genui_worker NOBYPASSRLS"
+      },
+      {
+        "introduce": "ALTER ROLE genui_worker NOLOGIN",
+        "restore": "ALTER ROLE genui_worker LOGIN"
+      },
+      {
+        "introduce": "ALTER ROLE genui_worker INHERIT",
+        "restore": "ALTER ROLE genui_worker NOINHERIT"
+      },
+      {
+        "introduce": "GRANT pg_read_all_data TO genui_owner WITH INHERIT FALSE, SET FALSE",
+        "restore": "REVOKE pg_read_all_data FROM genui_owner"
+      },
+      {
+        "introduce": "GRANT pg_read_all_data TO genui_workspace WITH INHERIT FALSE, SET FALSE",
+        "restore": "REVOKE pg_read_all_data FROM genui_workspace"
+      },
+      {
+        "introduce": "GRANT pg_read_all_data TO genui_control WITH INHERIT FALSE, SET FALSE",
+        "restore": "REVOKE pg_read_all_data FROM genui_control"
+      },
+      {
+        "introduce": "GRANT pg_read_all_data TO genui_data WITH INHERIT FALSE, SET FALSE",
+        "restore": "REVOKE pg_read_all_data FROM genui_data"
+      },
+      {
+        "introduce": "GRANT pg_read_all_data TO genui_worker WITH INHERIT FALSE, SET FALSE",
+        "restore": "REVOKE pg_read_all_data FROM genui_worker"
+      },
+      {
+        "introduce": "GRANT pg_read_all_data TO rds_iam WITH INHERIT FALSE, SET FALSE",
+        "restore": "REVOKE pg_read_all_data FROM rds_iam"
+      },
+      {
+        "introduce": "GRANT rds_iam TO genui_owner",
+        "restore": "REVOKE rds_iam FROM genui_owner"
+      }
+    ],
+    "clean_acl_check_sql": "SELECT has_schema_privilege(current_user,'genui_meta','CREATE'), has_table_privilege(current_user,'genui_meta.schema_version','TRUNCATE'), has_table_privilege(current_user,'genui_meta.schema_version','TRIGGER'), has_table_privilege(current_user,'genui_meta.schema_version','REFERENCES');",
+    "clean_acl_check_expected": "f|f|f|f for each of the four app logins. This checks the clean foundation only, not rejection of pre-existing ACL drift."
+  },
+  "compatibility_assessment": "The explicit restricted CREATE ROLE statements work on real PostgreSQL 16.13 as a non-superuser CREATEROLE/CREATEDB administrator. AWS documents this master-user privilege pattern and granting rds_iam to application users. Compatibility with the actual RDS service remains an inference pending managed execution.",
+  "references": [
+    "https://www.postgresql.org/docs/16/sql-createrole.html",
+    "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.PostgreSQL.CommonDBATasks.Roles.rds_superuser.html",
+    "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.DBAccounts.html"
+  ],
+  "limits": [
+    "No AWS operation, secret read, managed migration, IAM token login, TLS connection, tenant RLS test or public endpoint test was performed by this reviewer.",
+    "Local rds_iam is a simulated group. Matching upstream PostgreSQL 16.13 is not proof of RDS-specific behavior.",
+    "Drift rejection covers role attributes and memberships. The migration does not validate or revoke arbitrary existing object ACLs; clean-foundation grants and denials do not prove ACL-drift handling.",
+    "Successful repeat and refusal rollback were tested. Concurrent administrative role edits or concurrent migration invocations were not exercised; this operator-only migration assumes controlled administration.",
+    "The managed_sql_trial.py change belongs to a separate review and is outside this verdict.",
+    "The local candidate migration payload matches the reviewed SQL; registry identity and managed deployment acceptance remain separate gates.",
+    "This verdict does not complete APP-007 or the Phase 1 gate."
+  ]
+}

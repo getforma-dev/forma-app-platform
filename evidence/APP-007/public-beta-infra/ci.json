@@ -1,0 +1,71 @@
+{
+  "source": "7e105bf607a7a70982b57fbf66621a13b7e58b1a",
+  "observed_at_utc": "2026-10-28T22:18:35.056343+00:00",
+  "scope": "Reviewed public-beta infrastructure and unchanged application source; no managed acceptance inferred",
+  "runs": [
+    {
+      "conclusion": "success",
+      "databaseId": 40777246075,
+      "headSha": "7e105bf607a7a70982b57fbf66621a13b7e58b1a",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40777246075",
+      "workflowName": "Planning integrity"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40777246095,
+      "headSha": "7e105bf607a7a70982b57fbf66621a13b7e58b1a",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40777246095",
+      "workflowName": "Contract qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40777246127,
+      "headSha": "7e105bf607a7a70982b57fbf66621a13b7e58b1a",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40777246127",
+      "workflowName": "Released baseline"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40777246056,
+      "headSha": "7e105bf607a7a70982b57fbf66621a13b7e58b1a",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40777246056",
+      "workflowName": "Bounded query qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40777246160,
+      "headSha": "7e105bf607a7a70982b57fbf66621a13b7e58b1a",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40777246160",
+      "workflowName": "Auth consumer qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40777246106,
+      "headSha": "7e105bf607a7a70982b57fbf66621a13b7e58b1a",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40777246106",
+      "workflowName": "Published canvas consumer"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40777246497,
+      "headSha": "7e105bf607a7a70982b57fbf66621a13b7e58b1a",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40777246497",
+      "workflowName": "Foundation preparation"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40777246126,
+      "headSha": "7e105bf607a7a70982b57fbf66621a13b7e58b1a",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40777246126",
+      "workflowName": "Parser qualification"
+    }
+  ]
+}

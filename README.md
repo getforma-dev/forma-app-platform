@@ -31,7 +31,7 @@ The ticket Markdown files in `Tickets/` are the source of truth. Each of the 74 
 | `evidence/` | Actual checks, failures, reviews, source identities and operational records |
 | `.github/` | Ticket-specific qualification CI and pull request template |
 
-No GenUI AWS resources or model integration have been deployed. The [environment plan](docs/planning/SYNTHETIC-ENVIRONMENT.md) and [cost estimate](docs/planning/SYNTHETIC-ENVIRONMENT-COST.md) identify the remaining deployment inputs. At Victor’s separate request, unused GateWasm application resources were [torn down](evidence/APP-007/gatewasm-teardown.md); the [FormaStack handoff](docs/planning/CROSS-TEAM-HANDOFF.md) records rebuild prerequisites and team boundaries.
+The GenUI certificate and private image registry are prepared, and creation of the bounded synthetic environment is underway with app tasks initially stopped. Managed runtime acceptance and model integration remain unproved. The [environment plan](docs/planning/SYNTHETIC-ENVIRONMENT.md) and [cost record](docs/planning/SYNTHETIC-ENVIRONMENT-COST.md) capture the selected inputs and operating allowance. At Victor’s separate request, unused GateWasm application resources were [torn down](evidence/APP-007/gatewasm-teardown.md); the [FormaStack handoff](docs/planning/CROSS-TEAM-HANDOFF.md) records rebuild prerequisites and team boundaries.
 
 ## Check the preparation
 

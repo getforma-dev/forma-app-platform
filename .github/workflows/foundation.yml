@@ -23,6 +23,8 @@ jobs:
           rustup default 1.93.1
       - name: Check local scaffold and CDK without deployment
         run: python3 scripts/check-foundation.py
+      - name: Verify migration as a non-superuser PostgreSQL administrator
+        run: python3 app/runtime/qualify_migration.py --output evidence/APP-007/migration-repair/ci-postgresql16.json
       - name: Build immutable-source runtime image locally
         run: docker build --tag genui-foundation-ci --file app/Dockerfile app
       - name: Exercise image with no network and a read-only root
@@ -34,4 +36,5 @@ jobs:
           path: |
             evidence/APP-007/local-preparation.json
             evidence/APP-007/image-qualification.json
+            evidence/APP-007/migration-repair/ci-postgresql16.json
           retention-days: 14

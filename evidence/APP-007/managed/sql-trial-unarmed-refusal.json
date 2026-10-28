@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "scope": "APP-007 managed SQL role qualification",
+  "run_id": "c20e9397-5a77-4ea7-9537-1a8207a085bd",
+  "app008_acceptance": false,
+  "passed": false,
+  "checks": [
+    {
+      "name": "explicit_invocation_and_runtime",
+      "passed": false
+    }
+  ],
+  "failure": "assertion_or_interrupt"
+}

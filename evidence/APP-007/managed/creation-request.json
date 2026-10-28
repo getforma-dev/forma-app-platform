@@ -1,0 +1,363 @@
+{
+  "schema_version": 1,
+  "source": "7e105bf607a7a70982b57fbf66621a13b7e58b1a",
+  "observed_at_utc": "2026-10-28T22:18:35.060283+00:00",
+  "account": "877573132739",
+  "region": "us-east-1",
+  "stack_id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GenuiSyntheticFoundation/19ff2560-d31d-11f1-b9e5-0afffa733a75",
+  "change_set_id": "arn:aws:cloudformation:us-east-1:877573132739:changeSet/genui-foundation-6362e1a2-c0e6-4376-b825-fd23ee06b257/0956e117-1985-468b-b427-2d48f2453835",
+  "window_id": "6362e1a2-c0e6-4376-b825-fd23ee06b257",
+  "status": "CREATE requested; managed acceptance pending",
+  "reviewed_synth_sha256": "e87ecdb335f369ec51ad3c6886903aa7e8bbdb4aeeef445dfa9d2b191180a4a1",
+  "prepared_template_matches_reviewed_synthesis": true,
+  "all_parameters_match_private_preflight": true,
+  "desired_count": 0,
+  "ingress_mode": "operator",
+  "expires_at_utc": "2026-10-29T04:02:33Z",
+  "cost_by_month": {
+    "2026-10": {
+      "retained_core_full_month_cents": 5229,
+      "all_window_compute_reservations_cents": 109,
+      "prior_extra_spend_cents": 1,
+      "variable_reserve_cents": 1000,
+      "genui_total_cents": 6339,
+      "auth_spent_or_reserved_cents": 500,
+      "unallocated_cents": 2500,
+      "project_total_cents": 9339
+    }
+  },
+  "execution_request_returncode": 0,
+  "resource_changes": [
+    {
+      "action": "Add",
+      "type": "AWS::EC2::SecurityGroup",
+      "logical_id": "AlbSecurityEE4D756D"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::SecurityGroupEgress",
+      "logical_id": "AlbSecuritytoGenuiSyntheticFoundationTaskSecurity56C1A2F830004F28692D"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::CDK::Metadata",
+      "logical_id": "CDKMetadata"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::ECS::Cluster",
+      "logical_id": "ClusterEB0386A7"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Policy",
+      "logical_id": "DatabaseAccesscontrolDefaultPolicyE4DE3FF4"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Role",
+      "logical_id": "DatabaseAccesscontrolEF42B09A"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Role",
+      "logical_id": "DatabaseAccessdata36378A0D"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Policy",
+      "logical_id": "DatabaseAccessdataDefaultPolicy2F35C4CD"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Role",
+      "logical_id": "DatabaseAccessworker767404D8"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Policy",
+      "logical_id": "DatabaseAccessworkerDefaultPolicy741D01A4"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Role",
+      "logical_id": "DatabaseAccessworkspace80FF2866"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Policy",
+      "logical_id": "DatabaseAccessworkspaceDefaultPolicy21D1F422"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::RDS::DBInstance",
+      "logical_id": "DatabaseB269D8BB"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::RDS::DBParameterGroup",
+      "logical_id": "DatabaseParameterGroup2A921026"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::SecurityGroup",
+      "logical_id": "DatabaseSecurityD521C81A"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::SecurityGroupIngress",
+      "logical_id": "DatabaseSecurityfromGenuiSyntheticFoundationTaskSecurity56C1A2F8543287F9D7CB"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::RDS::DBSubnetGroup",
+      "logical_id": "DatabaseSubnetGroup7D60F180"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::Scheduler::Schedule",
+      "logical_id": "DeploymentExpiry"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::S3::Bucket",
+      "logical_id": "Evidence4CC26D68"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::S3::BucketPolicy",
+      "logical_id": "EvidencePolicy94E40009"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Role",
+      "logical_id": "ExecutionRole605A040B"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Policy",
+      "logical_id": "ExecutionRoleDefaultPolicyA5B92313"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Role",
+      "logical_id": "ExpiryRole0EF470AE"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Policy",
+      "logical_id": "ExpiryRoleDefaultPolicy8A471F99"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::Scheduler::ScheduleGroup",
+      "logical_id": "ExpiryScheduleGroup"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "logical_id": "LoadBalancerBE9EEC3A"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::ElasticLoadBalancingV2::Listener",
+      "logical_id": "LoadBalancerHttps0C5C99D2"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "logical_id": "LoadBalancerHttpsApplicationGroupC1398D37"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::Logs::LogGroup",
+      "logical_id": "Logs6819BB44"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Role",
+      "logical_id": "MigrationExecutionRoleB6B10AD3"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Policy",
+      "logical_id": "MigrationExecutionRoleDefaultPolicy2DEB579B"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Role",
+      "logical_id": "MigrationRole55C404E5"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::SecretsManager::Secret",
+      "logical_id": "MigrationSecret3625340F"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::SecretsManager::SecretTargetAttachment",
+      "logical_id": "MigrationSecretAttachment2EFDD562"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::ECS::TaskDefinition",
+      "logical_id": "MigrationTask69EAEF9D"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::ECS::Service",
+      "logical_id": "ServiceD69D759B"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::ECS::TaskDefinition",
+      "logical_id": "Task79114B6B"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Role",
+      "logical_id": "TaskRole30FC0FBB"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Policy",
+      "logical_id": "TaskRoleDefaultPolicy07FC53DE"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::SecurityGroup",
+      "logical_id": "TaskSecurity3206A714"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::SecurityGroupIngress",
+      "logical_id": "TaskSecurityfromGenuiSyntheticFoundationAlbSecurity84DF40DB300003B68B88"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::SecurityGroupEgress",
+      "logical_id": "TaskSecuritytoGenuiSyntheticFoundationDatabaseSecurity63993429543249D35720"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Role",
+      "logical_id": "TenantAccess09CBCD5F8"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Policy",
+      "logical_id": "TenantAccess0DefaultPolicy026679CA"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Role",
+      "logical_id": "TenantAccess1B93A8085"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::IAM::Policy",
+      "logical_id": "TenantAccess1DefaultPolicy934AC85C"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::VPC",
+      "logical_id": "Vpc8378EB38"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::InternetGateway",
+      "logical_id": "VpcIGWD7BA715C"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::VPCGatewayAttachment",
+      "logical_id": "VpcVPCGWBF912B6E"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::SubnetRouteTableAssociation",
+      "logical_id": "VpcdatabaseSubnet1RouteTableAssociationEE6CA36B"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::RouteTable",
+      "logical_id": "VpcdatabaseSubnet1RouteTableF3B572E4"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::Subnet",
+      "logical_id": "VpcdatabaseSubnet1SubnetD53A427B"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::RouteTable",
+      "logical_id": "VpcdatabaseSubnet2RouteTable1E50BD8E"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::SubnetRouteTableAssociation",
+      "logical_id": "VpcdatabaseSubnet2RouteTableAssociationCADBAF9A"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::Subnet",
+      "logical_id": "VpcdatabaseSubnet2Subnet75663D63"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::Route",
+      "logical_id": "VpcpublicSubnet1DefaultRouteB88F9E93"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::RouteTable",
+      "logical_id": "VpcpublicSubnet1RouteTable15C15F8E"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::SubnetRouteTableAssociation",
+      "logical_id": "VpcpublicSubnet1RouteTableAssociation4E83B6E4"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::Subnet",
+      "logical_id": "VpcpublicSubnet1Subnet2BB74ED7"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::Route",
+      "logical_id": "VpcpublicSubnet2DefaultRoute732F0BEB"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::SubnetRouteTableAssociation",
+      "logical_id": "VpcpublicSubnet2RouteTableAssociationCCE257FF"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::RouteTable",
+      "logical_id": "VpcpublicSubnet2RouteTableC5A6DF77"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::EC2::Subnet",
+      "logical_id": "VpcpublicSubnet2SubnetE34B022A"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::KMS::Key",
+      "logical_id": "canaryKey20802543"
+    },
+    {
+      "action": "Add",
+      "type": "AWS::KMS::Key",
+      "logical_id": "northstarKey0C129EB3"
+    }
+  ],
+  "limitations": [
+    "Count-zero still creates billable retained resources.",
+    "Initial inline ValidateTemplate exceeded the AWS 51200-byte body limit, including after JSON compaction (51433 bytes); CDK prepared the exact reviewed template through its normal bootstrap upload and CloudFormation accepted the change set.",
+    "Actual migration, tenant denials, scheduled stop, TLS, cleanup and rollback remain unproved.",
+    "The private operator IPv4, full DNS zone, credential material and raw parameters are omitted."
+  ]
+}

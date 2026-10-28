@@ -1,0 +1,243 @@
+{
+  "scope": "APP-007 local PostgreSQL migration regression",
+  "managed_acceptance": false,
+  "image": "postgres@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d",
+  "container": "genui-app007-migration-d9ca06777efe",
+  "network": "none",
+  "published_ports": [],
+  "migration_sha256": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+  "checks": [
+    {
+      "name": "legacy ALTER NOSUPERUSER",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "legacy ALTER NOBYPASSRLS",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "fresh migration refuses existing elevated role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "first migration as non-superuser administrator",
+      "passed": true
+    },
+    {
+      "name": "repeat migration preserves role state and version",
+      "passed": true
+    },
+    {
+      "name": "genui_workspace denied owner role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace denied migration role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace denied sibling role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace denied schema creation",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace denied temporary table",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace denied metadata write",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control denied owner role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control denied migration role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control denied sibling role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control denied schema creation",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control denied temporary table",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control denied metadata write",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data denied owner role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data denied migration role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data denied sibling role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data denied schema creation",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data denied temporary table",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data denied metadata write",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker denied owner role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker denied migration role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker denied sibling role",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker denied schema creation",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker denied temporary table",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker denied metadata write",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses app SUPERUSER",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses app BYPASSRLS",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses app CREATEDB",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses app CREATEROLE",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses app REPLICATION",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses app INHERIT",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses app NOLOGIN",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses owner login",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses owner privilege",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses app unexpected membership",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses owner unexpected membership",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses IAM grant admin option",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "migration refuses IAM grant inherit option",
+      "denied": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "safe migration remains repeatable after test cleanup",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "server_version": "16.15 (Debian 16.15-1.pgdg13+2)",
+  "administrator": "genui_migration|genui_migration|f|t|f",
+  "legacy_failures": [
+    {
+      "attribute": "NOSUPERUSER",
+      "diagnostic": "psql:<stdin>:1: ERROR:  42501: permission denied to alter role\nDETAIL:  Only roles with the SUPERUSER attribute may change the SUPERUSER attribute.\nLOCATION:  AlterRole, user.c:764"
+    },
+    {
+      "attribute": "NOBYPASSRLS",
+      "diagnostic": "psql:<stdin>:1: ERROR:  42501: permission denied to alter role\nDETAIL:  Only roles with the BYPASSRLS attribute may change the BYPASSRLS attribute.\nLOCATION:  AlterRole, user.c:814"
+    }
+  ],
+  "role_grants": [
+    "genui_workspace|genui_workspace|t|f|f|t|f|f|t|f|f|f|1",
+    "genui_control|genui_control|t|f|f|t|f|f|t|f|f|f|1",
+    "genui_data|genui_data|t|f|f|t|f|f|t|f|f|f|1",
+    "genui_worker|genui_worker|t|f|f|t|f|f|t|f|f|f|1"
+  ],
+  "container_removed": true
+}

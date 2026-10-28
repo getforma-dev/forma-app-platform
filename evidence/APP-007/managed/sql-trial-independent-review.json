@@ -1,0 +1,19 @@
+{
+  "reviewer": "GenUI root; independent of managed_sql_trial author",
+  "reviewed_at_utc": "2026-10-28T22:24:34.004833+00:00",
+  "source_sha256": "89ebf77678144d3769b2c59dd2b27f8b972083d45fc037fe2df7ae1f636a9cd1",
+  "verdict": "no blocking source findings for explicitly invoked synthetic qualification",
+  "checks": [
+    "Python AST parse",
+    "Actual unarmed invocation refused before any runtime import or cloud access",
+    "Inspected fixed SQL identifiers and expected privilege/identity predicates",
+    "Inspected BEGIN READ WRITE, unconditional rollback and identity/idle checks after both expected refusal and unexpected success",
+    "Inspected specific libpq hostname-mismatch negative; unrelated transport/auth failures cannot pass",
+    "Inspected uid/invocation gate, process/connection/statement bounds, private temporary credentials and sanitized output"
+  ],
+  "limits": [
+    "Actual managed invocation pending; this review does not establish RDS/IAM/TLS/SQL authorization acceptance.",
+    "Keep the current reviewed image, role/network/volume settings in the temporary task definition.",
+    "A stopped/killed task or missing report cannot be treated as passing."
+  ]
+}
