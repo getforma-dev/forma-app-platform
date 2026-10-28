@@ -1,0 +1,19 @@
+{
+  "scope": "Earlier development observations, superseded by the final local campaign; not rerun or altered into passing results.",
+  "observations": [
+    {
+      "command": "npm run typecheck && npm test",
+      "exit_code": 2,
+      "detail": "TypeScript TS2353: actionAfterCompletion does not exist in CfnScheduleProps. Current CloudFormation schema also lacks that property; removed it. No tests ran in this command."
+    },
+    {
+      "command": "npm run typecheck && npm test",
+      "exit_code": 1,
+      "detail": "Typecheck passed; preflight tests passed; template construction failed because CfnOutput IngressMode reused a parameter construct name. Renamed output to SelectedIngressMode and expiry output to ScheduledExpiryUtc."
+    }
+  ],
+  "review_preflight_repairs": [
+    "CloudFormation now always count zero; explicit live-checked activation prevents creation finishing after expiry from starting compute.",
+    "Extra standalone/deployment task hours are reserved in every month touched by a window, not only its first month."
+  ]
+}

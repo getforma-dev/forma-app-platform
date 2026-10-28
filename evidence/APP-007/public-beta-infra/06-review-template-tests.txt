@@ -1,0 +1,76 @@
+TAP version 13
+# Subtest: managed data stays private, encrypted, retained and versioned
+ok 1 - managed data stays private, encrypted, retained and versioned
+  ---
+  duration_ms: 4.785666
+  type: 'test'
+  ...
+# Subtest: only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact
+ok 2 - only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact
+  ---
+  duration_ms: 1.302875
+  type: 'test'
+  ...
+# Subtest: operator and certificate are required; broad/private/placeholder networks fail
+ok 3 - operator and certificate are required; broad/private/placeholder networks fail
+  ---
+  duration_ms: 0.669834
+  type: 'test'
+  ...
+# Subtest: expiry is one UTC execution that can update only this service in this cluster
+ok 4 - expiry is one UTC execution that can update only this service in this cluster
+  ---
+  duration_ms: 0.646542
+  type: 'test'
+  ...
+# Subtest: digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints
+ok 5 - digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints
+  ---
+  duration_ms: 2.190375
+  type: 'test'
+  ...
+# Subtest: task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it
+ok 6 - task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it
+  ---
+  duration_ms: 0.2605
+  type: 'test'
+  ...
+# Subtest: each DB identity connects only as its fixed username on this database
+ok 7 - each DB identity connects only as its fixed username on this database
+  ---
+  duration_ms: 0.402042
+  type: 'test'
+  ...
+# Subtest: tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required
+ok 8 - tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required
+  ---
+  duration_ms: 0.680208
+  type: 'test'
+  ...
+# Subtest: execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants
+ok 9 - execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants
+  ---
+  duration_ms: 0.509417
+  type: 'test'
+  ...
+# Subtest: only migration execution role receives admin secret; migration has no tenant AWS authority
+ok 10 - only migration execution role receives admin secret; migration has no tenant AWS authority
+  ---
+  duration_ms: 0.480875
+  type: 'test'
+  ...
+# Subtest: app environment contains identities only and one private ephemeral credential mount
+ok 11 - app environment contains identities only and one private ephemeral credential mount
+  ---
+  duration_ms: 0.248958
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2036.956292

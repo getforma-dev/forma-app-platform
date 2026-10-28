@@ -1,0 +1,118 @@
+{
+  "recorded_at_utc": "2026-10-28T22:02:11.658101+00:00",
+  "scope": "Local public-ingress and bounded-window infrastructure qualification only; no AWS API, deployment, DNS, certificate, billing or live Scheduler acceptance is established. Activation tests use controlled AWS-shaped responses; default preflight CLI tests use disposable private local ledgers.",
+  "base_head": "d47228a3e2ea627c8d79e8298bd8d7253cf7d484",
+  "tools": {
+    "node": "v22.21.0",
+    "npm": "11.6.2",
+    "python": "Python 3.11.0"
+  },
+  "prior_campaign": "qualification-before-final-review.json",
+  "review_repairs": [
+    "Require exact integer zero in live Scheduler stop payload; JSON false and0.0 no longer compare equal to accepted zero.",
+    "Require exact bounded integer desired counts in live service and activation response.",
+    "Clarify template0 does not reconcile ECS count drift on unrelated updates; observed stop is required before changing image/window/sole stop schedule."
+  ],
+  "inputs": {
+    "infra/src/stack.ts": {
+      "bytes": 18478,
+      "sha256": "c0b8893ee96a257927da7023e7e53495e3bf850c6f4c8794e5b35bebfbb4598b"
+    },
+    "infra/src/main.ts": {
+      "bytes": 234,
+      "sha256": "3080fe33f5d266dbbba63db823b2195b83bcdf3aea3f7f80a9530dd8161417d8"
+    },
+    "infra/test/security.test.ts": {
+      "bytes": 19552,
+      "sha256": "b621b5b71b7f00a0bfc992b8d957a79322680c1bc125e8ea781cf632d123384a"
+    },
+    "infra/test/preflight.test.ts": {
+      "bytes": 423,
+      "sha256": "fe1f0e6c1764e995c0562bbc80479f497a0fb54f69d3fe1d5f8da3901e3e55f9"
+    },
+    "infra/test/preflight_test.py": {
+      "bytes": 15277,
+      "sha256": "5e7feed8410d07db2bc26a3285bc4b6e64b3dc94ec5ead0a7e1e6b1b1a7996b5"
+    },
+    "infra/scripts/preflight.py": {
+      "bytes": 19238,
+      "sha256": "14493d0ccd105bdf8c05c2c95132f6e188a7aed6f60c726807d0872e7b0bf1fb"
+    },
+    "infra/README.md": {
+      "bytes": 22133,
+      "sha256": "a715a8b70f051121bbdc0e323fda549f6489370d4eabfc151ce59cfa0615ce04"
+    },
+    "infra/package.json": {
+      "bytes": 426,
+      "sha256": "4c06daa14e04b8f79f13286033628a212ad24a32ca9d7fa01595780b5861b5fd"
+    },
+    "infra/package-lock.json": {
+      "bytes": 26041,
+      "sha256": "cf171e2d3fa5064c60a9896a788ae84b38cc24b0c67d21463fd77c1361ee839a"
+    },
+    "infra/tsconfig.json": {
+      "bytes": 202,
+      "sha256": "7494f3c4db6888ba330c03a98b723a6ac92cba2490e29696bac66b5b4033b96c"
+    },
+    "infra/cdk.json": {
+      "bytes": 93,
+      "sha256": "218be47a43c2178de8ed04f0015c0501aa8809e22815817a34ce1dd136fb116c"
+    }
+  },
+  "steps": [
+    {
+      "name": "05-review-python-tests",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "test",
+        "-p",
+        "preflight_test.py",
+        "-v"
+      ],
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "05-review-python-tests.txt"
+    },
+    {
+      "name": "06-review-template-tests",
+      "command": [
+        "npx",
+        "--no-install",
+        "tsx",
+        "--test",
+        "test/security.test.ts"
+      ],
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "06-review-template-tests.txt"
+    },
+    {
+      "name": "07-review-typecheck",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "07-review-typecheck.txt"
+    },
+    {
+      "name": "08-review-synth",
+      "command": [
+        "npm",
+        "run",
+        "synth",
+        "--",
+        "--quiet"
+      ],
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "08-review-synth.txt"
+    }
+  ]
+}

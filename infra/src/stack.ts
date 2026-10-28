@@ -1,4 +1,4 @@
-import { CfnOutput, CfnParameter, Duration, Fn, RemovalPolicy, Stack, StackProps, Tags } from 'aws-cdk-lib';
+import { CfnCondition, CfnOutput, CfnParameter, Duration, Fn, RemovalPolicy, Stack, StackProps, Tags } from 'aws-cdk-lib';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
@@ -8,12 +8,14 @@ import * as kms from 'aws-cdk-lib/aws-kms';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as scheduler from 'aws-cdk-lib/aws-scheduler';
 import { Construct } from 'constructs';
 
-// No /0–/23, private/loopback/link-local/multicast, or placeholder TEST-NET ranges.
-// Required deployment input: a routable operator IPv4 block with at most 256 IPs.
+// The temporary ingress trial is one real operator address; public mode uses /0.
+// Keep the operator address separately so /0 can never masquerade as that trial.
 const octet = '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])';
-export const OPERATOR_CIDR_PATTERN = `^(?!(?:0|10|127)\\.)(?!100\\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\\.)(?!169\\.254\\.)(?!172\\.(?:1[6-9]|2[0-9]|3[01])\\.)(?!192\\.168\\.)(?!192\\.0\\.[02]\\.)(?!192\\.88\\.99\\.)(?!198\\.(?:18|19)\\.)(?!198\\.51\\.100\\.)(?!203\\.0\\.113\\.)(?!2(?:2[4-9]|[3-5][0-9])\\.)${octet}(?:\\.${octet}){3}/(?:2[4-9]|3[0-2])(?![\\s\\S])`;
+export const OPERATOR_CIDR_PATTERN = `^(?!(?:0|10|127)\\.)(?!100\\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\\.)(?!169\\.254\\.)(?!172\\.(?:1[6-9]|2[0-9]|3[01])\\.)(?!192\\.168\\.)(?!192\\.0\\.[02]\\.)(?!192\\.88\\.99\\.)(?!198\\.(?:18|19)\\.)(?!198\\.51\\.100\\.)(?!203\\.0\\.113\\.)(?!2(?:2[4-9]|[3-5][0-9])\\.)${octet}(?:\\.${octet}){3}/32(?![\\s\\S])`;
+export const EXPIRY_UTC_PATTERN = '^20[0-9]{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z(?![\\s\\S])';
 
 /** Reviewable deployment model. Synth/tests never create cloud resources. */
 export class GenuiFoundation extends Stack {
@@ -22,19 +24,22 @@ export class GenuiFoundation extends Stack {
     Tags.of(this).add('Application', 'forma-app-platform');
     Tags.of(this).add('Environment', 'synthetic');
     const operator = new CfnParameter(this, 'Operator', { type: 'String', minLength: 1, description: 'Named operator before provisioning' });
-    const budget = new CfnParameter(this, 'MonthlyBudgetUsd', { type: 'Number', minValue: 1, description: 'Approved monthly budget record/tag only; this creates neither an AWS Budget alarm nor a spending hard-stop' });
+    const budget = new CfnParameter(this, 'MonthlyBudgetUsd', { type: 'Number', default: 100, allowedValues: ['100'], description: 'Approved $100 monthly operating limit; preflight accounts for retained resources and other spending. This is not an AWS billing hard-stop.' });
+    const ingressMode = new CfnParameter(this, 'IngressMode', { type: 'String', default: 'public', allowedValues: ['operator', 'public'], description: 'operator only for the temporary /32 ingress trial; public HTTPS is the selected beta mode. Application access requires its separately tested signup/invite gate.' });
+    const publicIngress = new CfnCondition(this, 'PublicIngress', { expression: Fn.conditionEquals(ingressMode.valueAsString, 'public') });
     const operatorCidr = new CfnParameter(this, 'OperatorIpv4Cidr', {
       type: 'String', allowedPattern: OPERATOR_CIDR_PATTERN,
-      constraintDescription: 'Supply the real operator public IPv4 CIDR, /24 through /32; broad/private/reserved placeholder ranges are not accepted.',
-      description: 'Only this operator network may reach the HTTPS listener. No default or unrestricted ingress.',
+      constraintDescription: 'Supply the real operator public IPv4 /32; broad/private/reserved placeholder ranges are not accepted.',
+      description: 'Recorded operator address for the temporary ingress trial. Public mode uses 0.0.0.0/0 instead.',
     });
+    const expiresAt = new CfnParameter(this, 'DeploymentExpiresAtUtc', { type: 'String', allowedPattern: EXPIRY_UTC_PATTERN, description: 'Required UTC timestamp YYYY-MM-DDTHH:MM:SSZ. Run scripts/preflight.py immediately before deployment; expiry must be real, future and at most 48 hours away.' });
     const certificateArn = new CfnParameter(this, 'TlsCertificateArn', {
       type: 'String', allowedPattern: '^arn:aws:acm:[a-z0-9-]+:[0-9]{12}:certificate/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])',
       description: 'Existing issued ACM certificate ARN in this account/region for the operator-owned application hostname; no certificate or DNS name is invented.',
     });
     const desiredCount = new CfnParameter(this, 'ServiceDesiredCount', {
-      type: 'Number', default: 0, allowedValues: ['0', '1'],
-      description: 'Keep 0 until the separate migration task succeeds; set 1 only for the approved managed validation/deployment.',
+      type: 'Number', default: 0, allowedValues: ['0'],
+      description: 'Template creates service at zero; later unrelated updates may preserve actual count drift. Observe service/tasks stopped before replacing image/window/schedule. Activate only through the live-checked preflight path.',
     });
     Tags.of(this).add('Operator', operator.valueAsString, { excludeResourceTypes: ['aws:cdk:stack'] });
     Tags.of(this).add('ApprovedMonthlyBudgetUsd', budget.valueAsString, { excludeResourceTypes: ['aws:cdk:stack'] });
@@ -130,7 +135,7 @@ export class GenuiFoundation extends Stack {
     container.addPortMappings({ containerPort: 3000 });
 
     const albSecurity = new ec2.SecurityGroup(this, 'AlbSecurity', { vpc, allowAllOutbound: false });
-    albSecurity.addIngressRule(ec2.Peer.ipv4(operatorCidr.valueAsString), ec2.Port.tcp(443), 'Only the recorded operator network reaches HTTPS');
+    albSecurity.addIngressRule(ec2.Peer.ipv4(Fn.conditionIf(publicIngress.logicalId, '0.0.0.0/0', operatorCidr.valueAsString).toString()), ec2.Port.tcp(443), 'Public beta HTTPS or the temporary operator-only trial');
     albSecurity.addEgressRule(taskSecurity, ec2.Port.tcp(3000), 'Application and readiness probes');
     taskSecurity.addIngressRule(albSecurity, ec2.Port.tcp(3000), 'Only the ALB reaches the application');
     const alb = new elbv2.ApplicationLoadBalancer(this, 'LoadBalancer', { vpc, internetFacing: true, vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }, securityGroup: albSecurity, dropInvalidHeaderFields: true });
@@ -144,6 +149,28 @@ export class GenuiFoundation extends Stack {
     const certificate = acm.Certificate.fromCertificateArn(this, 'Certificate', certificateArn.valueAsString);
     const listener = alb.addListener('Https', { port: 443, protocol: elbv2.ApplicationProtocol.HTTPS, certificates: [certificate], sslPolicy: elbv2.SslPolicy.RECOMMENDED_TLS, open: false });
     listener.addTargets('Application', { port: 3000, protocol: elbv2.ApplicationProtocol.HTTP, targets: [service], healthCheck: { path: '/health/ready', healthyHttpCodes: '200', interval: Duration.seconds(30), timeout: Duration.seconds(5), healthyThresholdCount: 2, unhealthyThresholdCount: 3 }, deregistrationDelay: Duration.seconds(30) });
+
+    // One-time safety only: this stops service compute, not the retained billable
+    // database, ALB, storage or keys. There is no automatic resume or destroy.
+    const expiryGroup = new scheduler.CfnScheduleGroup(this, 'ExpiryScheduleGroup');
+    const expiryRole = new iam.Role(this, 'ExpiryRole', {
+      assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com', { conditions: {
+        StringEquals: { 'aws:SourceAccount': this.account },
+        ArnEquals: { 'aws:SourceArn': expiryGroup.attrArn },
+      } }),
+    });
+    expiryRole.addToPolicy(new iam.PolicyStatement({ actions: ['ecs:UpdateService'], resources: [service.serviceArn], conditions: { ArnEquals: { 'ecs:cluster': cluster.clusterArn } } }));
+    const expiry = new scheduler.CfnSchedule(this, 'DeploymentExpiry', {
+      groupName: expiryGroup.ref, state: 'ENABLED',
+      scheduleExpression: Fn.join('', ['at(', Fn.select(0, Fn.split('Z', expiresAt.valueAsString)), ')']), scheduleExpressionTimezone: 'UTC',
+      flexibleTimeWindow: { mode: 'OFF' },
+      target: {
+        arn: Fn.join('', ['arn:', this.partition, ':scheduler:::aws-sdk:ecs:updateService']),
+        roleArn: expiryRole.roleArn,
+        input: this.toJsonString({ Cluster: cluster.clusterArn, Service: service.serviceArn, DesiredCount: 0 }),
+        retryPolicy: { maximumEventAgeInSeconds: 900, maximumRetryAttempts: 3 },
+      },
+    });
 
     const migrationRole = new iam.Role(this, 'MigrationRole', { assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com') });
     const migrationExecutionRole = makeExecutionRole('MigrationExecutionRole');
@@ -161,6 +188,11 @@ export class GenuiFoundation extends Stack {
     new CfnOutput(this, 'TaskDefinition', { value: task.taskDefinitionArn });
     new CfnOutput(this, 'TaskSecurityGroup', { value: taskSecurity.securityGroupId });
     new CfnOutput(this, 'ServiceName', { value: service.serviceName });
+    new CfnOutput(this, 'SelectedIngressMode', { value: ingressMode.valueAsString });
+    new CfnOutput(this, 'ScheduledExpiryUtc', { value: expiresAt.valueAsString });
+    new CfnOutput(this, 'DeploymentExpiryScheduleArn', { value: expiry.attrArn });
+    new CfnOutput(this, 'DeploymentExpiryGroup', { value: expiryGroup.ref });
+    new CfnOutput(this, 'DeploymentExpiryRoleArn', { value: expiryRole.roleArn });
     new CfnOutput(this, 'LoadBalancerDnsName', { value: alb.loadBalancerDnsName });
     new CfnOutput(this, 'MigrationTaskDefinition', { value: migration.taskDefinitionArn });
     new CfnOutput(this, 'MigrationTaskRoleArn', { value: migrationRole.roleArn });

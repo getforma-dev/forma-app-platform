@@ -1,0 +1,86 @@
+
+> test
+> tsx --test test/*.test.ts
+
+TAP version 13
+# Subtest: deployment preflight refuses stale/over-budget windows and durably preserves reservations
+ok 1 - deployment preflight refuses stale/over-budget windows and durably preserves reservations
+  ---
+  duration_ms: 332.148875
+  type: 'test'
+  ...
+# Subtest: managed data stays private, encrypted, retained and versioned
+ok 2 - managed data stays private, encrypted, retained and versioned
+  ---
+  duration_ms: 5.084
+  type: 'test'
+  ...
+# Subtest: only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact
+ok 3 - only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact
+  ---
+  duration_ms: 0.794792
+  type: 'test'
+  ...
+# Subtest: operator and certificate are required; broad/private/placeholder networks fail
+ok 4 - operator and certificate are required; broad/private/placeholder networks fail
+  ---
+  duration_ms: 0.606917
+  type: 'test'
+  ...
+# Subtest: expiry is one UTC execution that can update only this service in this cluster
+ok 5 - expiry is one UTC execution that can update only this service in this cluster
+  ---
+  duration_ms: 0.366375
+  type: 'test'
+  ...
+# Subtest: digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints
+ok 6 - digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints
+  ---
+  duration_ms: 2.19025
+  type: 'test'
+  ...
+# Subtest: task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it
+ok 7 - task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it
+  ---
+  duration_ms: 0.3835
+  type: 'test'
+  ...
+# Subtest: each DB identity connects only as its fixed username on this database
+ok 8 - each DB identity connects only as its fixed username on this database
+  ---
+  duration_ms: 0.397917
+  type: 'test'
+  ...
+# Subtest: tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required
+ok 9 - tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required
+  ---
+  duration_ms: 0.547083
+  type: 'test'
+  ...
+# Subtest: execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants
+ok 10 - execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants
+  ---
+  duration_ms: 0.531541
+  type: 'test'
+  ...
+# Subtest: only migration execution role receives admin secret; migration has no tenant AWS authority
+ok 11 - only migration execution role receives admin secret; migration has no tenant AWS authority
+  ---
+  duration_ms: 0.495334
+  type: 'test'
+  ...
+# Subtest: app environment contains identities only and one private ephemeral credential mount
+ok 12 - app environment contains identities only and one private ephemeral credential mount
+  ---
+  duration_ms: 0.26775
+  type: 'test'
+  ...
+1..12
+# tests 12
+# suites 0
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2026.850417

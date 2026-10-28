@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28T22:04:13.614Z",
+  "reviewer": "Independent child agent /root/beta_infra_independent_review; implementation authored by /root/beta_budget_architecture",
+  "verdict": "pass_local_source_review_only",
+  "blocking_source_findings": [],
+  "scope": "APP-007 public HTTPS, bounded-window Scheduler and cumulative private-budget preflight; no deployment, AWS mutation, live provider invocation, application signup or managed acceptance.",
+  "base_head": "d47228a3e2ea627c8d79e8298bd8d7253cf7d484",
+  "review_started_at_utc": "2026-10-28T22:02:36.112Z",
+  "source_stable_before_and_after_checks": true,
+  "inputs": {
+    "infra/src/stack.ts": {
+      "sha256": "c0b8893ee96a257927da7023e7e53495e3bf850c6f4c8794e5b35bebfbb4598b",
+      "bytes": 18478
+    },
+    "infra/src/main.ts": {
+      "sha256": "3080fe33f5d266dbbba63db823b2195b83bcdf3aea3f7f80a9530dd8161417d8",
+      "bytes": 234
+    },
+    "infra/test/security.test.ts": {
+      "sha256": "b621b5b71b7f00a0bfc992b8d957a79322680c1bc125e8ea781cf632d123384a",
+      "bytes": 19552
+    },
+    "infra/test/preflight.test.ts": {
+      "sha256": "fe1f0e6c1764e995c0562bbc80479f497a0fb54f69d3fe1d5f8da3901e3e55f9",
+      "bytes": 423
+    },
+    "infra/test/preflight_test.py": {
+      "sha256": "5e7feed8410d07db2bc26a3285bc4b6e64b3dc94ec5ead0a7e1e6b1b1a7996b5",
+      "bytes": 15277
+    },
+    "infra/scripts/preflight.py": {
+      "sha256": "14493d0ccd105bdf8c05c2c95132f6e188a7aed6f60c726807d0872e7b0bf1fb",
+      "bytes": 19238
+    },
+    "infra/README.md": {
+      "sha256": "a715a8b70f051121bbdc0e323fda549f6489370d4eabfc151ce59cfa0615ce04",
+      "bytes": 22133
+    },
+    "infra/package.json": {
+      "sha256": "4c06daa14e04b8f79f13286033628a212ad24a32ca9d7fa01595780b5861b5fd",
+      "bytes": 426
+    },
+    "infra/package-lock.json": {
+      "sha256": "cf171e2d3fa5064c60a9896a788ae84b38cc24b0c67d21463fd77c1361ee839a",
+      "bytes": 26041
+    },
+    "infra/tsconfig.json": {
+      "sha256": "7494f3c4db6888ba330c03a98b723a6ac92cba2490e29696bac66b5b4033b96c",
+      "bytes": 202
+    },
+    "infra/cdk.json": {
+      "sha256": "218be47a43c2178de8ed04f0015c0501aa8809e22815817a34ce1dd136fb116c",
+      "bytes": 93
+    }
+  },
+  "producer_evidence": {
+    "path": "evidence/APP-007/public-beta-infra/qualification.json",
+    "sha256": "06de066d9113d3594b0eb13083f097224ec4f9408c3590901e7732ffad4e6fc1"
+  },
+  "checks": [
+    {
+      "command": "npm run typecheck",
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "\n> typecheck\n> tsc --noEmit\n\n"
+    },
+    {
+      "command": "npm test",
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "\n> test\n> tsx --test test/*.test.ts\n\nTAP version 13\n# Subtest: deployment preflight refuses stale/over-budget windows and durably preserves reservations\nok 1 - deployment preflight refuses stale/over-budget windows and durably preserves reservations\n  ---\n  duration_ms: 325.458042\n  type: 'test'\n  ...\n# Subtest: managed data stays private, encrypted, retained and versioned\nok 2 - managed data stays private, encrypted, retained and versioned\n  ---\n  duration_ms: 6.682209\n  type: 'test'\n  ...\n# Subtest: only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact\nok 3 - only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact\n  ---\n  duration_ms: 0.842458\n  type: 'test'\n  ...\n# Subtest: operator and certificate are required; broad/private/placeholder networks fail\nok 4 - operator and certificate are required; broad/private/placeholder networks fail\n  ---\n  duration_ms: 0.677125\n  type: 'test'\n  ...\n# Subtest: expiry is one UTC execution that can update only this service in this cluster\nok 5 - expiry is one UTC execution that can update only this service in this cluster\n  ---\n  duration_ms: 0.408459\n  type: 'test'\n  ...\n# Subtest: digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints\nok 6 - digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints\n  ---\n  duration_ms: 2.963125\n  type: 'test'\n  ...\n# Subtest: task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it\nok 7 - task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it\n  ---\n  duration_ms: 0.296\n  type: 'test'\n  ...\n# Subtest: each DB identity connects only as its fixed username on this database\nok 8 - each DB identity connects only as its fixed username on this database\n  ---\n  duration_ms: 0.397\n  type: 'test'\n  ...\n# Subtest: tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required\nok 9 - tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required\n  ---\n  duration_ms: 0.577417\n  type: 'test'\n  ...\n# Subtest: execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants\nok 10 - execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants\n  ---\n  duration_ms: 0.531083\n  type: 'test'\n  ...\n# Subtest: only migration execution role receives admin secret; migration has no tenant AWS authority\nok 11 - only migration execution role receives admin secret; migration has no tenant AWS authority\n  ---\n  duration_ms: 0.495208\n  type: 'test'\n  ...\n# Subtest: app environment contains identities only and one private ephemeral credential mount\nok 12 - app environment contains identities only and one private ephemeral credential mount\n  ---\n  duration_ms: 0.272459\n  type: 'test'\n  ...\n1..12\n# tests 12\n# suites 0\n# pass 12\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2023.811542\n"
+    },
+    {
+      "command": "npm run synth -- --quiet",
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "\n> synth\n> cdk synth --no-lookups --quiet\n\nAI agent detected\n84 feature flags are not configured. Run 'cdk flags --unstable=flags' to learn more.\n"
+    },
+    {
+      "command": "python3 -m unittest discover -s test -p preflight_test.py -v",
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "test_activation_checks_live_stop_and_service_before_count_one (preflight_test.Preflight.test_activation_checks_live_stop_and_service_before_count_one) ... ok\ntest_activation_late_response_requests_stop_instead_of_reporting_success (preflight_test.Preflight.test_activation_late_response_requests_stop_instead_of_reporting_success) ... ok\ntest_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry (preflight_test.Preflight.test_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry) ... ok\ntest_calendar_expiry_and_future_boundaries (preflight_test.Preflight.test_calendar_expiry_and_future_boundaries) ... ok\ntest_cli_persists_private_reservation_and_retry_does_not_charge_twice (preflight_test.Preflight.test_cli_persists_private_reservation_and_retry_does_not_charge_twice) ... ok\ntest_cli_will_not_initialize_a_missing_ledger (preflight_test.Preflight.test_cli_will_not_initialize_a_missing_ledger) ... ok\ntest_concurrent_preflights_cannot_spend_the_same_remaining_allowance (preflight_test.Preflight.test_concurrent_preflights_cannot_spend_the_same_remaining_allowance) ... ok\ntest_known_spending_and_auth_overrun_reduce_remaining_budget (preflight_test.Preflight.test_known_spending_and_auth_overrun_reduce_remaining_budget) ... ok\ntest_live_service_count_must_be_an_integer_within_the_plan (preflight_test.Preflight.test_live_service_count_must_be_an_integer_within_the_plan) ... ok\ntest_month_rollover_reserves_retained_resources_in_both_months (preflight_test.Preflight.test_month_rollover_reserves_retained_resources_in_both_months) ... ok\ntest_new_window_cannot_reset_prior_reservations (preflight_test.Preflight.test_new_window_cannot_reset_prior_reservations) ... ok\ntest_public_transition_reuses_window_without_resetting_expiry_or_reservation (preflight_test.Preflight.test_public_transition_reuses_window_without_resetting_expiry_or_reservation) ... ok\ntest_refuses_stale_ledger_missing_allowances_and_invalid_cidr (preflight_test.Preflight.test_refuses_stale_ledger_missing_allowances_and_invalid_cidr) ... ok\ntest_stop_count_requires_integer_zero_not_boolean_float_or_string (preflight_test.Preflight.test_stop_count_requires_integer_zero_not_boolean_float_or_string) ... ok\ntest_window_identity_rejects_extended_time_or_changed_artifact (preflight_test.Preflight.test_window_identity_rejects_extended_time_or_changed_artifact) ... ok\n\n----------------------------------------------------------------------\nRan 15 tests in 0.221s\n\nOK\n"
+    }
+  ],
+  "independent_probe": {
+    "command": "Run the following source with python3 from infra/; all AWS-shaped calls are in-memory fakes.",
+    "source": "import copy, importlib.util, json\nfrom datetime import datetime, timedelta, timezone\nfrom pathlib import Path\nspec=importlib.util.spec_from_file_location('review_preflight',Path('scripts/preflight.py'))\nm=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\nUTC=timezone.utc; NOW=datetime(2026,10,28,12,tzinfo=UTC)\npassed=[]\n\ndef inputs(now=NOW):\n c={'window_id':'bbbbbbbb-0000-4000-8000-000000000001','account':'877573132739','region':'us-east-1','hostname':'beta.getforma.dev','operator':'Independent synthetic reviewer','ingress_mode':'public','operator_ipv4_cidr':'1.1.1.1/32','deployment_expires_at_utc':(now+timedelta(hours=48)).strftime('%Y-%m-%dT%H:%M:%SZ'),'tls_certificate_arn':'arn:aws:acm:us-east-1:877573132739:certificate/bbbbbbbb-0000-4000-8000-000000000001','image_digest':'877573132739.dkr.ecr.us-east-1.amazonaws.com/independent@sha256:'+'a'*64,'image_architecture':'ARM64','service_desired_count':1,'extra_task_hours':2}\n l={'schema_version':1,'scope':'genui-beta-incremental','months':{},'windows':{}}\n month=now.replace(day=1,hour=0,minute=0,second=0,microsecond=0)\n until=now+timedelta(hours=49)\n while month < until:\n  l['months'][month.strftime('%Y-%m')]={'reconciled_at_utc':now.strftime('%Y-%m-%dT%H:%M:%SZ'),'basis':'Independent synthetic fixture only','prior_extra_spend_cents':0,'variable_reserve_cents':1000,'auth_spent_or_reserved_cents':500,'unallocated_cents':2500}\n  month=month.replace(year=month.year+1,month=1) if month.month==12 else month.replace(month=month.month+1)\n return c,l\n\ndef fixture():\n c,l=inputs(); _,r=m.reserve(c,l,NOW)\n cluster='arn:aws:ecs:us-east-1:877573132739:cluster/independent'\n service=cluster.replace(':cluster/',':service/')+'/app'\n role='arn:aws:iam::877573132739:role/independent'\n arn='arn:aws:scheduler:us-east-1:877573132739:schedule/independent/expiry'\n outputs={'ClusterName':'independent','ServiceName':'app','TaskDefinition':'arn:aws:ecs:us-east-1:877573132739:task-definition/independent:1','DeploymentExpiryScheduleArn':arn,'DeploymentExpiryGroup':'independent','DeploymentExpiryRoleArn':role}\n stack={'StackStatus':'CREATE_COMPLETE','Parameters':[{'ParameterKey':k,'ParameterValue':str(v)} for k,v in r['cloudformation_parameters'].items()],'Outputs':[{'OutputKey':k,'OutputValue':v} for k,v in outputs.items()]}\n sch={'Arn':arn,'State':'ENABLED','ScheduleExpressionTimezone':'UTC','ScheduleExpression':'at('+c['deployment_expires_at_utc'][:-1]+')','FlexibleTimeWindow':{'Mode':'OFF'},'Target':{'Arn':'arn:aws:scheduler:::aws-sdk:ecs:updateService','RoleArn':role,'Input':json.dumps({'Cluster':cluster,'Service':service,'DesiredCount':0}),'RetryPolicy':{'MaximumEventAgeInSeconds':900,'MaximumRetryAttempts':3}}}\n state={'account':c['account'],'stack':stack,'schedule':sch,'service':{'clusterArn':cluster,'serviceArn':service,'taskDefinition':outputs['TaskDefinition'],'status':'ACTIVE','desiredCount':0},'failures':[],'calls':[],'times':[NOW,NOW]}\n def call(*args):\n  state['calls'].append(args)\n  if args[:2]==('sts','get-caller-identity'): return {'Account':state['account']}\n  if args[:2]==('cloudformation','describe-stacks'): return {'Stacks':[state['stack']]}\n  if args[:2]==('scheduler','get-schedule'): return state['schedule']\n  if args[:2]==('ecs','describe-services'): return {'services':[copy.deepcopy(state['service'])],'failures':state['failures']}\n  if args[:2]==('ecs','update-service'):\n   state['service']['desiredCount']=int(args[-1]);return {'service':copy.deepcopy(state['service'])}\n  raise AssertionError(args)\n def clock(): return state['times'].pop(0)\n return c,r,state,call,clock\n\ndef mutate_payload(s,k,v):\n p=json.loads(s['schedule']['Target']['Input']);p[k]=v;s['schedule']['Target']['Input']=json.dumps(p)\n\nmutations={\n 'wrong_account':lambda s:s.update(account='000000000000'),\n 'incomplete_stack':lambda s:s['stack'].update(StackStatus='UPDATE_IN_PROGRESS'),\n 'parameter_drift':lambda s:s['stack']['Parameters'][0].update(ParameterValue='changed'),\n 'schedule_wrong_account':lambda s:s['stack']['Outputs'][3].update(OutputValue='arn:aws:scheduler:us-east-1:000000000000:schedule/independent/expiry'),\n 'disabled_schedule':lambda s:s['schedule'].update(State='DISABLED'),\n 'wrong_schedule_timezone':lambda s:s['schedule'].update(ScheduleExpressionTimezone='America/New_York'),\n 'wrong_schedule_expiry':lambda s:s['schedule'].update(ScheduleExpression='at(2026-10-30T12:00:01)'),\n 'flexible_window':lambda s:s['schedule'].update(FlexibleTimeWindow={'Mode':'FLEXIBLE','MaximumWindowInMinutes':10}),\n 'wrong_action':lambda s:s['schedule']['Target'].update(Arn='arn:aws:scheduler:::aws-sdk:ecs:runTask'),\n 'wrong_role':lambda s:s['schedule']['Target'].update(RoleArn='arn:aws:iam::877573132739:role/other'),\n 'wrong_retry':lambda s:s['schedule']['Target'].update(RetryPolicy={'MaximumEventAgeInSeconds':900,'MaximumRetryAttempts':4}),\n 'wrong_cluster':lambda s:mutate_payload(s,'Cluster','arn:aws:ecs:us-east-1:877573132739:cluster/other'),\n 'wrong_service':lambda s:mutate_payload(s,'Service','arn:aws:ecs:us-east-1:877573132739:service/independent/other'),\n 'bool_zero':lambda s:mutate_payload(s,'DesiredCount',False),\n 'float_zero':lambda s:mutate_payload(s,'DesiredCount',0.0),\n 'string_zero':lambda s:mutate_payload(s,'DesiredCount','0'),\n 'missing_zero':lambda s:mutate_payload(s,'DesiredCount',None),\n 'unexpected_payload_field':lambda s:mutate_payload(s,'ForceNewDeployment',True),\n 'duplicate_input_field':lambda s:s['schedule']['Target'].update(Input=s['schedule']['Target']['Input'][:-1]+',\"DesiredCount\":0}'),\n 'live_wrong_task':lambda s:s['service'].update(taskDefinition=s['service']['taskDefinition']+'9'),\n 'live_wrong_cluster':lambda s:s['service'].update(clusterArn='arn:aws:ecs:us-east-1:877573132739:cluster/other'),\n 'live_wrong_service':lambda s:s['service'].update(serviceArn='arn:aws:ecs:us-east-1:877573132739:service/independent/other'),\n 'service_failure':lambda s:s.update(failures=[{'reason':'MISSING'}]),\n 'deployment_finished_too_late':lambda s:s.update(times=[NOW+timedelta(hours=48)-timedelta(minutes=9)]),\n 'deployment_finished_after_expiry':lambda s:s.update(times=[NOW+timedelta(hours=49)]),\n}\nfor name,change in mutations.items():\n c,r,s,call,clock=fixture();change(s)\n try: m.activate(c,r,call,clock)\n except (ValueError,KeyError): pass\n else: raise AssertionError(name+' incorrectly accepted')\n assert not any(a[:2]==('ecs','update-service') for a in s['calls']),name+' mutated compute'\n passed.append(name)\n\nc,r,s,call,clock=fixture()\nassert m.activate(c,r,call,clock)['status']=='activation_requested_not_healthy'\nassert [a[-1] for a in s['calls'] if a[:2]==('ecs','update-service')]==['1']\npassed.append('valid_live_activation')\n\nc,r,s,call,clock=fixture();s['times']=[NOW,NOW+timedelta(hours=49)]\ntry: m.activate(c,r,call,clock)\nexcept ValueError as e: assert 'stop requested' in str(e)\nelse: raise AssertionError('late response accepted')\nassert [a[-1] for a in s['calls'] if a[:2]==('ecs','update-service')]==['1','0']\npassed.append('late_response_compensating_stop')\n\ndef refuse(name,c,l,now=NOW):\n try:m.reserve(c,l,now)\n except ValueError:passed.append(name)\n else:raise AssertionError(name+' incorrectly accepted')\n\nc,l=inputs();u,r=m.reserve(c,l,NOW)\nassert r['cost_by_month']['2026-10']['genui_total_cents']==6849\nassert r['cost_by_month']['2026-10']['project_total_cents']==9849\nassert r['cloudformation_parameters']['ServiceDesiredCount']=='0'\npassed.append('31_day_full_baseline_and_48_hour_allowance')\nc.update(ingress_mode='operator',service_desired_count=0)\nu2,r2=m.reserve(c,u,NOW+timedelta(minutes=1));assert u2==u and r2['reused_reservation']\npassed.append('public_operator_transition_reuses_immutable_window')\n\nbad=copy.deepcopy(c);bad['image_digest']=bad['image_digest'].replace('a'*64,'b'*64)\nrefuse('same_window_changed_image',bad,u)\nbad=copy.deepcopy(c);bad['deployment_expires_at_utc']='2026-10-30T11:59:59Z'\nrefuse('same_window_changed_expiry',bad,u)\nbad=copy.deepcopy(c);bad['window_id']='bbbbbbbb-0000-4000-8000-000000000002'\nrefuse('new_window_cannot_erase_prior_reservation',bad,u)\n\nfor name,delta in [('expiry_below_ten_minutes',timedelta(minutes=10,seconds=-1)),('expiry_above_48_hours',timedelta(hours=48,seconds=1))]:\n c,l=inputs();c['deployment_expires_at_utc']=(NOW+delta).strftime('%Y-%m-%dT%H:%M:%SZ');refuse(name,c,l)\nc,l=inputs();c['deployment_expires_at_utc']=(NOW+timedelta(minutes=10)).strftime('%Y-%m-%dT%H:%M:%SZ');m.reserve(c,l,NOW);passed.append('expiry_exact_lower_bound')\nfor name,field,value in [('stale_ledger','reconciled_at_utc','2026-10-27T11:59:59Z'),('negative_spend','prior_extra_spend_cents',-1),('boolean_spend','prior_extra_spend_cents',False),('missing_variable_allowance','variable_reserve_cents',999),('missing_auth_allowance','auth_spent_or_reserved_cents',499),('missing_unallocated','unallocated_cents',2499),('known_extra_exceeds_budget','prior_extra_spend_cents',152)]:\n c,l=inputs();l['months']['2026-10'][field]=value;refuse(name,c,l)\nroll=datetime(2026,12,31,12,tzinfo=UTC);c,l=inputs(roll)\n_,r=m.reserve(c,l,roll)\nassert set(r['cost_by_month'])=={'2026-12','2027-01'}\nassert r['cost_by_month']['2027-01']['all_window_compute_reservations_cents']==474\nassert r['cost_by_month']['2027-01']['retained_core_full_month_cents']==5229\npassed.append('new_year_split_full_baseline_and_extra_allowance')\nbad=copy.deepcopy(l);bad['months']['2027-01']['prior_extra_spend_cents']=320;refuse('next_month_overbudget',c,bad,roll)\nbad=copy.deepcopy(l);del bad['months']['2027-01'];refuse('next_month_missing_reconciliation',c,bad,roll)\nprint(json.dumps({'status':'pass','checks':passed,'count':len(passed),'aws_calls':'controlled in-memory fakes only'},indent=2))\n",
+    "exit_code": 0,
+    "result": {
+      "status": "pass",
+      "checks": [
+        "wrong_account",
+        "incomplete_stack",
+        "parameter_drift",
+        "schedule_wrong_account",
+        "disabled_schedule",
+        "wrong_schedule_timezone",
+        "wrong_schedule_expiry",
+        "flexible_window",
+        "wrong_action",
+        "wrong_role",
+        "wrong_retry",
+        "wrong_cluster",
+        "wrong_service",
+        "bool_zero",
+        "float_zero",
+        "string_zero",
+        "missing_zero",
+        "unexpected_payload_field",
+        "duplicate_input_field",
+        "live_wrong_task",
+        "live_wrong_cluster",
+        "live_wrong_service",
+        "service_failure",
+        "deployment_finished_too_late",
+        "deployment_finished_after_expiry",
+        "valid_live_activation",
+        "late_response_compensating_stop",
+        "31_day_full_baseline_and_48_hour_allowance",
+        "public_operator_transition_reuses_immutable_window",
+        "same_window_changed_image",
+        "same_window_changed_expiry",
+        "new_window_cannot_erase_prior_reservation",
+        "expiry_below_ten_minutes",
+        "expiry_above_48_hours",
+        "expiry_exact_lower_bound",
+        "stale_ledger",
+        "negative_spend",
+        "boolean_spend",
+        "missing_variable_allowance",
+        "missing_auth_allowance",
+        "missing_unallocated",
+        "known_extra_exceeds_budget",
+        "new_year_split_full_baseline_and_extra_allowance",
+        "next_month_overbudget",
+        "next_month_missing_reconciliation"
+      ],
+      "count": 45,
+      "aws_calls": "controlled in-memory fakes only"
+    }
+  },
+  "resolved_findings": [
+    {
+      "id": "IR-1",
+      "finding": "A slow stack deployment could miss a one-time expiry if count one were deployed directly.",
+      "resolution": "Template permits only initial count zero. Explicit activation rechecks completed stack, target/service identity and real future deadline immediately before count one. Late-response path requests a compensating stop. Delayed/expired activation negatives pass."
+    },
+    {
+      "id": "IR-2",
+      "finding": "Extra standalone/deployment task hours reserved only in the first month would understate a window crossing month/year end.",
+      "resolution": "Full extra-task allowance is reserved in every touched month. A January near-limit fixture rejects; missing next-month reconciliation rejects."
+    },
+    {
+      "id": "IR-3",
+      "finding": "Python dict equality accepted JSON false (and numeric 0.0) as DesiredCount zero, admitting a malformed stop target before activating service compute.",
+      "resolution": "Exact integer zero is required; false, float, string and null independently reject before any update-service call. Producer adds exact live/response count checks."
+    },
+    {
+      "id": "IR-4",
+      "finding": "Count-zero template wording incorrectly implied unrelated CloudFormation updates necessarily stop a drifted count-one service.",
+      "resolution": "Source description and runbook distinguish initial desired count from drift. Explicit request plus observed desired/running/pending zero and STOPPED task evidence is required before image/window/sole-stop replacement."
+    }
+  ],
+  "observations": [
+    "Public/operator switching affects only ALB TCP 443. No new direct task/database ingress, HTTP listener, NAT, ECS Exec or public database is introduced.",
+    "Fargate app and migration retain 2 vCPU / 8 GiB; managed RDS/S3/KMS and exact existing logical-role boundaries remain.",
+    "Scheduler uses one UTC at() target, exact service ARN plus ecs:cluster condition, and scheduler.amazonaws.com trust restricted to the exact account and dedicated schedule group. It does not constrain desiredCount at the IAM layer; numeric zero comes from reviewed target data.",
+    "Budget arithmetic reserves a full calendar month of retained core, active window plus stop margin and extra tasks, retained earlier windows, actual extra spending and at least $10 variable allowance; GenUI <= $70, auth >= $5, fixed $25 unallocated, combined <= $100.",
+    "Private ledger reserves before activation under an exclusive persistent lock and atomic durable replacement; retries reuse immutable reservations. It refuses missing ledgers, stale reconciliation and known overruns. Its contents remain operator-reconciled assertions, not independently verified AWS billing.",
+    "31-day maximum 48-hour fixture: $52.29 retained core + $6.20 compute + $10 variable = $68.49 GenUI; $98.49 including $5 auth and $25 unallocated. This leaves little repeat-window headroom; choose a shorter first window and retain all unknown reservations."
+  ],
+  "required_live_gates": [
+    "Verify actual account/deployment identity, exact registry digest/architecture, issued hostname certificate, service quotas and current resource prices before provisioning.",
+    "Observe managed migration exit, actual SQL grants and forbidden-role operations, paired tenant S3/KMS denials, credential refresh/expiry, readiness and verified TLS.",
+    "Exercise a short real Scheduler stop and retain invocation evidence, desiredCount zero, service running/pending zero and observed tasks STOPPED. Creation/synthesis cannot prove universal target behavior, IAM propagation or delivery.",
+    "Observe service/tasks stopped before changing image/window/sole expiry schedule; unrelated CloudFormation updates may preserve count drift. Inspect and stop every standalone migration/test task separately.",
+    "Restore public HTTPS after the temporary operator /32 trial. Public transport does not establish invite-first signup, tenant membership, app entitlements or refusal of costly unauthorized work; owning application tickets remain open.",
+    "Reconcile actual costs and retained resources at expiry and month end, execute scoped cleanup/retention, and coordinate the separate $5 auth rehearsal within the total. No model spending in this slice."
+  ],
+  "limits": [
+    "Review author called no AWS API and created no cloud resource; all activation API evidence is controlled local fixture behavior.",
+    "Scheduler is an operational backstop, not guaranteed timely delivery or an AWS billing cutoff. It does not stop standalone tasks or remove billable RDS/ALB/IPv4/storage/keys.",
+    "Preflight and runbook define the supported source path; they do not prevent an authorized AWS operator from bypassing them or changing deployed policies/schedules.",
+    "This verdict permits source landing and progression to separately operated managed qualification; it does not pass APP-007, PH01 or external-beta launch acceptance."
+  ],
+  "references": [
+    "https://docs.aws.amazon.com/scheduler/latest/UserGuide/managing-targets-universal.html",
+    "https://docs.aws.amazon.com/scheduler/latest/UserGuide/troubleshooting.html",
+    "https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html",
+    "https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html",
+    "https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_UpdateService.html"
+  ]
+}

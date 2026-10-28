@@ -1,0 +1,20 @@
+test_activation_checks_live_stop_and_service_before_count_one (preflight_test.Preflight.test_activation_checks_live_stop_and_service_before_count_one) ... ok
+test_activation_late_response_requests_stop_instead_of_reporting_success (preflight_test.Preflight.test_activation_late_response_requests_stop_instead_of_reporting_success) ... ok
+test_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry (preflight_test.Preflight.test_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry) ... ok
+test_calendar_expiry_and_future_boundaries (preflight_test.Preflight.test_calendar_expiry_and_future_boundaries) ... ok
+test_cli_persists_private_reservation_and_retry_does_not_charge_twice (preflight_test.Preflight.test_cli_persists_private_reservation_and_retry_does_not_charge_twice) ... ok
+test_cli_will_not_initialize_a_missing_ledger (preflight_test.Preflight.test_cli_will_not_initialize_a_missing_ledger) ... ok
+test_concurrent_preflights_cannot_spend_the_same_remaining_allowance (preflight_test.Preflight.test_concurrent_preflights_cannot_spend_the_same_remaining_allowance) ... ok
+test_known_spending_and_auth_overrun_reduce_remaining_budget (preflight_test.Preflight.test_known_spending_and_auth_overrun_reduce_remaining_budget) ... ok
+test_live_service_count_must_be_an_integer_within_the_plan (preflight_test.Preflight.test_live_service_count_must_be_an_integer_within_the_plan) ... ok
+test_month_rollover_reserves_retained_resources_in_both_months (preflight_test.Preflight.test_month_rollover_reserves_retained_resources_in_both_months) ... ok
+test_new_window_cannot_reset_prior_reservations (preflight_test.Preflight.test_new_window_cannot_reset_prior_reservations) ... ok
+test_public_transition_reuses_window_without_resetting_expiry_or_reservation (preflight_test.Preflight.test_public_transition_reuses_window_without_resetting_expiry_or_reservation) ... ok
+test_refuses_stale_ledger_missing_allowances_and_invalid_cidr (preflight_test.Preflight.test_refuses_stale_ledger_missing_allowances_and_invalid_cidr) ... ok
+test_stop_count_requires_integer_zero_not_boolean_float_or_string (preflight_test.Preflight.test_stop_count_requires_integer_zero_not_boolean_float_or_string) ... ok
+test_window_identity_rejects_extended_time_or_changed_artifact (preflight_test.Preflight.test_window_identity_rejects_extended_time_or_changed_artifact) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.243s
+
+OK

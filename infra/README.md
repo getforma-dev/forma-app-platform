@@ -1,6 +1,6 @@
 # GenUI infrastructure — AWS CDK / TypeScript
 
-This is the locally reviewable APP-007 synthetic deployment model, selected 2026-10-28. It uses separately owned GenUI resources in the agreed existing AWS account. **No GenUI deployment or managed acceptance is established by this package.** The paid environment remains blocked on the recorded operator, spending decision and deployment inputs. The old GateWasm CDK source stays in its owning repository.
+This is the APP-007 synthetic deployment model, revised 2026-10-28 for Victor's `beta.getforma.dev`, public HTTPS and $100/month decision. It preserves the full 2-vCPU/8-GiB Fargate envelope and private RDS/S3/KMS for a bounded Phase 1 window. **Local synthesis/tests establish no GenUI deployment or managed acceptance.** The old GateWasm CDK source stays in its owning repository. Always-on Fargate beta does not fit $100; this plan reserves retained resources and a short trial rather than promising continuous service at that price.
 
 ## Reproduce the local checks
 
@@ -13,7 +13,7 @@ npm test
 npm run synth -- --quiet
 ```
 
-Dependencies and CLI versions are exact and locked. Synthesis is account-agnostic and disables lookups; these commands do not create AWS resources. The ten template tests inspect network boundaries, role grants, identity configuration, storage policies and deployment settings. `cdk.out/` is disposable. Local image/credential-volume qualification belongs to the app's APP-007 checks; neither those checks nor synthesis prove live AWS connectivity, SQL grants or tenant authorization.
+Dependencies and CLI versions are exact and locked. Synthesis is account-agnostic and disables lookups; these commands do not create AWS resources. Eleven template tests inspect both ingress modes, fixed private boundaries, exact scheduler authority, role grants, storage and runtime settings. A twelfth Node test invokes the Python preflight tests, including concurrent budget reservations and activation refusal. Run those directly with `python3 -m unittest discover -s test -p preflight_test.py -v`. `cdk.out/` is disposable. Local checks cannot prove live AWS connectivity, scheduled delivery, SQL grants or tenant authorization.
 
 ## Required deployment inputs
 
@@ -21,19 +21,87 @@ Dependencies and CLI versions are exact and locked. Synthesis is account-agnosti
 | --- | --- |
 | Account and region | The approved account/region recorded in the environment plan; verify deployed RDS engine availability, service quotas and current costs. |
 | `Operator` | Named person responsible for the environment, migration, validation and cleanup. No default. |
-| `MonthlyBudgetUsd` | Approved budget recorded as a parameter/tag. **This creates no AWS Budget alarm and no spending hard stop.** Monitoring and stop decisions remain an operator responsibility. No default. |
-| `OperatorIpv4Cidr` | Actual public operator IPv4 network, preferably `/32`. The template accepts only `/24` through `/32` and rejects broad, private, loopback, link-local, multicast and placeholder ranges. No default; refresh deliberately if the operator's public address changes. |
+| `MonthlyBudgetUsd` | Fixed at the approved `100`, recorded as a parameter/tag. **This creates no AWS Budget alarm and no spending hard stop.** The ledger reserves $70 for GenUI, at least $5 for separate auth and $25 unallocated. Model spending remains zero. |
+| `IngressMode` | `public` by default; `operator` only for the temporary `/32` network trial. Public HTTPS does not authorize application usage; signup/invite/trial-code enforcement belongs to the app and must pass before expensive routes are exposed. |
+| `OperatorIpv4Cidr` | Actual public operator IPv4 `/32`, still required for the short ingress trial. Broad/private/loopback/link-local/multicast/placeholder ranges are rejected. No default. |
+| `DeploymentExpiresAtUtc` | Required real whole-second UTC time, `YYYY-MM-DDTHH:MM:SSZ`, 10 minutes to 48 hours in the future. Preflight checks the calendar and bound; CloudFormation's pattern alone cannot check real time. |
 | `TlsCertificateArn` | Existing, issued ACM certificate in this account/region, covering the operator-owned application hostname. Validate issuance and hostname ownership before deployment. The ARN pattern checks shape only. No default. |
-| `ImageDigest` | Reviewed immutable ECR image URI ending in `@sha256:` and 64 lowercase hex digits. Verify the digest exists and is pullable; the repository is not created here. Cross-account repositories also need their owner-approved repository policy. |
+| `ImageDigest` | Reviewed immutable ECR image URI in account `877573132739`, `us-east-1`, ending in `@sha256:` and 64 lowercase hex digits. Verify the digest exists and is pullable; the repository is not created here. The preflight supports only this account/region even though the raw template's shape pattern is broader. |
 | `ImageArchitecture` | `ARM64` or `X86_64`, matching that exact image artifact. No default. Locally qualified ARM64 and CI AMD64 images are distinct artifacts. Both app and migration tasks use this selection. |
-| `ServiceDesiredCount` | Defaults to `0`; only `0` or `1` is accepted. Keep zero through initial migration, then set one for approved managed validation. |
-| Hostname routing | Arrange a reviewed DNS alias/CNAME from the actual certificate hostname to `LoadBalancerDnsName` after provisioning. This stack creates no hostname, DNS record or certificate. Do not bypass TLS verification by calling the raw ALB hostname. |
+| `ServiceDesiredCount` | The supported template value is `0`, so initial creation starts no app task. An unrelated stack update may preserve an actual service count drifted to `1`; the template is not a stop command. Observe service/tasks stopped before replacing its image, window or stop schedule. Explicit `preflight.py --activate` checks the completed live stack, task revision and future stop schedule immediately before an ECS count-one request. |
+| Hostname routing | Arrange the reviewed `beta.getforma.dev` DNS CNAME to `LoadBalancerDnsName`. This stack creates no DNS record or certificate. Do not bypass TLS verification by calling the raw ALB hostname. |
 
-Desired count zero still provisions a billable ALB, RDS and retained resources; it is not a free preview or teardown. No deploy command should run solely because synthesis succeeds. The [environment plan](../docs/planning/SYNTHETIC-ENVIRONMENT.md) owns approval and the current cost estimate.
+Desired count zero still provisions a billable ALB, RDS and retained resources; it is not a free preview or teardown. The [environment plan](../docs/planning/SYNTHETIC-ENVIRONMENT.md) owns the current operating decision and cost record.
+
+## Bounded window and cumulative budget preflight
+
+Run the following immediately before provisioning/updating, with the reviewed non-secret inputs and the existing private ledger **outside Git**:
+
+```sh
+python3 scripts/preflight.py --input /private/path/deployment.json --ledger /private/path/budget-ledger.json
+```
+
+Default mode makes no AWS calls. It atomically reserves the window in the owned mode-0600 ledger under an exclusive lock, then prints a receipt and exact CloudFormation parameter map. Missing ledgers are refused: the operator creates the first ledger only after reconciling existing resources/charges, records that evidence in `basis`, and never resets it to obtain another window. Reuse the same canonical UUID `window_id` after a lost response or failed deployment. Changing its immutable inputs or expiry is refused; only switching ingress mode and desired count within the already reserved window is permitted. Every new UUID adds a reservation. Concurrent invocations cannot consume the same remaining allowance. No reservation is automatically released; retain unknown outcomes until resource/run evidence supports reconciliation.
+
+The input is a closed JSON object with these fields:
+
+```json
+{
+  "window_id": "00000000-0000-4000-8000-000000000001",
+  "account": "877573132739",
+  "region": "us-east-1",
+  "hostname": "beta.getforma.dev",
+  "operator": "REPLACE_WITH_NAMED_OPERATOR",
+  "ingress_mode": "operator",
+  "operator_ipv4_cidr": "REPLACE_WITH_CURRENT_PUBLIC_IPV4/32",
+  "deployment_expires_at_utc": "REPLACE_WITH_REAL_FUTURE_UTC_TIMESTAMP",
+  "tls_certificate_arn": "REPLACE_WITH_ISSUED_BETA_CERTIFICATE_ARN",
+  "image_digest": "REPLACE_WITH_REVIEWED_SAME_ACCOUNT_ECR_DIGEST",
+  "image_architecture": "ARM64",
+  "service_desired_count": 0,
+  "extra_task_hours": 2
+}
+```
+
+Use a fresh UUID for an actually new window; the example values are not deployment evidence. `extra_task_hours` reserves at least two aggregate task-hours for standalone migration/qualification and overlapping deployments. More hours need a larger explicit reservation. Each standalone task must have an observed exit/stop; the service expiry cannot stop it. The ledger contract is:
+
+```json
+{
+  "schema_version": 1,
+  "scope": "genui-beta-incremental",
+  "months": {
+    "YYYY-MM": {
+      "reconciled_at_utc": "REPLACE_WITH_CURRENT_UTC_TIMESTAMP",
+      "basis": "REPLACE_WITH_RESOURCE/BILLING/PRIOR_RUN_RECONCILIATION_REFERENCE",
+      "prior_extra_spend_cents": 0,
+      "variable_reserve_cents": 1000,
+      "auth_spent_or_reserved_cents": 500,
+      "unallocated_cents": 2500
+    }
+  },
+  "windows": {}
+}
+```
+
+The zero/empty values are valid only for a verified first environment with no previous relevant charges/reservations. For an existing environment, carry forward all `windows` and known extra spending. `prior_extra_spend_cents` covers relevant spending beyond the full retained-core baseline that is not already covered by a retained window reservation or the variable allowance; avoid omitting charges or counting the same reservation twice. Every affected month needs a reconciliation within 24 hours; crossing a month boundary reserves both months independently, including the entire extra-task allowance in each month because those tasks could run on either side. Record previous actual spend and unused-reservation reconciliation with its run/resource evidence before editing ledger entries. This script validates and persists the operator's accounting; it does not read AWS billing or independently prove the ledger truthful.
+
+The conservative model reserves a **full calendar month** of RDS, ALB, both ALB IPv4 addresses, 20 GiB database storage and two tenant keys, even for a short window. At the checked rates this is $51.39 for a 730-hour illustration and **$52.29 for a 31-day month**. It adds the reserved active window, a one-hour stop/delivery margin, extra task-hours, all earlier window reservations and at least $10 for probes/requests/logs/secrets/image/object storage. Compute uses the x86 2-vCPU/8-GiB rate plus its IPv4 even for ARM images. A 48-hour window with two extra task-hours totals $68.49 for GenUI in a 31-day month before additional known spending; a shorter initial window leaves more room. GenUI must stay within $70 and the aggregate with the auth reservation and $25 unallocated within $100. These are operating estimates, not an AWS-enforced cap. Public traffic, billing lag, excess retention, uncontrolled standalone tasks or repeated deployments can exceed estimates; retain observed usage and stop/reconcile before exceeding the allowance. No budget notification address, active budget tag or AWS alert is invented.
+
+After initial count-zero creation and migration are complete, set the **input** `service_desired_count` to `1` and use the explicit mutation path:
+
+```sh
+python3 scripts/preflight.py --input /private/path/deployment.json --ledger /private/path/budget-ledger.json --activate
+```
+
+Activation checks the actual account, completed `GenuiSyntheticFoundation` stack and parameter identity, exact enabled UTC stop schedule/group/role, zero-count target, retry bounds, current cluster/service/task revision and future expiry. Only then does it request desired count one, and it verifies the API result plus the current service count. The AWS CLI has one attempt, 5-second connect, 10-second read and a 20-second process limit per call. A late response after expiry triggers one bounded compensating stop. Any failure/unknown outcome retains its reservation and needs reconciliation; there is no automatic retry/resume. This starts neither migrations nor a new schedule and establishes no readiness. Never directly set count one through another command or deploy a stale preflight receipt. Refresh the preflight on every update and explicitly activate only after that update completes.
+
+**Updating an existing stack:** an activation call changes ECS outside CloudFormation. The stored template still says zero; changing an unrelated ingress/schedule property does not necessarily reconcile that drift. Before changing the image, window/expiry or sole stop schedule, explicitly request desired count zero on the inventoried service, wait for service convergence, then inspect the actual service and tasks. Require `desiredCount=0`, `runningCount=0`, `pendingCount=0`, and no service-associated RUNNING task; inspect previously observed task ARNs until they are STOPPED. Retain those results before updating the template or reconciling unused compute reservations. Never replace the only future stop while service compute remains active. Do not infer stopped state from the CloudFormation parameter, a successful update response, or an empty health response. An ingress-only switch within the same image/window may preserve actual count one; verify its unchanged future stop and current count explicitly. The default trial procedure below uses an observed stop before that update too.
+
+The one-time EventBridge Scheduler target requests **only this ECS service's desired count zero**, with a dedicated role allowed `ecs:UpdateService` on the exact service ARN and cluster, trusted only by the exact schedule group in this account. IAM does not constrain the UpdateService request's desired-count field; the reviewed target supplies zero. No Lambda, RDS control, data permissions, PassRole or wildcard resource authority is granted. Delivery has minute precision, up to three retries and a 900-second event-age limit; it is not guaranteed execution at an exact second. The scheduler API does not validate target business behavior at creation. Managed acceptance must actually observe a short scheduled stop, its service/task outcome and sanitized CloudTrail/metrics, then retain any failure. The schedule remains for review/cleanup and never resumes the service. RDS/ALB/IPv4/storage/keys continue charging after service compute stops; reconcile them at the next month and execute the scoped cleanup/retention plan.
 
 ## Network and credential boundaries
 
-The NAT-free VPC has two public subnets for the HTTPS ALB/Fargate ENIs and private isolated database subnets. Operator CIDR → ALB `443`, ALB security group → task `3000`, and task security group → RDS `5432` are the only inbound rules. There is no HTTP listener, SSH, bastion, ECS Exec, NAT gateway or paid interface endpoint. The single task receives a public IPv4 address for outbound AWS/provider HTTPS; its security group still accepts inbound application traffic only from the ALB. HTTPS egress is not an application data-disclosure policy. The ALB forwards HTTP inside this VPC; database clients require TLS verification with the packaged RDS CA.
+The NAT-free VPC has two public subnets for the HTTPS ALB/Fargate ENIs and private isolated database subnets. Only ALB `443` switches between the recorded operator `/32` and public `0.0.0.0/0`; ALB security group → task `3000` and task security group → RDS `5432` remain the only other inbound rules. There is no HTTP listener, SSH, bastion, ECS Exec, NAT gateway or paid interface endpoint. The single task receives a public IPv4 address for outbound AWS/provider HTTPS; its security group still accepts inbound application traffic only from the ALB. HTTPS egress is not an application data-disclosure policy. The ALB forwards HTTP inside this VPC; database clients require TLS verification with the packaged RDS CA. Network reachability is not signup/invite authorization or tenant isolation.
 
 RDS PostgreSQL 16.13 uses an encrypted 20-GiB `db.t4g.small`, single AZ, IAM authentication, enforced SSL, seven-day backups and deletion protection. Storage autoscaling is disabled by omitting its maximum parameter; setting the maximum equal to 20 GiB is an invalid AWS request. S3 is private, versioned and encrypted with organization keys. Both synthetic tenant UUIDs have their own assumable role, object prefix and KMS key; uploads must supply the matching key ARN **and** `aws:kms` algorithm. The tenant IDs are fixture configuration, never branches in platform business logic.
 
@@ -58,11 +126,11 @@ The helper obtains ECS task identity, assumes database and tenant roles for 900 
 
 This sequence is a handoff plan, not a record that deployment ran:
 
-1. Review the inputs, image/architecture, CDK diff, current estimate, cleanup plan and real certificate hostname. Provision only after the owning environment decision is complete, with `ServiceDesiredCount=0`.
+1. Review the inputs, image/architecture, CDK diff, current estimate, cleanup plan and real certificate hostname. Reserve the short window with preflight and provision with `ServiceDesiredCount=0`; confirm the required stop schedule actually exists before activation.
 2. Use stack outputs `ClusterName`, `MigrationTaskDefinition`, `PublicTaskSubnets` and `TaskSecurityGroup` to run exactly one migration task on Fargate Linux platform `1.4.0`, in those subnets, with that security group and public IP enabled for ECR/logs/Secrets Manager HTTPS. No public database endpoint or inbound migration port is added.
 3. The task runs `python3 /app/runtime.py migrate` using the bundled `/app/migrations/0001_role_foundation.sql`. Its fixed environment is `PGHOST` from RDS, `PGPORT=5432`, `PGDATABASE=genui`, `PGUSER=genui_migration`, `PGSSLROOTCERT=/etc/ssl/certs/rds-global-bundle.pem`, and `PGSSLMODE=verify-full`. ECS injects only `PGPASSWORD` from the generated secret. Do not paste the secret into overrides or shell arguments. The migration task role has no application AWS grants.
 4. Wait for that task to stop; inspect its exit code and sanitized `genui-migration` log stream. Stop on nonzero exit. Preserve migration version, task-definition revision and image digest in managed evidence without credentials. Verify actual SQL role attributes/grants and forbidden-role operations before starting the service.
-5. Set the service to one task, configure the actual certificate hostname's DNS, wait for service/target readiness, and test TLS and both health endpoints from the recorded operator network. Verify forbidden public ingress from a different source. Collect managed per-role database, two-tenant S3/KMS, expiry/refusal and cleanup/rollback evidence before claiming integrated acceptance.
+5. Configure the actual certificate hostname's DNS and explicitly activate through the live-checked preflight path. In temporary `operator` mode, test TLS/health from the recorded `/32` and denial from another source. Immediately request/observe the service stopped as described above, return the template to `public` mode, and activate the same reserved window after the update completes. The template alone does not establish a stopped service. Verify public HTTPS separately from application refusals: uninvited, expired/revoked-code and unauthorized requests must not enqueue work or call a provider once those app features exist. No scaffold-only test passes that application gate. Collect managed per-role database, paired tenant S3/KMS, credential expiry/refresh, actual scheduled stop and cleanup/rollback evidence.
 
 The operator needs a separate reviewed deployment identity and narrowly scoped migration invocation policy: `ecs:RunTask` on the exact migration task-definition revision, restricted to the output cluster; `iam:PassRole` only on `MigrationTaskRoleArn` and `MigrationExecutionRoleArn`, with `iam:PassedToService=ecs-tasks.amazonaws.com`; and the minimum task-status/log-read permissions needed to inspect that run. The migration invocation identity needs no `secretsmanager:GetSecretValue`. This stack does not silently grant an operator or add IAM policy to an existing identity. ECS Exec is disabled; enabling it would require a separately reviewed task configuration and policy.
 
@@ -75,3 +143,5 @@ Database, generated migration secret, S3 objects/versions, KMS keys and logs are
 Managed account connectivity, exact PostgreSQL grants, cross-tenant denials, readiness, snapshot/restore and cleanup/rollback are still required. Template assertions cannot establish these outcomes. No customer data or credentials belong in this synthetic environment's source or evidence.
 
 References: [ECS execution-role separation and permissions](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html), [Fargate task networking](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-networking.html), [ECS bind mounts and ownership](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/bind-mounts.html).
+
+Scheduling references: [universal targets](https://docs.aws.amazon.com/scheduler/latest/UserGuide/managing-targets-universal.html), [one-time precision](https://docs.aws.amazon.com/scheduler/latest/UserGuide/schedule-types.html), [schedule-group trust](https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html), [ECS action/resource scope](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html). Cost sources and exclusions remain in the [cost record](../docs/planning/SYNTHETIC-ENVIRONMENT-COST.md); the prior evidence is retained as historical qualification, not silently relabeled for these changes.

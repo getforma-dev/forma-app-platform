@@ -29,6 +29,8 @@ function resolve(value: any, parameters: Record<string, string>): any {
   if (value['Fn::Join']) return resolve(value['Fn::Join'][1], parameters).join(value['Fn::Join'][0]);
   if (value['Fn::Split']) return resolve(value['Fn::Split'][1], parameters).split(value['Fn::Split'][0]);
   if (value['Fn::Select']) return resolve(value['Fn::Select'][1], parameters)[Number(value['Fn::Select'][0])];
+  if (value['Fn::Equals']) return resolve(value['Fn::Equals'][0], parameters) === resolve(value['Fn::Equals'][1], parameters);
+  if (value['Fn::If']) return resolve(value['Fn::If'][resolve(document.Conditions[value['Fn::If'][0]], parameters) ? 1 : 2], parameters);
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, resolve(child, parameters)]));
 }
 
@@ -50,13 +52,16 @@ test('managed data stays private, encrypted, retained and versioned', () => {
   }
 });
 
-test('ingress is exactly operator HTTPS, ALB-to-task and task-to-database', () => {
+test('only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact', () => {
   const task = one('AWS::EC2::SecurityGroup', 'TaskSecurity')[0], alb = one('AWS::EC2::SecurityGroup', 'AlbSecurity')[0], database = one('AWS::EC2::SecurityGroup', 'DatabaseSecurity')[0];
   const ingress = entries('AWS::EC2::SecurityGroupIngress').map(([, item]) => item.Properties);
   for (const [id, group] of entries('AWS::EC2::SecurityGroup')) for (const rule of group.Properties.SecurityGroupIngress ?? []) ingress.push({ GroupId: reference(id), ...rule });
   assert.equal(ingress.length, 3);
   const byPort = (port: number) => ingress.find(rule => rule.FromPort === port);
-  assert.deepEqual(byPort(443).GroupId, reference(alb)); assert.deepEqual(byPort(443).CidrIp, { Ref: 'OperatorIpv4Cidr' });
+  assert.deepEqual(byPort(443).GroupId, reference(alb));
+  for (const mode of ['operator', 'public']) assert.equal(resolve(byPort(443).CidrIp, { IngressMode: mode, OperatorIpv4Cidr: '8.8.8.8/32' }), mode === 'public' ? '0.0.0.0/0' : '8.8.8.8/32');
+  assert.deepEqual(document.Parameters.IngressMode.AllowedValues, ['operator', 'public']);
+  assert.equal(document.Parameters.IngressMode.Default, 'public');
   assert.deepEqual(byPort(3000).SourceSecurityGroupId, reference(alb)); assert.deepEqual(byPort(3000).GroupId, reference(task));
   assert.deepEqual(byPort(5432).SourceSecurityGroupId, reference(task)); assert.deepEqual(byPort(5432).GroupId, reference(database));
   for (const rule of ingress) {
@@ -69,19 +74,38 @@ test('ingress is exactly operator HTTPS, ALB-to-task and task-to-database', () =
 
 test('operator and certificate are required; broad/private/placeholder networks fail', () => {
   const pattern = new RegExp(OPERATOR_CIDR_PATTERN);
-  for (const value of ['8.8.8.8/32', '1.1.1.0/24', '9.9.9.8/30']) assert.equal(pattern.test(value), true, value);
-  for (const value of ['0.0.0.0/0', '8.8.0.0/16', '1.1.0.0/23', '10.1.2.3/32', '172.16.0.1/32', '172.31.255.1/24', '192.168.1.1/32', '127.0.0.1/32', '169.254.169.254/32', '224.1.2.3/32', '203.0.113.1/32', '198.51.100.1/32', '192.0.2.1/32', '100.64.1.1/32', '198.18.0.1/32', '256.1.1.1/32', '1.1.1.1/33', '8.8.8.8/32\n', '::/0']) assert.equal(pattern.test(value), false, value);
-  for (const name of ['OperatorIpv4Cidr', 'TlsCertificateArn', 'Operator', 'MonthlyBudgetUsd', 'ImageArchitecture']) assert.equal(document.Parameters[name].Default, undefined);
+  for (const value of ['8.8.8.8/32', '1.1.1.1/32', '9.9.9.8/32']) assert.equal(pattern.test(value), true, value);
+  for (const value of ['0.0.0.0/0', '8.8.0.0/16', '1.1.0.0/23', '1.1.1.0/24', '9.9.9.8/30', '10.1.2.3/32', '172.16.0.1/32', '172.31.255.1/24', '192.168.1.1/32', '127.0.0.1/32', '169.254.169.254/32', '224.1.2.3/32', '203.0.113.1/32', '198.51.100.1/32', '192.0.2.1/32', '100.64.1.1/32', '198.18.0.1/32', '256.1.1.1/32', '1.1.1.1/33', '8.8.8.8/32\n', '::/0']) assert.equal(pattern.test(value), false, value);
+  for (const name of ['OperatorIpv4Cidr', 'TlsCertificateArn', 'Operator', 'ImageArchitecture', 'DeploymentExpiresAtUtc']) assert.equal(document.Parameters[name].Default, undefined);
+  assert.equal(document.Parameters.MonthlyBudgetUsd.Default, 100);
+  assert.deepEqual(document.Parameters.MonthlyBudgetUsd.AllowedValues, ['100']);
   const cert = new RegExp(document.Parameters.TlsCertificateArn.AllowedPattern);
   assert.equal(cert.test('arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-4000-8000-000000000001'), true);
   assert.equal(cert.test('invented-certificate'), false);
   assert.deepEqual(document.Parameters.ImageArchitecture.AllowedValues, ['ARM64', 'X86_64']);
 });
 
+test('expiry is one UTC execution that can update only this service in this cluster', () => {
+  const group = one('AWS::Scheduler::ScheduleGroup')[0], schedule = one('AWS::Scheduler::Schedule')[1].Properties;
+  const cluster = one('AWS::ECS::Cluster')[0], service = one('AWS::ECS::Service')[0], expiryRole = role('ExpiryRole');
+  assert.equal(schedule.State, 'ENABLED'); assert.equal(schedule.ActionAfterCompletion, undefined);
+  assert.equal(schedule.ScheduleExpressionTimezone, 'UTC'); assert.deepEqual(schedule.FlexibleTimeWindow, { Mode: 'OFF' });
+  assert.equal(resolve(schedule.ScheduleExpression, { DeploymentExpiresAtUtc: '2026-10-30T12:34:56Z' }), 'at(2026-10-30T12:34:56)');
+  assert.deepEqual(schedule.GroupName, { Ref: group });
+  assert.equal(resolve(schedule.Target.Arn, { 'AWS::Partition': 'aws' }), 'arn:aws:scheduler:::aws-sdk:ecs:updateService');
+  const payload = JSON.parse(resolve(schedule.Target.Input, {}));
+  assert.deepEqual(Object.keys(payload).sort(), ['Cluster', 'DesiredCount', 'Service']);
+  assert.equal(payload.DesiredCount, 0); assert.equal(payload.Cluster, `arn:fixture:${cluster}:Arn`); assert.equal(payload.Service, `reference:${service}`);
+  assert.deepEqual(schedule.Target.RetryPolicy, { MaximumEventAgeInSeconds: 900, MaximumRetryAttempts: 3 });
+  assert.deepEqual(schedule.Target.RoleArn, { 'Fn::GetAtt': [expiryRole, 'Arn'] });
+  assert.deepEqual(policy(expiryRole), [{ Action: 'ecs:UpdateService', Effect: 'Allow', Resource: { Ref: service }, Condition: { ArnEquals: { 'ecs:cluster': { 'Fn::GetAtt': [cluster, 'Arn'] } } } }]);
+  assert.deepEqual(document.Resources[expiryRole].Properties.AssumeRolePolicyDocument.Statement, [{ Action: 'sts:AssumeRole', Effect: 'Allow', Principal: { Service: 'scheduler.amazonaws.com' }, Condition: { StringEquals: { 'aws:SourceAccount': { Ref: 'AWS::AccountId' } }, ArnEquals: { 'aws:SourceArn': { 'Fn::GetAtt': [group, 'Arn'] } } } }]);
+});
+
 test('digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints', () => {
   for (const type of ['AWS::EC2::NatGateway', 'AWS::EC2::VPCEndpoint', 'AWS::EC2::Instance', 'AWS::AppRunner::Service', 'AWS::Route53::RecordSet', 'AWS::CertificateManager::Certificate']) template.resourceCountIs(type, 0);
   template.resourceCountIs('AWS::ECS::Service', 1); template.resourceCountIs('AWS::ElasticLoadBalancingV2::Listener', 1);
-  assert.equal(document.Parameters.ServiceDesiredCount.Default, 0); assert.deepEqual(document.Parameters.ServiceDesiredCount.AllowedValues, ['0', '1']);
+  assert.equal(document.Parameters.ServiceDesiredCount.Default, 0); assert.deepEqual(document.Parameters.ServiceDesiredCount.AllowedValues, ['0']);
   template.hasResourceProperties('AWS::ECS::Service', { LaunchType: 'FARGATE', DesiredCount: { Ref: 'ServiceDesiredCount' }, EnableExecuteCommand: false, DeploymentConfiguration: Match.objectLike({ DeploymentCircuitBreaker: { Enable: true, Rollback: true }, MinimumHealthyPercent: 100, MaximumPercent: 200 }), NetworkConfiguration: { AwsvpcConfiguration: Match.objectLike({ AssignPublicIp: 'ENABLED' }) } });
   template.hasResourceProperties('AWS::ElasticLoadBalancingV2::Listener', { Port: 443, Protocol: 'HTTPS', Certificates: [{ CertificateArn: { Ref: 'TlsCertificateArn' } }], SslPolicy: 'ELBSecurityPolicy-TLS13-1-2-2021-06' });
   template.hasResourceProperties('AWS::ElasticLoadBalancingV2::TargetGroup', { Port: 3000, Protocol: 'HTTP', TargetType: 'ip', HealthCheckPath: '/health/ready', Matcher: { HttpCode: '200' } });

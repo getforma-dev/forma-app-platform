@@ -42,3 +42,7 @@ Independent review found that an autoscaling maximum equal to the 20-GiB allocat
 ## Final local review and CI
 
 [Independent review](review.md) approves the local preparation at `8139067`, with all 39 source hashes checked, 24 focused tests repeated and the local immutable image independently exercised. All six [source CI checks](ci.json) pass. The retained [Linux/x86 preparation](ci-8139067/local-preparation.json) passes all fourteen steps; its separately built [image trial](ci-8139067/image-qualification.json) also passes. That source landed on `origin/main`. APP-007 remains Blocked for the inputs and managed acceptance above; CI ran no cloud deployment, migration or managed service trial.
+
+## Public-access and bounded-window revision
+
+The [revised infrastructure campaign](public-beta-infra/qualification.json) and [independent review](public-beta-infra/review.md) qualify public/operator ingress, a narrowly scoped expiry stop, live activation checks and cumulative budget reservations. The app runtime itself is unchanged; [its registry receipt](registry-image-receipt.json) rechecks the original app hashes and binds the uploaded ARM64 image digest. Registry publication does not establish deployed availability, a vulnerability-scan pass or managed acceptance. The first managed trial will use a short window within the $100 monthly project plan.

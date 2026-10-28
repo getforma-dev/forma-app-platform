@@ -1,0 +1,122 @@
+{
+  "recorded_at_utc": "2026-10-28T21:55:14.368556+00:00",
+  "scope": "Local public-ingress and bounded-window infrastructure qualification only; no AWS API, deployment, DNS, certificate, billing or live Scheduler acceptance is established. Activation tests use controlled AWS-shaped responses; default preflight CLI tests use disposable private local ledgers.",
+  "base_head": "d47228a3e2ea627c8d79e8298bd8d7253cf7d484",
+  "inputs": {
+    "infra/src/stack.ts": {
+      "bytes": 18422,
+      "sha256": "673187f4edaeb2629fff12ae7dc2ed5a97691cae978b3dc3b4fcd94223c424ba"
+    },
+    "infra/src/main.ts": {
+      "bytes": 234,
+      "sha256": "3080fe33f5d266dbbba63db823b2195b83bcdf3aea3f7f80a9530dd8161417d8"
+    },
+    "infra/test/security.test.ts": {
+      "bytes": 19552,
+      "sha256": "b621b5b71b7f00a0bfc992b8d957a79322680c1bc125e8ea781cf632d123384a"
+    },
+    "infra/test/preflight.test.ts": {
+      "bytes": 423,
+      "sha256": "fe1f0e6c1764e995c0562bbc80479f497a0fb54f69d3fe1d5f8da3901e3e55f9"
+    },
+    "infra/test/preflight_test.py": {
+      "bytes": 14158,
+      "sha256": "57b51e7e8a211ec36b573dbed8a6d6cabd995abbb92841c1a2aa6acff1e71416"
+    },
+    "infra/scripts/preflight.py": {
+      "bytes": 18910,
+      "sha256": "be5d554b0c59d136374e01d9d7892ff17c36e49c57cdedb42bf538ef54558fcf"
+    },
+    "infra/README.md": {
+      "bytes": 20794,
+      "sha256": "353d2a826985d19964f177a1304f8f5abacff88bf9dc451465552ff4f924608d"
+    },
+    "infra/package.json": {
+      "bytes": 426,
+      "sha256": "4c06daa14e04b8f79f13286033628a212ad24a32ca9d7fa01595780b5861b5fd"
+    },
+    "infra/package-lock.json": {
+      "bytes": 26041,
+      "sha256": "cf171e2d3fa5064c60a9896a788ae84b38cc24b0c67d21463fd77c1361ee839a"
+    },
+    "infra/tsconfig.json": {
+      "bytes": 202,
+      "sha256": "7494f3c4db6888ba330c03a98b723a6ac92cba2490e29696bac66b5b4033b96c"
+    },
+    "infra/cdk.json": {
+      "bytes": 93,
+      "sha256": "218be47a43c2178de8ed04f0015c0501aa8809e22815817a34ce1dd136fb116c"
+    }
+  },
+  "tools": {
+    "node": "v22.21.0",
+    "npm": "11.6.2",
+    "python": "Python 3.11.0"
+  },
+  "steps": [
+    {
+      "name": "01-typecheck",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "01-typecheck.txt"
+    },
+    {
+      "name": "02-tests",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "02-tests.txt"
+    },
+    {
+      "name": "03-python-tests",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "test",
+        "-p",
+        "preflight_test.py",
+        "-v"
+      ],
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "03-python-tests.txt"
+    },
+    {
+      "name": "04-synth",
+      "command": [
+        "npm",
+        "run",
+        "synth",
+        "--",
+        "--quiet"
+      ],
+      "cwd": "infra",
+      "exit_code": 0,
+      "output": "04-synth.txt"
+    }
+  ],
+  "documentation_after_run": {
+    "at_utc": "2026-10-28T21:56:13.069489+00:00",
+    "path": "infra/README.md",
+    "before": {
+      "bytes": 20726,
+      "sha256": "238fb25fe27ce44efb10ab74f7d92a78199acb81b4b4f8445898aaf804bdb997"
+    },
+    "after": {
+      "bytes": 20794,
+      "sha256": "353d2a826985d19964f177a1304f8f5abacff88bf9dc451465552ff4f924608d"
+    },
+    "reason": "Clarify preflight only supports same-account/region image repositories; no runtime/test/template change."
+  }
+}
