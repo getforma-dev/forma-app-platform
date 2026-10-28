@@ -6,7 +6,7 @@ Updated: 2026-10-28, after reviewed source `49389c6` landed on `main`. This is a
 
 This index summarizes the owning tickets' retained checks, reviews and source receipts. It does not replace their evidence or certify a managed release trial. No GenUI cloud environment or integrated saved workflow has been qualified.
 
-APP-003's [final acceptance](../../evidence/APP-003/ACCEPTANCE.md) includes the reviewed nine-renderer consumer, passing CI, measured no-override budget disposition and received FORMA-246 merged conformance evidence. APP-006's local verifier also has independent review and passing CI, but this does not clear hosted-auth or membership acceptance.
+APP-003's [final acceptance](../../evidence/APP-003/ACCEPTANCE.md) includes the reviewed nine-renderer consumer, passing CI, measured no-override budget disposition and received FORMA-246 merged conformance evidence. APP-006's local verifier also has independent review and passing CI. The [final auth source handback](../../evidence/APP-006/README.md) records PR17 merged with eight successful checks and independently verified unchanged consumer contracts; its qualified image is local and has no registry/deployment identity. These source receipts do not clear hosted-auth or membership acceptance.
 
 ## Evidence already available — reuse it
 

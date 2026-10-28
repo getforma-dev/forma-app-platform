@@ -6,6 +6,12 @@
 
 Implementation `49389c6` is on `main`. [Independent review](review.md) found no blocking local-consumer issue, and all eight [source CI checks](ci.json) passed. The [Linux run](ci-49389c6/qualification.json) passed the same 23 tests and matched all 13 input hashes; it explicitly reports no upstream checkout available there. Local producer and reviewer checks independently verified the 21 pinned upstream blobs. These results leave all hosted/member/session acceptance blocked.
 
+## Received merged auth source
+
+FormaStack's PR [#17](https://github.com/getforma-dev/gatewasm/pull/17) merged as `737c73f88f2b89e8712e4cd1f5dbf40163ab6081`; [current GitHub receipt](upstream-auth-source/github-receipt.json) records all eight successful checks at `c469efedde35bb16fff72ef11ac2ddb5fa8358e5`. The [independent source comparison](upstream-final-source-review.md) verifies all 21 original pinned blobs and all nine access-only profile files against the final source tree. The subsequent changes affect startup refusal and CI setup, not the consumer wire/claims contract. Original pins and runtime evidence remain unchanged; no consumer runtime rerun was needed for this source delta.
+
+The [received handoff](upstream-auth-source/handoff-received.txt) and [capture manifest](upstream-auth-source/capture-manifest.json) preserve FormaStack's source/local-image evidence. Its image retains source `e828404462a44f806b0b22fe6f4c04552cc1370b`, has no registry digest, and was exercised with a synthetic local signer. Any pending-merge wording or OPEN state in those received historical snapshots is superseded only by the current GitHub merge receipt above. This receipt does not prove live KMS custody, deployed sign-in, client registration, membership denial or rollback; APP-006 and the FORMA-247/248 consumer gates remain open.
+
 ## Recorded local run
 
 [local/qualification.json](local/qualification.json) identifies the exact input SHA-256 values, registry dependency versions/checksums/license metadata, base app HEAD, platform and toolchain. The run used macOS ARM64, Rust 1.93.1 and two Cargo jobs. It rechecked two public fixture hashes and twenty-one immutable upstream Git blobs against the independently available GateWasm repository. An app HEAD is context only: candidate file hashes identify these uncommitted implementation inputs.

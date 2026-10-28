@@ -1,0 +1,94 @@
+{
+  "observed_at": "2026-10-28T21:20:17.678904+00:00",
+  "receipt": {
+    "headRefOid": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+    "mergeCommit": {
+      "oid": "737c73f88f2b89e8712e4cd1f5dbf40163ab6081"
+    },
+    "mergedAt": "2026-10-28T21:17:44Z",
+    "state": "MERGED",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:08:19Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123101956192",
+        "name": "Managed key custody infrastructure",
+        "startedAt": "2026-10-28T21:07:57Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:08:17Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123101956621",
+        "name": "Lockfile integrity",
+        "startedAt": "2026-10-28T21:07:56Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:08:21Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123101956432",
+        "name": "Frontend validation",
+        "startedAt": "2026-10-28T21:07:56Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:15:39Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123102197502",
+        "name": "Rust unit tests",
+        "startedAt": "2026-10-28T21:08:25Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:12:19Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123102197433",
+        "name": "Integration tests",
+        "startedAt": "2026-10-28T21:08:24Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:11:03Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123102197421",
+        "name": "E2E smoke tests",
+        "startedAt": "2026-10-28T21:08:24Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:07:25Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://socket.dev/dashboard/org/getforma-dev/sbom/6690f517-0e5b-4fb4-bec8-f6ca33982c71",
+        "name": "Socket Security: Project Report",
+        "startedAt": "2026-10-28T21:07:23Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:07:39Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://socket.dev",
+        "name": "Socket Security: Pull Request Alerts",
+        "startedAt": "2026-10-28T21:07:26Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      }
+    ],
+    "url": "https://github.com/getforma-dev/gatewasm/pull/17"
+  }
+}

@@ -1,0 +1,35 @@
+# FORMA-247 / FORMA-248 auth source and image handoff
+
+**Source and local image qualification complete; hosted acceptance remains open.** PR17 merged as `737c73f88f2b89e8712e4cd1f5dbf40163ab6081` at 2026-10-28T21:17:44Z after independent approval and all eight exact-head checks. [Merge receipt](merge-final.json). The original FORMA tickets/journey retain hosted acceptance as open.
+
+- FORMA-247 source: [PR #16](https://github.com/getforma-dev/gatewasm/pull/16), merged `f0fa4bee73366dba813b7c33e2445c6b7a60d700`; reviewed head `f65c1948181554d30ad62549e35717eb8132f4f6`, CI run `40759887007` green. Its public provisioning receipts, three browser-engine code-flow passes and token-leak negative control remain under `work/FORMA-247/`.
+- FORMA-248 source: [PR #17](https://github.com/getforma-dev/gatewasm/pull/17), final CI head `c469efedde35bb16fff72ef11ac2ddb5fa8358e5`. [Run 40769265529](https://github.com/getforma-dev/gatewasm/actions/runs/40769265529) succeeded; all **eight checks passed**. Exact receipts: [checks](ci-final-eight-checks.json), [PR/head](ci-final-pr17.json), [run/jobs](ci-final-run40769265529.json).
+- Qualified image source: `e828404462a44f806b0b22fe6f4c04552cc1370b`. The final CI commit changes **only** `.github/workflows/ci.yml` to install Clippy. [Ancestry and complete build-input equivalence](ci-only-followup-image-equivalence.json) prove application, Docker, frontend and helper Git objects are identical. Do not relabel the image as the CI-only commit.
+
+The retained local image is `forma248-local:qualification`, Linux **amd64**, runtime user `app`:
+
+| Identity | Value |
+|---|---|
+| Local OCI image index | `sha256:d28e540eff5fa55639e514599d07dc86e9c4700a970cd47e517f6f3841a956dd` |
+| amd64 image manifest | `sha256:bcba949472251de732e90ebfbaa293a0654ffbbc29a9a10770ebf64a8a70287f` |
+| Image configuration | `sha256:24b427d8ae6871f98fcf81bf4a5c9474b75b350f2774b9657d8afa2798e5b280` |
+| Registry digest | **None: no registry push occurred** |
+
+[Image provenance](final-image-provenance.json), [embedded asset identity](image-build-identity.json) and [runtime qualification](local-image-qualification.json) bind the committed source archive, three pinned base-image digests, npm lock, frontend manifest, OCI label and running health revision. All **61 served asset hashes**, including **22 negotiated compressed representations**, match; the internal manifest correctly returns 404, login returns 200, and required KMS configuration without a manifest exits naturally with code **1**. The positive runtime uses an explicitly synthetic local signer, not AWS custody. [Final build log](docker-build-startup-exit.log) and [runtime proof](local-image-proof-startup-exit.log) are retained. Earlier superseded builds/refusal observations are retained separately.
+
+| Final verification | Result | Evidence |
+|---|---|---|
+| Rust unit tests and warning gate | 106 passed; clippy 25/25, bundle 0/0 | [CI unit log](ci-c469efe-unit.log) |
+| Rust integration | 281 passed, one existing ignored test | [CI integration log](ci-c469efe-integration.log) |
+| Browser smoke | 44 passed | [CI browser log](ci-c469efe-e2e.log) |
+| CDK and secret-rotation tests | 13 synthesis tests; four Python recovery tests | [CI infrastructure log](ci-c469efe-infrastructure.log) |
+| Focused final key boundaries | 13 JWT unit, three KMS integration, one SSF verification | `final-ssf-*.log` |
+| Independent mutation/provenance controls | Six IAM mutations detected; 19 image controls passed | [infrastructure review](INDEPENDENT-CDK-REVIEW.md), [image review](INDEPENDENT-IMAGE-REVIEW.md) |
+
+The public contract remains EdDSA/OKP/Ed25519 with unchanged tenant issuer/audience claims. `/auth/jwks` publishes **only access** current/next/unexpired previous keys. `/ssf/jwks` publishes the dedicated historical SET key, excluded from access verification. SETs use `typ=secevent+jwt` without `exp`; no new SSF discovery/issuer standardization is claimed. Keyring promotion requires a witnessed fleet publication interval of 3600 seconds; retirement requires a witnessed last issuance/drain plus the immutable lifetime cap and 60 seconds. Stale generations fail closed. AWS KMS RAW signing is bounded to 4096 bytes, checks returned signatures locally, and has no private-key fallback. Tenant secret rotation is recoverable and single-operator; accepted management/platform uses are durably audited.
+
+Independent reviews: root source review plus final main/CI delta approval; [canvas key/rotation review](canvas-key-boundary-review.md); budgets' [CDK review](INDEPENDENT-CDK-REVIEW.md) and [image/artifact review](INDEPENDENT-IMAGE-REVIEW.md). Source/runbook: `docs/handoff/FORMA-248.md` and `handoff/forma-248/README.md` in the clean retained auth checkout.
+
+**Still unproved:** live KMS custody/signing, provider IAM denial and outage/recovery, hosted tenant/client availability, real fleet key rotation/retirement, managed platform-key rotation, deployed image identity and GenUI's bounded unknown-kid integration/APP-058 acceptance. No AWS resource, key, secret or hosted image was created or changed. These require the coordinated reconstruction window, budget, operator and callback inputs. File-key rollback reopens the real-organization gate.
+
+Owned test listeners, containers, isolated network and disposable PostgreSQL volume are removed; the qualified local image and clean worktree remain. Generated synthetic management credentials were deleted. [Cleanup](local-cleanup.md) and [final privacy scan](privacy-scan-final.json) record the final state; no bearer tokens or private keys are retained in the public evidence.

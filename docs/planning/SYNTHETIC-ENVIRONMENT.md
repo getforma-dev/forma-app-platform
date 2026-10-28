@@ -36,6 +36,8 @@ Cleanup targets only the named synthetic resources. Preserve required evidence, 
 
 GenUI owns application infrastructure configuration, migrations and consumer checks. FormaStack owns FORMA-247 hosted fAuth and FORMA-248 signing-key custody. Coordinate app origin/callback and tenant/client identifiers through the handoff; neither team changes the other's repository or services implicitly.
 
+FormaStack has supplied a [separate auth rehearsal proposal](../../evidence/APP-006/upstream-auth-source/hosted-rehearsal-proposal.txt): six hours of synthetic staging with a proposed $5 operator spending limit and cleanup. It still needs the exact GenUI origin/callback, agreed start window and spending decision. That proposed allowance is not included in GenUI's monthly estimate, is not a hard AWS billing cap, and does not authorize recreating the deleted GateWasm production environment. Coordinate the window with actual GenUI consumer readiness.
+
 APP-007 stays incomplete until the managed environment checks pass. Missing account/access/budget/operator details block that acceptance specifically; they do not block APP-002/004/005 or close the FormaStack gates by implication.
 
 ## Infrastructure implementation choice

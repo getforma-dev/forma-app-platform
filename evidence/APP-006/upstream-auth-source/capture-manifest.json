@@ -1,0 +1,54 @@
+{
+  "captured_at": "2026-10-28T21:20:17.678904+00:00",
+  "scope": "Received owner source/local-image receipts only; no hosted acceptance or GenUI runtime rerun. Text snapshot keeps original bytes and links as historical source data.",
+  "files": [
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-248/evidence/FINAL-HANDOFF.md",
+      "saved_as": "handoff-received.txt",
+      "bytes": 5632,
+      "sha256": "198d319bd81499ce6cd1946981fb3b5b13393232f3aceb25eee3fc45c0692f5f"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-248/evidence/merge-final.json",
+      "saved_as": "merge-final.json",
+      "bytes": 261,
+      "sha256": "7016e25bb08012afe1f120943652e160a784ba1e4412622308f2e601e4108978"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-248/evidence/ci-final.json",
+      "saved_as": "ci-premerge.json",
+      "bytes": 3032,
+      "sha256": "0b3a0cfff0dba0ae7e0a4b661049d225bf0c317d589650717341c1cc96e63082"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-248/evidence/final-image-provenance.json",
+      "saved_as": "final-image-provenance.json",
+      "bytes": 1322,
+      "sha256": "7e06a889b11f98462669f70f9b9f54f6b0989fd14aefe44ea0145d6e83488474"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-248/evidence/ci-only-followup-image-equivalence.json",
+      "saved_as": "ci-only-followup-image-equivalence.json",
+      "bytes": 780,
+      "sha256": "85809ddcb3bd24662073413341b927bbd28c2ba7ec4389328af174df9add3af2"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-248/evidence/local-image-qualification.json",
+      "saved_as": "local-image-qualification.json",
+      "bytes": 1365,
+      "sha256": "ab0dc6796d610fb42953f58fa4c2819fdadf75b18eff9b2d8f88819ab4fb4d90"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-248/evidence/privacy-scan-final.json",
+      "saved_as": "privacy-scan-final.json",
+      "bytes": 201,
+      "sha256": "28d7483152fbadd14dd6538a9544dd7ae7491d9dc4f9efb64b1835cf6ceb0b7f"
+    },
+    {
+      "source": "/Users/victorvillacis/dev/Forma/work/FORMA-247/HOSTED-REHEARSAL-PLAN.md",
+      "saved_as": "hosted-rehearsal-proposal.txt",
+      "bytes": 11396,
+      "sha256": "a3c7c47c3d0be6b74d4b4b8ff49707c37870f94ae1e1bb4d45c034e400e5584a"
+    }
+  ]
+}

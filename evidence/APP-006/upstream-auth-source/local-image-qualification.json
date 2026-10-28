@@ -1,0 +1,33 @@
+{
+  "source_revision": "e828404462a44f806b0b22fe6f4c04552cc1370b",
+  "image_tag": "forma248-local:qualification",
+  "local_image_id": "sha256:d28e540eff5fa55639e514599d07dc86e9c4700a970cd47e517f6f3841a956dd",
+  "registry_digest": null,
+  "registry_pushed": false,
+  "platform": "linux/amd64",
+  "runtime_user": "app",
+  "rootfs_layers": [
+    "sha256:9b35de7893378218e365c34c2c735fb0032a859112fb7345ca8ea73f9aa1db70",
+    "sha256:2cac4478d234b5dae8fa0909ffede5739dc01116ac092a4d48db423abbd96243",
+    "sha256:df9325d50f8652b2de93f435dd295a3b7e3de2f5f1045d8925cc166a254d5b49",
+    "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+    "sha256:c07c6b22e8727e6cc9bd19caee72bd8247a08a9980fd46739cb9e2a4554b77c0",
+    "sha256:efe229d509121b66700f0f49600002e91a5d5d5db86fbd46c633f0f776b87830"
+  ],
+  "health": {
+    "db_status": "ok",
+    "signer_current": true,
+    "source_revision": "e828404462a44f806b0b22fe6f4c04552cc1370b",
+    "status": "ok",
+    "ws_connections": 0
+  },
+  "asset_files_checked": 61,
+  "negotiated_compressed_assets_checked": 22,
+  "internal_manifest_http": 404,
+  "asset_hash_mismatches": [],
+  "login_page_http": 200,
+  "required_kms_without_manifest": "startup refused",
+  "required_kms_exit_code": 1,
+  "runtime_core_limit": 0,
+  "positive_runtime_mode": "explicit synthetic local signer; not deployed KMS evidence"
+}

@@ -1,0 +1,1012 @@
+{
+  "review_kind": "independent read-only upstream merged-source delta review",
+  "reviewer": "/root/auth_final_handoff_review",
+  "observed_at_utc": "2026-10-28T21:20:44.869573+00:00",
+  "scope": "APP-006 external-identity verifier source compatibility; no hosted, membership, custody, release or Phase 1 gate acceptance",
+  "consumer_manifest": {
+    "path": "spikes/APP-006/source-contract.json",
+    "sha256": "a168a8638dd45a5f48334efbbe667ea452cc75a4911c4b9f8c88fcc93aa3143b"
+  },
+  "qualified_upstream_commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+  "final_ci_head": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+  "final_merge_commit": "737c73f88f2b89e8712e4cd1f5dbf40163ab6081",
+  "local_merge_commit_available": false,
+  "local_merge_observation_exit_code": 128,
+  "merge_binding_method": "GitHub immutable Git commit API reports the merge tree; that tree ID equals the locally inspected final CI head tree. No local merge-object inspection is claimed.",
+  "local_head_tree": "fa0860eeb39613e05f1eb5b53299b072bd583b24",
+  "remote_merge_tree": "fa0860eeb39613e05f1eb5b53299b072bd583b24",
+  "trees_equal": true,
+  "remote_merge_commit_observation": {
+    "sha": "737c73f88f2b89e8712e4cd1f5dbf40163ab6081",
+    "node_id": "C_kwDORmgfy9oAKDczN2M3M2Y4OGYyYjg5ZTg3MTJlNGNkMWY1ZGJmNDAxNjNhYjYwODE",
+    "url": "https://api.github.com/repos/getforma-dev/gatewasm/git/commits/737c73f88f2b89e8712e4cd1f5dbf40163ab6081",
+    "html_url": "https://github.com/getforma-dev/gatewasm/commit/737c73f88f2b89e8712e4cd1f5dbf40163ab6081",
+    "author": {
+      "name": "Victor Villacis",
+      "email": "victor.villacis@outlook.com",
+      "date": "2026-10-28T21:17:43Z"
+    },
+    "committer": {
+      "name": "GitHub",
+      "email": "noreply@github.com",
+      "date": "2026-10-28T21:17:43Z"
+    },
+    "tree": {
+      "sha": "fa0860eeb39613e05f1eb5b53299b072bd583b24",
+      "url": "https://api.github.com/repos/getforma-dev/gatewasm/git/trees/fa0860eeb39613e05f1eb5b53299b072bd583b24"
+    },
+    "message": "Merge pull request #17 from getforma-dev/codex/forma-248-kms\n\nAdd KMS Ed25519 custody and versioned access-key rotation",
+    "parents": [
+      {
+        "sha": "f0fa4bee73366dba813b7c33e2445c6b7a60d700",
+        "url": "https://api.github.com/repos/getforma-dev/gatewasm/git/commits/f0fa4bee73366dba813b7c33e2445c6b7a60d700",
+        "html_url": "https://github.com/getforma-dev/gatewasm/commit/f0fa4bee73366dba813b7c33e2445c6b7a60d700"
+      },
+      {
+        "sha": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+        "url": "https://api.github.com/repos/getforma-dev/gatewasm/git/commits/c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+        "html_url": "https://github.com/getforma-dev/gatewasm/commit/c469efedde35bb16fff72ef11ac2ddb5fa8358e5"
+      }
+    ],
+    "verification": {
+      "verified": true,
+      "reason": "valid",
+      "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJq4mZ4CRC1aQ7uu5UhlAAAD84QAHW6WQfdKXrK6rT6YUm7e8vK\nEq13lKjaTC6H4oFddFYukDXdErxlBO7H1YmvFMPwV2QgFB2yfMi/bePMxzk+3kGk\nVFTzCBVd2QhzBu8jrAS9kOdVoJ7o4xc/Y8PI1au3WbE5fHNSdE/3tGpgnYXTIcvl\nZY66J6rkM4J7hQS4ANwiZK/iWZfuNqp91GANOZdOEBSZpKkiudinhoNhIjShGNHo\nCjrP9skwdIFxB5nMD+2hNVDH2jBPlUGsEA9ynvY5OG1wKMuC/RK4RZ/dJr6y03Wp\njafHiN5aPecbwTjc8zlYrFdMO0p5aTkvNxQr3/dGlvDVSU8cTG/iF1YVa1rXgtGe\nJ8goBa3x5qkHlELxh1tY/4xtKFZ9h9LpMbU4k4KtJihwGHCklRm/K9zVe/N7+HmO\ng39lrJdHz8oRk9//MqKXN0uDokkQYQ/kVnOZm4WHXaM0WZIq1xDAopZTVXV+5Lv6\n+tLIQ5/CdIFuicGnOKQU+p1/NZGgUvmFY3bLXNWDxrhcxdDsvy18HDTID9e5Y25A\nC738TWE6pqTnqC3x6VPLnND/qvDODBDgXluyxmm3KwKLBKE64xNd45RtLni5ZnsX\nvHVOziT+FS2b2MUTI2SpvwGbEdNCHB884wpJ3EdSGuaWB1uXmi4BOLFeDNMriy51\n32Sir5yVkfuY1DaBxI0k\n=r36y\n-----END PGP SIGNATURE-----\n",
+      "payload": "tree fa0860eeb39613e05f1eb5b53299b072bd583b24\nparent f0fa4bee73366dba813b7c33e2445c6b7a60d700\nparent c469efedde35bb16fff72ef11ac2ddb5fa8358e5\nauthor Victor Villacis <victor.villacis@outlook.com> 1793222263 -0400\ncommitter GitHub <noreply@github.com> 1793222263 -0400\n\nMerge pull request #17 from getforma-dev/codex/forma-248-kms\n\nAdd KMS Ed25519 custody and versioned access-key rotation",
+      "verified_at": "2026-10-28T21:17:44Z"
+    }
+  },
+  "remote_pr_observation": {
+    "headRefOid": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+    "mergeCommit": {
+      "oid": "737c73f88f2b89e8712e4cd1f5dbf40163ab6081"
+    },
+    "mergedAt": "2026-10-28T21:17:44Z",
+    "state": "MERGED",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:08:19Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123101956192",
+        "name": "Managed key custody infrastructure",
+        "startedAt": "2026-10-28T21:07:57Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:08:17Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123101956621",
+        "name": "Lockfile integrity",
+        "startedAt": "2026-10-28T21:07:56Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:08:21Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123101956432",
+        "name": "Frontend validation",
+        "startedAt": "2026-10-28T21:07:56Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:15:39Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123102197502",
+        "name": "Rust unit tests",
+        "startedAt": "2026-10-28T21:08:25Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:12:19Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123102197433",
+        "name": "Integration tests",
+        "startedAt": "2026-10-28T21:08:24Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:11:03Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123102197421",
+        "name": "E2E smoke tests",
+        "startedAt": "2026-10-28T21:08:24Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:07:25Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://socket.dev/dashboard/org/getforma-dev/sbom/6690f517-0e5b-4fb4-bec8-f6ca33982c71",
+        "name": "Socket Security: Project Report",
+        "startedAt": "2026-10-28T21:07:23Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-28T21:07:39Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://socket.dev",
+        "name": "Socket Security: Pull Request Alerts",
+        "startedAt": "2026-10-28T21:07:26Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      }
+    ],
+    "url": "https://github.com/getforma-dev/gatewasm/pull/17"
+  },
+  "original_pinned_blob_results": [
+    {
+      "profile": "FORMA-247",
+      "commit": "f65c1948181554d30ad62549e35717eb8132f4f6",
+      "path": "crates/server/src/jwt/signing.rs",
+      "expected": {
+        "sha256": "90af90ba233fc3005215d0b5a38808a609d169a21ba3d868a8cf9279fb004df4",
+        "bytes": 3103
+      },
+      "observed": {
+        "bytes": 3103,
+        "sha256": "90af90ba233fc3005215d0b5a38808a609d169a21ba3d868a8cf9279fb004df4"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-247",
+      "commit": "f65c1948181554d30ad62549e35717eb8132f4f6",
+      "path": "crates/server/src/jwt/keys.rs",
+      "expected": {
+        "sha256": "69aaf6319e0968fda8d8f90b64b7bbb8355b81ccdca4957f405a2f11596c161c",
+        "bytes": 5842
+      },
+      "observed": {
+        "bytes": 5842,
+        "sha256": "69aaf6319e0968fda8d8f90b64b7bbb8355b81ccdca4957f405a2f11596c161c"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-247",
+      "commit": "f65c1948181554d30ad62549e35717eb8132f4f6",
+      "path": "crates/server/src/handlers/jwks.rs",
+      "expected": {
+        "sha256": "e2ed76b260b2002500665b87c271d8874bd3e6d374f0d29d751c7848ff577b6d",
+        "bytes": 720
+      },
+      "observed": {
+        "bytes": 720,
+        "sha256": "e2ed76b260b2002500665b87c271d8874bd3e6d374f0d29d751c7848ff577b6d"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-247",
+      "commit": "f65c1948181554d30ad62549e35717eb8132f4f6",
+      "path": "crates/server/src/handlers/token.rs",
+      "expected": {
+        "sha256": "6d60b85448e0448902f0375d31c5fea6bc57217839abfe924b93d06acd0b6ef2",
+        "bytes": 29367
+      },
+      "observed": {
+        "bytes": 29367,
+        "sha256": "6d60b85448e0448902f0375d31c5fea6bc57217839abfe924b93d06acd0b6ef2"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-247",
+      "commit": "f65c1948181554d30ad62549e35717eb8132f4f6",
+      "path": "crates/server/src/config.rs",
+      "expected": {
+        "sha256": "a6a1e2470cb844c85e7efcccf8268de7da061b9e6310044d2eca7c3c5c7f633a",
+        "bytes": 10464
+      },
+      "observed": {
+        "bytes": 10464,
+        "sha256": "a6a1e2470cb844c85e7efcccf8268de7da061b9e6310044d2eca7c3c5c7f633a"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-247",
+      "commit": "f65c1948181554d30ad62549e35717eb8132f4f6",
+      "path": "crates/server/src/types.rs",
+      "expected": {
+        "sha256": "c46fc8972609f1af137ae1ad7f1749d50c43cb078926f44139330bc6eab1b54b",
+        "bytes": 3066
+      },
+      "observed": {
+        "bytes": 3066,
+        "sha256": "c46fc8972609f1af137ae1ad7f1749d50c43cb078926f44139330bc6eab1b54b"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-247",
+      "commit": "f65c1948181554d30ad62549e35717eb8132f4f6",
+      "path": "handoff/forma-247/README.md",
+      "expected": {
+        "sha256": "0fd3a801f5aef52390733610ed209bd25f13d708d3ab512f812d801b56304785",
+        "bytes": 5733
+      },
+      "observed": {
+        "bytes": 5733,
+        "sha256": "0fd3a801f5aef52390733610ed209bd25f13d708d3ab512f812d801b56304785"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-247",
+      "commit": "f65c1948181554d30ad62549e35717eb8132f4f6",
+      "path": "Cargo.lock",
+      "expected": {
+        "sha256": "cfa10eda1655b2e97663ac8b17372e63b98ce0a1018a0d77fad0138082cae391",
+        "bytes": 102188
+      },
+      "observed": {
+        "bytes": 102188,
+        "sha256": "cfa10eda1655b2e97663ac8b17372e63b98ce0a1018a0d77fad0138082cae391"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 compatibility finding only",
+      "commit": "22652f8ef44bfb48184485045bf0f7f71eaf8e03",
+      "path": "crates/server/src/jwt/signing.rs",
+      "expected": {
+        "sha256": "733bd2361e50cce10c0321cb1aae6b24b3731e480fa71d13c6019daedebcab50",
+        "bytes": 3353
+      },
+      "observed": {
+        "bytes": 3353,
+        "sha256": "733bd2361e50cce10c0321cb1aae6b24b3731e480fa71d13c6019daedebcab50"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 compatibility finding only",
+      "commit": "22652f8ef44bfb48184485045bf0f7f71eaf8e03",
+      "path": "crates/server/src/jwt/keys.rs",
+      "expected": {
+        "sha256": "2c0ae8a01de10c58cab8fa486a8764ca8a7cb881b7a27cfb9c0f84429b966c67",
+        "bytes": 18063
+      },
+      "observed": {
+        "bytes": 18063,
+        "sha256": "2c0ae8a01de10c58cab8fa486a8764ca8a7cb881b7a27cfb9c0f84429b966c67"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 compatibility finding only",
+      "commit": "22652f8ef44bfb48184485045bf0f7f71eaf8e03",
+      "path": "crates/server/src/handlers/jwks.rs",
+      "expected": {
+        "sha256": "7b8d2401446fed823325a7d4cb2e2b5c5bb360a6c339c63592b4a06839050fa7",
+        "bytes": 1177
+      },
+      "observed": {
+        "bytes": 1177,
+        "sha256": "7b8d2401446fed823325a7d4cb2e2b5c5bb360a6c339c63592b4a06839050fa7"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 compatibility finding only",
+      "commit": "22652f8ef44bfb48184485045bf0f7f71eaf8e03",
+      "path": "handoff/forma-248/README.md",
+      "expected": {
+        "sha256": "2603e2553ac26d544e0aa352efc2628ea8a9925c39ab85b86844a1f376a5dfc9",
+        "bytes": 12540
+      },
+      "observed": {
+        "bytes": 12540,
+        "sha256": "2603e2553ac26d544e0aa352efc2628ea8a9925c39ab85b86844a1f376a5dfc9"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 access-only compatibility profile",
+      "commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "path": "crates/server/src/jwt/signing.rs",
+      "expected": {
+        "sha256": "733bd2361e50cce10c0321cb1aae6b24b3731e480fa71d13c6019daedebcab50",
+        "bytes": 3353
+      },
+      "observed": {
+        "bytes": 3353,
+        "sha256": "733bd2361e50cce10c0321cb1aae6b24b3731e480fa71d13c6019daedebcab50"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 access-only compatibility profile",
+      "commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "path": "crates/server/src/jwt/keys.rs",
+      "expected": {
+        "sha256": "a5adf363d66ef6bc58d7141a03e517b8075482eb9b826960b1dfa1a4ede16b93",
+        "bytes": 18809
+      },
+      "observed": {
+        "bytes": 18809,
+        "sha256": "a5adf363d66ef6bc58d7141a03e517b8075482eb9b826960b1dfa1a4ede16b93"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 access-only compatibility profile",
+      "commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "path": "crates/server/src/jwt/kms.rs",
+      "expected": {
+        "sha256": "3c58d5d3e5b3ca011e15c91de129c646972e7f70fa5dd925b0b55d8ffcb40707",
+        "bytes": 22410
+      },
+      "observed": {
+        "bytes": 22410,
+        "sha256": "3c58d5d3e5b3ca011e15c91de129c646972e7f70fa5dd925b0b55d8ffcb40707"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 access-only compatibility profile",
+      "commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "path": "crates/server/src/handlers/jwks.rs",
+      "expected": {
+        "sha256": "4955f54bfe038e32575fa4a5db5d38a2cf9114c9d8b2f7f295a1d3805800456d",
+        "bytes": 1715
+      },
+      "observed": {
+        "bytes": 1715,
+        "sha256": "4955f54bfe038e32575fa4a5db5d38a2cf9114c9d8b2f7f295a1d3805800456d"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 access-only compatibility profile",
+      "commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "path": "crates/server/src/handlers/mod.rs",
+      "expected": {
+        "sha256": "40fe277f7be0c24a9bdf57761e0da344bbfb1f55369dc46c6596893ca164e41f",
+        "bytes": 32319
+      },
+      "observed": {
+        "bytes": 32319,
+        "sha256": "40fe277f7be0c24a9bdf57761e0da344bbfb1f55369dc46c6596893ca164e41f"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 access-only compatibility profile",
+      "commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "path": "crates/server/src/types.rs",
+      "expected": {
+        "sha256": "c46fc8972609f1af137ae1ad7f1749d50c43cb078926f44139330bc6eab1b54b",
+        "bytes": 3066
+      },
+      "observed": {
+        "bytes": 3066,
+        "sha256": "c46fc8972609f1af137ae1ad7f1749d50c43cb078926f44139330bc6eab1b54b"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 access-only compatibility profile",
+      "commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "path": "crates/server/tests/integration.rs",
+      "expected": {
+        "sha256": "50264f622bc96ff2aa31250c995310e71c1de149cdac2c1e84adc3d3bfa0a590",
+        "bytes": 452247
+      },
+      "observed": {
+        "bytes": 452247,
+        "sha256": "50264f622bc96ff2aa31250c995310e71c1de149cdac2c1e84adc3d3bfa0a590"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 access-only compatibility profile",
+      "commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "path": "docs/handoff/FORMA-248.md",
+      "expected": {
+        "sha256": "beaf24e97aaca9a722dada3f380eae631a1700f6d499ee9625e355919063c0d1",
+        "bytes": 5023
+      },
+      "observed": {
+        "bytes": 5023,
+        "sha256": "beaf24e97aaca9a722dada3f380eae631a1700f6d499ee9625e355919063c0d1"
+      },
+      "pass": true
+    },
+    {
+      "profile": "FORMA-248 access-only compatibility profile",
+      "commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "path": "handoff/forma-248/README.md",
+      "expected": {
+        "sha256": "6913d39ae3bdf9cc3a44d6f910104fb3681d3e63441029a3deb1995b9faac633",
+        "bytes": 13844
+      },
+      "observed": {
+        "bytes": 13844,
+        "sha256": "6913d39ae3bdf9cc3a44d6f910104fb3681d3e63441029a3deb1995b9faac633"
+      },
+      "pass": true
+    }
+  ],
+  "original_pinned_blob_count": 21,
+  "final_profile_equivalence_results": [
+    {
+      "path": "crates/server/src/jwt/signing.rs",
+      "qualified_commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "final_head": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+      "qualified": {
+        "sha256": "733bd2361e50cce10c0321cb1aae6b24b3731e480fa71d13c6019daedebcab50",
+        "bytes": 3353
+      },
+      "final": {
+        "bytes": 3353,
+        "sha256": "733bd2361e50cce10c0321cb1aae6b24b3731e480fa71d13c6019daedebcab50"
+      },
+      "byte_identical": true
+    },
+    {
+      "path": "crates/server/src/jwt/keys.rs",
+      "qualified_commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "final_head": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+      "qualified": {
+        "sha256": "a5adf363d66ef6bc58d7141a03e517b8075482eb9b826960b1dfa1a4ede16b93",
+        "bytes": 18809
+      },
+      "final": {
+        "bytes": 18809,
+        "sha256": "a5adf363d66ef6bc58d7141a03e517b8075482eb9b826960b1dfa1a4ede16b93"
+      },
+      "byte_identical": true
+    },
+    {
+      "path": "crates/server/src/jwt/kms.rs",
+      "qualified_commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "final_head": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+      "qualified": {
+        "sha256": "3c58d5d3e5b3ca011e15c91de129c646972e7f70fa5dd925b0b55d8ffcb40707",
+        "bytes": 22410
+      },
+      "final": {
+        "bytes": 22410,
+        "sha256": "3c58d5d3e5b3ca011e15c91de129c646972e7f70fa5dd925b0b55d8ffcb40707"
+      },
+      "byte_identical": true
+    },
+    {
+      "path": "crates/server/src/handlers/jwks.rs",
+      "qualified_commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "final_head": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+      "qualified": {
+        "sha256": "4955f54bfe038e32575fa4a5db5d38a2cf9114c9d8b2f7f295a1d3805800456d",
+        "bytes": 1715
+      },
+      "final": {
+        "bytes": 1715,
+        "sha256": "4955f54bfe038e32575fa4a5db5d38a2cf9114c9d8b2f7f295a1d3805800456d"
+      },
+      "byte_identical": true
+    },
+    {
+      "path": "crates/server/src/handlers/mod.rs",
+      "qualified_commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "final_head": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+      "qualified": {
+        "sha256": "40fe277f7be0c24a9bdf57761e0da344bbfb1f55369dc46c6596893ca164e41f",
+        "bytes": 32319
+      },
+      "final": {
+        "bytes": 32319,
+        "sha256": "40fe277f7be0c24a9bdf57761e0da344bbfb1f55369dc46c6596893ca164e41f"
+      },
+      "byte_identical": true
+    },
+    {
+      "path": "crates/server/src/types.rs",
+      "qualified_commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "final_head": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+      "qualified": {
+        "sha256": "c46fc8972609f1af137ae1ad7f1749d50c43cb078926f44139330bc6eab1b54b",
+        "bytes": 3066
+      },
+      "final": {
+        "bytes": 3066,
+        "sha256": "c46fc8972609f1af137ae1ad7f1749d50c43cb078926f44139330bc6eab1b54b"
+      },
+      "byte_identical": true
+    },
+    {
+      "path": "crates/server/tests/integration.rs",
+      "qualified_commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "final_head": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+      "qualified": {
+        "sha256": "50264f622bc96ff2aa31250c995310e71c1de149cdac2c1e84adc3d3bfa0a590",
+        "bytes": 452247
+      },
+      "final": {
+        "bytes": 452247,
+        "sha256": "50264f622bc96ff2aa31250c995310e71c1de149cdac2c1e84adc3d3bfa0a590"
+      },
+      "byte_identical": true
+    },
+    {
+      "path": "docs/handoff/FORMA-248.md",
+      "qualified_commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "final_head": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+      "qualified": {
+        "sha256": "beaf24e97aaca9a722dada3f380eae631a1700f6d499ee9625e355919063c0d1",
+        "bytes": 5023
+      },
+      "final": {
+        "bytes": 5023,
+        "sha256": "beaf24e97aaca9a722dada3f380eae631a1700f6d499ee9625e355919063c0d1"
+      },
+      "byte_identical": true
+    },
+    {
+      "path": "handoff/forma-248/README.md",
+      "qualified_commit": "dfe7896826c4e1e3a616246fe6022d311cb38519",
+      "final_head": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+      "qualified": {
+        "sha256": "6913d39ae3bdf9cc3a44d6f910104fb3681d3e63441029a3deb1995b9faac633",
+        "bytes": 13844
+      },
+      "final": {
+        "bytes": 13844,
+        "sha256": "6913d39ae3bdf9cc3a44d6f910104fb3681d3e63441029a3deb1995b9faac633"
+      },
+      "byte_identical": true
+    }
+  ],
+  "final_profile_equivalence_count": 9,
+  "complete_changed_file_list_qualified_to_final": [
+    "M\t.github/workflows/ci.yml",
+    "M\tcrates/server/src/main.rs"
+  ],
+  "reviewed_patch_qualified_to_final": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\nindex f4ba64f..61592bc 100644\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -105,6 +105,7 @@ jobs:\n       - uses: dtolnay/rust-toolchain@stable\n         with:\n           toolchain: \"1.93.1\"\n+          components: clippy\n       - uses: Swatinem/rust-cache@v2\n       - name: Build admin assets\n         working-directory: admin\ndiff --git a/crates/server/src/main.rs b/crates/server/src/main.rs\nindex 6ea4462..e69f804 100644\n--- a/crates/server/src/main.rs\n+++ b/crates/server/src/main.rs\n@@ -18,6 +18,13 @@ use gatewasm_server::ws::ticket::TicketStore;\n use gatewasm_server::{assets, db, handlers, middleware, AppState};\n use sqlx::postgres::PgPool;\n \n+/// Configuration/custody refusal is an ordinary startup failure, not a panic.\n+/// Exit directly so abort/core-dump handling cannot leave an unhealthy process alive.\n+fn refuse_signing_startup(reason: &str) -> ! {\n+    tracing::error!(reason, \"Signing configuration refused; server will not start\");\n+    std::process::exit(1)\n+}\n+\n #[tokio::main]\n async fn main() {\n     tracing_subscriber::fmt::init();\n@@ -50,22 +57,22 @@ async fn main() {\n         gatewasm_server::jwt::kms::parse_required(match &std::env::var(\"FAUTH_REQUIRE_KMS\") {\n             Ok(value) => Some(value.as_str()),\n             Err(std::env::VarError::NotPresent) => None,\n-            Err(_) => panic!(\"Invalid FAUTH_REQUIRE_KMS encoding\"),\n+            Err(_) => refuse_signing_startup(\"Invalid FAUTH_REQUIRE_KMS encoding\"),\n         })\n-        .expect(\"Invalid FAUTH_REQUIRE_KMS\");\n+        .unwrap_or_else(|reason| refuse_signing_startup(&reason));\n     let keys = match std::env::var(\"FAUTH_KMS_KEYRING_JSON\") {\n         Ok(manifest) => {\n             if config.ed25519_private_key_pem.is_some() || config.ssf_signing_key_pem.is_some() {\n-                panic!(\"KMS mode refuses process-readable signing key configuration\");\n+                refuse_signing_startup(\"KMS mode refuses process-readable signing key configuration\");\n             }\n             gatewasm_server::jwt::kms::load(&manifest, &pool, config.access_token_expiry)\n                 .await\n-                .expect(\"KMS keyring initialization failed\")\n+                .unwrap_or_else(|reason| refuse_signing_startup(&reason))\n         }\n         Err(std::env::VarError::NotPresent) if !require_kms => {\n             KeyPair::from_pem_or_generate(config.ed25519_private_key_pem.as_deref())\n         }\n-        Err(_) => panic!(\"Required KMS keyring configuration is missing or invalid\"),\n+        Err(_) => refuse_signing_startup(\"Required KMS keyring configuration is missing or invalid\"),\n     };\n \n     // Asset manifest (content-hashed filenames)\n",
+  "startup_change_review": "main.rs adds refuse_signing_startup, logs a refusal reason and calls process::exit(1); the same invalid/absent required KMS and conflicting process-readable key conditions now take this explicit refusal instead of panic/expect. No access claim construction, token signing/verifying, JWKS key selection, route, cache header, successful startup key choice or consumer profile code changed.",
+  "ci_change_review": "The pinned Rust toolchain setup explicitly installs Clippy. The warning threshold and auth protocol are unchanged.",
+  "qualified_image_source": "e828404462a44f806b0b22fe6f4c04552cc1370b",
+  "complete_changed_file_list_image_source_to_final": [
+    "M\t.github/workflows/ci.yml"
+  ],
+  "conclusion": "All original pinned blobs match and all nine access-only profile files are byte-identical in the final merged tree. No APP-006 wire/claims consumer change or rerun of unchanged consumer tests is required for this source-only delta. Preserve original evidence pins and qualified image source identity.",
+  "remaining_gates": [
+    "Deployed image/revision and health identity",
+    "Hosted tenant/client/callback and real PKCE/state/code exchange",
+    "Unknown app principal and membership denial",
+    "Provider KMS/IAM/outage/recovery and fleet rotation evidence when the managed profile is deployed",
+    "Hosted rollback/fallback evidence"
+  ],
+  "commands": [
+    {
+      "argv": [
+        "git",
+        "cat-file",
+        "-e",
+        "737c73f88f2b89e8712e4cd1f5dbf40163ab6081^{commit}"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 128,
+      "stdout": "",
+      "stderr": "fatal: Not a valid object name 737c73f88f2b89e8712e4cd1f5dbf40163ab6081^{commit}\n"
+    },
+    {
+      "argv": [
+        "git",
+        "rev-parse",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5^{tree}"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout": "fa0860eeb39613e05f1eb5b53299b072bd583b24\n"
+    },
+    {
+      "argv": [
+        "gh",
+        "api",
+        "repos/getforma-dev/gatewasm/git/commits/737c73f88f2b89e8712e4cd1f5dbf40163ab6081"
+      ],
+      "cwd": "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform",
+      "exit_code": 0,
+      "stdout": "{\"sha\":\"737c73f88f2b89e8712e4cd1f5dbf40163ab6081\",\"node_id\":\"C_kwDORmgfy9oAKDczN2M3M2Y4OGYyYjg5ZTg3MTJlNGNkMWY1ZGJmNDAxNjNhYjYwODE\",\"url\":\"https://api.github.com/repos/getforma-dev/gatewasm/git/commits/737c73f88f2b89e8712e4cd1f5dbf40163ab6081\",\"html_url\":\"https://github.com/getforma-dev/gatewasm/commit/737c73f88f2b89e8712e4cd1f5dbf40163ab6081\",\"author\":{\"name\":\"Victor Villacis\",\"email\":\"victor.villacis@outlook.com\",\"date\":\"2026-10-28T21:17:43Z\"},\"committer\":{\"name\":\"GitHub\",\"email\":\"noreply@github.com\",\"date\":\"2026-10-28T21:17:43Z\"},\"tree\":{\"sha\":\"fa0860eeb39613e05f1eb5b53299b072bd583b24\",\"url\":\"https://api.github.com/repos/getforma-dev/gatewasm/git/trees/fa0860eeb39613e05f1eb5b53299b072bd583b24\"},\"message\":\"Merge pull request #17 from getforma-dev/codex/forma-248-kms\\n\\nAdd KMS Ed25519 custody and versioned access-key rotation\",\"parents\":[{\"sha\":\"f0fa4bee73366dba813b7c33e2445c6b7a60d700\",\"url\":\"https://api.github.com/repos/getforma-dev/gatewasm/git/commits/f0fa4bee73366dba813b7c33e2445c6b7a60d700\",\"html_url\":\"https://github.com/getforma-dev/gatewasm/commit/f0fa4bee73366dba813b7c33e2445c6b7a60d700\"},{\"sha\":\"c469efedde35bb16fff72ef11ac2ddb5fa8358e5\",\"url\":\"https://api.github.com/repos/getforma-dev/gatewasm/git/commits/c469efedde35bb16fff72ef11ac2ddb5fa8358e5\",\"html_url\":\"https://github.com/getforma-dev/gatewasm/commit/c469efedde35bb16fff72ef11ac2ddb5fa8358e5\"}],\"verification\":{\"verified\":true,\"reason\":\"valid\",\"signature\":\"-----BEGIN PGP SIGNATURE-----\\n\\nwsFcBAABCAAQBQJq4mZ4CRC1aQ7uu5UhlAAAD84QAHW6WQfdKXrK6rT6YUm7e8vK\\nEq13lKjaTC6H4oFddFYukDXdErxlBO7H1YmvFMPwV2QgFB2yfMi/bePMxzk+3kGk\\nVFTzCBVd2QhzBu8jrAS9kOdVoJ7o4xc/Y8PI1au3WbE5fHNSdE/3tGpgnYXTIcvl\\nZY66J6rkM4J7hQS4ANwiZK/iWZfuNqp91GANOZdOEBSZpKkiudinhoNhIjShGNHo\\nCjrP9skwdIFxB5nMD+2hNVDH2jBPlUGsEA9ynvY5OG1wKMuC/RK4RZ/dJr6y03Wp\\njafHiN5aPecbwTjc8zlYrFdMO0p5aTkvNxQr3/dGlvDVSU8cTG/iF1YVa1rXgtGe\\nJ8goBa3x5qkHlELxh1tY/4xtKFZ9h9LpMbU4k4KtJihwGHCklRm/K9zVe/N7+HmO\\ng39lrJdHz8oRk9//MqKXN0uDokkQYQ/kVnOZm4WHXaM0WZIq1xDAopZTVXV+5Lv6\\n+tLIQ5/CdIFuicGnOKQU+p1/NZGgUvmFY3bLXNWDxrhcxdDsvy18HDTID9e5Y25A\\nC738TWE6pqTnqC3x6VPLnND/qvDODBDgXluyxmm3KwKLBKE64xNd45RtLni5ZnsX\\nvHVOziT+FS2b2MUTI2SpvwGbEdNCHB884wpJ3EdSGuaWB1uXmi4BOLFeDNMriy51\\n32Sir5yVkfuY1DaBxI0k\\n=r36y\\n-----END PGP SIGNATURE-----\\n\",\"payload\":\"tree fa0860eeb39613e05f1eb5b53299b072bd583b24\\nparent f0fa4bee73366dba813b7c33e2445c6b7a60d700\\nparent c469efedde35bb16fff72ef11ac2ddb5fa8358e5\\nauthor Victor Villacis <victor.villacis@outlook.com> 1793222263 -0400\\ncommitter GitHub <noreply@github.com> 1793222263 -0400\\n\\nMerge pull request #17 from getforma-dev/codex/forma-248-kms\\n\\nAdd KMS Ed25519 custody and versioned access-key rotation\",\"verified_at\":\"2026-10-28T21:17:44Z\"}}"
+    },
+    {
+      "argv": [
+        "gh",
+        "pr",
+        "view",
+        "17",
+        "--repo",
+        "getforma-dev/gatewasm",
+        "--json",
+        "state,headRefOid,mergeCommit,mergedAt,statusCheckRollup,url"
+      ],
+      "cwd": "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform",
+      "exit_code": 0,
+      "stdout": "{\"headRefOid\":\"c469efedde35bb16fff72ef11ac2ddb5fa8358e5\",\"mergeCommit\":{\"oid\":\"737c73f88f2b89e8712e4cd1f5dbf40163ab6081\"},\"mergedAt\":\"2026-10-28T21:17:44Z\",\"state\":\"MERGED\",\"statusCheckRollup\":[{\"__typename\":\"CheckRun\",\"completedAt\":\"2026-10-28T21:08:19Z\",\"conclusion\":\"SUCCESS\",\"detailsUrl\":\"https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123101956192\",\"name\":\"Managed key custody infrastructure\",\"startedAt\":\"2026-10-28T21:07:57Z\",\"status\":\"COMPLETED\",\"workflowName\":\"CI\"},{\"__typename\":\"CheckRun\",\"completedAt\":\"2026-10-28T21:08:17Z\",\"conclusion\":\"SUCCESS\",\"detailsUrl\":\"https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123101956621\",\"name\":\"Lockfile integrity\",\"startedAt\":\"2026-10-28T21:07:56Z\",\"status\":\"COMPLETED\",\"workflowName\":\"CI\"},{\"__typename\":\"CheckRun\",\"completedAt\":\"2026-10-28T21:08:21Z\",\"conclusion\":\"SUCCESS\",\"detailsUrl\":\"https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123101956432\",\"name\":\"Frontend validation\",\"startedAt\":\"2026-10-28T21:07:56Z\",\"status\":\"COMPLETED\",\"workflowName\":\"CI\"},{\"__typename\":\"CheckRun\",\"completedAt\":\"2026-10-28T21:15:39Z\",\"conclusion\":\"SUCCESS\",\"detailsUrl\":\"https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123102197502\",\"name\":\"Rust unit tests\",\"startedAt\":\"2026-10-28T21:08:25Z\",\"status\":\"COMPLETED\",\"workflowName\":\"CI\"},{\"__typename\":\"CheckRun\",\"completedAt\":\"2026-10-28T21:12:19Z\",\"conclusion\":\"SUCCESS\",\"detailsUrl\":\"https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123102197433\",\"name\":\"Integration tests\",\"startedAt\":\"2026-10-28T21:08:24Z\",\"status\":\"COMPLETED\",\"workflowName\":\"CI\"},{\"__typename\":\"CheckRun\",\"completedAt\":\"2026-10-28T21:11:03Z\",\"conclusion\":\"SUCCESS\",\"detailsUrl\":\"https://github.com/getforma-dev/gatewasm/actions/runs/40769265529/job/123102197421\",\"name\":\"E2E smoke tests\",\"startedAt\":\"2026-10-28T21:08:24Z\",\"status\":\"COMPLETED\",\"workflowName\":\"CI\"},{\"__typename\":\"CheckRun\",\"completedAt\":\"2026-10-28T21:07:25Z\",\"conclusion\":\"SUCCESS\",\"detailsUrl\":\"https://socket.dev/dashboard/org/getforma-dev/sbom/6690f517-0e5b-4fb4-bec8-f6ca33982c71\",\"name\":\"Socket Security: Project Report\",\"startedAt\":\"2026-10-28T21:07:23Z\",\"status\":\"COMPLETED\",\"workflowName\":\"\"},{\"__typename\":\"CheckRun\",\"completedAt\":\"2026-10-28T21:07:39Z\",\"conclusion\":\"SUCCESS\",\"detailsUrl\":\"https://socket.dev\",\"name\":\"Socket Security: Pull Request Alerts\",\"startedAt\":\"2026-10-28T21:07:26Z\",\"status\":\"COMPLETED\",\"workflowName\":\"\"}],\"url\":\"https://github.com/getforma-dev/gatewasm/pull/17\"}\n"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "f65c1948181554d30ad62549e35717eb8132f4f6:crates/server/src/jwt/signing.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 3103,
+      "stdout_sha256": "90af90ba233fc3005215d0b5a38808a609d169a21ba3d868a8cf9279fb004df4"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "f65c1948181554d30ad62549e35717eb8132f4f6:crates/server/src/jwt/keys.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 5842,
+      "stdout_sha256": "69aaf6319e0968fda8d8f90b64b7bbb8355b81ccdca4957f405a2f11596c161c"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "f65c1948181554d30ad62549e35717eb8132f4f6:crates/server/src/handlers/jwks.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 720,
+      "stdout_sha256": "e2ed76b260b2002500665b87c271d8874bd3e6d374f0d29d751c7848ff577b6d"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "f65c1948181554d30ad62549e35717eb8132f4f6:crates/server/src/handlers/token.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 29367,
+      "stdout_sha256": "6d60b85448e0448902f0375d31c5fea6bc57217839abfe924b93d06acd0b6ef2"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "f65c1948181554d30ad62549e35717eb8132f4f6:crates/server/src/config.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 10464,
+      "stdout_sha256": "a6a1e2470cb844c85e7efcccf8268de7da061b9e6310044d2eca7c3c5c7f633a"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "f65c1948181554d30ad62549e35717eb8132f4f6:crates/server/src/types.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 3066,
+      "stdout_sha256": "c46fc8972609f1af137ae1ad7f1749d50c43cb078926f44139330bc6eab1b54b"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "f65c1948181554d30ad62549e35717eb8132f4f6:handoff/forma-247/README.md"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 5733,
+      "stdout_sha256": "0fd3a801f5aef52390733610ed209bd25f13d708d3ab512f812d801b56304785"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "f65c1948181554d30ad62549e35717eb8132f4f6:Cargo.lock"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 102188,
+      "stdout_sha256": "cfa10eda1655b2e97663ac8b17372e63b98ce0a1018a0d77fad0138082cae391"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "22652f8ef44bfb48184485045bf0f7f71eaf8e03:crates/server/src/jwt/signing.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 3353,
+      "stdout_sha256": "733bd2361e50cce10c0321cb1aae6b24b3731e480fa71d13c6019daedebcab50"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "22652f8ef44bfb48184485045bf0f7f71eaf8e03:crates/server/src/jwt/keys.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 18063,
+      "stdout_sha256": "2c0ae8a01de10c58cab8fa486a8764ca8a7cb881b7a27cfb9c0f84429b966c67"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "22652f8ef44bfb48184485045bf0f7f71eaf8e03:crates/server/src/handlers/jwks.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 1177,
+      "stdout_sha256": "7b8d2401446fed823325a7d4cb2e2b5c5bb360a6c339c63592b4a06839050fa7"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "22652f8ef44bfb48184485045bf0f7f71eaf8e03:handoff/forma-248/README.md"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 12540,
+      "stdout_sha256": "2603e2553ac26d544e0aa352efc2628ea8a9925c39ab85b86844a1f376a5dfc9"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "dfe7896826c4e1e3a616246fe6022d311cb38519:crates/server/src/jwt/signing.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 3353,
+      "stdout_sha256": "733bd2361e50cce10c0321cb1aae6b24b3731e480fa71d13c6019daedebcab50"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "dfe7896826c4e1e3a616246fe6022d311cb38519:crates/server/src/jwt/keys.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 18809,
+      "stdout_sha256": "a5adf363d66ef6bc58d7141a03e517b8075482eb9b826960b1dfa1a4ede16b93"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "dfe7896826c4e1e3a616246fe6022d311cb38519:crates/server/src/jwt/kms.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 22410,
+      "stdout_sha256": "3c58d5d3e5b3ca011e15c91de129c646972e7f70fa5dd925b0b55d8ffcb40707"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "dfe7896826c4e1e3a616246fe6022d311cb38519:crates/server/src/handlers/jwks.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 1715,
+      "stdout_sha256": "4955f54bfe038e32575fa4a5db5d38a2cf9114c9d8b2f7f295a1d3805800456d"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "dfe7896826c4e1e3a616246fe6022d311cb38519:crates/server/src/handlers/mod.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 32319,
+      "stdout_sha256": "40fe277f7be0c24a9bdf57761e0da344bbfb1f55369dc46c6596893ca164e41f"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "dfe7896826c4e1e3a616246fe6022d311cb38519:crates/server/src/types.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 3066,
+      "stdout_sha256": "c46fc8972609f1af137ae1ad7f1749d50c43cb078926f44139330bc6eab1b54b"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "dfe7896826c4e1e3a616246fe6022d311cb38519:crates/server/tests/integration.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 452247,
+      "stdout_sha256": "50264f622bc96ff2aa31250c995310e71c1de149cdac2c1e84adc3d3bfa0a590"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "dfe7896826c4e1e3a616246fe6022d311cb38519:docs/handoff/FORMA-248.md"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 5023,
+      "stdout_sha256": "beaf24e97aaca9a722dada3f380eae631a1700f6d499ee9625e355919063c0d1"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "dfe7896826c4e1e3a616246fe6022d311cb38519:handoff/forma-248/README.md"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 13844,
+      "stdout_sha256": "6913d39ae3bdf9cc3a44d6f910104fb3681d3e63441029a3deb1995b9faac633"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5:crates/server/src/jwt/signing.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 3353,
+      "stdout_sha256": "733bd2361e50cce10c0321cb1aae6b24b3731e480fa71d13c6019daedebcab50"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5:crates/server/src/jwt/keys.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 18809,
+      "stdout_sha256": "a5adf363d66ef6bc58d7141a03e517b8075482eb9b826960b1dfa1a4ede16b93"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5:crates/server/src/jwt/kms.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 22410,
+      "stdout_sha256": "3c58d5d3e5b3ca011e15c91de129c646972e7f70fa5dd925b0b55d8ffcb40707"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5:crates/server/src/handlers/jwks.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 1715,
+      "stdout_sha256": "4955f54bfe038e32575fa4a5db5d38a2cf9114c9d8b2f7f295a1d3805800456d"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5:crates/server/src/handlers/mod.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 32319,
+      "stdout_sha256": "40fe277f7be0c24a9bdf57761e0da344bbfb1f55369dc46c6596893ca164e41f"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5:crates/server/src/types.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 3066,
+      "stdout_sha256": "c46fc8972609f1af137ae1ad7f1749d50c43cb078926f44139330bc6eab1b54b"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5:crates/server/tests/integration.rs"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 452247,
+      "stdout_sha256": "50264f622bc96ff2aa31250c995310e71c1de149cdac2c1e84adc3d3bfa0a590"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5:docs/handoff/FORMA-248.md"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 5023,
+      "stdout_sha256": "beaf24e97aaca9a722dada3f380eae631a1700f6d499ee9625e355919063c0d1"
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5:handoff/forma-248/README.md"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout_bytes": 13844,
+      "stdout_sha256": "6913d39ae3bdf9cc3a44d6f910104fb3681d3e63441029a3deb1995b9faac633"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--name-status",
+        "dfe7896826c4e1e3a616246fe6022d311cb38519",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout": "M\t.github/workflows/ci.yml\nM\tcrates/server/src/main.rs\n"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "dfe7896826c4e1e3a616246fe6022d311cb38519",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+        "--",
+        "crates/server/src/main.rs",
+        ".github/workflows/ci.yml"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\nindex f4ba64f..61592bc 100644\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -105,6 +105,7 @@ jobs:\n       - uses: dtolnay/rust-toolchain@stable\n         with:\n           toolchain: \"1.93.1\"\n+          components: clippy\n       - uses: Swatinem/rust-cache@v2\n       - name: Build admin assets\n         working-directory: admin\ndiff --git a/crates/server/src/main.rs b/crates/server/src/main.rs\nindex 6ea4462..e69f804 100644\n--- a/crates/server/src/main.rs\n+++ b/crates/server/src/main.rs\n@@ -18,6 +18,13 @@ use gatewasm_server::ws::ticket::TicketStore;\n use gatewasm_server::{assets, db, handlers, middleware, AppState};\n use sqlx::postgres::PgPool;\n \n+/// Configuration/custody refusal is an ordinary startup failure, not a panic.\n+/// Exit directly so abort/core-dump handling cannot leave an unhealthy process alive.\n+fn refuse_signing_startup(reason: &str) -> ! {\n+    tracing::error!(reason, \"Signing configuration refused; server will not start\");\n+    std::process::exit(1)\n+}\n+\n #[tokio::main]\n async fn main() {\n     tracing_subscriber::fmt::init();\n@@ -50,22 +57,22 @@ async fn main() {\n         gatewasm_server::jwt::kms::parse_required(match &std::env::var(\"FAUTH_REQUIRE_KMS\") {\n             Ok(value) => Some(value.as_str()),\n             Err(std::env::VarError::NotPresent) => None,\n-            Err(_) => panic!(\"Invalid FAUTH_REQUIRE_KMS encoding\"),\n+            Err(_) => refuse_signing_startup(\"Invalid FAUTH_REQUIRE_KMS encoding\"),\n         })\n-        .expect(\"Invalid FAUTH_REQUIRE_KMS\");\n+        .unwrap_or_else(|reason| refuse_signing_startup(&reason));\n     let keys = match std::env::var(\"FAUTH_KMS_KEYRING_JSON\") {\n         Ok(manifest) => {\n             if config.ed25519_private_key_pem.is_some() || config.ssf_signing_key_pem.is_some() {\n-                panic!(\"KMS mode refuses process-readable signing key configuration\");\n+                refuse_signing_startup(\"KMS mode refuses process-readable signing key configuration\");\n             }\n             gatewasm_server::jwt::kms::load(&manifest, &pool, config.access_token_expiry)\n                 .await\n-                .expect(\"KMS keyring initialization failed\")\n+                .unwrap_or_else(|reason| refuse_signing_startup(&reason))\n         }\n         Err(std::env::VarError::NotPresent) if !require_kms => {\n             KeyPair::from_pem_or_generate(config.ed25519_private_key_pem.as_deref())\n         }\n-        Err(_) => panic!(\"Required KMS keyring configuration is missing or invalid\"),\n+        Err(_) => refuse_signing_startup(\"Required KMS keyring configuration is missing or invalid\"),\n     };\n \n     // Asset manifest (content-hashed filenames)\n"
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--name-status",
+        "e828404462a44f806b0b22fe6f4c04552cc1370b",
+        "c469efedde35bb16fff72ef11ac2ddb5fa8358e5"
+      ],
+      "cwd": "/Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm",
+      "exit_code": 0,
+      "stdout": "M\t.github/workflows/ci.yml\n"
+    }
+  ]
+}

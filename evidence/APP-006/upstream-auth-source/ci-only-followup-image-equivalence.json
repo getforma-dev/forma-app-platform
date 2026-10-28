@@ -1,0 +1,24 @@
+{
+  "qualified_image_source": "e828404462a44f806b0b22fe6f4c04552cc1370b",
+  "final_ci_source": "c469efedde35bb16fff72ef11ac2ddb5fa8358e5",
+  "qualified_source_is_ancestor": true,
+  "changed_paths": [
+    ".github/workflows/ci.yml"
+  ],
+  "change": "Install Clippy in the pinned unit-test toolchain; no runtime source or build recipe changes.",
+  "build_input_tree_sha256": "0b73accb88edae72501742f7143ffbaa062803d9a35f44923f90b282fdeed914",
+  "identical_build_input_paths": [
+    "Cargo.toml",
+    "Cargo.lock",
+    ".cargo",
+    "crates",
+    "bridge",
+    "specs",
+    "admin",
+    ".dockerignore",
+    "scripts/build_local_image.sh",
+    "scripts/build_and_push_image.sh"
+  ],
+  "image_rebuild_required": false,
+  "final_head_ci": "8/8 checks passed, Actions run40769265529"
+}

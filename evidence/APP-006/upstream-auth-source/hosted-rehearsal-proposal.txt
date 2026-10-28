@@ -1,0 +1,57 @@
+# FORMA-247/248 — proposed hosted rehearsal
+
+Prepared 2026-10-28. **No resources have been created or restored.** This is a bounded synthetic test proposal following Victor's deletion of the unused GateWasm environment. The source and local evidence can be reviewed independently. Hosted acceptance remains open.
+
+## Proposed window and owner
+
+- One FormaStack operator, Codex `/root`, with GenUI coordinating its callback and integration check. No concurrent deployment/rotation operator.
+- One six-hour window in `us-east-1`, including provisioning, a real one-hour next-key publication interval, rotation/expiry checks and teardown.
+- Proposed operating budget: **$5**, with expected low-traffic resource charges below $1 and a conservative $2 planning allowance for logs, image storage, requests and deployment overhead. This is an operator stop budget, not an AWS-enforced hard billing cap; usage/billing reports can lag.
+- Synthetic Northstar/canary users only. Do not admit a real organization during this rehearsal.
+- Approval must include the exact GenUI public origin and OAuth callback, the start window, the spending limit and cleanup of the newly created rehearsal resources. These inputs have been requested and remain pending.
+
+## Resources and existing-customer eligibility
+
+Use the reviewed GateWasm CDK staging path, selecting only `GatewasmStagingNetworkStack`, `GatewasmStagingDatabaseStack` and `GatewasmStagingServiceStack`. Never deploy `--all`: the application also instantiates production and CDN stacks. Proposed service name is `gatewasm-server-staging`, database `gatewasm_staging`, and auth hostname `auth-staging.getforma.dev` subject to DNS availability/ownership verification. Explicitly set `gatewasm:staging:repositoryName` to `gatewasm-rehearsal-20261028`, `gatewasm:staging:rdsSecretName` to `forma-rehearsal-20261028/rds`, and the provisioning/rotation secret prefix to `forma-rehearsal-20261028`; otherwise the staging repository inherits the production default. Set `gatewasm:staging:kmsKeyring` to the reviewed manifest before synthesis; no file-key branch may be selected. The deleted production environment stays deleted. CDN and the recurring owner-session canary are unnecessary for the hosted email/PKCE test.
+
+AWS allows existing App Runner customers to create new resources despite closing to new customers. The actual account's historical `GatewasmServiceStack` was created on 2026-03-04 and is now `DELETE_COMPLETE`; a fresh `ListServices` read returned an empty list. This supports existing-customer eligibility, but it is not proof that a future `CreateService` call will succeed. If creation is denied, stop and report the provider result; do not silently introduce a different hosting architecture. See [AWS availability policy](https://docs.aws.amazon.com/apprunner/latest/dg/apprunner-availability-change.html) and `app-runner-eligibility-readonly.json`.
+
+The deployment consists of one private Single-AZ PostgreSQL `db.t4g.micro` with 20 GB GP3, one `t4g.nano` NAT instance and public IPv4 address, and App Runner 0.25 vCPU/0.5 GB with minimum one and maximum two containers. Runtime image deployment is explicit; automatic deploys are disabled. New KMS keys provide current, next and dedicated SSF signing; promotion adds a new next key while retaining the previous access key. All signing keys are AWS-generated `ECC_NIST_EDWARDS25519`, `SIGN_VERIFY`, with immutable ARNs. No file signing key is restored or granted to the service role.
+
+Create fresh rehearsal app/management secrets rather than restoring every deleted production secret. Use email-only tenant configuration; external OAuth provider secrets can contain empty provider values and no provider login is enabled. SMTP and MFA secrets are omitted for this explicit synthetic scope. Passwords and platform/tenant management values enter the approved secret environment without command-line arguments or evidence logging. The runtime role receives only exact referenced secrets; the operator's provisioning/rotation role receives only the rehearsal prefix.
+
+## Cost model
+
+The following estimates assume six hours, up to two continuously active App Runner containers, 20 GB database storage, four KMS keys during rotation and eight small managed secrets. Taxes, unexpected external traffic and retained resources are not included.
+
+| Item | Verified rate | Six-hour estimate |
+|---|---:|---:|
+| App Runner, two at maximum size | 2 × (0.25 × $0.064 + 0.5 × $0.007) / hour | $0.234 |
+| PostgreSQL instance | $0.016 / hour | $0.096 |
+| NAT instance | $0.0042 / hour | $0.0252 |
+| One public IPv4 | $0.005 / hour | $0.030 |
+| 20 GB RDS GP3 | $0.115 / GB-month | about $0.019 |
+| Four KMS keys | $1 / key-month, prorated hourly | about $0.033 |
+| Eight secrets | $0.40 / secret-month, prorated hourly | about $0.027 |
+| 10,000 asymmetric KMS requests (allowance) | $0.15 / 10,000 | $0.150 |
+
+Subtotal is about **$0.72**, before NAT disk, logs/alarms, registry storage, DNS and transfer. The $2 planning allowance is intentionally above this low-volume subtotal; the proposed $5 authorization is not a promise of a hard cloud spending stop. RDS/EC2/KMS price API responses are retained in `rds-pricing.json`, `ec2-pricing.json`, `rds-storage-pricing.json`, and `kms-pricing.json`. Public provider references: [App Runner pricing](https://aws.amazon.com/apprunner/pricing/), [KMS pricing](https://aws.amazon.com/kms/pricing/), [Secrets Manager pricing](https://aws.amazon.com/secrets-manager/pricing/), [IPv4 pricing](https://aws.amazon.com/vpc/pricing/). No free-tier credit is assumed for asymmetric signing.
+
+## Execution and receipts
+
+1. Before any write, verify the approved window, exact callback/origin, region/account, unused staging names/DNS, source commits, green CI and independent review. FORMA-247 is PR 16 at `f65c1948181554d30ad62549e35717eb8132f4f6`; FORMA-248 image source is `e828404462a44f806b0b22fe6f4c04552cc1370b`; final CI head `c469efedde35bb16fff72ef11ac2ddb5fa8358e5` differs only by the CI Clippy installation. PR17 merged as `737c73f88f2b89e8712e4cd1f5dbf40163ab6081` after all eight checks passed; `../FORMA-248/evidence/merge-final.json` and `FINAL-HANDOFF.md` retain the final source/CI/image receipts. The qualified local linux/amd64 manifest is `sha256:bcba949472251de732e90ebfbaa293a0654ffbbc29a9a10770ebf64a8a70287f`; no registry digest or deployed availability is claimed. Keep the embedded image source unchanged when publishing that exact reviewed image. Synthesize and review only staging templates and IAM policies. Save a non-secret inventory and planned teardown list.
+2. Create the dedicated ECR repository, publish the already qualified image (or rebuild and requalify if its inputs change), retain the returned registry digest/source revision, and create only the described KMS keys and secrets. Record public key metadata, policy and sanitized IDs. Retain recoverable versioned manifests, never private keys or bearer values.
+3. Deploy selected staging stacks, associate the approved auth hostname and complete certificate/DNS verification. Confirm `/health` source revision, database health and `signer_current: true`, plus exact issuer/audience and public JWKS. `/health` does not expose a numeric generation: record the deployed configuration's manifest version and digest alongside the image identity and deployment operation. Service creation alone is not a pass.
+4. Run the FORMA-247 provisioning artifact twice. Compare public tenant/client/subject/role receipts and exact redirect. Exercise branded email login in Chromium, Firefox and WebKit; exchange the single-use code with PKCE in the backend, verify signatures offline and prove tenant/canary isolation. GenUI separately runs its own session/authorization integration.
+5. Deploy manifest v1 with current A, next B and SSF S, and immutable `max_access_lifetime: 900` matching `JWT_ACCESS_TOKEN_EXPIRY=900`. Verify access-only `/auth/jwks` contains A/B and separate `/ssf/jwks` contains only S; access-token consumers must not combine the sets. After successful fleet deployment, record publication in v2 with the same keys and the witnessed timestamp/evidence; wait the full 3,600-second JWKS cache interval from that witness. Promote B in v3, introduce fresh next C and retain A indefinitely as previous; clear the next-key publication receipt until C is separately witnessed. Stale replicas return 503/no-store until replaced; this design makes no zero-downtime claim. The next session refresh after the new generation is healthy must succeed. Never shorten either the publication or expiry/skew interval to fit the test window.
+6. Retain A indefinitely until old signing replicas/in-flight requests have drained. Record the drain receipt in v4 and retain A for at least the persisted maximum access-token lifetime plus 60-second skew after its last possible issuance. Verify old-token acceptance throughout its valid lifetime, timestamp-driven JWKS removal and a later manifest that removes the retired entry. SSF S remains published independently and its tokens have no `exp` claim. GenUI supplies its rate-bounded unknown-`kid` refetch/refusal evidence.
+7. Exercise an unauthorized principal, controlled KMS denial and recovery, oversized signing refusal and no-local-fallback behavior. Rotate tenant management and platform keys through managed secrets; prove retry/recovery, old-key refusal and audit events for accepted uses. Retain sanitized CloudTrail/service evidence and restored-policy confirmation. Failure means the custody gate stays closed.
+8. Export only non-secret receipts, logs, public JWKS and identity/CI/review references. Reconcile every created resource against the starting inventory and the cleanup plan. Return exact evidence to the FORMA tickets/journey; GenUI alone clears APP-006/058.
+
+## Cleanup and rollback
+
+End the test window by deleting the new staging service, database, backups, NAT/VPC, registry images/repository and owned logs/alarms after exporting evidence. Include the owned App Runner custom-domain association/verification DNS records, autoscaling configuration, VPC connector, SNS resources and generated database secret in the inventory and final absence checks. The current database construct has deletion protection and `RETAIN`; `cdk destroy` alone will not remove it. Disable protection only on the inventoried rehearsal database, delete that synthetic database without a final snapshot, remove its automated backups and then verify the retained resources are absent. Do not touch shared bootstrap, existing unrelated DNS, other services or the recoverably deleted old secrets.
+
+Schedule deletion of newly created rehearsal KMS keys and secrets with a recoverable window after evidence export, record pending states, and verify the provider's billing behavior at execution. Do not leave an idle database, NAT or public IPv4 behind. If teardown cannot finish in the window, stop workload generation, report the exact remaining charged resources and continue the approved cleanup.
+
+Roll back application code only to a reviewed KMS-aware image that honors the current persisted manifest version. Do not resurrect retired signing keys or restore an old manifest. A file-key fallback would reopen APP-058 and bar real-organization sign-in. A failed rehearsal stays synthetic and does not create production availability.

@@ -1,0 +1,20 @@
+{
+  "source_commit": "e828404462a44f806b0b22fe6f4c04552cc1370b",
+  "local_image_id": "sha256:d28e540eff5fa55639e514599d07dc86e9c4700a970cd47e517f6f3841a956dd",
+  "platform": "linux/amd64",
+  "oci_label_revision": "e828404462a44f806b0b22fe6f4c04552cc1370b",
+  "base_images": [
+    "docker.io/library/debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8",
+    "docker.io/library/node:22-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da",
+    "docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31"
+  ],
+  "exported_digests": {
+    "manifest": "sha256:bcba949472251de732e90ebfbaa293a0654ffbbc29a9a10770ebf64a8a70287f",
+    "config": "sha256:24b427d8ae6871f98fcf81bf4a5c9474b75b350f2774b9657d8afa2798e5b280",
+    "attestation manifest": "sha256:ef2f9255bddb4cc90a4e1f9010d3562ec12e76aa6ea36c5b5931a5079c552e86",
+    "manifest list": "sha256:d28e540eff5fa55639e514599d07dc86e9c4700a970cd47e517f6f3841a956dd"
+  },
+  "frontend_lock_sha256": "d12e7195f5bba406462896bd98a6fb9d94d996231df3086959aec1bee5c07ff4",
+  "aws_or_ecr_push": false,
+  "cleanup": "Owned auth containers and the disposable PostgreSQL container/anonymous volume removed. Local qualified image retained; no listener remains."
+}
