@@ -1,0 +1,99 @@
+{
+  "date": "2026-10-22",
+  "scope": "Preparation checks only; not runtime or full factory gates",
+  "markdown_local_links_checked": 75,
+  "missing_links": [],
+  "invalid_line_links": [],
+  "inputs": [
+    {
+      "task": "forma-generative-app-platform-v2",
+      "source": "/Users/victorvillacis/dev/Forma/Notes/forma-app-platform-product-definition.pdf",
+      "copy": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/input/context/forma-app-platform-product-definition.pdf",
+      "sha256": "b9ad17a9eed621328e77f33f9fcac55bd2c1c2cc385833fa6e9d4415a93c2b56",
+      "matches_source": true
+    },
+    {
+      "task": "forma-generative-app-platform-v2",
+      "source": "/Users/victorvillacis/dev/Forma/Notes/forma-platform-product-definition.pdf",
+      "copy": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/input/context/forma-platform-product-definition.pdf",
+      "sha256": "5a31715821eeefdb24423428157559bf490f3408c5d5aa4209d651505b163cc2",
+      "matches_source": true
+    },
+    {
+      "task": "forma-northstar-demo",
+      "source": "/Users/victorvillacis/dev/Forma/Notes/forma-app-platform-product-definition.pdf",
+      "copy": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/input/context/forma-app-platform-product-definition.pdf",
+      "sha256": "b9ad17a9eed621328e77f33f9fcac55bd2c1c2cc385833fa6e9d4415a93c2b56",
+      "matches_source": true
+    },
+    {
+      "task": "forma-northstar-demo",
+      "source": "/Users/victorvillacis/dev/Forma/Notes/forma-platform-product-definition.pdf",
+      "copy": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/input/context/forma-platform-product-definition.pdf",
+      "sha256": "5a31715821eeefdb24423428157559bf490f3408c5d5aa4209d651505b163cc2",
+      "matches_source": true
+    }
+  ],
+  "templates": [
+    {
+      "task": "forma-generative-app-platform-v2",
+      "design_untouched": true
+    },
+    {
+      "task": "forma-northstar-demo",
+      "design_untouched": true
+    }
+  ],
+  "contract_lock_matches": true,
+  "contract_ids": [
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06",
+    "C07",
+    "C08",
+    "C09",
+    "C10",
+    "C11",
+    "C12",
+    "C13",
+    "C14",
+    "C15",
+    "C16"
+  ],
+  "source_records_rechecked": 59,
+  "changed_source_records": [],
+  "fixture_calculation": {
+    "events": 5,
+    "total_bytes": 1140000,
+    "matched_bytes": 240000,
+    "unmatched_bytes": 900000,
+    "bytes_per_minute": 114000,
+    "unmatched_bytes_per_minute": 90000,
+    "distinct_destinations": 3,
+    "timeline_bytes": [
+      60000,
+      120000,
+      300000,
+      600000,
+      0,
+      60000,
+      0,
+      0,
+      0,
+      0
+    ],
+    "exact_over_network_events": [
+      "E1",
+      "E5"
+    ],
+    "jordan_bytes": 210000,
+    "jordan_bytes_per_minute": 21000,
+    "spend_cents": 64000,
+    "queue_cents": 45000,
+    "combined_source_storage_90days_gib": 43.95
+  },
+  "fixture_expected_values_match": true
+}

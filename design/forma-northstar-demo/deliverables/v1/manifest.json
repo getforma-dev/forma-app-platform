@@ -1,0 +1,145 @@
+{
+  "task": "forma-northstar-demo",
+  "version": "v1",
+  "tag": "task/forma-northstar-demo/v1",
+  "commit": "e279953",
+  "deliveredAt": "2026-10-23T16:32:38.338Z",
+  "submission": "pdf/design-demo.pdf",
+  "editions": [
+    {
+      "name": "demo",
+      "file": "pdf/design-demo.pdf",
+      "pages": 19
+    }
+  ],
+  "gate": {
+    "full": "0 FAIL, 2 WARN, 19 PASS",
+    "reader": "0 FAIL, 0 WARN, 8 PASS",
+    "annotated": "0 FAIL, 0 WARN, 3 PASS"
+  },
+  "score": {
+    "total": 41,
+    "max": 48,
+    "level": "L2",
+    "baseline": "reference/baselines"
+  },
+  "claims": {
+    "rows": 51,
+    "confirmed": 39,
+    "partly": 8,
+    "contradicted": 2,
+    "undocumented": 2,
+    "fixed": 12,
+    "removed": 1,
+    "assumed": 1
+  },
+  "xref": {
+    "slices": [
+      "guide",
+      "numbers",
+      "patterns",
+      "edition",
+      "teaching"
+    ],
+    "findings": 72,
+    "blocking": 2,
+    "fixed": 58,
+    "reference": 3,
+    "accepted": 11,
+    "disputed": 0,
+    "pending": 0
+  },
+  "reception": {
+    "verdict": "hold, medium. The one thing that decides it: nothing on these pages has run. The status is",
+    "questions": 7,
+    "objections": 8
+  },
+  "pages": {
+    "full": {
+      "body": 39,
+      "landscapeDiagrams": 4,
+      "appendix": 5
+    },
+    "reader": {
+      "total": 19,
+      "landscapeDiagrams": 4
+    }
+  },
+  "files": [
+    {
+      "file": "pdf/design-demo.pdf",
+      "role": "the submission: the demo edition, 19 pages",
+      "audience": "the audience named at intake"
+    },
+    {
+      "file": "docx/design-demo.docx",
+      "role": "the demo edition as Word, for editing and handing in",
+      "audience": "the author and the audience"
+    },
+    {
+      "file": "html/design-demo.html",
+      "role": "the demo edition as a web page",
+      "audience": "the audience, in a browser"
+    },
+    {
+      "file": "md/design-demo.md",
+      "role": "the demo edition as Markdown, the source",
+      "audience": "the audience, when Markdown is accepted"
+    },
+    {
+      "file": "pdf/design.pdf",
+      "role": "the record: the full design document, 44 pages",
+      "audience": "the head, reviewers, and anyone who wants the detail"
+    },
+    {
+      "file": "docx/design.docx",
+      "role": "the record as Word",
+      "audience": "reviewers who edit"
+    },
+    {
+      "file": "html/design.html",
+      "role": "the record as a web page",
+      "audience": "reviewers, in a browser"
+    },
+    {
+      "file": "md/design.md",
+      "role": "the record as Markdown, the source",
+      "audience": "reviewers who prefer source"
+    },
+    {
+      "file": "notes.md",
+      "role": "presenter notes",
+      "audience": "the author, before presenting"
+    },
+    {
+      "file": "claims.md",
+      "role": "the vendor-claims ledger: every claim about a product the design does not own, checked against the vendor's documentation, with what the lead did",
+      "audience": "the head, and anyone who asks where a product figure comes from"
+    },
+    {
+      "file": "xref.md",
+      "role": "the reference cross-check: the finished document checked against the research it was built from, one fresh agent per slice, and the lead's triage of every finding",
+      "audience": "the head, and anyone who asks whether the document follows its own rules"
+    },
+    {
+      "file": "reception.md",
+      "role": "the reception check: the recipient's read of the submission, by a fresh agent in their role, and the lead's triage of every question and objection",
+      "audience": "the head, before handing over; never the recipient"
+    },
+    {
+      "file": "html/design-annotated.html",
+      "role": "the annotated edition: the record with method notes, design notes, a glossary, exercises, flashcards and reading, as one web page",
+      "audience": "learners, and anyone being taught the design"
+    },
+    {
+      "file": "md/annotations.md",
+      "role": "the annotated edition's design layer, the source",
+      "audience": "the author"
+    },
+    {
+      "file": "md/flashcards.tsv",
+      "role": "the flashcards as tab-separated text (front, back, deck), importable into Anki",
+      "audience": "learners"
+    }
+  ]
+}

@@ -1,0 +1,126 @@
+{
+  "title": "System context: the Forma company app platform, the people who use it at their entry points, and the systems it calls",
+  "arrows": "synchronous calls; protocol and authentication in brackets",
+  "kind": "c4",
+  "nodes": [
+    {
+      "id": "builders",
+      "type": "person",
+      "label": "Builders",
+      "desc": "Form, transform and preview apps; import sources",
+      "icon": "generic/user",
+      "col": 0.0,
+      "row": 0
+    },
+    {
+      "id": "members",
+      "type": "person",
+      "label": "Team members (practitioners)",
+      "desc": "Run apps, keep saved work, submit internal records",
+      "icon": "generic/users",
+      "col": 1.15,
+      "row": 0
+    },
+    {
+      "id": "reviewers",
+      "type": "person",
+      "label": "Reviewers and administrators",
+      "desc": "Review and publish; manage membership, spaces, policy",
+      "icon": "generic/shield",
+      "col": 2.3,
+      "row": 0
+    },
+    {
+      "id": "operators",
+      "type": "person",
+      "label": "Operators",
+      "desc": "Run the service: jobs, quotas, restore, deletion",
+      "icon": "generic/cog",
+      "col": 3.45,
+      "row": 0
+    },
+    {
+      "id": "platform",
+      "type": "system",
+      "label": "Forma company app platform",
+      "tech": "Rust services on Forma 3.0.0; a browser workspace",
+      "desc": "Organizations, spaces, apps, publications, saved work, records, sources and queries",
+      "icon": "generic/layers",
+      "col": 1.65,
+      "row": 1.7
+    },
+    {
+      "id": "fauth",
+      "type": "external",
+      "label": "fAuth",
+      "tech": "Identity service: tenants, users, roles, EdDSA tokens",
+      "desc": "Signs people in; the platform verifies its tokens offline",
+      "icon": "generic/key",
+      "col": 0.4,
+      "row": 3.1
+    },
+    {
+      "id": "model",
+      "type": "external",
+      "label": "Model provider",
+      "tech": "Claude through the platform's provider interface",
+      "desc": "Proposes app definitions from schemas and synthetic rows; explains receipts when policy allows",
+      "icon": "generic/cpu",
+      "col": 2.9,
+      "row": 3.1
+    }
+  ],
+  "edges": [
+    {
+      "from": "builders",
+      "to": "platform",
+      "label": "form and transform apps, import sources [HTTPS, session]"
+    },
+    {
+      "from": "members",
+      "to": "platform",
+      "label": "run apps, save work, submit records [HTTPS, session]"
+    },
+    {
+      "from": "reviewers",
+      "to": "platform",
+      "label": "review, publish, administer [HTTPS, session]"
+    },
+    {
+      "from": "operators",
+      "to": "platform",
+      "label": "operate [HTTPS, operator role, just in time]"
+    },
+    {
+      "from": "platform",
+      "to": "fauth",
+      "label": "redirect sign-in; read the key set [HTTPS]"
+    },
+    {
+      "from": "platform",
+      "to": "model",
+      "label": "schemas and synthetic rows out, proposals back [HTTPS, API key]"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "B0",
+      "label": "People, in a browser (the Internet)",
+      "style": "group",
+      "contains": [
+        "builders",
+        "members",
+        "reviewers",
+        "operators"
+      ]
+    },
+    {
+      "id": "B1",
+      "label": "The platform: one AWS account, one region",
+      "style": "trust",
+      "contains": [
+        "platform"
+      ]
+    }
+  ]
+}

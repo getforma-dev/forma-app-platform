@@ -1,0 +1,17 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+target/
+dist/
+.cache/
+tmp/
+*.log
+!design/**/*.log
+!Tickets/evidence/**/*.log
+__pycache__/
+*.pyc
+.venv/
+runtime-data/
+credentials/

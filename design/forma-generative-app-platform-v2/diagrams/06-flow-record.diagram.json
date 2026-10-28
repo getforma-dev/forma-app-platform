@@ -1,0 +1,163 @@
+{
+  "title": "Data flow 3: a record command commits in one transaction at the data service; the retry, the conflict, version adoption and the canary's replay take the same path",
+  "arrows": "data flow in the direction the data moves; label = Fn payload [protocol, authentication; data class]",
+  "kind": "dfd",
+  "nodes": [
+    {
+      "id": "EE1",
+      "type": "entity",
+      "label": "Member's browser",
+      "desc": "A Finance practitioner decides; the canary organization's member replays",
+      "icon": "generic/user",
+      "col": 0,
+      "row": 0
+    },
+    {
+      "id": "P8",
+      "type": "process",
+      "label": "Browser workspace",
+      "desc": "The decision form; mints the Idempotency-Key; retries by key",
+      "icon": "generic/browser",
+      "col": 0,
+      "row": 1.4
+    },
+    {
+      "id": "P1",
+      "type": "process",
+      "label": "Edge",
+      "desc": "TLS, WAF, rate limits; caches nothing under /v1",
+      "icon": "aws/cloudfront",
+      "col": 1.3,
+      "row": 0
+    },
+    {
+      "id": "P2",
+      "type": "process",
+      "label": "Workspace server",
+      "desc": "Authorizes: session, membership, record write on this work; forwards the command",
+      "icon": "aws/ecs",
+      "col": 2.6,
+      "row": 0
+    },
+    {
+      "id": "DS4",
+      "type": "store",
+      "label": "Session store",
+      "desc": "Session and membership epoch, rows in PostgreSQL",
+      "icon": "generic/lock",
+      "col": 1.3,
+      "row": 1.4
+    },
+    {
+      "id": "P4",
+      "type": "process",
+      "label": "Data service",
+      "desc": "One PostgreSQL transaction: outcome, version, epoch, revisions, record, audit",
+      "icon": "aws/ecs",
+      "col": 2.6,
+      "row": 2.8
+    },
+    {
+      "id": "DS1",
+      "type": "store",
+      "label": "PostgreSQL",
+      "desc": "Records, idempotency outcomes, membership, saved work, audit",
+      "icon": "aws/rds",
+      "col": 1.3,
+      "row": 2.8
+    }
+  ],
+  "edges": [
+    {
+      "from": "EE1",
+      "to": "P8",
+      "label": "F40 status, note, submit; retry; refresh; adopt a version [keyboard, local; Confidential]"
+    },
+    {
+      "from": "P8",
+      "to": "P1",
+      "label": "F41 POST the command: record key, expected version, values, Idempotency-Key; GET the outcome [HTTPS, session; Confidential]"
+    },
+    {
+      "from": "P1",
+      "to": "P2",
+      "label": "F42 the same, forwarded with a request id [HTTP in the VPC, session cookie; Confidential]"
+    },
+    {
+      "from": "DS4",
+      "to": "P2",
+      "label": "F43 session, roles, membership epoch [TLS, role workspace; Restricted]"
+    },
+    {
+      "from": "P2",
+      "to": "DS1",
+      "label": "F44 record schema and transitions of the pinned publication; the adoption table [TLS, role workspace; Internal]"
+    },
+    {
+      "from": "P2",
+      "to": "P4",
+      "label": "F45 command: scope, work id, app revision, schema id, record key, expected version, values, key, epoch [HTTP, service token; Confidential]"
+    },
+    {
+      "from": "P4",
+      "to": "DS1",
+      "label": "F46 one transaction: outcome claimed by key, membership FOR SHARE, record FOR UPDATE, revision, outcome, audit [TLS, role data; Confidential]"
+    },
+    {
+      "from": "DS1",
+      "to": "P4",
+      "label": "F47 stored outcome on a replay; current version on a conflict [TLS, role data; Confidential]"
+    },
+    {
+      "from": "P4",
+      "to": "P2",
+      "label": "F48 committed version, the stored outcome, or a conflict with a recovery view [HTTP, service token; Confidential]"
+    },
+    {
+      "from": "P2",
+      "to": "DS1",
+      "label": "F49 adoption: compare-and-set on the pinned publication, audit [TLS, role workspace; Confidential]"
+    },
+    {
+      "from": "P2",
+      "to": "P1",
+      "label": "F50 outcome, recovery view, adoption result; 404 outside the organization [HTTPS, session; Confidential]"
+    },
+    {
+      "from": "P1",
+      "to": "P8",
+      "label": "F51 the same, no-store [HTTPS, session; Confidential]"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "B1",
+      "label": "The Internet: members' browsers",
+      "style": "trust",
+      "contains": [
+        "EE1",
+        "P8"
+      ]
+    },
+    {
+      "id": "B2",
+      "label": "The VPC: the edge, the workspace server, the data service and the stores",
+      "style": "trust",
+      "contains": [
+        "P1",
+        "P2",
+        "DS4",
+        "DS1",
+        "B4"
+      ]
+    },
+    {
+      "id": "B4",
+      "label": "Data service: the only writer of records",
+      "style": "trust",
+      "contains": [
+        "P4"
+      ]
+    }
+  ]
+}

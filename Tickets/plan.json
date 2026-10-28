@@ -1,0 +1,162 @@
+{
+  "categories": [
+    {
+      "id": "FND",
+      "name": "Foundation",
+      "description": "Released framework qualification, typed contracts and reproducible application structure."
+    },
+    {
+      "id": "IAM",
+      "name": "Identity and access",
+      "description": "Authenticated principals, tenant boundaries and service authority."
+    },
+    {
+      "id": "ING",
+      "name": "Evidence and imports",
+      "description": "Bounded CSV/XLSX ingestion, interpretation and immutable evidence."
+    },
+    {
+      "id": "QRY",
+      "name": "Queries and provenance",
+      "description": "Deterministic operations, exact semantics, receipts and resource bounds."
+    },
+    {
+      "id": "REC",
+      "name": "Internal records",
+      "description": "Declared mutations, durable outcomes, conflict recovery and concurrency."
+    },
+    {
+      "id": "UX",
+      "name": "Workspace and accessibility",
+      "description": "Native presentation, canvas and equivalent keyboard/focused workflows."
+    },
+    {
+      "id": "AUT",
+      "name": "App authoring",
+      "description": "Typed definitions, direct composition, patches and isolated preview."
+    },
+    {
+      "id": "GOV",
+      "name": "Publication and lifecycle",
+      "description": "Policy, exact-content publication, pinned work and maintenance."
+    },
+    {
+      "id": "AI",
+      "name": "AI and retrieval",
+      "description": "Authorized discovery, bounded generation, explanation and evaluation."
+    },
+    {
+      "id": "SHR",
+      "name": "Sharing and handoff",
+      "description": "Separate grants, derived information, revocation and exports."
+    },
+    {
+      "id": "VAL",
+      "name": "Validation and demonstrations",
+      "description": "Synthetic fixtures, both app journeys and reproducible release evidence."
+    },
+    {
+      "id": "OPS",
+      "name": "Operations and security",
+      "description": "Jobs, release controls, recovery, retention, support and pilot operations."
+    }
+  ],
+  "sprints": [
+    {
+      "id": "S01",
+      "name": "Rebase and qualify architectural seams",
+      "stage": "A \u2014 Qualification and foundations",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Frozen platform and companion design packets are available.",
+      "outcome": "Verified Forma 3.2 contracts and bounded renderer/parser/query/auth qualification plans.",
+      "exit": "Released pins, measured spike evidence, explicit amended assumptions and unresolved upstream gate ownership; no application capability claimed from release publication alone."
+    },
+    {
+      "id": "S02",
+      "name": "One authorized app, query and saved decision",
+      "stage": "A \u2014 Qualification and foundations",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Contract/role decisions and required S01 qualification evidence are accepted for the selected slice.",
+      "outcome": "Admitted definition \u2192 authorized query \u2192 visible receipt \u2192 explicit command \u2192 atomic outcome/audit \u2192 reopen.",
+      "exit": "Synthetic fixtures are portable; duplicate and stale-edit tests pass; two-tenant denial and persisted restart evidence exist. Seeded definitions are clearly labeled."
+    },
+    {
+      "id": "S03",
+      "name": "Real inspected evidence",
+      "stage": "B \u2014 Deterministic working platform",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Tenant storage, durable work and role boundaries exist.",
+      "outcome": "CSV and XLSX enter through real inspected upload and become immutable compatible revisions.",
+      "exit": "Both drop and keyboard Upload show limits/progress/cancel/inspection; parser caps and original-to-normalized provenance are evidenced."
+    },
+    {
+      "id": "S04",
+      "name": "Correct bounded execution",
+      "stage": "B \u2014 Deterministic working platform",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Imported revisions, typed contracts and minimal receipts are available.",
+      "outcome": "Northstar and Spend Review arithmetic executes through generic bounded operations.",
+      "exit": "Exact totals, half-open windows, units, currency, pagination and source/record snapshots pass; hostile query and stale-epoch release tests pass."
+    },
+    {
+      "id": "S05",
+      "name": "A useful persistent workspace",
+      "stage": "B \u2014 Deterministic working platform",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Authorized query/record path and the measured native primitive set work.",
+      "outcome": "People navigate, arrange, filter and submit forms through spatial and focused workflows.",
+      "exit": "Keyboard and screen-reader evidence covers required states; same/new work is distinct; reload and context changes preserve permitted work without stale response leakage."
+    },
+    {
+      "id": "S06",
+      "name": "Direct authoring and safe transformation",
+      "stage": "C \u2014 Creation and governance",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Trusted primitives, declared commands and persisted work are present.",
+      "outcome": "People compose both app shapes and make meaningful durable edits before AI polish.",
+      "exit": "Whole-definition admission, completion semantics, stale-patch/undo behavior and preview isolation pass; two directly authored apps run on one build."
+    },
+    {
+      "id": "S07",
+      "name": "Publication and version lifecycle",
+      "stage": "C \u2014 Creation and governance",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Validated immutable drafts, diffs and isolated previews are available.",
+      "outcome": "Organization policy controls exact publication and explicit compatible version adoption.",
+      "exit": "Independent review and owner publication both pass; stale/replayed approval fails; existing work stays pinned and rollback never reverses data or authority."
+    },
+    {
+      "id": "S08",
+      "name": "Bounded AI creation and retrieval",
+      "stage": "C \u2014 Creation and governance",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Direct authoring/admission, publication and durable jobs are complete.",
+      "outcome": "Real retrieval/adaptation/generation proposes valid apps without gaining authority or leaking evidence.",
+      "exit": "Ten supported/five adversarial evaluation outcomes and provider request inspections are retained; explanation is policy gated; published runtime survives model outage."
+    },
+    {
+      "id": "S09",
+      "name": "Safe handoff and synthetic recovery",
+      "stage": "D \u2014 Shared dual-app proof",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Governed apps, correct receipts and bounded composition exist.",
+      "outcome": "Colleagues continue or independently reuse work with current access and demonstrable recovery.",
+      "exit": "Cross-scope/derived-data/queued-result/export tests pass, plus real synthetic backup/restore, retention/deletion and noisy-neighbor/budget evidence before the demo gate."
+    },
+    {
+      "id": "S10",
+      "name": "Working dual-app release gate",
+      "stage": "D \u2014 Shared dual-app proof",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: S01\u2013S09 local and upstream dependencies are evidenced; all demo mechanisms are implemented.",
+      "outcome": "Northstar and Spend Review complete S01\u2013S07 on one unchanged platform build.",
+      "exit": "Actual second-app creation, exact arithmetic, permissions, conflicts, recovery, accessible journey and honest provenance pass; evidence packet distinguishes seeded/manual/simulated steps."
+    },
+    {
+      "id": "S11",
+      "name": "Hosted pilot controls",
+      "stage": "E \u2014 Managed pilot readiness",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Synthetic demo gate passes. Real-data decisions and upstream live-organization hardening are explicit gates.",
+      "outcome": "Prepared hosted deployment and lifecycle controls support a defined pilot scope.",
+      "exit": "No paid resources or live data without the separately required decision. Role isolation, signed compatible release, audit, support access and erasure are verified for the chosen environment."
+    },
+    {
+      "id": "S12",
+      "name": "Measured operations and pilot entry",
+      "stage": "E \u2014 Managed pilot readiness",
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Hosted controls exist and ownership/data/provider/region decisions are recorded.",
+      "outcome": "Measured capacity/recovery/security and operational ownership support the pilot decision.",
+      "exit": "Restore/deletion/load/security/accessibility reviews pass with measured limits; runbooks and support owner exist before live rows; external recurring-use learning is kept separate from synthetic demo proof."
+    }
+  ]
+}

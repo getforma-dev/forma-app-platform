@@ -1,0 +1,4 @@
+# Preserve evidence byte-for-byte, including historical CRLF headers and spacing.
+design/** -text -whitespace
+Tickets/evidence/upstream/** -text -whitespace
+Tickets/evidence/upstream-current/** -text -whitespace

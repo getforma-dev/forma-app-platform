@@ -1,0 +1,226 @@
+{
+  "title": "Containers: inside the demo box of diagram 01; the platform's four roles as components of one process, the parser sandbox, the two stores, fAuth and the model provider, and who calls whom",
+  "arrows": "synchronous calls; authentication in brackets; store calls are TLS; in-process calls carry the role",
+  "kind": "c4",
+  "nodes": [
+    {
+      "id": "runtime",
+      "type": "container",
+      "label": "Browser workspace",
+      "tech": "TypeScript, Forma 3.0.0 core: the canvas island and nine renderer kinds",
+      "desc": "Adopts server-rendered pages; the canvas, linked filters, forms, the composer chat",
+      "icon": "generic/browser",
+      "col": 2.4,
+      "row": 0
+    },
+    {
+      "id": "edge",
+      "type": "container",
+      "label": "Host's edge (P1)",
+      "tech": "The load balancer: ends TLS",
+      "desc": "Routes to the one task; no cache, no WAF [reduced: the platform's edge]",
+      "icon": "aws/elb",
+      "col": 2.4,
+      "row": 1.1
+    },
+    {
+      "id": "workspace",
+      "type": "component",
+      "label": "Workspace server",
+      "tech": "Rust, axum, forma-server 3.0.0; role workspace",
+      "desc": "The one authorization point; pages, saved work, drafts, previews, the JSON API",
+      "icon": "generic/server",
+      "col": 2.4,
+      "row": 2.2
+    },
+    {
+      "id": "control",
+      "type": "component",
+      "label": "Control plane",
+      "tech": "Rust; role control",
+      "desc": "Admits definitions, applies the publication policy; the only writer of publications",
+      "icon": "generic/shield",
+      "col": 3.6,
+      "row": 3.3
+    },
+    {
+      "id": "data",
+      "type": "component",
+      "label": "Data service",
+      "tech": "Rust; DuckDB over Parquet; role data",
+      "desc": "Typed queries with receipts; record commands in one transaction",
+      "icon": "generic/table",
+      "col": 1.2,
+      "row": 2.2
+    },
+    {
+      "id": "workers",
+      "type": "component",
+      "label": "Workers",
+      "tech": "Rust jobs; role worker",
+      "desc": "Generation, import, index building; the only caller of the provider",
+      "icon": "generic/workflow",
+      "col": 0,
+      "row": 3.3
+    },
+    {
+      "id": "sandbox",
+      "type": "component",
+      "label": "Parser sandbox",
+      "tech": "A WebAssembly module in the worker: no system interface, A6's limits",
+      "desc": "Turns an original into Parquet and counts, or dies at its cap",
+      "icon": "generic/lock",
+      "col": -1.2,
+      "row": 3.3
+    },
+    {
+      "id": "pg",
+      "type": "store",
+      "label": "PostgreSQL",
+      "tech": "One instance; organization id in every key, row-level security; four roles, a fifth (reset) under the rehearsal flag only",
+      "desc": "Apps, publications, policy, saved work, records, jobs, audit, outcomes",
+      "icon": "aws/rds",
+      "col": 2.4,
+      "row": 4.8
+    },
+    {
+      "id": "s3",
+      "type": "store",
+      "label": "Object storage",
+      "tech": "S3, one bucket, a prefix per organization under its key",
+      "desc": "Originals, Parquet revisions, exports, index files",
+      "icon": "aws/s3",
+      "col": 0,
+      "row": 4.8
+    },
+    {
+      "id": "fauth",
+      "type": "external",
+      "label": "fAuth",
+      "tech": "Identity service, its own deployment, same site",
+      "desc": "Hosted sign-in; EdDSA tokens; key set at /auth/jwks",
+      "icon": "generic/key",
+      "col": -2.4,
+      "row": 0
+    },
+    {
+      "id": "model",
+      "type": "external",
+      "label": "Model provider",
+      "tech": "Claude, through the provider interface",
+      "desc": "Sees schemas, catalog metadata and synthetic rows",
+      "icon": "generic/cpu",
+      "col": -1.2,
+      "row": 0
+    }
+  ],
+  "edges": [
+    {
+      "from": "runtime",
+      "to": "edge",
+      "label": "requests pages and API calls [HTTPS, session cookie]"
+    },
+    {
+      "from": "edge",
+      "to": "workspace",
+      "label": "forwards requests [HTTP on the host, TLS ended]"
+    },
+    {
+      "from": "workspace",
+      "to": "control",
+      "label": "admits drafts, publishes, sets policy [in process, typed principal]"
+    },
+    {
+      "from": "workspace",
+      "to": "data",
+      "label": "runs typed queries and record commands [in process, principal and epoch]"
+    },
+    {
+      "from": "workspace",
+      "to": "fauth",
+      "label": "redirects sign-in; reads the key set [HTTPS]"
+    },
+    {
+      "from": "workspace",
+      "to": "pg",
+      "label": "reads and writes apps, drafts, saved work, jobs [TLS, role workspace]"
+    },
+    {
+      "from": "control",
+      "to": "pg",
+      "label": "writes publications, policy, audit [TLS, role control]"
+    },
+    {
+      "from": "data",
+      "to": "pg",
+      "label": "commits records, receipts, outcomes [TLS, role data]"
+    },
+    {
+      "from": "data",
+      "to": "s3",
+      "label": "reads Parquet revisions [HTTPS, SigV4]"
+    },
+    {
+      "from": "workers",
+      "to": "sandbox",
+      "label": "streams an original in, Parquet out [two streams]"
+    },
+    {
+      "from": "workers",
+      "to": "pg",
+      "label": "claims jobs, writes results [TLS, role worker]"
+    },
+    {
+      "from": "workers",
+      "to": "s3",
+      "label": "reads originals, writes Parquet and index files [HTTPS, SigV4]"
+    },
+    {
+      "from": "workers",
+      "to": "model",
+      "label": "sends schemas and synthetic rows, receives proposals [HTTPS, API key]"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "B1",
+      "label": "The recording browser",
+      "style": "trust",
+      "contains": [
+        "runtime"
+      ]
+    },
+    {
+      "id": "B2",
+      "label": "The host's network: the edge, the one process (D1, D10), the stores",
+      "style": "trust",
+      "contains": [
+        "edge",
+        "workspace",
+        "control",
+        "data",
+        "workers",
+        "pg",
+        "s3",
+        "B6"
+      ]
+    },
+    {
+      "id": "B6",
+      "label": "Parser sandbox: a WebAssembly module in the worker",
+      "style": "trust",
+      "contains": [
+        "sandbox"
+      ]
+    },
+    {
+      "id": "B8",
+      "label": "Outside services: fAuth and the model provider",
+      "style": "trust",
+      "contains": [
+        "fauth",
+        "model"
+      ]
+    }
+  ]
+}

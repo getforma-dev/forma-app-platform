@@ -1,0 +1,174 @@
+{
+  "title": "Components: inside the workspace server, the control plane and the data service of diagram 02; the components the cards name and the stores each touches",
+  "arrows": "synchronous calls; protocol and credential in brackets",
+  "kind": "c4",
+  "nodes": [
+    {
+      "id": "browser",
+      "type": "container",
+      "label": "Browser workspace",
+      "tech": "Forma 3.0.0 islands",
+      "desc": "The canvas island, the renderer library, forms, the composer chat",
+      "icon": "generic/browser",
+      "col": 1.2,
+      "row": 0
+    },
+    {
+      "id": "session",
+      "type": "component",
+      "label": "Session adapter",
+      "tech": "Rust; the identity adapter",
+      "desc": "Verifies fAuth's EdDSA token against the cached key set; mints and reads the platform session",
+      "icon": "generic/key",
+      "col": 0,
+      "row": 1
+    },
+    {
+      "id": "authz",
+      "type": "component",
+      "label": "Authorizer",
+      "tech": "Rust; one permission table",
+      "desc": "Permission by role against the membership row and its epoch, on every request; denies as 404",
+      "icon": "generic/shield",
+      "col": 1.2,
+      "row": 1
+    },
+    {
+      "id": "views",
+      "type": "component",
+      "label": "View server",
+      "tech": "Rust, forma-server 3.0.0 typed props",
+      "desc": "Pages and the canvas from typed props; forwards typed queries and record commands with the principal and epoch",
+      "icon": "generic/monitor",
+      "col": 2.4,
+      "row": 1
+    },
+    {
+      "id": "nav",
+      "type": "component",
+      "label": "Navigator",
+      "tech": "Rust; in-process index",
+      "desc": "Click and alias to one stable id; retrieval over the organization's index file, re-checked for authorization",
+      "icon": "generic/search",
+      "col": 0,
+      "row": 2
+    },
+    {
+      "id": "drafts",
+      "type": "component",
+      "label": "Draft editor",
+      "tech": "Rust",
+      "desc": "Patches on a base revision with semantic diff; synthetic previews; the isolated preview store; forwards admission and publication",
+      "icon": "generic/file-text",
+      "col": 1.2,
+      "row": 2
+    },
+    {
+      "id": "work",
+      "type": "component",
+      "label": "Work keeper",
+      "tech": "Rust",
+      "desc": "Saved work, bindings, personal state, share grants; adoption by compare-and-set",
+      "icon": "generic/folder",
+      "col": 2.4,
+      "row": 2
+    },
+    {
+      "id": "admission",
+      "type": "component",
+      "label": "Admission",
+      "tech": "Rust; the AppDefinition schema",
+      "desc": "Schema, grammar, complexity, renderer and operator versions; a digest per admitted revision",
+      "icon": "generic/puzzle",
+      "col": 0,
+      "row": 3.3
+    },
+    {
+      "id": "publisher",
+      "type": "component",
+      "label": "Publisher",
+      "tech": "Rust; one serializable transaction",
+      "desc": "Policy, approval over the digest, the publication record, the adoption table, the governance audit",
+      "icon": "generic/lock",
+      "col": 1.2,
+      "row": 3.3
+    },
+    {
+      "id": "query",
+      "type": "component",
+      "label": "Query engine",
+      "tech": "Rust; DuckDB per query",
+      "desc": "Typed operations over Parquet revisions and a record snapshot; receipts, budgets, exports",
+      "icon": "generic/table",
+      "col": 2.6,
+      "row": 3.3
+    },
+    {
+      "id": "records",
+      "type": "component",
+      "label": "Record store",
+      "tech": "Rust; one PostgreSQL transaction",
+      "desc": "Record commands: idempotency outcome, expected version, membership epoch, record revision, outcome and audit in one transaction",
+      "icon": "generic/inbox",
+      "col": 3.8,
+      "row": 3.3
+    },
+    {
+      "id": "pg",
+      "type": "store",
+      "label": "PostgreSQL",
+      "tech": "RDS Multi-AZ; row-level security per organization",
+      "desc": "Sessions, membership, drafts, saved work, publications, policy, records, outcomes, audit",
+      "icon": "aws/rds",
+      "col": 1.2,
+      "row": 4.5
+    },
+    {
+      "id": "s3",
+      "type": "store",
+      "label": "Object storage",
+      "tech": "S3, per-organization prefixes",
+      "desc": "Parquet revisions, index files, exports",
+      "icon": "aws/s3",
+      "col": 2.6,
+      "row": 4.5
+    },
+    {
+      "id": "kms",
+      "type": "store",
+      "label": "Key management",
+      "tech": "AWS KMS, one data key per organization",
+      "desc": "Unwraps the data key a revision was encrypted under",
+      "icon": "aws/kms",
+      "col": 3.8,
+      "row": 4.5
+    }
+  ],
+  "edges": [
+    { "from": "browser", "to": "session", "label": "sign-in callback; every request [HTTPS, session cookie]" },
+    { "from": "session", "to": "authz", "label": "verified principal [in process]" },
+    { "from": "authz", "to": "views", "label": "authorized request [in process]" },
+    { "from": "authz", "to": "nav", "label": "authorized request [in process]" },
+    { "from": "authz", "to": "drafts", "label": "authorized request [in process]" },
+    { "from": "authz", "to": "work", "label": "authorized request [in process]" },
+    { "from": "session", "to": "pg", "label": "sessions [TLS, role workspace]" },
+    { "from": "authz", "to": "pg", "label": "membership row and epoch [TLS, role workspace]" },
+    { "from": "nav", "to": "s3", "label": "index files [HTTPS, SigV4]" },
+    { "from": "drafts", "to": "admission", "label": "admit a draft [HTTP, service identity]" },
+    { "from": "drafts", "to": "publisher", "label": "submit, approve over the digest, publish [HTTP, service identity]" },
+    { "from": "drafts", "to": "pg", "label": "drafts, patches, preview records [TLS, role workspace]" },
+    { "from": "work", "to": "pg", "label": "saved work, bindings, personal state; adoption compare-and-set [TLS, role workspace]" },
+    { "from": "views", "to": "query", "label": "typed queries with principal and epoch [HTTP, service identity]" },
+    { "from": "views", "to": "records", "label": "record commands with key and expected version [HTTP, service identity]" },
+    { "from": "publisher", "to": "pg", "label": "publications, policy, adoption table, audit [TLS, role control]" },
+    { "from": "query", "to": "s3", "label": "Parquet revisions, exports [HTTPS, SigV4]" },
+    { "from": "query", "to": "kms", "label": "decrypt data keys [HTTPS, SigV4]" },
+    { "from": "query", "to": "pg", "label": "record snapshot, receipts [TLS, role data]" },
+    { "from": "records", "to": "pg", "label": "one transaction: record, outcome, audit [TLS, role data]" }
+  ],
+  "boundaries": [
+    { "id": "B-WS", "label": "Workspace server: role workspace; the one authorization point", "style": "trust", "contains": ["session", "authz", "views", "nav", "drafts", "work"] },
+    { "id": "B-CP", "label": "Control plane: role control; the only writer of publications and policy", "style": "trust", "contains": ["admission", "publisher"] },
+    { "id": "B-DS", "label": "Data service: role data; the only reader of Parquet and writer of records", "style": "trust", "contains": ["query", "records"] }
+  ]
+}

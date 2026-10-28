@@ -1,0 +1,240 @@
+{
+  "title": "Data flow 2: sign-in, then a published app run and shared; typed queries with receipts through the data service, the six-view refresh by epoch, saved work, sharing, export and revocation",
+  "arrows": "data flow in the direction the data moves; label = Fn payload [protocol, authentication; data class]",
+  "kind": "dfd",
+  "nodes": [
+    {
+      "id": "EE1",
+      "type": "entity",
+      "label": "Member's browser",
+      "desc": "Maya runs and shares; Jordan continues; the administrator revokes",
+      "icon": "generic/user",
+      "col": 0,
+      "row": 0
+    },
+    {
+      "id": "EE3",
+      "type": "entity",
+      "label": "fAuth",
+      "desc": "Hosted sign-in; EdDSA tokens; key set at /auth/jwks",
+      "icon": "generic/key",
+      "col": 1.3,
+      "row": 0
+    },
+    {
+      "id": "P8",
+      "type": "process",
+      "label": "Browser workspace",
+      "desc": "The canvas island: filter epochs, layout, forms",
+      "icon": "generic/browser",
+      "col": 0,
+      "row": 1.4
+    },
+    {
+      "id": "P1",
+      "type": "process",
+      "label": "Edge",
+      "desc": "TLS, WAF, rate limits; caches nothing under /v1",
+      "icon": "aws/cloudfront",
+      "col": 1.3,
+      "row": 1.4
+    },
+    {
+      "id": "P2",
+      "type": "process",
+      "label": "Workspace server",
+      "desc": "Verifies the token, mints the session, authorizes every request, fans out queries",
+      "icon": "aws/ecs",
+      "col": 2.6,
+      "row": 1.4
+    },
+    {
+      "id": "P4",
+      "type": "process",
+      "label": "Data service",
+      "desc": "DuckDB over Parquet; receipts; rechecks authority before release",
+      "icon": "aws/ecs",
+      "col": 3.9,
+      "row": 1.4
+    },
+    {
+      "id": "DS2",
+      "type": "store",
+      "label": "Object storage",
+      "desc": "Parquet revisions and export snapshots under the organization's prefix",
+      "icon": "aws/s3",
+      "col": 3.9,
+      "row": 2.8
+    },
+    {
+      "id": "DS4",
+      "type": "store",
+      "label": "Session store",
+      "desc": "Platform sessions and the membership epoch, rows in PostgreSQL",
+      "icon": "generic/lock",
+      "col": 1.3,
+      "row": 2.8
+    },
+    {
+      "id": "DS5",
+      "type": "store",
+      "label": "Cached key set",
+      "desc": "fAuth's public keys by kid, in P2's memory",
+      "icon": "generic/key",
+      "col": 1.3,
+      "row": 4.2
+    },
+    {
+      "id": "DS1",
+      "type": "store",
+      "label": "PostgreSQL",
+      "desc": "Saved work, bindings, grants, personal state, records, receipts, audit",
+      "icon": "aws/rds",
+      "col": 2.6,
+      "row": 2.8
+    },
+    {
+      "id": "DS3",
+      "type": "store",
+      "label": "Key management",
+      "desc": "KMS: one data key per organization",
+      "icon": "aws/kms",
+      "col": 2.6,
+      "row": 4.2
+    }
+  ],
+  "edges": [
+    {
+      "from": "P8",
+      "to": "P1",
+      "label": "F27 /v1 calls: open, queries with the filter epoch, work, grants, export [HTTPS, session; Confidential]"
+    },
+    {
+      "from": "P1",
+      "to": "P2",
+      "label": "F28 the same, forwarded with a request id [HTTP in the VPC, session cookie; Confidential]"
+    },
+    {
+      "from": "P2",
+      "to": "P1",
+      "label": "F38 props, results with receipts, work, the export stream [HTTPS, session; Confidential]"
+    },
+    {
+      "from": "P1",
+      "to": "P8",
+      "label": "F39 the same, no-store [HTTPS, session; Confidential]"
+    },
+    {
+      "from": "EE1",
+      "to": "EE3",
+      "label": "F22 credentials on fAuth's hosted page [HTTPS, fAuth's own; Restricted]"
+    },
+    {
+      "from": "EE3",
+      "to": "P2",
+      "label": "F23 authorization code via the browser; the EdDSA token on the back channel; key set on a kid miss [HTTPS, PKCE; Restricted]"
+    },
+    {
+      "from": "DS5",
+      "to": "P2",
+      "label": "F24 public key by kid [in process; Internal]"
+    },
+    {
+      "from": "P2",
+      "to": "DS4",
+      "label": "F25 session minted: organization, person, roles, epoch; read every request [TLS, role workspace; Restricted]"
+    },
+    {
+      "from": "EE1",
+      "to": "P8",
+      "label": "F26 clicks, aliases, filters, notes, save, share, export, revoke [keyboard; Confidential]"
+    },
+    {
+      "from": "P2",
+      "to": "DS1",
+      "label": "F29 current publication and adoption table for the app [TLS, role workspace; Internal]"
+    },
+    {
+      "from": "P2",
+      "to": "DS1",
+      "label": "F30 saved work, bindings, share grants, personal state, grant audit [TLS, role workspace; Confidential]"
+    },
+    {
+      "from": "P2",
+      "to": "P4",
+      "label": "F31 typed query: publication digest, bindings, parameters, filter epoch, scope, budget [HTTP, service token; Confidential]"
+    },
+    {
+      "from": "DS3",
+      "to": "P4",
+      "label": "F32 the organization's data key, unwrapped [HTTPS, SigV4; Restricted]"
+    },
+    {
+      "from": "DS2",
+      "to": "P4",
+      "label": "F33 column ranges of the bound Parquet revisions [HTTPS, SigV4, SSE-KMS; Confidential]"
+    },
+    {
+      "from": "DS1",
+      "to": "P4",
+      "label": "F34 records at a committed snapshot sequence; current membership [TLS, role data; Confidential]"
+    },
+    {
+      "from": "P4",
+      "to": "DS1",
+      "label": "F35 receipt by content hash [TLS, role data; Confidential]"
+    },
+    {
+      "from": "P4",
+      "to": "DS2",
+      "label": "F36 export snapshot with revisions and capture time [HTTPS, SigV4, SSE-KMS; Confidential]"
+    },
+    {
+      "from": "P4",
+      "to": "P2",
+      "label": "F37 result pages with receipt and epoch; or denied [HTTP, service token; Confidential]"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "B1",
+      "label": "The Internet: members' browsers",
+      "style": "trust",
+      "contains": [
+        "EE1",
+        "P8"
+      ]
+    },
+    {
+      "id": "B8",
+      "label": "fAuth: the identity service",
+      "style": "trust",
+      "contains": [
+        "EE3"
+      ]
+    },
+    {
+      "id": "B2",
+      "label": "The VPC: the edge, the workspace server, the data service and the stores",
+      "style": "trust",
+      "contains": [
+        "P1",
+        "P2",
+        "DS4",
+        "DS5",
+        "DS1",
+        "DS2",
+        "DS3",
+        "B4"
+      ]
+    },
+    {
+      "id": "B4",
+      "label": "Data service: the only reader of Parquet",
+      "style": "trust",
+      "contains": [
+        "P4"
+      ]
+    }
+  ]
+}

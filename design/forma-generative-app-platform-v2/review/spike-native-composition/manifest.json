@@ -1,0 +1,56 @@
+{
+  "version": 2,
+  "writer": "3.0.0",
+  "app": "composition-spike",
+  "build": "085cbbacca1b5812",
+  "aliases": {
+    "about.ir": "about.eeaeab0d.ir",
+    "app.css": "app.8098e2c0.css",
+    "home.ir": "home.b77c110d.ir",
+    "home.js": "home.e3e83114.js"
+  },
+  "assets": {
+    "about.eeaeab0d.ir": {
+      "immutable": true,
+      "integrity": "sha384-lK5k5+/PZku7A5TweixI96pmLPqRcYXybk7il4WEj/SIL5pvOtrQotDbFSySA8KE"
+    },
+    "app.8098e2c0.css": {
+      "immutable": true,
+      "integrity": "sha384-KZx2zbkPSKZbxUiXO0zO4dU1qfGZ4/EvgdwHoJEclHN8C3XUy3OARpffWTEJovZf"
+    },
+    "home.b77c110d.ir": {
+      "immutable": true,
+      "integrity": "sha384-t99amDjtPvfBe1wF/DedNXyo7c6HH1/VOXaRJ2oF2ZYyAlsERq1GYwwqAd3MRKqy"
+    },
+    "home.e3e83114.js": {
+      "immutable": true,
+      "integrity": "sha384-6xGK+nOxYmvGHPKtlSdtw4C8G0piGzqjTCoRq/hNXGY0VZ9eg914Q6xOABFrtYGg"
+    }
+  },
+  "routes": {
+    "/": {
+      "mode": "ssr",
+      "js": [
+        "home.e3e83114.js"
+      ],
+      "css": [
+        "app.8098e2c0.css"
+      ],
+      "fonts": [],
+      "total_size_br": 26095,
+      "budget_warn_threshold": 200000,
+      "ir": "home.b77c110d.ir"
+    },
+    "/about": {
+      "mode": "ssr",
+      "js": [],
+      "css": [
+        "app.8098e2c0.css"
+      ],
+      "fonts": [],
+      "total_size_br": 654,
+      "budget_warn_threshold": 200000,
+      "ir": "about.eeaeab0d.ir"
+    }
+  }
+}

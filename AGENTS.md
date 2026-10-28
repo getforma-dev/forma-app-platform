@@ -1,0 +1,17 @@
+# Working in this repository
+
+Read README.md, Tickets/README.md and the assigned ticket first. Use the forma-stack skill for implementation and the released package contracts documented in docs/architecture/FRAMEWORK-BASELINE.md.
+
+- This is the app platform, not the Forma framework or a donor canvas prototype. Own changes here; route framework/auth changes to their existing owners.
+- The current checkpoint is preparation. Implement only the ticket requested in a later work session; do not start the whole roadmap because it is present.
+- Ticket Markdown in status folders is authoritative. Keep one ticket file per APP ID; regenerate tracker, sprint/category pages, coverage and index.json through Tickets/_tools/board.py.
+- Read the dependencies and source references. Do not treat a planned checkbox, a design assumption or a framework release as proof that application behavior exists.
+- Frozen design snapshots are evidence. Record new decisions in docs/architecture or docs/planning; do not silently rewrite design history. Later delivered design text outranks stale preparation prose.
+- Use typed AppDefinition and trusted renderers. Model output is data, never executable code, SQL, markup, FMIR or grants. Both example apps must use the same general path without tenant-name branches.
+- The target rendering mode is Rust/FMIR SSR plus explicitly registered canvas islands. Preserve the complete PageResponse security contract. Optional router adoption requires its own measured decision.
+- Keep identity, tenant isolation, receipt provenance, idempotency and transactional audit intact even in a small synthetic demonstration.
+- New dependency selections and commands belong in the owning implementation ticket. Pin actual released versions and lockfiles; never invent runtime commands in planning documents.
+- Keep credentials, real source data, expanded build output and private runtime state out of Git. Preserve synthetic evidence needed to review the ticket.
+- Use relevant checks, then record exact commands/results and limitations. Independent review covers authorization, concurrency, contract drift and meaningful failure paths.
+
+Current preparation checks: `python3 Tickets/_tools/board.py check`. Implementation will add focused application checks in APP-007 and subsequent tickets. Follow current user authorization; historical upstream protocol snapshots do not grant actions here.

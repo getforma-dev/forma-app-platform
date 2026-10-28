@@ -1,0 +1,238 @@
+{
+  "title": "Deployment: the platform on AWS in us-east-1, one VPC across two availability zones (one drawn), each role of diagram 02 an ECS service with its own credentials, the managed stores beside it, fAuth and the model provider outside",
+  "arrows": "synchronous calls; protocol in brackets",
+  "kind": "c4",
+  "nodes": [
+    {
+      "id": "dns",
+      "type": "external",
+      "label": "DNS and certificates",
+      "tech": "Route 53, ACM",
+      "desc": "The platform name and the canary name; a health check fails the edge name over to the load balancer",
+      "icon": "generic/globe",
+      "col": 0,
+      "row": 0
+    },
+    {
+      "id": "cdn",
+      "type": "container",
+      "label": "CloudFront",
+      "tech": "Global edge",
+      "desc": "Caches hash-named assets only; nothing under /v1; forwards pages and API calls",
+      "icon": "aws/cloudfront",
+      "col": 1,
+      "row": 0
+    },
+    {
+      "id": "fauth",
+      "type": "external",
+      "label": "fAuth",
+      "tech": "Identity service, its own deployment",
+      "desc": "Hosted sign-in; EdDSA tokens; key set fetched hourly and on an unknown kid",
+      "icon": "generic/key",
+      "col": 2.2,
+      "row": 0
+    },
+    {
+      "id": "model",
+      "type": "external",
+      "label": "Model provider",
+      "tech": "Claude, through the provider interface",
+      "desc": "Reached only by the workers, through the NAT gateways' fixed addresses",
+      "icon": "generic/cpu",
+      "col": 3.4,
+      "row": 0
+    },
+    {
+      "id": "alb",
+      "type": "container",
+      "label": "Load balancer and WAF",
+      "tech": "Application Load Balancer, AWS WAF",
+      "desc": "TLS; routes by host; 100 requests per client in 10 s; a weighted target group for the release wave",
+      "icon": "aws/elb",
+      "col": 0,
+      "row": 1
+    },
+    {
+      "id": "workspace",
+      "type": "container",
+      "label": "Workspace server",
+      "tech": "ECS service: 2 tasks, 1 vCPU, 2 GiB",
+      "desc": "One task per zone, each sized for the design point; database role workspace; the only role fAuth and members reach",
+      "icon": "aws/ecs",
+      "col": 1,
+      "row": 1
+    },
+    {
+      "id": "data",
+      "type": "container",
+      "label": "Data service",
+      "tech": "ECS service: 2 tasks, 4 vCPU, 16 GiB, 50 GiB disk",
+      "desc": "One task per zone; 8 DuckDB instances of 1 GiB each; the revision cache on local disk; database role data",
+      "icon": "aws/ecs",
+      "col": 2.2,
+      "row": 1
+    },
+    {
+      "id": "workers",
+      "type": "container",
+      "label": "Composer and import workers",
+      "tech": "ECS service: 2 tasks, 1 vCPU, 8 GiB",
+      "desc": "Eight job slots; parsers as WebAssembly modules with no system interface; database role worker; the only role with egress",
+      "icon": "aws/ecs",
+      "col": 3.4,
+      "row": 1
+    },
+    {
+      "id": "control",
+      "type": "container",
+      "label": "Control plane",
+      "tech": "ECS service: 2 tasks, 0.5 vCPU, 1 GiB",
+      "desc": "Admission, policy, publications, governance audit; database role control; off the published-app path",
+      "icon": "aws/ecs",
+      "col": 0,
+      "row": 2
+    },
+    {
+      "id": "rds",
+      "type": "store",
+      "label": "PostgreSQL",
+      "tech": "RDS Multi-AZ, db.m7g.large (assumed)",
+      "desc": "Synchronous standby in the other zone; four database roles under row-level security; 7 days of point-in-time recovery",
+      "icon": "aws/rds",
+      "col": 1,
+      "row": 2
+    },
+    {
+      "id": "secrets",
+      "type": "store",
+      "label": "Secrets Manager",
+      "tech": "Regional service",
+      "desc": "The four database credentials, the provider key, fAuth's client secret; read by each task at start",
+      "icon": "aws/secrets_manager",
+      "col": 0,
+      "row": 3
+    },
+    {
+      "id": "s3",
+      "type": "store",
+      "label": "Object storage",
+      "tech": "S3, versioned, through a gateway endpoint",
+      "desc": "A prefix per organization under its key; originals, Parquet, exports, index files; 30 days of noncurrent versions",
+      "icon": "aws/s3",
+      "col": 3.4,
+      "row": 3
+    },
+    {
+      "id": "kms",
+      "type": "store",
+      "label": "Key management",
+      "tech": "KMS, one data key per organization",
+      "desc": "Envelope encryption of every object; disabling a key is the deletion path",
+      "icon": "aws/kms",
+      "col": 2.2,
+      "row": 3
+    },
+    {
+      "id": "cw",
+      "type": "external",
+      "label": "CloudWatch",
+      "tech": "Metrics, logs, alarms",
+      "desc": "Every task writes here; alarms gate the release waves and page the operator",
+      "icon": "aws/cloudwatch",
+      "col": 1,
+      "row": 3
+    }
+  ],
+  "edges": [
+    {
+      "from": "dns",
+      "to": "cdn",
+      "label": "resolves the platform name [DNS]"
+    },
+    {
+      "from": "cdn",
+      "to": "alb",
+      "label": "forwards pages and API calls [HTTPS]"
+    },
+    {
+      "from": "alb",
+      "to": "workspace",
+      "label": "routes by host, the canary name to the new target group [HTTP in the VPC]"
+    },
+    {
+      "from": "workspace",
+      "to": "fauth",
+      "label": "redirects sign-in, exchanges the code, fetches the key set [HTTPS, via NAT]"
+    },
+    {
+      "from": "workspace",
+      "to": "data",
+      "label": "runs typed queries, submits record commands [HTTP, service token]"
+    },
+    {
+      "from": "workspace",
+      "to": "control",
+      "label": "admits, publishes, sets policy [HTTP, service token]"
+    },
+    {
+      "from": "workspace",
+      "to": "rds",
+      "label": "reads and writes sessions, drafts, work, jobs [TLS, role workspace]"
+    },
+    {
+      "from": "control",
+      "to": "rds",
+      "label": "writes publications, policy, audit [TLS, role control]"
+    },
+    {
+      "from": "data",
+      "to": "rds",
+      "label": "writes records, receipts, outcomes [TLS, role data]"
+    },
+    {
+      "from": "data",
+      "to": "s3",
+      "label": "reads Parquet revisions [HTTPS, SigV4]"
+    },
+    {
+      "from": "data",
+      "to": "kms",
+      "label": "unwraps the organization's key [KMS API]"
+    },
+    {
+      "from": "workers",
+      "to": "s3",
+      "label": "read originals, write Parquet and index files [HTTPS, SigV4]"
+    },
+    {
+      "from": "workers",
+      "to": "model",
+      "label": "send schemas and synthetic rows, receive proposals [HTTPS, via NAT]"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "B1",
+      "label": "The platform VPC: private subnets in two availability zones, one drawn; NAT gateways with fixed addresses, one per zone",
+      "style": "trust",
+      "contains": [
+        "alb",
+        "workspace",
+        "data",
+        "workers",
+        "control",
+        "rds"
+      ]
+    },
+    {
+      "id": "B2",
+      "label": "Outside services",
+      "style": "trust",
+      "contains": [
+        "fauth",
+        "model"
+      ]
+    }
+  ]
+}

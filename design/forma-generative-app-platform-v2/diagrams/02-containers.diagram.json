@@ -1,0 +1,232 @@
+{
+  "title": "Containers: inside the platform box of diagram 01; the deployable roles, the stores and the trust boundaries, and who calls whom (key management is on the deployment diagram)",
+  "arrows": "synchronous calls; protocol and authentication in brackets",
+  "kind": "c4",
+  "nodes": [
+    {
+      "id": "people",
+      "type": "person",
+      "label": "Builders, practitioners, reviewers, administrators",
+      "desc": "The workspace, in a browser",
+      "icon": "generic/users",
+      "col": 0.3,
+      "row": -0.5
+    },
+    {
+      "id": "operators",
+      "type": "person",
+      "label": "Operators",
+      "desc": "Operator pages of the same workspace",
+      "icon": "generic/cog",
+      "col": 1.5,
+      "row": -0.5
+    },
+    {
+      "id": "runtime",
+      "type": "container",
+      "label": "Browser workspace",
+      "tech": "TypeScript, Forma 3.0.0 core: native islands; the canvas island and the renderer library",
+      "desc": "Adopts server-rendered pages; the canvas, forms and the composer chat",
+      "icon": "generic/browser",
+      "col": 0.3,
+      "row": 0.5
+    },
+    {
+      "id": "edge",
+      "type": "container",
+      "label": "Edge",
+      "tech": "CloudFront, Application Load Balancer, AWS WAF",
+      "desc": "Terminates TLS, routes by host, rate-limits, caches only hash-named assets",
+      "icon": "aws/cloudfront",
+      "col": 1.5,
+      "row": 0.5
+    },
+    {
+      "id": "workspace",
+      "type": "container",
+      "label": "Workspace server",
+      "tech": "Rust, axum, forma-server 3.0.0; new in this release",
+      "desc": "Renders pages and the canvas from typed props; the one authorization point; navigation, saved work, drafts, previews, the JSON API",
+      "icon": "aws/ecs",
+      "col": 0.3,
+      "row": 1.6
+    },
+    {
+      "id": "control",
+      "type": "container",
+      "label": "Control plane",
+      "tech": "Rust, axum; new",
+      "desc": "Admits definitions, applies the organization's publication policy, records publications and audit; the only writer of publications",
+      "icon": "aws/ecs",
+      "col": 1.5,
+      "row": 1.6
+    },
+    {
+      "id": "data",
+      "type": "container",
+      "label": "Data service",
+      "tech": "Rust; DuckDB over Parquet; PostgreSQL commands",
+      "desc": "Runs typed queries with receipts over source revisions; commits record commands with idempotency and compare-and-set",
+      "icon": "aws/ecs",
+      "col": 2.7,
+      "row": 1.6
+    },
+    {
+      "id": "workers",
+      "type": "container",
+      "label": "Composer and import workers",
+      "tech": "Rust jobs; parsers in an isolated process with no network and no keys",
+      "desc": "Generation, import parsing to Parquet, retrieval index building, explanations",
+      "icon": "aws/ecs",
+      "col": 0.3,
+      "row": 2.8
+    },
+    {
+      "id": "pg",
+      "type": "store",
+      "label": "PostgreSQL",
+      "tech": "RDS Multi-AZ; one schema, organization id in every key, row-level security",
+      "desc": "Apps, definitions, publications, policy, saved work, records, jobs, audit, idempotency outcomes",
+      "icon": "aws/rds",
+      "col": 1.5,
+      "row": 2.8
+    },
+    {
+      "id": "s3",
+      "type": "store",
+      "label": "Object storage",
+      "tech": "S3, per-organization prefixes, encrypted under the organization's KMS data key",
+      "desc": "Originals, Parquet revisions, exports, retrieval index files, retained assets; deletion by crypto-shredding",
+      "icon": "aws/s3",
+      "col": 2.7,
+      "row": 3.9
+    },
+    {
+      "id": "fauth",
+      "type": "external",
+      "label": "fAuth",
+      "tech": "Identity service, its own deployment",
+      "desc": "Hosted sign-in; EdDSA tokens; key set at /auth/jwks",
+      "icon": "generic/key",
+      "col": -0.9,
+      "row": 1.6
+    },
+    {
+      "id": "model",
+      "type": "external",
+      "label": "Model provider",
+      "tech": "Claude, through the provider interface",
+      "desc": "Sees schemas, catalog metadata and synthetic rows by default",
+      "icon": "generic/cpu",
+      "col": -0.9,
+      "row": 2.8
+    }
+  ],
+  "edges": [
+    {
+      "from": "people",
+      "to": "runtime",
+      "label": "use the workspace [browser]"
+    },
+    {
+      "from": "operators",
+      "to": "edge",
+      "label": "open operator pages [HTTPS, operator role]"
+    },
+    {
+      "from": "runtime",
+      "to": "edge",
+      "label": "requests pages and API calls [HTTPS, session cookie]"
+    },
+    {
+      "from": "edge",
+      "to": "workspace",
+      "label": "forwards requests [HTTP inside the VPC]"
+    },
+    {
+      "from": "workspace",
+      "to": "control",
+      "label": "admits, publishes, sets policy, writes governance audit [HTTP, service token]"
+    },
+    {
+      "from": "workspace",
+      "to": "data",
+      "label": "runs queries, submits commands [HTTP, service token]"
+    },
+    {
+      "from": "workspace",
+      "to": "pg",
+      "label": "reads and writes apps, drafts, saved work, personal state, jobs [TLS, role workspace]"
+    },
+    {
+      "from": "workspace",
+      "to": "fauth",
+      "label": "redirects sign-in, exchanges the code, fetches the key set [HTTPS]"
+    },
+    {
+      "from": "control",
+      "to": "pg",
+      "label": "writes publications, policy, audit [TLS, role control]"
+    },
+    {
+      "from": "data",
+      "to": "pg",
+      "label": "writes records, receipts, outcomes [TLS, role data]"
+    },
+    {
+      "from": "data",
+      "to": "s3",
+      "label": "reads Parquet revisions [HTTPS, SigV4]"
+    },
+    {
+      "from": "workers",
+      "to": "pg",
+      "label": "claim jobs, write results [TLS, role worker]"
+    },
+    {
+      "from": "workers",
+      "to": "s3",
+      "label": "read originals, write Parquet and index files [HTTPS, SigV4]"
+    },
+    {
+      "from": "workers",
+      "to": "model",
+      "label": "send schemas and synthetic rows, receive proposals [HTTPS, API key]"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "B0",
+      "label": "The Internet: browsers",
+      "style": "trust",
+      "contains": [
+        "people",
+        "operators",
+        "runtime"
+      ]
+    },
+    {
+      "id": "B1",
+      "label": "The platform VPC, one AWS account, one region",
+      "style": "trust",
+      "contains": [
+        "edge",
+        "workspace",
+        "control",
+        "data",
+        "workers",
+        "pg",
+        "s3"
+      ]
+    },
+    {
+      "id": "B2",
+      "label": "Outside services",
+      "style": "trust",
+      "contains": [
+        "fauth",
+        "model"
+      ]
+    }
+  ]
+}

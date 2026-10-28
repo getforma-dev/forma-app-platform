@@ -1,0 +1,1033 @@
+{
+  "review_date": "2026-10-22",
+  "scope": "Read-only local file and Git-pin inspection; no tests, registry download, or remote release verification",
+  "prior_manifest": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-security-investigation-workspace/review/source-manifest.json",
+  "files": [
+    {
+      "path": "/Users/victorvillacis/dev/Forma/Notes/forma-security-product-definition.pdf",
+      "previous_path": "/Users/victorvillacis/dev/Forma/Notes/forma-security-product-definition.pdf",
+      "bytes": 304769,
+      "sha256": "38d4b0458c7b4e15a3f4d40b51dcf84795799ddc3b832da9bb1447e99d0343d5",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S1",
+          "claim": "Security direction, canvas/cards, file ingestion, generation, review, Northstar reuse and initial exclusions"
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/forma-fullstack-demo/Cargo.toml",
+      "previous_path": "/Users/victorvillacis/dev/Forma/forma-fullstack-demo/Cargo.toml",
+      "bytes": 696,
+      "sha256": "2248ff0ec4f3fea7dc74fc4bb2bf9e9206c295465882e67506fc41148f026e7c",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S28",
+          "claim": "Actual 3.0 consumer example; limited local persistence, no accounts or booking ownership"
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/forma-fullstack-demo/README.md",
+      "previous_path": "/Users/victorvillacis/dev/Forma/forma-fullstack-demo/README.md",
+      "bytes": 9686,
+      "sha256": "0e384e93c92dad86524fa415f84c4658c97e8d2fd60763cec4741931f2d88039",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S28",
+          "claim": "Actual 3.0 consumer example; limited local persistence, no accounts or booking ownership",
+          "line": 3
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/forma-fullstack-demo/admin/package.json",
+      "previous_path": "/Users/victorvillacis/dev/Forma/forma-fullstack-demo/admin/package.json",
+      "bytes": 711,
+      "sha256": "8c211c2387d287f102b6129b0df480fa36b4aa1ecb2aac3fda08424cbde29afd",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S28",
+          "claim": "Actual 3.0 consumer example; limited local persistence, no accounts or booking ownership"
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/SECURITY.md",
+      "previous_path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/SECURITY.md",
+      "bytes": 12234,
+      "sha256": "838666107e69ee95aed5c36a41381739306d87d6040493a364278281cee8dbeb",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S6",
+          "claim": "FMIR trusted-build boundary and deferred untrusted-module admission",
+          "line": 24
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim.",
+      "release_commit": "2006423b21fe0f8dd5a510bd09bfe3b8748327a5",
+      "release_tag_sha256": "0bf3dbc7eb1914509a1ec7ea5c86fd5252dcf2f4d6812f93d40d0cfaf2f37672",
+      "working_file_equals_release": false
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/crates/forma-server/src/frame.rs",
+      "previous_path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/crates/forma-server/src/frame.rs",
+      "bytes": 20279,
+      "sha256": "2d8c9f09a8390ad104f21c6f9f69a06c67bcfc56737cc458de9b50a238fdd492",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S8",
+          "claim": "Host duties and restricted preview protocol",
+          "line": 107
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim.",
+      "release_commit": "2006423b21fe0f8dd5a510bd09bfe3b8748327a5",
+      "release_tag_sha256": "2d8c9f09a8390ad104f21c6f9f69a06c67bcfc56737cc458de9b50a238fdd492",
+      "working_file_equals_release": true
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/crates/forma-server/src/response.rs",
+      "previous_path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/crates/forma-server/src/response.rs",
+      "bytes": 7562,
+      "sha256": "cc3544083a06f9ace42682e1b76355fb893d96f1f35e9cdb121438ea0b3670f0",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S9",
+          "claim": "Policy-bearing responses and native compiler limits",
+          "line": 8
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim.",
+      "release_commit": "2006423b21fe0f8dd5a510bd09bfe3b8748327a5",
+      "release_tag_sha256": "cc3544083a06f9ace42682e1b76355fb893d96f1f35e9cdb121438ea0b3670f0",
+      "working_file_equals_release": true
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/docs/release/V3-AS-BUILT.md",
+      "previous_path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/docs/release/V3-AS-BUILT.md",
+      "bytes": 6723,
+      "sha256": "0c1cc066cb44170fa081911b1982401cfca257cc396845a74ff0481e4899ca35",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S4",
+          "claim": "Final/RC evidence distinction, 61/61 P17, remaining scope and benchmark limits",
+          "line": 3
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim.",
+      "release_commit": "2006423b21fe0f8dd5a510bd09bfe3b8748327a5",
+      "release_tag_sha256": "3bf89ef876c1c7a6fa938f075afd18183b45c61fccb434045a02f2359cb9f043",
+      "working_file_equals_release": false
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/packages/compiler/docs/subset.md",
+      "previous_path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/packages/compiler/docs/subset.md",
+      "bytes": 52554,
+      "sha256": "e04acebf88a757a988a11ec64fbc0b27d106610e548e0e31b6da2371f20c5e42",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S9",
+          "claim": "Policy-bearing responses and native compiler limits",
+          "line": 32
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim.",
+      "release_commit": "2006423b21fe0f8dd5a510bd09bfe3b8748327a5",
+      "release_tag_sha256": "3ed218093668a62b047c3ee356619a6b892aff6e4d9fb8770a4ce431377a7cad",
+      "working_file_equals_release": false
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/packages/core/SECURITY.md",
+      "previous_path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/packages/core/SECURITY.md",
+      "bytes": 42876,
+      "sha256": "e6389733a6a1be1ebf0508fbb98ec8eb8fcf636d72d72958a777a254d432bb74",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S7",
+          "claim": "Explicit tiers, grants, exact reviewed content and remaining host responsibility",
+          "line": 139
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim.",
+      "release_commit": "2006423b21fe0f8dd5a510bd09bfe3b8748327a5",
+      "release_tag_sha256": "83d9be42b89d6fbe43af48711b5695452cedbc3ece71db8ed01e6ec7f43193d7",
+      "working_file_equals_release": false
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/packages/core/docs/HTML-RUNTIME.md",
+      "previous_path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma/packages/core/docs/HTML-RUNTIME.md",
+      "bytes": 31139,
+      "sha256": "b8f2b33cd37403383f2698e5a52b28bb1054935e0ac4b5c572108e82dd52fe9a",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S7",
+          "claim": "Explicit tiers, grants, exact reviewed content and remaining host responsibility",
+          "line": 278
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim.",
+      "release_commit": "2006423b21fe0f8dd5a510bd09bfe3b8748327a5",
+      "release_tag_sha256": "b8f2b33cd37403383f2698e5a52b28bb1054935e0ac4b5c572108e82dd52fe9a",
+      "working_file_equals_release": true
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/Cargo.toml",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/Cargo.toml",
+      "bytes": 949,
+      "sha256": "daa74c04da0540e8f4cea4a646a2f28499d3b743c4fe7b197616c7e2bced9d49",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S20",
+          "claim": "Pre-3.0 local serving prototype and explicit limitations",
+          "line": 12
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/README.md",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/README.md",
+      "bytes": 13080,
+      "sha256": "2ed2e7fd314f2e2a2895a54ea5c1a5e2f0ff1400126385a87011b9c617d87514",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S20",
+          "claim": "Pre-3.0 local serving prototype and explicit limitations",
+          "line": 81
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/docs/architecture/credential-store-boundary.md",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/docs/architecture/credential-store-boundary.md",
+      "bytes": 7875,
+      "sha256": "b3bc9c1a4fd220741e1c0266b8f4619cc369aa0684e9caa3f7b313ef585e8bcd",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S26",
+          "claim": "Unwired credential foundation; retrieval scope limits",
+          "line": 11
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/docs/architecture/dataset-widget-binding.md",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/docs/architecture/dataset-widget-binding.md",
+      "bytes": 22130,
+      "sha256": "6f6e740ebb5a385268ac6c8f8cef5466969d9b4a06bcd4254651965b730b1051",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S24",
+          "claim": "2,000 rows/32 columns/5 MiB, limited aggregates and new XLSX work",
+          "line": 367
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/docs/architecture/retrieval-and-routing-status.md",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/docs/architecture/retrieval-and-routing-status.md",
+      "bytes": 4964,
+      "sha256": "c403677c793830c19001e8cf83ea7900e580a7e134b3ffe695680a6363bb5c40",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S26",
+          "claim": "Unwired credential foundation; retrieval scope limits",
+          "line": 74
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/package.json",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/package.json",
+      "bytes": 1212,
+      "sha256": "44887cfb02143898a5f5f0e8f222f0d3c0f01a18d4711c81387bee707b44d0bc",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S20",
+          "claim": "Pre-3.0 local serving prototype and explicit limitations",
+          "line": 19
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/src/data_contracts.rs",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/src/data_contracts.rs",
+      "bytes": 15810,
+      "sha256": "36839a703cfa683826a02f4a7472adc6f209a9d2a573b198bb759112a143f690",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S25",
+          "claim": "Exact widget/view/operation matching as prior art",
+          "line": 95
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/src/local_data.rs",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/src/local_data.rs",
+      "bytes": 292895,
+      "sha256": "be24c57390ca33287ce64ff8c82dd3932e22a4f01f55bdf9d994aabbb76c79ff",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S24",
+          "claim": "2,000 rows/32 columns/5 MiB, limited aggregates and new XLSX work",
+          "line": 91
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/src/server/mod.rs",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui/src/server/mod.rs",
+      "bytes": 124777,
+      "sha256": "2a87ce9c5fa0506400240f30fe94c12901f2d36558f53e294278fbdc61e60b60",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S25",
+          "claim": "Exact widget/view/operation matching as prior art",
+          "line": 3161
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/README.md",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/README.md",
+      "bytes": 7726,
+      "sha256": "202acefca31fa5533e4670cdd23a095bd65adb67669e56578da4f0ad137528cb",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S21",
+          "claim": "Extracted library scope, peer version, private distribution and donor provenance",
+          "line": 22
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/SECURITY.md",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/SECURITY.md",
+      "bytes": 833,
+      "sha256": "184c45bbba897c1da001cdd3b34490ede2699b2281eacd139166101ec81db9eb",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S22",
+          "claim": "Caller owns trust; Shadow DOM is not security isolation; supplied markup execution path",
+          "line": 7
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/crates/forma-genui-runtime/src/catalog.rs",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/crates/forma-genui-runtime/src/catalog.rs",
+      "bytes": 14182,
+      "sha256": "21dd8f44d11e1ff926fe5846737152a37387dd161b659c7bcac160785797ae2c",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S23",
+          "claim": "Useful structural validation without authorization",
+          "line": 186
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/crates/forma-genui-runtime/src/plan.rs",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/crates/forma-genui-runtime/src/plan.rs",
+      "bytes": 14391,
+      "sha256": "81c907ffbeb6cc012068c2f0c9cef06434b0363844455545f7b16c54d134e17a",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S23",
+          "claim": "Useful structural validation without authorization",
+          "line": 34
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/docs/PROVENANCE.md",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/docs/PROVENANCE.md",
+      "bytes": 1360,
+      "sha256": "b546664523f0d1dd163f3687babb2bebecead7e895543379233e9288dc246363",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S21",
+          "claim": "Extracted library scope, peer version, private distribution and donor provenance",
+          "line": 1
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/package.json",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/package.json",
+      "bytes": 1823,
+      "sha256": "eb700eeadd30aaa454209449c9efe2f8d98c0fb9b8d0d9e8f0337ec08530ac9f",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S21",
+          "claim": "Extracted library scope, peer version, private distribution and donor provenance",
+          "line": 44
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/src/contracts.ts",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/src/contracts.ts",
+      "bytes": 1225,
+      "sha256": "b18742e7a3d92892c18b4613450ab562dc4f0f72bb7ace25495a14a8404002cc",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S22",
+          "claim": "Caller owns trust; Shadow DOM is not security isolation; supplied markup execution path",
+          "line": 3
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/src/forma/widget-host.ts",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime/src/forma/widget-host.ts",
+      "bytes": 18782,
+      "sha256": "a2530ad14367f6f63690f1d2b932412bfa555d553bab64eb2146e607cbe41a26",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S22",
+          "claim": "Caller owns trust; Shadow DOM is not security isolation; supplied markup execution path",
+          "line": 349
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-vector-studio/Cargo.toml",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-vector-studio/Cargo.toml",
+      "bytes": 2169,
+      "sha256": "424bb015d4e05dbe22906e21d02281b0bc1360d06cf6cafbff780e224cc5b1e6",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S19",
+          "claim": "Pre-3.0 pins; authoring/retrieval; browser/WebSocket auth boundary",
+          "line": 53
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-vector-studio/docs/architecture/overview.md",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-vector-studio/docs/architecture/overview.md",
+      "bytes": 7370,
+      "sha256": "9a0d0afe3d071f68e65a945a2652a7c964f690eb0428589895bce238ebd73a3c",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S19",
+          "claim": "Pre-3.0 pins; authoring/retrieval; browser/WebSocket auth boundary",
+          "line": 26
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-vector-studio/package.json",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-vector-studio/package.json",
+      "bytes": 1538,
+      "sha256": "49984a55fcf3dec522245b9ed012e5991b5e795f8e92623fe5f5251676afed73",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S19",
+          "claim": "Pre-3.0 pins; authoring/retrieval; browser/WebSocket auth boundary",
+          "line": 22
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/gatewasm/Cargo.toml",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/gatewasm/Cargo.toml",
+      "bytes": 544,
+      "sha256": "55f8dd4c3c74c132e081f4873e80df89492ec616a42e02ca04a9f2391be151eb",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S27",
+          "claim": "Other apps are references, not inherited identity/secure case sharing",
+          "line": 11
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/gatewasm/admin/package.json",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/gatewasm/admin/package.json",
+      "bytes": 1290,
+      "sha256": "48a529b3eaeb8193a9a38660553969740eb83b06cfe4197d75f7722a62ffdd57",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S27",
+          "claim": "Other apps are references, not inherited identity/secure case sharing",
+          "line": 24
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/kmd/README.md",
+      "previous_path": "/Users/victorvillacis/dev/FormaBuiltApps/kmd/README.md",
+      "bytes": 5996,
+      "sha256": "94721ae1f57ec7f57c22ac099b5525d674336ea97dae15e626d2cc183657a73a",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S27",
+          "claim": "Other apps are references, not inherited identity/secure case sharing",
+          "line": 74
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-insurance-demo/STATUS.md",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-mvp/STATUS.md",
+      "bytes": 37570,
+      "sha256": "95d971b0151395a3b54af155d3606ddb86e87d68bcefc6d8628e804c94950d50",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S14",
+          "claim": "Current professional MVP target; not built",
+          "line": 7
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-insurance-demo/deliverables/v5/md/design.md",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-mvp/deliverables/v5/md/design.md",
+      "bytes": 176662,
+      "sha256": "526d9ad95f537b0a9e4591c47e6f53dbcc88ff6f1c0644291ef942ae1d4dc9ca",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S14",
+          "claim": "Current professional MVP target; not built",
+          "line": 341
+        },
+        {
+          "prior_source_id": "S15",
+          "claim": "Approval pin, financial upload-discard policy and latest-mode limitation",
+          "line": 803
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-insurance-demo/deliverables/v5/reception.md",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-mvp/deliverables/v5/reception.md",
+      "bytes": 16754,
+      "sha256": "233feeb08cfc198639d016a8e2ba2d937358b30191f8cc1f6bcb8306d1787d36",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S18",
+          "claim": "Prior reviewer questions about demand, not actual YC feedback",
+          "line": 59
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform/deliverables/README.md",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-platform/deliverables/README.md",
+      "bytes": 10594,
+      "sha256": "161ce490e42cf5d22bd99c936a8d6c08ef6738b8ecebcdeec31f393d57b5e066",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S10",
+          "claim": "v4 is current; platform remains a target",
+          "line": 12
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform/deliverables/v4/md/design-investor.md",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-platform/deliverables/v4/md/design-investor.md",
+      "bytes": 17584,
+      "sha256": "990052002b85c6c51fede25c249a362519b1766a0e50aafcec1166bce70539d4",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S10",
+          "claim": "v4 is current; platform remains a target",
+          "line": 19
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform/deliverables/v4/md/design.md",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-platform/deliverables/v4/md/design.md",
+      "bytes": 213705,
+      "sha256": "bac7579eab635f83d6096566ac3e314d0a6a35c6f6789613c667d702761adfc0",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S11",
+          "claim": "D13\u2013D27 and D37\u2013D40 artifact, approval, tenancy, data, rendering and assistant contracts",
+          "line": 499
+        },
+        {
+          "prior_source_id": "S12",
+          "claim": "Declared state only; request/declarations but no evidence rows",
+          "line": 2184
+        },
+        {
+          "prior_source_id": "S13",
+          "claim": "FORMA-237..241 are proposed with fallbacks",
+          "line": 2107
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform/input/evidence/01-built-today.md",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-platform/input/evidence/01-built-today.md",
+      "bytes": 15037,
+      "sha256": "25a45364b8b5ae31e8eae99cc883d5095cc84e7616c3c944bbeaecbb0cd6cbe9",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S16",
+          "claim": "Prototype stages and other apps; historical observations must not override newer inspected code",
+          "line": 16
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform/input/evidence/05-decisions-and-path.md",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-platform/input/evidence/05-decisions-and-path.md",
+      "bytes": 9056,
+      "sha256": "c85a35220f7c4308122d12568d6710b1f1aaf94542986599ce0d5cef2e9c70fb",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S17",
+          "claim": "No inferred pgvector, persisted FMIR or nonexistent compile/validate pipeline",
+          "line": 26
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-security-investigation-workspace/input/context/forma-security-product-definition.pdf",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-security/input/context/forma-security-product-definition.pdf",
+      "bytes": 304769,
+      "sha256": "38d4b0458c7b4e15a3f4d40b51dcf84795799ddc3b832da9bb1447e99d0343d5",
+      "matches_prior": true,
+      "claim_support": [],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-stack/deliverables/v3/evidence/E88-AUTHENTICATED-FINAL.json",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-stack/deliverables/v3/evidence/E88-AUTHENTICATED-FINAL.json",
+      "bytes": 2400,
+      "sha256": "b1c4281e11944713dba89216391235a5a67b377788e527f9e0c56915023c1e66",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S3",
+          "claim": "Retained final publication evidence",
+          "line": 2
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-stack/deliverables/v3/evidence/E99-post-release-soak-independent-review.md",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-stack/deliverables/v3/evidence/E99-post-release-soak-independent-review.md",
+      "bytes": 6239,
+      "sha256": "a6b4d172e6cac7650438c995d8511559251ef9272c2d63ef5a5e1aed40627855",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S5",
+          "claim": "RC.5 payload, 3,660 active seconds, 15 rounds, zero faults",
+          "line": 12
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-stack/deliverables/v3/md/design.md",
+      "previous_path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-stack/deliverables/v3/md/design.md",
+      "bytes": 182871,
+      "sha256": "c203807d080cf44711b4897dddd23dc14cffb033783f9eec15eb4ac6d9e9aefd",
+      "matches_prior": true,
+      "claim_support": [
+        {
+          "prior_source_id": "S2",
+          "claim": "Released scope, external migration exclusions and bounded framework contracts",
+          "line": 24
+        }
+      ],
+      "review_basis": "Current bytes rehashed against prior read-only review; relevant claim-bearing excerpts inspected in this audit. No execution claim."
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/Notes/forma-app-platform-product-definition.pdf",
+      "bytes": 392364,
+      "sha256": "b9ad17a9eed621328e77f33f9fcac55bd2c1c2cc385833fa6e9d4415a93c2b56",
+      "claim_support": [
+        {
+          "source_id": "P01",
+          "claim": "Controlling product input: platform launch identity p1; generic creation pp3-4,11-12; writable records p12; configurable review/role overlap pp6,13; second app p18; two-app release proof pp20-21; buyer/workflow choice p24."
+        }
+      ],
+      "review_basis": "Read-only current source inspection"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/Notes/forma-platform-product-definition.pdf",
+      "bytes": 377013,
+      "sha256": "5a31715821eeefdb24423428157559bf490f3408c5d5aa4209d651505b163cc2",
+      "claim_support": [
+        {
+          "source_id": "P02",
+          "claim": "Compatible earlier product input: security first family p1; security-first buyer pp6,22; internal notes/findings/status/ownership/review records p11; publication policy/overlapping roles pp5,13; single app-family release proof p19."
+        }
+      ],
+      "review_basis": "Read-only current source inspection"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-security-investigation-workspace/SOURCES.md",
+      "bytes": 10622,
+      "sha256": "a65568b087332ec35bdab4ae8b5c691494724f517b32e5645c3f7b668c16822c",
+      "claim_support": [
+        {
+          "source_id": "P03",
+          "claim": "Prior evidence status and source navigation; some historical paths require declared rename mapping."
+        }
+      ],
+      "review_basis": "Read-only current source inspection"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-security-investigation-workspace/review/source-manifest.json",
+      "bytes": 12514,
+      "sha256": "65d54d39d24362bb857830f9543087e69c338132e478f977511147e8a4f9a894",
+      "claim_support": [
+        {
+          "source_id": "P04",
+          "claim": "Previous local SHA-256 and Git pin inventory. All 46 source bytes match on this recheck."
+        }
+      ],
+      "review_basis": "Read-only current source inspection"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-security-investigation-workspace/STATUS.md",
+      "bytes": 3632,
+      "sha256": "81268644e640c64c536f9942a0c2ea2c6f4510e7032a7cae32d953f3d503c5c9",
+      "claim_support": [
+        {
+          "source_id": "P05",
+          "claim": "Security task is pre-design preparation; design template not delivered or accepted; no implementation or test claims."
+        }
+      ],
+      "review_basis": "Read-only current source inspection"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-builder/src/plugins/integration/stripe/service.ts",
+      "bytes": 2273,
+      "sha256": "8b26c721662e9484fee19bf8b0a5c332d89078693877ce91802aa28f51633abf",
+      "claim_support": [
+        {
+          "source_id": "P06",
+          "claim": "Line 1 explicitly marks mock integration awaiting real implementation; mock account and checkout URLs confirm this is not a real platform service."
+        }
+      ],
+      "review_basis": "Read-only current source inspection"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-builder/src/plugins/integration/github/service.ts",
+      "bytes": 3385,
+      "sha256": "1c4140ecc18df9ae57b505c41ef9a1643c58ac63351ed25a5bcece3deedecc72",
+      "claim_support": [
+        {
+          "source_id": "P07",
+          "claim": "Line 1 explicitly marks mock integration awaiting real implementation."
+        }
+      ],
+      "review_basis": "Read-only current source inspection"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-builder/src/plugins/integration/notion-sync/service.ts",
+      "bytes": 2884,
+      "sha256": "cca99cb93dce88a2b79797f2565f08df450fb382b10cf073809b1df61fe3eba7",
+      "claim_support": [
+        {
+          "source_id": "P08",
+          "claim": "Line 1 explicitly marks mock integration awaiting real implementation."
+        }
+      ],
+      "review_basis": "Read-only current source inspection"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/forma-fullstack-demo/src/main.rs",
+      "bytes": 7987,
+      "sha256": "e62cbb6c57406d5fb366b7850da8ca7c7b2f7c8287fa889f16e50035b7b4a2bb",
+      "claim_support": [
+        {
+          "source_id": "P09",
+          "claim": "Typed PageProps and PageHandles; mandatory SSR routes; bind/finalize at startup; JSON API attached. Source only, not fresh runtime verification."
+        }
+      ],
+      "review_basis": "Read-only current source inspection"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/forma-fullstack-demo/src/api.rs",
+      "bytes": 14806,
+      "sha256": "5a0d2c676884d2b7c4225d9029ebe8489474207718e3f05257290382e950852a",
+      "claim_support": [
+        {
+          "source_id": "P10",
+          "claim": "Bounded JSON routes for sessions/reservations/reset with loopback origin guard. Not company membership or app authorization."
+        }
+      ],
+      "review_basis": "Read-only current source inspection"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/forma-fullstack-demo/src/store.rs",
+      "bytes": 12163,
+      "sha256": "0520942fa6fba64328285c62a10493667c19f050ba1694f8d51b148695fbc1e0",
+      "claim_support": [
+        {
+          "source_id": "P11",
+          "claim": "Mutex-backed single-process counter store; file write/sync/rename; not multi-tenant durable platform records."
+        }
+      ],
+      "review_basis": "Read-only current source inspection"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/input/context/forma-app-platform-product-definition.pdf",
+      "bytes": 392364,
+      "sha256": "b9ad17a9eed621328e77f33f9fcac55bd2c1c2cc385833fa6e9d4415a93c2b56",
+      "same_bytes_as": "/Users/victorvillacis/dev/Forma/Notes/forma-app-platform-product-definition.pdf",
+      "claim_support": [
+        {
+          "source_id": "P01",
+          "claim": "Controlling product input: platform launch identity p1; generic creation pp3-4,11-12; writable records p12; configurable review/role overlap pp6,13; second app p18; two-app release proof pp20-21; buyer/workflow choice p24."
+        }
+      ],
+      "review_basis": "Byte-for-byte comparison to source PDF"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/input/context/forma-platform-product-definition.pdf",
+      "bytes": 377013,
+      "sha256": "5a31715821eeefdb24423428157559bf490f3408c5d5aa4209d651505b163cc2",
+      "same_bytes_as": "/Users/victorvillacis/dev/Forma/Notes/forma-platform-product-definition.pdf",
+      "claim_support": [
+        {
+          "source_id": "P02",
+          "claim": "Compatible earlier product input: security first family p1; security-first buyer pp6,22; internal notes/findings/status/ownership/review records p11; publication policy/overlapping roles pp5,13; single app-family release proof p19."
+        }
+      ],
+      "review_basis": "Byte-for-byte comparison to source PDF"
+    }
+  ],
+  "git_heads": [
+    {
+      "path": "/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma",
+      "head": "753be2ae7e3838cd37035e5d892bba448e5793bc",
+      "current_head": "753be2ae7e3838cd37035e5d892bba448e5793bc"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-vector-studio",
+      "head": "131771d2e06627c08fbcf41d8d88450d1d5f3343",
+      "current_head": "131771d2e06627c08fbcf41d8d88450d1d5f3343"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-generative-ui",
+      "head": "a108203d6d55f7591d914fd09a4a54932b8c9337",
+      "current_head": "a108203d6d55f7591d914fd09a4a54932b8c9337"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/forma-genui-runtime",
+      "head": "93c3871e5d248b8747c6efb649edb46036549e6b",
+      "current_head": "93c3871e5d248b8747c6efb649edb46036549e6b"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/gatewasm",
+      "head": "b750ca534ae89066714f100eb2b76ee71edf1ab1",
+      "current_head": "b750ca534ae89066714f100eb2b76ee71edf1ab1"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/FormaBuiltApps/kmd",
+      "head": "2b861b0432d8da2516eb1df579d6f2a366326729",
+      "current_head": "2b861b0432d8da2516eb1df579d6f2a366326729"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory",
+      "head": "260b87eb6f7c9afbb5f65ab131a54a382c237364",
+      "current_head": "260b87eb6f7c9afbb5f65ab131a54a382c237364"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/Forma/forma-fullstack-demo",
+      "head": "45c2b1390248d47aaafa5f8d9a3bb9253a0748a2",
+      "current_head": "45c2b1390248d47aaafa5f8d9a3bb9253a0748a2"
+    }
+  ],
+  "release_tag": "v3.0.0",
+  "release_commit": "2006423b21fe0f8dd5a510bd09bfe3b8748327a5",
+  "release_tag_verified_locally": true,
+  "prior_file_hash_comparison": {
+    "total": 46,
+    "matching": 46,
+    "framework_prototype_subset_total": 30,
+    "framework_prototype_subset_matching": 30
+  },
+  "path_renames": {
+    "/tasks/forma-platform/": "/tasks/forma-generative-app-platform/",
+    "/tasks/forma-mvp/": "/tasks/forma-insurance-demo/",
+    "/tasks/forma-security/": "/tasks/forma-security-investigation-workspace/"
+  },
+  "limitations": [
+    "No framework or prototype tests run.",
+    "No fresh remote release, registry-archive, external-vendor, or deployment checks.",
+    "A file hash identifies inspected bytes, not a clean checkout or runtime qualification.",
+    "PDF claims are intended product requirements, not implementation evidence.",
+    "Prior SOURCES external references remain prior checks only; not re-certified here."
+  ],
+  "findings": [
+    {
+      "id": "E01",
+      "severity": "low",
+      "target": "ALIGNMENT.md evolution table: Writes",
+      "finding": "Earlier PDF p11 already includes notes, findings, status, ownership and review records; internal persistence itself is not new. The new explicit general-purpose forms and create/update-defined-records requirement broadens it.",
+      "recommendation": "Write the earlier column as investigation notes/findings/status/ownership/review records (p11) and disposition as generalize to typed internal forms/records with transactional commands."
+    },
+    {
+      "id": "E02",
+      "severity": "low",
+      "target": "ALIGNMENT.md evolution table: Review",
+      "finding": "Earlier PDF pp5,13 already states overlapping roles and organization publication policy; this is retained clarification rather than a new policy delta.",
+      "recommendation": "State policy/overlapping roles retained; Northstar independent review remains the selected demo policy."
+    },
+    {
+      "id": "E03",
+      "severity": "info",
+      "target": "SOURCES.md / new source manifest",
+      "finding": "Historical security packet links and manifest use renamed task directories; the renamed sources are byte-identical.",
+      "recommendation": "Use current absolute paths, preserve previous_path and explicit rename mapping, do not edit historical packets."
+    },
+    {
+      "id": "E04",
+      "severity": "info",
+      "target": "Release evidence citations",
+      "finding": "Current framework SECURITY.md, V3-AS-BUILT.md, compiler subset.md and core SECURITY.md differ from v3.0.0 blobs, exactly as the prior manifest records; frame.rs, response.rs and HTML-RUNTIME.md equal release.",
+      "recommendation": "Keep the release commit explicit and include release_tag_sha256/working_file_equals_release rather than attributing all current documentation to the release."
+    }
+  ],
+  "pdf_page_review": {
+    "app-platform": {
+      "pages": 25,
+      "text_matches_fresh_pdftotext_layout": true,
+      "verified_claim_pages": [
+        1,
+        3,
+        4,
+        6,
+        11,
+        12,
+        13,
+        17,
+        18,
+        20,
+        21,
+        24
+      ],
+      "visual_page_review": [
+        18
+      ],
+      "citation_result": "All current ALIGNMENT cited page locations support the stated controlling-PDF claims; record schemas are an implementation proposal, not a literal named PDF requirement."
+    },
+    "platform": {
+      "pages": 23,
+      "text_matches_fresh_pdftotext_layout": true,
+      "verified_claim_pages": [
+        1,
+        4,
+        5,
+        6,
+        11,
+        12,
+        17,
+        18,
+        19,
+        22
+      ],
+      "citation_result": "Existing citations support identity and security-first buyer. Add pp11 and5,13 for the two historical nuance corrections."
+    }
+  },
+  "reviewed_target_documents": [
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/PRODUCT-BRIEF.md",
+      "sha256": "7416fdd6aef90f8bdd9061bac1dd7c868d5ab5f4cdebd451bb55484b0a58dadf",
+      "bytes": 10446
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/ALIGNMENT.md",
+      "sha256": "3df13f1c5441ee5d5425c9d9497f0afb64ac17c3fa95d37f2e1c782e92938d18",
+      "bytes": 10233
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/SHARED-CONTRACTS.md",
+      "sha256": "8559a5dc38b023167d130b77406bf1a4161797362a9e04236dde40ae7102eeba",
+      "bytes": 16699
+    }
+  ]
+}

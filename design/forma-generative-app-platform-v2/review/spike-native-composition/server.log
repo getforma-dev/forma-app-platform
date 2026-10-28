@@ -1,0 +1,4 @@
+2026-10-22T23:35:05.756427Z  INFO forma_server::ir: Loaded IR module for SSR route=/about ir_file=about.eeaeab0d.ir
+2026-10-22T23:35:05.757752Z  INFO forma_server::ir: Loaded IR module for SSR route=/ ir_file=home.b77c110d.ir
+2026-10-22T23:35:05.757766Z  INFO forma_server::ir: Phase 2 SSR enabled for 2 route(s) ssr_routes=2
+FORMA_LISTENING http://127.0.0.1:64667

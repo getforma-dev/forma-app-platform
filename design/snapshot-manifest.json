@@ -1,0 +1,867 @@
+{
+  "captured_on": "2026-10-28",
+  "source_repository": "https://github.com/Victor-Villacis/design-doc-factory",
+  "source_head": "1e6d117ec179798fa99d6b3e9bc35df257232c29",
+  "delivery_tags": [
+    "task/forma-generative-app-platform-v2/v1",
+    "task/forma-northstar-demo/v1"
+  ],
+  "excluded": [
+    "output/ (factory drafts and intermediates)",
+    ".DS_Store"
+  ],
+  "files": [
+    {
+      "path": "design/forma-generative-app-platform-v2/ALIGNMENT.md",
+      "source": "tasks/forma-generative-app-platform-v2/ALIGNMENT.md",
+      "sha256": "5ff0b3d2d008dc9d93a2321daad5aaff1b89375e597495d11f8947873db4f483",
+      "bytes": 12988
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/PRODUCT-BRIEF.md",
+      "source": "tasks/forma-generative-app-platform-v2/PRODUCT-BRIEF.md",
+      "sha256": "444aada3ed2c6c89a028f99596c4967c54c4007f7158f00169c56c307cf8c51f",
+      "bytes": 10631
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/README.md",
+      "source": "tasks/forma-generative-app-platform-v2/README.md",
+      "sha256": "f486b3bbeb3c69e9ad38d15ef2862ca6cc750dd5c1a468a0565da7c8236c3850",
+      "bytes": 2712
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md",
+      "source": "tasks/forma-generative-app-platform-v2/SHARED-CONTRACTS.md",
+      "sha256": "f209ccb05aa895080c6fd424fe979d65f276959536ee7d57b371428e1d049fd5",
+      "bytes": 18061
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/SOURCES.md",
+      "source": "tasks/forma-generative-app-platform-v2/SOURCES.md",
+      "sha256": "985c845d350c32bfd4b773d843812fd95ccffa31ce83d158f6ceccc3a264fff5",
+      "bytes": 11812
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/STATUS.md",
+      "source": "tasks/forma-generative-app-platform-v2/STATUS.md",
+      "sha256": "879ff28a2af01c30d96888afd6cc591a00119ffe787e419644eaddf93cb18c11",
+      "bytes": 25486
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/VALIDATION.md",
+      "source": "tasks/forma-generative-app-platform-v2/VALIDATION.md",
+      "sha256": "db78a82ae9c5e05767b715fd81de088abf666f30a4b95a3c752a079cd3a27016",
+      "bytes": 10621
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/annotations.md",
+      "source": "tasks/forma-generative-app-platform-v2/annotations.md",
+      "sha256": "c0d2d47782ba8f4b003d0abfaa557cc7fe5db13a58853fe3e5310ade80b97bc9",
+      "bytes": 115326
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/claims.md",
+      "source": "tasks/forma-generative-app-platform-v2/claims.md",
+      "sha256": "47a0196a6ef0bf91e077e8058fb717e3c1b11286458b52ededa4ce842c75e45a",
+      "bytes": 23529
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/README.md",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/README.md",
+      "sha256": "88444820a1f0a9c0592ab5c3bc1e20c9b483d0d746c5c83e31d396ce10d4ba95",
+      "bytes": 2936
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/claims.md",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/claims.md",
+      "sha256": "47a0196a6ef0bf91e077e8058fb717e3c1b11286458b52ededa4ce842c75e45a",
+      "bytes": 23529
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/docx/design-investor.docx",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/docx/design-investor.docx",
+      "sha256": "602ab3c195c329074388b060252bfeaa90ba479f7726f72b2bccb3370d707952",
+      "bytes": 1047782
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/docx/design.docx",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/docx/design.docx",
+      "sha256": "321e4a789f85c50b2c5805cf3373e1079d979ab8f21417a994680cc349d16339",
+      "bytes": 3756415
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/html/design-annotated.html",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/html/design-annotated.html",
+      "sha256": "3462fe8b768d8e335413c3c3300b8a67d319fb2abc11df3a6cd8e8ca993c2e85",
+      "bytes": 1599534
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/html/design-investor.html",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/html/design-investor.html",
+      "sha256": "4125fd6b45ae8f309a467eb7c19aed872029cc651b9a7aa7444ba30f8f0c2833",
+      "bytes": 319567
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/html/design.html",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/html/design.html",
+      "sha256": "33d0fa376da40c7fda89b78e0cdc301ff9392e433a12a0d8112ae45dab74cca7",
+      "bytes": 1046241
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/manifest.json",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/manifest.json",
+      "sha256": "d5e1d5a82bbc1bb3fd7c055d08bb442d7fcfdc12ae53a7a3a6d3166f6002e877",
+      "bytes": 4231
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/md/annotations.md",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/md/annotations.md",
+      "sha256": "c0d2d47782ba8f4b003d0abfaa557cc7fe5db13a58853fe3e5310ade80b97bc9",
+      "bytes": 115326
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/md/design-investor.md",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/md/design-investor.md",
+      "sha256": "4dcdba90253ff237dfcccba1a34bc0fbbf0afabff76edcf4040a15f76ba9365e",
+      "bytes": 46494
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/md/design.md",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/md/design.md",
+      "sha256": "c339b8f6d1dbe522206a9c582bfc7d9a89e16e8c9d71f29936d53bb49a8b3d2e",
+      "bytes": 185328
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/md/flashcards.tsv",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/md/flashcards.tsv",
+      "sha256": "7318b3b06a5ccc7400acda15708df04f829cdffc10e54699d8e76fae1d0fadc0",
+      "bytes": 104461
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/notes.md",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/notes.md",
+      "sha256": "4bb7f6cdfbd32671fbc8be4d52607b7901e41758b1fd04840a5cf0064996507e",
+      "bytes": 29986
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/pdf/design-investor.pdf",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/pdf/design-investor.pdf",
+      "sha256": "9e70e2ffcc89ad9730491011c0c950921733b51211b971aeb1c19ab35d4fc084",
+      "bytes": 796982
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/pdf/design.pdf",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/pdf/design.pdf",
+      "sha256": "372226904be99937724315b58a92da3aacabe8cffb33105a87618d420828c935",
+      "bytes": 2830743
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/reception.md",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/reception.md",
+      "sha256": "d02987bee9a750494c79f586aefc04dccd93959ad6366ec7572d75740dfcb39e",
+      "bytes": 26031
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/xref.md",
+      "source": "tasks/forma-generative-app-platform-v2/deliverables/v1/xref.md",
+      "sha256": "6071227382fe25b5c1c42dfd3f9a555475f9ac0142959978a31ec5a05e82142e",
+      "bytes": 9385
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/design-investor.md",
+      "source": "tasks/forma-generative-app-platform-v2/design-investor.md",
+      "sha256": "4dcdba90253ff237dfcccba1a34bc0fbbf0afabff76edcf4040a15f76ba9365e",
+      "bytes": 46494
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/design.md",
+      "source": "tasks/forma-generative-app-platform-v2/design.md",
+      "sha256": "c339b8f6d1dbe522206a9c582bfc7d9a89e16e8c9d71f29936d53bb49a8b3d2e",
+      "bytes": 185328
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/01-context.diagram.json",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/01-context.diagram.json",
+      "sha256": "a519f441041dda1bc19fe7297847bb22347bf7674c463f0ddec4f357c3a13357",
+      "bytes": 3333
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/01-context.excalidraw",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/01-context.excalidraw",
+      "sha256": "0778f3b2747cf1b54a0e8c3c711b7bc6989936119870efb7f40783acbc51044d",
+      "bytes": 50372
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/01-context.svg",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/01-context.svg",
+      "sha256": "d7b2b3c71d6a02cc15a4d98e12c92642388a7028fc975eedfefba40562506ad6",
+      "bytes": 59343
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/02-containers.diagram.json",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/02-containers.diagram.json",
+      "sha256": "c113d717fa69a6e5f5d82fcb96a228d68eb41b6d85ce1443017360832807f450",
+      "bytes": 6561
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/02-containers.excalidraw",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/02-containers.excalidraw",
+      "sha256": "9cb6bfae0fc3bc704adf269fb582b48d8901a8257e0c317f0a97c6a3524ef46e",
+      "bytes": 94360
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/02-containers.svg",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/02-containers.svg",
+      "sha256": "b375760c1054c48fa466e0aa1c7259edf430d4e5b97c970362eb02d0b3856ef4",
+      "bytes": 111554
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/03-components.diagram.json",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/03-components.diagram.json",
+      "sha256": "9e839e8f12c928aba0d3e52b503a12a403245e5973cc217036e06eb87aa6b44b",
+      "bytes": 7096
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/03-components.excalidraw",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/03-components.excalidraw",
+      "sha256": "e4c58e237bbc5bd15beb9996ddc6a9ff518fda52d3c33f6445c87e9a326c0e1b",
+      "bytes": 113573
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/03-components.svg",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/03-components.svg",
+      "sha256": "4a04f17cb01ada3ca2094b828443b0edefd087ee5d4a30c2fe1edb2724d7a4ed",
+      "bytes": 126484
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/04-flow-form.diagram.json",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/04-flow-form.diagram.json",
+      "sha256": "fdad58b6dfcfaa788aa8132ac7cdf0d0025c18f9e28f41ec6238415c6b2f1f23",
+      "bytes": 7347
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/04-flow-form.excalidraw",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/04-flow-form.excalidraw",
+      "sha256": "3ae5307fb5b9841c17e2f049dfac36ecb634601c53ebc111190acbff19e06e0e",
+      "bytes": 115812
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/04-flow-form.svg",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/04-flow-form.svg",
+      "sha256": "474de98f2f241a70b241bc51466c7beddd90a7ce44ddf2b592a9c8f752778aa0",
+      "bytes": 132533
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/05-flow-run.diagram.json",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/05-flow-run.diagram.json",
+      "sha256": "90d5e852ba69a9ec5a4f1bc6e45b603a0d60d0b837d12f21e65294fa07f06e71",
+      "bytes": 6430
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/05-flow-run.excalidraw",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/05-flow-run.excalidraw",
+      "sha256": "6f07798dc520ee11ed98845e351c2738c7972ddbb9196d2949560a94cb06d732",
+      "bytes": 113291
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/05-flow-run.svg",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/05-flow-run.svg",
+      "sha256": "af20e3d3dd8bae8360ebfdaca99a4f1414aaef1bb9ad7e9663e0c4296bb2cd59",
+      "bytes": 130935
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/06-flow-record.diagram.json",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/06-flow-record.diagram.json",
+      "sha256": "beb5c1e6c3aa90de06a6135e7c38334e0352d5f0a7556855905d5cf0518bed00",
+      "bytes": 4601
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/06-flow-record.excalidraw",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/06-flow-record.excalidraw",
+      "sha256": "d06e9e45d60ebe6c7bb4ad4b964afd5d1599e1d9940e3bc30d1620537e97584f",
+      "bytes": 74439
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/06-flow-record.svg",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/06-flow-record.svg",
+      "sha256": "44ce55a69d6c90c5ae21c411c83b62d49b578a8bf6eec8f9094cda7353f09008",
+      "bytes": 92573
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/08-deployment.diagram.json",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/08-deployment.diagram.json",
+      "sha256": "dba429c663fc8d3ffd16c8cfdc8e081a2cac96a42f28ae033e55de8573eb15ba",
+      "bytes": 6938
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/08-deployment.excalidraw",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/08-deployment.excalidraw",
+      "sha256": "4149506265fe7200f06827186df30111d6ffd796d875da7b2be5b7d09970507a",
+      "bytes": 113173
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/diagrams/08-deployment.svg",
+      "source": "tasks/forma-generative-app-platform-v2/diagrams/08-deployment.svg",
+      "sha256": "01306bfbca9fa090a07900664b7b52299d34dffb501d2a45455d16ca4a1cb5c7",
+      "bytes": 141909
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/input/README.md",
+      "source": "tasks/forma-generative-app-platform-v2/input/README.md",
+      "sha256": "24cf656091d1277bdcc054bb08529c582157ec579c7cbe0d2b2a7fd4549a4add",
+      "bytes": 401
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/input/brief.md",
+      "source": "tasks/forma-generative-app-platform-v2/input/brief.md",
+      "sha256": "af8bad48453440f488d923ba66eb3e7c9ba144e92bea57afbaaf6f093eb020d1",
+      "bytes": 808
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/input/constraints.md",
+      "source": "tasks/forma-generative-app-platform-v2/input/constraints.md",
+      "sha256": "582e2ae1b9a98db64391d5219e1c30f75d1dc65604402a2bf8b6ff7aadf68732",
+      "bytes": 846
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/input/context/forma-app-platform-product-definition.pdf",
+      "source": "tasks/forma-generative-app-platform-v2/input/context/forma-app-platform-product-definition.pdf",
+      "sha256": "b9ad17a9eed621328e77f33f9fcac55bd2c1c2cc385833fa6e9d4415a93c2b56",
+      "bytes": 392364
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/input/context/forma-platform-product-definition.pdf",
+      "source": "tasks/forma-generative-app-platform-v2/input/context/forma-platform-product-definition.pdf",
+      "sha256": "5a31715821eeefdb24423428157559bf490f3408c5d5aa4209d651505b163cc2",
+      "bytes": 377013
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/intake.md",
+      "source": "tasks/forma-generative-app-platform-v2/intake.md",
+      "sha256": "2e9db91adae9b1168f6d35c996d7e5bc167f8c3f58c0210af6bc6201b64f80ba",
+      "bytes": 16017
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/notes.md",
+      "source": "tasks/forma-generative-app-platform-v2/notes.md",
+      "sha256": "4bb7f6cdfbd32671fbc8be4d52607b7901e41758b1fd04840a5cf0064996507e",
+      "bytes": 29986
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/reception.md",
+      "source": "tasks/forma-generative-app-platform-v2/reception.md",
+      "sha256": "d02987bee9a750494c79f586aefc04dccd93959ad6366ec7572d75740dfcb39e",
+      "bytes": 26031
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/fauth-viability/live-forma-login-2026-10-22.png",
+      "source": "tasks/forma-generative-app-platform-v2/review/fauth-viability/live-forma-login-2026-10-22.png",
+      "sha256": "66230e2d078fea6c7224499d8d6fb14cf60e15996fb02ef8cc7618431bbae5ac",
+      "bytes": 32498
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/fauth-viability/live-onboarding-2026-10-22.png",
+      "source": "tasks/forma-generative-app-platform-v2/review/fauth-viability/live-onboarding-2026-10-22.png",
+      "sha256": "590f6a159edf7cc436ca176d08cb2601f9cee2a5239d85a243b4287157f76d5f",
+      "bytes": 44304
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/fauth-viability/local-jwks.json",
+      "source": "tasks/forma-generative-app-platform-v2/review/fauth-viability/local-jwks.json",
+      "sha256": "0f80a67a3bcfdb660d37b0b25710fd8e3736fc988e16ff99d420061c72d6b0d8",
+      "bytes": 136
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/fauth-viability/local-pin-northstar-branded-login.png",
+      "source": "tasks/forma-generative-app-platform-v2/review/fauth-viability/local-pin-northstar-branded-login.png",
+      "sha256": "8ed39702a5920f6574e635c913064811c3d37040c96d7c498dcc4a35375e00b8",
+      "bytes": 171938
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/fauth-viability/smoke-suite-at-pin.log",
+      "source": "tasks/forma-generative-app-platform-v2/review/fauth-viability/smoke-suite-at-pin.log",
+      "sha256": "2da2a798c3fedfa1d369ea2796130e876912db2d05f371705dff1e9ff648aca9",
+      "bytes": 4522
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/fauth-viability.md",
+      "source": "tasks/forma-generative-app-platform-v2/review/fauth-viability.md",
+      "sha256": "2de02d512ec8d8e5f461b4204a315b23d4ea3612b580d70d1c165e2df63df3dc",
+      "bytes": 9515
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/foundation-review.md",
+      "source": "tasks/forma-generative-app-platform-v2/review/foundation-review.md",
+      "sha256": "9193898eef80f885991ebdf41cbd4b30e03e5e2f22c4256d3036c8fe95a24d37",
+      "bytes": 26207
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/fresh-review-A.md",
+      "source": "tasks/forma-generative-app-platform-v2/review/fresh-review-A.md",
+      "sha256": "78bfaaf5483d7b628715654bc898207538e391e45a6b22f760e18f6076e330ae",
+      "bytes": 19890
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/fresh-review-B.md",
+      "source": "tasks/forma-generative-app-platform-v2/review/fresh-review-B.md",
+      "sha256": "d670c45f301c461db62ecd939a8f120e19f392841db1132f406a7a16d74054ba",
+      "bytes": 24860
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/junior-reader-check.md",
+      "source": "tasks/forma-generative-app-platform-v2/review/junior-reader-check.md",
+      "sha256": "e6ae963ae4c4b0c04861ff17c9e129592fc4ecab92ffc6790749a7f0214cca31",
+      "bytes": 16334
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/packet-manifest.json",
+      "source": "tasks/forma-generative-app-platform-v2/review/packet-manifest.json",
+      "sha256": "3ad398aeabbe83833ce819bd103fa7ed7cba2272af34727db491586e09d1eb32",
+      "bytes": 7875
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/paired-review.md",
+      "source": "tasks/forma-generative-app-platform-v2/review/paired-review.md",
+      "sha256": "35350b49b80dbfbe91a66883c6179ecd1e8a266155722e0b1fb1c368872dbaa2",
+      "bytes": 4505
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/preparation-checks.json",
+      "source": "tasks/forma-generative-app-platform-v2/review/preparation-checks.json",
+      "sha256": "324a97277926e95904f6d9deb25019067dc79534a7e613fe7d150083b4fc0ccf",
+      "bytes": 3024
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/reader-check-investor.md",
+      "source": "tasks/forma-generative-app-platform-v2/review/reader-check-investor.md",
+      "sha256": "1022bd1b109f376556e6bfe1e2adc62c296a5d2a5e6ebf2d2f5e5573238b5390",
+      "bytes": 23532
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/readiness.md",
+      "source": "tasks/forma-generative-app-platform-v2/review/readiness.md",
+      "sha256": "216c6d7889c6e2460682a910c0ebb6c8baeb523d6d9196ceadda4f2ee67e251c",
+      "bytes": 4909
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/security-review.md",
+      "source": "tasks/forma-generative-app-platform-v2/review/security-review.md",
+      "sha256": "7e4cc4087488b845e1e86ec6d209d5fc2a9c31354f4a4529dc106fcf07bc06cc",
+      "bytes": 18890
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/source-audit-findings.md",
+      "source": "tasks/forma-generative-app-platform-v2/review/source-audit-findings.md",
+      "sha256": "dd730a6c2734136016d053ba34a0a97817fee4ea44552d95565237b74c4ba733",
+      "bytes": 3065
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/source-manifest.json",
+      "source": "tasks/forma-generative-app-platform-v2/review/source-manifest.json",
+      "sha256": "75613f45f77e9e46c448b9b79033ddbe80aed82549f7deb9196197661f6e386f",
+      "bytes": 48758
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/spike-native-composition/README.md",
+      "source": "tasks/forma-generative-app-platform-v2/review/spike-native-composition/README.md",
+      "sha256": "e9c76dc9b9e6fc39337e8a6bafbdf26026d379400238175b060f37033a935d8f",
+      "bytes": 4124
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/spike-native-composition/app.tsx",
+      "source": "tasks/forma-generative-app-platform-v2/review/spike-native-composition/app.tsx",
+      "sha256": "f2caf8286046afb42dd99396996981c1fb598ba301eaa883bf7bef255b42b34d",
+      "bytes": 3325
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/spike-native-composition/build.ts",
+      "source": "tasks/forma-generative-app-platform-v2/review/spike-native-composition/build.ts",
+      "sha256": "934711b02bdef4ddbcc76b845b0ce045b1ebeb95a3cb9f0ba782ce49fd6ab0c0",
+      "bytes": 1037
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/spike-native-composition/main.rs",
+      "source": "tasks/forma-generative-app-platform-v2/review/spike-native-composition/main.rs",
+      "sha256": "7e36ae823f9b3da132fe4c2b430154097588828d8c08c719dabec91ef164f5c5",
+      "bytes": 10993
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/spike-native-composition/manifest.json",
+      "source": "tasks/forma-generative-app-platform-v2/review/spike-native-composition/manifest.json",
+      "sha256": "a814099a002c443e11c9f7b2c7563336585bddd64202942834cdcb8eceba70d2",
+      "bytes": 1391
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/spike-native-composition/rendered-home.html",
+      "source": "tasks/forma-generative-app-platform-v2/review/spike-native-composition/rendered-home.html",
+      "sha256": "06fdcd4726ada71a675a056a0682d18a6c959e68358b6a1121d949c713a1eca0",
+      "bytes": 6752
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/spike-native-composition/response-headers.txt",
+      "source": "tasks/forma-generative-app-platform-v2/review/spike-native-composition/response-headers.txt",
+      "sha256": "d374c86834fbcfed61854bbb157798bd72cd1e513532075f52b9a1eca4f0320b",
+      "bytes": 903
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/spike-native-composition/server.log",
+      "source": "tasks/forma-generative-app-platform-v2/review/spike-native-composition/server.log",
+      "sha256": "b66c82298721e3ec68514c198d4cf90268c7201369b30bdbbc7a758576573644",
+      "bytes": 365
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/spike-native-composition/size-report.json",
+      "source": "tasks/forma-generative-app-platform-v2/review/spike-native-composition/size-report.json",
+      "sha256": "85d42f87d8b6308eb6269100f1ccf69cda1c2cbb449423340a4309d96a9eec0d",
+      "bytes": 1770
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/spike-native-composition/variant-result.txt",
+      "source": "tasks/forma-generative-app-platform-v2/review/spike-native-composition/variant-result.txt",
+      "sha256": "b88ce58f7e67188bdfe316fa6c23915c04ec7170d4e277ed5d4e59a8523ea614",
+      "bytes": 586
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/review/spike-native-composition/variant.diff",
+      "source": "tasks/forma-generative-app-platform-v2/review/spike-native-composition/variant.diff",
+      "sha256": "6d4a5b4afbbb9192912da2dffd777fdaaebaafe92b7e27fd06a7a4a577412a3a",
+      "bytes": 2334
+    },
+    {
+      "path": "design/forma-generative-app-platform-v2/xref.md",
+      "source": "tasks/forma-generative-app-platform-v2/xref.md",
+      "sha256": "6071227382fe25b5c1c42dfd3f9a555475f9ac0142959978a31ec5a05e82142e",
+      "bytes": 9385
+    },
+    {
+      "path": "design/forma-northstar-demo/BUILD-HANDOFF.md",
+      "source": "tasks/forma-northstar-demo/BUILD-HANDOFF.md",
+      "sha256": "c6530cc7ebc581147d14d43c14a7971669852e74207f4823e7dd06a04cbbad99",
+      "bytes": 7739
+    },
+    {
+      "path": "design/forma-northstar-demo/PRODUCT-BRIEF.md",
+      "source": "tasks/forma-northstar-demo/PRODUCT-BRIEF.md",
+      "sha256": "b2a31a0e52410389aa24b3bbb1f2da7a7aa65a22d75f3479012a5e0045e32e59",
+      "bytes": 8160
+    },
+    {
+      "path": "design/forma-northstar-demo/README.md",
+      "source": "tasks/forma-northstar-demo/README.md",
+      "sha256": "29a8de449e1a15e59a65cc49d3a8a9c3415b7829c2428ae7e346bed411a7de38",
+      "bytes": 2686
+    },
+    {
+      "path": "design/forma-northstar-demo/SCENARIOS.md",
+      "source": "tasks/forma-northstar-demo/SCENARIOS.md",
+      "sha256": "0adc2d6a83df03f555dcf52258a768039d0e59592ed56d12335e82f8123cbab1",
+      "bytes": 13369
+    },
+    {
+      "path": "design/forma-northstar-demo/STATUS.md",
+      "source": "tasks/forma-northstar-demo/STATUS.md",
+      "sha256": "bb8077cb8217d325670fdc67b50595046ccf755ebf52817b542171997d7bb33c",
+      "bytes": 27659
+    },
+    {
+      "path": "design/forma-northstar-demo/annotations.md",
+      "source": "tasks/forma-northstar-demo/annotations.md",
+      "sha256": "4875daa57e2ce0a4a56cfd7c270a57367e6e054968f8e579396f3fc788211439",
+      "bytes": 140185
+    },
+    {
+      "path": "design/forma-northstar-demo/claims.md",
+      "source": "tasks/forma-northstar-demo/claims.md",
+      "sha256": "1eacc8b990a753175adc027982fe173ec2a99358dd299ef259d52006cf0ca07e",
+      "bytes": 19165
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/README.md",
+      "source": "tasks/forma-northstar-demo/deliverables/README.md",
+      "sha256": "58895b7e43fdf72c09d51669947b0dc72a8e24bfea3c02559a90c9a69c5268a7",
+      "bytes": 2860
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/claims.md",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/claims.md",
+      "sha256": "1eacc8b990a753175adc027982fe173ec2a99358dd299ef259d52006cf0ca07e",
+      "bytes": 19165
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/docx/design-demo.docx",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/docx/design-demo.docx",
+      "sha256": "8f85c18f7406cd70c95a7fc087c05017f900fd7f8175561a947e262ecb41ae15",
+      "bytes": 2011813
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/docx/design.docx",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/docx/design.docx",
+      "sha256": "291c2b1d32acab9d3365bc3706437f5b1514405969f069c16bacc7858e2f068f",
+      "bytes": 2061550
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/html/design-annotated.html",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/html/design-annotated.html",
+      "sha256": "4e7c0ea763cce6a411c70eda6b04bcbe19482b994937233839d2b336407eff74",
+      "bytes": 1083880
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/html/design-demo.html",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/html/design-demo.html",
+      "sha256": "09818d38ed7c1720f720ddfdb50376be799361fc1cd29e497fb583dd7e9dc249",
+      "bytes": 406881
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/html/design.html",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/html/design.html",
+      "sha256": "a7c87861a4e3519db8da5973826be18f69a5f61629fdce0490cf4182011f2eb1",
+      "bytes": 508346
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/manifest.json",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/manifest.json",
+      "sha256": "cb1f82780e2178e3b7cc2463dc65ec6d3e9e0ec06d0cce7fa28ccfe69771a6b8",
+      "bytes": 4158
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/md/annotations.md",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/md/annotations.md",
+      "sha256": "4875daa57e2ce0a4a56cfd7c270a57367e6e054968f8e579396f3fc788211439",
+      "bytes": 140185
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/md/design-demo.md",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/md/design-demo.md",
+      "sha256": "3cab5e4e0f3a29d5b61fe0d7bdcd597c6a6f55fdcf9ccb609731711756ac4001",
+      "bytes": 38962
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/md/design.md",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/md/design.md",
+      "sha256": "0461bf56c10806e5b72361f1e3a6d0d6e4608bbb83ab5a4888a117a7f7eac13c",
+      "bytes": 125563
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/md/flashcards.tsv",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/md/flashcards.tsv",
+      "sha256": "2f1260d5cfc67f74d5003ce9825c01fd70b3380e3e9a2c7abebef683f72d0538",
+      "bytes": 101099
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/notes.md",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/notes.md",
+      "sha256": "a30480289ae471c23d92460f05bcc3a4f314c6b87bf4fb42f9d8494c048fbb3c",
+      "bytes": 41698
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/pdf/design-demo.pdf",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/pdf/design-demo.pdf",
+      "sha256": "d5d8112f519a951a6f05e75a78aa80e83e78085ad23ad2ffd6caa5bf74f1622c",
+      "bytes": 1014151
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/pdf/design.pdf",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/pdf/design.pdf",
+      "sha256": "969c29f24328b9251d49e85e2f82f8797b1288497ff5e5a48b261ed313cd9225",
+      "bytes": 1957749
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/reception.md",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/reception.md",
+      "sha256": "fc23dde98e0edecdc0f25de990f2bc824c6ff94d85b7b6da4a5e1c518127c1c9",
+      "bytes": 27275
+    },
+    {
+      "path": "design/forma-northstar-demo/deliverables/v1/xref.md",
+      "source": "tasks/forma-northstar-demo/deliverables/v1/xref.md",
+      "sha256": "06b32d94171f083f7dbb1cf05603820d376001aa5f9311c1c06c0b6937485baf",
+      "bytes": 13317
+    },
+    {
+      "path": "design/forma-northstar-demo/design-demo.md",
+      "source": "tasks/forma-northstar-demo/design-demo.md",
+      "sha256": "3cab5e4e0f3a29d5b61fe0d7bdcd597c6a6f55fdcf9ccb609731711756ac4001",
+      "bytes": 38962
+    },
+    {
+      "path": "design/forma-northstar-demo/design.md",
+      "source": "tasks/forma-northstar-demo/design.md",
+      "sha256": "0461bf56c10806e5b72361f1e3a6d0d6e4608bbb83ab5a4888a117a7f7eac13c",
+      "bytes": 125563
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/01-context.diagram.json",
+      "source": "tasks/forma-northstar-demo/diagrams/01-context.diagram.json",
+      "sha256": "ef125da4c57b253006ecf1cbe4cfbcad0bd3b3a9030336ca885a1b04db4f91df",
+      "bytes": 3940
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/01-context.excalidraw",
+      "source": "tasks/forma-northstar-demo/diagrams/01-context.excalidraw",
+      "sha256": "0af66da8161be4b92e5b74a0f26661cc07944f0d4eb862fe5dcf437dc0e7f3d0",
+      "bytes": 57112
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/01-context.svg",
+      "source": "tasks/forma-northstar-demo/diagrams/01-context.svg",
+      "sha256": "cd04d1b127cc6a93ee43b3f11bc9f9a181cd3dfb5b183aa93c235bbef30e96d7",
+      "bytes": 67256
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/02-containers.diagram.json",
+      "source": "tasks/forma-northstar-demo/diagrams/02-containers.diagram.json",
+      "sha256": "c35adbe7000c1a8b133965c5384376fb6651333c31d64f2ccc37428b04bab680",
+      "bytes": 6278
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/02-containers.excalidraw",
+      "source": "tasks/forma-northstar-demo/diagrams/02-containers.excalidraw",
+      "sha256": "dd87c31b07fd2abf73164b98bfd8d620c9a733252ef4b26db6f7a3c710b7f9cd",
+      "bytes": 87489
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/02-containers.svg",
+      "source": "tasks/forma-northstar-demo/diagrams/02-containers.svg",
+      "sha256": "87789dd9731ec3a3d290899b3504e37999ad92acc7f60c3a98a53327a737f845",
+      "bytes": 100031
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/03-flow-demo.diagram.json",
+      "source": "tasks/forma-northstar-demo/diagrams/03-flow-demo.diagram.json",
+      "sha256": "a381004d9262235aaf47e18afadf3d4dab848ae37f16edca9b627484049ddc36",
+      "bytes": 5634
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/03-flow-demo.excalidraw",
+      "source": "tasks/forma-northstar-demo/diagrams/03-flow-demo.excalidraw",
+      "sha256": "f35c811418ac6f9ec9b464cbe0e98e824aa1d881c88354ce7fd89e2691426e57",
+      "bytes": 80557
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/03-flow-demo.svg",
+      "source": "tasks/forma-northstar-demo/diagrams/03-flow-demo.svg",
+      "sha256": "bb931d4c08de08e11f6d1afaa7b1a20346fd0fe0fadb1553072ac376c7c7ac82",
+      "bytes": 100294
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/04-flow-operator.diagram.json",
+      "source": "tasks/forma-northstar-demo/diagrams/04-flow-operator.diagram.json",
+      "sha256": "708e39b26caf674df20a69393a6f07dbc101a60604dd13b83d3e449cd1f7312d",
+      "bytes": 4464
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/04-flow-operator.excalidraw",
+      "source": "tasks/forma-northstar-demo/diagrams/04-flow-operator.excalidraw",
+      "sha256": "bcc8e1dcf53d1b1355e59e3f485c04ada8d1ebf403de960fa8133f0c2f904493",
+      "bytes": 70115
+    },
+    {
+      "path": "design/forma-northstar-demo/diagrams/04-flow-operator.svg",
+      "source": "tasks/forma-northstar-demo/diagrams/04-flow-operator.svg",
+      "sha256": "2f856105ddcd051d94a0ac0659125b80f23baefe88a30ef6227fc314787412aa",
+      "bytes": 87656
+    },
+    {
+      "path": "design/forma-northstar-demo/input/README.md",
+      "source": "tasks/forma-northstar-demo/input/README.md",
+      "sha256": "24cf656091d1277bdcc054bb08529c582157ec579c7cbe0d2b2a7fd4549a4add",
+      "bytes": 401
+    },
+    {
+      "path": "design/forma-northstar-demo/input/brief.md",
+      "source": "tasks/forma-northstar-demo/input/brief.md",
+      "sha256": "af8bad48453440f488d923ba66eb3e7c9ba144e92bea57afbaaf6f093eb020d1",
+      "bytes": 808
+    },
+    {
+      "path": "design/forma-northstar-demo/input/constraints.md",
+      "source": "tasks/forma-northstar-demo/input/constraints.md",
+      "sha256": "582e2ae1b9a98db64391d5219e1c30f75d1dc65604402a2bf8b6ff7aadf68732",
+      "bytes": 846
+    },
+    {
+      "path": "design/forma-northstar-demo/input/context/forma-app-platform-product-definition.pdf",
+      "source": "tasks/forma-northstar-demo/input/context/forma-app-platform-product-definition.pdf",
+      "sha256": "b9ad17a9eed621328e77f33f9fcac55bd2c1c2cc385833fa6e9d4415a93c2b56",
+      "bytes": 392364
+    },
+    {
+      "path": "design/forma-northstar-demo/input/context/forma-platform-product-definition.pdf",
+      "source": "tasks/forma-northstar-demo/input/context/forma-platform-product-definition.pdf",
+      "sha256": "5a31715821eeefdb24423428157559bf490f3408c5d5aa4209d651505b163cc2",
+      "bytes": 377013
+    },
+    {
+      "path": "design/forma-northstar-demo/intake.md",
+      "source": "tasks/forma-northstar-demo/intake.md",
+      "sha256": "6a82bfd099cfbe87b3a95ef4df7c377f27fe27da16045ffecf53bc750ef9a840",
+      "bytes": 14106
+    },
+    {
+      "path": "design/forma-northstar-demo/notes.md",
+      "source": "tasks/forma-northstar-demo/notes.md",
+      "sha256": "a30480289ae471c23d92460f05bcc3a4f314c6b87bf4fb42f9d8494c048fbb3c",
+      "bytes": 41698
+    },
+    {
+      "path": "design/forma-northstar-demo/platform-contract-lock.json",
+      "source": "tasks/forma-northstar-demo/platform-contract-lock.json",
+      "sha256": "d267c1495bdf200434d621738868a9f5af78320cc750a79d0a4d6a5732f74953",
+      "bytes": 621
+    },
+    {
+      "path": "design/forma-northstar-demo/reception.md",
+      "source": "tasks/forma-northstar-demo/reception.md",
+      "sha256": "fc23dde98e0edecdc0f25de990f2bc824c6ff94d85b7b6da4a5e1c518127c1c9",
+      "bytes": 27275
+    },
+    {
+      "path": "design/forma-northstar-demo/review/foundation-review.md",
+      "source": "tasks/forma-northstar-demo/review/foundation-review.md",
+      "sha256": "b7367beab210157103ba1e2ff57de97e1dbe38070f66d565acaf129c06ca6aff",
+      "bytes": 3343
+    },
+    {
+      "path": "design/forma-northstar-demo/review/fresh-review.md",
+      "source": "tasks/forma-northstar-demo/review/fresh-review.md",
+      "sha256": "860737730041511e65af7091f5cdecbe26f300307b715e1e0fc07ce321c7dbbb",
+      "bytes": 27343
+    },
+    {
+      "path": "design/forma-northstar-demo/review/gate-dispositions.md",
+      "source": "tasks/forma-northstar-demo/review/gate-dispositions.md",
+      "sha256": "2ba26e025e41bc50b2e706ba1b0e93108835a74b562ad5c131ff07ff35a240a7",
+      "bytes": 6211
+    },
+    {
+      "path": "design/forma-northstar-demo/review/junior-reader-check.md",
+      "source": "tasks/forma-northstar-demo/review/junior-reader-check.md",
+      "sha256": "e1aa353360b27df0b47618cf46389c32188479adf0f5814ef084a53a2bf97bb1",
+      "bytes": 22141
+    },
+    {
+      "path": "design/forma-northstar-demo/review/reader-check-demo.md",
+      "source": "tasks/forma-northstar-demo/review/reader-check-demo.md",
+      "sha256": "816200e50e78edc5375c252f4abf76fbb50224d5850c86549f9b929c7b1cfb09",
+      "bytes": 27680
+    },
+    {
+      "path": "design/forma-northstar-demo/review/readiness.md",
+      "source": "tasks/forma-northstar-demo/review/readiness.md",
+      "sha256": "a165e02acfd94e76b6a9c5231c641aaeb8d36a7ed4e630c8e83888e915bc30cb",
+      "bytes": 1262
+    },
+    {
+      "path": "design/forma-northstar-demo/review/security-review.md",
+      "source": "tasks/forma-northstar-demo/review/security-review.md",
+      "sha256": "f6e7192441ebb49b21714f09c3071be7105ccfbaa8a1656380937794231484bc",
+      "bytes": 43044
+    },
+    {
+      "path": "design/forma-northstar-demo/xref.md",
+      "source": "tasks/forma-northstar-demo/xref.md",
+      "sha256": "06b32d94171f083f7dbb1cf05603820d376001aa5f9311c1c06c0b6937485baf",
+      "bytes": 13317
+    }
+  ]
+}

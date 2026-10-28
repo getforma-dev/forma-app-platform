@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "ceilings": {
+    "forma": 28100,
+    "page": 76800,
+    "canvas": 373760
+  },
+  "routes": [
+    {
+      "route": "/",
+      "class": "islands",
+      "canvas": false,
+      "files": [
+        {
+          "file": "home.e3e83114.js",
+          "raw": 85085,
+          "gzip": 28579,
+          "brotli": 25441,
+          "forma": {
+            "raw": 82391,
+            "gzip": 27674,
+            "brotli": 24635
+          }
+        }
+      ],
+      "raw": 85085,
+      "gzip": 28579,
+      "brotli": 25441,
+      "forma": {
+        "raw": 82391,
+        "gzip": 27674,
+        "brotli": 24635
+      },
+      "application": {
+        "raw": 2694,
+        "gzip": 905,
+        "brotli": 806
+      },
+      "worker": {
+        "raw": 3219,
+        "gzip": 1537,
+        "brotli": 1305
+      },
+      "javascript": {
+        "raw": 88304,
+        "gzip": 30116,
+        "brotli": 26746
+      },
+      "ceilings": {
+        "forma": 28100,
+        "javascript": 76800
+      },
+      "exceeded": [],
+      "over": false
+    },
+    {
+      "route": "/about",
+      "class": "no-interactive-region",
+      "canvas": false,
+      "files": [],
+      "raw": 0,
+      "gzip": 0,
+      "brotli": 0,
+      "forma": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "application": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "worker": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "javascript": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "ceilings": {
+        "forma": 0,
+        "javascript": 0
+      },
+      "exceeded": [],
+      "over": false
+    }
+  ],
+  "worker": {
+    "file": "sw.js",
+    "raw": 3219,
+    "gzip": 1537,
+    "brotli": 1305
+  }
+}

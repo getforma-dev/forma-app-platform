@@ -1,0 +1,273 @@
+{
+  "title": "Data flow 1: sources and an intent become a published app; import through the parser sandbox, composition through the provider, admission and publication through the control plane",
+  "arrows": "data flow in the direction the data moves; label = Fn payload [protocol, authentication; data class]",
+  "kind": "dfd",
+  "nodes": [
+    {
+      "id": "EE1",
+      "type": "entity",
+      "label": "Member's browser",
+      "desc": "Maya builds; Sarah reviews",
+      "icon": "generic/user",
+      "col": 0,
+      "row": 0
+    },
+    {
+      "id": "P8",
+      "type": "process",
+      "label": "Browser workspace",
+      "desc": "Forma 3.0.0 islands: canvas, source card, composer chat",
+      "icon": "generic/browser",
+      "col": 1.3,
+      "row": 0
+    },
+    {
+      "id": "P1",
+      "type": "process",
+      "label": "Edge",
+      "desc": "TLS, WAF, rate limits; caches nothing under /v1",
+      "icon": "aws/cloudfront",
+      "col": 1.3,
+      "row": 1.4
+    },
+    {
+      "id": "P2",
+      "type": "process",
+      "label": "Workspace server",
+      "desc": "The one authorization point; jobs, drafts, patches, previews, retrieval",
+      "icon": "aws/ecs",
+      "col": 2.6,
+      "row": 1.4
+    },
+    {
+      "id": "P3",
+      "type": "process",
+      "label": "Control plane",
+      "desc": "Admission, policy, the publication record, audit",
+      "icon": "aws/ecs",
+      "col": 3.9,
+      "row": 1.4
+    },
+    {
+      "id": "DS2",
+      "type": "store",
+      "label": "Object storage",
+      "desc": "S3, the organization's prefix, SSE-KMS: originals, Parquet revisions",
+      "icon": "aws/s3",
+      "col": 1.3,
+      "row": 2.8
+    },
+    {
+      "id": "DS1",
+      "type": "store",
+      "label": "PostgreSQL",
+      "desc": "Jobs, sources, drafts, previews, publications, audit; organization id in every key",
+      "icon": "aws/rds",
+      "col": 2.6,
+      "row": 2.8
+    },
+    {
+      "id": "DS6",
+      "type": "store",
+      "label": "Retrieval index",
+      "desc": "Index files per organization, derived; loaded by P2",
+      "icon": "generic/search",
+      "col": 3.9,
+      "row": 2.8
+    },
+    {
+      "id": "P6",
+      "type": "process",
+      "label": "Import parser",
+      "desc": "Sandboxed: bytes in, Parquet out; no system interface",
+      "icon": "generic/file-text",
+      "col": 1.3,
+      "row": 4.2
+    },
+    {
+      "id": "P5",
+      "type": "process",
+      "label": "Composer worker",
+      "desc": "Generation through the provider interface; whole-output validation",
+      "icon": "generic/workflow",
+      "col": 2.6,
+      "row": 4.2
+    },
+    {
+      "id": "P7",
+      "type": "process",
+      "label": "Index builder",
+      "desc": "Rebuilds the organization's index after a publication",
+      "icon": "generic/cog",
+      "col": 3.9,
+      "row": 4.2
+    },
+    {
+      "id": "EE4",
+      "type": "entity",
+      "label": "Model provider",
+      "desc": "Claude; sees schemas, catalog metadata, synthetic rows",
+      "icon": "generic/cpu",
+      "col": 0,
+      "row": 4.2
+    }
+  ],
+  "edges": [
+    {
+      "from": "EE1",
+      "to": "P8",
+      "label": "F1 files, mappings, intent, patches, approval [keyboard, file picker; Confidential]"
+    },
+    {
+      "from": "P8",
+      "to": "P1",
+      "label": "F2 pages and /v1 calls: upload, jobs, drafts, patches, preview, approve [HTTPS, session; Confidential]"
+    },
+    {
+      "from": "P1",
+      "to": "P2",
+      "label": "F3 the same, forwarded with a request id [HTTP in the VPC, session cookie; Confidential]"
+    },
+    {
+      "from": "P2",
+      "to": "DS2",
+      "label": "F4 the original, streamed under the organization's prefix [HTTPS, SigV4, SSE-KMS; Confidential]"
+    },
+    {
+      "from": "P2",
+      "to": "DS1",
+      "label": "F5 import and generation jobs, drafts, patch revisions, preview records [TLS, role workspace; Confidential]"
+    },
+    {
+      "from": "DS1",
+      "to": "P6",
+      "label": "F6 claimed import job: source id, limits, format [TLS, role worker, via the worker; Internal]"
+    },
+    {
+      "from": "DS2",
+      "to": "P6",
+      "label": "F7 original bytes, piped in by the host [HTTPS, SigV4, SSE-KMS; Confidential]"
+    },
+    {
+      "from": "P6",
+      "to": "DS2",
+      "label": "F8 Parquet revision, piped out, written by the host [HTTPS, SigV4, SSE-KMS; Confidential]"
+    },
+    {
+      "from": "P6",
+      "to": "DS1",
+      "label": "F9 job done or refused: schema, counts, suggested mappings, reason [TLS, role worker; Internal]"
+    },
+    {
+      "from": "DS6",
+      "to": "P2",
+      "label": "F10 nearest catalog entries and curated examples [in process; Internal]"
+    },
+    {
+      "from": "DS1",
+      "to": "P5",
+      "label": "F11 claimed generation job: intent, retrieval labels, authorized schemas [TLS, role worker; Confidential]"
+    },
+    {
+      "from": "P5",
+      "to": "EE4",
+      "label": "F12 intent, schemas, catalog metadata, synthetic rows, no evidence [HTTPS, API key; Confidential]"
+    },
+    {
+      "from": "EE4",
+      "to": "P5",
+      "label": "F13 proposed AppDefinition, untrusted until admitted [HTTPS, API key; Internal]"
+    },
+    {
+      "from": "P5",
+      "to": "DS1",
+      "label": "F14 draft revision with its labels, or failed after two attempts [TLS, role worker; Internal]"
+    },
+    {
+      "from": "P2",
+      "to": "P3",
+      "label": "F15 admit a draft digest, submit, approve a digest, publish [HTTP, service token; Internal]"
+    },
+    {
+      "from": "P3",
+      "to": "DS1",
+      "label": "F16 admission result, policy read, publication record, audit event [TLS, role control; Internal]"
+    },
+    {
+      "from": "P3",
+      "to": "P2",
+      "label": "F17 admission report, publication id and digest, or the refusing rule [HTTP, service token; Internal]"
+    },
+    {
+      "from": "P2",
+      "to": "P1",
+      "label": "F18 pages, job state, preview props, diffs, inbox [HTTPS, session; Confidential]"
+    },
+    {
+      "from": "P1",
+      "to": "P8",
+      "label": "F19 the same, no-store [HTTPS, session; Confidential]"
+    },
+    {
+      "from": "DS1",
+      "to": "P7",
+      "label": "F20 publication event: the organization's catalog [TLS, role worker; Internal]"
+    },
+    {
+      "from": "P7",
+      "to": "DS6",
+      "label": "F21 index files rebuilt for the organization [HTTPS, SigV4, SSE-KMS; Confidential]"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "B1",
+      "label": "The Internet: members' browsers",
+      "style": "trust",
+      "contains": [
+        "EE1",
+        "P8"
+      ]
+    },
+    {
+      "id": "B6",
+      "label": "Parser sandbox: WebAssembly, no system interface",
+      "style": "trust",
+      "contains": [
+        "P6"
+      ]
+    },
+    {
+      "id": "B5",
+      "label": "Workers: the only egress to the model provider",
+      "style": "trust",
+      "contains": [
+        "B6",
+        "P5",
+        "P7"
+      ]
+    },
+    {
+      "id": "B3",
+      "label": "Control plane: the only writer of publications",
+      "style": "trust",
+      "contains": [
+        "P3"
+      ]
+    },
+    {
+      "id": "B2",
+      "label": "The VPC: the edge, the workspace server and the stores",
+      "style": "trust",
+      "contains": [
+        "P1",
+        "P2",
+        "DS2",
+        "DS1",
+        "DS6",
+        "B3",
+        "B5"
+      ]
+    }
+  ]
+}

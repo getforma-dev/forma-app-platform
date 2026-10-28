@@ -1,0 +1,44 @@
+--- admin/src/home/app.tsx	2026-10-22 19:29:19
++++ /private/tmp/claude-501/-Users-victorvillacis-dev-design-doc-factory/99f648cd-7c18-4db8-a60b-09bab6fbf794/scratchpad/spike/variant/admin/src/home/app.tsx	2026-10-22 19:29:48
+@@ -4,7 +4,7 @@
+ // Every value is data; the component library is the trusted renderer.
+ type Cell = { id: string; text: string };
+ type Row = { id: string; cells: Cell[] };
+-type Bar = { id: string; x: string; height: string; label: string };
++type Bar = { id: string; x: number; height: number; label: string };
+ type Choice = { id: string; label: string };
+ type Field = { id: string; label: string; isText: boolean; isEnum: boolean; choices: Choice[] };
+ type Item = { id: string; label: string; value: string };
+@@ -31,28 +31,28 @@
+       {createList(() => props.cards, card => card.id, card => (
+         <section class="card" data-kind={card.kind} style={card.style} aria-label={card.title}>
+           <h2>{card.title}</h2>
+-          {createShow(() => card.isSummary, () => (
++          {createShow(() => card.kind === 'summary', () => (
+             <dl class="summary">
+               {createList(() => card.items, i => i.id, i => (
+                 <div class="kv"><dt>{i.label}</dt><dd>{i.value}</dd></div>
+               ))}
+             </dl>
+           ))}
+-          {createShow(() => card.isTable, () => (
++          {createShow(() => card.kind === 'table', () => (
+             <table class="grid"><tbody>
+               {createList(() => card.rows, r => r.id, r => (
+                 <tr>{createList(() => r.cells, c => c.id, c => <td>{c.text}</td>)}</tr>
+               ))}
+             </tbody></table>
+           ))}
+-          {createShow(() => card.isTimeline, () => (
++          {createShow(() => card.kind === 'timeline', () => (
+             <svg viewBox="0 0 600 120" role="img" aria-label={card.title}>
+               {createList(() => card.bars, b => b.id, b => (
+                 <rect x={b.x} y="0" width="8" height={b.height}><title>{b.label}</title></rect>
+               ))}
+             </svg>
+           ))}
+-          {createShow(() => card.isForm, () => (
++          {createShow(() => card.kind === 'form', () => (
+             <form method="post" action="/commands">
+               {createList(() => card.fields, f => f.id, f => (
+                 <div class="field">

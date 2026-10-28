@@ -1,0 +1,171 @@
+{
+  "date": "2026-10-22",
+  "scope": "Final two-task preparation snapshot; this manifest excludes its own digest",
+  "files": [
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/ALIGNMENT.md",
+      "bytes": 10292,
+      "sha256": "5cacb81fe7b39e593d24f94f241c162b4f4a811fb87f315e7671d3d592dc800a"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/PRODUCT-BRIEF.md",
+      "bytes": 10631,
+      "sha256": "444aada3ed2c6c89a028f99596c4967c54c4007f7158f00169c56c307cf8c51f"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/README.md",
+      "bytes": 2712,
+      "sha256": "f486b3bbeb3c69e9ad38d15ef2862ca6cc750dd5c1a468a0565da7c8236c3850"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/SHARED-CONTRACTS.md",
+      "bytes": 18061,
+      "sha256": "f209ccb05aa895080c6fd424fe979d65f276959536ee7d57b371428e1d049fd5"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/SOURCES.md",
+      "bytes": 10749,
+      "sha256": "5249150220ade2c4e2792b70d62f52c7fb62b0b2c4384adadf152adcefa89548"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/STATUS.md",
+      "bytes": 3314,
+      "sha256": "04689a40a67d77f540c2b44780228d9feb5689945629d1ef81e2bc2fd502eaad"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/VALIDATION.md",
+      "bytes": 10621,
+      "sha256": "db78a82ae9c5e05767b715fd81de088abf666f30a4b95a3c752a079cd3a27016"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/design.md",
+      "bytes": 11213,
+      "sha256": "892a18b2a50ae634add067df29093a8abdd1ea01eee2dc67f35471e5b9ed1a5f"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/input/README.md",
+      "bytes": 401,
+      "sha256": "24cf656091d1277bdcc054bb08529c582157ec579c7cbe0d2b2a7fd4549a4add"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/input/brief.md",
+      "bytes": 808,
+      "sha256": "af8bad48453440f488d923ba66eb3e7c9ba144e92bea57afbaaf6f093eb020d1"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/input/constraints.md",
+      "bytes": 846,
+      "sha256": "582e2ae1b9a98db64391d5219e1c30f75d1dc65604402a2bf8b6ff7aadf68732"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/input/context/forma-app-platform-product-definition.pdf",
+      "bytes": 392364,
+      "sha256": "b9ad17a9eed621328e77f33f9fcac55bd2c1c2cc385833fa6e9d4415a93c2b56"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/input/context/forma-platform-product-definition.pdf",
+      "bytes": 377013,
+      "sha256": "5a31715821eeefdb24423428157559bf490f3408c5d5aa4209d651505b163cc2"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/intake.md",
+      "bytes": 9989,
+      "sha256": "3b80ee6df351b15eea2b6ea4e8e46eb6080d655bced563db5ff2bb725b62dcf1"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/review/paired-review.md",
+      "bytes": 4505,
+      "sha256": "35350b49b80dbfbe91a66883c6179ecd1e8a266155722e0b1fb1c368872dbaa2"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/review/preparation-checks.json",
+      "bytes": 3024,
+      "sha256": "324a97277926e95904f6d9deb25019067dc79534a7e613fe7d150083b4fc0ccf"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/review/readiness.md",
+      "bytes": 4909,
+      "sha256": "216c6d7889c6e2460682a910c0ebb6c8baeb523d6d9196ceadda4f2ee67e251c"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/review/source-audit-findings.md",
+      "bytes": 3065,
+      "sha256": "dd730a6c2734136016d053ba34a0a97817fee4ea44552d95565237b74c4ba733"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-generative-app-platform-v2/review/source-manifest.json",
+      "bytes": 48758,
+      "sha256": "75613f45f77e9e46c448b9b79033ddbe80aed82549f7deb9196197661f6e386f"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/BUILD-HANDOFF.md",
+      "bytes": 7739,
+      "sha256": "c6530cc7ebc581147d14d43c14a7971669852e74207f4823e7dd06a04cbbad99"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/PRODUCT-BRIEF.md",
+      "bytes": 8160,
+      "sha256": "b2a31a0e52410389aa24b3bbb1f2da7a7aa65a22d75f3479012a5e0045e32e59"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/README.md",
+      "bytes": 2686,
+      "sha256": "29a8de449e1a15e59a65cc49d3a8a9c3415b7829c2428ae7e346bed411a7de38"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/SCENARIOS.md",
+      "bytes": 13369,
+      "sha256": "0adc2d6a83df03f555dcf52258a768039d0e59592ed56d12335e82f8123cbab1"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/STATUS.md",
+      "bytes": 3586,
+      "sha256": "87bba87d31c9e489f696a37f7b1579a4a3bdbae74eee5c7833a1c923ea42f205"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/design.md",
+      "bytes": 11213,
+      "sha256": "892a18b2a50ae634add067df29093a8abdd1ea01eee2dc67f35471e5b9ed1a5f"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/input/README.md",
+      "bytes": 401,
+      "sha256": "24cf656091d1277bdcc054bb08529c582157ec579c7cbe0d2b2a7fd4549a4add"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/input/brief.md",
+      "bytes": 808,
+      "sha256": "af8bad48453440f488d923ba66eb3e7c9ba144e92bea57afbaaf6f093eb020d1"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/input/constraints.md",
+      "bytes": 846,
+      "sha256": "582e2ae1b9a98db64391d5219e1c30f75d1dc65604402a2bf8b6ff7aadf68732"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/input/context/forma-app-platform-product-definition.pdf",
+      "bytes": 392364,
+      "sha256": "b9ad17a9eed621328e77f33f9fcac55bd2c1c2cc385833fa6e9d4415a93c2b56"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/input/context/forma-platform-product-definition.pdf",
+      "bytes": 377013,
+      "sha256": "5a31715821eeefdb24423428157559bf490f3408c5d5aa4209d651505b163cc2"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/intake.md",
+      "bytes": 10249,
+      "sha256": "2b972e7e11662efa868eea8f9be3fc4f3e3334a259c515ce0e36606c7fed6db9"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/platform-contract-lock.json",
+      "bytes": 621,
+      "sha256": "d267c1495bdf200434d621738868a9f5af78320cc750a79d0a4d6a5732f74953"
+    },
+    {
+      "path": "/Users/victorvillacis/dev/design-doc-factory/tasks/forma-northstar-demo/review/readiness.md",
+      "bytes": 1262,
+      "sha256": "a165e02acfd94e76b6a9c5231c641aaeb8d36a7ed4e630c8e83888e915bc30cb"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "snapshot_date": "2026-10-28",
+  "timezone": "America/New_York",
+  "purpose": "Post-assignment handoff snapshot; original local Forma board remains authoritative.",
+  "tickets": [
+    {
+      "ticket": "FORMA-232",
+      "source_path": "/Users/victorvillacis/dev/Forma/Tickets/0-backlog/FORMA-232.md",
+      "snapshot_path": "FORMA-232.md",
+      "status": "Backlog",
+      "assignee": "FormaStack team",
+      "team": "FormaStack",
+      "blocks_team": "GenUI",
+      "blocks_app": "APP-003",
+      "sha256": "4ffb36250673526f90879b42916a18906df956ab8733772975f36538771d8c9e"
+    },
+    {
+      "ticket": "FORMA-246",
+      "source_path": "/Users/victorvillacis/dev/Forma/Tickets/0-backlog/FORMA-246.md",
+      "snapshot_path": "FORMA-246.md",
+      "status": "Backlog",
+      "assignee": "FormaStack team",
+      "team": "FormaStack",
+      "blocks_team": "GenUI",
+      "blocks_app": "APP-003",
+      "sha256": "73b5934e4291589bae5c769f187855523f86b4351645245d441c82120bb6e469"
+    },
+    {
+      "ticket": "FORMA-247",
+      "source_path": "/Users/victorvillacis/dev/Forma/Tickets/0-backlog/FORMA-247.md",
+      "snapshot_path": "FORMA-247.md",
+      "status": "Backlog",
+      "assignee": "FormaStack team",
+      "team": "FormaStack",
+      "blocks_team": "GenUI",
+      "blocks_app": "APP-006",
+      "sha256": "b6f7295f8c5279c9e3ae3bfe70b2817c23c8d19a9a29599aa508da0a08ad7a7a"
+    },
+    {
+      "ticket": "FORMA-248",
+      "source_path": "/Users/victorvillacis/dev/Forma/Tickets/0-backlog/FORMA-248.md",
+      "snapshot_path": "FORMA-248.md",
+      "status": "Backlog",
+      "assignee": "FormaStack team",
+      "team": "FormaStack",
+      "blocks_team": "GenUI",
+      "blocks_app": "APP-058",
+      "sha256": "6514190a8281c92304d25d19f61e9f03bcecf5a9e385764ffdc427e801036055"
+    }
+  ]
+}

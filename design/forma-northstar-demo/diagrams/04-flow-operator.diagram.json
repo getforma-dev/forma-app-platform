@@ -1,0 +1,149 @@
+{
+  "title": "Data flow: the operator's flows; provisioning through fAuth and the administration group, the fixture states, the reset under the rehearsal flag, and the packet's reads, from the operator's machine into the host",
+  "arrows": "data flow in the direction the data moves; label = Fn payload [protocol, authentication; data class]",
+  "kind": "dfd",
+  "nodes": [
+    {
+      "id": "EE2",
+      "type": "entity",
+      "label": "Operator's shell",
+      "desc": "The operator at the keyboard: runs P9 and P10 with AS12's keys and the take id",
+      "icon": "generic/terminal",
+      "col": 0,
+      "row": 0
+    },
+    {
+      "id": "P9",
+      "type": "process",
+      "label": "Provisioning script",
+      "desc": "Tenants, users, spaces, memberships, policy, the operator role; captures s0 and s2 to s5; idempotent",
+      "icon": "generic/cog",
+      "col": 1.2,
+      "row": 0
+    },
+    {
+      "id": "EE3",
+      "type": "entity",
+      "label": "fAuth",
+      "desc": "Identity service at b750ca53: tenants, users, config; no client API",
+      "icon": "generic/key",
+      "col": 2.6,
+      "row": 0
+    },
+    {
+      "id": "P10",
+      "type": "process",
+      "label": "Evidence recorder",
+      "desc": "Assembles the packet from the sanitised export and the operator views; anchors its manifest digest",
+      "icon": "generic/file-text",
+      "col": 0,
+      "row": 1.4
+    },
+    {
+      "id": "P2",
+      "type": "process",
+      "label": "Workspace server",
+      "desc": "Role workspace: the administration group and the operator views; registers the reset route only under flag and role",
+      "icon": "aws/ecs",
+      "col": 2.6,
+      "row": 1.4
+    },
+    {
+      "id": "P11",
+      "type": "process",
+      "label": "Reset",
+      "desc": "Role reset, a job under the rehearsal flag: restores a digest-matched state between takes",
+      "icon": "generic/clock",
+      "col": 3.8,
+      "row": 1.4
+    },
+    {
+      "id": "DS2",
+      "type": "store",
+      "label": "Object storage",
+      "desc": "The operator prefix: fixture states and manifests; both organizations' objects",
+      "icon": "aws/s3",
+      "col": 2.6,
+      "row": 2.8
+    },
+    {
+      "id": "DS1",
+      "type": "store",
+      "label": "PostgreSQL",
+      "desc": "Both organizations' rows; sessions and audit kept through a reset",
+      "icon": "aws/rds",
+      "col": 3.8,
+      "row": 2.8
+    }
+  ],
+  "edges": [
+    {
+      "from": "EE2",
+      "to": "P9",
+      "label": "runs it: the take id, the manifest, the keys read from the keychain [local shell; Restricted]"
+    },
+    {
+      "from": "EE2",
+      "to": "P10",
+      "label": "runs it after the take: the sanitised export [local shell; Confidential]"
+    },
+    {
+      "from": "P9",
+      "to": "EE3",
+      "label": "F14 create tenants, set config, create users [HTTPS, bearer platform and management keys; Restricted]"
+    },
+    {
+      "from": "P9",
+      "to": "P2",
+      "label": "F15 spaces, aliases, memberships, policy, the operator role; the reset request [HTTPS, the operator's session, just in time; Internal]"
+    },
+    {
+      "from": "P9",
+      "to": "DS2",
+      "label": "F16 fixture states s0, s2 to s5 and their manifests, under the operator prefix [HTTPS, SigV4; Confidential]"
+    },
+    {
+      "from": "P2",
+      "to": "P11",
+      "label": "F17 the reset job: state name and digest, under the flag [in process, the operator's principal; Internal]"
+    },
+    {
+      "from": "P11",
+      "to": "DS1",
+      "label": "F18 delete past the state's sequence, insert its rows, bump the epoch; audit and sessions kept [TLS, role reset; Confidential]"
+    },
+    {
+      "from": "P11",
+      "to": "DS2",
+      "label": "F19 read the manifest, restore the object listing [HTTPS, SigV4 under the task role; Confidential]"
+    },
+    {
+      "from": "P2",
+      "to": "P10",
+      "label": "F13 the operator views: audit events, job states, build digest [HTTPS, operator session, just in time; Internal]"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "B9",
+      "label": "The operator's machine: the shell, the keychain, the scripts",
+      "style": "trust",
+      "contains": [
+        "EE2",
+        "P9",
+        "P10"
+      ]
+    },
+    {
+      "id": "B2",
+      "label": "The host's network: the one process, PostgreSQL, object storage",
+      "style": "trust",
+      "contains": [
+        "P2",
+        "P11",
+        "DS1",
+        "DS2"
+      ]
+    }
+  ]
+}

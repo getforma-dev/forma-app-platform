@@ -1,0 +1,47 @@
+Running 44 tests using 1 worker
+[1/44] e2e/console.spec.ts:18:1 › unauthenticated user redirects to /platform/login @smoke @regression
+[2/44] e2e/console.spec.ts:27:1 › authenticated: console loads with account shell and workspaces view @smoke @regression
+[3/44] e2e/console.spec.ts:39:1 › authenticated: no console errors @smoke @regression
+[4/44] e2e/console.spec.ts:45:1 › authenticated: + New Application opens the wizard create step with required fields @smoke @regression
+[5/44] e2e/console.spec.ts:59:1 › authenticated: wizard create step slug preview updates from the form fields @smoke @regression
+[6/44] e2e/console.spec.ts:80:1 › authenticated: sign out redirects to login @smoke @regression
+[7/44] e2e/console.spec.ts:94:1 › authenticated: no layout overflow @smoke @regression
+[8/44] e2e/login.spec.ts:19:1 › login page serves the boot shell with JS disabled @smoke @regression
+[9/44] e2e/login.spec.ts:40:1 › password field is masked once the login UI hydrates @smoke @regression
+[10/44] e2e/login.spec.ts:48:1 › login: no console errors after hydration @smoke @regression
+[11/44] e2e/login.spec.ts:54:1 › login: no FormaJS warnings for registered islands @smoke @regression
+[12/44] e2e/login.spec.ts:69:1 › login: email input accepts typing @smoke @regression
+[13/44] e2e/login.spec.ts:78:1 › login: password toggle switches between password and text @smoke @regression
+[14/44] e2e/login.spec.ts:97:1 › login: submit empty form shows error message @smoke @regression
+[15/44] e2e/login.spec.ts:111:1 › "New here?" link navigates to /platform/onboarding @smoke @regression
+[16/44] e2e/login.spec.ts:124:1 › login: no layout overflow @smoke @regression
+[17/44] e2e/login.spec.ts:129:1 › login: no DOM doubling after hydration @smoke @regression
+[18/44] e2e/navigation.spec.ts:14:1 › tenant dashboard redirects to tenant login when unauthenticated @smoke @regression
+[19/44] e2e/navigation.spec.ts:20:1 › tenant admin redirects to tenant login when unauthenticated @smoke @regression
+[20/44] e2e/navigation.spec.ts:28:1 › authenticated: can navigate from console to login and back @smoke @regression
+[21/44] e2e/onboarding.spec.ts:19:1 › onboarding page serves the boot shell with JS disabled @smoke @regression
+[22/44] e2e/onboarding.spec.ts:40:1 › password fields stay masked after the onboarding UI hydrates @smoke @regression
+[23/44] e2e/onboarding.spec.ts:52:1 › onboarding: no console errors after hydration @smoke @regression
+[24/44] e2e/smoke.spec.ts:27:3 › benchmark: loads without console errors @smoke @regression
+[25/44] e2e/smoke.spec.ts:27:3 › platform-login: loads without console errors @smoke @regression
+[26/44] e2e/smoke.spec.ts:27:3 › onboarding: loads without console errors @smoke @regression
+[27/44] e2e/smoke.spec.ts:27:3 › tenant-login: loads without console errors @smoke @regression
+[28/44] e2e/smoke.spec.ts:36:3 › benchmark: serves the boot shell without JS @smoke @regression
+[29/44] e2e/smoke.spec.ts:36:3 › platform-login: serves the boot shell without JS @smoke @regression
+[30/44] e2e/smoke.spec.ts:36:3 › onboarding: serves the boot shell without JS @smoke @regression
+[31/44] e2e/smoke.spec.ts:36:3 › tenant-login: serves the boot shell without JS @smoke @regression
+[32/44] e2e/smoke.spec.ts:58:3 › benchmark: no hydration warnings @smoke @regression
+[33/44] e2e/smoke.spec.ts:58:3 › platform-login: no hydration warnings @smoke @regression
+[34/44] e2e/smoke.spec.ts:58:3 › onboarding: no hydration warnings @smoke @regression
+[35/44] e2e/smoke.spec.ts:58:3 › tenant-login: no hydration warnings @smoke @regression
+[36/44] e2e/smoke.spec.ts:67:3 › benchmark: no layout overflow @smoke @regression
+[37/44] e2e/smoke.spec.ts:67:3 › platform-login: no layout overflow @smoke @regression
+[38/44] e2e/smoke.spec.ts:67:3 › onboarding: no layout overflow @smoke @regression
+[39/44] e2e/smoke.spec.ts:67:3 › tenant-login: no layout overflow @smoke @regression
+[40/44] e2e/smoke.spec.ts:75:3 › console: redirects to login when unauthenticated @smoke @regression
+[41/44] e2e/smoke.spec.ts:75:3 › owner-dashboard: redirects to login when unauthenticated @smoke @regression
+[42/44] e2e/smoke.spec.ts:83:1 › debug build does not register a service worker @smoke @regression
+[43/44] e2e/tenant-login.spec.ts:26:1 › tenant login renders login form after JS loads @smoke @regression
+[44/44] e2e/tenant-login.spec.ts:43:1 › tenant login: no console errors @smoke @regression
+  44 passed (30.2s)
+exit: 0

@@ -1,0 +1,49 @@
+{
+  "snapshot_date": "2026-10-28",
+  "timezone": "America/New_York",
+  "authority": "Original local Forma work board; these are immutable historical reference copies, not active tickets.",
+  "tickets": [
+    {
+      "ticket": "FORMA-232",
+      "status_at_copy": "Backlog",
+      "source_path": "/Users/victorvillacis/dev/Forma/Tickets/0-backlog/FORMA-232.md",
+      "snapshot_path": "FORMA-232.md",
+      "sha256": "1716f9137e455d2a880f7b0109673df5bd483397183448d1e16dd359ec1863a8"
+    },
+    {
+      "ticket": "FORMA-246",
+      "status_at_copy": "Backlog",
+      "source_path": "/Users/victorvillacis/dev/Forma/Tickets/0-backlog/FORMA-246.md",
+      "snapshot_path": "FORMA-246.md",
+      "sha256": "a2b1ca412d863f1c6099fc23ec58f4638b1aa7097cefd439e39f7dcc5caae5cb"
+    },
+    {
+      "ticket": "FORMA-247",
+      "status_at_copy": "Backlog",
+      "source_path": "/Users/victorvillacis/dev/Forma/Tickets/0-backlog/FORMA-247.md",
+      "snapshot_path": "FORMA-247.md",
+      "sha256": "d9b2780cd1e307c6e5400a38df6b93c92ff1b018b85abecead96a0df93d74f2f"
+    },
+    {
+      "ticket": "FORMA-248",
+      "status_at_copy": "Backlog",
+      "source_path": "/Users/victorvillacis/dev/Forma/Tickets/0-backlog/FORMA-248.md",
+      "snapshot_path": "FORMA-248.md",
+      "sha256": "dacb76bd490b51ac3297f81b99720e2ce65ddde2357008fa052676df002b48ea"
+    },
+    {
+      "ticket": "FORMA-294",
+      "status_at_copy": "Done",
+      "source_path": "/Users/victorvillacis/dev/Forma/Tickets/4-done/FORMA-294.md",
+      "snapshot_path": "FORMA-294.md",
+      "sha256": "d3a23ddd7d6c079a49a9f1c186d3ab8c5e900f9b54976428553178abb4fae584"
+    },
+    {
+      "ticket": "FORMA-301",
+      "status_at_copy": "Done",
+      "source_path": "/Users/victorvillacis/dev/Forma/Tickets/4-done/FORMA-301.md",
+      "snapshot_path": "FORMA-301.md",
+      "sha256": "b036b38cff4923b0a82f55b28f115868391e8282558d85b65c91c7f5a91d2fe3"
+    }
+  ]
+}

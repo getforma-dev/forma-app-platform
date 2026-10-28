@@ -1,0 +1,148 @@
+{
+  "title": "System context: the Northstar demo as one box, the people who use it at their entry points, the canary organization, and the systems it calls",
+  "arrows": "synchronous calls; protocol and authentication in brackets",
+  "kind": "c4",
+  "nodes": [
+    {
+      "id": "maya",
+      "type": "person",
+      "label": "Maya (builder)",
+      "desc": "Imports the fixtures, forms both apps, saves her case",
+      "icon": "generic/user",
+      "col": 0.0,
+      "row": 0
+    },
+    {
+      "id": "sarah",
+      "type": "person",
+      "label": "Sarah (reviewer)",
+      "desc": "Approves the exact draft Maya submitted; an author's own approval is refused",
+      "icon": "generic/shield",
+      "col": 1.15,
+      "row": 0
+    },
+    {
+      "id": "jordan",
+      "type": "person",
+      "label": "Jordan (colleague)",
+      "desc": "Reopens the shared case, starts his own work; revoked",
+      "icon": "generic/users",
+      "col": 2.3,
+      "row": 0
+    },
+    {
+      "id": "operator",
+      "type": "person",
+      "label": "The operator",
+      "desc": "Provisions, resets, files the packet; reads synthetic data only",
+      "icon": "generic/cog",
+      "col": 3.45,
+      "row": 0
+    },
+    {
+      "id": "demo",
+      "type": "system",
+      "label": "The Northstar demo",
+      "tech": "The platform's binary as one process on one host; Forma 3.0.0; PostgreSQL and S3",
+      "desc": "Two organizations, Security and Finance spaces, two apps, saved work, records, fixtures as sources",
+      "icon": "generic/layers",
+      "col": 1.65,
+      "row": 1.7
+    },
+    {
+      "id": "canary",
+      "type": "person",
+      "label": "The canary",
+      "desc": "A member of the second organization; replays every call with Northstar's identifiers",
+      "icon": "generic/lock",
+      "col": 3.45,
+      "row": 1.7
+    },
+    {
+      "id": "fauth",
+      "type": "external",
+      "label": "fAuth",
+      "tech": "Identity service at b750ca53, the northstar tenant",
+      "desc": "Hosted sign-in, the platform a registered client; EdDSA tokens verified offline",
+      "icon": "generic/key",
+      "col": 0.4,
+      "row": 3.1
+    },
+    {
+      "id": "model",
+      "type": "external",
+      "label": "Model provider",
+      "tech": "Claude through the platform's provider interface",
+      "desc": "Proposes app definitions from schemas and synthetic rows; absent when the labeled fixture runs",
+      "icon": "generic/cpu",
+      "col": 2.9,
+      "row": 3.1
+    }
+  ],
+  "edges": [
+    {
+      "from": "maya",
+      "to": "demo",
+      "label": "import, form, patch, run, save [HTTPS, session]"
+    },
+    {
+      "from": "sarah",
+      "to": "demo",
+      "label": "review and approve [HTTPS, session]"
+    },
+    {
+      "from": "jordan",
+      "to": "demo",
+      "label": "reopen, start new work, export [HTTPS, session]"
+    },
+    {
+      "from": "operator",
+      "to": "demo",
+      "label": "provision, reset, collect the packet [HTTPS, the operator's session]"
+    },
+    {
+      "from": "canary",
+      "to": "demo",
+      "label": "replay Northstar's ids: 404 before data, audited [HTTPS, its own session]"
+    },
+    {
+      "from": "demo",
+      "to": "fauth",
+      "label": "redirect sign-in; read the key set [HTTPS]"
+    },
+    {
+      "from": "demo",
+      "to": "model",
+      "label": "send schemas and synthetic rows, receive proposals [HTTPS, API key]"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "B1",
+      "label": "Northstar's people and the operator, in Chrome",
+      "style": "group",
+      "contains": [
+        "maya",
+        "sarah",
+        "jordan",
+        "operator"
+      ]
+    },
+    {
+      "id": "B2",
+      "label": "The demo: one host, one region",
+      "style": "trust",
+      "contains": [
+        "demo"
+      ]
+    },
+    {
+      "id": "B10",
+      "label": "The canary's organization",
+      "style": "group",
+      "contains": [
+        "canary"
+      ]
+    }
+  ]
+}

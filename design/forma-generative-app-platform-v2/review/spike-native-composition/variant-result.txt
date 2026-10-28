@@ -1,0 +1,4 @@
+Warning: BUILD-809 no Cargo.lock found from /private/tmp/claude-501/-Users-victorvillacis-dev-design-doc-factory/99f648cd-7c18-4db8-a60b-09bab6fbf794/scratchpad/spike/variant/admin; forma-server compatibility cannot be checked until startup
+   IR: BUILD-610 BUILD-610 src/home/app.tsx:34:29: computed declared values remain outside the native subset
+   IR: BUILD-610 BUILD-610 src/home/app.tsx:34:29: computed declared values remain outside the native subset
+src/home/app.tsx:34:29  BUILD-610  BUILD-610 src/home/app.tsx:34:29: computed declared values remain outside the native subset

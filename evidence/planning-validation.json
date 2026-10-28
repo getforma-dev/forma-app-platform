@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-28",
+  "scope": "planning tooling only; no app runtime tests",
+  "checks": [
+    "clean copied workspace check",
+    "status move regenerates stale index paths and sprint state",
+    "premature dependent selection refused",
+    "uncleared FormaStack gate cannot be bypassed by moving a ticket",
+    "stale generated view detected and repaired"
+  ],
+  "result": "passed"
+}

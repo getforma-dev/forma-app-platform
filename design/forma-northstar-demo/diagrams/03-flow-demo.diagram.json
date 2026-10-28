@@ -1,0 +1,185 @@
+{
+  "title": "Data flow: act 6's record command on the demo's one process and the return to Security; the duplicate retry, the stale edit, the late Finance response and the canary's replay take the same arrows; the evidence recorder reads what they returned",
+  "arrows": "data flow in the direction the data moves; label = Fn payload [protocol, authentication; data class]",
+  "kind": "dfd",
+  "nodes": [
+    {
+      "id": "EE1",
+      "type": "entity",
+      "label": "Member's browser",
+      "desc": "Maya decides in Finance, returns to Security; the canary's member replays",
+      "icon": "generic/user",
+      "col": 0,
+      "row": 0
+    },
+    {
+      "id": "P8",
+      "type": "process",
+      "label": "Browser workspace",
+      "desc": "The decision form; mints the Idempotency-Key; retries by key; drops a late epoch",
+      "icon": "generic/browser",
+      "col": 1,
+      "row": 0
+    },
+    {
+      "id": "P1",
+      "type": "process",
+      "label": "Host's edge",
+      "desc": "The load balancer: ends TLS, caches nothing; no CDN, no WAF (reduced)",
+      "icon": "aws/elb",
+      "col": 2,
+      "row": 0
+    },
+    {
+      "id": "P2",
+      "type": "process",
+      "label": "Workspace server",
+      "desc": "Role workspace: session, epoch, record write on this work, the pinned publication's record schema; scopes every id to the session's organization",
+      "icon": "aws/ecs",
+      "col": 3.5,
+      "row": 0
+    },
+    {
+      "id": "DS4",
+      "type": "store",
+      "label": "Session store",
+      "desc": "Session and membership epoch, rows in PostgreSQL",
+      "icon": "generic/lock",
+      "col": 2.2,
+      "row": 2.6
+    },
+    {
+      "id": "P4",
+      "type": "process",
+      "label": "Data service",
+      "desc": "Role data, in process: one transaction for outcome, version, epoch, record, audit",
+      "icon": "generic/table",
+      "col": 3.5,
+      "row": 1.5
+    },
+    {
+      "id": "DS1",
+      "type": "store",
+      "label": "PostgreSQL",
+      "desc": "One instance: records, outcomes, membership, saved work, audit",
+      "icon": "aws/rds",
+      "col": 5,
+      "row": 1.5
+    },
+    {
+      "id": "P10",
+      "type": "process",
+      "label": "Evidence recorder",
+      "desc": "The operator's script, on the operator's machine: assembles S07's packet after the take",
+      "icon": "generic/file-text",
+      "col": 0.5,
+      "row": 3
+    }
+  ],
+  "edges": [
+    {
+      "from": "EE1",
+      "to": "P8",
+      "label": "F1 status, note, submit; retry; refresh; click or /security [keyboard, local; Confidential]"
+    },
+    {
+      "from": "P8",
+      "to": "P1",
+      "label": "F2 POST the command: record key, expected version, values, Idempotency-Key; GET the outcome by key; GET the Security page [HTTPS, session cookie; Confidential]"
+    },
+    {
+      "from": "P1",
+      "to": "P2",
+      "label": "F3 the same, with a request id [HTTP on the host, session cookie; Confidential]"
+    },
+    {
+      "from": "DS4",
+      "to": "P2",
+      "label": "F4 session, roles, membership epoch [TLS, role workspace; Restricted]"
+    },
+    {
+      "from": "P2",
+      "to": "DS1",
+      "label": "F5 record schema and permitted transitions of the pinned publication [TLS, role workspace; Internal]"
+    },
+    {
+      "from": "P2",
+      "to": "P4",
+      "label": "F6 command: principal scope, work id, app revision, schema id, record key, expected version, values, key, epoch [in process, principal and epoch; Confidential]"
+    },
+    {
+      "from": "P4",
+      "to": "DS1",
+      "label": "F7 one transaction: outcome by key, record FOR UPDATE, membership FOR SHARE, work revision, record revision, outcome, audit [TLS, role data; Confidential]"
+    },
+    {
+      "from": "DS1",
+      "to": "P4",
+      "label": "F8 stored outcome on a replay; current version on a conflict [TLS, role data; Confidential]"
+    },
+    {
+      "from": "P4",
+      "to": "P2",
+      "label": "F9 committed version; or the stored outcome; or conflict with an authorized recovery view [in process; Confidential]"
+    },
+    {
+      "from": "P2",
+      "to": "P1",
+      "label": "F10 outcome, recovery view, the Security page with its view state; 404 outside the organization [HTTP on the host, session; Confidential]"
+    },
+    {
+      "from": "P1",
+      "to": "P8",
+      "label": "F11 the same, no-store; a response below the current epoch is dropped on arrival [HTTPS, session; Confidential]"
+    },
+    {
+      "from": "P8",
+      "to": "P10",
+      "label": "F12 Chrome's sanitised export of the take: status codes, outcomes, receipts, epochs as received [file export from each actor's profile, by the operator; Confidential]"
+    },
+    {
+      "from": "P2",
+      "to": "P10",
+      "label": "F13 audit events, job states, build digest: the operator views [HTTPS, operator session, just in time; Internal]"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "B1",
+      "label": "The Internet: the recording browser",
+      "style": "trust",
+      "contains": [
+        "EE1",
+        "P8"
+      ]
+    },
+    {
+      "id": "B2",
+      "label": "The host's network: the edge, the one process, PostgreSQL",
+      "style": "trust",
+      "contains": [
+        "P1",
+        "P2",
+        "DS4",
+        "DS1",
+        "B4"
+      ]
+    },
+    {
+      "id": "B4",
+      "label": "Role data: a database role, not a hop (D1); the only writer of records",
+      "style": "trust",
+      "contains": [
+        "P4"
+      ]
+    },
+    {
+      "id": "B9",
+      "label": "The operator's machine: the evidence recorder",
+      "style": "trust",
+      "contains": [
+        "P10"
+      ]
+    }
+  ]
+}
