@@ -1,6 +1,6 @@
 # Phase verification and release gates
 
-Every implementation ticket has design references, acceptance tests, a verification plan and migration/rollback guidance. Every phase adds an integrated evidence gate. These are planned obligations; no application runtime test or release trial has passed at this preparation checkpoint.
+Every implementation ticket has design references, acceptance tests, a verification plan and migration/rollback guidance. Every phase adds an integrated evidence gate. This document defines those obligations; the [live board](../../Tickets/TRACKER.md) and each ticket’s retained evidence record which checks have actually passed. Completed isolated qualifications do not establish a managed release trial or phase acceptance.
 
 The controlling references are the [delivered platform design](../../design/forma-generative-app-platform-v2/deliverables/v1/md/design.md), [shared contracts](../../design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md), [validation plan](../../design/forma-generative-app-platform-v2/VALIDATION.md), [delivered demo design](../../design/forma-northstar-demo/deliverables/v1/md/design.md), and [S01–S07 scenarios](../../design/forma-northstar-demo/SCENARIOS.md). [Coverage](../../Tickets/COVERAGE.md) maps all 80 requirement/scenario IDs to owning work. A coverage link is a test obligation, not a passing result.
 

@@ -1,0 +1,40 @@
+{
+  "name": "admin",
+  "dependencies": {
+    "@getforma/build": {
+      "version": "3.2.0",
+      "resolved": "https://registry.npmjs.org/@getforma/build/-/build-3.2.0.tgz",
+      "overridden": false
+    },
+    "@getforma/compiler": {
+      "version": "3.2.0",
+      "resolved": "https://registry.npmjs.org/@getforma/compiler/-/compiler-3.2.0.tgz",
+      "overridden": false
+    },
+    "@getforma/core": {
+      "version": "3.2.0",
+      "resolved": "https://registry.npmjs.org/@getforma/core/-/core-3.2.0.tgz",
+      "overridden": false
+    },
+    "esbuild": {
+      "version": "0.28.2",
+      "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.28.2.tgz",
+      "overridden": false
+    },
+    "playwright": {
+      "version": "1.64.1",
+      "resolved": "https://registry.npmjs.org/playwright/-/playwright-1.64.1.tgz",
+      "overridden": false
+    },
+    "tsx": {
+      "version": "4.23.15",
+      "resolved": "https://registry.npmjs.org/tsx/-/tsx-4.23.15.tgz",
+      "overridden": false
+    },
+    "typescript": {
+      "version": "5.9.3",
+      "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+      "overridden": false
+    }
+  }
+}

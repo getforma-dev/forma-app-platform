@@ -1,0 +1,33 @@
+name: Published canvas consumer
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  app-003:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.21.0'
+      - name: Pinned tools and browser engines
+        run: |
+          npm install --global npm@11.6.2
+          rustup toolchain install 1.93.1 --profile minimal --component rustfmt
+          rustup default 1.93.1
+          npm ci --prefix spikes/APP-003/admin
+          cd spikes/APP-003/admin
+          npx --no-install playwright install --with-deps chromium firefox webkit
+      - name: Strict published native build, render and browser qualification
+        run: python3 spikes/APP-003/verify.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: app003-canvas-evidence
+          path: evidence/APP-003/
+          retention-days: 14

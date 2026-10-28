@@ -1,0 +1,151 @@
+{
+  "scope": "APP-003 consumer preparation, not upstream acceptance",
+  "environment": {
+    "platform": "macOS-26.1-arm64-arm-64bit"
+  },
+  "steps": [
+    {
+      "command": [
+        "node",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "v22.21.0\n"
+    },
+    {
+      "command": [
+        "npm",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "11.6.2\n"
+    },
+    {
+      "command": [
+        "rustc",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "rustc 1.93.1 (01f6ddf75 2026-02-11)\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "--version"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "cargo 1.93.1 (083ac5135 2025-12-15)\n"
+    },
+    {
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "\nadded 30 packages, and audited 31 packages in 1s\n\n1 package is looking for funding\n  run `npm fund` for details\n\nfound 0 vulnerabilities\n"
+    },
+    {
+      "command": [
+        "npm",
+        "ls",
+        "--json"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "{\n  \"name\": \"admin\",\n  \"dependencies\": {\n    \"@getforma/build\": {\n      \"version\": \"3.2.0\",\n      \"resolved\": \"https://registry.npmjs.org/@getforma/build/-/build-3.2.0.tgz\",\n      \"overridden\": false\n    },\n    \"@getforma/compiler\": {\n      \"version\": \"3.2.0\",\n      \"resolved\": \"https://registry.npmjs.org/@getforma/compiler/-/compiler-3.2.0.tgz\",\n      \"overridden\": false\n    },\n    \"@getforma/core\": {\n      \"version\": \"3.2.0\",\n      \"resolved\": \"https://registry.npmjs.org/@getforma/core/-/core-3.2.0.tgz\",\n      \"overridden\": false\n    },\n    \"esbuild\": {\n      \"version\": \"0.28.2\",\n      \"resolved\": \"https://registry.npmjs.org/esbuild/-/esbuild-0.28.2.tgz\",\n      \"overridden\": false\n    },\n    \"playwright\": {\n      \"version\": \"1.64.1\",\n      \"resolved\": \"https://registry.npmjs.org/playwright/-/playwright-1.64.1.tgz\",\n      \"overridden\": false\n    },\n    \"tsx\": {\n      \"version\": \"4.23.15\",\n      \"resolved\": \"https://registry.npmjs.org/tsx/-/tsx-4.23.15.tgz\",\n      \"overridden\": false\n    },\n    \"typescript\": {\n      \"version\": \"5.9.3\",\n      \"resolved\": \"https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz\",\n      \"overridden\": false\n    }\n  }\n}\n"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "\n> typecheck\n> tsc --noEmit\n\n"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "\n> build\n> tsx build.ts --ssr --strict\n\nSSR mode enabled \u2014 emitting IR files\n   IR emitted (real): home.ir (8026 bytes, 1 islands)\n\n   dist/home.57701d13.js  87.2kb\n\n   3 assets hashed\n   2 files compressed (brotli 11 + gzip 9)\n\n   Size report (gzip -9, Brotli beside it; 1 KB = 1,000 B, 1 KiB = 1,024 B). Forma code is @getforma/core, @getforma/router and alien-signals as bundled;\n   N2's ceilings are policy (DR-35 and the 3.1 performance decision): Forma code 28,420 B, the JavaScript of a page 76,800 B, of a canvas 373,760 B, a route with no interactive region none.\n   /  islands, canvas  Forma 27,938 of 28,420 B  JavaScript 31,176 of 373,760 B  (Brotli: Forma 24,941, JavaScript 27,773)  home.57701d13.js\n   Service worker   sw.js  3,237 B raw, 1,538 B gzip, 1,314 B Brotli; counted in the JavaScript of each route that has JavaScript\n   Build time       441 ms: bundle 332 ms, hash 1 ms, compress 107 ms, manifest 1 ms\n\nManifest written: dist/manifest.json (build: c41a339d7bd3...)\nSize report written: dist/size-report.json\n   SW generated: dist/sw.js (verified on-demand assets)\n"
+    },
+    {
+      "command": [
+        "node",
+        "refusals.mjs"
+      ],
+      "cwd": "spikes/APP-003/admin",
+      "exit": 0,
+      "output": "SSR mode enabled \u2014 emitting IR files\n   IR: BUILD-610 BUILD-610 /Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/.cache/refusals/enum-condition/app.tsx:51:27: computed declared values remain outside the native subset\n   IR: BUILD-610 BUILD-610 /Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/.cache/refusals/enum-condition/app.tsx:51:27: computed declared values remain outside the native subset\nSSR mode enabled \u2014 emitting IR files\n   IR: BUILD-403 component Fourth(...) nests deeper than the 3-level inlining limit (chain: Page > First > Second > Third > Fourth) in /Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx:3:32 \u2014 refused with BUILD-610 because it cannot produce a declared native island contract \u2014 flatten the component tree if it needs to render server-side\n   IR: BUILD-610 BUILD-610 /Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx:3:32: Fourth cannot be represented by a declared native island; use a registered browserOnly component for a client-only body\n   IR: BUILD-610 BUILD-610 /Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/.cache/refusals/four-component-depth/app.tsx:3:32: Fourth cannot be represented by a declared native island; use a registered browserOnly component for a client-only body\nSSR mode enabled \u2014 emitting IR files\n   IR: BUILD-610 BUILD-610 /Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/.cache/refusals/reassigned-declared-local/app.tsx:29:21: declared prop binding requested is reassigned; pass an immutable value to SSR\n   IR: BUILD-610 BUILD-610 /Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/.cache/refusals/reassigned-declared-local/app.tsx:29:21: declared prop binding requested is reassigned; pass an immutable value to SSR\nSSR mode enabled \u2014 emitting IR files\n   IR: BUILD-207 attribute 'tabindex' on <section> is a bare '-' expression (not wrapped in a function), which the compiler cannot evaluate in /Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003/admin/.cache/refusals/negative-literal-attribute/app.tsx:49:117 \u2014 the attribute is OMITTED from the server-rendered HTML and hydration does not re-apply a non-function prop, so it never appears \u2014 inline the literal, use a module-level const, or wrap it in a function (`() => \u2026`) for a reactive binding\n   IR emitted (real): home.ir (8020 bytes, 1 islands)\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--check"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s\n     Running unittests src/main.rs (target/debug/deps/genui_canvas_spike-4c2e51550689d71e)\n\nrunning 3 tests\ntest tests::native_mode_is_mandatory ... ok\ntest tests::geometry_rows_keys_are_bounded ... ok\ntest tests::actual_native_schema_and_unbound_route_refuse_before_listening ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "   Compiling genui-canvas-spike v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-003)\n    Finished `release` profile [optimized] target(s) in 5.61s\n"
+    },
+    {
+      "command": [
+        "target/release/genui-canvas-spike",
+        "--bench"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "BENCH_JSON {\"over_cap\":{\"code\":\"RENDER-502\",\"refused\":true,\"typed_json_utf8_bytes\":1206304},\"scope\":\"local sequential release renderer, no network/database/browser or client SLO claim\",\"states\":[{\"elapsed_seconds\":0.044045917,\"first_render_us\":362,\"iterations\":200,\"median_render_ns\":217667,\"native_walk_html_bytes\":10131,\"p99_local_sample_ns\":291333,\"process_lifetime_peak_rss_bytes\":4390912,\"renders_per_second\":4540.715998715614,\"state\":\"normal\",\"typed_json_utf8_bytes\":6382},{\"elapsed_seconds\":0.002189208,\"first_render_us\":13,\"iterations\":200,\"median_render_ns\":10250,\"native_walk_html_bytes\":520,\"p99_local_sample_ns\":34791,\"process_lifetime_peak_rss_bytes\":4423680,\"renders_per_second\":91357.23969581693,\"state\":\"empty\",\"typed_json_utf8_bytes\":95},{\"elapsed_seconds\":0.026504709,\"first_render_us\":162,\"iterations\":200,\"median_render_ns\":132084,\"native_walk_html_bytes\":6719,\"p99_local_sample_ns\":172834,\"process_lifetime_peak_rss_bytes\":4521984,\"renders_per_second\":7545.828931756994,\"state\":\"nested-empty\",\"typed_json_utf8_bytes\":4210},{\"elapsed_seconds\":0.061878583,\"first_render_us\":351,\"iterations\":200,\"median_render_ns\":309083,\"native_walk_html_bytes\":42251,\"p99_local_sample_ns\":421125,\"process_lifetime_peak_rss_bytes\":5128192,\"renders_per_second\":3232.136068791362,\"state\":\"long\",\"typed_json_utf8_bytes\":19975},{\"elapsed_seconds\":0.545019167,\"first_render_us\":2761,\"iterations\":200,\"median_render_ns\":2712916,\"native_walk_html_bytes\":143616,\"p99_local_sample_ns\":3004125,\"process_lifetime_peak_rss_bytes\":7913472,\"renders_per_second\":366.9595715337476,\"state\":\"rows500\",\"typed_json_utf8_bytes\":87185}]}\n"
+    },
+    {
+      "command": [
+        "node",
+        "verify_browser.mjs"
+      ],
+      "cwd": "spikes/APP-003",
+      "exit": 0,
+      "output": "{\"passed\":true,\"engines\":[\"chromium\",\"firefox\",\"webkit\"]}\n"
+    }
+  ],
+  "passed": true,
+  "followup": {
+    "command": [
+      "node",
+      "spikes/APP-003/verify_browser.mjs"
+    ],
+    "exit": 0,
+    "reason": "Capture requested representative screenshot; all browser checks rerun after this harness-only addition",
+    "screenshot_visual_review": "All nine primitives visible; form acknowledgement and keyboard focus outline visible; hostile-looking strings are literal."
+  }
+}

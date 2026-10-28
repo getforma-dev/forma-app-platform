@@ -1,0 +1,13 @@
+{
+  "app_forma_target": 28100,
+  "published_forma_cap": 28420,
+  "canvas_total_cap": 373760,
+  "estimated_forma_gzip": 27938,
+  "javascript_gzip_including_worker": 31176,
+  "router_gzip": 0,
+  "class": "islands",
+  "canvas": true,
+  "app_target_fits": true,
+  "published_caps_fit": true,
+  "override_used": false
+}

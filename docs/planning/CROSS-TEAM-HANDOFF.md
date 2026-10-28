@@ -23,11 +23,11 @@ APP-003, APP-006 and APP-058 start in `Tickets/9-blocked/`. Their downstream tic
 
 ## Ready-to-pick-up instructions
 
-Each authoritative FORMA ticket has a **2026-10-28 execution handoff** section with ordered implementation steps, required checks, exact handback evidence and ownership boundaries. The FormaStack agent has claimed the work. At the coordination check, FORMA-232/246/247 were In review and FORMA-248 In progress; consult the original board for later moves. No final delivery or consumer acceptance is inferred from these intermediate states.
+Each authoritative FORMA ticket has a **2026-10-28 execution handoff** section with ordered implementation steps, required checks, exact handback evidence and ownership boundaries. The FormaStack agent has claimed the work. At the latest coordination check, FORMA-232 was Done, FORMA-246/247 In review and FORMA-248 In progress; consult the original board for later moves. FORMA-232's configurable-budget source is merged but its package is unreleased. APP-003 now prepares the full-library consumer fixture using registry 3.2.0; only its actual shipped-cap measurement can establish a no-override disposition. No app gate is cleared by the upstream status alone.
 
 | Start order | Authoritative local ticket | Writable ownership |
 |---|---|---|
-| Framework lane: start together | `/Users/victorvillacis/dev/Forma/Tickets/3-in-review/FORMA-246.md` and `FORMA-232.md` | Isolated checkout of `getforma-dev/forma`; compiler/native fixture and route-budget code/tests/docs |
+| Framework lane: start together | `/Users/victorvillacis/dev/Forma/Tickets/3-in-review/FORMA-246.md`; budget source receipt in `/Users/victorvillacis/dev/Forma/Tickets/4-done/FORMA-232.md` | Isolated checkout of `getforma-dev/forma`; compiler/native fixture and route-budget code/tests/docs |
 | Auth lane: parallel with framework | `/Users/victorvillacis/dev/Forma/Tickets/3-in-review/FORMA-247.md` | Isolated checkout of `getforma-dev/gatewasm`; fAuth and designated auth environment |
 | Auth custody: integration after FORMA-247 | `/Users/victorvillacis/dev/Forma/Tickets/2-in-progress/FORMA-248.md` | Same coordinated fAuth lane; KMS/JWKS/managed-secret changes |
 

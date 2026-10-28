@@ -1,0 +1,70 @@
+{
+  "over_cap": {
+    "code": "RENDER-502",
+    "refused": true,
+    "typed_json_utf8_bytes": 1206304
+  },
+  "scope": "local sequential release renderer, no network/database/browser or client SLO claim",
+  "states": [
+    {
+      "elapsed_seconds": 0.044045917,
+      "first_render_us": 362,
+      "iterations": 200,
+      "median_render_ns": 217667,
+      "native_walk_html_bytes": 10131,
+      "p99_local_sample_ns": 291333,
+      "process_lifetime_peak_rss_bytes": 4390912,
+      "renders_per_second": 4540.715998715614,
+      "state": "normal",
+      "typed_json_utf8_bytes": 6382
+    },
+    {
+      "elapsed_seconds": 0.002189208,
+      "first_render_us": 13,
+      "iterations": 200,
+      "median_render_ns": 10250,
+      "native_walk_html_bytes": 520,
+      "p99_local_sample_ns": 34791,
+      "process_lifetime_peak_rss_bytes": 4423680,
+      "renders_per_second": 91357.23969581693,
+      "state": "empty",
+      "typed_json_utf8_bytes": 95
+    },
+    {
+      "elapsed_seconds": 0.026504709,
+      "first_render_us": 162,
+      "iterations": 200,
+      "median_render_ns": 132084,
+      "native_walk_html_bytes": 6719,
+      "p99_local_sample_ns": 172834,
+      "process_lifetime_peak_rss_bytes": 4521984,
+      "renders_per_second": 7545.828931756994,
+      "state": "nested-empty",
+      "typed_json_utf8_bytes": 4210
+    },
+    {
+      "elapsed_seconds": 0.061878583,
+      "first_render_us": 351,
+      "iterations": 200,
+      "median_render_ns": 309083,
+      "native_walk_html_bytes": 42251,
+      "p99_local_sample_ns": 421125,
+      "process_lifetime_peak_rss_bytes": 5128192,
+      "renders_per_second": 3232.136068791362,
+      "state": "long",
+      "typed_json_utf8_bytes": 19975
+    },
+    {
+      "elapsed_seconds": 0.545019167,
+      "first_render_us": 2761,
+      "iterations": 200,
+      "median_render_ns": 2712916,
+      "native_walk_html_bytes": 143616,
+      "p99_local_sample_ns": 3004125,
+      "process_lifetime_peak_rss_bytes": 7913472,
+      "renders_per_second": 366.9595715337476,
+      "state": "rows500",
+      "typed_json_utf8_bytes": 87185
+    }
+  ]
+}

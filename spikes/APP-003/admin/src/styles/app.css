@@ -1,0 +1,6 @@
+:root { font-family: system-ui, sans-serif; color: #182329; background: #f4f6f6; }
+body { margin: 0; } main { padding: 24px; } .canvas { display: grid; grid-template-columns: repeat(3, minmax(240px, 1fr)); gap: 16px; }
+.linked-scope { grid-column: 1 / -1; } .card { padding: 16px; background: white; border: 1px solid #bac9cb; border-radius: 8px; overflow: auto; }
+.card:focus { outline: 3px solid #096b75; } label { display: block; } input, select, button { font: inherit; margin: 4px; padding: 8px; }
+table { border-collapse: collapse; width: 100%; } td, th { padding: 6px; border-bottom: 1px solid #ddd; text-align: left; } svg { width: 100%; fill: #096b75; }
+@media (max-width: 800px) { .canvas { grid-template-columns: 1fr; } }

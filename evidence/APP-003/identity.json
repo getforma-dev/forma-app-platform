@@ -1,0 +1,37 @@
+{
+  "recorded_at": "2026-10-28T20:46:10.907749+00:00",
+  "base_commit": "441c82ece11cf223f914426a41e8f174a62520ea",
+  "source_sha256": {
+    ".github/workflows/canvas.yml": "b864b2705bcfb34274ad3b6d684aa51c33a42b38f0f0b7aed7b874736b331588",
+    "spikes/APP-003/Cargo.lock": "12ba0e8118a59c8e98375d92495c120e5e56c4af5abd1ad5948beb23f7ac92ca",
+    "spikes/APP-003/Cargo.toml": "915093d3939f69e6f8cd978e9bfbe864019888b0f3c94105f1d396439014ad6b",
+    "spikes/APP-003/README.md": "e8dacdf21142f60265c94ebad8d90c5c088e3b5b5612572570a0422d58e161f5",
+    "spikes/APP-003/admin/build.ts": "cd0e92d9d332ddd6081dca638a2c03870d1844f9e3898c57eba4ffff26f3f4ca",
+    "spikes/APP-003/admin/package-lock.json": "7629159d545ab177135b390c0788b763f40895fcab011d958a9f2b54dacaa45c",
+    "spikes/APP-003/admin/package.json": "5e5e46193e319a8c4b0e3fc2dea157b805c92e2ee817c4e0891d811695454c5b",
+    "spikes/APP-003/admin/refusals.mjs": "910dca534a5355f9f6c0e62ce605aee00909da7ddb46f1910a820f70418109f5",
+    "spikes/APP-003/admin/src/forma-types.d.ts": "c6a2147992b4ab14f29315b8349051600bd67e8f0e363f99d9b34af5dcbe5f0a",
+    "spikes/APP-003/admin/src/home/app.tsx": "d551300763f3d8c62b173c50caa0a09bf77904ced5c6b3f056edebb1e6d9b512",
+    "spikes/APP-003/admin/src/styles/app.css": "df55fe5225df7c3ceae690cc2b8ad4225fc821922463faf86b8b95eb99ea184e",
+    "spikes/APP-003/admin/tsconfig.json": "8f54953b133871cc1c728d72bf59b8e03eb929a85a60da177368619f5a2049a4",
+    "spikes/APP-003/src/main.rs": "c21ba0572f2dc1aff93b6636485be03998e48e37a13ce0a0c4ac75b029a6bc02",
+    "spikes/APP-003/verify.py": "4dc2fe4feb263e6f9f3213fdbd72dce6afad21f04245e51ac373e748f0479578",
+    "spikes/APP-003/verify_browser.mjs": "1a5775f61bd9171607e754e19684d5663412cdb9c2e2a644c481f154466d48f8"
+  },
+  "qualification_passed": true,
+  "evidence_sha256": {
+    "README.md": "7a48c3ceeb5c455c7db3ecea0315124de5ec9a4883c8b3a228084750ba542cc0",
+    "browser.json": "4fb40db5a70c54ce87ea1a2da6b481ec21d06d8d45d7ebb33d6c74142fad08dc",
+    "budget.json": "07917c2d478808363963a7d295e9b6502a6ad2003b783614516f04970a850954",
+    "canvas-chromium.png": "bf8d5b9219e3cf8d44670b487f99a43bc3f7dfb7e48c6b3b9bf6d1d8b373c575",
+    "initial-harness-failure.json": "539b8121f63a84968a755d73b92c2564c1ab7a78c6d518ead6ccee0f392c45cd",
+    "manifest.json": "83dea702ebb1d4307108c001a78ccc607216ca576c48645e21436110ac4d32fd",
+    "npm-resolved.json": "57c677fb5a8bb217aefcc324e9e60b893ae5ad9e7b3876ca7a0455e7a25f651a",
+    "qualification.json": "1f1a9f9b93c604e7f33ba693200b397f0ab9dfdf0f038c4af123b8ef060cf701",
+    "refusals.json": "ff5b35fe2af035ea430e03cbacacc4d0f91a3150a54843561825121334eb1e1f",
+    "render-output.txt": "b74a913799eb685d405f5aa9873a671b92018201dae604ee08017b4ef18099a0",
+    "render.json": "55b439dbb55904d13037e412746b8b02a94eb9770ce58523f5014e27666cdd51",
+    "server-output.txt": "b9e05aa7e8352bab7afd6e422e997aecd876b80c215db63c52246c3fd85c323f",
+    "size-report.json": "98fb7bc16a83f82c3412792c5a8ad08e290f1ef2f614103346a9e513ba50d699"
+  }
+}
