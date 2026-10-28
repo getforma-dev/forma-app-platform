@@ -1,0 +1,136 @@
+{
+  "checks": [
+    "typed count 7 in raw HTML",
+    "Counter controls in initial HTML",
+    "about renders with no script",
+    "all responses no-store and nosniff",
+    "CSP nonce matches HTML and changes on next response"
+  ],
+  "result": "passed",
+  "browser_adoption": "not tested; APP-003 gate remains open",
+  "html_bytes": 1571,
+  "about_bytes": 588,
+  "size_report": {
+    "version": 1,
+    "ceilings": {
+      "forma": 28420,
+      "page": 76800,
+      "canvas": 373760
+    },
+    "routes": [
+      {
+        "route": "/",
+        "class": "islands",
+        "canvas": false,
+        "files": [
+          {
+            "file": "home.5a35feb8.js",
+            "raw": 79448,
+            "gzip": 26637,
+            "brotli": 23904,
+            "forma": {
+              "raw": 79081,
+              "gzip": 26514,
+              "brotli": 23794
+            },
+            "router": {
+              "raw": 0,
+              "gzip": 0,
+              "brotli": 0
+            }
+          }
+        ],
+        "raw": 79448,
+        "gzip": 26637,
+        "brotli": 23904,
+        "forma": {
+          "raw": 79081,
+          "gzip": 26514,
+          "brotli": 23794
+        },
+        "core": {
+          "raw": 79081,
+          "gzip": 26514,
+          "brotli": 23794
+        },
+        "router": {
+          "raw": 0,
+          "gzip": 0,
+          "brotli": 0
+        },
+        "application": {
+          "raw": 367,
+          "gzip": 123,
+          "brotli": 110
+        },
+        "worker": {
+          "raw": 3199,
+          "gzip": 1527,
+          "brotli": 1310
+        },
+        "javascript": {
+          "raw": 82647,
+          "gzip": 28164,
+          "brotli": 25214
+        },
+        "ceilings": {
+          "forma": 28420,
+          "javascript": 76800
+        },
+        "exceeded": [],
+        "over": false
+      },
+      {
+        "route": "/about",
+        "class": "no-interactive-region",
+        "canvas": false,
+        "files": [],
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0,
+        "forma": {
+          "raw": 0,
+          "gzip": 0,
+          "brotli": 0
+        },
+        "core": {
+          "raw": 0,
+          "gzip": 0,
+          "brotli": 0
+        },
+        "router": {
+          "raw": 0,
+          "gzip": 0,
+          "brotli": 0
+        },
+        "application": {
+          "raw": 0,
+          "gzip": 0,
+          "brotli": 0
+        },
+        "worker": {
+          "raw": 0,
+          "gzip": 0,
+          "brotli": 0
+        },
+        "javascript": {
+          "raw": 0,
+          "gzip": 0,
+          "brotli": 0
+        },
+        "ceilings": {
+          "forma": 0,
+          "javascript": 0
+        },
+        "exceeded": [],
+        "over": false
+      }
+    ],
+    "worker": {
+      "file": "sw.js",
+      "raw": 3199,
+      "gzip": 1527,
+      "brotli": 1310
+    }
+  }
+}

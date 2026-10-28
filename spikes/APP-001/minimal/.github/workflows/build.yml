@@ -1,0 +1,57 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '3'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.0'
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+        with:
+          toolchain: '1.93.1'
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # rust-cache includes Cargo.lock and the compiler in its cache key.
+          # Page source is deliberately absent: dependencies can be reused.
+          key: release
+          save-if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+      - name: Verify JavaScript dependencies
+        shell: bash
+        working-directory: admin
+        run: |
+          npm ci --ignore-scripts --include=dev --include=optional --include=peer
+          npm audit signatures --include=dev --include=optional --include=peer
+          npm audit --include=dev --include=optional --include=peer
+      - name: Verify Rust advisories
+        shell: bash
+        run: |
+          cargo install cargo-deny --version 0.20.2 --locked
+          # A failed live fetch must stop the build, even with a cached database.
+          cargo deny --locked --manifest-path Cargo.toml fetch db
+          cargo deny --locked --manifest-path Cargo.toml check advisories
+      - run: npm run build:ssr
+        working-directory: admin
+      # Build assets first: rust-embed includes this build's pages in the binary.
+      - run: cargo build --release --locked --timings

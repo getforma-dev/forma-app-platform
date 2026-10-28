@@ -1,0 +1,58 @@
+$ npm ci
+
+added 28 packages, and audited 29 packages in 638ms
+
+1 package is looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+$ npm run typecheck
+
+> typecheck
+> tsc --noEmit
+
+
+$ npm run build
+
+> build
+> tsx build.ts --ssr --strict
+
+SSR mode enabled — emitting IR files
+   IR emitted (real): about.ir (405 bytes, 0 islands)
+   IR emitted (real): home.ir (762 bytes, 1 islands)
+
+   dist/home.5a35feb8.js  77.6kb
+
+   4 assets hashed
+   2 files compressed (brotli 11 + gzip 9)
+
+   Size report (gzip -9, Brotli beside it; 1 KB = 1,000 B, 1 KiB = 1,024 B). Forma code is @getforma/core, @getforma/router and alien-signals as bundled;
+   N2's ceilings are policy (DR-35 and the 3.1 performance decision): Forma code 28,420 B, the JavaScript of a page 76,800 B, of a canvas 373,760 B, a route with no interactive region none.
+   /       islands                Forma 26,514 of 28,420 B  JavaScript 28,164 of 76,800 B  (Brotli: Forma 23,794, JavaScript 25,214)  home.5a35feb8.js
+   /about  no interactive region  no JavaScript
+   Service worker   sw.js  3,199 B raw, 1,527 B gzip, 1,310 B Brotli; counted in the JavaScript of each route that has JavaScript
+   Build time       242 ms: bundle 155 ms, hash 1 ms, compress 85 ms, manifest 1 ms
+
+Manifest written: dist/manifest.json (build: e51dc2d675cb...)
+Size report written: dist/size-report.json
+   SW generated: dist/sw.js (verified on-demand assets)
+
+$ cargo fmt --check
+
+$ cargo test --locked
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running unittests src/main.rs (target/debug/deps/minimal-3b6f7fe0eb07f17d)
+
+running 1 test
+test tests::required_native_routes_refuse_browser_and_missing_outputs ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+$ cargo build --locked
+   Compiling minimal v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-001/minimal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.84s
+
+$ python3 spikes/APP-001/verify_http.py
+PASS: typed HTTP SSR, static no-JS page, CSP/nonce/no-store response policy

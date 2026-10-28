@@ -1,6 +1,6 @@
 # FormaStack → GenUI dependency handoff
 
-Owner assignment: October 28, 2026, at Victor's explicit request. **GenUI** is the app team in this repository. **FormaStack** owns the upstream framework and fAuth work. Assigning the team prepares parallel work; it does not claim a team has started or a message was dispatched.
+Owner assignment and execution handoff prepared: October 28, 2026, at Victor's explicit request. **GenUI** is the app team in this repository. **FormaStack** owns the upstream framework and fAuth work. Assigning the team prepares parallel work; it does not claim a team has started or a message was dispatched.
 
 The existing FORMA tickets remain authoritative in the FormaStack board. They are assigned to FormaStack and cross-linked to their consumers. No duplicate implementation ticket is created for an existing upstream fix.
 
@@ -15,11 +15,29 @@ See the [current handoff snapshots](../../Tickets/evidence/upstream-current/READ
 
 ## Parallel work
 
-FormaStack can take FORMA-246, the FORMA-232 disposition, FORMA-247 and FORMA-248 concurrently where its own dependencies permit. The fAuth work remains in its owning repository under FormaStack coordination.
+FormaStack can take FORMA-246 and the FORMA-232 disposition together in the framework lane, with FORMA-247 in an independent fAuth lane. FORMA-248 follows its existing FORMA-247 prerequisite; it must finish before real-organization sign-in. The fAuth work remains in its owning repository under FormaStack coordination.
 
 GenUI starts APP-001 and contracts next, then follows the actual graph. Synthetic fixtures, parser confinement, query measurements, scaffold and tenant schema can move independently of hosted-auth/native acceptance where their listed predecessors permit. A whole sprint is not blocked merely because one consumer is blocked.
 
 APP-003, APP-006 and APP-058 start in `Tickets/9-blocked/`. Their downstream tickets wait in Backlog with explicit dependencies. This prevents selection of dependent work without inflating every waiting task into a separate blocker.
+
+## Ready-to-pick-up instructions
+
+Each authoritative FORMA ticket now has a **2026-10-28 execution handoff** section with ordered implementation steps, required checks, exact handback evidence and ownership boundaries. These are ready for Victor to give to the FormaStack agent; they remain Backlog until that agent claims the work.
+
+| Start order | Authoritative local ticket | Writable ownership |
+|---|---|---|
+| Framework lane: start together | `/Users/victorvillacis/dev/Forma/Tickets/0-backlog/FORMA-246.md` and `FORMA-232.md` | Isolated checkout of `getforma-dev/forma`; compiler/native fixture and route-budget code/tests/docs |
+| Auth lane: parallel with framework | `/Users/victorvillacis/dev/Forma/Tickets/0-backlog/FORMA-247.md` | Isolated checkout of `getforma-dev/gatewasm`; fAuth and designated auth environment |
+| Auth custody: after FORMA-247 | `/Users/victorvillacis/dev/Forma/Tickets/0-backlog/FORMA-248.md` | Same coordinated fAuth lane; KMS/JWKS/managed-secret changes |
+
+The framework reference checkout is `/Users/victorvillacis/dev/Forma/work/codex-release-lead/forma`; the fAuth reference checkout is `/Users/victorvillacis/dev/FormaBuiltApps/gatewasm`. These are discovery references, not permission to overwrite another working tree. Read each owning repository's current instructions and inspect the worktree before selecting an isolated work context. The published framework baseline remains 3.2.0, tag `fc76ea8531f0e3a85d0224087384e41f52040e3c`; the observed fAuth source pin is `b750ca534ae89066714f100eb2b76ee71edf1ab1`, not a claim about the live deployment.
+
+GenUI owns this app repository, its APP tickets, schemas, lockfiles, application fixtures and consumer verification. FormaStack should not edit this checkout or its gate register. In particular, deliver any demo provisioning script as a reviewed patch/artifact for GenUI to incorporate; coordinate app origin/redirect values instead of guessing them. No team should reset the other's data, terminate its processes, migrate donor apps, or rewrite frozen design/upstream snapshots.
+
+Before starting, the FormaStack agent records its name, ticket, branch/worktree and files/services owned in the original ticket. When ready, it reports the exact commit/PR, released package or deployed image identity, reproducible commands and results, independent review/CI, limitations and rollback. GenUI then records receipt and consumer acceptance. New contract changes or operational blockers should be reported as soon as discovered. This file and the original ticket Logs are the durable coordination record; no message to another agent has been sent by preparing these instructions.
+
+The original upstream board's older clone, attribution and release instructions are historical context. Current user authorization and owning repository instructions govern execution; this handoff alone publishes no package and deploys no service. Missing environment access or a concrete spending decision is recorded against its specific operation, while independent local work continues. If FORMA-248 rolls back to a process-readable file key, real-organization sign-in becomes blocked again even if synthetic login works.
 
 ## Handoff completion
 

@@ -1,0 +1,22 @@
+# Build output
+target/
+node_modules/
+dist/
+# @getforma/build's staging and previous output, left beside dist/ by a
+# build that was killed part way (the next build removes or restores them)
+.dist.forma-*
+
+# Secrets — never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs and OS cruft
+*.log
+.DS_Store
+Thumbs.db
+
+# Cargo.lock is deliberately NOT ignored: this is an application, so the
+# lockfile belongs in version control.

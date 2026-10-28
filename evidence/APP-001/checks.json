@@ -1,0 +1,66 @@
+{
+  "at": "2026-10-28T18:48:15.884661+00:00",
+  "steps": [
+    {
+      "cwd": "spikes/APP-001/minimal/admin",
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "exit": 0
+    },
+    {
+      "cwd": "spikes/APP-001/minimal/admin",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "exit": 0
+    },
+    {
+      "cwd": "spikes/APP-001/minimal/admin",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exit": 0
+    },
+    {
+      "cwd": "spikes/APP-001/minimal",
+      "command": [
+        "cargo",
+        "fmt",
+        "--check"
+      ],
+      "exit": 0
+    },
+    {
+      "cwd": "spikes/APP-001/minimal",
+      "command": [
+        "cargo",
+        "test",
+        "--locked"
+      ],
+      "exit": 0
+    },
+    {
+      "cwd": "spikes/APP-001/minimal",
+      "command": [
+        "cargo",
+        "build",
+        "--locked"
+      ],
+      "exit": 0
+    },
+    {
+      "cwd": ".",
+      "command": [
+        "python3",
+        "spikes/APP-001/verify_http.py"
+      ],
+      "exit": 0
+    }
+  ]
+}

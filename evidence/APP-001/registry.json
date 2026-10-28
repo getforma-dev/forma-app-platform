@@ -1,0 +1,113 @@
+{
+  "verified_at": "2026-10-28T18:49:51.894443+00:00",
+  "source_commit": "fc76ea8531f0e3a85d0224087384e41f52040e3c",
+  "tag": "v3.2.0",
+  "host": "macOS-26.1-arm64-arm-64bit",
+  "archives": [
+    {
+      "ecosystem": "npm",
+      "package": "@getforma/core",
+      "version": "3.2.0",
+      "endpoint": "https://registry.npmjs.org/@getforma%2Fcore/3.2.0",
+      "archive": "https://registry.npmjs.org/@getforma/core/-/core-3.2.0.tgz",
+      "integrity": "sha512-7NBfZtubktrcKHDf+LI2FadkbxKXjU8OR7KLMuycLsMy50x44hiP7xyE1NZNlITzUMnmTvoS5lylxE0/n/60hA==",
+      "sha256": "fe1d7bd07086f0d9dc3d4b3794d45e3950b803ae9c659531f4b752f9834cf15b",
+      "git_head": null,
+      "engines": {
+        "node": ">=22"
+      },
+      "role": "selected"
+    },
+    {
+      "ecosystem": "npm",
+      "package": "@getforma/compiler",
+      "version": "3.2.0",
+      "endpoint": "https://registry.npmjs.org/@getforma%2Fcompiler/3.2.0",
+      "archive": "https://registry.npmjs.org/@getforma/compiler/-/compiler-3.2.0.tgz",
+      "integrity": "sha512-Pg6zpFso4N5e3QWc4w+JrqifjjNvDv63mDh2pB2qhv9dOss6bLG3Eub99Ye4N7DYHydc1bfCb6egE/QO8bFjzA==",
+      "sha256": "5cee66797c656a57eee2e61a78368fd26d4e5e4ff79d53ec93d101da50bd37b9",
+      "git_head": null,
+      "engines": {
+        "node": ">=22"
+      },
+      "role": "selected"
+    },
+    {
+      "ecosystem": "npm",
+      "package": "@getforma/build",
+      "version": "3.2.0",
+      "endpoint": "https://registry.npmjs.org/@getforma%2Fbuild/3.2.0",
+      "archive": "https://registry.npmjs.org/@getforma/build/-/build-3.2.0.tgz",
+      "integrity": "sha512-vDRadd/J/Oyp70tcUENrJifrVOrCuNhiB9SoiIZ6NA4IjwkYGTAKHmZ5PZrcvO0CwH5nowQuKDNlBaAN9vpk/A==",
+      "sha256": "80a65b15bd7fd4b3335ddc8e5c7eac0e53c3d2f2e7935f89538faa6445936a45",
+      "git_head": null,
+      "engines": {
+        "node": ">=22"
+      },
+      "role": "selected"
+    },
+    {
+      "ecosystem": "npm",
+      "package": "@getforma/router",
+      "version": "3.2.0",
+      "endpoint": "https://registry.npmjs.org/@getforma%2Frouter/3.2.0",
+      "archive": "https://registry.npmjs.org/@getforma/router/-/router-3.2.0.tgz",
+      "integrity": "sha512-NNxbHjEdOyFabeGQPF0cyS7zeEEL4nWX2zKFkvzQETqwd6kAe5Y+c50ACG/573xzdCwAoRBZyXbrmbzrVjY+EA==",
+      "sha256": "c776f967e45da8f3603a91e8b2cfd820a66efcb08254fc8ea1f805c439f9237f",
+      "git_head": null,
+      "engines": {
+        "node": ">=22"
+      },
+      "role": "optional; not installed"
+    },
+    {
+      "ecosystem": "npm",
+      "package": "@getforma/create-app",
+      "version": "3.2.0",
+      "endpoint": "https://registry.npmjs.org/@getforma%2Fcreate-app/3.2.0",
+      "archive": "https://registry.npmjs.org/@getforma/create-app/-/create-app-3.2.0.tgz",
+      "integrity": "sha512-5FD9czNjXdIXHK0WAteWxJwHxn91Vsl0GbJgV1ptYgEQXHyouayVlqnKxndxdzPeuOPclDU9EzDlBTXtZb2sbw==",
+      "sha256": "3f33108ae4095fb2064c523d91171243f9e2a61eb349486eec11785ed51ff7a8",
+      "git_head": null,
+      "engines": {
+        "node": ">=22"
+      },
+      "role": "selected"
+    },
+    {
+      "ecosystem": "crates.io",
+      "package": "forma-ir",
+      "version": "3.2.0",
+      "endpoint": "https://crates.io/api/v1/crates/forma-ir/3.2.0",
+      "archive": "https://static.crates.io/crates/forma-ir/forma-ir-3.2.0.crate",
+      "sha256": "5617c2febe4a47e030bb412505d42ed24a0d5410dfadcc6430d2fbeb9eda3c2c",
+      "rust_version": "1.71",
+      "role": "selected"
+    },
+    {
+      "ecosystem": "crates.io",
+      "package": "forma-ir-derive",
+      "version": "3.2.0",
+      "endpoint": "https://crates.io/api/v1/crates/forma-ir-derive/3.2.0",
+      "archive": "https://static.crates.io/crates/forma-ir-derive/forma-ir-derive-3.2.0.crate",
+      "sha256": "2a5d5dd3e9cd8cf28765a9aef84c142bad5ed3aa353dd904419e5b864cd16bc1",
+      "rust_version": "1.71",
+      "role": "selected"
+    },
+    {
+      "ecosystem": "crates.io",
+      "package": "forma-server",
+      "version": "3.2.0",
+      "endpoint": "https://crates.io/api/v1/crates/forma-server/3.2.0",
+      "archive": "https://static.crates.io/crates/forma-server/forma-server-3.2.0.crate",
+      "sha256": "ff29031e7a3c8a12ee97791755244e4730bcca3bf05a80abc0e24f7c128c30cd",
+      "rust_version": "1.85",
+      "role": "selected"
+    }
+  ],
+  "lock_sha256": {
+    "spikes/APP-001/minimal/admin/package-lock.json": "a5850cd7fed748d29a1270bc05f41912c3ae9fa2058e6941d6af36c440e7acfd",
+    "spikes/APP-001/minimal/Cargo.lock": "d4b2811388e8983ea034a40ffdbc9133eee7812fe323a1b5e57732bcab689781"
+  },
+  "result": "All eight downloaded archives match published registry checksums; tag identity verified."
+}

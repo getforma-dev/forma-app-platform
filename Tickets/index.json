@@ -7,7 +7,7 @@
       "name": "Foundations and first saved workflow",
       "order": 1,
       "depends_on": [],
-      "status": "planned",
+      "status": "active",
       "gate_status": "pending",
       "gate_evidence": [],
       "sprints": [
@@ -193,18 +193,16 @@
       "blocked_count": 0
     }
   ],
-  "ready_by_local_dependencies": [
-    "APP-001"
-  ],
+  "ready_by_local_dependencies": [],
   "tickets": [
     {
       "id": "APP-001",
       "title": "Record the released Forma 3.2 baseline and amend design assumptions",
-      "path": "0-backlog/APP-001.md",
+      "path": "2-in-progress/APP-001.md",
       "Field": "Value",
       "---": "---",
       "Epic": "FND",
-      "Status": "Backlog",
+      "Status": "In progress",
       "Priority": "P0",
       "Type": "Spike",
       "Sprint": "S01",
@@ -216,8 +214,8 @@
       "Requirements": "N9",
       "Depends on": "None",
       "External dependencies": "None beyond listed local predecessors",
-      "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Assignee": "GenUI \u2014 Codex implementation agent",
+      "Branch / PR": "app-001-phase-one; local review before landing",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
