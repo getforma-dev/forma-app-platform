@@ -5,7 +5,7 @@ This is the implementation board for Forma's company app platform and its Norths
 ## Start here
 
 1. Read the repository [contribution guide](../CONTRIBUTING.md) and the [source guide](../docs/planning/SOURCE-GUIDE.md).
-2. Read the [sprint plan](SPRINTS.md) for staged outcomes and the [ordered tracker](TRACKER.md) for individual tickets. [Categories](CATEGORIES.md) group responsibility; they do not create separate copies of a ticket.
+2. Read the [phase plan](PHASES.md) and [quality gates](../docs/planning/QUALITY-GATES.md), then the [sprint plan](SPRINTS.md) for smaller outcomes and the [ordered tracker](TRACKER.md) for individual tickets. [Categories](CATEGORIES.md) group responsibility; they do not create separate copies of a ticket.
 3. When implementation begins, run `python3 Tickets/_tools/board.py next` from the repository root. Start with the first ready ticket, initially APP-001, after checking its external dependencies and acceptance criteria.
 4. Use [IMPLEMENT](_tools/IMPLEMENT.md) for execution and [REVIEW](_tools/REVIEW.md) for independent review.
 
@@ -13,7 +13,7 @@ Sprints are ordered scope batches, not calendar commitments. Start dates and cap
 
 ## One authoritative ticket
 
-Each `APP-NNN.md` lives in exactly one status folder. Its Markdown fields, acceptance checklist and log are authoritative. `plan.json` defines category and sprint metadata; `external-dependencies.json` records upstream gate evidence. `TRACKER.md`, `SPRINTS.md`, category/sprint pages, `COVERAGE.md`, `BLOCKERS.md` and `index.json` are derived views. Edit the source ticket or register, then regenerate; do not hand-edit those views.
+Each `APP-NNN.md` lives in exactly one status folder. Its Markdown fields, acceptance checklist and log are authoritative. `plan.json` defines phase gates, category and sprint metadata; `external-dependencies.json` records upstream gate evidence. `TRACKER.md`, `PHASES.md`, `SPRINTS.md`, phase/category/sprint pages, `COVERAGE.md`, `BLOCKERS.md` and `index.json` are derived views. Edit the source ticket or register, then regenerate; do not hand-edit those views.
 
 GitHub hosts source and pull requests. It does not hold a second issue board. The **GenUI team** owns this app and its `APP-NNN` implementation tickets. The **FormaStack team** owns the upstream blockers, including coordination of framework and fAuth work, under their existing `FORMA-NNN` identities. The GenUI team implements app integration and verifies the required upstream evidence; it does not duplicate those fixes. [Upstream snapshots](evidence/upstream/README.md) preserve evidence only; never move or close them as app tickets.
 
@@ -40,6 +40,10 @@ python3 Tickets/_tools/board.py check
 python3 Tickets/_tools/board.py next
 ```
 
-`render` validates ticket structure and regenerates indexes. `check` also refuses stale indexes and checks design digests and active local links. `next` lists Backlog tickets whose local APP predecessors are Done; **external dependencies still require inspection**. These are planning checks, not application tests.
+`render` validates ticket structure, phase membership and completion-gate prerequisites, then regenerates indexes. `check` also refuses stale indexes and checks design digests and active local links. `next` lists Backlog tickets whose local APP predecessors are Done; **external dependencies still require inspection**. These are planning checks, not application tests.
 
 [Requirement coverage](COVERAGE.md) is a map from design obligations to planned work. Coverage links are not evidence that the behavior exists or passes.
+
+## Phase acceptance
+
+Each ticket and sprint belongs to exactly one PH01–PH06 phase. A phase is complete only when all its tickets are Done, predecessor gates have passed, and its own gate has reviewed evidence. Use the [gate record](_tools/PHASE-GATE.md) and the phase page. Pending upstream gates still block only their consumers; eligible independent tickets may proceed. The board validates evidence links and status relationships, while the reviewer judges whether the tests satisfy the design.

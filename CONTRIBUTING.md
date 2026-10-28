@@ -31,3 +31,7 @@ These validate the board, local links and frozen design hashes; they do not buil
 For implementation, run checks appropriate to the changed behavior and all ticket-required gates. Add focused regression coverage for defects and meaningful acceptance checks for new behavior. Record failures and limitations honestly. Independent review must assess the actual change before completion. Keep secrets, credentials, personal data, dependency folders and disposable build artifacts out of commits; retain sanitized evidence needed to understand results.
 
 Use concise commits and review descriptions that explain the problem, resulting behavior and verification. Do not add fabricated coauthor attribution. Scope external actions to the current user request; preparing tickets alone does not perform or establish authority for a production rollout.
+
+## Phase completion
+
+Use [PHASES](Tickets/PHASES.md) for phase ownership and [QUALITY-GATES](docs/planning/QUALITY-GATES.md) for verification/release trials. Record reviewed evidence with the [phase-gate template](Tickets/_tools/PHASE-GATE.md). Ticket completion and planning checks do not by themselves complete a phase.

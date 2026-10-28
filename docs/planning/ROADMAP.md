@@ -1,27 +1,28 @@
-# Delivery roadmap
+# Six-phase delivery roadmap
 
-The first deliverable is this organized workspace. The implementation sequence below turns the delivered design into small, checkable outcomes. GenUI owns the app; FormaStack owns upstream framework/authentication blockers. A dependency blocks its consumer, not every ticket in the sprint.
+The workspace preparation is complete. Application implementation is organized into six phases, with the existing 72 tickets and 12 sprints retained. **GenUI** owns the application; **FormaStack** owns the four upstream handoff items. No phase has started or passed its implementation gate yet.
 
-| Stage | Sprints | Outcome | Exit gate |
+| Phase | Sprints | Tickets | What we will have at the end |
 |---|---|---|---|
-| A — Foundations and engineering spike | S01–S02 | Current contracts, native rendering and confined data/parser proofs, followed by one durable authorized workflow | Admitted definition → authorized query → receipt → explicit internal command → atomic outcome/audit → reopen. Replay, conflict and race evidence. Upstream gates cleared before dependent acceptance |
-| B — Deterministic app platform | S03–S05 | Real imports, correct query execution, accessible canvas and saved work | CSV and XLSX through actual inspected imports; exact two-domain arithmetic; spatial and focused workflows; durable forms and reopened work |
-| C — Creation and governance | S06–S08 | Direct editing, preview, publication, version adoption, retrieval and bounded AI | Both app shapes authored through general controls; exact approvals; genuine generation admitted with evidence; unsupported intents abstain |
-| D — Shared two-app demonstration | S09–S10 | Safe sharing, revocation, export, operational rehearsal and the complete six acts | S01–S07 pass on one unchanged platform build; colleague continuation and independent reuse; no per-example patch; restored data and failure handling proven |
-| E — Managed pilot readiness | S11 | Hosted isolation, supply chain, audit, support and data lifecycle | Environment and operating decisions recorded; real-identity key custody blocker resolved; deployable controls ready for qualification |
-| E — Managed pilot readiness | S12 | Measured load, recovery, security, runbooks and one recurring customer workflow | Real-data entry only after all readiness controls pass; then measure recurring use, second-person reuse and maintenance effort |
+| [1 — Foundations and first saved workflow](../../Tickets/phases/PH01.md) | S01–S02 | APP-001–014 (14) | One authorized query, receipt and durable decision that survives retry, conflict and reopen |
+| [2 — Working data and workspace](../../Tickets/phases/PH02.md) | S03–S05 | APP-015–031 (17) | Real file imports, correct results, accessible canvas/forms and saved work |
+| [3 — App creation, governance and AI](../../Tickets/phases/PH03.md) | S06–S08 | APP-032–047 (16) | General app authoring, preview, governed publication, version changes and bounded AI |
+| [4 — Complete two-app demonstration](../../Tickets/phases/PH04.md) | S09–S10 | APP-048–057 (10) | Northstar and Spend Review work through the same build, with sharing, reuse and recovery proven |
+| [5 — Managed pilot controls](../../Tickets/phases/PH05.md) | S11 | APP-058–066 (9) | Hosted deployment, service identity, audit, support and deletion controls |
+| [6 — Qualification and pilot learning](../../Tickets/phases/PH06.md) | S12 | APP-067–072 (6) | Measured release readiness, a controlled real-data pilot, and observed customer reuse |
 
-Use the [sprint plan](../../Tickets/SPRINTS.md) and [ordered tracker](../../Tickets/TRACKER.md) for exact work and dependencies. Each sprint is a scope batch; no dates or team velocity have been assumed. Size estimates are planning aids, not promises. Split an item before starting if it will exceed five focused implementation days or cannot yield one reviewable result.
+The maintained [phase board](../../Tickets/PHASES.md) shows progress. Each phase page contains entry requirements, deliverables, checks and evidence gates, applicable FormaStack blockers and its ordered tickets. [Sprints](../../Tickets/SPRINTS.md) divide the phase into smaller batches; [categories](../../Tickets/CATEGORIES.md) group ownership. `Tickets/plan.json` owns phase definitions; ticket Markdown owns individual work status.
 
-## Working rules
+## Execution and completion
 
-- Start one ready primary GenUI ticket at a time. Parallelize independent contracts, fixtures, parser/query work and upstream FormaStack work when the dependency graph permits.
-- End each ticket with evidence; end each stage with a demonstration or measured gate. A passing planned-coverage check is not a runtime test.
-- Use the same tenant, permission, source, record and version semantics in the spike and the full product. Reduced scale does not waive authority boundaries.
-- Do not treat a synthetic provider, seeded app or prerecorded screen as real generation. They can support early development only with an explicit label.
-- Keep app code in this repository and upstream fixes in their owners. Donor canvas repositories are reference material; copy selected code only through a porting ticket with license and behavior review.
-- Recheck release evidence when an upstream blocker lands. GenUI must rerun its consuming check before moving the blocked ticket to Selected.
+Start PH01 with APP-001. Select work by its actual dependencies. Independent eligible tickets may begin while another phase's integration gate waits; this does not pass that gate or waive a required check. Phase acceptance remains sequential and requires ticket completion plus reviewed evidence.
 
-## Beyond the first release
+PH01 directly waits on FORMA-232's budget disposition, FORMA-246 native conformance and FORMA-247 hosted authentication. PH05 waits on FORMA-248 before real-organization identity readiness. Their scope and unblock evidence are in the [cross-team handoff](CROSS-TEAM-HANDOFF.md). Downstream local dependencies preserve these gates.
 
-The [deferred scope](DEFERRED.md) records candidate follow-ups. It has no launch dependency or committed sprint. The design's first-release promise is a managed company app platform; it does not imply arbitrary code, live connectors, external transactions or a public marketplace.
+The [quality gates](QUALITY-GATES.md) specify the tests, verifications and release trials required by the design for each phase. A phase cannot finish merely because its ticket list is checked off. Record exact candidate/environment identities, commands/results, negative/failure cases and independent review in its gate record. Preserve failed trials and rerun affected checks after fixes.
+
+PH05 records scope and prepares controls. PH06 first qualifies the candidate with APP-067–071, then makes the live-data entry decision at APP-072 entry, then observes recurring customer use. Customer learning is the end of PH06, not a prerequisite for entering the pilot.
+
+Sprints and phases are scope batches without invented dates or velocity. Refine estimates before selection and split any task that cannot yield a reviewable result within five focused implementation days. Observational pilot time may exceed that effort estimate.
+
+[Deferred scope](DEFERRED.md) remains outside these phases. Source designs are preserved unchanged; later decisions and measured deviations are recorded explicitly.

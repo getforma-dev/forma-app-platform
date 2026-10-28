@@ -2,16 +2,16 @@
 
 Synthetic fixtures, both app journeys and reproducible release evidence.
 
-| Order | Ticket | Sprint | Category | Priority | Size | Status | Depends on |
-|---|---|---|---|---|---|---|---|
-| 11 | [APP-011: Package reproducible synthetic sources and expected outcomes](../0-backlog/APP-011.md) | S02 | VAL | P0 | M | Backlog | APP-002, APP-007 |
-| 36 | [APP-036: Prove authoring generality before AI polish](../0-backlog/APP-036.md) | S06 | VAL | P0 | M | Backlog | APP-033, APP-035 |
-| 47 | [APP-047: Freeze and run the 15-intent evaluation](../0-backlog/APP-047.md) | S08 | VAL | P0 | M | Backlog | APP-044, APP-045, APP-046 |
-| 52 | [APP-052: Exercise handoff, independent reuse and all data surfaces](../0-backlog/APP-052.md) | S09 | VAL | P0 | M | Backlog | APP-041, APP-050, APP-051 |
-| 54 | [APP-054: Run the complete Northstar journey from imported evidence](../0-backlog/APP-054.md) | S10 | VAL | P0 | M | Backlog | APP-019, APP-025, APP-039, APP-047, APP-052, APP-053 |
-| 55 | [APP-055: Create Spend Review through the same live authoring path](../0-backlog/APP-055.md) | S10 | VAL | P0 | M | Backlog | APP-054 |
-| 56 | [APP-056: Run failure, security and accessibility release suite](../0-backlog/APP-056.md) | S10 | VAL | P0 | M | Backlog | APP-047, APP-052, APP-053, APP-055 |
-| 57 | [APP-057: Package reproducible demo evidence and rehearsal](../0-backlog/APP-057.md) | S10 | VAL | P1 | M | Backlog | APP-056 |
-| 69 | [APP-069: Qualify load, noisy neighbor and budgets at declared limits](../0-backlog/APP-069.md) | S12 | VAL | P0 | M | Backlog | APP-024, APP-059, APP-060, APP-067 |
-| 70 | [APP-070: Independent release security and accessibility review](../0-backlog/APP-070.md) | S12 | VAL | P0 | M | Backlog | APP-062, APP-063, APP-064, APP-065, APP-068, APP-069 |
-| 72 | [APP-072: Evaluate one real recurring workflow and second-person reuse](../0-backlog/APP-072.md) | S12 | VAL | P1 | M | Backlog | APP-058, APP-070, APP-071 |
+| Order | Ticket | Phase | Sprint | Category | Priority | Size | Status | Depends on |
+|---|---|---|---|---|---|---|---|---|
+| 11 | [APP-011: Package reproducible synthetic sources and expected outcomes](../0-backlog/APP-011.md) | [PH01](../phases/PH01.md) | S02 | VAL | P0 | M | Backlog | APP-002, APP-007 |
+| 36 | [APP-036: Prove authoring generality before AI polish](../0-backlog/APP-036.md) | [PH03](../phases/PH03.md) | S06 | VAL | P0 | M | Backlog | APP-033, APP-035 |
+| 47 | [APP-047: Freeze and run the 15-intent evaluation](../0-backlog/APP-047.md) | [PH03](../phases/PH03.md) | S08 | VAL | P0 | M | Backlog | APP-044, APP-045, APP-046 |
+| 52 | [APP-052: Exercise handoff, independent reuse and all data surfaces](../0-backlog/APP-052.md) | [PH04](../phases/PH04.md) | S09 | VAL | P0 | M | Backlog | APP-041, APP-050, APP-051 |
+| 54 | [APP-054: Run the complete Northstar journey from imported evidence](../0-backlog/APP-054.md) | [PH04](../phases/PH04.md) | S10 | VAL | P0 | M | Backlog | APP-019, APP-025, APP-039, APP-047, APP-052, APP-053 |
+| 55 | [APP-055: Create Spend Review through the same live authoring path](../0-backlog/APP-055.md) | [PH04](../phases/PH04.md) | S10 | VAL | P0 | M | Backlog | APP-054 |
+| 56 | [APP-056: Run failure, security and accessibility release suite](../0-backlog/APP-056.md) | [PH04](../phases/PH04.md) | S10 | VAL | P0 | M | Backlog | APP-047, APP-052, APP-053, APP-055 |
+| 57 | [APP-057: Package reproducible demo evidence and rehearsal](../0-backlog/APP-057.md) | [PH04](../phases/PH04.md) | S10 | VAL | P1 | M | Backlog | APP-056 |
+| 69 | [APP-069: Qualify load, noisy neighbor and budgets at declared limits](../0-backlog/APP-069.md) | [PH06](../phases/PH06.md) | S12 | VAL | P0 | M | Backlog | APP-024, APP-059, APP-060, APP-067 |
+| 70 | [APP-070: Independent release security and accessibility review](../0-backlog/APP-070.md) | [PH06](../phases/PH06.md) | S12 | VAL | P0 | M | Backlog | APP-062, APP-063, APP-064, APP-065, APP-068, APP-069 |
+| 72 | [APP-072: Evaluate one real recurring workflow and second-person reuse](../0-backlog/APP-072.md) | [PH06](../phases/PH06.md) | S12 | VAL | P1 | M | Backlog | APP-058, APP-070, APP-071 |

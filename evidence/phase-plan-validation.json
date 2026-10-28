@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-28",
+  "scope": "phase planning tooling only; no application tests executed",
+  "result": "passed",
+  "checks": [
+    "passed gate requires evidence and all phase tickets Done",
+    "gate evidence must name an existing repository-relative file",
+    "all tickets Done with pending gate remains awaiting gate",
+    "predecessor phase gate has not passed",
+    "phase is unknown or disagrees with sprint"
+  ],
+  "counts": {
+    "tickets": 72,
+    "phases": 6,
+    "requirements": 80
+  }
+}

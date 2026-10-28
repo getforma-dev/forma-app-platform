@@ -1,6 +1,6 @@
 # First implementation session
 
-This preparation checkpoint intentionally stops before application code. Begin with **APP-001** when implementation is requested.
+This preparation checkpoint intentionally stops before application code. Begin with **PH01 — Foundations and first saved workflow**, starting at **APP-001**, when implementation is requested. Read the [phase plan](../../Tickets/PHASES.md) and [quality gates](QUALITY-GATES.md).
 
 1. Read the [source guide](SOURCE-GUIDE.md), [3.2 baseline](../architecture/FRAMEWORK-BASELINE.md) and [cross-team handoff](CROSS-TEAM-HANDOFF.md).
 2. Run `python3 Tickets/_tools/board.py check` and `python3 Tickets/_tools/board.py next` from the repository root.

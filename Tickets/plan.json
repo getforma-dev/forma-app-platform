@@ -65,98 +65,245 @@
     {
       "id": "S01",
       "name": "Rebase and qualify architectural seams",
-      "stage": "A \u2014 Qualification and foundations",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Frozen platform and companion design packets are available.",
       "outcome": "Verified Forma 3.2 contracts and bounded renderer/parser/query/auth qualification plans.",
-      "exit": "Released pins, measured spike evidence, explicit amended assumptions and unresolved upstream gate ownership; no application capability claimed from release publication alone."
+      "exit": "Released pins, measured spike evidence, explicit amended assumptions and unresolved upstream gate ownership; no application capability claimed from release publication alone.",
+      "phase": "PH01"
     },
     {
       "id": "S02",
       "name": "One authorized app, query and saved decision",
-      "stage": "A \u2014 Qualification and foundations",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Contract/role decisions and required S01 qualification evidence are accepted for the selected slice.",
-      "outcome": "Admitted definition \u2192 authorized query \u2192 visible receipt \u2192 explicit command \u2192 atomic outcome/audit \u2192 reopen.",
-      "exit": "Synthetic fixtures are portable; duplicate and stale-edit tests pass; two-tenant denial and persisted restart evidence exist. Seeded definitions are clearly labeled."
+      "outcome": "Admitted definition → authorized query → visible receipt → explicit command → atomic outcome/audit → reopen.",
+      "exit": "Synthetic fixtures are portable; duplicate and stale-edit tests pass; two-tenant denial and persisted restart evidence exist. Seeded definitions are clearly labeled.",
+      "phase": "PH01"
     },
     {
       "id": "S03",
       "name": "Real inspected evidence",
-      "stage": "B \u2014 Deterministic working platform",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Tenant storage, durable work and role boundaries exist.",
       "outcome": "CSV and XLSX enter through real inspected upload and become immutable compatible revisions.",
-      "exit": "Both drop and keyboard Upload show limits/progress/cancel/inspection; parser caps and original-to-normalized provenance are evidenced."
+      "exit": "Both drop and keyboard Upload show limits/progress/cancel/inspection; parser caps and original-to-normalized provenance are evidenced.",
+      "phase": "PH02"
     },
     {
       "id": "S04",
       "name": "Correct bounded execution",
-      "stage": "B \u2014 Deterministic working platform",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Imported revisions, typed contracts and minimal receipts are available.",
       "outcome": "Northstar and Spend Review arithmetic executes through generic bounded operations.",
-      "exit": "Exact totals, half-open windows, units, currency, pagination and source/record snapshots pass; hostile query and stale-epoch release tests pass."
+      "exit": "Exact totals, half-open windows, units, currency, pagination and source/record snapshots pass; hostile query and stale-epoch release tests pass.",
+      "phase": "PH02"
     },
     {
       "id": "S05",
       "name": "A useful persistent workspace",
-      "stage": "B \u2014 Deterministic working platform",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Authorized query/record path and the measured native primitive set work.",
       "outcome": "People navigate, arrange, filter and submit forms through spatial and focused workflows.",
-      "exit": "Keyboard and screen-reader evidence covers required states; same/new work is distinct; reload and context changes preserve permitted work without stale response leakage."
+      "exit": "Keyboard and screen-reader evidence covers required states; same/new work is distinct; reload and context changes preserve permitted work without stale response leakage.",
+      "phase": "PH02"
     },
     {
       "id": "S06",
       "name": "Direct authoring and safe transformation",
-      "stage": "C \u2014 Creation and governance",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Trusted primitives, declared commands and persisted work are present.",
       "outcome": "People compose both app shapes and make meaningful durable edits before AI polish.",
-      "exit": "Whole-definition admission, completion semantics, stale-patch/undo behavior and preview isolation pass; two directly authored apps run on one build."
+      "exit": "Whole-definition admission, completion semantics, stale-patch/undo behavior and preview isolation pass; two directly authored apps run on one build.",
+      "phase": "PH03"
     },
     {
       "id": "S07",
       "name": "Publication and version lifecycle",
-      "stage": "C \u2014 Creation and governance",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Validated immutable drafts, diffs and isolated previews are available.",
       "outcome": "Organization policy controls exact publication and explicit compatible version adoption.",
-      "exit": "Independent review and owner publication both pass; stale/replayed approval fails; existing work stays pinned and rollback never reverses data or authority."
+      "exit": "Independent review and owner publication both pass; stale/replayed approval fails; existing work stays pinned and rollback never reverses data or authority.",
+      "phase": "PH03"
     },
     {
       "id": "S08",
       "name": "Bounded AI creation and retrieval",
-      "stage": "C \u2014 Creation and governance",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Direct authoring/admission, publication and durable jobs are complete.",
       "outcome": "Real retrieval/adaptation/generation proposes valid apps without gaining authority or leaking evidence.",
-      "exit": "Ten supported/five adversarial evaluation outcomes and provider request inspections are retained; explanation is policy gated; published runtime survives model outage."
+      "exit": "Ten supported/five adversarial evaluation outcomes and provider request inspections are retained; explanation is policy gated; published runtime survives model outage.",
+      "phase": "PH03"
     },
     {
       "id": "S09",
       "name": "Safe handoff and synthetic recovery",
-      "stage": "D \u2014 Shared dual-app proof",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Governed apps, correct receipts and bounded composition exist.",
       "outcome": "Colleagues continue or independently reuse work with current access and demonstrable recovery.",
-      "exit": "Cross-scope/derived-data/queued-result/export tests pass, plus real synthetic backup/restore, retention/deletion and noisy-neighbor/budget evidence before the demo gate."
+      "exit": "Cross-scope/derived-data/queued-result/export tests pass, plus real synthetic backup/restore, retention/deletion and noisy-neighbor/budget evidence before the demo gate.",
+      "phase": "PH04"
     },
     {
       "id": "S10",
       "name": "Working dual-app release gate",
-      "stage": "D \u2014 Shared dual-app proof",
-      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: S01\u2013S09 local and upstream dependencies are evidenced; all demo mechanisms are implemented.",
-      "outcome": "Northstar and Spend Review complete S01\u2013S07 on one unchanged platform build.",
-      "exit": "Actual second-app creation, exact arithmetic, permissions, conflicts, recovery, accessible journey and honest provenance pass; evidence packet distinguishes seeded/manual/simulated steps."
+      "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: S01–S09 local and upstream dependencies are evidenced; all demo mechanisms are implemented.",
+      "outcome": "Northstar and Spend Review complete S01–S07 on one unchanged platform build.",
+      "exit": "Actual second-app creation, exact arithmetic, permissions, conflicts, recovery, accessible journey and honest provenance pass; evidence packet distinguishes seeded/manual/simulated steps.",
+      "phase": "PH04"
     },
     {
       "id": "S11",
       "name": "Hosted pilot controls",
-      "stage": "E \u2014 Managed pilot readiness",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Synthetic demo gate passes. Real-data decisions and upstream live-organization hardening are explicit gates.",
       "outcome": "Prepared hosted deployment and lifecycle controls support a defined pilot scope.",
-      "exit": "No paid resources or live data without the separately required decision. Role isolation, signed compatible release, audit, support access and erasure are verified for the chosen environment."
+      "exit": "No paid resources or live data without the separately required decision. Role isolation, signed compatible release, audit, support access and erasure are verified for the chosen environment.",
+      "phase": "PH05"
     },
     {
       "id": "S12",
       "name": "Measured operations and pilot entry",
-      "stage": "E \u2014 Managed pilot readiness",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Hosted controls exist and ownership/data/provider/region decisions are recorded.",
       "outcome": "Measured capacity/recovery/security and operational ownership support the pilot decision.",
-      "exit": "Restore/deletion/load/security/accessibility reviews pass with measured limits; runbooks and support owner exist before live rows; external recurring-use learning is kept separate from synthetic demo proof."
+      "exit": "Restore/deletion/load/security/accessibility reviews pass with measured limits; runbooks and support owner exist before live rows; external recurring-use learning is kept separate from synthetic demo proof.",
+      "phase": "PH06"
+    }
+  ],
+  "phases": [
+    {
+      "id": "PH01",
+      "name": "Foundations and first saved workflow",
+      "entry": "The preserved design and published Forma 3.2 baseline are available. Begin APP-001; use independent isolated spikes while upstream integration gates are open.",
+      "outcome": "One authenticated user can query authorized data, inspect its receipt, save a decision and reopen it safely.",
+      "deliverables": [
+        "Adopted typed contracts and measured native/parser/query qualification on Forma 3.2 (APP-001–006).",
+        "Reproducible app scaffold, synthetic managed-store environment, tenant schema and session boundary (APP-007–009).",
+        "Admitted definition, deterministic fixtures, query receipt, atomic command/outcome/audit and retry/conflict harness (APP-010–014)."
+      ],
+      "exit_criteria": [
+        "APP-001–014 are Done with reproducible build, schema, parser/query confinement and native adoption evidence; compile refusals and numeric/resource bounds are tested.",
+        "FORMA-246 conformance, FORMA-232 budget disposition and FORMA-247 hosted-auth receipts are accepted by GenUI in APP-003/006.",
+        "The integrated query → receipt → explicit command → atomic outcome/audit → reopen path passes; identical retries do not duplicate writes, stale edits conflict, and both revocation/adoption race orders pass (APP-012–014).",
+        "Tenant isolation and authoritative identity checks pass on the actual integrated path. Synthetic/local test substitutes are identified and cannot satisfy hosted integration acceptance."
+      ],
+      "parallel_work": "FormaStack owns 232/246/247 and later 248. GenUI may advance contracts, parser/query spikes, scaffold, tenant schema and fixtures when their own ticket dependencies permit; only dependent integration acceptance waits.",
+      "order": 1,
+      "depends_on": [],
+      "gate_status": "pending",
+      "gate_evidence": []
+    },
+    {
+      "id": "PH02",
+      "name": "Working data and workspace",
+      "entry": "PH01 is accepted for integrated delivery. Individual storage/import or UI work can start earlier once its own prerequisites are Done.",
+      "outcome": "People import real files, get correct traceable results, use accessible views/forms, and return to saved work.",
+      "deliverables": [
+        "Durable bounded jobs, immutable source storage, CSV/XLSX processing and confirmed interpretation (APP-015–019).",
+        "Typed queries, exact arithmetic/domain operators, reproducible receipts, resource admission and linked filter epochs (APP-020–025).",
+        "Company navigation, canvas interactions, trusted renderers, accessibility, general forms and distinct new/continued work (APP-026–031)."
+      ],
+      "exit_criteria": [
+        "Both drop and keyboard upload exercise actual CSV/XLSX parsing, mapping confirmation and refusal paths; archive-wide memory/time/expansion limits and provenance are verified (APP-015–019).",
+        "Northstar totals are 1,140,000 bytes, 900,000 unmatched and 114,000 bytes/minute; Spend Review totals are 64,000 cents with a 45,000-cent queue. Tests cover windows, units, currencies, pagination and receipt/record snapshot identity (APP-020–025).",
+        "Pan/zoom/move/resize/group/fit, focus navigation and forms work through the same model. Component state accessibility checks plus keyboard and screen-reader evidence pass (APP-027–030).",
+        "Reload, independent new work, original-node adoption, form retry/conflict and late cross-context responses preserve correct data and authority (APP-025–031)."
+      ],
+      "parallel_work": "Imports/query work and workspace interaction can be developed concurrently after their shared contracts settle. Do not bypass PH01 identity or native gates for integrated acceptance.",
+      "order": 2,
+      "depends_on": [
+        "PH01"
+      ],
+      "gate_status": "pending",
+      "gate_evidence": []
+    },
+    {
+      "id": "PH03",
+      "name": "App creation, governance and AI",
+      "entry": "PH02 provides the trusted views, commands and persisted work used by the general authoring path.",
+      "outcome": "Users create, change, review, publish and generate supported apps without platform code changes.",
+      "deliverables": [
+        "Complete typed schema, general editor controls, semantic patches/undo and isolated previews (APP-032–036).",
+        "Versioned publication policy, exact digest approval, reviewer UI, adoption/rollback and ownership lifecycle (APP-037–041).",
+        "Private retrieval, provider/disclosure budgets, compose/adapt jobs, five tool boundaries, receipt-based explanation and the 15-intent evaluation (APP-042–047)."
+      ],
+      "exit_criteria": [
+        "Both app shapes are built through normal authoring controls; source code/build identity stays unchanged and completion semantics are visible. Preview records never enter live work (APP-032–036).",
+        "Publication rechecks digest/policy/approver epochs atomically; stale or replayed approval is refused. Existing work remains pinned and explicit rollback restores neither records nor revoked access (APP-037–041).",
+        "Ten supported and five adversarial intents are frozen and evaluated. All admitted output validates, unsupported requests abstain and numbers match receipts. Provider requests respect disclosure policy, bounded attempts and budget (APP-042–047).",
+        "Provider outage leaves published deterministic queries/forms operational; injected evidence cannot expand tools or authorize a mutation. User submission is required for record changes (APP-043–047)."
+      ],
+      "parallel_work": "Direct authoring and policy work can progress before AI polish. Separate admission, disclosure and publication ownership; model success cannot waive deterministic checks.",
+      "order": 3,
+      "depends_on": [
+        "PH02"
+      ],
+      "gate_status": "pending",
+      "gate_evidence": []
+    },
+    {
+      "id": "PH04",
+      "name": "Complete two-app demonstration",
+      "entry": "PH03 supports genuine app creation, governed publication and bounded AI; the existing dependency graph controls individual starts.",
+      "outcome": "Northstar and Spend Review complete the designed shared-work, independent-reuse and recovery journey on one unchanged build.",
+      "deliverables": [
+        "Separate sharing grants, derived-data redaction, end-to-end revocation, authorized export and colleague continuation/reuse (APP-048–052).",
+        "Actual synthetic restore/deletion/quota recovery before demo signoff (APP-053).",
+        "Full Northstar and Spend Review runs, adversarial/accessibility suite, guarded reset and six-act rehearsal evidence (APP-054–057)."
+      ],
+      "exit_criteria": [
+        "Demo control applicability is recorded: platform SR1/2/4–7/10–13 hold; demo §10.7 substitutes typed in-process principals for SR3 and pinned image/per-build tests for SR8, and accepts SR9 reduction under demo AR1. Demo-SR1–SR6 and the §11.1 pre/post-take protocol pass (APP-056/057); full platform controls remain PH05 work.",
+        "All Northstar scenarios S01–S07 pass with exact source/record receipts and a real user-created second app. No per-example source patch or deployment is used (APP-054/055/057).",
+        "Sharing, cached/derived responses, export and delayed jobs obey current permissions; revocation and command races pass at the reconciled end-to-end bound (APP-048–052).",
+        "Restore uses actual persisted backups, not fixture reseeding; deletion ledger, restart, quotas and isolation continue to hold. S06 adversarial and accessibility checks pass (APP-053/056). Insert-only audit chains are anchored to Object Lock every 15 minutes and restored chains match retained anchors (APP-053; demo M13–M14).",
+        "Six-act release rehearsal records one build, both app digests, model/source pins, outcomes, failures and manual intervention. Reset requires rehearsal mode plus a restricted role, preserves audit/sessions and is absent in real-data mode (APP-057). The sanitized packet has no credentials or retained headers, every shown value matches its captured receipt, and its manifest digest is audited and anchored before delivery (demo M31)."
+      ],
+      "parallel_work": "Sharing and operational rehearsal may run alongside journey polish on accepted interfaces. This phase qualifies a synthetic demo, with production claims reserved for later qualification.",
+      "order": 4,
+      "depends_on": [
+        "PH03"
+      ],
+      "gate_status": "pending",
+      "gate_evidence": []
+    },
+    {
+      "id": "PH05",
+      "name": "Managed pilot controls",
+      "entry": "PH04 synthetic demo evidence is accepted. Confirm pilot scope and identity prerequisites in APP-058; no live-data entry is granted here.",
+      "outcome": "The hosted platform has controlled deployment, service identities, audit, support access and data lifecycle mechanisms.",
+      "deliverables": [
+        "Named pilot workflow/data/operator/budget/region/disclosure plan and FormaStack key-custody receipt (APP-058).",
+        "Role-separated infrastructure and service identity, reproducible signed builds and reversible rollout (APP-059–061).",
+        "Append-only audit/anchors, constrained support, retention/crypto-shredding, organization deletion and administration (APP-062–066)."
+      ],
+      "exit_criteria": [
+        "FORMA-248 key custody/rotation/outage evidence is accepted, and the pilot scope/operator/budget/data decisions are recorded. APP-058 does not approve live customer data.",
+        "Role and service-token negative tests pass; unsigned/mismatched release artifacts are refused. SBOM/provenance and exact deployable digest are retained (APP-059–061).",
+        "Run previous/current API compatibility, migration upgrade → downgrade → upgrade, callee-first canary and rollback trials in the intended isolated environment; record actual candidate identities and stop conditions (APP-061).",
+        "Audit-chain/anchor checks, just-in-time support/breakglass, destructive-action governance with the recorded platform AR1 fallback where applicable, retention and the 24-hour organization-deletion hold pass (APP-062–066)."
+      ],
+      "parallel_work": "FormaStack can deliver key custody earlier while GenUI proves the synthetic demo. Hosted controls can be prepared independently where their ticket prerequisites allow; qualification remains ahead of customer admission.",
+      "order": 5,
+      "depends_on": [
+        "PH04"
+      ],
+      "gate_status": "pending",
+      "gate_evidence": []
+    },
+    {
+      "id": "PH06",
+      "name": "Qualification and pilot learning",
+      "entry": "PH05 controls and scope are ready. First qualify the release candidate with APP-067–071; then decide live-data entry at APP-072 entry; complete this phase only after recurring-use learning.",
+      "outcome": "Measured operational evidence supports a controlled pilot, followed by observed customer use and independent reuse.",
+      "deliverables": [
+        "Payload-safe telemetry, SLO/cost signals and actual restore/failure drills (APP-067/068).",
+        "Open-loop load/noisy-neighbor/budget qualification and independent security/accessibility review (APP-069/070).",
+        "Exercised operations/release/rollback runbooks and named support ownership (APP-071).",
+        "Final live-data entry record, then recurring customer workflow/second-person reuse evidence (APP-072)."
+      ],
+      "exit_criteria": [
+        "An isolated restore verifies relationships, audit and deletion-ledger replay; measured RPO/RTO meet adopted design targets. Process/role/zone/provider/key-store failures fail safely (APP-068).",
+        "Cold/warm million-row, six-view peak, hot-record and 10x/noisy-neighbor trials report p50/p95/p99, errors, admitted/rejected load, bounded resources and fair quotas against explicit adopted limits (APP-067/069).",
+        "Independent release review covers SR1–SR13, actual provider disclosure, revocation, service isolation, audit, deletion after restore and WCAG/keyboard/screen-reader evidence. Blockers are fixed and affected checks rerun (APP-070).",
+        "Before the first real organization sign-in or live row, record readiness using APP-058 scope/identity, APP-070 qualification and APP-071 operational evidence. This is the entry checkpoint for APP-072, not a requirement to finish customer learning before it starts.",
+        "Then complete APP-072 recurring-use and second-person reuse observations with baseline effort, corrections, sample size and limits. No demo-only adoption claim. Archive the phase evidence after this learning completes."
+      ],
+      "parallel_work": "Telemetry and runbook preparation can proceed during synthetic qualification. Customer observations begin only after the live-data entry checkpoint; their elapsed observation period is separate from focused engineering effort.",
+      "order": 6,
+      "depends_on": [
+        "PH05"
+      ],
+      "gate_status": "pending",
+      "gate_evidence": []
     }
   ]
 }
