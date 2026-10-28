@@ -13,7 +13,7 @@ The company app platform built on Forma Stack: teams create, run, adapt and shar
 5. [Existing related work](docs/planning/EXISTING-WORK.md) and [open decisions](docs/planning/DECISIONS-AND-RISKS.md)
 6. [Phase 2 handoff checklist](docs/planning/PHASE-2-HANDOFF.md) — pending full Phase 1 acceptance
 
-The ticket Markdown files in `Tickets/` are the source of truth. Each of the 72 tickets belongs to one of six phases. Tickets have dependencies, scope, acceptance checks and verification evidence; each phase also requires a reviewed completion gate. `APP-NNN` identifies this application's work; existing `FORMA-NNN` tickets retain their upstream owners. GitHub hosts the private repository; there is no duplicate GitHub Issues board.
+The ticket Markdown files in `Tickets/` are the source of truth. Each of the 74 tickets belongs to one of six phases. Tickets have dependencies, scope, acceptance checks and verification evidence; each phase also requires a reviewed completion gate. `APP-NNN` identifies this application's work; existing `FORMA-NNN` tickets retain their upstream owners. GitHub hosts the private repository; there is no duplicate GitHub Issues board.
 
 ## Workspace map
 

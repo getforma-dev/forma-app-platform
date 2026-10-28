@@ -74,8 +74,8 @@
       "id": "S02",
       "name": "One authorized app, query and saved decision",
       "entry": "Select individual tickets when their listed predecessors and external gates are satisfied. Independent work may start before earlier sprint integration gates close. Integrated slice prerequisites: Contract/role decisions and required S01 qualification evidence are accepted for the selected slice.",
-      "outcome": "Admitted definition → authorized query → visible receipt → explicit command → atomic outcome/audit → reopen.",
-      "exit": "Synthetic fixtures are portable; duplicate and stale-edit tests pass; two-tenant denial and persisted restart evidence exist. Seeded definitions are clearly labeled.",
+      "outcome": "Invite-first public beta admission → admitted definition → authorized query → visible receipt → explicit command → atomic outcome/audit → reopen.",
+      "exit": "Synthetic fixtures are portable; duplicate and stale-edit tests pass; two-tenant denial and persisted restart evidence exist. Seeded definitions are clearly labeled. ADR-003 invitation/entitlement, hosted registration and public-route refusal evidence is required through APP-073/074; a temporary CIDR test does not pass application admission.",
       "phase": "PH01"
     },
     {
@@ -168,13 +168,15 @@
       "deliverables": [
         "Adopted typed contracts and measured native/parser/query qualification on Forma 3.2 (APP-001–006).",
         "Reproducible app scaffold, synthetic managed-store environment, tenant schema and session boundary (APP-007–009).",
-        "Admitted definition, deterministic fixtures, query receipt, atomic command/outcome/audit and retry/conflict harness (APP-010–014)."
+        "Admitted definition, deterministic fixtures, query receipt, atomic command/outcome/audit and retry/conflict harness (APP-010–014).",
+        "Invite-first beta entry at beta.getforma.dev: owner-issued codes, persisted trial entitlement, tenant-scoped hosted signup and protected-route refusal (APP-073/074; ADR-003)."
       ],
       "exit_criteria": [
-        "APP-001–014 are Done with reproducible build, schema, parser/query confinement and native adoption evidence; compile refusals and numeric/resource bounds are tested.",
+        "APP-001–014 and APP-073/074 are Done with reproducible build, schema, parser/query confinement and native adoption evidence; compile refusals and numeric/resource bounds are tested.",
         "FORMA-246 conformance, FORMA-232 budget disposition and FORMA-247 hosted-auth receipts are accepted by GenUI in APP-003/006.",
         "The integrated query → receipt → explicit command → atomic outcome/audit → reopen path passes; identical retries do not duplicate writes, stale edits conflict, and both revocation/adoption race orders pass (APP-012–014).",
-        "Tenant isolation and authoritative identity checks pass on the actual integrated path. Synthetic/local test substitutes are identified and cannot satisfy hosted integration acceptance."
+        "Tenant isolation and authoritative identity checks pass on the actual integrated path. Synthetic/local test substitutes are identified and cannot satisfy hosted integration acceptance.",
+        "Public HTTPS preserves invite-first registration and server-bound organization scope; anonymous/pre-access/expired/revoked users cannot dispatch protected work. Actual hosted registration, real verification delivery and mailbox activation, three-browser admission, code concurrency/revocation and bounded $100/month environment evidence pass. LLM calls remain disabled before APP-043."
       ],
       "parallel_work": "FormaStack owns 232/246/247 and later 248. GenUI may advance contracts, parser/query spikes, scaffold, tenant schema and fixtures when their own ticket dependencies permit; only dependent integration acceptance waits.",
       "order": 1,

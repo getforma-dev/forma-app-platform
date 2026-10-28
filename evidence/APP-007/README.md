@@ -1,6 +1,10 @@
 # APP-007 local preparation and managed gate
 
-**Local preparation is reviewable; APP-007 is not complete.** No GenUI AWS resource was created, no migration was applied to RDS, and no live readiness/two-tenant qualification was run. The budget/operator and deployment inputs must be settled before the managed acceptance campaign.
+## Updated operator inputs — 2026-10-28
+
+Victor supplied `beta.getforma.dev`, public HTTPS with invite-first signup, and a $100 monthly project limit. [The operator input receipt](operator-inputs-2026-10-28.json) records successful issuance of a dedicated non-exportable ACM certificate and preservation of all 23 existing DNS records when adding its validation. No application route, RDS, app task or managed qualification is established by that certificate. Infrastructure is being revised for a bounded trial, with $5 of the same limit reserved for the coordinated auth rehearsal. The [current environment plan](../../docs/planning/SYNTHETIC-ENVIRONMENT.md) supersedes earlier missing-input and permanent-IP-restriction assumptions below; the original source/image checks remain historical evidence for their exact revisions.
+
+**Local preparation is reviewable; APP-007 is not complete.** At the original local qualification below, no GenUI AWS resource had been created and operator inputs were pending. The later receipt above resolves those inputs and records certificate preparation only. No migration has been applied to GenUI RDS and no live readiness/two-tenant qualification has run.
 
 The candidate supplies strict native Forma 3.2.0 browser/Rust source, fixed role interfaces with atomic credential-file reload, a pinned credential helper and actual dependency probes, initial SQL migration, separate mutating qualification/cleanup commands, and deployable CDK ECS/Fargate/RDS/S3/KMS/TLS configuration. One Rust business binary plus a local Python support process share the demo task's trust boundary; no per-process or application authorization claim follows from logical role credentials.
 

@@ -31,7 +31,7 @@
       ],
       "kind": "required",
       "evidence": "",
-      "condition": "Deployed auth revision, client, PKCE, tenant claims, canary and rollback evidence."
+      "condition": "Deployed auth revision, exact beta client/callback, tenant-bound invite-only registration and token-free PKCE, verified-mailbox activation, tenant/canary isolation and rollback evidence under ADR-003."
     },
     {
       "id": "FORMA-248",

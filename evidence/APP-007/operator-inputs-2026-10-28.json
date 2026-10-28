@@ -1,0 +1,31 @@
+{
+  "recorded_at": "2026-10-28T21:43:22.048739+00:00",
+  "authority": "Victor supplied beta.getforma.dev, public HTTPS, invite-first signup and $100 monthly cap in this chat; auth chat reported his $5-within-cap rehearsal approval with coordinated-start condition.",
+  "public_origin": "https://beta.getforma.dev",
+  "oauth_callback": "https://beta.getforma.dev/auth/callback",
+  "monthly_project_limit_usd": 100,
+  "planned_allocations_usd": {
+    "genui_qualification_and_retained_infrastructure": 70,
+    "auth_rehearsal": 5,
+    "unallocated": 25,
+    "model_calls": 0
+  },
+  "desired_ingress": "public IPv4 HTTPS; operator /32 is a temporary network trial only",
+  "signup_policy": "valid owner-issued invitation before tenant-scoped registration; app membership and active entitlement separately required",
+  "certificate": {
+    "certificate_arn": "arn:aws:acm:us-east-1:877573132739:certificate/832cd214-1039-4d8d-abdd-1ae614caf9ed",
+    "domain": "beta.getforma.dev",
+    "status": "ISSUED",
+    "export": "DISABLED",
+    "validation_status": "SUCCESS",
+    "in_use_by": []
+  },
+  "dns_verification": {
+    "existing_records_preserved": 23,
+    "validation_cname_added": true,
+    "application_route_created": false,
+    "raw_zone_and_record_values": "retained only in ignored .cache/operations/beta; excluded from Git"
+  },
+  "genui_billable_application_resources_created": false,
+  "cloud_phase_acceptance": false
+}

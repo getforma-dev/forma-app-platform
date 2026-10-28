@@ -4,7 +4,7 @@ Prepared 2026-10-28. This record turns the delivered designs into implementation
 
 ## Source precedence
 
-1. The user's current request establishes preparation of the app on released Forma 3.2 before implementation begins.
+1. The user's current instructions establish released Forma 3.2 implementation and the invite-first public beta direction recorded in [ADR-003](ADR-003-PUBLIC-BETA-ACCESS.md). New explicit instructions amend preparation assumptions; they do not fabricate completed runtime evidence.
 2. The controlling App Platform product definition and the shared C01–C16 contracts establish product scope and authority boundaries.
 3. The final [platform design](../../design/forma-generative-app-platform-v2/design.md) and [Northstar design](../../design/forma-northstar-demo/design.md), particularly their decision tables in section 5.3 and final delivery logs, settle choices made after preparation.
 4. Earlier [BUILD-HANDOFF](../../design/forma-northstar-demo/BUILD-HANDOFF.md), brief, status and intake passages remain useful requirements evidence but sometimes predate final rulings. Their references to unresolved representation, 3.0-only packages, browser-canvas alternatives or storage preparation are not a mandate to reopen settled decisions.
@@ -59,3 +59,7 @@ The synthetic demo can advance while these decisions are tracked. A real organiz
 - Provenance, signed deployable artifacts, pinned dependencies, operations/audit monitoring and explicit residual-risk ownership.
 
 These are implementation/release exit criteria from the design, not an approval ritual for this repository preparation. No live data, external deployment or paid resources are created by preparing the backlog.
+
+## Public beta amendment
+
+[ADR-003](ADR-003-PUBLIC-BETA-ACCESS.md) adopts `beta.getforma.dev`, public HTTPS, invite-first email/password signup, operator-controlled isolated trial organizations and a $100/month operating limit. The immediate full-size Fargate environment is a bounded Phase 1 qualification window, not the earlier always-on cost estimate. APP-073/074 add persisted admission and hosted public-entry proof to PH01; APP-009/012 consume that gate. fAuth registration/verification remains FormaStack-owned, while GenUI owns membership, codes, entitlement and work/budget admission. No generic public signup, unlimited trial, enabled LLM, completed beta or real-data readiness follows from this amendment.
