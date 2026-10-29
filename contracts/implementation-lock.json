@@ -39,7 +39,7 @@
     "contracts/validate.py": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
     "contracts/verify_vectors.mjs": "b81b9bdeb4e57037a66bca328c5e519ea7613101eec1c3d8486598aa28b31674",
     "docs/architecture/ADR-002-CONTRACT-EDITION.md": "5bba501cbd3e9b603439e790acc3fea9c8c3e78bc2cb8ba57a94ed2f6b25a79a",
-    "docs/architecture/ADR-009-PHASE-2-DATA-PLANE.md": "1e71dfcedfc3cc93226a8152bf4799a910f0a046168f87bd2a8b0d54be4888fe",
+    "docs/architecture/ADR-009-PHASE-2-DATA-PLANE.md": "93d77119f146dab745916f34110f99bf440a1d55d889ec3e9da6d2bf644e44b3",
     "evidence/APP-002/dependencies.json": "89c86a4d381f8d945bdcd9c7655ad9e7f01ae80a60515ded172060afd890771c"
   }
 }
