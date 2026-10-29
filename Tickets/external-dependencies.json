@@ -72,7 +72,7 @@
       ],
       "kind": "required",
       "evidence": "",
-      "condition": "Lean always-on fAuth deployment for the beta (FormaStack ticket FORMA-367, P1; Victor approved it with SES SMTP on 2026-10-29 and FormaStack deploys once its image is qualified): an image at or after 1bf5d3b, ECR, KMS keys and secrets including the SMTP secret, three-stack deploy, custom domain (GenUI creates the DNS records), Northstar/Canary tenants, the beta client with the exact callback https://beta.getforma.dev/auth/callback and per-organization return_entry_url, a smoke test, and private delivery of the issuer identity and ten_/usr_ ids. FormaStack's recomputed always-on cost is about $31–38/month (ADR-008)."
+      "condition": "Lean always-on fAuth deployment for the beta (FormaStack ticket FORMA-367, P1; Victor approved it with SES SMTP on 2026-10-29 and FormaStack deploys once its image is qualified): an image at or after 1bf5d3b, ECR, KMS keys and secrets including the SMTP secret, three-stack deploy, custom domain (GenUI creates the DNS records), Northstar/Canary tenants, the beta client with the exact callback https://beta.getforma.dev/auth/callback and per-organization return_entry_url, a smoke test, and private delivery of the issuer identity and ten_/usr_ ids. FormaStack's recomputed always-on cost is about $31–38/month (ADR-008). Hosting changed 2026-10-29 at Victor's choice: AWS refused new App Runner services for the account, so fAuth runs on one EC2 t3a.small with Caddy (Let's Encrypt) at the unchanged origin https://auth-staging.getforma.dev, image main 1bf5d3b (manifest sha256:d1365238…); DNS is one A record created by Victor."
     }
   ]
 }
