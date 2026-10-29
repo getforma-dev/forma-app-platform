@@ -1,0 +1,810 @@
+{
+  "schema_version": 1,
+  "scope": "APP-008 real local PostgreSQL schema/ACL qualification",
+  "managed_acceptance": false,
+  "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "server_version": "16.13",
+  "network": "random loopback-only published port",
+  "checks": [
+    {
+      "name": "committed missing real table refuses and preserves exact drifted state",
+      "passed": true
+    },
+    {
+      "name": "committed disabled tenant RLS refuses and preserves exact drifted state",
+      "passed": true
+    },
+    {
+      "name": "committed extra application UPDATE refuses and preserves exact drifted state",
+      "passed": true
+    },
+    {
+      "name": "committed preexisting history1 with role drift refuses and preserves exact drifted state",
+      "passed": true
+    },
+    {
+      "name": "committed all-role application_name default refuses on fresh app/operator connections without repair",
+      "passed": true
+    },
+    {
+      "name": "committed all-role session_replication_role default refuses on fresh app/operator connections without repair",
+      "passed": true
+    },
+    {
+      "name": "committed application replica-parameter SET grant refuses while session remains origin without repair",
+      "passed": true
+    },
+    {
+      "name": "operator-enabled current replica session refuses both verifier and migration without SET repair",
+      "passed": true
+    },
+    {
+      "name": "managed-style absence of optional creator-only grants permits exact version1 verification and upgrade",
+      "passed": true
+    },
+    {
+      "name": "managed-style absence of optional creator-only grants permits exact version2 repeat",
+      "passed": true
+    },
+    {
+      "name": "required explicit migration-owner access remains exact and cannot be normalized away",
+      "passed": true
+    },
+    {
+      "name": "version1 migration refuses unsafe database search_path without executing shadow functions or repairing default",
+      "passed": true
+    },
+    {
+      "name": "legacy version view refuses before reading its marker expression",
+      "passed": true
+    },
+    {
+      "name": "version2 migration refuses unsafe database search_path without executing shadow functions or repairing default",
+      "passed": true
+    },
+    {
+      "name": "positive-control temporary catalog view executes only under implicit temp-first path; verifier and repeat leave zero marker",
+      "passed": true
+    },
+    {
+      "name": "actual read-only workspace probe refuses malicious version view before evaluation; read-write and read-only controls prove reachability",
+      "passed": true,
+      "read_only_control_sqlstate": "25006"
+    },
+    {
+      "name": "autocommit migration refuses before changing fresh database",
+      "passed": true
+    },
+    {
+      "name": "fresh checksummed version2 install and exact repeat",
+      "passed": true
+    },
+    {
+      "name": "fresh migration interruption rolls schema/history/lock-role back",
+      "passed": true
+    },
+    {
+      "name": "version1 migration interruption rolls schema/history/lock-role back",
+      "passed": true
+    },
+    {
+      "name": "legacy metadata extra column refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "legacy metadata wrong constraint refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "legacy metadata PUBLIC write refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "legacy application inheritance drift refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "legacy default privilege drift refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "preexisting history1 refuses without bootstrap bypass",
+      "passed": true
+    },
+    {
+      "name": "preexisting history1 plus role drift refuses without bootstrap bypass",
+      "passed": true
+    },
+    {
+      "name": "partial version1 state refuses without inventing migration history",
+      "passed": true
+    },
+    {
+      "name": "transactional verified version1-to-version2 migration",
+      "passed": true
+    },
+    {
+      "name": "checksummed repeat has identical schema/data dump",
+      "passed": true
+    },
+    {
+      "name": "altered recorded checksum refuses without altering database",
+      "passed": true
+    },
+    {
+      "name": "missing real table refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "missing real column refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "changed column default refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "missing check constraint refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "extra index refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "disabled RLS refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "disabled FORCE RLS refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "permissive tenant policy refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "changed table owner refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "extra workspace UPDATE refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "extra workspace column UPDATE refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "PUBLIC business read refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "application inheritance drift refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "application owner membership refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "noncreator operator grant flags refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "unknown incoming owner member refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "transitive IAM parent membership refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "unexpected incoming helper membership refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "application database CREATE refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "helper schema CREATE refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "PUBLIC function execute refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "unsafe helper search path refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "changed helper body refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "role database setting refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "extra schema object refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "committed disabled internal FK triggers refuse without repair",
+      "passed": true
+    },
+    {
+      "name": "one canonical complete catalog projection is readable by all four application roles",
+      "passed": true
+    },
+    {
+      "name": "autocommit seed refuses before tenant writes",
+      "passed": true
+    },
+    {
+      "name": "validated operator seed idempotence",
+      "passed": true,
+      "bundle_count": 3,
+      "seed_sha256": "92031ca3156c5048cfefcee65ebbbe5a8b526829a48982faa4b38f405184800b"
+    },
+    {
+      "name": "all real tenant relations have owner/FORCE-RLS/policies/tenant-leading indexes and FKs",
+      "passed": true,
+      "table_count": 26
+    },
+    {
+      "name": "lock definer is non-login non-inheriting minimal role with exact three UPDATE columns",
+      "passed": true
+    },
+    {
+      "name": "genui_workspace actual own-tenant positive and missing/foreign scope denial",
+      "passed": true
+    },
+    {
+      "name": "genui_workspace RLS on every granted real relation",
+      "passed": true,
+      "tables": [
+        "app_permissions",
+        "apps",
+        "definition_inputs",
+        "definition_record_schemas",
+        "definition_revisions",
+        "memberships",
+        "organization_permissions",
+        "organizations",
+        "principals",
+        "provider_tenant_bindings",
+        "publication_inputs",
+        "publication_policies",
+        "publication_record_schemas",
+        "publications",
+        "record_collections",
+        "saved_work",
+        "source_permissions",
+        "source_revisions",
+        "sources",
+        "spaces",
+        "work_bindings",
+        "work_permissions",
+        "work_source_dependencies"
+      ]
+    },
+    {
+      "name": "genui_workspace cannot SET ROLE genui_owner",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot SET ROLE genui_lock",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot SET ROLE genui_migration",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE organizations",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE memberships",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE saved_work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct INSERT publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct INSERT internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct INSERT internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot TRUNCATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot bypass RLS",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace malformed scope fails closed",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "genui_workspace permitted bounded member fence, mismatched epoch refuses",
+      "passed": true
+    },
+    {
+      "name": "genui_workspace cannot execute work fence",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control actual own-tenant positive and missing/foreign scope denial",
+      "passed": true
+    },
+    {
+      "name": "genui_control RLS on every granted real relation",
+      "passed": true,
+      "tables": [
+        "app_permissions",
+        "apps",
+        "definition_inputs",
+        "definition_record_schemas",
+        "definition_revisions",
+        "memberships",
+        "organization_permissions",
+        "organizations",
+        "publication_inputs",
+        "publication_policies",
+        "publication_record_schemas",
+        "publications",
+        "source_permissions",
+        "spaces",
+        "work_permissions"
+      ]
+    },
+    {
+      "name": "genui_control cannot SET ROLE genui_owner",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot SET ROLE genui_lock",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot SET ROLE genui_migration",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE organizations",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE memberships",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE saved_work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct INSERT publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct INSERT internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct INSERT internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot TRUNCATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot bypass RLS",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control malformed scope fails closed",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "genui_control permitted bounded member fence, mismatched epoch refuses",
+      "passed": true
+    },
+    {
+      "name": "genui_control cannot execute work fence",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data actual own-tenant positive and missing/foreign scope denial",
+      "passed": true
+    },
+    {
+      "name": "genui_data RLS on every granted real relation",
+      "passed": true,
+      "tables": [
+        "app_permissions",
+        "apps",
+        "definition_inputs",
+        "definition_record_schemas",
+        "definition_revisions",
+        "internal_record_revisions",
+        "internal_records",
+        "memberships",
+        "organization_permissions",
+        "organizations",
+        "publication_inputs",
+        "publication_policies",
+        "publication_record_schemas",
+        "publications",
+        "record_collections",
+        "record_source_dependencies",
+        "saved_work",
+        "source_permissions",
+        "source_revisions",
+        "sources",
+        "spaces",
+        "work_bindings",
+        "work_permissions",
+        "work_source_dependencies"
+      ]
+    },
+    {
+      "name": "genui_data cannot SET ROLE genui_owner",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot SET ROLE genui_lock",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot SET ROLE genui_migration",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE organizations",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE memberships",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE saved_work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct INSERT publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct INSERT internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct INSERT internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot TRUNCATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot bypass RLS",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data malformed scope fails closed",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "genui_data permitted bounded member fence, mismatched epoch refuses",
+      "passed": true
+    },
+    {
+      "name": "genui_worker actual own-tenant positive and missing/foreign scope denial",
+      "passed": true
+    },
+    {
+      "name": "genui_worker RLS on every granted real relation",
+      "passed": true,
+      "tables": [
+        "organizations"
+      ]
+    },
+    {
+      "name": "genui_worker cannot SET ROLE genui_owner",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot SET ROLE genui_lock",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot SET ROLE genui_migration",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE organizations",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE memberships",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE saved_work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct INSERT publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct INSERT internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct INSERT internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot TRUNCATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot bypass RLS",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker malformed scope fails closed",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "worker cannot execute authority fence",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot execute work fence",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "data has real record read and bounded work lock, no UPDATE authority",
+      "passed": true
+    },
+    {
+      "name": "NULL or incomplete scope, unsafe epochs and stale work pin fail closed",
+      "passed": true
+    },
+    {
+      "name": "malformed genui.principal_id refuses work fence",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "malformed genui.membership_epoch refuses work fence",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "actual NOLOGIN table owner remains subject to FORCE RLS",
+      "passed": true
+    },
+    {
+      "name": "real FK refuses foreign-only app",
+      "passed": true,
+      "sqlstate": "23503"
+    },
+    {
+      "name": "owner tenant policy refuses cross-organization write",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "unknown permission check rejects even operator seed",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "record binding refuses NULL revision policy",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "source binding refuses changed normalized digest",
+      "passed": true,
+      "sqlstate": "23503"
+    },
+    {
+      "name": "source dependency cannot name a different input binding",
+      "passed": true,
+      "sqlstate": "23503"
+    },
+    {
+      "name": "publication refuses wrong definition digest",
+      "passed": true,
+      "sqlstate": "23503"
+    },
+    {
+      "name": "membership revocation reader-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "membership revocation writer-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "organization suspension reader-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "organization suspension writer-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "saved-work version advance reader-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "saved-work version advance writer-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "operator seed refuses changed existing epoch without overwriting authority",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "limits": [
+    "Local trust authentication is not RDS IAM/TLS qualification.",
+    "Operator-seeded contract shapes are not source import, hosted identity, admission or successful application business writes.",
+    "Native pool cancellation/reuse and actual managed trials remain separate."
+  ],
+  "committed_drift_containers_removed": [
+    true,
+    true,
+    true,
+    true
+  ],
+  "replica_drift_container_removed": true,
+  "compatibility_container_removed": true,
+  "shadow_path_container_removed": true,
+  "fresh_container_removed": true,
+  "source_sha256": {
+    "app/runtime/runtime.py": "dfef99b5f60fe225b480563a8b54977cfdc45f99887b9a05a9904b4a3f918beb",
+    "app/runtime/qualify_tenant_schema.py": "84ac10d54a201de496f547afe05f181a441b263be1b07063170e0a8b2cae6be0",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+    "app/migrations/manifest.json": "13976faa01ee527a81524d969e2aee864ef42e78368b69e8bee67895b8287bd5",
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/catalog-query.json": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963",
+    "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954"
+  },
+  "container_removed": true
+}

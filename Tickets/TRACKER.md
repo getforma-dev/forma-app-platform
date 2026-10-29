@@ -11,15 +11,15 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 3 | [APP-003: Qualify a 3.2 native canvas with the full required primitive library](4-done/APP-003.md) | [PH01](phases/PH01.md) | S01 | UX | P0 | M | Done | APP-001 |
 | 4 | [APP-004: Qualify the WASM CSV/XLSX parser boundary](4-done/APP-004.md) | [PH01](phases/PH01.md) | S01 | ING | P0 | M | Done | APP-002 |
 | 5 | [APP-005: Measure the cold million-row DuckDB path and confinement](4-done/APP-005.md) | [PH01](phases/PH01.md) | S01 | QRY | P0 | M | Done | APP-002 |
-| 6 | [APP-006: Revalidate fAuth contract and integration prerequisites](9-blocked/APP-006.md) | [PH01](phases/PH01.md) | S01 | IAM | P0 | M | Blocked | APP-001 |
+| 6 | [APP-006: Revalidate fAuth contract and integration prerequisites](3-in-review/APP-006.md) | [PH01](phases/PH01.md) | S01 | IAM | P0 | M | In review | APP-001 |
 | 7 | [APP-007: Scaffold reproducible browser/Rust workspace and one binary's role interfaces](4-done/APP-007.md) | [PH01](phases/PH01.md) | S02 | FND | P0 | L | Done | APP-001, APP-002 |
-| 8 | [APP-008: Establish tenant-bearing schema, database roles and deny-by-default authorization](1-selected/APP-008.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Selected | APP-007 |
+| 8 | [APP-008: Establish tenant-bearing schema, database roles and deny-by-default authorization](3-in-review/APP-008.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | In review | APP-007 |
 | 9 | [APP-073: Establish bounded invite and trial admission with owner-issued codes](0-backlog/APP-073.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-008 |
-| 10 | [APP-009: Implement fAuth-backed session lifecycle](0-backlog/APP-009.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-006, APP-008, APP-073 |
-| 11 | [APP-074: Qualify invite-only signup and public beta access](0-backlog/APP-074.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-006, APP-009, APP-073 |
+| 10 | [APP-009: Implement fAuth-backed session lifecycle](0-backlog/APP-009.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-008, APP-073 |
+| 11 | [APP-074: Qualify invite-only signup and public beta entry locally](0-backlog/APP-074.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-006, APP-009, APP-073 |
 | 12 | [APP-010: Persist and admit a minimal typed definition and work binding](0-backlog/APP-010.md) | [PH01](phases/PH01.md) | S02 | FND | P0 | L | Backlog | APP-002, APP-008 |
-| 13 | [APP-011: Package reproducible synthetic sources and expected outcomes](0-backlog/APP-011.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | M | Backlog | APP-002, APP-007 |
-| 14 | [APP-012: Deliver a minimal authorized query with receipt](0-backlog/APP-012.md) | [PH01](phases/PH01.md) | S02 | QRY | P0 | L | Backlog | APP-003, APP-005, APP-009, APP-010, APP-011, APP-074 |
+| 13 | [APP-011: Package reproducible synthetic sources and expected outcomes](3-in-review/APP-011.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | M | In review | APP-002, APP-007 |
+| 14 | [APP-012: Deliver a minimal authorized query with receipt](0-backlog/APP-012.md) | [PH01](phases/PH01.md) | S02 | QRY | P0 | L | Backlog | APP-003, APP-005, APP-009, APP-010, APP-011 |
 | 15 | [APP-013: Commit one declared internal record and recover outcome](0-backlog/APP-013.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | L | Backlog | APP-012 |
 | 16 | [APP-014: Prove command retries, conflicts and authorization race ordering](0-backlog/APP-014.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | M | Backlog | APP-013 |
 | 17 | [APP-015: Implement durable jobs, leases and cancellation](0-backlog/APP-015.md) | [PH02](phases/PH02.md) | S03 | OPS | P0 | L | Backlog | APP-008, APP-009, APP-073 |
@@ -80,3 +80,9 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 72 | [APP-070: Independent release security and accessibility review](0-backlog/APP-070.md) | [PH06](phases/PH06.md) | S12 | VAL | P0 | M | Backlog | APP-062, APP-063, APP-064, APP-065, APP-068, APP-069 |
 | 73 | [APP-071: Publish operator/run/release/rollback and incident runbooks](0-backlog/APP-071.md) | [PH06](phases/PH06.md) | S12 | OPS | P0 | M | Backlog | APP-066, APP-067, APP-068, APP-070 |
 | 74 | [APP-072: Evaluate one real recurring workflow and second-person reuse](0-backlog/APP-072.md) | [PH06](phases/PH06.md) | S12 | VAL | P1 | M | Backlog | APP-058, APP-070, APP-071 |
+| 75 | [APP-075: Finish the managed qualification entry, image and supervisor](0-backlog/APP-075.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-008 |
+| 76 | [APP-077: Package the operator image and tools](0-backlog/APP-077.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-008 |
+| 77 | [APP-078: Qualify the tenant foundation on managed RDS in one reserved window](0-backlog/APP-078.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-075, APP-077 |
+| 78 | [APP-076: Run the beta go-live trial on the live deployment](9-blocked/APP-076.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | L | Blocked | APP-012, APP-013, APP-014, APP-074, APP-078 |
+| 79 | [APP-079: Hosted identity acceptance deferred from Phase 1](9-blocked/APP-079.md) | [PH06](phases/PH06.md) | S12 | IAM | P1 | L | Blocked | APP-076 |
+| 80 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](0-backlog/APP-080.md) | [PH05](phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-077, APP-078 |

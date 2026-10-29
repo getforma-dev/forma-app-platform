@@ -1,0 +1,18 @@
+{
+  "scope": "Read-only source compatibility for standalone helper; no claim of equal complete application image",
+  "source_pins": {
+    "8f8c34ba0b5e47a55990b273fc6d555d41369791": {
+      "app/runtime/requirements.lock": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+      "app/certs/rds-global-bundle.pem": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+      "app/Dockerfile": "0adc6ae93ab0c1fcd853b56c7211d949eddda328608ca495af57507e16aab874",
+      "python_runtime_base": "FROM python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d"
+    },
+    "18c33f538a19d06cb77f37d091c71b1a8d5e3c39": {
+      "app/runtime/requirements.lock": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+      "app/certs/rds-global-bundle.pem": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+      "app/Dockerfile": "d507566be86285de7f9f2e2c84ab9022a550666a944fd5c1f0bfcc7e1feb4225",
+      "python_runtime_base": "FROM python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d"
+    }
+  },
+  "requirements_CA_and_Python_base_equal": true
+}

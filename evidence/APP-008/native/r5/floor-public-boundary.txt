@@ -1,0 +1,9 @@
+   Compiling forma-app-platform v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.69s
+   Doc-tests genui
+
+running 1 test
+test src/storage/authorization.rs - storage::authorization::TrustedRequest (line 12) - compile fail ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+

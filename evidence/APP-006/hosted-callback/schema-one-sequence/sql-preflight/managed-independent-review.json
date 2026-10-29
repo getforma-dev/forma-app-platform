@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "reviewer": "/root/auth_readiness_answer",
+  "reviewed_at_utc": "2026-10-29T04:11:38.014923+00:00",
+  "scope": "Independent review of retained actual managed read-only schema-one observer evidence; no new remote calls",
+  "disposition": "Accepted for point-in-time managed schema-one SQL compatibility proof and bounded task cleanup only",
+  "blocking_findings": [],
+  "passed": true,
+  "auth_rehearsal_acceptance": false,
+  "app008_schema2_acceptance": false,
+  "managed_observation_sha256": "773fc6e402e0a0478609fb223a0b2ffb3e5096b4b13d5ff010e02011fcf9e253",
+  "operation_review_sha256": "6031e25a28894ab5131eadb56ed0966eda5d66ac43869ae2e58d3bdf1f3ee2fd",
+  "private_evidence_sha256": {
+    "active-tasks-after.json": "6bf784c5565eed5077d77491fb60340c0ffc16408f326e50ddb43e2e2d0619df",
+    "database-after.json": "8893a1ebb4b9f6808b109067e87a22287abafaec929ea599317c2f8dce19ae6f",
+    "deregister-intent.json": "5a2cc928a1a914e351be3a6b35f9e2a5e9aa5c052128e4332b64b004fa5259a4",
+    "deregister-response.json": "23d18e7c1f7bf46a704d350d70b0c6b827ee0ecb53c0948c3fd56cbe99c919dc",
+    "deregistered-description.json": "c2e260f72eb5aa98409127259d62606009e1c3fe6103c60dcca2a18ff5fb4c44",
+    "live-before.json": "cbb3639bbb38612fa07b3be62e4ebfc99a729f226a43b167d325759835ac1925",
+    "prelaunch-comparison-failure.json": "5f72bb32cfaa7257a5c89fade301df0c0089d271f72b1f37cdb6f3f46e9192da",
+    "preparation.json": "41ecba317ada1741a53c3056cf2abe4b6ec8bc88a7075483f585e647f7b73024",
+    "register-intent.json": "1c40945ef35e47ec84a5ac209f5c04bf42473dd3d5872d0bddc286648e886429",
+    "register-request.json": "2a7855431d4eec7e178ee9cfad0257c4c7403c843f1959b9caa484b2cceff1f5",
+    "register-response.json": "bc1acfd82d880e933da3f942e40d0e30abec6f373f9a3968c6280bd920713f1b",
+    "registered-description.json": "5c9f429815c0182bc4dba25f2075899ef6360f0d28ad04dc40a4521ddd438394",
+    "reused-budget.json": "ba364af32667f29cfee61a46844a64cda6a69f445ca68a38b85c7a88e3951ba5",
+    "run-intent.json": "287f80201eb922cdb557a8ec27f66423f90b73194bed4ba88a71954582b2f789",
+    "run-request.json": "3f85efb90b19b1e7384f05ed77b7ba6d0ad39cdda04b54f373694e7af668f5ad",
+    "run-request.pending.json": "dcc2b71da78b340581ffd7e7df2173a01da0582ab02258d43538e289c5050376",
+    "run-response.json": "97a6da69a78652752b484a475684fc5906391f874c37b06cd7b70023e831cdf9",
+    "service-after.json": "489866d3dd3d9ea850f691c2db2f4916b562f2cb2b22de2291cc38a9d25f278e",
+    "source-task-definition-after.json": "ac8b4bb723c4f52c1116d8e1a81a5a0a4a669a719b785f3304c53ccf44793c00",
+    "source-task-definition.json": "c8da667de5fdfb183ac98be4dc084cea6adfbbe42b3455050ad6d16c9020f6d7",
+    "stopped-task-fresh.json": "f5216ab4d13b6565abe72426ec7ef437da33960a29fd83991881131a4d339855",
+    "stopped-task.json": "39aac86716ade0aed5e1af7a603c234fc08036d983432358986d5fc64a33831c",
+    "task-log-events.json": "6faa353a9debc372a1add3d298f2bd61cd3f878499e2ac12dc7d3baa49b6b234"
+  },
+  "source_resource_sha256": {
+    "infra/scripts/auth_schema_preflight.py": "c29ea7f8fcfc105e85c9e2dcd12a2b288365732aa461f62acb71b1ba8b352804",
+    "app/migrations/catalog-query.json": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963",
+    "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9"
+  },
+  "checks": [
+    {
+      "name": "Root observation hashes match every private receipt",
+      "passed": true
+    },
+    {
+      "name": "All five prepared inputs remained unchanged",
+      "passed": true
+    },
+    {
+      "name": "Private raw JSON files have mode0600",
+      "passed": true
+    },
+    {
+      "name": "Helper source hash matches current reviewed source",
+      "passed": true
+    },
+    {
+      "name": "Query document hash matches exact reviewed query",
+      "passed": true
+    },
+    {
+      "name": "Version1 snapshot hash matches exact reviewed bytes",
+      "passed": true
+    },
+    {
+      "name": "Actual catalog digest matches canonical expected JSON",
+      "passed": true
+    },
+    {
+      "name": "CloudWatch receipt equals sanitized root SQL receipt",
+      "passed": true
+    },
+    {
+      "name": "One returned task ARN matches actual stopped task",
+      "passed": true
+    },
+    {
+      "name": "Registered definition fields match prepared registration",
+      "passed": true
+    },
+    {
+      "name": "Registered and RunTask response tags match unordered unique request maps",
+      "passed": true
+    },
+    {
+      "name": "Final RunTask only binds the exact registered revision",
+      "passed": true
+    },
+    {
+      "name": "Stable client token and request intent hashes match",
+      "passed": true
+    },
+    {
+      "name": "Actual task command matches the complete7867-byte reviewed override",
+      "passed": true
+    },
+    {
+      "name": "Only empty provider-default inference overrides are additional",
+      "passed": true
+    },
+    {
+      "name": "Actual image digest matches immutable770 foundation image",
+      "passed": true
+    },
+    {
+      "name": "Task is ARM64/Fargate with reviewed2048CPU/8192MiB and exec disabled",
+      "passed": true
+    },
+    {
+      "name": "Attached subnet belongs to the exact prepared network",
+      "passed": true
+    },
+    {
+      "name": "One actual container exited0 and task reached STOPPED",
+      "passed": true
+    },
+    {
+      "name": "Log timestamp lies inside actual native execution interval",
+      "passed": true
+    },
+    {
+      "name": "SQL success asserts schema1/PostgreSQL16.13/origin/read-only/catalog-before-metadata/TLS",
+      "passed": true
+    },
+    {
+      "name": "TLS hostname and control-plane resource ID agree with reviewed target and RDS after snapshot",
+      "passed": true
+    },
+    {
+      "name": "Whole task53.012seconds is below180second cap and precedes window expiry",
+      "passed": true
+    },
+    {
+      "name": "Temporary preflight definition alone is INACTIVE",
+      "passed": true
+    },
+    {
+      "name": "Original migration revision remains ACTIVE with immutable configuration unchanged",
+      "passed": true
+    },
+    {
+      "name": "Service desired/running/pending counts are0/0/0",
+      "passed": true
+    },
+    {
+      "name": "Cluster RUNNING and PENDING snapshots are empty",
+      "passed": true
+    },
+    {
+      "name": "RDS is available/private/encrypted/delete-protected with auto-minor disabled",
+      "passed": true
+    },
+    {
+      "name": "Existing budget ledger hash is unchanged",
+      "passed": true
+    },
+    {
+      "name": "Cumulative known standalone usage is378.872 of7200seconds",
+      "passed": true
+    }
+  ],
+  "execution": {
+    "task_id": "4afe072901f049baa53689a42b0e213f",
+    "task_definition_family_revision": "GenuiAuthSchemaOnePreflight:1",
+    "image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+    "request_sha256": "3f85efb90b19b1e7384f05ed77b7ba6d0ad39cdda04b54f373694e7af668f5ad",
+    "client_token_sha256": "c30ab01ee49d5d57566ea5f714a90785d9ae2a877d1b8eb1756aee6ab0475e46",
+    "override_bytes": 7867,
+    "override_sha256": "c423cce86ea1b14f9f473795fad7520c9885c683b078058d69353708d4ee78da",
+    "created_at_utc": "2026-10-29T03:58:08.304000+00:00",
+    "native_started_at_utc": "2026-10-29T03:58:36.606000+00:00",
+    "native_execution_stopped_at_utc": "2026-10-29T03:58:36.843000+00:00",
+    "stopped_at_utc": "2026-10-29T03:59:01.316000+00:00",
+    "created_to_stopped_seconds": 53.012,
+    "whole_task_cap_seconds": 180,
+    "stop_request_planned_after_seconds": 120,
+    "stop_request_needed": false,
+    "container_exit_code": 0,
+    "cloudwatch_event_count": 1,
+    "cloudwatch_message_bytes": 964,
+    "sql_receipt": {
+      "assertions": {
+        "catalog_before_metadata": true,
+        "fixed_operator_identity": true,
+        "origin": true,
+        "postgres_16_13": true,
+        "read_only": true,
+        "tls": true,
+        "tls_verify_full": true
+      },
+      "catalog_sha256": "e210fc43b054757525522fc628e63250b0c44c8da8d9c84e78a3282eab7c75c1",
+      "database_version": 1,
+      "expected_sha256": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+      "limits": [
+        "Point-in-time SQL proof; preserve operator/schema quiescence for the auth window.",
+        "No hosted identity, deployment, invitation, application access or schema-two acceptance."
+      ],
+      "passed": true,
+      "query_sha256": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963",
+      "scope": "APP-006 read-only schema-one auth preflight",
+      "source_sha256": "c29ea7f8fcfc105e85c9e2dcd12a2b288365732aa461f62acb71b1ba8b352804"
+    },
+    "target_host_sha256": "784f6972ac8bd4b0e7c65c60bb0b7da47d31b4bfa9be6ac3f8258d67b4425b7b",
+    "resource_id_is_control_plane_binding_not_sql_claim": true
+  },
+  "budget": {
+    "existing_window": "f84517f4-263b-4133-b5bc-c93cda64dd05",
+    "expires": "2026-10-29T04:39:50Z",
+    "known_previous_standalone_seconds": 325.86,
+    "this_task_seconds": 53.012,
+    "cumulative_known_standalone_seconds": 378.872,
+    "standalone_allowance_seconds": 7200,
+    "ledger_sha256_unchanged": "bf5ff561052c334e17e936ffce444a90df44660cc30af8fc9689bc6a3d65f616",
+    "new_reservation": false,
+    "auth_clock_started": false
+  },
+  "cleanup": {
+    "temporary_task_definition": "INACTIVE",
+    "original_migration_definition_unchanged": true,
+    "service_desired_running_pending": [
+      0,
+      0,
+      0
+    ],
+    "cluster_running_pending_task_count": 0,
+    "protected_source_resource_id_unchanged": true,
+    "source_engine": "16.13",
+    "source_private_encrypted_delete_protected": true,
+    "source_auto_minor_upgrade": false
+  },
+  "review_notes": [
+    "ECS reordered registration tags; unique key/value maps match. RunTask response confirms expected task tags; DescribeTasks snapshots omit tags, which is not treated as deletion.",
+    "ECS included an empty inferenceAcceleratorOverrides array; no added accelerator/environment/task-role override exists.",
+    "A retained initial local datetime/string comparison refusal precedes register/run intents and records no cloud mutation. It is preserved; no failed attempt is relabeled as the successful SQL task.",
+    "The one supplied RunTask success response has one ARN and zero failures. Stable saved token/request, matched actual ARN and empty post-run cluster snapshots support the single-task record; this review does not claim an independent CloudTrail audit."
+  ],
+  "limits": [
+    "Reviewer made no cloud/network/Git calls, read no secret value, and changed only these independent review artifacts.",
+    "The SQL statement sequence and rollback/read-only guarantees derive from the exact independently reviewed helper plus its actual matching receipt; this review did not repeat a live SQL query.",
+    "The SQL observation is at native execution around03:58:36UTC; later root collection time is not a later SQL check. Preserve schema/operator quiescence or obtain a fresh reviewed observation before relying on it after state changes.",
+    "Exact RDS resource ID comes from retained control-plane observations; PostgreSQL reports database/version/TLS/catalog facts, not the AWS resource ID.",
+    "Observed task lifetimes and unchanged reservation are accounting evidence, not an invoice or hard billing cap. No new auth reservation/start or service activation is established.",
+    "No hosted identity/callback deployment, invitation, mailbox, session/admission, business access or schema2 acceptance follows from this observer."
+  ]
+}

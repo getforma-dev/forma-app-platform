@@ -1,0 +1,16 @@
+Copyright (c) 2026 Victor Villacis. All rights reserved.
+
+This repository is published in source-visible form solely so that its
+continuous-integration workflows can run on GitHub Actions while the project
+is being deployed. No license is granted. Except for the viewing and forking
+that GitHub's Terms of Service permit within GitHub itself, you may not use,
+copy, modify, merge, publish, distribute, sublicense, sell, train models on,
+or create derivative works from any part of this repository without the
+copyright holder's prior written permission. All design documents, tickets,
+evidence, contracts and code remain the confidential and proprietary
+property of the copyright holder, and this notice applies to every copy
+regardless of where it is obtained.
+
+THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.

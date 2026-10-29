@@ -1,0 +1,271 @@
+{
+  "config_sha256": "sha256:27dbe0880d995f2a75cae9aa1cc603264dc9d62e575dca5118c393c661a0d3d5",
+  "elapsed_ms": 1,
+  "fuel_consumed": 1549632,
+  "input_sha256": "sha256:7cd65c562971535ce783b66dec03342aad1314ad8564a7f0ac3f879a5c9306e0",
+  "interface_imports": [],
+  "memory_bytes": 1376256,
+  "resource_limits": {
+    "fuel": 5000000000,
+    "guest_linear_memory_bytes": 2147483648,
+    "input_bytes": 10485760,
+    "output_bytes": 134217728,
+    "wall_clock_ms": 120000
+  },
+  "result": {
+    "contract_edition": "impl-2026-10-28.1",
+    "parser_version": 1,
+    "profile": "demo",
+    "result": {
+      "cells": [
+        {
+          "column": 1,
+          "coordinate": {
+            "logical_record": 1,
+            "physical_line_end": 1,
+            "physical_line_start": 1,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "expense_id",
+          "value": {
+            "type": "text",
+            "value": "expense_id"
+          }
+        },
+        {
+          "column": 2,
+          "coordinate": {
+            "logical_record": 1,
+            "physical_line_end": 1,
+            "physical_line_start": 1,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "description",
+          "value": {
+            "type": "text",
+            "value": "description"
+          }
+        },
+        {
+          "column": 3,
+          "coordinate": {
+            "logical_record": 1,
+            "physical_line_end": 1,
+            "physical_line_start": 1,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "amount_cents",
+          "value": {
+            "type": "text",
+            "value": "amount_cents"
+          }
+        },
+        {
+          "column": 4,
+          "coordinate": {
+            "logical_record": 1,
+            "physical_line_end": 1,
+            "physical_line_start": 1,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "currency",
+          "value": {
+            "type": "text",
+            "value": "currency"
+          }
+        },
+        {
+          "column": 1,
+          "coordinate": {
+            "logical_record": 2,
+            "physical_line_end": 2,
+            "physical_line_start": 2,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "EXP-001",
+          "value": {
+            "type": "text",
+            "value": "EXP-001"
+          }
+        },
+        {
+          "column": 2,
+          "coordinate": {
+            "logical_record": 2,
+            "physical_line_end": 2,
+            "physical_line_start": 2,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "Equipment supplies",
+          "value": {
+            "type": "text",
+            "value": "Equipment supplies"
+          }
+        },
+        {
+          "column": 3,
+          "coordinate": {
+            "logical_record": 2,
+            "physical_line_end": 2,
+            "physical_line_start": 2,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "12000",
+          "value": {
+            "type": "text",
+            "value": "12000"
+          }
+        },
+        {
+          "column": 4,
+          "coordinate": {
+            "logical_record": 2,
+            "physical_line_end": 2,
+            "physical_line_start": 2,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "USD",
+          "value": {
+            "type": "text",
+            "value": "USD"
+          }
+        },
+        {
+          "column": 1,
+          "coordinate": {
+            "logical_record": 3,
+            "physical_line_end": 3,
+            "physical_line_start": 3,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "EXP-002",
+          "value": {
+            "type": "text",
+            "value": "EXP-002"
+          }
+        },
+        {
+          "column": 2,
+          "coordinate": {
+            "logical_record": 3,
+            "physical_line_end": 3,
+            "physical_line_start": 3,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "Hosted service",
+          "value": {
+            "type": "text",
+            "value": "Hosted service"
+          }
+        },
+        {
+          "column": 3,
+          "coordinate": {
+            "logical_record": 3,
+            "physical_line_end": 3,
+            "physical_line_start": 3,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "45000",
+          "value": {
+            "type": "text",
+            "value": "45000"
+          }
+        },
+        {
+          "column": 4,
+          "coordinate": {
+            "logical_record": 3,
+            "physical_line_end": 3,
+            "physical_line_start": 3,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "USD",
+          "value": {
+            "type": "text",
+            "value": "USD"
+          }
+        },
+        {
+          "column": 1,
+          "coordinate": {
+            "logical_record": 4,
+            "physical_line_end": 4,
+            "physical_line_start": 4,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "EXP-003",
+          "value": {
+            "type": "text",
+            "value": "EXP-003"
+          }
+        },
+        {
+          "column": 2,
+          "coordinate": {
+            "logical_record": 4,
+            "physical_line_end": 4,
+            "physical_line_start": 4,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "Team transport",
+          "value": {
+            "type": "text",
+            "value": "Team transport"
+          }
+        },
+        {
+          "column": 3,
+          "coordinate": {
+            "logical_record": 4,
+            "physical_line_end": 4,
+            "physical_line_start": 4,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "7000",
+          "value": {
+            "type": "text",
+            "value": "7000"
+          }
+        },
+        {
+          "column": 4,
+          "coordinate": {
+            "logical_record": 4,
+            "physical_line_end": 4,
+            "physical_line_start": 4,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "USD",
+          "value": {
+            "type": "text",
+            "value": "USD"
+          }
+        }
+      ],
+      "csv_dialect": "csv-core-0.1.13-permissive-utf8",
+      "format": "csv",
+      "formula_policy": "reject",
+      "mapping_status": "inspection_required",
+      "rows": 4
+    },
+    "status": "parsed"
+  },
+  "wasm_sha256": "sha256:aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba"
+}

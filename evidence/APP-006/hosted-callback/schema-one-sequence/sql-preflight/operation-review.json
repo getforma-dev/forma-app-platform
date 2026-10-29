@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "reviewer": "/root/auth_readiness_answer",
+  "recorded_at": "2026-10-29T03:52:37.042370+00:00",
+  "scope": "Independent bounded operational review of prepared single standalone read-only schema-one SQL observer; no AWS call or launch by reviewer",
+  "disposition": "Prepared request approved conditionally for one bounded run; final registered revision and current control-plane conditions must be verified before RunTask",
+  "blocking_findings": [],
+  "private_preparation_directory": ".cache/operations/auth-schema-preflight",
+  "private_file_sha256": {
+    "preparation.json": "41ecba317ada1741a53c3056cf2abe4b6ec8bc88a7075483f585e647f7b73024",
+    "source-task-definition.json": "c8da667de5fdfb183ac98be4dc084cea6adfbbe42b3455050ad6d16c9020f6d7",
+    "register-request.json": "2a7855431d4eec7e178ee9cfad0257c4c7403c843f1959b9caa484b2cceff1f5",
+    "run-request.pending.json": "dcc2b71da78b340581ffd7e7df2173a01da0582ab02258d43538e289c5050376",
+    "reused-budget.json": "ba364af32667f29cfee61a46844a64cda6a69f445ca68a38b85c7a88e3951ba5"
+  },
+  "reference_sha256": {
+    "infra/scripts/auth_schema_preflight.py": "c29ea7f8fcfc105e85c9e2dcd12a2b288365732aa461f62acb71b1ba8b352804",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/independent-review.json": "0fa3feab4c484ac4af1b95e82a8f487b2d1803099feb294a5bfb70d2f10c2fe9",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/independent-foundation-image-entrypoint.json": "f72045a0130803cc72be76f5dca815432e9156edbb71759b58f867033ea42375",
+    ".cache/operations/beta/retry-1/migration-2-request.json": "8343a11ce23082b5258d4508901ccd3dba6b648939d24c695c1b79b82ee4e9ce",
+    ".cache/operations/beta/budget-ledger.json": "bf5ff561052c334e17e936ffce444a90df44660cc30af8fc9689bc6a3d65f616",
+    "evidence/APP-007/managed/final-operating-state.json": "84d74fc74ff7b12f5f54a6638666a87cfbc51c653824d2b6dfbe59ee4b84ea9d"
+  },
+  "checks": {
+    "registration_only_changes": [
+      "family",
+      "tags",
+      "containerDefinitions[0].entryPoint",
+      "containerDefinitions[0].command"
+    ],
+    "task_role_exactly_preserved": true,
+    "execution_role_exactly_preserved": true,
+    "existing_password_secret_reference_exactly_preserved": true,
+    "secret_value_read": false,
+    "image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+    "entrypoint": [
+      "python3"
+    ],
+    "default_command": [
+      "-c",
+      "raise SystemExit(1)"
+    ],
+    "cpu_units": "2048",
+    "memory_mib": "8192",
+    "architecture": "ARM64",
+    "user": "65532:65532",
+    "readonly_root": true,
+    "no_ports_or_mounts": true,
+    "network_mode": "awsvpc",
+    "historical_run_network_cluster_launch_platform_match": true,
+    "count": 1,
+    "execute_command": false,
+    "override_bytes": 7867,
+    "override_sha256": "c423cce86ea1b14f9f473795fad7520c9885c683b078058d69353708d4ee78da",
+    "override_equals_current_deterministic_emitter": true,
+    "helper_sha256": "c29ea7f8fcfc105e85c9e2dcd12a2b288365732aa461f62acb71b1ba8b352804",
+    "client_token_sha256": "c30ab01ee49d5d57566ea5f714a90785d9ae2a877d1b8eb1756aee6ab0475e46",
+    "client_token_must_remain_stable": true,
+    "task_definition_placeholder_requires_exact_registered_revision": true,
+    "no_added_environment_overrides": true
+  },
+  "budget": {
+    "window_id": "f84517f4-263b-4133-b5bc-c93cda64dd05",
+    "expires_at_utc": "2026-10-29T04:39:50Z",
+    "known_standalone_created_to_stopped_seconds": 325.86,
+    "reserved_standalone_seconds": 7200,
+    "this_task_creation_to_stopped_cap_seconds": 180,
+    "helper_process_alarm_seconds": 30,
+    "known_usage_plus_task_cap_seconds": 505.86,
+    "remaining_reserved_seconds_after_cap": 6694.14,
+    "new_reservation": false,
+    "auth_clock_start": false,
+    "service_desired_count_must_stay": 0,
+    "invoice_or_hard_cap_claim": false
+  },
+  "before_run_conditions": [
+    "Reobserve service desired/running/pending counts all zero, no other pending/running standalone task or unresolved prior RunTask outcome, and retained schema-one source target/window before launch. The retained1:04UTC receipt is historical, not a fresh live assertion by this reviewer.",
+    "Require enough time before04:39:50Z for the complete180-second created-to-STOPPED bound and cleanup; latest theoretical submission04:36:50Z is not a recommendation to consume all shutdown margin. If the window or allowance cannot cover the run, do not launch under this approval.",
+    "Register only the pinned request; describe the returned exact revision and compare all reviewed registration fields including entryPoint/python3, default refusal command, image, roles, password reference, environment, security and resources. No family/latest selection.",
+    "Create the final RunTask document by replacing only the taskDefinition placeholder with that verified exact ARN; preserve count1, execute disabled, network,7867-byte override, tags and stable clientToken. Persist its exact bytes/hash before submission.",
+    "Verify helper/resource/override/private-file pins remain unchanged. Keep service0; no new grants, secrets, migration, seed, service deployment/update, auth-start signal or schema mutation is authorized by this review."
+  ],
+  "unknown_outcome_reconciliation": [
+    "Persist submission time and exact request/token before RunTask. Treat network timeout, missing response or unclassified failures as unknown, never as zero tasks or unused budget.",
+    "Reconcile the saved response if available, startedBy/family and described task ARNs on the same cluster. An idempotent retry uses the identical final request and clientToken; never rotate token, definition, network or overrides to retry an unknown outcome. Do not start a second task until the first outcome is resolved.",
+    "Acknowledge only one intended ARN. If duplicate/unexpected matching tasks are discovered, stop and account for each; do not count the review as approval for extra tasks. Unknown elapsed usage remains reserved until observed/reconciled."
+  ],
+  "stop_and_cleanup_conditions": [
+    "Monitor from submission/createdAt through STOPPED, including image provisioning time; the30-second Python alarm starts only after the process begins and is not the whole-task cap.",
+    "If successful stop is not imminent, request StopTask early enough to leave shutdown margin within180seconds and the window; request immediate stop on cap/window risk, unexpected state or refusal. Continue reconciliation until actual STOPPED. StopTask acceptance or the service stop schedule is not proof a standalone task has stopped.",
+    "Retain sanitized task identity, image/revision, timestamps, exit code and exact helper source/query/baseline receipt. Require exit0 plus matching passed schema-one assertions to accept the SQL observation; otherwise preserve refusal without migration/repair or an unreviewed rerun.",
+    "After actual STOPPED and receipt capture, deregister only the exact temporary preflight definition revision. Do not deregister the original migration revision. Verify service remains0 and no matching pending/running task remains; reconcile full created-to-stopped usage into existing budget records."
+  ],
+  "limits": [
+    "Reviewer made no AWS, secret-value, billing, image, Git or private-preparation mutation. Only deterministic local override emission/read comparison was executed.",
+    "No wait for unrelated billing CI is required for this already-reserved read-only observer. New image/service deployment and actual managed acceptance remain distinct gates.",
+    "Prepared source_counts_zero is an operator assertion, not a newly queried control-plane fact in this review. Root must satisfy live preconditions.",
+    "Current resource ID is a retained control-plane identity; the helper proves point-in-time SQL/catalog/TLS and requires continued schema/operator quiescence for later auth work.",
+    "No auth window begins, hosted identity is passed or application access is granted by this operation review."
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "received_at": "2026-10-29T03:07:47.203677+00:00",
+  "source_review_sha256": "sha256:f365faa47179774dee175f1e220585f758b6f6563029944454cb7b2fa6ba9e69",
+  "scope": "received independent local-preparation review, source binding only; no hosted execution or gate closure",
+  "verified_current_source_files": {
+    "canonical-key-bridge.cjs": true,
+    "canonical-key-bridge.test.cjs": true,
+    "canonical-key-binding.pending.json": true,
+    "CANONICAL-KEY-BRIDGE.md": true,
+    "canonical-key-bridge-tests.log": true,
+    "canonical-key-bridge-tests.initial.log": true,
+    "issuer-session-driver.cjs": true,
+    "issuer-session-driver.test.cjs": true,
+    "session-controller.cjs": true,
+    "issuer-session-driver-key-seam-independent-controls.cjs": true,
+    "issuer-session-driver-independent-key-seam.json": true,
+    "issuer-session-driver-key-seam-independent.log": true,
+    "issuer-session-driver-key-seam-existing-tests.log": true,
+    "canonical-key-bridge-tests.window-fix.log": true,
+    "canonical-key-bridge-preparation.json": true,
+    "canonical-key-bridge-independent-window-control.cjs": true,
+    "canonical-key-bridge-independent-window-initial.json": true,
+    "canonical-key-bridge-independent-window-final.json": true,
+    "GENUI-UNKNOWN-KID-HANDOFF-REVIEW.md": true,
+    "genui-unknown-kid-handoff-review.json": true
+  },
+  "start_signal": false
+}

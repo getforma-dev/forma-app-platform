@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-29T02:30:00.284921+00:00",
+  "scope": "APP-008 post-review schema repair and private empty-registry author checks",
+  "source_sha256": {
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/manifest.json": "858429ac1d15344b8f7738d4d02a67fe29f3d45d5f886223dade637046e85629",
+    "app/migrations/catalog-query.json": "028d7a84db3e7bbade26fd12c6fcc363fae4e93fe04777d011d07287085892cf",
+    "app/migrations/catalog-v1.json": "d486958fbdcde684b1e85d428c3b220c4da76029f07e606aed6ca8fa11cfc83b",
+    "app/migrations/catalog-v2.json": "82c01e831db712093f4ef86f98630f5d6e2a63936c723b351ea367bfa9069148",
+    "app/runtime/runtime.py": "580e1e3698262d5bdffa9f34d1ef9ab120fb94ea10213437c6c02e282daf0113",
+    "app/runtime/test_runtime.py": "c339e62e430f9dff8cea023a5a67a3dd6bd0999e57ffc738c7fb97fb0b8c82e4",
+    "app/runtime/qualify_migration.py": "9cd5ad523c38d91b93e087f10e3d2534c5dd216d9adc6f847648a0ed666c11ec",
+    "app/runtime/qualify_tenant_schema.py": "5c4fe46d74e024b48d29e4ad424211ea613d8410335b05128c621cbcf041338e",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+    "app/runtime/generate_schema_catalog.py": "9fea07c987110cbcfef61ad8981c27e3490b4809945c3fe985c680b4365eef2b",
+    "docs/architecture/ADR-004-TENANT-TRANSACTIONS.md": "1b3dc629a5e1d1ca82818587c8724d0499b19669b496f5308af91d75fca9e3a6"
+  },
+  "supersedes_author_receipt": "pre-review/author-checks.json",
+  "independent_findings_addressed": [
+    "R1 catalog/security drift accepted with valid version2 ledger",
+    "R2 preexisting partial history1 bypassed legacy proof"
+  ],
+  "checks": [
+    {
+      "command": "app/runtime/.venv/bin/python -m unittest discover -s app/runtime -p test_runtime.py -v",
+      "exit_code": 0,
+      "tests": 30,
+      "passed": true,
+      "output_summary": "Ran 30 tests in 11.550s\n\nOK",
+      "local_log_sha256": "f75c0164e0a067524dc13e0bd9c780c5810cea13c47cbca6bc9d43021a7aeb66"
+    },
+    {
+      "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python app/runtime/qualify_tenant_schema.py --output evidence/APP-008/schema/local-postgres.json",
+      "exit_code": 0,
+      "checks": 142,
+      "passed": true,
+      "receipt": "local-postgres.json",
+      "receipt_sha256": "5c6640d88c1220c8e6a2e284b64b8eebbfe02ae61cd415e8ca2b8469e59b0e66",
+      "all_six_containers_removed": true
+    },
+    {
+      "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python app/runtime/generate_schema_catalog.py --output-dir .cache/app008-final-catalog-run",
+      "exit_code": 0,
+      "passed": true,
+      "receipt": "catalog-reproduction.json",
+      "receipt_sha256": "3ceab496ade41700aa7d1b39769f73f6c6ad85dd5911636a017701147782f982",
+      "both_candidates_match_authoritative_bytes": true,
+      "container_removed": true
+    },
+    {
+      "command": "python3 app/runtime/qualify_migration.py --output evidence/APP-008/schema/original-migration-regression.json",
+      "exit_code": 0,
+      "checks": 43,
+      "passed": true,
+      "retained_unchanged_source_result": true,
+      "receipt": "original-migration-regression.json",
+      "receipt_sha256": "57717c4a68f7be889db4fe03168b6e4a8bf6840ff9f3adde75d1aad31f5957e6"
+    },
+    {
+      "command": "git diff --check -- app/runtime/runtime.py app/runtime/test_runtime.py app/runtime/qualify_migration.py",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "command": "python3 Tickets/_tools/board.py check",
+      "exit_code": 0,
+      "passed": true,
+      "result": "74 tickets; 6 phases; 12 sprints; 80 requirements; design digests and active links verified"
+    }
+  ],
+  "new_dependencies": [],
+  "managed_acceptance": false,
+  "independent_followup_review": "pending",
+  "ticket_complete": false,
+  "limits": [
+    "Local PostgreSQL uses trust authentication and simulated rds_iam, not managed IAM/TLS.",
+    "Native connection admission/readiness reuses the canonical resources; its proof is owned by the native slice.",
+    "Empty registry denies all mappings; explicit operator files remain native-validated. No provider mapping or session/admission delivery is claimed.",
+    "Operator fixture shapes are not imported bytes or successful application business writes.",
+    "No managed operations, staging or commits performed by this author."
+  ]
+}

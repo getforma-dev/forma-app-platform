@@ -1,0 +1,266 @@
+{
+  "all_owned_resources_removed": true,
+  "environment": {
+    "database_transport": "fresh random loopback port; no ambient PostgreSQL overrides",
+    "docker_transport": "local Unix socket"
+  },
+  "failure": {
+    "message": "intentional cleanup check after committed disposable mutation",
+    "type": "InjectedFailure"
+  },
+  "finished_at": "2026-10-29T02:45:25.687740+00:00",
+  "not_exercised": [
+    "RDS IAM/TLS",
+    "actual imported/normalized sources",
+    "authored applications",
+    "provider identities/sessions",
+    "native per-principal authorization",
+    "APP-057 shared rehearsal reset",
+    "backup recovery"
+  ],
+  "passed": false,
+  "schema_version": 1,
+  "scope": "owned disposable local synthetic fixture setup/reset, not backup restore or a shared managed reset",
+  "seed_bundle_digest": "sha256:92031ca3156c5048cfefcee65ebbbe5a8b526829a48982faa4b38f405184800b",
+  "source_pins": {
+    "app/migrations/0001_role_foundation.sql": "sha256:f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "sha256:7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/catalog-query.json": "sha256:3af18e8ec8b58b52e7956dc900deae8dffc9a585bc1db9e1ce1ab4dee02ed6bc",
+    "app/migrations/catalog-v1.json": "sha256:854e4089bd68bf427c48ee52ba57792cf8edaf815ee2b12f9fc27aef3d39090e",
+    "app/migrations/catalog-v2.json": "sha256:5772132f163b5490b8d39f6d1fdc26cef388100daf9fd8e86cc7aa9f8ebffe07",
+    "app/migrations/manifest.json": "sha256:a3130b979cf84851eb05e930a52fc4a7439e73da820155bb87424436fbb1eff2",
+    "app/runtime/qualify_tenant_schema.py": "sha256:ecf0a61a5d8149f13f92ece3bfadef5d23e65554bf811471ae6faeb46508daee",
+    "app/runtime/requirements.lock": "sha256:db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+    "app/runtime/runtime.py": "sha256:a488f35b92a2d0413c236a6a3bf35097470bbd1a7780521120a872713dc93ea9",
+    "app/runtime/tenant_seed.py": "sha256:66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+    "contracts/implementation-lock.json": "sha256:9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45",
+    "contracts/requirements.lock": "sha256:8254cb9a13753eafff6514939b2f687b33fc40c1a9ea5e329219f3265ae5ed12",
+    "contracts/validate.py": "sha256:2d833eb3aaad4779880b40bde4dc4528cb6f3b620794c5508d0ba640851ed997",
+    "fixtures/phase-one/v1/manifest.json": "sha256:247f009c132c4e5a6185851f086a30ec8d4e583eb51fe204f2378ca7bc1cf4cd",
+    "fixtures/phase-one/v1/setup.json": "sha256:29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
+    "fixtures/reset_trial.py": "sha256:7ecec7084546019e2afe65166e1fe78b941ce0b2a6ae2472a31a7b623fd4fe48",
+    "fixtures/verify.py": "sha256:28badd0d7c77ae0db3a33ec0ee0443989c8683f8f8cf921e33a454fabdc49ee2"
+  },
+  "started_at": "2026-10-29T02:45:23.229824+00:00",
+  "workspaces": [
+    {
+      "changed_seed_refused_without_overwrite": true,
+      "container_id": "86149fd8d61f0115a8b8f71e3a27e5d851ae03f9c224257e53984d2b636da9fa",
+      "created": true,
+      "image_architecture": "arm64",
+      "image_id": "sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+      "initial_state_digest": "sha256:52246a09a6a7633cec8402c751b41dc91d1e36ee92409e4ccf44a6694cbca275",
+      "loopback_port": 65246,
+      "mutated_state_digest": "sha256:bdfef1d53e8da46c464395a2f6c2ccc102fe0d35f6f56ea794e1f257d39cf952",
+      "name": "genui-app008-schema-3a98c28860d4",
+      "ordinal": 1,
+      "postgres_image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+      "removed": true,
+      "repeat_seed_identical": true,
+      "role_trials": {
+        "missing_cleared_scope_denied": true,
+        "role_escalation_and_direct_write_denied": true,
+        "role_organization_checks": [
+          {
+            "foreign_rows": 0,
+            "granted_tables": [
+              "app_permissions",
+              "apps",
+              "definition_inputs",
+              "definition_record_schemas",
+              "definition_revisions",
+              "memberships",
+              "organization_permissions",
+              "organizations",
+              "principals",
+              "provider_tenant_bindings",
+              "publication_inputs",
+              "publication_policies",
+              "publication_record_schemas",
+              "publications",
+              "record_collections",
+              "saved_work",
+              "source_permissions",
+              "source_revisions",
+              "sources",
+              "spaces",
+              "work_bindings",
+              "work_permissions",
+              "work_source_dependencies"
+            ],
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "own_rows_match_manifest": true,
+            "role": "genui_workspace"
+          },
+          {
+            "foreign_rows": 0,
+            "granted_tables": [
+              "app_permissions",
+              "apps",
+              "definition_inputs",
+              "definition_record_schemas",
+              "definition_revisions",
+              "memberships",
+              "organization_permissions",
+              "organizations",
+              "principals",
+              "provider_tenant_bindings",
+              "publication_inputs",
+              "publication_policies",
+              "publication_record_schemas",
+              "publications",
+              "record_collections",
+              "saved_work",
+              "source_permissions",
+              "source_revisions",
+              "sources",
+              "spaces",
+              "work_bindings",
+              "work_permissions",
+              "work_source_dependencies"
+            ],
+            "organization_id": "00000000-0000-4000-8000-000000000002",
+            "own_rows_match_manifest": true,
+            "role": "genui_workspace"
+          },
+          {
+            "foreign_rows": 0,
+            "granted_tables": [
+              "app_permissions",
+              "apps",
+              "definition_inputs",
+              "definition_record_schemas",
+              "definition_revisions",
+              "memberships",
+              "organization_permissions",
+              "organizations",
+              "publication_inputs",
+              "publication_policies",
+              "publication_record_schemas",
+              "publications",
+              "source_permissions",
+              "spaces",
+              "work_permissions"
+            ],
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "own_rows_match_manifest": true,
+            "role": "genui_control"
+          },
+          {
+            "foreign_rows": 0,
+            "granted_tables": [
+              "app_permissions",
+              "apps",
+              "definition_inputs",
+              "definition_record_schemas",
+              "definition_revisions",
+              "memberships",
+              "organization_permissions",
+              "organizations",
+              "publication_inputs",
+              "publication_policies",
+              "publication_record_schemas",
+              "publications",
+              "source_permissions",
+              "spaces",
+              "work_permissions"
+            ],
+            "organization_id": "00000000-0000-4000-8000-000000000002",
+            "own_rows_match_manifest": true,
+            "role": "genui_control"
+          },
+          {
+            "foreign_rows": 0,
+            "granted_tables": [
+              "app_permissions",
+              "apps",
+              "definition_inputs",
+              "definition_record_schemas",
+              "definition_revisions",
+              "internal_record_revisions",
+              "internal_records",
+              "memberships",
+              "organization_permissions",
+              "organizations",
+              "publication_inputs",
+              "publication_policies",
+              "publication_record_schemas",
+              "publications",
+              "record_collections",
+              "record_source_dependencies",
+              "saved_work",
+              "source_permissions",
+              "source_revisions",
+              "sources",
+              "spaces",
+              "work_bindings",
+              "work_permissions",
+              "work_source_dependencies"
+            ],
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "own_rows_match_manifest": true,
+            "role": "genui_data"
+          },
+          {
+            "foreign_rows": 0,
+            "granted_tables": [
+              "app_permissions",
+              "apps",
+              "definition_inputs",
+              "definition_record_schemas",
+              "definition_revisions",
+              "internal_record_revisions",
+              "internal_records",
+              "memberships",
+              "organization_permissions",
+              "organizations",
+              "publication_inputs",
+              "publication_policies",
+              "publication_record_schemas",
+              "publications",
+              "record_collections",
+              "record_source_dependencies",
+              "saved_work",
+              "source_permissions",
+              "source_revisions",
+              "sources",
+              "spaces",
+              "work_bindings",
+              "work_permissions",
+              "work_source_dependencies"
+            ],
+            "organization_id": "00000000-0000-4000-8000-000000000002",
+            "own_rows_match_manifest": true,
+            "role": "genui_data"
+          },
+          {
+            "foreign_rows": 0,
+            "granted_tables": [
+              "organizations"
+            ],
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "own_rows_match_manifest": true,
+            "role": "genui_worker"
+          },
+          {
+            "foreign_rows": 0,
+            "granted_tables": [
+              "organizations"
+            ],
+            "organization_id": "00000000-0000-4000-8000-000000000002",
+            "own_rows_match_manifest": true,
+            "role": "genui_worker"
+          }
+        ],
+        "scope": "actual SQL-role privileges and organization RLS; not provider authentication or native subject authorization"
+      },
+      "seed_manifest": {
+        "bundles": 3,
+        "organizations": 2,
+        "principals": 13,
+        "scope": "exact seeded identities, bindings, memberships, app/work/record identities, grants and canonical definitions/publications; all 26 relation rows retained for reset equality",
+        "table_count_per_organization": 26
+      }
+    }
+  ]
+}

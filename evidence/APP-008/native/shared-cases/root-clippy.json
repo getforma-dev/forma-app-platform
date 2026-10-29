@@ -1,0 +1,18 @@
+{
+  "scope": "Retained strict lint evidence for shared-case source",
+  "recorded_at_utc": "2026-10-29T04:23:14.765530+00:00",
+  "command": [
+    "cargo",
+    "+1.93.1",
+    "clippy",
+    "--offline",
+    "--locked",
+    "--all-targets",
+    "--",
+    "-D",
+    "warnings"
+  ],
+  "cwd": "app",
+  "build_jobs": 2,
+  "exit_code": 0
+}

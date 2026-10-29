@@ -18,6 +18,23 @@ app/src/**
 !app/src/auth_qualification/
 app/src/auth_qualification/**
 !app/src/auth_qualification/tests.rs
+!app/src/storage/
+app/src/storage/**
+!app/src/storage/mod.rs
+!app/src/storage/pool.rs
+!app/src/storage/registry.rs
+!app/src/storage/authorization.rs
+!app/src/storage/catalog.rs
+!app/src/storage/tests.rs
+!app/src/storage/qualification.rs
+!app/src/storage/qualification_cases.rs
+!app/src/admission/
+app/src/admission/**
+!app/src/admission/mod.rs
+!app/src/admission/canonical.rs
+!app/src/admission/digest.rs
+!app/src/admission/validate.rs
+# admission/tests.rs is cfg(test) only; its include_str! of ../contracts/ never compiles in a release build.
 !app/admin/
 app/admin/**
 !app/admin/package.json
@@ -42,6 +59,11 @@ app/runtime/**
 !app/migrations/
 app/migrations/**
 !app/migrations/0001_role_foundation.sql
+!app/migrations/0002_tenant_foundation.sql
+!app/migrations/manifest.json
+!app/migrations/catalog-query.json
+!app/migrations/catalog-v1.json
+!app/migrations/catalog-v2.json
 !app/certs/
 app/certs/**
 !app/certs/rds-global-bundle.pem

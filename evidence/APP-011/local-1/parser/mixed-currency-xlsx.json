@@ -1,0 +1,206 @@
+{
+  "config_sha256": "sha256:12cfa179f58e98619ffbe43b4bf849d0bd149a6f5f4df848f14f4726b058cb65",
+  "elapsed_ms": 1,
+  "fuel_consumed": 1477085,
+  "input_sha256": "sha256:031b349e38c11d69e5817d7688910e871e82822daa88047fb0893fe8c7f02aad",
+  "interface_imports": [],
+  "memory_bytes": 1441792,
+  "resource_limits": {
+    "fuel": 5000000000,
+    "guest_linear_memory_bytes": 2147483648,
+    "input_bytes": 5242880,
+    "output_bytes": 134217728,
+    "wall_clock_ms": 120000
+  },
+  "result": {
+    "contract_edition": "impl-2026-10-28.1",
+    "parser_version": 1,
+    "profile": "demo",
+    "result": {
+      "available_sheets": [
+        "Expenses"
+      ],
+      "cells": [
+        {
+          "coordinate": {
+            "column": 1,
+            "row": 1,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "expense_id",
+          "value": {
+            "type": "text",
+            "value": "expense_id"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 2,
+            "row": 1,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "description",
+          "value": {
+            "type": "text",
+            "value": "description"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 3,
+            "row": 1,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "amount_cents",
+          "value": {
+            "type": "text",
+            "value": "amount_cents"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 4,
+            "row": 1,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "currency",
+          "value": {
+            "type": "text",
+            "value": "currency"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 1,
+            "row": 2,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "EXP-001",
+          "value": {
+            "type": "text",
+            "value": "EXP-001"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 2,
+            "row": 2,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "Equipment supplies",
+          "value": {
+            "type": "text",
+            "value": "Equipment supplies"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 3,
+            "row": 2,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "unit_unconfirmed",
+          "original": "12000",
+          "value": {
+            "type": "integer",
+            "unit": "unconfirmed",
+            "value": "12000"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 4,
+            "row": 2,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "USD",
+          "value": {
+            "type": "text",
+            "value": "USD"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 1,
+            "row": 3,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "EXP-EUR",
+          "value": {
+            "type": "text",
+            "value": "EXP-EUR"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 2,
+            "row": 3,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "Synthetic EUR control",
+          "value": {
+            "type": "text",
+            "value": "Synthetic EUR control"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 3,
+            "row": 3,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "unit_unconfirmed",
+          "original": "45000",
+          "value": {
+            "type": "integer",
+            "unit": "unconfirmed",
+            "value": "45000"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 4,
+            "row": 3,
+            "sheet": "Expenses",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "EUR",
+          "value": {
+            "type": "text",
+            "value": "EUR"
+          }
+        }
+      ],
+      "date_epoch_1904": false,
+      "expanded_bytes": 2202,
+      "format": "xlsx",
+      "formula_policy": "reject",
+      "mapping_status": "inspection_required",
+      "rows": 3,
+      "selected_sheet": "Expenses"
+    },
+    "status": "parsed"
+  },
+  "wasm_sha256": "sha256:aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba"
+}

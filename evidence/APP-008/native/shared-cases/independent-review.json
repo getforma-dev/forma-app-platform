@@ -1,0 +1,33 @@
+{
+  "reviewer": "/root",
+  "recorded_at_utc": "2026-10-29T04:22:56.923910+00:00",
+  "passed": true,
+  "blocking_findings": [],
+  "scope": "Independent full-diff review of cfg(test)-only extraction and exact context; actual local campaign run by author, not repeated by reviewer",
+  "checks": {
+    "all_reviewed_source_hashes_match": true,
+    "author_commands_passed": true,
+    "same_36_ordered_campaign_results_as_r5": true,
+    "supplemental_per_file_quoted_literal_multiset_preserved": true,
+    "new_module_cfg_test_only_private_to_storage": true,
+    "no_endpoint_environment_operator_or_public_constructor_added": true,
+    "actual_context_is_prior_36_paths_plus_one_exact_shared_file": true
+  },
+  "source_sha256": {
+    ".dockerignore": "0b71fef5941e2d88bb5e8f1220eff32f9aa3f165c465f2a6bdcbb88fee474218",
+    "app/src/storage/mod.rs": "9dc948d21d752b2f91030a05c81f3e4236dd2cfb7560481b649a77b10ec0ecfe",
+    "app/src/storage/qualification.rs": "a3e276172119c8d090d0c295581b754e014d8b8ce9753852483ef4fff953d16e",
+    "app/src/storage/qualification_cases.rs": "80e3fbbd31a16e5cb022882bd56107f6d01327d98026df4cf134445e3f3cf9d8"
+  },
+  "evidence_sha256": {
+    "author-checks.json": "e65b4a031351c488cb16340145b0821b5df8215ac22c6db293015068b544727b",
+    "local-postgres-tls.json": "cae9b8c6d0a1d75726a2cbf9855af58077a8cccd1f3240114555bf057537c4cd",
+    "context-export.json": "5df1b5563e9745ff38244f457891b260cd5e3d7740937527016bcf1bd498fccd"
+  },
+  "limits": [
+    "Source inspection and retained local execution evidence; no fresh RDS/IAM or hosted evidence.",
+    "Supplemental quoted-literal comparison is not a Rust parser or proof of semantic equivalence; full diff was reviewed separately.",
+    "R5 image remains historical; final image and exact-source CI/landing remain open.",
+    "This extraction adds no managed runner, operator package, coordinator or trusted production request constructor."
+  ]
+}

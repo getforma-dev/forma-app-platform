@@ -1,6 +1,6 @@
 # APP-006 local consumer evidence
 
-**Blocked acceptance; locally qualified candidate.** No deployed auth service, environment client, browser login, app session, app membership or live rollback was exercised. The reusable verifier and its limits are documented in [the spike](../../spikes/APP-006/README.md). All source fixtures are synthetic or public-only; ephemeral private keys and signed test tokens exist only in test memory.
+**In progress under ADR-008; locally qualified candidate.** No deployed auth service, environment client, browser login, app session, app membership or live rollback was exercised. The reusable verifier and its limits are documented in [the spike](../../spikes/APP-006/README.md). All source fixtures are synthetic or public-only; ephemeral private keys and signed test tokens exist only in test memory.
 
 ## Current reviewed source
 
@@ -49,4 +49,4 @@ Omit the upstream argument on hosts without that independent repository. The res
 - Historical FORMA-248 candidate `22652f8e` lacked a public access-vs-SSF selector. The owner supplied `dfe7896826c4e1e3a616246fe6022d311cb38519` with access-only `/auth/jwks` and separate `/ssf/jwks`; exact source hashes and the earlier ambiguity are retained. The consumer now locally qualifies an explicit bounded access-only profile, including prepublished next keys, overlap, retirement after observed replacement and genuine SSF-signed `typ=JWT` refusal. This does not prove upstream CI, KMS custody, deployed endpoint separation or live rotation. A fresh cached key can remain usable until expiry or authoritative replacement; no immediate remote-retirement claim is made.
 - Existing-session continuity, cookie/CSRF policy, membership rechecks, key-alert/audit integration, fleet-wide admission and deployed outage/rollback remain their owning tickets' work. No provider downgrade or fake organization picker is introduced.
 
-[APP-006](../../Tickets/9-blocked/APP-006.md) stays Blocked with all acceptance boxes open. This preparation does not pass the [Phase 1 gate](../../Tickets/phases/PH01.md) or start dependent Phase 2 work.
+[APP-006](../../Tickets/3-in-review/APP-006.md) is In progress under ADR-008; its local items are bound by [independent review](adr-008-restructure-review.md) and its hosted items are APP-079's. This preparation does not pass the [Phase 1 gate](../../Tickets/phases/PH01.md) or start dependent Phase 2 work.

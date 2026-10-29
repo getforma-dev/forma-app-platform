@@ -1,0 +1,77 @@
+{
+  "recorded_at_utc": "2026-10-29T17:19:00.577383+00:00",
+  "status": "DRAFT_UNACCEPTED_HANDOFF",
+  "scope": "Focused format/compile only after user-requested wind down; no behavior qualification",
+  "source_sha256": {
+    "app/src/storage/managed_qualification.rs": "57478ae92f0a7fdea62365c6fae4be650a1d63e44545edd249687d43df572dd7",
+    "app/src/storage/mod.rs": "5c2c43fc192571fba6b3b16a3889f0be482f115b35adb7376ae46cb896ed1ac8",
+    "app/src/storage/qualification_cases.rs": "80e3fbbd31a16e5cb022882bd56107f6d01327d98026df4cf134445e3f3cf9d8",
+    "app/src/storage/pool.rs": "4a8eae301412ed8ce48ef2b84e08919380747e17179ae314b61c15d1d429a0d5",
+    "app/src/storage/authorization.rs": "c53609ef588351a322acf47ff249fd7423d49eef01848d8a4213bea4f0c05a32",
+    "app/src/storage/catalog.rs": "8c0462983afb7e7d877f661d3c49b63eae71de0b0b95c5e61f7c291c1f2cf35a",
+    "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+    "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+    "app/src/lib.rs": "381db89b74187d80ebd7300b1e1a9823596a3c3a422a55632f5552a7ab2b305f",
+    "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+    "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+    "fixtures/phase-one/v1/setup.json": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
+    "app/migrations/catalog-query.json": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963",
+    "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+    "app/migrations/manifest.json": "13976faa01ee527a81524d969e2aee864ef42e78368b69e8bee67895b8287bd5"
+  },
+  "checks": [
+    {
+      "name": "format-owned",
+      "command": [
+        "rustfmt",
+        "+1.93.1",
+        "--edition",
+        "2021",
+        "app/src/storage/managed_qualification.rs"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.148,
+      "log": "format-owned.txt"
+    },
+    {
+      "name": "format-check",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "fmt",
+        "--manifest-path",
+        "app/Cargo.toml",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.155,
+      "log": "format-check.txt"
+    },
+    {
+      "name": "compile-check",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "check",
+        "--offline",
+        "--locked",
+        "--manifest-path",
+        "app/Cargo.toml",
+        "--lib",
+        "--tests"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 2.39,
+      "log": "compile-check.txt"
+    }
+  ],
+  "focused_checks_passed": true,
+  "tests_run": 0,
+  "container_tests_run": 0,
+  "managed_acceptance": false,
+  "owned_live_processes": [],
+  "owned_created_containers": [],
+  "cloud_calls": 0,
+  "git_mutations": false
+}

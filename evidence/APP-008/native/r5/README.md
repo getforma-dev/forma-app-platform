@@ -1,0 +1,13 @@
+# R5: put temporary schemas after the system catalog
+
+The schema review demonstrated that `search_path=pg_catalog` still implicitly searches an existing temporary schema first for relation names. The native catalog transaction is READ ONLY, which prevents permanent writes but does not prevent temporary sequence increments or make name resolution catalog-only. Ordinary application roles lack TEMP privilege; this follow-up also protects the stated catalog-only boundary when a temporary object already exists.
+
+Startup options, identity/baseline checks, reset and the catalog transaction now use the exact path `pg_catalog, pg_temp`. The canonical query document must name that same path; the native validator refuses any other value. Catalog SQL and expected catalog values remain the migration owner's contract. No privilege repair or application TEMP grant is added.
+
+The added local TLS regression first proves ordinary TEMP creation is denied. In the disposable fixture, an operator briefly grants TEMP so a private test connection can create a temporary `pg_namespace` view whose predicate increments a temporary sequence. The operator revokes the grant before qualification. The old path inside READ ONLY executes that marker; the corrected catalog transaction and actual same-backend recycle leave it untouched. A successful finish/reset then removes both temporary objects while preserving safe same-backend reuse. The test-only direct pool access is absent from production.
+
+The prior 29-, 32- and 35-check author/reviewer receipts remain unchanged. [Author checks](author-checks.json) pass with unchanged before/after source inputs: all **36** [real local PostgreSQL/TLS cases](local-postgres-tls.json), 18 ordinary library tests, strict lint, production library build, four Rust 1.85 native unit tests and the Rust 1.85 public-boundary compile-fail doctest. The fixture container and private files were removed. The final independent supplement remains pending.
+
+The final query document SHA-256 is `e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963`; expected version2 catalog remains `51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954`. The receipt records every source/resource digest and exact toolchain command. The Python helper's parallel catalog-before-metadata repair has a separate owner/reviewer; the native test does not claim managed helper delivery.
+
+These synthetic password/TLS results do not establish RDS IAM, hosted identity/session/admission, actual managed acceptance or protection against a concurrent hostile database administrator changing DDL after validation. No image, Git, managed RDS or cloud action was performed by this author.

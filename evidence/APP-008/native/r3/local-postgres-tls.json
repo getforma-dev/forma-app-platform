@@ -1,0 +1,143 @@
+{
+  "checks": [
+    {
+      "name": "aggregate fixed-role native readiness verifies identity, schema and blank scope",
+      "passed": true
+    },
+    {
+      "name": "composed readiness requires actual native success plus synthetic helper success and invalidates cache on generation change",
+      "passed": true
+    },
+    {
+      "name": "TLS role identity and scoped two-organization publication/record reads",
+      "passed": true
+    },
+    {
+      "name": "all four fixed roles enforce RLS, blank scope and direct write refusal",
+      "passed": true
+    },
+    {
+      "name": "revocation, epoch, missing grants and registry/DB binding mismatches deny",
+      "passed": true
+    },
+    {
+      "name": "closed action matrix evaluates current scoped grants without granting business writes",
+      "passed": true
+    },
+    {
+      "name": "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
+      "passed": true
+    },
+    {
+      "name": "cancellation at recycle discards physical backend",
+      "passed": true
+    },
+    {
+      "name": "cancellation at begin discards physical backend",
+      "passed": true
+    },
+    {
+      "name": "cancellation at finish discards physical backend",
+      "passed": true
+    },
+    {
+      "name": "cancellation at reset discards physical backend",
+      "passed": true
+    },
+    {
+      "name": "cancelled connect retains capacity until owned transport destruction",
+      "passed": true
+    },
+    {
+      "name": "cancellation during real PostgreSQL query discards backend",
+      "passed": true
+    },
+    {
+      "name": "expired commit deadline gives unknown outcome and discards without retry",
+      "passed": true
+    },
+    {
+      "name": "two-second cleanup deadline discards uncertain reset",
+      "passed": true
+    },
+    {
+      "name": "generation rotation retires old leases and expired credentials refuse checkout",
+      "passed": true
+    },
+    {
+      "name": "current source visibility is required in addition to record and run permissions",
+      "passed": true
+    },
+    {
+      "name": "tombstoned source dependencies deny bounded record reads",
+      "passed": true
+    },
+    {
+      "name": "writer-first revocation blocks then invalidates the prior nonfinal precheck",
+      "passed": true
+    },
+    {
+      "name": "operation-first authority fence holds until commit then subsequent stale request denies",
+      "passed": true
+    },
+    {
+      "name": "eight physical connections, two per role, bounded waiters and absolute acquisition deadline",
+      "passed": true
+    },
+    {
+      "name": "closed pools terminate all eight-capacity transport owners",
+      "passed": true
+    },
+    {
+      "name": "changed-generation connection retry shares the original five-second deadline",
+      "passed": true
+    },
+    {
+      "name": "canonical catalog comparison rejects disabled RLS, extra UPDATE and missing named relation before reuse",
+      "passed": true
+    },
+    {
+      "name": "empty registry stays deny-all while fixed-role readiness detects expiry, role drift and aggregate timeout",
+      "passed": true
+    },
+    {
+      "name": "elevated flags, unexpected memberships and unsupported schema refuse new connections",
+      "passed": true
+    },
+    {
+      "name": "committed database replica default is observed by all four roles and refused until operator restoration",
+      "passed": true
+    },
+    {
+      "name": "operator-enabled session replica drift is refused before reset and replaces the backend without app SET repair",
+      "passed": true
+    },
+    {
+      "name": "replica-mode idle session is discarded during recycle before a new origin backend is admitted",
+      "passed": true
+    },
+    {
+      "name": "new physical connection authenticates with changed current role credential material",
+      "passed": true
+    },
+    {
+      "name": "wrong hostname, untrusted CA and plaintext PostgreSQL are refused",
+      "passed": true
+    },
+    {
+      "name": "local database and private fixture files removed",
+      "passed": true
+    }
+  ],
+  "limits": [
+    "Synthetic local password authentication is not RDS IAM.",
+    "Fixture identities do not establish APP-006/009/073/074 readiness.",
+    "Initial application access is read-only; business writes remain denied."
+  ],
+  "managed_acceptance": false,
+  "passed": true,
+  "postgres_image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "schema_version": 1,
+  "scope": "APP-008 isolated native PostgreSQL TLS qualification",
+  "server_version": "16.13 (Debian 16.13-1.pgdg13+1)"
+}

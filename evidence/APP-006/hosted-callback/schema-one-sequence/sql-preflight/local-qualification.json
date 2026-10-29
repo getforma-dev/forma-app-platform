@@ -1,0 +1,123 @@
+{
+  "scope": "APP-006 schema-one preflight local PostgreSQL/TLS qualification",
+  "managed_acceptance": false,
+  "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "checks": [
+    {
+      "name": "deterministic exact emitted override fits8192 and validates embedded SHA-bound resources",
+      "passed": true
+    },
+    {
+      "name": "actual python3 entryPoint plus emitted command fails closed with bounded sanitized JSON before network",
+      "passed": true
+    },
+    {
+      "name": "embedded query byte tampering refuses before connection",
+      "passed": true
+    },
+    {
+      "name": "production connection fixes identity target TLS safe startup bounds and consumes secret env",
+      "passed": true
+    },
+    {
+      "name": "production refuses alternate PGHOST",
+      "passed": true
+    },
+    {
+      "name": "production refuses alternate PGPORT",
+      "passed": true
+    },
+    {
+      "name": "production refuses alternate PGUSER",
+      "passed": true
+    },
+    {
+      "name": "production refuses alternate PGDATABASE",
+      "passed": true
+    },
+    {
+      "name": "production refuses alternate PGSSLMODE",
+      "passed": true
+    },
+    {
+      "name": "production refuses alternate PGSSLROOTCERT",
+      "passed": true
+    },
+    {
+      "name": "production refuses alternate PGHOSTADDR",
+      "passed": true
+    },
+    {
+      "name": "production refuses alternate PGSERVICE",
+      "passed": true
+    },
+    {
+      "name": "production refuses alternate PGOPTIONS",
+      "passed": true
+    },
+    {
+      "name": "exact emitted collector succeeds on actual PG16.13 verify-full TLS version1 without state changes",
+      "passed": true
+    },
+    {
+      "name": "actual operator UPDATE is denied SQLSTATE25006 in the preflight transaction",
+      "passed": true
+    },
+    {
+      "name": "catalog role drift refuses and leaves the observed changed role untouched",
+      "passed": true
+    },
+    {
+      "name": "temp catalog shadow positive control fires; exact preflight path never evaluates it",
+      "passed": true
+    },
+    {
+      "name": "metadata view RW control fires and RO control reaches25006; collector refuses catalog before expression",
+      "passed": true
+    },
+    {
+      "name": "committed all-role replica default refuses immediately and is not silently repaired",
+      "passed": true
+    },
+    {
+      "name": "real schema2 installation refuses and remains unchanged; no migration or downgrade path",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "override_bytes": 7867,
+  "override_sha256": "c423cce86ea1b14f9f473795fad7520c9885c683b078058d69353708d4ee78da",
+  "source_sha256": "c29ea7f8fcfc105e85c9e2dcd12a2b288365732aa461f62acb71b1ba8b352804",
+  "resource_sha256": {
+    "catalog-query.json": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963",
+    "catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963"
+  },
+  "local_success_receipt": {
+    "scope": "APP-006 read-only schema-one auth preflight",
+    "passed": true,
+    "database_version": 1,
+    "source_sha256": "c29ea7f8fcfc105e85c9e2dcd12a2b288365732aa461f62acb71b1ba8b352804",
+    "query_sha256": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963",
+    "expected_sha256": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "catalog_sha256": "e210fc43b054757525522fc628e63250b0c44c8da8d9c84e78a3282eab7c75c1",
+    "assertions": {
+      "fixed_operator_identity": true,
+      "postgres_16_13": true,
+      "tls": true,
+      "read_only": true,
+      "origin": true,
+      "catalog_before_metadata": true
+    },
+    "limits": [
+      "Point-in-time SQL proof; preserve operator/schema quiescence for the auth window.",
+      "No hosted identity, deployment, invitation, application access or schema-two acceptance."
+    ]
+  },
+  "container_removed": true,
+  "limits": [
+    "Disposable local operator/trust authentication with verified TLS is not actual RDS identity or IAM acceptance.",
+    "Production endpoint/UID/env guards are checked locally; production run was not connected to AWS.",
+    "No cloud, hosted identity, migration, shared database reset or secret read occurred."
+  ]
+}

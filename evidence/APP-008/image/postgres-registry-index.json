@@ -1,0 +1,22 @@
+{
+  "recorded_at": "2026-10-29T03:06:10.416671+00:00",
+  "index_digest": "sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "media_type": "application/vnd.oci.image.index.v1+json",
+  "platforms": [
+    {
+      "digest": "sha256:3102b2114b39383b61fa194e5929734c72a56ce366dbb391509b1f07aef10f9f",
+      "platform": {
+        "architecture": "amd64",
+        "os": "linux"
+      }
+    },
+    {
+      "digest": "sha256:bf738fa93668ee69ca247db4d98830fcc9b7e486257096adf793fa7836b5f076",
+      "platform": {
+        "architecture": "arm64",
+        "os": "linux",
+        "variant": "v8"
+      }
+    }
+  ]
+}

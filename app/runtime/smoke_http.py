@@ -1,4 +1,4 @@
-"""Local HTTP/security smoke with a deliberately unavailable probe; no cloud IO."""
+"""Local HTTP/security smoke: a positive mock helper cannot replace native pools."""
 import argparse
 import json
 import os
@@ -19,8 +19,18 @@ with tempfile.TemporaryDirectory(prefix='genui-http-unit-', dir=args.directory) 
     document = {'schema_version':1,'generation':str(uuid.uuid4()),'issued_at':now,'expires_at':now+500,
         'database':{'host':'synthetic.invalid','port':5432,'name':'genui','roles':{name:{'username':'genui_'+name,'token':'unit-only-'+name,'expires_at':now+500} for name in ('workspace','control','data','worker')}},'storage':{}}
     path.write_text(json.dumps(document)); path.chmod(0o600)
+    helper = Path(directory) / 'synthetic_probe.py'
+    marker = Path(directory) / 'probe-called'
+    helper.write_text('''import hashlib,json,os,time
+from pathlib import Path
+path=Path(os.environ['GENUI_RUNTIME_CONFIG_FILE'])
+raw=path.read_bytes(); value=json.loads(raw)
+path.with_name('probe-called').write_text('called')
+print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(raw).hexdigest(),
+ 'expires_at':value['expires_at'],'checked_at':int(time.time())}))
+''')
     env = {k:v for k,v in os.environ.items() if not k.startswith(('AWS_','GENUI_'))}
-    env.update({'GENUI_RUNTIME_CONFIG_FILE':str(path),'GENUI_HELPER_PATH':'/deliberately-absent-managed-probe.py','AWS_EC2_METADATA_DISABLED':'true','FORMA_PORT':'0','FORMA_BIND_ADDRESS':'127.0.0.1'})
+    env.update({'GENUI_RUNTIME_CONFIG_FILE':str(path),'GENUI_HELPER_PATH':str(helper),'AWS_EC2_METADATA_DISABLED':'true','FORMA_PORT':'0','FORMA_BIND_ADDRESS':'127.0.0.1'})
     process = subprocess.Popen([args.binary], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         lines=queue.Queue()
@@ -36,10 +46,12 @@ with tempfile.TemporaryDirectory(prefix='genui-http-unit-', dir=args.directory) 
             assert time.monotonic()<deadline, 'listener timeout'
         origin=line.split(' ',1)[1]
         with urllib.request.urlopen(origin+'/health/live',timeout=3) as response: assert response.status==200
-        for _ in range(2):
+        for _ in range(20):
             try: urllib.request.urlopen(origin+'/health/ready',timeout=3)
             except urllib.error.HTTPError as error: assert error.code==503 and error.read()==b''
             else: raise AssertionError('unverified managed dependencies reported ready')
+            time.sleep(.05)
+        assert not marker.exists(), 'missing native registry launched a helper-only readiness path'
         pages=[]
         for _ in range(2):
             with urllib.request.urlopen(origin,timeout=3) as response:
@@ -47,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix='genui-http-unit-', dir=args.directory) 
                 assert b'Foundation workspace' in body and re.search(rb'>\s*7\s*<',body)
                 nonce=re.search(r"nonce-([^' ]+)",csp).group(1);assert nonce.encode() in body;pages.append(nonce)
         assert pages[0]!=pages[1]
-        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_probe':503,'native_html_count':7,'fresh_csp_nonces':True,'no_store':True}))
+        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_html_count':7,'fresh_csp_nonces':True,'no_store':True}))
     finally:
         process.terminate()
         try: process.communicate(timeout=5)
@@ -56,3 +68,14 @@ with tempfile.TemporaryDirectory(prefix='genui-http-unit-', dir=args.directory) 
     refused=subprocess.run([args.binary],env=env,capture_output=True,text=True,timeout=5)
     assert refused.returncode!=0 and 'unit-only' not in refused.stdout+refused.stderr
     print(json.dumps({'scope':'startup credential permission failure','passed':True,'credential_values_disclosed':False}))
+    path.chmod(0o600)
+    # Reach the private registry loader: an invalid hostname would refuse in
+    # Settings::new first and would not exercise this missing-file boundary.
+    document['database']['host'] = 'synthetic-test.us-east-1.rds.amazonaws.com'
+    path.write_text(json.dumps(document))
+    env['GENUI_IDENTITY_REGISTRY_FILE'] = str(Path(directory) / 'absent-registry.json')
+    refused=subprocess.run([args.binary],env=env,capture_output=True,text=True,timeout=5)
+    assert refused.returncode!=0 and 'FORMA_LISTENING' not in refused.stdout
+    assert 'tenant storage configuration refused' in refused.stderr
+    assert 'unit-only' not in refused.stdout+refused.stderr
+    print(json.dumps({'scope':'accepted RDS hostname with missing private registry cannot bind a listener','passed':True}))

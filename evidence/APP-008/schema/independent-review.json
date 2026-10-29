@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "reviewer": "app008_schema_review",
+  "reviewed_parent_commit": "2c5760248d2fda8c71bb78f8a2a0fc1d64d1651e",
+  "verdict": "changes_requested",
+  "source_sha256": {
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/manifest.json": "e2c67f17aadc27205235ebf36dbcf7855a98fe76f77a2822575590a833f588a8",
+    "app/runtime/runtime.py": "8045ebb79193c47baaa7ac1b226e91324e8eba336dfe19f033fb681b77f52b22",
+    "app/runtime/test_runtime.py": "88f61742d78ae7b838e1c7e22101b8fcff9e32d195c11d716d1e88f7cbe7281a",
+    "app/runtime/qualify_migration.py": "9cd5ad523c38d91b93e087f10e3d2534c5dd216d9adc6f847648a0ed666c11ec",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+    "app/runtime/qualify_tenant_schema.py": "1ff0e86d8535af4230b913b7c94f9c105b5e83b03c181673ced6fd3a8ba646f8",
+    "docs/architecture/ADR-004-TENANT-TRANSACTIONS.md": "0925434de4a123c013400aeb13b600cc136fd9a5a8003a96e526ef1faf58af60"
+  },
+  "checks": [
+    {
+      "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python app/runtime/qualify_tenant_schema.py --output evidence/APP-008/schema/independent-postgres.json",
+      "exit_code": 0,
+      "checks": 106,
+      "passed": true,
+      "receipt": "independent-postgres.json",
+      "receipt_sha256": "d8fd7282a2c02391b5ee61af9bc728ba89eb4f70609067a89a1156b69663474c",
+      "both_containers_removed": true
+    },
+    {
+      "command": "app/runtime/.venv/bin/python -m unittest discover -s app/runtime -p test_runtime.py -v",
+      "exit_code": 0,
+      "tests": 24,
+      "passed": true,
+      "elapsed_seconds": 9.531
+    }
+  ],
+  "findings": [
+    {
+      "id": "R1",
+      "priority": 1,
+      "file": "app/runtime/runtime.py",
+      "start_line": 367,
+      "end_line": 374,
+      "title": "Existing version2 repeat accepts structural and ACL drift",
+      "reproduction": [
+        "Use qualify_tenant_schema.LocalPostgres with its pinned PostgreSQL16.13 image and random loopback port.",
+        "As genui_migration, commit apply_migrations(connection, MIGRATIONS) on a fresh database.",
+        "Commit DROP TABLE genui.organization_permissions; then apply_migrations again: accepted.",
+        "Commit ALTER TABLE genui.organizations DISABLE ROW LEVEL SECURITY; then apply_migrations again: accepted.",
+        "Commit GRANT UPDATE ON genui.publications TO genui_workspace; then apply_migrations again: accepted.",
+        "The latter two observations occurred in the same isolated database after the missing-table mutation; the runner still reported success throughout. No history row or checksum was changed.",
+        "Remove the disposable container through LocalPostgres cleanup."
+      ],
+      "observed": {
+        "missing_table_accepted_as_version2": true,
+        "disabled_rls_accepted_as_version2": true,
+        "application_write_grant_accepted_as_version2": true,
+        "container_removed": true
+      },
+      "required_disposition": "Verify the exact version2 structural/security baseline before successful repeat and after applying; refuse drift without repairing or rewriting it."
+    },
+    {
+      "id": "R2",
+      "priority": 1,
+      "file": "app/runtime/runtime.py",
+      "start_line": 356,
+      "end_line": 370,
+      "title": "Preexisting one-row history bypasses version1 baseline verification",
+      "reproduction": [
+        "Use a new LocalPostgres environment and apply the unchanged0001 SQL as genui_migration.",
+        "Execute the exact history-table creation and schema_version constraint replacement from runtime.py lines359-365, then insert version1 with INITIAL_MIGRATION_SHA256; commit.",
+        "Commit ALTER ROLE genui_workspace INHERIT.",
+        "Call apply_migrations(connection, MIGRATIONS) and commit. It succeeds with schema_version2 and retains rolinherit=true for genui_workspace.",
+        "Remove the disposable container."
+      ],
+      "observed": {
+        "partial_history_with_drift_accepted": true,
+        "unsafe_role_inheritance_retained": true,
+        "container_removed": true
+      },
+      "required_disposition": "Refuse preexisting partial version1 history or verify an explicitly supported complete baseline; history must not bypass role/schema validation."
+    }
+  ],
+  "managed_acceptance": false,
+  "native_pool_acceptance": false,
+  "ci_acceptance": false,
+  "ticket_complete": false,
+  "mutated_implementation": false,
+  "cloud_operations": false,
+  "followups": [
+    {
+      "recorded_at": "2026-10-29T02:36:29.977164+00:00",
+      "reviewed_parent_commit": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+      "verdict": "changes_requested",
+      "resolved_findings": [
+        "R1",
+        "R2"
+      ],
+      "source_sha256": {
+        "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+        "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+        "app/migrations/manifest.json": "858429ac1d15344b8f7738d4d02a67fe29f3d45d5f886223dade637046e85629",
+        "app/migrations/catalog-query.json": "028d7a84db3e7bbade26fd12c6fcc363fae4e93fe04777d011d07287085892cf",
+        "app/migrations/catalog-v1.json": "d486958fbdcde684b1e85d428c3b220c4da76029f07e606aed6ca8fa11cfc83b",
+        "app/migrations/catalog-v2.json": "82c01e831db712093f4ef86f98630f5d6e2a63936c723b351ea367bfa9069148",
+        "app/runtime/runtime.py": "580e1e3698262d5bdffa9f34d1ef9ab120fb94ea10213437c6c02e282daf0113",
+        "app/runtime/test_runtime.py": "c339e62e430f9dff8cea023a5a67a3dd6bd0999e57ffc738c7fb97fb0b8c82e4",
+        "app/runtime/qualify_migration.py": "9cd5ad523c38d91b93e087f10e3d2534c5dd216d9adc6f847648a0ed666c11ec",
+        "app/runtime/qualify_tenant_schema.py": "5c4fe46d74e024b48d29e4ad424211ea613d8410335b05128c621cbcf041338e",
+        "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+        "app/runtime/generate_schema_catalog.py": "9fea07c987110cbcfef61ad8981c27e3490b4809945c3fe985c680b4365eef2b",
+        "docs/architecture/ADR-004-TENANT-TRANSACTIONS.md": "1b3dc629a5e1d1ca82818587c8724d0499b19669b496f5308af91d75fca9e3a6"
+      },
+      "checks": [
+        {
+          "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python app/runtime/qualify_tenant_schema.py --output evidence/APP-008/schema/independent-postgres-repair.json",
+          "exit_code": 0,
+          "passed": true,
+          "checks": 142,
+          "receipt": "independent-postgres-repair.json",
+          "receipt_sha256": "5c6640d88c1220c8e6a2e284b64b8eebbfe02ae61cd415e8ca2b8469e59b0e66",
+          "all_six_containers_removed": true
+        },
+        {
+          "command": "app/runtime/.venv/bin/python -m unittest discover -s app/runtime -p test_runtime.py -v",
+          "exit_code": 0,
+          "passed": true,
+          "tests": 30,
+          "elapsed_seconds": 11.55
+        }
+      ],
+      "empty_registry_review": "No blocking finding in default empty file creation, explicit-path preservation, owned inode cleanup or existing raw auth handoff. Native interpretation and managed delivery remain separate.",
+      "new_findings": [
+        {
+          "id": "R3",
+          "priority": 1,
+          "file": "app/migrations/catalog-query.json",
+          "section": "role_database_settings",
+          "title": "Database-wide defaults are omitted, allowing effective FK checks to be disabled",
+          "reproduction": [
+            "Use a fresh LocalPostgres instance with pinned PostgreSQL16.13 and apply_migrations to version2.",
+            "As the isolated postgres administrator, commit ALTER DATABASE genui SET session_replication_role=replica.",
+            "Connect anew as genui_workspace. SHOW session_replication_role returns replica; runtime.verify_schema_catalog(connection,MIGRATIONS) succeeds.",
+            "Connect anew as genui_migration. SHOW session_replication_role returns replica; runtime.apply_migrations(connection,MIGRATIONS) succeeds.",
+            "Remove the disposable container. No source or managed database was modified."
+          ],
+          "observed": {
+            "workspace_replication_role": "replica",
+            "catalog_accepted_database_replica_default": true,
+            "migration_replication_role": "replica",
+            "migration_repeat_accepted_database_replica_default": true,
+            "container_removed": true
+          },
+          "cause": "role_database_settings uses an inner join from pg_db_role_setting.setrole to pg_roles; database-wide rows use setrole=0 and vanish. Internal trigger tgenabled facts remain unchanged while replica mode disables origin FK triggers.",
+          "required_disposition": "Include current-database all-role defaults in the canonical projection. Verify effective session_replication_role is origin in migration and native connection admission/reset so a server/operator-session default cannot bypass the baseline. Add actual committed refusal and effective-session regressions without repairing drift."
+        }
+      ],
+      "managed_acceptance": false,
+      "native_pool_acceptance": false,
+      "ci_acceptance": false,
+      "ticket_complete": false,
+      "cloud_operations": false,
+      "mutated_implementation": false
+    },
+    {
+      "recorded_at": "2026-10-29T02:47:21.404966+00:00",
+      "reviewed_parent_commit": "d39d2f911ad3e631e8ce4c2fb28defdd8e90234f",
+      "verdict": "no_blocking_findings",
+      "scope": "Final schema/runtime follow-up only; native lifecycle, CI/image and managed acceptance remain separate",
+      "resolved_findings": [
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "source_sha256": {
+        "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+        "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+        "app/migrations/manifest.json": "a3130b979cf84851eb05e930a52fc4a7439e73da820155bb87424436fbb1eff2",
+        "app/migrations/catalog-query.json": "3af18e8ec8b58b52e7956dc900deae8dffc9a585bc1db9e1ce1ab4dee02ed6bc",
+        "app/migrations/catalog-v1.json": "854e4089bd68bf427c48ee52ba57792cf8edaf815ee2b12f9fc27aef3d39090e",
+        "app/migrations/catalog-v2.json": "5772132f163b5490b8d39f6d1fdc26cef388100daf9fd8e86cc7aa9f8ebffe07",
+        "app/runtime/runtime.py": "a488f35b92a2d0413c236a6a3bf35097470bbd1a7780521120a872713dc93ea9",
+        "app/runtime/test_runtime.py": "c339e62e430f9dff8cea023a5a67a3dd6bd0999e57ffc738c7fb97fb0b8c82e4",
+        "app/runtime/qualify_migration.py": "9cd5ad523c38d91b93e087f10e3d2534c5dd216d9adc6f847648a0ed666c11ec",
+        "app/runtime/qualify_tenant_schema.py": "ecf0a61a5d8149f13f92ece3bfadef5d23e65554bf811471ae6faeb46508daee",
+        "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+        "app/runtime/generate_schema_catalog.py": "9fea07c987110cbcfef61ad8981c27e3490b4809945c3fe985c680b4365eef2b",
+        "docs/architecture/ADR-004-TENANT-TRANSACTIONS.md": "1b3dc629a5e1d1ca82818587c8724d0499b19669b496f5308af91d75fca9e3a6"
+      },
+      "checks": [
+        {
+          "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python app/runtime/qualify_tenant_schema.py --output evidence/APP-008/schema/independent-postgres-r3.json",
+          "exit_code": 0,
+          "passed": true,
+          "checks": 146,
+          "receipt": "independent-postgres-r3.json",
+          "receipt_sha256": "6604a2e47a58120bc85d1016e29d9f453988d7020ce1cc5929159e16c0b89c88",
+          "all_seven_containers_removed": true
+        },
+        {
+          "command": "app/runtime/.venv/bin/python -m unittest discover -s app/runtime -p test_runtime.py -v",
+          "exit_code": 0,
+          "passed": true,
+          "tests": 30,
+          "elapsed_seconds": 11.629
+        },
+        {
+          "scope": "Additional independent fresh-database replica-mode refusal before any foundation write",
+          "steps": [
+            "Create one disposable LocalPostgres16.13 environment.",
+            "As isolated postgres administrator, GRANT SET ON PARAMETER session_replication_role TO genui_migration.",
+            "On a fresh genui_migration connection SET LOCAL session_replication_role=replica; invoke apply_migrations and require runtime.Refused.",
+            "Query pg_namespace and pg_roles to confirm no genui foundation schemas or fixed roles were created; SHOW session_replication_role must remain replica.",
+            "Rollback the test transaction and remove its disposable container."
+          ],
+          "observed": {
+            "fresh_replica_refused": true,
+            "mode_preserved": true,
+            "no_foundation_schema_created": true,
+            "no_foundation_roles_created": true,
+            "container_removed": true
+          },
+          "passed": true
+        }
+      ],
+      "r3_disposition": "All-role current-database settings are included through a left role join and explicit ALL_ROLES sentinel; effective SET/ALTER SYSTEM parameter privileges for six fixed roles are compared; current origin mode is required before migration writes and catalog verification without SET repair.",
+      "empty_registry_disposition": "No blocking findings in the retained owned-file implementation; the six focused tests and preexisting auth-file tests passed again on current source.",
+      "new_findings": [],
+      "managed_acceptance": false,
+      "native_pool_acceptance": false,
+      "ci_acceptance": false,
+      "ticket_complete": false,
+      "cloud_operations": false,
+      "mutated_implementation": false,
+      "limits": [
+        "Actual RDS logical-catalog compatibility, IAM/TLS and managed migration/recovery must still be qualified; do not regenerate expected catalog from the live target.",
+        "Native origin admission/recycle/reset source was inspected narrowly, but its full independent lifecycle review and final runtime campaign remain separately owned.",
+        "The remaining native metadata-before-catalog ordering observation was sent to root for owning review and is not represented as a proved schema/runtime finding.",
+        "No app identity/session, import, business writes or Phase1 completion is established."
+      ]
+    }
+  ],
+  "latest_verdict": "no_blocking_findings",
+  "latest_followup_index": 1
+}

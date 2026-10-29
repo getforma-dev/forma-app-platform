@@ -1,0 +1,70 @@
+{
+  "pre_catalog_reproduction": {
+    "schema_version": 1,
+    "reviewer": "/root/app008_native_review",
+    "scope": "local SQL ordering reproduction only; no managed access; TLS is not asserted by this reproduction",
+    "initial_pool_sha256": "3c95a9d66029eefc1272e38d7682132a4b83b3be9151ebb93ae94709ad4c25b6",
+    "initial_identity_sql": "SELECT session_user::text,current_user::text,current_database(),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit,pg_has_role(current_user,'rds_iam','MEMBER'),(SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),(SELECT version FROM genui_meta.schema_version WHERE singleton),current_setting('session_replication_role') FROM pg_roles WHERE rolname=current_user",
+    "checks": [
+      {
+        "name": "replaced schema_version view executes side effect during exact initial identity SQL before later catalog mismatch",
+        "marker_rows": [
+          [
+            "schema_version view executed"
+          ]
+        ],
+        "result_schema_version": 2,
+        "catalog_mismatch": true,
+        "passed": true
+      },
+      {
+        "name": "unchecked database search_path resolves initial identity pg_roles to unexpected view",
+        "database_search_path": "reviewer_probe, pg_catalog",
+        "marker_row_count": 1,
+        "passed": true
+      }
+    ],
+    "container_removed": true,
+    "container_name": "genui-app008-schema-281a6f17d4f9"
+  },
+  "disposition": "open pre-catalog admission ordering finding; R3 origin repair source appears correct; native final campaign pending repair",
+  "initial_author_receipt_sha256": "880351646f549a05766a11679a2efada704b36b284467d76bbc524a673b38148",
+  "initial_reviewed_inputs": {
+    "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+    "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+    "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+    "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+    "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+    "app/src/lib.rs": "381db89b74187d80ebd7300b1e1a9823596a3c3a422a55632f5552a7ab2b305f",
+    "app/src/main.rs": "6d0a1e5cd599605cfdf21335e1cf545e260961aa2b60c00739879456746f8451",
+    "app/src/readiness.rs": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513",
+    "app/src/roles.rs": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216",
+    "app/src/storage/authorization.rs": "c53609ef588351a322acf47ff249fd7423d49eef01848d8a4213bea4f0c05a32",
+    "app/src/storage/catalog.rs": "585f39f389d1173bbbb7b5b6b23a70283a155da0e1023bdc8ab9879cb0705055",
+    "app/src/storage/mod.rs": "2c642fec59cc879435830142140e0ce0fb9a18cd4c04d9ec2da03bbff867c481",
+    "app/src/storage/pool.rs": "3c95a9d66029eefc1272e38d7682132a4b83b3be9151ebb93ae94709ad4c25b6",
+    "app/src/storage/qualification.rs": "479524a4bdd7bb6145c42293da50708c014948f1f2ae8a4b8d2917c4c077092a",
+    "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+    "app/src/storage/tests.rs": "6e2a1747c398f0a064a25e945ba3b2a9ce65bdedd17e6750a1f8ae66b4d63232",
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/catalog-query.json": "3af18e8ec8b58b52e7956dc900deae8dffc9a585bc1db9e1ce1ab4dee02ed6bc",
+    "app/migrations/catalog-v1.json": "854e4089bd68bf427c48ee52ba57792cf8edaf815ee2b12f9fc27aef3d39090e",
+    "app/migrations/catalog-v2.json": "5772132f163b5490b8d39f6d1fdc26cef388100daf9fd8e86cc7aa9f8ebffe07",
+    "app/migrations/manifest.json": "a3130b979cf84851eb05e930a52fc4a7439e73da820155bb87424436fbb1eff2",
+    "app/runtime/runtime.py": "a488f35b92a2d0413c236a6a3bf35097470bbd1a7780521120a872713dc93ea9",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd"
+  },
+  "initial_review_recorded_at": "2026-10-29T02:51:57.936364+00:00",
+  "findings": [
+    {
+      "id": "NATIVE-R3-01",
+      "severity": "P2",
+      "status": "open",
+      "summary": "Unverified metadata relation and unchecked startup search_path can execute unexpected SQL before catalog refusal",
+      "scope": "Admission ordering under operator-visible catalog/configuration drift; application roles do not receive DDL authority",
+      "affected_initial_source": "app/src/storage/pool.rs:294,442",
+      "requested_fix": "Set startup search_path to pg_catalog; use catalog-only initial identity query; compare canonical catalog before reading schema_version; verify real TLS no-marker refusal/recovery regressions."
+    }
+  ]
+}

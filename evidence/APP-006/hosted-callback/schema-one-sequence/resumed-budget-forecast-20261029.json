@@ -1,0 +1,24 @@
+{
+  "scope": "Proposed17:30UTC auth rehearsal cost feasibility only; no selected secret, reservation or start",
+  "recorded_at_utc": "2026-10-29T17:14:15.631591+00:00",
+  "proposed_T0": "2026-10-29T17:30:00Z",
+  "proposed_Tstop": "2026-10-29T22:00:00Z",
+  "proposed_Tend": "2026-10-29T23:30:00Z",
+  "cost_by_month": {
+    "2026-10": {
+      "retained_core_full_month_cents": 5229,
+      "all_window_compute_reservations_cents": 314,
+      "prior_extra_spend_cents": 101,
+      "variable_reserve_cents": 1200,
+      "genui_total_cents": 6844,
+      "auth_spent_or_reserved_cents": 500,
+      "unallocated_cents": 2500,
+      "project_total_cents": 9844
+    }
+  },
+  "ledger_sha256": "bf5ff561052c334e17e936ffce444a90df44660cc30af8fc9689bc6a3d65f616",
+  "ledger_unchanged": true,
+  "auth_allowance_counted_once": true,
+  "new_reservation": false,
+  "assumption": "Forecast starts compute allowance now, before proposedT0, conservatively; optional secret ARN omitted only for discarded cost calculation. Actual reservation requires its real ARN and immutable input."
+}

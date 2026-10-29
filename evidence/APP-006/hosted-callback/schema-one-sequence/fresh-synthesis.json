@@ -1,0 +1,49 @@
+{
+  "scope": "Fresh offline no-lookups schema-one infrastructure synthesis; no cloud operation or selected window",
+  "recorded_at_utc": "2026-10-29T04:26:54.416462+00:00",
+  "command": [
+    "npm",
+    "run",
+    "synth",
+    "--",
+    "--quiet"
+  ],
+  "cwd": "infra",
+  "exit_code": 0,
+  "template_sha256": "686949d0fbd92e9e739c5abb3bebbdfccb81f4247b0e8a8b4472438e099bb2b8",
+  "template_bytes": 84297,
+  "compact_template_bytes": 52793,
+  "parameters": [
+    "Operator",
+    "MonthlyBudgetUsd",
+    "IngressMode",
+    "OperatorIpv4Cidr",
+    "DeploymentExpiresAtUtc",
+    "TlsCertificateArn",
+    "ServiceDesiredCount",
+    "QualificationConfigSecretArn",
+    "ImageDigest",
+    "ImageArchitecture",
+    "BootstrapVersion"
+  ],
+  "optional_qualification_secret_parameter_and_conditional_task_policy_present": true,
+  "infrastructure_source_identical_to_accepted_revision": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+  "source_sha256": {
+    "infra/src/stack.ts": "8d3058943c36062724a6dfd21c1c78d57219dfad6359b7d3326ec663f95c3cfa",
+    "infra/src/main.ts": "3080fe33f5d266dbbba63db823b2195b83bcdf3aea3f7f80a9530dd8161417d8",
+    "infra/scripts/preflight.py": "47037e5a307195efa1e95e26fc4d3925fbc8b7657d9bbfe02836444d8c5d34cd",
+    "infra/package.json": "4c06daa14e04b8f79f13286033628a212ad24a32ca9d7fa01595780b5861b5fd",
+    "infra/package-lock.json": "cf171e2d3fa5064c60a9896a788ae84b38cc24b0c67d21463fd77c1361ee839a",
+    "infra/cdk.json": "218be47a43c2178de8ed04f0015c0501aa8809e22815817a34ce1dd136fb116c",
+    "infra/stack-policy.json": "48ac65c6ee7ca63d40da59ee5be4f367493613cd26a828b3adeeca8c7b27c3b3"
+  },
+  "warnings": [
+    "W2509 heuristically identifies QualificationConfigSecretArn as password-like. It carries only a secret ARN, never a secret value; no source/policy change made.",
+    "84 feature flags are not configured; locked CDK source/dependencies remain unchanged."
+  ],
+  "limitations": [
+    "Actual secret ARN, window, cumulative reservation, parameter values and complete change-set review remain inside coordinated provisioning.",
+    "Synthesis does not prove deployed state, healthy callback, browser identity or managed acceptance."
+  ],
+  "transport_requirement": "Both synthesized and compact JSON exceed the CloudFormation TemplateBody limit of51200 bytes. The actual update must use a separately reviewed TemplateURL in an existing approved operator-owned artifact prefix; bind upload hash/URL and cleanup only that owned object. No upload/destination selected here."
+}

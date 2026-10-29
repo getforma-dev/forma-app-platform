@@ -39,7 +39,34 @@ async fn main() {
             eprintln!("configuration refused: {reason}");
             std::process::exit(1);
         });
-    let _services = genui::roles::Services::new(credential_path.clone().into());
+    // A missing registry permits the inert public shell, but never readiness or
+    // private data. The managed launcher supplies an explicit empty deny-all
+    // registry until real provider bindings are provisioned and reviewed.
+    let stores = match std::env::var("GENUI_IDENTITY_REGISTRY_FILE") {
+        Ok(registry_path) => {
+            let settings = genui::storage::Settings::new(
+                credential_path.clone().into(),
+                registry_path.into(),
+                std::env::var("GENUI_RDS_CA_FILE")
+                    .unwrap_or_else(|_| "/etc/ssl/certs/rds-global-bundle.pem".into())
+                    .into(),
+                config.database_host.clone(),
+            );
+            Some(Arc::new(
+                settings
+                    .and_then(genui::storage::Stores::new)
+                    .unwrap_or_else(|_| {
+                        eprintln!("tenant storage configuration refused");
+                        std::process::exit(1);
+                    }),
+            ))
+        }
+        Err(std::env::VarError::NotPresent) => None,
+        Err(_) => {
+            eprintln!("tenant storage configuration refused");
+            std::process::exit(1);
+        }
+    };
     drop(config);
     // A render that fails comes back to `home` as a coded error, which `home`
     // logs through `tracing`; forma-server's own security events go there too.
@@ -119,6 +146,7 @@ async fn main() {
             .unwrap_or_else(|_| "/app/runtime.py".into())
             .into(),
         std::env::var("GENUI_PYTHON").unwrap_or_else(|_| "python3".into()),
+        stores,
     );
 
     let state = Arc::new(AppState {

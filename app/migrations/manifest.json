@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "database_version": 2,
+  "migrations": [
+    {
+      "version": 1,
+      "file": "0001_role_foundation.sql",
+      "sha256": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963"
+    },
+    {
+      "version": 2,
+      "file": "0002_tenant_foundation.sql",
+      "sha256": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5"
+    }
+  ],
+  "catalog": [
+    {
+      "file": "catalog-query.json",
+      "sha256": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963"
+    },
+    {
+      "file": "catalog-v1.json",
+      "sha256": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9"
+    },
+    {
+      "file": "catalog-v2.json",
+      "sha256": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954"
+    }
+  ]
+}

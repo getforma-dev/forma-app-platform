@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "reviewed_at_utc": "2026-10-29T04:25:30.348464+00:00",
+  "reviewer": "independent agent auth_readiness_answer",
+  "scope": "Frozen schema1 callback activation runbook versus existing callback/preflight/stack and retained evidence",
+  "disposition": "no_blocking_findings_for_manual_plan; launch_gates_open",
+  "start_signal": false,
+  "source_sha256": {
+    "evidence/APP-006/hosted-callback/schema-one-sequence/activation-runbook.md": "01badd95410539d4514f79f15cb752303bd5bd8a8587ae4c8539bd1d4a638344",
+    "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+    "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+    "infra/scripts/preflight.py": "47037e5a307195efa1e95e26fc4d3925fbc8b7657d9bbfe02836444d8c5d34cd",
+    "infra/src/stack.ts": "8d3058943c36062724a6dfd21c1c78d57219dfad6359b7d3326ec663f95c3cfa",
+    "evidence/APP-006/hosted-callback/README.md": "74843216097942dca572a5338f241540110aa0c2024164827eeef6d3ae267dcc",
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/source-before.json": "970c0469ecae9f99cfabfc3e702cf2c9ef952a221bed62e041c9fd2ab323b9e6",
+    "evidence/APP-006/hosted-callback/secret-wiring/registry-platform-binding.json": "ae1edcb3c7e6515284d40c6ba3553a809e02d1c237dca059a1eb502513b59c8a",
+    "evidence/APP-006/hosted-callback/secret-wiring/ci.json": "c54c8da0d2cbf4f313f93a72595403dd871bad15c90b49baf1508a6fe8b724ac",
+    "evidence/APP-006/hosted-key-qualification/registry-binding.json": "156287ddb50ed5d68e966c5dbf8faadc91206f9beedd217c25aa5869b8869e7b",
+    "evidence/APP-006/upstream-auth-source/GENUI-IDENTITY-CONTRACT-2026-10-28.md": "1487cd6b187ce4b037464c132266519bd9cc040cd87b31863393f69e4217ed92",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/README.md": "fec0088ba6cf4e0c7ac2589ccf4a00cd5ab21d6db2d46521c1f41fc448fdfd42",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/independent-review.json": "7005ac7baf30f51d194b11f531e8fe15db5c3c003cac3158e69995351aa54364",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/managed-observation.json": "773fc6e402e0a0478609fb223a0b2ffb3e5096b4b13d5ff010e02011fcf9e253",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/managed-independent-review.json": "b1e5d865e8e3c2cc735e1a2239fe1c8a39d3cfb6ae300f6131b97276f29a34a0"
+  },
+  "checks": [
+    {
+      "id": "selected_artifacts",
+      "passed": true,
+      "evidence": "The schema1 callback source18c33f5 and indexa4a47707 remain separate from key tool8fca35c/index5ee5ad16 and later schema2 APP008 candidate. Retained image/CI receipts support the selected identities; this review made no new registry or CI query."
+    },
+    {
+      "id": "callback_source_binding",
+      "passed": true,
+      "evidence": "Current callback implementation and tests exactly match the retained24-input schema1 image source hashes."
+    },
+    {
+      "id": "mode_selection",
+      "passed": true,
+      "evidence": "A nonnull fixed invitation always selects PAR signup. Null invitation requires a configured actual usr_UUID subject. Existing Maya login is S1; fresh invited signup is S2. No third process or consumed-invite reuse is allocated."
+    },
+    {
+      "id": "identity_binding",
+      "passed": true,
+      "evidence": "Actual provider tenant/subject/email are private provisioning outputs. Expected subject is checked against canonical JWTsub and token user.id. No fixture UUID conversion, app membership or session grant is inferred."
+    },
+    {
+      "id": "stopped_secret_transition",
+      "passed": true,
+      "evidence": "Save counters/receipts and reconcile cleanup before stopping; all known consumers must be STOPPED and service0/0/0 before AWSCURRENT changes. The same exact secret ARN receives a new immutable version. No rolling deployment or live config reload is claimed."
+    },
+    {
+      "id": "private_version_record",
+      "passed": true,
+      "evidence": "Each private record binds campaign/window, unique run_id, ARN, VersionId, exact UTF8 configuration SHA256, original expiry, starts/flows and observed task ARN. New operator capability and exclusive writer establish operator correlation, not runtime attestation."
+    },
+    {
+      "id": "preflight_boundary",
+      "passed": true,
+      "evidence": "Reserve binds secret ARN/image/expiry to cumulative immutable input and always emits countzero stack parameters. Activate checks actual task/secret/source architecture and future stop schedule; it does not read or attest secret version/configuration bytes."
+    },
+    {
+      "id": "status_fields",
+      "passed": true,
+      "evidence": "Status exposes run_id, declared source pins, issuer/tenant/client, counters, pending flows and later verified_subject receipts. It omits configured subject/email, invitation mode, expiry/limits, ARN/VersionId and configdigest. Runbook describes those limits accurately."
+    },
+    {
+      "id": "finite_plan",
+      "passed": true,
+      "evidence": "Exactly two deliberate process slots: S1 max_attempts3 and S2 max_attempts1; each max_flows1. Four configured starts, no spare/retry slot, original identical expiry; perprocess request256 yields an operator allocation512, not a durable crossprocess guarantee."
+    },
+    {
+      "id": "unexpected_replacement",
+      "passed": true,
+      "evidence": "ECS/service may replace tasks and reset process counters. Unexpected replacement/reset aborts browser work and requests countzero with reconciliation; S2 cannot be reused as a retry. Unknown outcomes charge the full slot."
+    },
+    {
+      "id": "time_and_budget",
+      "passed": true,
+      "evidence": "One T0/Tend interval at most6hours includes provisioning and cleanup; same earlier Tstop for deployment and callback expiry. New image/secretARN/expiry needs a new reconciled immutable reservation; the oldf845 interval is historical. Auth5USD is counted once inside100USD."
+    },
+    {
+      "id": "browser_custody",
+      "passed": true,
+      "evidence": "Operator bearer stays in Node-side exact endpoint requests, redirects disabled and same browser cookie context; no global headers or public capability/URL receipts. NativeSafari remains an explicit capability gate; browser/attempt correlation is external."
+    },
+    {
+      "id": "provider_and_acceptance_limits",
+      "passed": true,
+      "evidence": "Provider canary/replay/key/cleanup trials are separately owned; key cache/rotation remains one process. Callback logout acknowledgement is not revocation proof. NoSMTP cannot pass mailbox activation, app admission, public signup or APP008 acceptance."
+    },
+    {
+      "id": "unknown_and_cleanup",
+      "passed": true,
+      "evidence": "Retained idempotency identities reconcile unknown secret/stack outcomes before retry. Safe state is countzero; service scheduler does not stop oneoffs or erase retained costs. Owned resources and prior receipts are preserved."
+    },
+    {
+      "id": "relative_links",
+      "passed": true,
+      "evidence": "All relative Markdown links in the frozen runbook resolve locally."
+    }
+  ],
+  "blocking_findings": [],
+  "resolved_review_clarifications": [
+    {
+      "item": "Aggregate request accounting",
+      "resolution": "Explicit two process slots, four total configured starts,512 operator allocation; no durable crossprocess enforcement claim or spare restart."
+    },
+    {
+      "item": "Private secret-version correlation",
+      "resolution": "Exact campaign/window/run_id/ARN/VersionId/config-byte digest/expiry/limit/task binding added before freeze."
+    }
+  ],
+  "limitations": [
+    "Independent static operational review only. No test/build, network, cloud, Git operation or private secret value read occurred; only the two review artifacts were written.",
+    "The two-slot matrix reflects the parent/provider plan relayed to the author. Actual provider confirmation, native Safari capability, concrete private inputs/requests and live deployment observations remain launch gates.",
+    "The private linkage is an operator inference under exclusive-writer/stopped-consumer assumptions. The current binary cannot attest hidden configuration or secret version before browser traffic.",
+    "No durable campaign/process/request counter exists.512 is a reviewed allocation for the two deliberate processes, not a hard AWS or binary bound across uncontrolled replacements.",
+    "No source change is required for this explicitly manual procedure. Requiring strict prebrowser subject/version attestation or a platform-enforced global counter would require additional implementation/review.",
+    "The schema1 callback lacks later APP008 catalog protection; preserved database/operator quiescence and the retained SQL baseline are explicit operating assumptions.",
+    "No automatic start signal, activation approval, secret issuance approval, managed delivery acceptance, hosted auth pass or public beta readiness is conveyed."
+  ],
+  "source_hashes_unchanged_after_review": true
+}

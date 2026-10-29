@@ -1,6 +1,7 @@
 """Unit-only failure-path checks. No AWS/RDS calls or managed acceptance."""
 import copy
 import contextlib
+import hashlib
 import io
 import importlib.util
 import json
@@ -8,15 +9,114 @@ import os
 from pathlib import Path
 import tempfile
 import signal
+import shutil
 import stat
 import subprocess
 import sys
 import threading
 import time
+import types
 import unittest
 from unittest.mock import patch
 import uuid
 import runtime
+
+MIGRATIONS = Path(runtime.__file__).resolve().parent.parent / 'migrations'
+LEDGER_READ = 'SELECT version,sha256 FROM genui_meta.schema_migrations ORDER BY version'
+VERSION_READ = 'SELECT singleton,version FROM genui_meta.schema_version'
+WRITES = ('INSERT ', 'UPDATE ', 'SET LOCAL ROLE ')
+
+
+def synthetic_versions(target, latest):
+    """Reviewed two-version directory plus tiny unit-only versions 3..latest.
+
+    Each synthetic migration is a comment and a SELECT; each synthetic catalog
+    adds one marker relation row and keeps the reviewed sections. Only runner
+    bookkeeping is exercised: nothing here is schema SQL or reaches PostgreSQL.
+    """
+    target = Path(target)
+    for p in MIGRATIONS.iterdir():
+        if p.is_file(): shutil.copyfile(p, target / p.name)
+    manifest = json.loads((target / 'manifest.json').read_text())
+    catalog = json.loads((target / 'catalog-v2.json').read_text())
+    for version in range(3, latest + 1):
+        name = f'{version:04d}_unit_only_marker.sql'
+        source = f'-- unit-only synthetic migration {version}; never reaches PostgreSQL\nSELECT {version};\n'.encode()
+        (target / name).write_bytes(source)
+        catalog = copy.deepcopy(catalog)
+        catalog['relations'].append(['genui', f'unit_only_marker_{version}', 'r', 'genui_owner', True, True, 'p', False, None])
+        raw = json.dumps(catalog, sort_keys=True).encode()
+        (target / f'catalog-v{version}.json').write_bytes(raw)
+        manifest['migrations'].append({'version': version, 'file': name, 'sha256': hashlib.sha256(source).hexdigest()})
+        manifest['catalog'].append({'file': f'catalog-v{version}.json', 'sha256': hashlib.sha256(raw).hexdigest()})
+    manifest['database_version'] = latest
+    (target / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    return target
+
+
+class MigrationRecorder:
+    """Unit-only stand-in for one migration transaction; never a database.
+
+    It answers the runner's fixed statements from modeled facts: the reviewed
+    catalog the projection shows, the ledger rows and the version row. Running
+    reviewed migration k's exact text makes the projection show catalog-vk;
+    `drift` replaces what the projection shows at a version. Any other
+    statement fails the test.
+    """
+    def __init__(self, directory, version, ledger=True, created=True):
+        directory = Path(directory)
+        manifest = json.loads((directory / 'manifest.json').read_text())
+        self.query = json.loads((directory / 'catalog-query.json').read_text())['sql']
+        self.catalogs = {v: (directory / f'catalog-v{v}.json').read_text() for v in range(1, manifest['database_version'] + 1)}
+        self.migrations = {(directory / item['file']).read_bytes().decode('utf-8'): item['version'] for item in manifest['migrations']}
+        self.digests = {item['version']: item['sha256'] for item in manifest['migrations']}
+        self.autocommit = False
+        self.created, self.ledger = created, ledger
+        self.shown = self.version = version if created else None
+        self.history = [(v, self.digests[v]) for v in range(1, version + 1)] if ledger else []
+        self.drift = {}
+        self.statements = []
+        self.rows = []
+
+    def applied(self):
+        return [self.migrations[s] for s in self.statements if s in self.migrations]
+
+    def writes(self):
+        return [s for s in self.statements if s in self.migrations or s.startswith(WRITES)]
+
+    def execute(self, statement, params=None):
+        self.statements.append(statement)
+        fixed = {
+            'SHOW session_replication_role': [('origin',)],
+            'SET LOCAL search_path=pg_catalog, pg_temp': [],
+            'SELECT session_user::text,current_user::text,current_database()': [('genui_migration', 'genui_migration', 'genui')],
+            'SELECT pg_advisory_xact_lock(1819409017, 2)': [('',)],
+            "SELECT to_regclass('genui_meta.schema_version') IS NOT NULL": [(self.created,)],
+            "SELECT to_regclass('genui_meta.schema_migrations') IS NOT NULL": [(self.ledger,)],
+            "SELECT count(*) FROM pg_namespace WHERE nspname IN ('genui_meta','genui','genui_private')": [(3 if self.created else 0,)],
+            LEDGER_READ: list(self.history),
+            VERSION_READ: [(True, self.version)],
+            'SELECT version FROM genui_meta.schema_version': [(self.version,)],
+        }
+        if statement in fixed: self.rows = fixed[statement]
+        elif statement == self.query: self.rows = [(self.drift.get(self.shown, self.catalogs.get(self.shown, '{}')),)]
+        elif statement in self.migrations:
+            self.shown = self.migrations[statement]
+            if self.shown == 1: self.created, self.version = True, 1
+            self.rows = []
+        elif statement.startswith('SET LOCAL ROLE genui_owner;') and 'CREATE TABLE genui_meta.schema_migrations' in statement:
+            self.ledger, self.rows = True, []
+        elif statement == 'INSERT INTO genui_meta.schema_migrations(version,sha256) VALUES (1,%s)':
+            self.history.append((1, params[0])); self.rows = []
+        elif statement == 'INSERT INTO genui_meta.schema_migrations(version,sha256) VALUES (%s,%s)':
+            self.history.append(tuple(params)); self.rows = []
+        elif statement == 'UPDATE genui_meta.schema_version SET version=%s WHERE singleton':
+            self.version = params[0]; self.rows = []
+        else: raise AssertionError('unexpected unit-only statement: ' + statement[:80])
+        return self
+
+    def fetchone(self): return self.rows[0] if self.rows else None
+    def fetchall(self): return list(self.rows)
 
 
 def fixture():
@@ -107,10 +207,11 @@ class RuntimeTests(unittest.TestCase):
             def __exit__(self, *args): pass
             def execute(self, *args): return self
             def fetchone(self): return ("genui_migration",) * 12
-        with patch.dict(os.environ, {"GENUI_RDS_CA_FILE": "/unit-only/ca.pem"}), patch('psycopg.connect', return_value=Connection()) as connect, patch.object(runtime, 'scoped_session') as storage:
+        with patch.dict(os.environ, {"GENUI_RDS_CA_FILE": "/unit-only/ca.pem"}), patch('psycopg.connect', return_value=Connection()) as connect, patch.object(runtime, 'scoped_session') as storage, patch.object(runtime, 'verify_schema_catalog'):
             with self.assertRaises(runtime.Refused): runtime.probe(self.path, self.value["generation"])
             self.assertEqual(connect.call_args.kwargs['sslmode'], 'verify-full')
             self.assertEqual(connect.call_args.kwargs['user'], 'genui_workspace')
+            self.assertIn('-c search_path=pg_catalog,pg_temp',connect.call_args.kwargs['options'])
             storage.assert_not_called()
 
     def test_rds_superuser_membership_refused_even_with_false_superuser_flags(self):
@@ -119,16 +220,386 @@ class RuntimeTests(unittest.TestCase):
             def __exit__(self, *args): pass
             def execute(self, *args): return self
             def fetchone(self):
-                return ('genui_workspace','genui_workspace','genui',False,False,False,False,True,False,True,True,1)
+                return ('genui_workspace','genui_workspace','genui',False,False,False,False,True,False,True,True,runtime.DATABASE_SCHEMA_VERSION)
             def fetchall(self): return [('rds_superuser',)]
-        with patch.dict(os.environ, {'GENUI_RDS_CA_FILE':'/unit-only/ca.pem'}), patch('psycopg.connect',return_value=Connection()), patch.object(runtime,'scoped_session') as storage:
+        with patch.dict(os.environ, {'GENUI_RDS_CA_FILE':'/unit-only/ca.pem'}), patch('psycopg.connect',return_value=Connection()), patch.object(runtime,'scoped_session') as storage, patch.object(runtime,'verify_schema_catalog'):
             with self.assertRaises(runtime.Refused): runtime.probe(self.path,self.value['generation'])
             storage.assert_not_called()
+
+    def test_real_probe_requires_exact_schema_two_before_storage(self):
+        class Connection:
+            def __init__(self, user, version): self.user, self.version = user, version
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def execute(self, *args): return self
+            def fetchone(self): return (self.user,self.user,'genui',False,False,False,False,True,False,True,True,self.version)
+            def fetchall(self): return []
+        class Session:
+            def client(self, *args, **kwargs): return self
+            def list_objects_v2(self, **kwargs): return {}
+            def encrypt(self, **kwargs): return {'CiphertextBlob':b'unit-only'}
+            def decrypt(self, **kwargs): return {'Plaintext':b'genui-foundation-readiness-v1'}
+        for version in (1,2,3):
+            with self.subTest(version=version), patch.dict(os.environ, {'GENUI_RDS_CA_FILE':'/unit-only/ca.pem'}), \
+                 patch('psycopg.connect',side_effect=lambda **kw: Connection(kw['user'],version)), \
+                 patch.object(runtime,'verify_schema_catalog'), \
+                 patch.object(runtime,'scoped_session',return_value=Session()) as storage:
+                if version==2:
+                    result=runtime.probe(self.path,self.value['generation'])
+                    self.assertEqual(result['generation'],self.value['generation'])
+                    self.assertEqual(storage.call_count,2)
+                else:
+                    with self.assertRaises(runtime.Refused): runtime.probe(self.path,self.value['generation'])
+                    storage.assert_not_called()
+
+    def test_probe_catalog_refusal_precedes_identity_and_storage(self):
+        class Connection:
+            def __enter__(self): return self
+            def __exit__(self,*args): pass
+            def execute(self,*args): raise AssertionError('metadata read before catalog proof')
+        with patch.dict(os.environ,{'GENUI_RDS_CA_FILE':'/unit-only/ca.pem'}), \
+             patch('psycopg.connect',return_value=Connection()), \
+             patch.object(runtime,'verify_schema_catalog',side_effect=runtime.Refused()) as catalog, \
+             patch.object(runtime,'scoped_session') as storage:
+            with self.assertRaises(runtime.Refused): runtime.probe(self.path,self.value['generation'])
+            catalog.assert_called_once();storage.assert_not_called()
 
     def test_generation_change_refused_before_network(self):
         with patch('psycopg.connect') as connect:
             with self.assertRaises(runtime.Refused): runtime.probe(self.path, str(uuid.uuid4()))
             connect.assert_not_called()
+
+
+class MigrationSourceTests(unittest.TestCase):
+    def test_exact_two_migrations_and_original_bytes_are_required(self):
+        source=Path(runtime.__file__).resolve().parent.parent/'migrations'
+        self.assertEqual([row[0] for row in runtime.migration_sources(source)],[1,2])
+        for case in ('unknown_version','reorder','extra_sql','changed_second','changed_catalog','changed_query','changed_original_even_with_new_hash'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                target=Path(tmp)
+                for p in source.iterdir():
+                    if p.is_file(): shutil.copyfile(p,target/p.name)
+                manifest=json.loads((target/'manifest.json').read_text())
+                if case=='unknown_version': manifest['database_version']=3
+                elif case=='reorder': manifest['migrations'].reverse()
+                elif case=='extra_sql': (target/'0003_unreviewed.sql').write_text('SELECT 1;')
+                elif case=='changed_second': (target/'0002_tenant_foundation.sql').write_text('SELECT 1;')
+                elif case=='changed_catalog': (target/'catalog-v2.json').write_text('{}')
+                elif case=='changed_query': (target/'catalog-query.json').write_text('{"sql":"SELECT 1"}')
+                else:
+                    p=target/'0001_role_foundation.sql';p.write_text(p.read_text()+'\n')
+                    manifest['migrations'][0]['sha256']=runtime.hashlib.sha256(p.read_bytes()).hexdigest()
+                (target/'manifest.json').write_text(json.dumps(manifest))
+                with self.assertRaises(runtime.Refused): runtime.migration_sources(target)
+
+    def test_migration_sources_accepts_three_pinned_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = synthetic_versions(tmp, 3)
+            manifest = json.loads((directory / 'manifest.json').read_text())
+            sources = runtime.migration_sources(directory)
+            self.assertEqual([(version, digest) for version, digest, _ in sources],
+                             [(item['version'], item['sha256']) for item in manifest['migrations']])
+            self.assertEqual(sources[0][1], runtime.INITIAL_MIGRATION_SHA256)
+            self.assertEqual(sources[2][2], (directory / '0003_unit_only_marker.sql').read_text())
+            query, catalogs = runtime.catalog_resources(directory)
+            self.assertEqual(query, json.loads((directory / 'catalog-query.json').read_text()))
+            self.assertEqual(sorted(catalogs), [1, 2, 3])
+            for version in (1, 2, 3):
+                self.assertEqual(catalogs[version], json.loads((directory / f'catalog-v{version}.json').read_text()))
+        # Exact pins, numbering, stray-file and section-key rules hold for N files.
+        for case in ('changed_third', 'unpinned_fourth', 'misnumbered_third', 'unnumbered_third', 'catalog_sections_differ',
+                     'missing_catalog_pin', 'version_count_mismatch', 'extra_manifest_key'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                directory = synthetic_versions(tmp, 3)
+                manifest = json.loads((directory / 'manifest.json').read_text())
+                third = manifest['migrations'][2]
+                if case == 'changed_third': (directory / third['file']).write_text('SELECT 4;\n')
+                elif case == 'unpinned_fourth': (directory / '0004_unit_only_marker.sql').write_text('SELECT 4;\n')
+                elif case in ('misnumbered_third', 'unnumbered_third'):
+                    name = '0004_unit_only_marker.sql' if case == 'misnumbered_third' else 'unit_only_marker.sql'
+                    (directory / third['file']).rename(directory / name); third['file'] = name
+                elif case == 'catalog_sections_differ':
+                    catalog = json.loads((directory / 'catalog-v3.json').read_text()); catalog['unreviewed_section'] = []
+                    raw = json.dumps(catalog).encode(); (directory / 'catalog-v3.json').write_bytes(raw)
+                    manifest['catalog'][3]['sha256'] = hashlib.sha256(raw).hexdigest()
+                elif case == 'missing_catalog_pin': manifest['catalog'].pop()
+                elif case == 'version_count_mismatch': manifest['database_version'] = 4
+                else: manifest['unreviewed'] = True
+                (directory / 'manifest.json').write_text(json.dumps(manifest))
+                with self.assertRaises(runtime.Refused): runtime.migration_sources(directory)
+
+
+class MigrationRunnerTests(unittest.TestCase):
+    """Runner bookkeeping against MigrationRecorder; real SQL is qualify_tenant_schema.py."""
+
+    def test_apply_migrations_upgrades_v2_to_v3_and_repeat_is_noop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = synthetic_versions(tmp, 3)
+            manifest = json.loads((directory / 'manifest.json').read_text())
+            database = MigrationRecorder(directory, 2)
+            runtime.apply_migrations(database, directory)
+            self.assertEqual(database.applied(), [3])
+            self.assertEqual(database.history, [(item['version'], item['sha256']) for item in manifest['migrations']])
+            self.assertEqual((database.version, database.shown), (3, 3))
+            statements = database.statements
+            self.assertEqual(statements[:2], ['SHOW session_replication_role', 'SET LOCAL search_path=pg_catalog, pg_temp'])
+            self.assertIn('SELECT pg_advisory_xact_lock(1819409017, 2)', statements)
+            # The recorded version is proven by the catalog before any ledger or
+            # version read; the last statement is the final catalog-v3 proof.
+            self.assertLess(statements.index(database.query), min(statements.index(LEDGER_READ), statements.index(VERSION_READ)))
+            self.assertLess(statements.index(VERSION_READ), statements.index((directory / '0003_unit_only_marker.sql').read_text()))
+            self.assertEqual(statements[-1], database.query)
+            # Already at N: exact-match repeat with the same lock and no writes.
+            before = (list(database.history), database.version, database.shown)
+            database.statements = []
+            runtime.apply_migrations(database, directory)
+            self.assertEqual((database.history, database.version, database.shown), before)
+            self.assertEqual(database.writes(), [])
+            self.assertIn('SELECT pg_advisory_xact_lock(1819409017, 2)', database.statements)
+            self.assertEqual(database.statements.count(database.query), 1)
+
+    def test_new_ledger_starts_at_version_two_and_every_step_is_proven(self):
+        # ADR-007 D7.12: the runner creates the ledger at the historical bound and
+        # each later migration ALTERs both version CHECKs, so a fresh or legacy
+        # install passes through every reviewed catalog, proven step by step.
+        self.assertEqual(runtime.LEDGER_VERSION, 2)
+        bound = f'CHECK (version BETWEEN 1 AND {runtime.LEDGER_VERSION})'
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = synthetic_versions(tmp, 3)
+            third = (directory / '0003_unit_only_marker.sql').read_text()
+            for created in (False, True):  # fresh database, then preserved legacy version 1
+                with self.subTest(created=created):
+                    database = MigrationRecorder(directory, 1, ledger=False, created=created)
+                    runtime.apply_migrations(database, directory)
+                    ledger, = [s for s in database.statements if s.startswith('SET LOCAL ROLE genui_owner;')]
+                    self.assertEqual((ledger.count('BETWEEN 1 AND '), ledger.count(bound)), (2, 2))
+                    self.assertEqual(database.applied(), [2, 3] if created else [1, 2, 3])
+                    self.assertEqual(([version for version, _ in database.history], database.version), ([1, 2, 3], 3))
+                    # Proof of version 1, of version 2 before 0003 runs, and finally of version 3.
+                    proofs = [index for index, s in enumerate(database.statements) if s == database.query]
+                    self.assertEqual(len(proofs), 3)
+                    self.assertLess(proofs[1], database.statements.index(third))
+                    self.assertEqual(database.statements[-1], database.query)
+                    # A step whose catalog differs is refused before the next migration runs.
+                    database = MigrationRecorder(directory, 1, ledger=False, created=created)
+                    database.drift[2] = json.dumps({'unreviewed': []})
+                    with self.assertRaises(runtime.Refused): runtime.apply_migrations(database, directory)
+                    self.assertEqual(database.applied(), [2] if created else [1, 2])
+        # The reviewed two-version manifest: the same bound, version 1 then final version 2 proof.
+        database = MigrationRecorder(MIGRATIONS, 1, ledger=False)
+        runtime.apply_migrations(database, MIGRATIONS)
+        ledger, = [s for s in database.statements if s.startswith('SET LOCAL ROLE genui_owner;')]
+        self.assertEqual((ledger.count('BETWEEN 1 AND '), ledger.count(bound)), (2, 2))
+        self.assertEqual((database.version, database.statements.count(database.query)), (2, 2))
+
+    def test_apply_migrations_proves_each_intermediate_version_before_the_next(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = synthetic_versions(tmp, 4)
+            database = MigrationRecorder(directory, 2)
+            runtime.apply_migrations(database, directory)
+            self.assertEqual((database.applied(), [v for v, _ in database.history], database.version), ([3, 4], [1, 2, 3, 4], 4))
+            # Proof of version 2 before metadata, of version 3, and finally of version 4.
+            self.assertEqual(database.statements.count(database.query), 3)
+            database = MigrationRecorder(directory, 2)
+            database.drift[3] = json.dumps({'unreviewed': []})
+            with self.assertRaises(runtime.Refused): runtime.apply_migrations(database, directory)
+            self.assertEqual(database.applied(), [3])
+
+    def test_apply_migrations_refuses_unproven_or_altered_history_before_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / 'three').mkdir(); (Path(tmp) / 'four').mkdir()
+            directory = synthetic_versions(Path(tmp) / 'three', 3)
+            newer = (synthetic_versions(Path(tmp) / 'four', 4) / 'catalog-v4.json').read_text()
+            cases = {
+                'altered_recorded_checksum': lambda d: d.history.__setitem__(1, (2, '0' * 64)),
+                'ledger_ahead_of_catalog': lambda d: d.history.append((3, d.digests[3])),
+                'version_row_disagrees': lambda d: setattr(d, 'version', 3),
+                'unreviewed_catalog': lambda d: d.drift.__setitem__(2, json.dumps({'unreviewed': []})),
+                'catalog_newer_than_manifest': lambda d: d.drift.__setitem__(2, newer),
+            }
+            for case, edit in cases.items():
+                with self.subTest(case=case):
+                    database = MigrationRecorder(directory, 2)
+                    edit(database)
+                    with self.assertRaises(runtime.Refused): runtime.apply_migrations(database, directory)
+                    self.assertIn('SELECT pg_advisory_xact_lock(1819409017, 2)', database.statements)
+                    self.assertEqual(database.statements.count(database.query), 1)
+                    self.assertEqual(database.writes(), [])
+                    if case in ('unreviewed_catalog', 'catalog_newer_than_manifest'):
+                        # Catalog proof precedes every metadata read.
+                        self.assertNotIn(LEDGER_READ, database.statements)
+                        self.assertNotIn(VERSION_READ, database.statements)
+
+    def test_probe_and_default_catalog_proof_follow_the_manifest_version(self):
+        class Connection:
+            def __init__(self, version): self.version = version
+            def execute(self, *args): return self
+            def fetchone(self): return ('genui_workspace','genui_workspace','genui',False,False,False,False,True,False,True,True,self.version)
+            def fetchall(self): return []
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = synthetic_versions(tmp, 3)
+            for version in (2, 3):
+                with self.subTest(version=version), patch.object(runtime, 'migration_directory', return_value=directory), \
+                     patch.object(runtime, 'verify_schema_catalog') as catalog:
+                    connection = Connection(version)
+                    if version == 3: runtime.probe_database(connection, 'genui_workspace')
+                    else:
+                        with self.assertRaises(runtime.Refused): runtime.probe_database(connection, 'genui_workspace')
+                    catalog.assert_called_once_with(connection, directory)
+            # Without an explicit version the proof requires the manifest's latest.
+            runtime.verify_schema_catalog(MigrationRecorder(directory, 3), directory)
+            with self.assertRaises(runtime.Refused): runtime.verify_schema_catalog(MigrationRecorder(directory, 2), directory)
+            runtime.verify_schema_catalog(MigrationRecorder(directory, 2), directory, 2)
+
+
+class GeneratorTests(unittest.TestCase):
+    """The real generator over a unit-only stand-in for local PostgreSQL 16.13."""
+
+    def test_generator_refuses_snapshot_over_80_percent_cap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'migrations').mkdir()
+            directory = synthetic_versions(root / 'migrations', 3)
+            query = json.loads((directory / 'catalog-query.json').read_text())['sql']
+            feed, statements = [], []
+            class Connection:
+                def __enter__(self): return self
+                def __exit__(self, *args): return False
+                def execute(self, statement, params=None):
+                    statements.append(statement)
+                    self.row = (feed.pop(0),) if statement == query else None
+                    return self
+                def fetchone(self): return self.row
+            class LocalPostgres:
+                removed = False
+                def __enter__(self): return self
+                def __exit__(self, *args): self.removed = True
+                def connect(self): return Connection()
+            stand_in = types.ModuleType('qualify_tenant_schema')
+            stand_in.LocalPostgres, stand_in.MIGRATIONS, stand_in.IMAGE = LocalPostgres, directory, 'unit-only-image'
+            with patch.dict(sys.modules, {'qualify_tenant_schema': stand_in}):
+                sys.modules.pop('generate_schema_catalog', None)
+                generator = importlib.import_module('generate_schema_catalog')
+                small = generator.readable({'relations': [['genui', 'unit_only', 'r']]})
+                base = len(generator.readable({'relations': [['pad', '']]}).encode())
+                def padded(size): return generator.readable({'relations': [['pad', 'x' * (size - base)]]})
+                self.assertEqual(len(padded(209715).encode()), 209715)
+                cases = (('at_cap', padded(209715), None),
+                         ('file_over_cap', padded(209716), 'catalog-v3 candidate exceeds 209715 bytes'),
+                         ('projection_over_cap', padded(209715) + ' ', 'catalog-v3 candidate exceeds 209715 bytes'))
+                for case, third, refusal in cases:
+                    with self.subTest(case=case):
+                        feed[:] = [small, small, third]; statements.clear()
+                        output = root / ('out-' + case)
+                        if refusal is None:
+                            receipt = generator.generate(output)
+                            self.assertEqual(sorted(p.name for p in output.iterdir()),
+                                             ['catalog-v1.json', 'catalog-v2.json', 'catalog-v3.json', 'generation.json'])
+                            self.assertEqual(len((output / 'catalog-v3.json').read_bytes()), 209715)
+                            self.assertEqual(sorted(receipt['candidate_sha256']), ['catalog-v1.json', 'catalog-v2.json', 'catalog-v3.json'])
+                        else:
+                            with self.assertRaisesRegex(ValueError, refusal): generator.generate(output)
+                            self.assertFalse(output.exists())
+                        # One snapshot after every migration, all taken before any refusal.
+                        self.assertEqual(statements.count(query), 3)
+                        self.assertEqual(feed, [])
+                        # As in the runner, the upgrade to version 2 creates the ledger at
+                        # its historical bound, so catalog-v2 is the real version-2 state.
+                        ledger, = [s for s in statements if s.startswith('SET LOCAL ROLE genui_owner;')]
+                        self.assertEqual(ledger.count('CHECK (version BETWEEN 1 AND 2)'), 2)
+                        second = (directory / '0002_tenant_foundation.sql').read_bytes().decode('utf-8')
+                        self.assertLess(statements.index(ledger), statements.index(second))
+
+
+class IdentityRegistryFileTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(prefix='genui-empty-registry-unit-')
+        self.directory=Path(self.tmp.name);self.directory.chmod(0o700)
+        self.path=self.directory/'credentials.json'
+
+    def tearDown(self):
+        self.directory.chmod(0o700);self.tmp.cleanup()
+
+    def files(self): return list(self.directory.glob('.identity-registry-*.json'))
+
+    def test_new_owned_empty_registry_has_closed_shape_and_cleanup(self):
+        owned=runtime.EmptyIdentityRegistryFile(self.path)
+        value=json.loads(owned.path.read_text())
+        self.assertEqual(set(value),{'schema_version','registry_version','bindings'})
+        self.assertEqual(value['schema_version'],1);self.assertEqual(value['bindings'],[])
+        self.assertEqual(str(uuid.UUID(value['registry_version'])),value['registry_version'])
+        self.assertEqual(stat.S_IMODE(owned.path.stat().st_mode),0o600)
+        self.assertEqual(owned.path.stat().st_uid,os.geteuid())
+        self.assertFalse(os.get_inheritable(owned.file_fd))
+        owned.check_file();owned.close();owned.close()
+        self.assertEqual(self.files(),[])
+
+    def test_real_children_receive_private_empty_or_exact_explicit_registry(self):
+        report=self.directory/'report.json';script=self.directory/'child.py'
+        script.write_text(f'''#!{sys.executable}
+import json,os,stat
+from pathlib import Path
+p=Path(os.environ[{runtime.IDENTITY_REGISTRY_FILE_ENV!r}])
+Path({str(report)!r}).write_text(json.dumps({{'path':str(p),'value':json.loads(p.read_text()),'mode':stat.S_IMODE(p.stat().st_mode),'raw_auth_absent':{runtime.QUALIFICATION_JSON_ENV!r} not in os.environ}}))
+''');script.chmod(0o700)
+        explicit=self.directory/'operator-registry.json'
+        explicit_payload=json.dumps({'schema_version':1,'registry_version':str(uuid.uuid4()),'bindings':[]})
+        explicit.write_text(explicit_payload);explicit.chmod(0o600)
+        for supplied in (False,True):
+            with self.subTest(supplied=supplied):
+                env={'GENUI_BINARY':str(script)}
+                if supplied: env[runtime.IDENTITY_REGISTRY_FILE_ENV]=str(explicit)
+                with patch.dict(os.environ,env,clear=True),patch.object(runtime.signal,'signal'), \
+                     patch.object(runtime,'refresh',side_effect=lambda p:runtime.atomic_write(p,fixture())):
+                    self.assertEqual(runtime.serve(self.path),0)
+                    self.assertEqual(runtime.IDENTITY_REGISTRY_FILE_ENV in os.environ,supplied)
+                value=json.loads(report.read_text())
+                self.assertEqual(value['mode'],0o600);self.assertTrue(value['raw_auth_absent'])
+                self.assertEqual(value['value']['bindings'],[])
+                if supplied:
+                    self.assertEqual(value['path'],str(explicit))
+                    self.assertEqual(value['value'],json.loads(explicit_payload))
+                else: self.assertTrue(Path(value['path']).name.startswith('.identity-registry-'))
+                self.assertEqual(explicit.read_text(),explicit_payload)
+                self.assertEqual(self.files(),[]);self.assertFalse(self.path.exists())
+
+    def test_explicit_empty_path_is_preserved_for_native_refusal(self):
+        with patch.dict(os.environ,{runtime.IDENTITY_REGISTRY_FILE_ENV:''},clear=True), \
+             patch.object(runtime.signal,'signal'),patch.object(runtime,'refresh'), \
+             patch.object(runtime.subprocess,'Popen') as launch:
+            launch.return_value.poll.return_value=7;launch.return_value.returncode=7
+            self.assertEqual(runtime.serve(self.path),7)
+            self.assertEqual(launch.call_args.kwargs['env'][runtime.IDENTITY_REGISTRY_FILE_ENV],'')
+        self.assertEqual(self.files(),[])
+
+    def test_replaced_registry_is_refused_before_launch_and_preserved(self):
+        def refresh(_):
+            path,=self.files();path.unlink();path.write_text('unrelated replacement')
+        with patch.dict(os.environ,{},clear=True),patch.object(runtime.signal,'signal'), \
+             patch.object(runtime,'refresh',side_effect=refresh),patch.object(runtime.subprocess,'Popen') as launch:
+            with self.assertRaises(runtime.Refused): runtime.serve(self.path)
+            launch.assert_not_called()
+        path,=self.files();self.assertEqual(path.read_text(),'unrelated replacement')
+
+    def test_existing_collision_and_unsafe_directory_are_never_replaced(self):
+        fixed=uuid.UUID('00000000-0000-4000-8000-000000000001')
+        collision=self.directory/('.identity-registry-'+fixed.hex+'.json')
+        collision.write_text('existing operator data')
+        with patch.object(runtime.uuid,'uuid4',return_value=fixed):
+            with self.assertRaises(FileExistsError): runtime.EmptyIdentityRegistryFile(self.path)
+        self.assertEqual(collision.read_text(),'existing operator data')
+        self.directory.chmod(0o755)
+        with self.assertRaises(runtime.Refused): runtime.EmptyIdentityRegistryFile(self.path)
+
+    def test_refresh_failure_cleans_owned_registry(self):
+        stop=threading.Event()
+        def refresh(_):
+            self.assertEqual(len(self.files()),1);stop.set();raise OSError('synthetic')
+        with patch.dict(os.environ,{},clear=True),patch.object(runtime.signal,'signal'), \
+             patch.object(runtime.threading,'Event',return_value=stop),patch.object(runtime,'refresh',side_effect=refresh), \
+             contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(runtime.serve(self.path),0)
+        self.assertEqual(self.files(),[])
 
 
 class QualificationSecretTests(unittest.TestCase):

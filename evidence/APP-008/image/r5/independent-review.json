@@ -1,0 +1,13 @@
+{
+  "reviewer": "GenUI root; not supervisor-smoke author",
+  "recorded_at": "2026-10-29T03:33:05.247583+00:00",
+  "disposition": "no blocking findings in supervisor/image-runner change",
+  "files": {
+    "app/runtime/qualify_image.py": "sha256:0025aa3f041786296eb3d1452b9c1caa3b00b06a0c6bc744ea522455a491533f",
+    "app/runtime/smoke_supervisor.py": "sha256:382aad62d63bf040e0942a84d1b533b1900fa964d1c88952f80a68844eb3b99b",
+    "app/runtime/smoke_http.py": "sha256:566401d6b9ac72d8322a81cef5cca03095ba83d8aa42f8a88c22ee1bdd17c8aa"
+  },
+  "all36_image_inputs_unchanged": true,
+  "actual_qualification": "independent-image.json",
+  "scope": "confined local image only; no provider or managed acceptance"
+}

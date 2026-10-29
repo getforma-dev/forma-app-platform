@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "scope": "local catalog review candidates; not automatic baseline adoption",
+  "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "server_version": "16.13",
+  "container_removed": true,
+  "source_sha256": {
+    "0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "catalog-query.json": "028d7a84db3e7bbade26fd12c6fcc363fae4e93fe04777d011d07287085892cf",
+    "generate_schema_catalog.py": "9fea07c987110cbcfef61ad8981c27e3490b4809945c3fe985c680b4365eef2b",
+    "qualify_tenant_schema.py": "5c4fe46d74e024b48d29e4ad424211ea613d8410335b05128c621cbcf041338e",
+    "runtime.py": "580e1e3698262d5bdffa9f34d1ef9ab120fb94ea10213437c6c02e282daf0113"
+  },
+  "candidate_sha256": {
+    "catalog-v1.json": "d486958fbdcde684b1e85d428c3b220c4da76029f07e606aed6ca8fa11cfc83b",
+    "catalog-v2.json": "82c01e831db712093f4ef86f98630f5d6e2a63936c723b351ea367bfa9069148"
+  }
+}

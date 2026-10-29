@@ -1,0 +1,177 @@
+{
+  "config_sha256": "sha256:ba92f3682894683023daf402d7ae3af5915de64466be4629f168617090251700",
+  "elapsed_ms": 1,
+  "fuel_consumed": 1308215,
+  "input_sha256": "sha256:a96f75d61e38c6146569a145c11698c7c2bd881b0d231c777f9644446adf4603",
+  "interface_imports": [],
+  "memory_bytes": 1441792,
+  "resource_limits": {
+    "fuel": 5000000000,
+    "guest_linear_memory_bytes": 2147483648,
+    "input_bytes": 5242880,
+    "output_bytes": 134217728,
+    "wall_clock_ms": 120000
+  },
+  "result": {
+    "contract_edition": "impl-2026-10-28.1",
+    "parser_version": 1,
+    "profile": "demo",
+    "result": {
+      "available_sheets": [
+        "Events"
+      ],
+      "cells": [
+        {
+          "coordinate": {
+            "column": 1,
+            "row": 1,
+            "sheet": "Events",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "event_id",
+          "value": {
+            "type": "text",
+            "value": "event_id"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 2,
+            "row": 1,
+            "sheet": "Events",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "asset",
+          "value": {
+            "type": "text",
+            "value": "asset"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 3,
+            "row": 1,
+            "sheet": "Events",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "time",
+          "value": {
+            "type": "text",
+            "value": "time"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 4,
+            "row": 1,
+            "sheet": "Events",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "destination",
+          "value": {
+            "type": "text",
+            "value": "destination"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 5,
+            "row": 1,
+            "sheet": "Events",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "bytes",
+          "value": {
+            "type": "text",
+            "value": "bytes"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 1,
+            "row": 2,
+            "sheet": "Events",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "E1",
+          "value": {
+            "type": "text",
+            "value": "E1"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 2,
+            "row": 2,
+            "sheet": "Events",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "build-worker-17",
+          "value": {
+            "type": "text",
+            "value": "build-worker-17"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 3,
+            "row": 2,
+            "sheet": "Events",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "2026-10-22T10:00:00.001Z",
+          "value": {
+            "type": "text",
+            "value": "2026-10-22T10:00:00.001Z"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 4,
+            "row": 2,
+            "sheet": "Events",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "203.0.113.10",
+          "value": {
+            "type": "text",
+            "value": "203.0.113.10"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 5,
+            "row": 2,
+            "sheet": "Events",
+            "type": "xlsx"
+          },
+          "interpretation": "unit_unconfirmed",
+          "original": "60000",
+          "value": {
+            "type": "integer",
+            "unit": "unconfirmed",
+            "value": "60000"
+          }
+        }
+      ],
+      "date_epoch_1904": false,
+      "expanded_bytes": 2078,
+      "format": "xlsx",
+      "formula_policy": "reject",
+      "mapping_status": "inspection_required",
+      "rows": 2,
+      "selected_sheet": "Events"
+    },
+    "status": "parsed"
+  },
+  "wasm_sha256": "sha256:aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba"
+}

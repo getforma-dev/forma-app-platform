@@ -1,0 +1,11 @@
+# Independent shared-case extraction review
+
+Reviewer: `/root`, October 29, 2026. **No blocking findings for this test-only extraction.** The [structured review](independent-review.json) binds the current source and retained execution receipts.
+
+Reviewed the entire moved block, its call site, fixed identities and helper functions. Six existing result groups moved into a private sibling module declared only under `cfg(test)`. The existing fixture supplies the same private request constructor; operator setup/mutations, credentials, transport selection, race/lifecycle cases and cleanup remain in the local campaign. The production transaction, pool, registry, catalog and public API implementations are unchanged. No ordinary caller gains a trusted request constructor or SQL interface.
+
+The author's fresh PostgreSQL/TLS campaign passed the same 36 ordered checks as R5, including owned-resource cleanup. Formatting, production-library compilation, four storage units and the private-construction doctest passed at the retained source hashes. These source-bound executions were inspected, not redundantly rerun by this reviewer. A supplemental per-file quoted-literal comparison confirms the moved literals match; it is not a Rust parser or a substitute for the full diff review. The initial concatenated-file matcher crossed a file boundary and refused; its [diagnostic](review-comparison-initial-refusal.json) is retained, with no source change made to satisfy it.
+
+Root added one exact Docker allowlist entry and performed an actual isolated scratch COPY export. [The export receipt](context-export.json) contains exactly the previous 36 paths plus `qualification_cases.rs`, with byte-identical source/export hashes and temporary export cleanup. Only the ignore file, test module declaration and two qualification files differ from R5. No credentials, caches or evidence entered the context.
+
+This passes the local extraction review only. The older R5 image is historical, not an image of these new source bytes. A final current-source image, successful CI/landing, managed entry/package, IAM/RDS campaign and APP-008 acceptance remain open. The shared schema1 auth environment was not changed.

@@ -1,0 +1,4 @@
+inventory_id,kind,address
+INV-EXACT,exact,203.0.113.10
+INV-NET24,network,203.0.113.0/24
+INV-NET25,network,203.0.113.0/25

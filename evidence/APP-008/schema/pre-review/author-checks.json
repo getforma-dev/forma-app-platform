@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-29T02:03:40.247960+00:00",
+  "scope": "APP-008 schema/runtime author checks only",
+  "source_sha256": {
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/manifest.json": "e2c67f17aadc27205235ebf36dbcf7855a98fe76f77a2822575590a833f588a8",
+    "app/runtime/runtime.py": "8045ebb79193c47baaa7ac1b226e91324e8eba336dfe19f033fb681b77f52b22",
+    "app/runtime/test_runtime.py": "88f61742d78ae7b838e1c7e22101b8fcff9e32d195c11d716d1e88f7cbe7281a",
+    "app/runtime/qualify_migration.py": "9cd5ad523c38d91b93e087f10e3d2534c5dd216d9adc6f847648a0ed666c11ec",
+    "app/runtime/qualify_tenant_schema.py": "1ff0e86d8535af4230b913b7c94f9c105b5e83b03c181673ced6fd3a8ba646f8",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+    "docs/architecture/ADR-004-TENANT-TRANSACTIONS.md": "0925434de4a123c013400aeb13b600cc136fd9a5a8003a96e526ef1faf58af60"
+  },
+  "checks": [
+    {
+      "command": "app/runtime/.venv/bin/python -m unittest discover -s app/runtime -p test_runtime.py -v",
+      "exit_code": 0,
+      "tests": 24,
+      "passed": true,
+      "output_summary": "Ran 24 tests in 9.568s\n\nOK",
+      "local_log_sha256": "216f5b4d887c70fabb280779c11afa108d7f0ea981314d3cb50187e208303c0e"
+    },
+    {
+      "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python app/runtime/qualify_tenant_schema.py --output evidence/APP-008/schema/local-postgres.json",
+      "exit_code": 0,
+      "checks": 106,
+      "passed": true,
+      "receipt": "local-postgres.json",
+      "receipt_sha256": "d8fd7282a2c02391b5ee61af9bc728ba89eb4f70609067a89a1156b69663474c",
+      "all_containers_removed": true
+    },
+    {
+      "command": "python3 app/runtime/qualify_migration.py --output evidence/APP-008/schema/original-migration-regression.json",
+      "exit_code": 0,
+      "checks": 43,
+      "passed": true,
+      "receipt": "original-migration-regression.json",
+      "receipt_sha256": "57717c4a68f7be889db4fe03168b6e4a8bf6840ff9f3adde75d1aad31f5957e6",
+      "container_removed": true
+    },
+    {
+      "command": "git diff --check -- app/runtime/runtime.py app/runtime/test_runtime.py app/runtime/qualify_migration.py",
+      "exit_code": 0,
+      "passed": true
+    }
+  ],
+  "new_dependencies": [],
+  "managed_acceptance": false,
+  "independent_review": "pending",
+  "ticket_complete": false,
+  "limits": [
+    "Local PostgreSQL uses trust authentication and simulated rds_iam, not managed IAM/TLS.",
+    "Native pool cleanup/cancellation, trusted mapping and transaction permits belong to the parallel native slice.",
+    "Operator fixture contract shapes are not source import, admission or successful application business writes.",
+    "No destructive reset integration, managed operations, staging or commits performed by this author."
+  ]
+}

@@ -1,0 +1,30 @@
+# Local pre-push checks at 01c8b2d on 2026-10-29T18:30:09Z, macOS arm64, CARGO_BUILD_JOBS=2. Local evidence only, not CI.
+
+=== fmt --check ===
+fmt exit 
+=== clippy --all-targets -D warnings ===
+    Checking forma-app-platform v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.48s
+clippy exit 
+=== 1.85 floor check --lib --tests ===
+    Checking lazy_static v1.5.1
+    Checking matchit v0.8.4
+    Checking axum v0.8.9
+    Checking tokio-postgres v0.7.18
+    Checking sharded-slab v0.1.7
+    Checking forma-ir v3.2.0
+    Checking rust-embed v8.13.0
+    Checking x509-cert v0.2.5
+    Checking reqwest v0.12.28
+    Checking tracing-log v0.2.0
+    Checking deadpool-runtime v0.3.1
+    Checking thread_local v1.1.10
+    Checking nu-ansi-term v0.50.3
+    Checking genui-auth-verifier v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/spikes/APP-006)
+    Checking tracing-subscriber v0.3.23
+    Checking deadpool v0.13.1
+    Checking tokio-postgres-rustls v0.14.0
+    Checking forma-server v3.2.0
+    Checking forma-app-platform v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 31.64s
+floor exit 

@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "scope": "APP-008 native author verification; local only",
+  "managed_acceptance": false,
+  "recorded_at": "2026-10-29T02:25:07.755191+00:00",
+  "inputs_before": {
+    "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+    "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+    "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+    "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+    "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+    "app/src/lib.rs": "381db89b74187d80ebd7300b1e1a9823596a3c3a422a55632f5552a7ab2b305f",
+    "app/src/main.rs": "6d0a1e5cd599605cfdf21335e1cf545e260961aa2b60c00739879456746f8451",
+    "app/src/readiness.rs": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513",
+    "app/src/roles.rs": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216",
+    "app/src/storage/authorization.rs": "c53609ef588351a322acf47ff249fd7423d49eef01848d8a4213bea4f0c05a32",
+    "app/src/storage/catalog.rs": "585f39f389d1173bbbb7b5b6b23a70283a155da0e1023bdc8ab9879cb0705055",
+    "app/src/storage/mod.rs": "2c642fec59cc879435830142140e0ce0fb9a18cd4c04d9ec2da03bbff867c481",
+    "app/src/storage/pool.rs": "7d56a0dccb723b263fb299fd6f54003dee2a44a2d0488762c2a9fa9babc17400",
+    "app/src/storage/qualification.rs": "d05c03841d7000f82062761a645eeff3e561fd0dc99769ab3a47e99dde30ab0d",
+    "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+    "app/src/storage/tests.rs": "6e2a1747c398f0a064a25e945ba3b2a9ce65bdedd17e6750a1f8ae66b4d63232",
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/catalog-query.json": "e9e42eaaf6461f483a59a1af4e51bb9686aafa6b8b1584610692287c040294cc",
+    "app/migrations/catalog-v1.json": "23c92d6a2e3868358dd626ee800b09d663c47f3f120ebae5fdc5926dcafe24cc",
+    "app/migrations/catalog-v2.json": "0caa7863ecdab6aa7ac5b6efeb49e3e9740cd58857af8b47767c036437c86601",
+    "app/migrations/manifest.json": "abafcbb63d6124c2c5ba5fb2a9ff33da96508994154aff1163b5a10baa5cccc4",
+    "app/runtime/runtime.py": "580e1e3698262d5bdffa9f34d1ef9ab120fb94ea10213437c6c02e282daf0113",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+    "fixtures/phase-one/v1/setup.json": "9836f82337ef24bb522242b9b98eb6a8cdca347561f0f72466388638156d2130"
+  },
+  "checks": [
+    {
+      "name": "format",
+      "command": [
+        "rustfmt",
+        "+1.93.1",
+        "--check",
+        "--edition",
+        "2021",
+        "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app/src/storage/authorization.rs",
+        "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app/src/storage/catalog.rs",
+        "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app/src/storage/mod.rs",
+        "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app/src/storage/pool.rs",
+        "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app/src/storage/qualification.rs",
+        "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app/src/storage/registry.rs",
+        "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app/src/storage/tests.rs"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.164,
+      "log": "format.txt"
+    },
+    {
+      "name": "lint",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "clippy",
+        "--locked",
+        "--lib",
+        "--tests",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.737,
+      "log": "lint.txt"
+    },
+    {
+      "name": "production-library",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "build",
+        "--locked",
+        "--lib"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 4.089,
+      "log": "production-library.txt"
+    },
+    {
+      "name": "floor-native-unit",
+      "command": [
+        "cargo",
+        "+1.85.0",
+        "test",
+        "--locked",
+        "--lib",
+        "storage",
+        "--target-dir",
+        "target/app008-msrv",
+        "--",
+        "--skip",
+        "native_postgres_campaign"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 5.241,
+      "log": "floor-native-unit.txt"
+    },
+    {
+      "name": "floor-public-boundary",
+      "command": [
+        "cargo",
+        "+1.85.0",
+        "test",
+        "--locked",
+        "--doc",
+        "--target-dir",
+        "target/app008-msrv"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 3.235,
+      "log": "floor-public-boundary.txt"
+    }
+  ],
+  "inputs_after": {
+    "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+    "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+    "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+    "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+    "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+    "app/src/lib.rs": "381db89b74187d80ebd7300b1e1a9823596a3c3a422a55632f5552a7ab2b305f",
+    "app/src/main.rs": "6d0a1e5cd599605cfdf21335e1cf545e260961aa2b60c00739879456746f8451",
+    "app/src/readiness.rs": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513",
+    "app/src/roles.rs": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216",
+    "app/src/storage/authorization.rs": "c53609ef588351a322acf47ff249fd7423d49eef01848d8a4213bea4f0c05a32",
+    "app/src/storage/catalog.rs": "585f39f389d1173bbbb7b5b6b23a70283a155da0e1023bdc8ab9879cb0705055",
+    "app/src/storage/mod.rs": "2c642fec59cc879435830142140e0ce0fb9a18cd4c04d9ec2da03bbff867c481",
+    "app/src/storage/pool.rs": "7d56a0dccb723b263fb299fd6f54003dee2a44a2d0488762c2a9fa9babc17400",
+    "app/src/storage/qualification.rs": "d05c03841d7000f82062761a645eeff3e561fd0dc99769ab3a47e99dde30ab0d",
+    "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+    "app/src/storage/tests.rs": "6e2a1747c398f0a064a25e945ba3b2a9ce65bdedd17e6750a1f8ae66b4d63232",
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/catalog-query.json": "e9e42eaaf6461f483a59a1af4e51bb9686aafa6b8b1584610692287c040294cc",
+    "app/migrations/catalog-v1.json": "23c92d6a2e3868358dd626ee800b09d663c47f3f120ebae5fdc5926dcafe24cc",
+    "app/migrations/catalog-v2.json": "0caa7863ecdab6aa7ac5b6efeb49e3e9740cd58857af8b47767c036437c86601",
+    "app/migrations/manifest.json": "abafcbb63d6124c2c5ba5fb2a9ff33da96508994154aff1163b5a10baa5cccc4",
+    "app/runtime/runtime.py": "580e1e3698262d5bdffa9f34d1ef9ab120fb94ea10213437c6c02e282daf0113",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+    "fixtures/phase-one/v1/setup.json": "9836f82337ef24bb522242b9b98eb6a8cdca347561f0f72466388638156d2130"
+  },
+  "inputs_unchanged": true,
+  "toolchains": {
+    "1.93.1": "rustc 1.93.1 (01f6ddf75 2026-02-11)\nbinary: rustc\ncommit-hash: 01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf\ncommit-date: 2026-02-11\nhost: aarch64-apple-darwin\nrelease: 1.93.1\nLLVM version: 21.1.8\n",
+    "1.85.0": "rustc 1.85.0 (4d91de4e4 2025-02-17)\nbinary: rustc\ncommit-hash: 4d91de4e48198da2e33413efdcd9cd2cc0c46688\ncommit-date: 2025-02-17\nhost: aarch64-apple-darwin\nrelease: 1.85.0\nLLVM version: 19.1.7\n"
+  },
+  "native_campaign": {
+    "report": "local-postgres-tls.json",
+    "sha256": "ef10fcbfa801e8aec61d699a517f3a6af700dc4a887e5efe6766bfe00ab0b229",
+    "passed_checks": 29
+  },
+  "passed": true
+}

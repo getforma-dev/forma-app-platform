@@ -1,0 +1,26 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.25s
+     Running unittests src/lib.rs (target/debug/deps/genui-eff302464415cc1d)
+
+running 19 tests
+test auth_qualification::tests::production_configuration_cannot_select_test_transport_or_identity ... ok
+test auth_qualification::tests::operator_and_caller_selected_inputs_never_start_provider_work ... ok
+test config::tests::file_reader_rejects_fifo_symlink_and_oversized_input ... ok
+test config::tests::refuse_expiry_shared_credentials_and_role_interchange_without_disclosure ... ok
+test readiness::tests::late_or_other_generation_probe_cannot_extend_credentials ... ok
+test storage::pool::lifecycle_tests::abort_request_retains_permits_until_transport_drop ... ok
+test auth_qualification::tests::existing_login_uses_server_bound_pkce_and_expected_subject ... ok
+test storage::qualification::native_postgres_campaign ... ignored, requires local Docker, OpenSSL and the locked migration/contract Python environments
+test storage::tests::production_settings_allow_only_fixed_rds_endpoint ... ok
+test auth_qualification::tests::expiry_restart_and_attempt_limits_fail_closed ... ok
+test storage::tests::unknown_permissions_and_noncanonical_ids_deny ... ok
+test auth_qualification::tests::foreign_verified_tenant_is_refused_and_logout_is_requested ... ok
+test auth_qualification::tests::state_cookie_and_parser_refusals_never_exchange ... ok
+test auth_qualification::tests::concurrent_and_sequential_replay_exchange_exactly_once ... ok
+test auth_qualification::tests::real_router_and_backend_par_exchange_create_no_app_authority ... ok
+test auth_qualification::tests::canceled_exchange_or_verification_keeps_cleanup_unresolved ... ok
+test storage::tests::private_registry_rejects_links_modes_duplicates_unknowns_and_large_documents ... ok
+test auth_qualification::tests::token_shape_binding_redirect_body_and_cleanup_refusals ... ok
+test auth_qualification::tests::token_and_logout_timeouts_are_bounded_and_never_retry ... ok
+
+test result: ok. 18 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 6.03s
+

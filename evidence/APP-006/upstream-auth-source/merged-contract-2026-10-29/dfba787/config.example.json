@@ -1,0 +1,25 @@
+{
+  "auth_origin": "http://127.0.0.1:3247",
+  "app_origin": "http://127.0.0.1:3248",
+  "redirect_uri": "http://127.0.0.1:3248/auth/callback",
+  "tenants": [
+    {
+      "slug": "northstar", "name": "Northstar", "owner_email": "maya@northstar.test",
+      "primary_color": "#3557d6", "logo_url": "http://127.0.0.1:3248/northstar.svg",
+      "client_id": "northstar-platform",
+      "users": [
+        {"name": "Maya", "email": "maya@northstar.test", "role": "admin", "password_env": "NORTHSTAR_MAYA_PASSWORD"},
+        {"name": "Sarah", "email": "sarah@northstar.test", "role": "admin", "password_env": "NORTHSTAR_SARAH_PASSWORD"},
+        {"name": "Jordan", "email": "jordan@northstar.test", "role": "user", "password_env": "NORTHSTAR_JORDAN_PASSWORD"}
+      ]
+    },
+    {
+      "slug": "canary", "name": "Canary", "owner_email": "canary@canary.test",
+      "primary_color": "#8a4f1e", "logo_url": "http://127.0.0.1:3248/canary.svg",
+      "client_id": "canary-platform",
+      "users": [
+        {"name": "Canary", "email": "canary@canary.test", "role": "user", "password_env": "CANARY_PASSWORD"}
+      ]
+    }
+  ]
+}

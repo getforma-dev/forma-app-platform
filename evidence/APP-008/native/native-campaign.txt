@@ -1,0 +1,37 @@
+
+running 1 test
+APP008 check: aggregate fixed-role native readiness verifies identity, schema and blank scope
+APP008 check: composed readiness requires actual native success plus synthetic helper success and invalidates cache on generation change
+APP008 check: TLS role identity and scoped two-organization publication/record reads
+APP008 check: all four fixed roles enforce RLS, blank scope and direct write refusal
+APP008 check: revocation, epoch, missing grants and registry/DB binding mismatches deny
+APP008 check: closed action matrix evaluates current scoped grants without granting business writes
+APP008 check: same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks
+APP008 check: cancellation at recycle discards physical backend
+APP008 check: cancellation at begin discards physical backend
+APP008 check: cancellation at finish discards physical backend
+APP008 check: cancellation at reset discards physical backend
+APP008 check: cancelled connect retains capacity until owned transport destruction
+APP008 check: cancellation during real PostgreSQL query discards backend
+APP008 check: expired commit deadline gives unknown outcome and discards without retry
+APP008 check: two-second cleanup deadline discards uncertain reset
+APP008 check: generation rotation retires old leases and expired credentials refuse checkout
+APP008 check: current source visibility is required in addition to record and run permissions
+APP008 check: tombstoned source dependencies deny bounded record reads
+APP008 check: writer-first revocation blocks then invalidates the prior nonfinal precheck
+APP008 check: operation-first authority fence holds until commit then subsequent stale request denies
+APP008 check: eight physical connections, two per role, bounded waiters and absolute acquisition deadline
+APP008 check: closed pools terminate all eight-capacity transport owners
+APP008 check: changed-generation connection retry shares the original five-second deadline
+APP008 check: canonical catalog comparison rejects disabled RLS, extra UPDATE and missing named relation before reuse
+APP008 check: empty registry stays deny-all while fixed-role readiness detects expiry, role drift and aggregate timeout
+APP008 check: elevated flags, unexpected memberships and unsupported schema refuse new connections
+APP008 check: new physical connection authenticates with changed current role credential material
+APP008 check: wrong hostname, untrusted CA and plaintext PostgreSQL are refused
+APP008 check: local database and private fixture files removed
+test storage::qualification::native_postgres_campaign ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 29.43s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running unittests src/lib.rs (target/debug/deps/genui-eff302464415cc1d)

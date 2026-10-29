@@ -1,0 +1,3 @@
+expense_id,description,amount_cents,currency
+EXP-001,Equipment supplies,12000,USD
+EXP-EUR,Synthetic EUR control,45000,EUR

@@ -1,0 +1,7 @@
+# Received FormaStack private qualifier bridge review
+
+The [received independent review](received-independent-review.json) approves local operator preparation for the private bridge to GenUI's canonical verifier image at source `8fca35c35b80828d4effb17e59f9bbd80ae237ea`. Root verified the review digest and all twenty referenced current preparation files; [capture.json](capture.json) records that binding. The provider team retains the original source, tests and earlier failed window-boundary control under its FORMA-248 rehearsal evidence.
+
+The bridge keeps a separately acquired synthetic access token in memory and sends it through bounded anonymous standard input to the pinned one-shot image. Its reviewed controls check the exact local image, shared interval, five output cases and cleanup. The source receipt records nineteen bridge/seam tests, fourteen existing driver tests and four timing controls; the independent reviewer reran the concrete repaired window regression. GenUI did not rerun those provider-owned checks or execute a hosted request when receiving this handoff.
+
+This receipt is preparation only. Actual provider provisioning, private configuration, compatible GenUI callback deployment, Safari capability, the jointly selected interval, hosted identity/key results and cleanup remain required. No start signal was sent. The approved auth allowance is counted once inside the project limit. APP-006 remains blocked for hosted acceptance, and this handoff does not qualify external beta signup or application access.

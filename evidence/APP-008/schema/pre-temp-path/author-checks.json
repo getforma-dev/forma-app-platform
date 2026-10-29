@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-29T03:05:31.493637+00:00",
+  "scope": "APP-008 catalog repairs, approved RDS creator normalization and migration lookup-order author checks",
+  "source_sha256": {
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/manifest.json": "d9384be1ea8a999d2113a5afcb47902df4e18c6bb7bf0336ea90f1ce3e1b9388",
+    "app/migrations/catalog-query.json": "dd86a4be87895fe4ddb8ccd24e31da50f6705754ffc2dc51709c1b7171f24422",
+    "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+    "app/runtime/runtime.py": "c6bc3ca14dd898597cd78651d7baecf3a79676dd8d8d7d79369b5c6d2732ca09",
+    "app/runtime/test_runtime.py": "c339e62e430f9dff8cea023a5a67a3dd6bd0999e57ffc738c7fb97fb0b8c82e4",
+    "app/runtime/qualify_migration.py": "9cd5ad523c38d91b93e087f10e3d2534c5dd216d9adc6f847648a0ed666c11ec",
+    "app/runtime/qualify_tenant_schema.py": "22dd44b557233f66695111cdda3b605fbd51444890570cc1adf38346dc3cccc1",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+    "app/runtime/generate_schema_catalog.py": "9fea07c987110cbcfef61ad8981c27e3490b4809945c3fe985c680b4365eef2b",
+    "docs/architecture/ADR-004-TENANT-TRANSACTIONS.md": "684aa2454380939b106ceb9609690b374e87af5c6b17f06937ea2d1ad545e1db"
+  },
+  "supersedes_author_receipt": "pre-compatibility/author-checks.json",
+  "independent_findings_addressed": [
+    "R1 catalog/security drift accepted with valid version2 ledger",
+    "R2 preexisting partial history1 bypassed legacy proof",
+    "R3 all-role database defaults could disable FK enforcement; current replica mode and fixed-role bypass parameter grants now refuse",
+    "Narrow approved RDS operator creator-grant normalization; explicit owner/helper and all other memberships remain exact",
+    "Migration pg_catalog lookup path before any identity/advisory/metadata SELECT; hostile function/view markers remain uncalled"
+  ],
+  "checks": [
+    {
+      "command": "app/runtime/.venv/bin/python -m unittest discover -s app/runtime -p test_runtime.py -v",
+      "exit_code": 0,
+      "tests": 30,
+      "passed": true,
+      "output_summary": "Ran 30 tests in 11.538s\n\nOK",
+      "local_log_sha256": "aa0c5c6a30ae262e3f988023eda9a8c360de2ff27f40e0b761c5e7cd522b9220"
+    },
+    {
+      "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python app/runtime/qualify_tenant_schema.py --output evidence/APP-008/schema/local-postgres.json",
+      "exit_code": 0,
+      "checks": 154,
+      "passed": true,
+      "receipt": "local-postgres.json",
+      "receipt_sha256": "e3c476719c74048b5594309ce2c23ae525db0ff5a3de37f16aa6474fbc9c276f",
+      "all_nine_containers_removed": true
+    },
+    {
+      "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python app/runtime/generate_schema_catalog.py --output-dir .cache/app008-compat-final-proof",
+      "exit_code": 0,
+      "passed": true,
+      "receipt": "catalog-reproduction.json",
+      "receipt_sha256": "cb7818f5aaabf15a4dd84b98e2075205bbe6e464a0c3aa20add2b3b0b63dd111",
+      "both_candidates_match_authoritative_bytes": true,
+      "container_removed": true
+    },
+    {
+      "command": "python3 app/runtime/qualify_migration.py --output evidence/APP-008/schema/original-migration-regression.json",
+      "exit_code": 0,
+      "checks": 43,
+      "passed": true,
+      "retained_unchanged_source_result": true,
+      "receipt": "original-migration-regression.json",
+      "receipt_sha256": "57717c4a68f7be889db4fe03168b6e4a8bf6840ff9f3adde75d1aad31f5957e6"
+    },
+    {
+      "command": "git diff --check -- app/runtime/runtime.py app/runtime/test_runtime.py app/runtime/qualify_migration.py",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "command": "python3 Tickets/_tools/board.py check",
+      "exit_code": 0,
+      "passed": true,
+      "result": "74 tickets; 6 phases; 12 sprints; 80 requirements; design digests and active links verified"
+    }
+  ],
+  "new_dependencies": [],
+  "managed_acceptance": false,
+  "independent_followup_review": "pending",
+  "ticket_complete": false,
+  "limits": [
+    "Local PostgreSQL uses trust authentication and simulated rds_iam, not managed IAM/TLS.",
+    "Native connection admission/readiness reuses the canonical resources; its proof is owned by the native slice.",
+    "Empty registry denies all mappings; explicit operator files remain native-validated. No provider mapping or session/admission delivery is claimed.",
+    "Operator fixture shapes are not imported bytes or successful application business writes.",
+    "No managed operations, staging or commits performed by this author."
+  ],
+  "non_acceptance_setup_failure": "First compatibility-negative fixture attempted invalid ADMIN back-grant; stopped before that case. Corrected to valid noncreator flags and full final campaign passed."
+}

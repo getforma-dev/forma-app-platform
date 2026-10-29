@@ -1,0 +1,31 @@
+{
+  "command": "spikes/APP-005/.venv/bin/python fixtures/qualify.py --output evidence/APP-011/local-1",
+  "failure": {
+    "message": "parser refusal mismatch: formula-cache-xlsx {'no_revision_created': True, 'reason': 'formula_refused', 'status': 'refused'}",
+    "type": "AssertionError"
+  },
+  "finished_at": "2026-10-29T01:56:08.331421+00:00",
+  "limits": [
+    "No real app journeys, account provisioning, database reset, publication, model generation, record mutation or restore acceptance",
+    "CIDR/rate/currency are independent oracle checks; unsupported APP-005 operators remain unsupported",
+    "Actual APP-004 accepted files require mapping; acceptance is not source admission",
+    "APP-008 shape seeds intentionally retain placeholder source/admission/receipt data"
+  ],
+  "passed": false,
+  "platform": "macOS-26.1-arm64-arm-64bit",
+  "python": "3.11.0",
+  "source_pins": {
+    "contracts/implementation-lock.json": "sha256:9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45",
+    "fixtures/generate.py": "sha256:d9172a5459ee05b611b9ff08744c820289c47b65785b12dd767b61efd55421d0",
+    "fixtures/phase-one/v1/manifest.json": "sha256:da137aff586e052bc36fe17c840d0cf89469da7f05dd7f91f0d7dde4df76e398",
+    "fixtures/qualify.py": "sha256:ba06d4969f43f2670cdc0b2a4319e0e9beed7f3d6b8e0cf89bdfec8aa25a0ea3",
+    "fixtures/test_fixtures.py": "sha256:0b1ca40b37fb32a4a462d2f35e855fe2e0e32743b218a4c3eef25636530917d0",
+    "fixtures/verify.py": "sha256:28badd0d7c77ae0db3a33ec0ee0443989c8683f8f8cf921e33a454fabdc49ee2",
+    "spikes/APP-004/Cargo.lock": "sha256:d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+    "spikes/APP-004/guest/src/lib.rs": "sha256:76b510d6d21ae7c5f99f36ffbf7c3ebee13f738a52374258e0a45b8fe57c9009",
+    "spikes/APP-004/host/src/lib.rs": "sha256:bdb98c9a45c1ec081afd12081e4f40675518531474c20e2ab2becfe15c85f667",
+    "spikes/APP-005/query.py": "sha256:d7d724b9e34c3bdb73316eb9f3017c082dfedc3a7b79503cea584d67e06cf187",
+    "spikes/APP-005/requirements.lock": "sha256:06295e1e9bf322670a74bff06616b94ec32b7a912cc4d43afb90d25a25118ca3"
+  },
+  "started_at": "2026-10-29T01:53:44.173140+00:00"
+}

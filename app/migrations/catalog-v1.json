@@ -1,0 +1,106 @@
+{
+  "column_acl": [
+
+  ],
+  "columns": [
+    ["genui_meta","schema_version",1,"singleton","boolean",true,"","",false,null,null],
+    ["genui_meta","schema_version",2,"version","integer",true,"","",false,null,null]
+  ],
+  "constraints": [
+    ["genui_meta","schema_version","schema_version_pkey","p",true,false,false,"PRIMARY KEY (singleton)"],
+    ["genui_meta","schema_version","schema_version_singleton_check","c",true,false,false,"CHECK (singleton)"],
+    ["genui_meta","schema_version","schema_version_version_check","c",true,false,false,"CHECK (version = 1)"]
+  ],
+  "default_acl": [
+
+  ],
+  "effective_boundaries": [
+    ["genui_control",true,false,false,false,false,false],
+    ["genui_data",true,false,false,false,false,false],
+    ["genui_owner",false,false,false,false,false,false],
+    ["genui_worker",true,false,false,false,false,false],
+    ["genui_workspace",true,false,false,false,false,false]
+  ],
+  "function_acl": [
+
+  ],
+  "functions": [
+
+  ],
+  "indexes": [
+    ["genui_meta","schema_version_pkey",true,true,true,true,true,false,false,"CREATE UNIQUE INDEX schema_version_pkey ON genui_meta.schema_version USING btree (singleton)"]
+  ],
+  "internal_triggers": [
+
+  ],
+  "memberships": [
+    ["genui_owner","genui_migration",false,true,true],
+    ["rds_iam","genui_control",false,false,true],
+    ["rds_iam","genui_data",false,false,true],
+    ["rds_iam","genui_worker",false,false,true],
+    ["rds_iam","genui_workspace",false,false,true]
+  ],
+  "policies": [
+
+  ],
+  "relations": [
+    ["genui_meta","schema_version","r","genui_owner",false,false,"p",false,null],
+    ["genui_meta","schema_version_pkey","i","genui_owner",false,false,"p",false,null]
+  ],
+  "role_database_settings": [
+
+  ],
+  "role_reachability": [
+    ["genui_control","rds_iam"],
+    ["genui_data","rds_iam"],
+    ["genui_worker","rds_iam"],
+    ["genui_workspace","rds_iam"]
+  ],
+  "roles": [
+    ["genui_control",false,false,false,false,false,true,false,-1,null,null],
+    ["genui_data",false,false,false,false,false,true,false,-1,null,null],
+    ["genui_owner",false,false,false,false,false,false,true,-1,null,null],
+    ["genui_worker",false,false,false,false,false,true,false,-1,null,null],
+    ["genui_workspace",false,false,false,false,false,true,false,-1,null,null]
+  ],
+  "rules": [
+
+  ],
+  "schema_acl": [
+    ["genui_meta","genui_control","USAGE",false],
+    ["genui_meta","genui_data","USAGE",false],
+    ["genui_meta","genui_owner","CREATE",false],
+    ["genui_meta","genui_owner","USAGE",false],
+    ["genui_meta","genui_worker","USAGE",false],
+    ["genui_meta","genui_workspace","USAGE",false]
+  ],
+  "schemas": [
+    ["genui_meta","genui_owner"]
+  ],
+  "table_acl": [
+    ["genui_meta","schema_version","genui_control","SELECT",false],
+    ["genui_meta","schema_version","genui_data","SELECT",false],
+    ["genui_meta","schema_version","genui_owner","DELETE",false],
+    ["genui_meta","schema_version","genui_owner","INSERT",false],
+    ["genui_meta","schema_version","genui_owner","REFERENCES",false],
+    ["genui_meta","schema_version","genui_owner","SELECT",false],
+    ["genui_meta","schema_version","genui_owner","TRIGGER",false],
+    ["genui_meta","schema_version","genui_owner","TRUNCATE",false],
+    ["genui_meta","schema_version","genui_owner","UPDATE",false],
+    ["genui_meta","schema_version","genui_worker","SELECT",false],
+    ["genui_meta","schema_version","genui_workspace","SELECT",false]
+  ],
+  "triggers": [
+
+  ],
+  "type_acl": [
+    ["genui_meta","_schema_version","PUBLIC","USAGE",false],
+    ["genui_meta","_schema_version","genui_owner","USAGE",false],
+    ["genui_meta","schema_version","PUBLIC","USAGE",false],
+    ["genui_meta","schema_version","genui_owner","USAGE",false]
+  ],
+  "types": [
+    ["genui_meta","_schema_version","genui_owner","b",null,false,null,"genui_meta.schema_version"],
+    ["genui_meta","schema_version","genui_owner","c",null,false,null,null]
+  ]
+}

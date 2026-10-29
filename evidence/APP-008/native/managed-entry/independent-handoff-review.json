@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-29T17:20:07.931475+00:00",
+  "status": "INCOMPLETE_USER_REQUESTED_WIND_DOWN",
+  "independent_acceptance": false,
+  "managed_acceptance": false,
+  "scope": "APP-008 managed entry slice2 initial contract and partial draft source review only",
+  "draft_source_sha256": {
+    "app/src/storage/managed_qualification.rs": "57478ae92f0a7fdea62365c6fae4be650a1d63e44545edd249687d43df572dd7",
+    "app/src/storage/mod.rs": "5c2c43fc192571fba6b3b16a3889f0be482f115b35adb7376ae46cb896ed1ac8",
+    "app/src/storage/qualification_cases.rs": "80e3fbbd31a16e5cb022882bd56107f6d01327d98026df4cf134445e3f3cf9d8",
+    "app/src/storage/pool.rs": "4a8eae301412ed8ce48ef2b84e08919380747e17179ae314b61c15d1d429a0d5",
+    "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+    "app/src/storage/catalog.rs": "8c0462983afb7e7d877f661d3c49b63eae71de0b0b95c5e61f7c291c1f2cf35a",
+    "app/src/storage/authorization.rs": "c53609ef588351a322acf47ff249fd7423d49eef01848d8a4213bea4f0c05a32",
+    "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+    "app/src/lib.rs": "381db89b74187d80ebd7300b1e1a9823596a3c3a422a55632f5552a7ab2b305f",
+    "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+    "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+    "fixtures/phase-one/v1/setup.json": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
+    "app/migrations/catalog-query.json": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963",
+    "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+    "app/migrations/manifest.json": "13976faa01ee527a81524d969e2aee864ef42e78368b69e8bee67895b8287bd5",
+    "evidence/APP-008/managed-harness-preparation.md": "315659239adcf7464e426d5ff44043403b6c7185b598fed2d53a54227f6ea351"
+  },
+  "observed_boundary": [
+    "The new managed_qualification module is declared only under cfg(test). The ignored entry requires an exact selector/argument shape, explicit arming and UID65532.",
+    "Closed private manifest binds original issued/expiry at most600 seconds, fixed endpoint/port/database/ResourceId, exact two synthetic organizations, canonical registry bytes, source/resource hashes and fixed paths.",
+    "The proposed entry uses production Settings::new and Stores; its private synthetic TrustedRequest factory remains inside the test module.",
+    "Shared case task panic payloads are suppressed; timeout requests abort and awaits the task before Stores.close. A4-second cleanup reserve and original-deadline watchdog are present in draft. These paths were not qualified by this reviewer."
+  ],
+  "identified_narrow_concerns": [
+    {
+      "id": "source-binding",
+      "initial_issue": "Initial Pins lacked a source identity while binding only fixture/catalog/migration resources.",
+      "draft_repair": "Added checked source_bundle_sha256 over11 explicitly named compiled source/lock inputs, including managed_qualification.rs. It is explicitly not full image or Git attestation.",
+      "review_state": "Narrow repair inspected; not compiled or tested."
+    },
+    {
+      "id": "deadline-conversion",
+      "initial_issue": "The original conversion added parsing/hash time after the wall-clock sample.",
+      "draft_repair": "Capture a monotonic sample before parsing/hashing and derive the deadline from that sample.",
+      "review_state": "Narrow repair inspected; timing behavior not tested."
+    }
+  ],
+  "unresolved_review_questions": [
+    "Finish reviewing the entire frozen source and any author-added tests; this review stopped before completion.",
+    "Prove actual Stores.close and transport release after shared-case success, panic and timeout, including task cancellation/await and original-deadline watchdog behavior. Do not infer cleanup from pre-constructor refusals.",
+    "Prove output and panic privacy with sentinel synthetic credentials and bounded actual subprocess receipts. Validate exact selector/arming and invalid-file paths before any database connection.",
+    "Review private file ownership/modes/link/FIFO/size/encoding handling, closed/duplicate-key parsing, target/org/pin mismatch and original deadline refusal tests.",
+    "Confirm compiled source-bundle algorithm and packaging binding. Source/image identity, CA provenance and RDS ResourceId require separate root-owned immutable-image/control-plane receipts.",
+    "Fixed-path CA digest self-consistency was accepted by root for local synthetic TLS qualification; the real package must bind the reviewed RDS CA and prohibit mounts/overrides. No TLS bypass or Settings::fixture may select the managed entry.",
+    "Root-owned separate package/supervisor is not qualified here: it must preserve role separation, no operator password, fixed files/selector, credential refresh, original deadline and bounded cleanup."
+  ],
+  "required_next_checks": [
+    "Focused manifest/file/selector/deadline/privacy unit and subprocess tests.",
+    "Actual isolated accepted-hostname/TLS positive using the production Settings::new path and a confined synthetic CA; label it local, not RDS/IAM proof.",
+    "Meaningful case-panic/timeout/cancellation tests observing Stores.close, all pool permits/transports released and sanitized output.",
+    "Production library/private-construction checks and relevant strict lint/format checks after source freezes.",
+    "Later actual RDS/IAM, full per-role/RLS/FK/reuse/race/drift/HTTP/recovery matrix remains required; the six reused local case groups do not pass it."
+  ],
+  "actions_by_this_reviewer": {
+    "cargo_builds": 0,
+    "tests": 0,
+    "containers": 0,
+    "cloud_or_provider_calls": 0,
+    "git_operations": 0,
+    "source_or_ticket_edits": 0,
+    "private_secret_values_read": 0
+  },
+  "local_resources": {
+    "reviewer_owned_active_resources": [],
+    "reviewer_cleanup_required": false,
+    "author_lane_resources": "Author confirmation requested; parent owns collecting author status. Do not infer author cleanup from this reviewer lane."
+  },
+  "limitations": [
+    "No independent acceptance or launch signal.",
+    "No new managed execution occurred.",
+    "Historical36-case local proof remains historical and is not relabeled as managed qualification."
+  ],
+  "snapshot_rechecked_unchanged": true
+}
