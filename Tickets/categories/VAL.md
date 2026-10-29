@@ -15,4 +15,4 @@ Synthetic fixtures, both app journeys and reproducible release evidence.
 | 71 | [APP-069: Qualify load, noisy neighbor and budgets at declared limits](../0-backlog/APP-069.md) | [PH06](../phases/PH06.md) | S12 | VAL | P0 | M | Backlog | APP-024, APP-059, APP-060, APP-067 |
 | 72 | [APP-070: Independent release security and accessibility review](../0-backlog/APP-070.md) | [PH06](../phases/PH06.md) | S12 | VAL | P0 | M | Backlog | APP-062, APP-063, APP-064, APP-065, APP-068, APP-069 |
 | 74 | [APP-072: Evaluate one real recurring workflow and second-person reuse](../0-backlog/APP-072.md) | [PH06](../phases/PH06.md) | S12 | VAL | P1 | M | Backlog | APP-058, APP-070, APP-071 |
-| 78 | [APP-076: Run the Phase 1 integrated managed trial](../0-backlog/APP-076.md) | [PH01](../phases/PH01.md) | S02 | VAL | P0 | L | Backlog | APP-012, APP-013, APP-014, APP-074, APP-078 |
+| 78 | [APP-076: Run the beta go-live trial on the live deployment](../9-blocked/APP-076.md) | [PH01](../phases/PH01.md) | S02 | VAL | P0 | L | Blocked | APP-012, APP-013, APP-014, APP-074, APP-078 |

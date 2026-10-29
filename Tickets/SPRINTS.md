@@ -2,7 +2,7 @@
 
 Sprints are ordered scope batches within the [implementation phases](PHASES.md), not calendar promises. Scheduling and capacity are agreed at sprint entry. Later batches are forecasts; split work before selection when it exceeds five focused days.
 
-Current board: Backlog: 68, Selected: 0, In progress: 0, In review: 1, Done: 6, Blocked: 3.
+Current board: Backlog: 68, Selected: 0, In progress: 1, In review: 1, Done: 6, Blocked: 4.
 
 | Sprint | Phase | Outcome | Tickets |
 |---|---|---|---|
@@ -16,5 +16,5 @@ Current board: Backlog: 68, Selected: 0, In progress: 0, In review: 1, Done: 6, 
 | [S08: Bounded AI creation and retrieval](sprints/S08.md) | [PH03](phases/PH03.md) | Real retrieval/adaptation/generation proposes valid apps without gaining authority or leaking evidence. | 6 |
 | [S09: Safe handoff and synthetic recovery](sprints/S09.md) | [PH04](phases/PH04.md) | Colleagues continue or independently reuse work with current access and demonstrable recovery. | 6 |
 | [S10: Working dual-app release gate](sprints/S10.md) | [PH04](phases/PH04.md) | Northstar and Spend Review complete S01–S07 on one unchanged platform build. | 4 |
-| [S11: Hosted pilot controls](sprints/S11.md) | [PH05](phases/PH05.md) | Prepared hosted deployment and lifecycle controls support a defined pilot scope. | 9 |
-| [S12: Measured operations and pilot entry](sprints/S12.md) | [PH06](phases/PH06.md) | Measured capacity/recovery/security and operational ownership support the pilot decision. | 6 |
+| [S11: Hosted pilot controls](sprints/S11.md) | [PH05](phases/PH05.md) | Prepared hosted deployment and lifecycle controls support a defined pilot scope. | 10 |
+| [S12: Measured operations and pilot entry](sprints/S12.md) | [PH06](phases/PH06.md) | Measured capacity/recovery/security and operational ownership support the pilot decision. | 7 |

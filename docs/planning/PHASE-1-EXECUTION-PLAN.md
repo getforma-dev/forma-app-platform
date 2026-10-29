@@ -24,7 +24,7 @@ Copied from the specs; every task inherits them.
 - Design values: workspace session 12 h absolute / 1 h idle, pre-login state 10 min, `__Host-` HttpOnly Secure SameSite=Lax cookies; idempotency key ≥128 bits CSPRNG scoped to (organization, principal, work, command, key), outcome checked before expected version, outcomes retained 24 h, same key with different canonical payload → 409; error codes 404 uniform denial, 403 `cross_site`, 409 conflict with recovery view, 412 stale, 422 `narrow_the_query`, 429 with `Retry-After`, 503 only for provider/store unavailability; admission limits 24 views, 8 operations per view, 256 KiB definition, 500 rows per page; query deadline 1.8 s, DuckDB 2 threads / 1 GiB, read-only, no extensions or httpfs; one JWKS refetch per minute, fail closed; totals cover the full authorized input and a failed calculation is an error, never a zero.
 - Fixture semantics stay exact: Northstar 1,140,000 / 900,000 / 114,000, ops-runner 210,000 / 30,000 / 21,000, Spend Review 64,000 cents total and 45,000 cents at `amount_cents >= 20,000`; S05 versions 0→1→2 with ik-1/ik-2 and stale ik-3 → 409.
 - Identity: literal issuer `gatewasm`, audience `gatewasm-app`, access 900 s, access-only `/auth/jwks`; `sub` equals `user.id`; `user.email_verified` is backend metadata; provider identifiers `ten_`/`usr_` map through the closed registry (≤32 bindings, restart to replace) to GenUI organization UUIDs `…0001` (Northstar) and `…0002` (Canary); no fAuth token JSON or Set-Cookie ever reaches the browser.
-- Operations: $100/month cap with the $5 auth allowance counted once; October headroom is $2.51 and the ledger 24-hour reconciliation rule applies; single GenUI operator; no push to GitHub while organization billing is blocked; no LLM call before APP-043; no real customer data; APP-075 schema changes never overlap an auth window; observe STOPPED before claiming cleanup.
+- Operations: $100/month cap for the bounded qualification windows with the $5 auth allowance counted once (October headroom $2.51; the ledger 24-hour reconciliation rule applies); the always-on beta needs the new monthly figure ADR-008 asks Victor for; single GenUI operator; the repository is public under its all-rights-reserved notice until deployment is complete; no LLM call before APP-043; no real customer data; GenUI schema changes never overlap a fAuth deployment operation; observe STOPPED (or, for the beta, RUNNING on the recorded digest) before claiming the end state.
 - Done requires independent review, exact-source CI and landing on `origin/main`; local checks are evidence, never a CI pass.
 
 ## Review focus
@@ -76,9 +76,9 @@ Victor: GitHub billing ─┐
 T1 land APP-008 + APP-011 (CI, main) ──► APP-073/APP-010 Selected
 T2 ADR-007 ──► T3 runner N-versions ──► T4 0003 ──► T5 APP-073 ──► T7 APP-009 ──► T8 APP-074 local
                                      └─► T6 APP-010 ─────────────────────────────► T9 APP-012 ──► T10 APP-013 ──► T11 APP-014
-Track B: APP-075 (B1 entry tests → B2 local harness → B3 image/supervisor) ∥ APP-077 (B4 operator package → B5 coordinator) → APP-078 (B6 RDS window after any auth window → B7 review)
-Track C (hosted):  C1 pre-start → C2 joint identity rehearsal (APP-006 consumer items) → FormaStack mail follow-on + controlled-mail trial → C3 FORMA-247 cleared → C4 APP-074 hosted
-Track D:           APP-076 integrated trial (needs T11, C4, B7) → PH01 GATE.md
+Track B: APP-075 (B1 entry tests → B2 local harness → B3 image/supervisor) ∥ APP-077 (B4 operator package; B5 coordinator deferred to APP-080) → APP-078 (B6 RDS window, ADR-008 rows → B7 review)
+Track C (beta):    C0 merged contract bound (done) → C1 Victor's figure + mail transport → C2 FormaStack lean fAuth + mail (FORMA-366) → C3 GenUI deploy (APP-078 window, service up, codes)
+Track D:           APP-076 beta go-live trial in Chrome (needs T11, C3, FORMA-366) → PH01 GATE.md (names APP-079/080 deferrals)
 ```
 
 ---
@@ -301,7 +301,9 @@ B1–B3 belong to APP-075 and B4–B5 to APP-077; both depend only on APP-008 an
 
 - [ ] Steps: package `runtime.apply_migrations`, `tenant_seed.seed`, `contracts/validate.py` and fixtures, `admission_operator.py`; S3 upload of fixture source bytes to `o/<org>/sources/…` with KMS; tests; image build; CDK tests; review; commit.
 
-### Task B5 (APP-077): Two-process race coordinator (local proof)
+### Task B5 (APP-080, deferred by ADR-008): Two-process race coordinator (local proof)
+
+Not a PH01 task since ADR-008: APP-080 (PH05) owns the coordinator and the RDS lock-observation rows before any real organization. The steps below stay as the implementation plan for that ticket.
 
 **Files:** Create `app/qualification/race_coordinator.py`, `app/src/storage/managed_races.rs` (cfg(test)); `evidence/APP-075/coordinator/README.md`.
 
@@ -309,56 +311,59 @@ B1–B3 belong to APP-075 and B4–B5 to APP-077; both depend only on APP-008 an
 
 - [ ] Steps: tests on disposable PG 16.13/TLS first; implement; run; review; commit.
 
-### Task B6 (APP-078): The RDS window (after APP-075 and APP-077 Done, after any auth window, Victor-approved)
+### Task B6 (APP-078): The RDS window (after APP-075 and APP-077 Done, outside any fAuth deployment operation, Victor-approved; ADR-008 rows)
 
 - [ ] Reconcile the ledger basis; new window UUID via `infra/scripts/preflight.py --input … --ledger …` (count 0, `extra_task_hours` ≥ 2); TemplateURL upload path reviewed; stack update with the new `ImageDigest` and the two optional task definitions after observing 0/0/0 and the consumer stopped.
-- [ ] Decide and review the drift-trial target (temporary restored instance with reviewed `rds-db:connect` bindings, or a recorded limitation) and the ten-minute campaign cap before reserving; follow `evidence/APP-008/managed-plan.md` steps 1–7 exactly, including the read-only pre-mutation comparison with its stop-for-review rule, applying every landed migration and seeding; run the matrix via the qualification task; probe `https://beta.getforma.dev` from the production image; stop everything; observe STOPPED; clean up; reconcile the ledger.
+- [ ] Review the ten-minute campaign cap against image startup and reserved task-hours; the drift-trial target choice moved to APP-080 (ADR-008). Run the ADR-008 rows only (readiness comparison, migrations once and again, seed, four role bindings, grant/RLS isolation matrix, HTTPS surface); take the pre-migration snapshot but leave its restore drill to APP-080.
 - [ ] Retain receipts under `evidence/APP-078/`; independent review; move APP-078 to In review, then Done after CI/landing of any source changes.
 
 ---
 
-## Track C — hosted identity with FormaStack (joint; Victor approves each slot)
+## Track C — beta go-live path with FormaStack (ADR-008)
 
-### Task C0: Bind the merged provider contract
+The joint six-hour identity rehearsal, its pre-start list and its in-window runbook are deferred to APP-079 / FORMA-365 by Victor's disposition of 2026-10-29 ([ADR-008](../architecture/ADR-008-YC-DEMO-AND-BETA-MVP.md)). Track C now puts fAuth and GenUI live for the invite-first beta. The old C1/C2 material stays valid for APP-079 in `evidence/APP-006/hosted-callback/schema-one-sequence/` and `evidence/APP-006/window-schedule-collision-check-20261029.md`.
 
-- [ ] Copy `handoff/forma-247/README.md`, `handoff/forma-247/config.example.json` and the PR18/PR19 route documentation from the FormaStack checkout at `dfba787` (read-only) into `evidence/APP-006/upstream-auth-source/` with a hash-bound receipt; record in APP-006 that the server-only invitation and PAR contract is accepted source (hosted evidence still open) and that verification is attested through backend response metadata (`user.email_verified`), not a JWT claim. Ask the FormaStack owner for the FORMA ticket id that owns the mailbox follow-on and apply the ADR-005 item 7 gate split in `Tickets/external-dependencies.json`.
+### Task C0: Bind the merged provider contract (done 2026-10-29)
 
-### Task C1: GenUI pre-start list
+- [x] `handoff/forma-247/README.md`, `config.example.json` and `provision.py` at gatewasm `dfba787` and `MAIL-VERIFICATION.md` plus the `return_entry_url` provisioning change at `1bf5d3b` are hash-bound in `evidence/APP-006/upstream-auth-source/merged-contract-2026-10-29/` (fetched from the now-public repository, blob SHA-1s matching GitHub's tree; the FormaStack checkout was not touched). APP-006 records the server-only invitation and PAR contract and the mail contract as accepted merged source; verification is attested through `user.email_verified`, not a JWT claim.
+- [x] Gate split applied in `Tickets/external-dependencies.json`: FORMA-247/248 cleared by disposition with the disposition record as evidence; FORMA-365 blocks APP-058 and APP-079; FORMA-366 blocks APP-076.
 
-- [ ] Ledger reconciliation: rewrite `reconciled_at_utc` and `basis` in `.cache/operations/beta/budget-ledger.json` from actual retained resources and task history (preserve every cent and window; retain the previous file hash in a private receipt).
-- [ ] Preflight a new window UUID with `service_desired_count 0`, `image_digest` = callback index `sha256:a4a47707…`, ARM64, `deployment_expires_at_utc` = agreed Tstop, `qualification_config_secret_arn` of a freshly created `genui-qualification-*` secret; headroom check: October ≤ $2.51 or a reconciled 2026-11 month.
-- [ ] Review the TemplateURL upload path (destination prefix in the CDK bootstrap bucket or an operator-owned prefix; record exact key and hash) and prepare `create-change-set`/`describe-change-set`/`execute-change-set` request files; read back the stack policy.
-- [ ] Prepare the closed callback secret document (S1 existing Maya, then S2 fresh signup) without logging values.
-- [ ] Write the auth-staging DNS procedure (Porkbun API: create the CNAME and ACM validation records FormaStack returns at about T0+1:15, retain record ids privately, delete them at T0+4:30 cleanup, never touch `beta.getforma.dev` or unrelated records); no such procedure exists in the repository yet.
-- [ ] Check FormaStack's `work/FORMA-247/rehearsal/WINDOW-SCHEDULE.md` against `evidence/APP-006/hosted-callback/schema-one-sequence/activation-runbook.md` for collisions (S1/stop/S2/key tool inside W→W+60; auth-staging DNS at ~T0+1:15; GenUI DNS cleanup at T0+4:30) and reply.
-- [ ] Report readiness to the FormaStack owner; the T0 proposal goes to Victor.
+### Task C1: Victor's two choices (they block only the hosted steps C2–C3 and Track D)
 
-### Task C2: In-window execution (activation runbook)
+- [ ] The monthly figure for the always-on beta (ADR-008 default about $185–205/month including FormaStack's lean fAuth, or a scheduled daily window). Record it as a dated amendment in `docs/planning/SYNTHETIC-ENVIRONMENT-COST.md` and rewrite the ledger `basis` in `.cache/operations/beta/budget-ledger.json` from actual retained resources before any reservation.
+- [ ] The mail transport (default Amazon SES SMTP in account 877573132739 with a verified `getforma.dev` sender; alternative Resend). GenUI creates the DNS records at Porkbun and records the record ids privately; FormaStack configures fAuth's SMTP secret.
 
-- [ ] Fresh schema-1 read-only SQL observation (temporary task definition copy, `auth_schema_preflight.py --emit-override`), then `preflight.py --activate`; S1 three browsers, observed stop, new secret version, S2; key-tool five-case run inside a stable segment; stop; cleanup; receipts under `evidence/APP-006/hosted-rehearsal-<date>/`; APP-006 log; cross-team handoff update.
+### Task C2: FormaStack deploys fAuth lean for the beta (FORMA-366; FormaStack's work, GenUI receives)
 
-### Task C3: FORMA-247 clearance and APP-074 hosted acceptance
+- [ ] Request from the FormaStack owner, with Victor's approvals quoted: a qualified image at or after `1bf5d3b`, a lean always-on deployment, tenants mapped to Northstar `…0001` and Canary `…0002`, the beta client with exact callback `https://beta.getforma.dev/auth/callback` and `return_entry_url` `https://beta.getforma.dev/signin/{handle}` (handles supplied by GenUI from APP-009's registry), the controlled-inbox trial receipt, and the deployed issuer identity plus `ten_`/`usr_` identifiers delivered privately.
+- [ ] Record the receipt under `evidence/APP-006/upstream-auth-source/`, write the private identity registry file (ADR-004, at most 32 bindings) and the beta client configuration into the execution secret, set FORMA-366 `cleared` in the register, regenerate the board; APP-076 leaves Blocked.
 
-- [ ] After FormaStack merges the mail follow-on and a separately scoped controlled-mail trial is approved: run APP-074's hosted items (three browsers, real mailbox, direct API denials, forwarded-IP forgery, limits, rollback) against the deployed APP-009/074 image; record FormaStack's receipts in APP-006; set FORMA-247 `cleared` in `Tickets/external-dependencies.json` with evidence; move APP-006 and APP-074 through review to Done.
+### Task C3: GenUI deploys the beta build (after Tasks 1–11 and B6)
+
+- [ ] APP-078's window with the service stopped (ADR-008 rows: readiness comparison, migrations 0003–0006 once and again, seed, four role bindings, grant/RLS isolation matrix, HTTPS surface, cleanup); then set the service desired count to 1 on the exact candidate image, point `beta.getforma.dev` at the load balancer with the already validated certificate, and issue the YC viewers' and demo principals' invite codes with the operator CLI (raw codes delivered privately once). The service stays running.
 
 ---
 
-## Track D — APP-076 integrated managed trial and the PH01 gate
+## Track D — APP-076 beta go-live trial and the PH01 gate
 
-- [ ] After Tasks 9–11, B6 (APP-078) and C3, under a separately approved hosted-auth allowance for this window: one reserved window; operator task applies remaining migrations; run the APP-076 acceptance list end to end on `https://beta.getforma.dev` with the hosted fAuth; stop, clean up, reconcile; independent review; APP-076 Done.
-- [ ] Create `evidence/phases/PH01/GATE.md` from `Tickets/_tools/PHASE-GATE.md`, bind every exit criterion to its ticket evidence, record limits and amendments (ADR-005/006/007), obtain the independent reviewer's decision, then set `gate_status: passed` with the evidence reference in `Tickets/plan.json`, render and check the board, update `docs/planning/PHASE-2-HANDOFF.md` to READY.
+- [ ] After Tasks 9–11, B6/C3 and FORMA-366 cleared: run APP-076's acceptance list in installed Chrome against `https://beta.getforma.dev` with real mail; exercise rollback as a redeploy of the previous task definition and restore the service; reconcile the ledger against the approved beta figure; independent review; APP-076 Done with the service observed RUNNING on the recorded digest.
+- [ ] Create `evidence/phases/PH01/GATE.md` from `Tickets/_tools/PHASE-GATE.md`, bind every exit criterion to its ticket evidence, record limits and amendments (ADR-005/006/007/008) and name the ADR-008 deferrals (APP-079 in PH06, APP-080 in PH05) as limitations, obtain the independent reviewer's decision, then set `gate_status: passed` with the evidence reference in `Tickets/plan.json`, render and check the board, update `docs/planning/PHASE-2-HANDOFF.md` to READY.
 
 ---
 
 ## Victor's actions (only these)
 
-1. Repository visibility: public with the all-rights-reserved notice while CI is needed (done at his direction on 2026-10-29); set it back to private after deployment, remembering that any fork made meanwhile stays public.
-2. Approve each proposed window slot (joint identity rehearsal; APP-078 RDS window; APP-076 window), each a few dollars inside the $100 cap.
-3. Approve the additional hosted-auth allowances FormaStack needs to operate fAuth with mail during the controlled-mail trial (APP-074) and the integrated trial (APP-076); the existing $5 covers only the identity-only rehearsal.
+1. Approve the monthly figure for the always-on beta (ADR-008; default about $185–205/month including FormaStack's lean fAuth) or choose the scheduled-window alternative.
+2. Choose the mail transport (default Amazon SES with a verified `getforma.dev` sender) and approve its small cost.
+3. Approve the APP-078 window slot when GenUI proposes it (a few dollars inside the approved figure).
+
+Repository visibility stays public with the all-rights-reserved notice until the beta deployment is complete (done at his direction on 2026-10-29); setting it back to private afterwards is his call, remembering that any fork made meanwhile stays public.
+
+---
 
 ## Self-review
 
-- Spec coverage: every PH01 acceptance sentence maps to a task (APP-073 → 4–5, APP-010 → 6, APP-009 → 7, APP-074 → 8 + C3, APP-012 → 9 + D, APP-013 → 10, APP-014 → 11, APP-075 → B1–B6, APP-076 → D, APP-006 → C1–C3, APP-008/011 → 1); PH01 exit criteria 1–5 → D.
+- Spec coverage: every PH01 acceptance sentence maps to a task (APP-073 → 4–5, APP-010 → 6, APP-009 → 7, APP-074 → 8, APP-012 → 9 + D, APP-013 → 10, APP-014 → 11, APP-075 → B1–B3, APP-077 → B4, APP-078 → B6/C3, APP-076 → D, APP-006 → C0, APP-008/011 → 1); the ADR-008 deferrals are APP-079 (PH06) and APP-080 (PH05); PH01 exit criteria 1–5 → D.
 - Type consistency: `VerifiedNonmember`, `Admission`, `CommandResult`, `CommandRequest`, `QueryRun`, `TrustedRequest` constructor location and the three definer functions are named identically in Tasks 2, 4, 5, 7, 9, 10, 11.
 - Review focus: the five failure modes each have an owning task and test.
 - Proportion: the plan decides files, names, signatures, orders and values; bodies are left to the implementer except the ADR-004 transaction order, which the spec fixes.

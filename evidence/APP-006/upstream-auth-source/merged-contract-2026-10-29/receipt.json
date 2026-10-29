@@ -1,0 +1,78 @@
+{
+  "recorded_at_utc": "2026-10-29T19:30:00Z",
+  "recorded_by": "GenUI owner (Claude), read-only through the public GitHub API; nothing in the FormaStack checkout was touched",
+  "repository": "https://github.com/getforma-dev/gatewasm",
+  "visibility_at_capture": "public",
+  "license_metadata": "BUSL-1.1 (PR 21, merge e889bcbd033c1248542957328fd95215c7bd8b40, 2026-10-29T18:51:14Z)",
+  "commits": {
+    "dfba787295b880816fd95295b507a4527c51e62f": "rehearsal image source: PR18 (server-only invitation, PAR, access-only JWKS) and PR19 (redirect contents removed from logs)",
+    "1bf5d3b2fb515c8ed82b0c5a044f7846915e28d0": "merge of PR 20 \"feat(auth): truthful mail outcomes, one-use bound verification, fresh-sign-in return\", head 229d27adb17e14ece3248e042ee3a558b031a1be, merged 2026-10-29T18:51:32Z; parents e889bcb and 229d27a"
+  },
+  "check_runs_on_229d27a": {
+    "E2E smoke tests": "success",
+    "Rust unit tests": "success",
+    "Integration tests": "success",
+    "Lockfile integrity": "success",
+    "Managed key custody infrastructure": "success",
+    "Frontend validation": "success",
+    "Socket Security: Pull Request Alerts": "success",
+    "Socket Security: Project Report": "success",
+    "source": "GET repos/getforma-dev/gatewasm/commits/229d27a/check-runs, workflow run 40928751981"
+  },
+  "fetched_with": "gh api -H \"Accept: application/vnd.github.raw+json\" repos/getforma-dev/gatewasm/contents/handoff/forma-247/<file>?ref=<commit>; git blob SHA-1 of each saved file equals the blob listed by GET git/trees/<commit>?recursive=1",
+  "files": [
+    {
+      "path": "dfba787/README.md",
+      "git_blob_sha1": "42e37e95b5edbf550055c9ee95421bdf0b07b15f",
+      "sha256": "b9b18a97da4b8ee3a1c5c7e28e9084cf68c7991c32e89013b6728f660ce83ee6",
+      "bytes": 10939
+    },
+    {
+      "path": "dfba787/config.example.json",
+      "git_blob_sha1": "ff831d229549080673070554849be9cc15ace507",
+      "sha256": "2973c1d6130cdd56a7f5e2af8bd79e497033fbacd54e0fb428e6130fd49acb9c",
+      "bytes": 1119
+    },
+    {
+      "path": "dfba787/provision.py",
+      "git_blob_sha1": "ca8f1161edb209e9bb4c17b3ace5b48eb1be6156",
+      "sha256": "6dc21024d5aa1c90f2227032be228ae5a7c5fb9b4111e16daef40260bed90860",
+      "bytes": 10149
+    },
+    {
+      "path": "1bf5d3b/MAIL-VERIFICATION.md",
+      "git_blob_sha1": "406bb69cceaa7cee8ece6f43f763a86f7e44da7c",
+      "sha256": "2964ecd3b5588a564d2794461489841609a2fe2f9d9f003d8dfd61795d5e4ec9",
+      "bytes": 5841
+    },
+    {
+      "path": "1bf5d3b/README.md",
+      "git_blob_sha1": "42e37e95b5edbf550055c9ee95421bdf0b07b15f",
+      "sha256": "b9b18a97da4b8ee3a1c5c7e28e9084cf68c7991c32e89013b6728f660ce83ee6",
+      "bytes": 10939
+    },
+    {
+      "path": "1bf5d3b/config.example.json",
+      "git_blob_sha1": "ff831d229549080673070554849be9cc15ace507",
+      "sha256": "2973c1d6130cdd56a7f5e2af8bd79e497033fbacd54e0fb428e6130fd49acb9c",
+      "bytes": 1119
+    },
+    {
+      "path": "1bf5d3b/provision.py",
+      "git_blob_sha1": "1ed3137b175580e6e2d3637991090f0518da8053",
+      "sha256": "047a57c462eabaebe99aa70c9a8d8a5ccb28bfdb70e300f1f26f73496748d09f",
+      "bytes": 10728
+    }
+  ],
+  "what_this_is": "Hash-bound copy of the merged provider contract GenUI consumes (ADR-003 server-only invitation and PAR, ADR-006 mail verification and resend outcomes, return_entry_url). It is accepted source. It is not a deployed or qualified image: the rehearsal image remains dfba787, and the mail image qualification, transport and controlled-inbox trial are FORMA-366.",
+  "unchanged_between_commits": [
+    "README.md",
+    "config.example.json"
+  ],
+  "changed_between_commits": [
+    "provision.py adds an optional per-tenant return_entry_url validated against app_origin with no query or fragment"
+  ],
+  "new_at_1bf5d3b": [
+    "MAIL-VERIFICATION.md"
+  ]
+}

@@ -17,3 +17,4 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 69 | [APP-067: Instrument SLOs, cost and payload-safe telemetry](../0-backlog/APP-067.md) | [PH06](../phases/PH06.md) | S12 | OPS | P1 | L | Backlog | APP-059, APP-060, APP-062, APP-063 |
 | 70 | [APP-068: Exercise restore and failure drills](../0-backlog/APP-068.md) | [PH06](../phases/PH06.md) | S12 | OPS | P0 | L | Backlog | APP-061, APP-064, APP-065, APP-067 |
 | 73 | [APP-071: Publish operator/run/release/rollback and incident runbooks](../0-backlog/APP-071.md) | [PH06](../phases/PH06.md) | S12 | OPS | P0 | M | Backlog | APP-066, APP-067, APP-068, APP-070 |
+| 80 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](../0-backlog/APP-080.md) | [PH05](../phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-078 |

@@ -169,14 +169,14 @@
         "Adopted typed contracts and measured native/parser/query qualification on Forma 3.2 (APP-001–006).",
         "Reproducible app scaffold, synthetic managed-store environment, tenant schema and session boundary (APP-007–009).",
         "Admitted definition, deterministic fixtures, query receipt, atomic command/outcome/audit and retry/conflict harness (APP-010–014).",
-        "Invite-first beta entry at beta.getforma.dev: owner-issued codes, persisted trial entitlement, tenant-scoped hosted signup and protected-route refusal (APP-073/074; ADR-003), qualified on managed RDS and in the integrated trial (APP-075–078; ADR-005)."
+        "Invite-first beta entry at beta.getforma.dev: owner-issued codes, persisted trial entitlement, tenant-scoped hosted signup and protected-route refusal (APP-073/074; ADR-003), qualified on managed RDS and in the beta go-live trial, then left running as the invite-first beta that the YC demo is recorded on (APP-075–078; ADR-005, ADR-008)."
       ],
       "exit_criteria": [
         "APP-001–014 and APP-073–078 are Done with reproducible build, schema, parser/query confinement and native adoption evidence; compile refusals and numeric/resource bounds are tested.",
-        "FORMA-246 conformance, FORMA-232 budget disposition and FORMA-247 hosted-auth receipts are accepted by GenUI in APP-003/006.",
-        "The integrated query → receipt → explicit command → atomic outcome/audit → reopen path passes; identical retries do not duplicate writes, stale edits conflict, and both revocation/adoption race orders pass (APP-012–014 locally; APP-076 on the managed path).",
-        "Tenant isolation and authoritative identity checks pass on the actual integrated path. Synthetic/local test substitutes are identified and cannot satisfy hosted integration acceptance.",
-        "Public HTTPS preserves invite-first registration and server-bound organization scope; anonymous/pre-access/expired/revoked users cannot dispatch protected work. Actual hosted registration, real verification delivery and mailbox activation, three-browser admission, code concurrency/revocation and bounded $100/month environment evidence pass. LLM calls remain disabled before APP-043."
+        "FORMA-246 conformance, FORMA-232 budget disposition and FORMA-247 are accepted by GenUI in APP-003/006; FORMA-247 is accepted by founder disposition on merged, CI-passing source (ADR-008), and its deferred hosted proof is FORMA-365 / APP-079 before any real organization.",
+        "The integrated query → receipt → explicit command → atomic outcome/audit → reopen path passes; identical retries do not duplicate writes, stale edits conflict, and both revocation/adoption race orders pass (APP-012–014 locally; APP-076 on the live beta path; the RDS lock-observation repeat of both orders is APP-080 by ADR-008).",
+        "Tenant isolation and authoritative identity checks pass on the actual integrated path (the RDS grant/RLS matrix in APP-078; identity and the private-route refusal matrix on the live deployment in APP-076). Synthetic/local test substitutes are identified and cannot satisfy hosted integration acceptance.",
+        "Public HTTPS preserves invite-first registration and server-bound organization scope; anonymous/pre-access/expired/revoked users cannot dispatch protected work. Actual hosted registration, real verification delivery and mailbox activation and code concurrency/revocation pass in installed Chrome on the live beta (APP-076); native Safari and Firefox admission is APP-079 (ADR-008). The environment runs inside the monthly figure Victor approves for the always-on beta, which replaces the bounded-window $100 assumption (ADR-008). LLM calls remain disabled before APP-043."
       ],
       "parallel_work": "FormaStack owns 232/246/247 and later 248. GenUI may advance contracts, parser/query spikes, scaffold, tenant schema and fixtures when their own ticket dependencies permit; only dependent integration acceptance waits.",
       "order": 1,
@@ -265,15 +265,17 @@
       "deliverables": [
         "Named pilot workflow/data/operator/budget/region/disclosure plan and FormaStack key-custody receipt (APP-058).",
         "Role-separated infrastructure and service identity, reproducible signed builds and reversible rollout (APP-059–061).",
-        "Append-only audit/anchors, constrained support, retention/crypto-shredding, organization deletion and administration (APP-062–066)."
+        "Append-only audit/anchors, constrained support, retention/crypto-shredding, organization deletion and administration (APP-062–066).",
+        "Managed races, drift and recovery qualification on RDS before any real organization (APP-080; ADR-008)."
       ],
       "exit_criteria": [
-        "FORMA-248 key custody/rotation/outage evidence is accepted, and the pilot scope/operator/budget/data decisions are recorded. APP-058 does not approve live customer data.",
+        "FORMA-365 key custody/rotation/outage evidence (the hosted campaign deferred from FORMA-248 by founder disposition, ADR-008) is accepted, and the pilot scope/operator/budget/data decisions are recorded. APP-058 does not approve live customer data.",
         "Role and service-token negative tests pass; unsigned/mismatched release artifacts are refused. SBOM/provenance and exact deployable digest are retained (APP-059–061).",
         "Run previous/current API compatibility, migration upgrade → downgrade → upgrade, callee-first canary and rollback trials in the intended isolated environment; record actual candidate identities and stop conditions (APP-061).",
-        "Audit-chain/anchor checks, just-in-time support/breakglass, destructive-action governance with the recorded platform AR1 fallback where applicable, retention and the 24-hour organization-deletion hold pass (APP-062–066)."
+        "Audit-chain/anchor checks, just-in-time support/breakglass, destructive-action governance with the recorded platform AR1 fallback where applicable, retention and the 24-hour organization-deletion hold pass (APP-062–066).",
+        "The RDS recovery drill, pool-lifecycle, two-order concurrency and drift/readiness rows deferred from APP-077/078 pass with real lock observations (APP-080)."
       ],
-      "parallel_work": "FormaStack can deliver key custody earlier while GenUI proves the synthetic demo. Hosted controls can be prepared independently where their ticket prerequisites allow; qualification remains ahead of customer admission.",
+      "parallel_work": "FormaStack can deliver the FORMA-365 custody campaign earlier while GenUI proves the synthetic demo. Hosted controls can be prepared independently where their ticket prerequisites allow; qualification remains ahead of customer admission.",
       "order": 5,
       "depends_on": [
         "PH04"
@@ -290,13 +292,14 @@
         "Payload-safe telemetry, SLO/cost signals and actual restore/failure drills (APP-067/068).",
         "Open-loop load/noisy-neighbor/budget qualification and independent security/accessibility review (APP-069/070).",
         "Exercised operations/release/rollback runbooks and named support ownership (APP-071).",
-        "Final live-data entry record, then recurring customer workflow/second-person reuse evidence (APP-072)."
+        "Final live-data entry record, then recurring customer workflow/second-person reuse evidence (APP-072).",
+        "Deferred hosted identity acceptance: three-browser callback matrix, deployed negatives, rotation campaign and canary resource check on the live deployment (APP-079; ADR-008)."
       ],
       "exit_criteria": [
         "An isolated restore verifies relationships, audit and deletion-ledger replay; measured RPO/RTO meet adopted design targets. Process/role/zone/provider/key-store failures fail safely (APP-068).",
         "Cold/warm million-row, six-view peak, hot-record and 10x/noisy-neighbor trials report p50/p95/p99, errors, admitted/rejected load, bounded resources and fair quotas against explicit adopted limits (APP-067/069).",
         "Independent release review covers SR1–SR13, actual provider disclosure, revocation, service isolation, audit, deletion after restore and WCAG/keyboard/screen-reader evidence. Blockers are fixed and affected checks rerun (APP-070).",
-        "Before the first real organization sign-in or live row, record readiness using APP-058 scope/identity, APP-070 qualification and APP-071 operational evidence. This is the entry checkpoint for APP-072, not a requirement to finish customer learning before it starts.",
+        "Before the first real organization sign-in or live row, record readiness using APP-058 scope/identity, APP-079 hosted identity acceptance, APP-070 qualification and APP-071 operational evidence. This is the entry checkpoint for APP-072, not a requirement to finish customer learning before it starts.",
         "Then complete APP-072 recurring-use and second-person reuse observations with baseline effort, corrections, sample size and limits. No demo-only adoption claim. Archive the phase evidence after this learning completes."
       ],
       "parallel_work": "Telemetry and runbook preparation can proceed during synthetic qualification. Customer observations begin only after the live-data entry checkpoint; their elapsed observation period is separate from focused engineering effort.",

@@ -5,7 +5,7 @@ Categories describe ownership; sprints describe execution order. A ticket lives 
 | Category | Responsibility | Tickets |
 |---|---|---|
 | [FND: Foundation](categories/FND.md) | Released framework qualification, typed contracts and reproducible application structure. | 4 |
-| [IAM: Identity and access](categories/IAM.md) | Authenticated principals, tenant boundaries and service authority. | 9 |
+| [IAM: Identity and access](categories/IAM.md) | Authenticated principals, tenant boundaries and service authority. | 10 |
 | [ING: Evidence and imports](categories/ING.md) | Bounded CSV/XLSX ingestion, interpretation and immutable evidence. | 4 |
 | [QRY: Queries and provenance](categories/QRY.md) | Deterministic operations, exact semantics, receipts and resource bounds. | 7 |
 | [REC: Internal records](categories/REC.md) | Declared mutations, durable outcomes, conflict recovery and concurrency. | 3 |
@@ -15,4 +15,4 @@ Categories describe ownership; sprints describe execution order. A ticket lives 
 | [AI: AI and retrieval](categories/AI.md) | Authorized discovery, bounded generation, explanation and evaluation. | 5 |
 | [SHR: Sharing and handoff](categories/SHR.md) | Separate grants, derived information, revocation and exports. | 4 |
 | [VAL: Validation and demonstrations](categories/VAL.md) | Synthetic fixtures, both app journeys and reproducible release evidence. | 12 |
-| [OPS: Operations and security](categories/OPS.md) | Jobs, release controls, recovery, retention, support and pilot operations. | 13 |
+| [OPS: Operations and security](categories/OPS.md) | Jobs, release controls, recovery, retention, support and pilot operations. | 14 |
