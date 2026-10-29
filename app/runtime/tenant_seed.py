@@ -106,8 +106,9 @@ def seed(connection, bundles):
                 (o,a,r,item['id'],item['version'],digest('record-schema',item),canonical(item)), 5)
         policy = pub['policy']
         put('publication_policies', ('organization_id','policy_id','policy_version','kind'), (o,policy['id'],policy['version'],policy['kind']), 3)
-        put('publications', ('organization_id','app_id','publication_id','definition_revision_id','definition_digest','policy_id','policy_version','policy_kind','author_id','approver_id','approver_epoch','renderer_version','operator_version','admission_digest','published_at','canonical_envelope'),
-            (o,a,publication,r,pub['definition_digest'],policy['id'],policy['version'],policy['kind'],pub['author_id'],pub['approver_id'],pub['approver_epoch'],1,1,pub['admission_digest'],pub['published_at'],canonical(pub)), 3)
+        # ADR-007 amendment (APP-010 review M1): each seeded app has one publication, its first.
+        put('publications', ('organization_id','app_id','publication_id','definition_revision_id','definition_digest','policy_id','policy_version','policy_kind','author_id','approver_id','approver_epoch','renderer_version','operator_version','admission_digest','published_at','canonical_envelope','publication_sequence'),
+            (o,a,publication,r,pub['definition_digest'],policy['id'],policy['version'],policy['kind'],pub['author_id'],pub['approver_id'],pub['approver_epoch'],1,1,pub['admission_digest'],pub['published_at'],canonical(pub),1), 3)
         for item in d['content']['inputs']:
             put('publication_inputs', ('organization_id','app_id','publication_id','input_id','definition_revision_id','kind','contract_digest'),
                 (o,a,publication,item['id'],r,item['kind'],digest('input-contract',item)), 4)

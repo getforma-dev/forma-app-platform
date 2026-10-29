@@ -25,7 +25,7 @@
     {
       "version": 5,
       "file": "0005_definition_work_grants.sql",
-      "sha256": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893"
+      "sha256": "78d837a2968a661253f5fa9ddaab1502fc17a4e84aac979d5acf6e6c969de06e"
     }
   ],
   "catalog": [
@@ -51,7 +51,7 @@
     },
     {
       "file": "catalog-v5.json",
-      "sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff"
+      "sha256": "66112bd02c1cf3e04753c8fe38d7baa261ecae91f35f5254d58c8d61d6987804"
     }
   ]
 }

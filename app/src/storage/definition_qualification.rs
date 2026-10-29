@@ -3,19 +3,22 @@
 //! APP-008 native and APP-073 admission campaigns. Definitions are admitted by
 //! `crate::admission`, drafted and saved by genui_workspace and published by
 //! genui_control through the storage module over verified TLS. The operator
-//! command backfills the audit heads and verifies every chain. Fixture-only
-//! operator SQL (the local superuser acting as genui_owner under explicit
-//! scope, as `tenant_seed` and the D7.19 operator channel do) writes what no
-//! application role may: the app shell, permission rows and the Northstar
-//! expenses source revision (APP-077 and the import tickets own their product
-//! paths). It also builds the Northstar Spend Review S05 fixture (plan Task 6)
-//! that APP-013's command campaign reuses through [`spend_review_s05`].
+//! command backfills the audit heads, creates the Spend Review app shell,
+//! grants and revokes every permission and creator authority (ADR-007
+//! amendment of 2026-10-29, APP-010 review M2 and m7) and verifies every
+//! chain. Fixture-only operator SQL (the local superuser acting as
+//! genui_owner under explicit scope, as `tenant_seed` does) writes only what
+//! has no operator command yet: the Northstar expenses source revision (the
+//! import tickets own its product path) and the `independent_review` policy
+//! row (policy rows are operator-seeded, as `owner_publish` is). It also
+//! builds the Northstar Spend Review S05 fixture (plan Task 6) that APP-013's
+//! command campaign reuses through [`spend_review_s05`].
 use super::{
     admission_qualification::operator,
-    authorization::Transaction,
+    authorization::{Action, Resource, Transaction},
     pool::TestHooks,
     qualification::{fixture_python, Fixture},
-    qualification_cases::{check, APP, ORG, OTHER, PRINCIPAL},
+    qualification_cases::{check, APP, ORG, OTHER, PRINCIPAL, REVIEWER},
     *,
 };
 use crate::admission::{self, digest, AdmissionError, AdmittedDefinition};
@@ -38,12 +41,15 @@ pub(super) const AUTHOR: &str = "00000000-0000-4000-8000-0000000000ca";
 pub(super) const SPEND_APP: &str = "00000000-0000-4000-8000-0000000000c9";
 /// tenant_seed.OWNER_PUBLISH_POLICY, version 1, in both organizations.
 pub(super) const POLICY: &str = "00000000-0000-4000-8000-0000000000e0";
+/// A Northstar `independent_review` policy row this campaign seeds (review m4).
+const REVIEW_POLICY: &str = "00000000-0000-4000-8000-0000000000e4";
 /// Northstar's own expenses source revision (operator stand-in).
 pub(super) const EXPENSES: &str = "00000000-0000-4000-8000-0000000000e2";
 pub(super) const EXPENSES_REVISION: &str = "00000000-0000-4000-8000-0000000000e3";
 /// The canary organization's seeded Spend Review source revision.
 const CANARY_SOURCE: &str = "00000000-0000-4000-8000-0000000000d2";
 const CANARY_REVISION: &str = "00000000-0000-4000-8000-0000000000d3";
+/// tenant_seed.SPACE, in both organizations.
 const SPACE: &str = "00000000-0000-4000-8000-000000000384";
 const REVOKED: &str = "00000000-0000-4000-8000-00000000006e";
 const FIXTURE: &str = "contracts/fixtures/impl-2026-10-28.1/spend-review.json";
@@ -82,6 +88,46 @@ fn owner_sql(fixture: &Fixture, organization: &str, statements: &str) {
         &format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{organization}',true); {statements} COMMIT;"),
         "genui",
     );
+}
+/// The operator package's closed grant and revocation (ADR-007 amendment,
+/// review M2 and m7) in Northstar; the JSON result carries the epoch.
+pub(super) fn grant(
+    fixture: &Fixture,
+    principal: &str,
+    permission: &str,
+    resource: &[&str],
+) -> Value {
+    permission_command(fixture, "grant-permission", principal, permission, resource)
+}
+fn revoke(fixture: &Fixture, principal: &str, permission: &str, resource: &[&str]) -> Value {
+    permission_command(
+        fixture,
+        "revoke-permission",
+        principal,
+        permission,
+        resource,
+    )
+}
+fn permission_command(
+    fixture: &Fixture,
+    command: &str,
+    principal: &str,
+    permission: &str,
+    resource: &[&str],
+) -> Value {
+    let mut args = vec![
+        command,
+        "--organization",
+        ORG,
+        "--principal",
+        principal,
+        "--permission",
+        permission,
+    ];
+    args.extend_from_slice(resource);
+    let out = operator(fixture, &args);
+    assert_eq!(out["changed"], true, "{command} {permission}");
+    out
 }
 fn hexed(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -145,9 +191,12 @@ pub(super) struct SpendReview {
 
 /// Plan Task 6: create the Spend Review app, publication and saved work in
 /// the Northstar organization through the admitted path, as the S05 fixture
-/// for APP-013. The operator stand-in writes the app shell, the author's app
-/// and source grants and Northstar's expenses revision before, and the work
-/// grants after (permission rows are operator-only, ADR-007 D7.3).
+/// for APP-013. The operator package creates the app shell (with the owner's
+/// `edit_definition`) and grants the author `discover`, `run` and
+/// `source_read` (ADR-007 amendment, review M2 and m7; the organization's
+/// operator audit head must exist, as `backfill` creates it); only Northstar's
+/// expenses source revision is fixture SQL. The author saves the work as its
+/// creator, so no work grant is written.
 pub(super) async fn spend_review_s05(fixture: &Fixture, stores: &Stores) -> SpendReview {
     let source = expenses_revision();
     let contract = admission::encode(&source["input_contract"]).unwrap();
@@ -155,17 +204,33 @@ pub(super) async fn spend_review_s05(fixture: &Fixture, stores: &Stores) -> Spen
         fixture,
         ORG,
         &format!(
-            "INSERT INTO genui.apps VALUES ('{ORG}','{SPEND_APP}','{SPACE}','{AUTHOR}');
-             INSERT INTO genui.app_permissions VALUES ('{ORG}','{AUTHOR}','{SPEND_APP}','discover'),('{ORG}','{AUTHOR}','{SPEND_APP}','run'),('{ORG}','{AUTHOR}','{SPEND_APP}','edit_definition');
-             INSERT INTO genui.sources VALUES ('{ORG}','{EXPENSES}');
-             INSERT INTO genui.source_revisions VALUES ('{ORG}','{EXPENSES}','{EXPENSES_REVISION}','{}','{}','{}',NULL,'\\x{}'::bytea);
-             INSERT INTO genui.source_permissions VALUES ('{ORG}','{AUTHOR}','{EXPENSES}','source_read');",
+            "INSERT INTO genui.sources VALUES ('{ORG}','{EXPENSES}');
+             INSERT INTO genui.source_revisions VALUES ('{ORG}','{EXPENSES}','{EXPENSES_REVISION}','{}','{}','{}',NULL,'\\x{}'::bytea);",
             source["content_digest"].as_str().unwrap(),
             source["normalized_digest"].as_str().unwrap(),
             digest::digest(digest::INPUT_CONTRACT, &contract),
             hexed(&admission::encode(&source).unwrap()),
         ),
     );
+    let created = operator(
+        fixture,
+        &[
+            "create-app",
+            "--organization",
+            ORG,
+            "--app",
+            SPEND_APP,
+            "--space",
+            SPACE,
+            "--owner",
+            AUTHOR,
+        ],
+    );
+    assert_eq!(created["granted"], json!(["edit_definition"]));
+    for permission in ["discover", "run"] {
+        grant(fixture, AUTHOR, permission, &["--app", SPEND_APP]);
+    }
+    grant(fixture, AUTHOR, "source_read", &["--source", EXPENSES]);
     let author = request(stores, ORG, AUTHOR, 1);
     let admitted = admit(&spend_review_definition(ORG)).expect("edition-1 Spend Review admits");
     let revision = stores
@@ -204,13 +269,6 @@ pub(super) async fn spend_review_s05(fixture: &Fixture, stores: &Stores) -> Spen
         .await
         .unwrap();
     let w = &work.work;
-    owner_sql(
-        fixture,
-        ORG,
-        &format!(
-            "INSERT INTO genui.work_permissions VALUES ('{ORG}','{AUTHOR}','{SPEND_APP}','{w}','record_read'),('{ORG}','{AUTHOR}','{SPEND_APP}','{w}','record_write'),('{ORG}','{AUTHOR}','{SPEND_APP}','{w}','share_work');"
-        ),
-    );
     let collection = fixture
         .operator()
         .await
@@ -308,6 +366,70 @@ async fn paused(hooks: &TestHooks) {
     timeout(Duration::from_secs(5), hooks.reached.notified())
         .await
         .expect("publication barrier reached");
+}
+async fn publication_count(fixture: &Fixture) -> i64 {
+    scalar(
+        fixture,
+        &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{SPEND_APP}'"),
+    )
+    .await
+}
+/// The app's publication with the highest sequence, as the superuser reads it.
+async fn highest(fixture: &Fixture) -> String {
+    fixture
+        .operator()
+        .await
+        .client
+        .query_one(
+            "SELECT publication_id::text FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid ORDER BY publication_sequence DESC LIMIT 1",
+            &[&ORG, &SPEND_APP],
+        )
+        .await
+        .unwrap()
+        .get(0)
+}
+/// The author's publication of the S05 revision, in its own task.
+fn publish_task(
+    stores: &Arc<Stores>,
+    revision: &str,
+    deadline: Option<tokio::time::Instant>,
+) -> tokio::task::JoinHandle<Result<PublishResult>> {
+    let stores = stores.clone();
+    let revision = revision.to_owned();
+    tokio::spawn(async move {
+        let author = request(&stores, ORG, AUTHOR, 1);
+        match deadline {
+            None => {
+                stores
+                    .control
+                    .publish(&author, SPEND_APP, &revision, POLICY)
+                    .await
+            }
+            Some(deadline) => {
+                stores
+                    .control
+                    .publish_until(&author, SPEND_APP, &revision, POLICY, deadline)
+                    .await
+            }
+        }
+    })
+}
+/// Review m1 recipe: while the paused publication (T1) holds its writes, a
+/// superuser SERIALIZABLE transaction (T2) reads publications (T2 rw-> T1)
+/// and inserts a newer version of the policy T1 read (T1 rw-> T2), and
+/// commits first: PostgreSQL dooms T1, whose COMMIT then fails with 40001. A
+/// trigger cannot do this: the pool's catalog verification refuses any added
+/// genui trigger.
+async fn doom(fixture: &Fixture, version: i64) {
+    fixture
+        .operator()
+        .await
+        .client
+        .batch_execute(&format!(
+            "BEGIN ISOLATION LEVEL SERIALIZABLE; SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}'; INSERT INTO genui.publication_policies VALUES ('{ORG}','{POLICY}',{version},'owner_publish'); COMMIT;"
+        ))
+        .await
+        .unwrap();
 }
 fn published(result: PublishResult) -> Publication {
     match result {
@@ -493,6 +615,16 @@ async fn campaign() {
     assert_eq!(work.version, 1);
     assert_eq!(work.publication, s05.publication);
     assert_eq!(work.definition_digest, genuine.digest);
+    // ADR-007 amendment (review M2): the author reads the work it saved as its
+    // creator; no permission row exists on it.
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND work_id='{}'", s05.work)).await,
+        0
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.saved_work WHERE organization_id='{ORG}' AND work_id='{}' AND created_by='{AUTHOR}' AND creator_revoked_at IS NULL", s05.work)).await,
+        1
+    );
     let envelope: Value = serde_json::from_slice(&publication.envelope).unwrap();
     let saved: Value = serde_json::from_slice(&work.canonical).unwrap();
     assert_eq!(publication.admission_digest, genuine.digest);
@@ -501,7 +633,7 @@ async fn campaign() {
     assert_eq!(envelope["approver_id"], AUTHOR);
     check(
         &mut checks,
-        "stored revision re-admits to the same digest and bytes; publication and saved work read back as canonical documents pinned to that digest",
+        "stored revision re-admits to the same digest and bytes; publication and saved work read back as canonical documents pinned to that digest; the author reads the saved work as its recorded creator with no work permission row",
     );
 
     // --- C02: the reusable publication carries contracts, never bindings ---
@@ -696,11 +828,14 @@ async fn campaign() {
             .await,
         Err(Error::Denied)
     );
-    owner_sql(
+    assert_eq!(footprint(&fixture).await, before);
+    grant(
         &fixture,
-        ORG,
-        &format!("INSERT INTO genui.app_permissions VALUES ('{ORG}','{PRINCIPAL}','{SPEND_APP}','edit_definition');"),
+        PRINCIPAL,
+        "edit_definition",
+        &["--app", SPEND_APP],
     );
+    let before = footprint(&fixture).await;
     assert_eq!(
         stores
             .control
@@ -822,8 +957,8 @@ async fn campaign() {
     hooks.arm("publish");
     hooks.release.notify_one();
     paused(&hooks).await;
-    // Whole-second published_at: the newest publication is unambiguous.
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    // Review M1: no wait for a new second. The newest publication is the
+    // highest publication_sequence, whatever its whole-second published_at.
     let newest = published(
         stores
             .control
@@ -843,13 +978,315 @@ async fn campaign() {
     );
     assert_eq!(failures(), 3);
     assert_eq!(chain_events(&fixture, "control").await, control_before + 4);
+    assert_eq!(publication_count(&fixture).await, 5);
+    // The app's publications are numbered 1..=5 in commit order; the newest
+    // holds 5, and how many share a whole second is recorded, not avoided.
+    let ordered: Vec<(String, i64)> = fixture
+        .operator()
+        .await
+        .client
+        .query(
+            "SELECT publication_id::text,publication_sequence::bigint FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid ORDER BY publication_sequence",
+            &[&ORG, &SPEND_APP],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| (row.get(0), row.get(1)))
+        .collect();
     assert_eq!(
-        scalar(&fixture, &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{SPEND_APP}'")).await,
-        5
+        ordered
+            .iter()
+            .map(|(_, sequence)| *sequence)
+            .collect::<Vec<_>>(),
+        [1, 2, 3, 4, 5]
+    );
+    assert_eq!(ordered[4].0, newest.publication_id);
+    assert_eq!(ordered[0].0, s05.publication);
+    let same_second = scalar(&fixture, &format!("SELECT count(*)-count(DISTINCT published_at) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{SPEND_APP}'")).await;
+    check(
+        &mut checks,
+        "a publication that loses to a concurrent writer on both attempts returns PublishResult::Stale naming the publication with the highest publication_sequence (412), with no wait for a new second; the app's publications are numbered 1..=5 in commit order; neither attempt left a publication or event",
+    );
+
+    // --- Review m1: 40001 at COMMIT and a transport loss at COMMIT (D7.6) ---
+    let base = failures();
+    let before = publication_count(&fixture).await;
+    hooks.arm("commit");
+    let task = publish_task(&stores, &s05.revision, None);
+    paused(&hooks).await;
+    doom(&fixture, 2).await;
+    hooks.release.notify_one();
+    let retried = published(task.await.unwrap().unwrap());
+    assert_eq!(failures() - base, 1);
+    assert_eq!(publication_count(&fixture).await, before + 1);
+    assert_eq!(highest(&fixture).await, retried.publication_id);
+    let base = failures();
+    hooks.arm("commit");
+    let task = publish_task(&stores, &s05.revision, None);
+    paused(&hooks).await;
+    doom(&fixture, 3).await;
+    hooks.arm("commit");
+    hooks.release.notify_one();
+    paused(&hooks).await;
+    doom(&fixture, 4).await;
+    hooks.release.notify_one();
+    assert_eq!(
+        task.await.unwrap().unwrap(),
+        PublishResult::Stale(CurrentRevision {
+            publication: Some(retried.publication_id.clone()),
+            revision: Some(s05.revision.clone()),
+            definition_digest: Some(genuine.digest.clone()),
+        })
+    );
+    assert_eq!(failures() - base, 2);
+    assert_eq!(publication_count(&fixture).await, before + 1);
+    let base = failures();
+    let control_events = chain_events(&fixture, "control").await;
+    hooks.arm("commit");
+    let task = publish_task(&stores, &s05.revision, None);
+    paused(&hooks).await;
+    let terminated = scalar(&fixture, "SELECT count(*) FROM (SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename='genui_control' AND state LIKE 'idle in transaction%') t").await;
+    assert_eq!(terminated, 1);
+    hooks.release.notify_one();
+    assert_eq!(task.await.unwrap(), Err(Error::UnknownOutcome));
+    assert_eq!(failures() - base, 0);
+    assert_eq!(publication_count(&fixture).await, before + 1);
+    assert_eq!(chain_events(&fixture, "control").await, control_events);
+    check(
+        &mut checks,
+        "COMMIT path (review m1): a publication doomed by SSI at COMMIT (40001) is retried once and publishes; doomed at COMMIT on both attempts it is Stale naming the highest-sequence publication with nothing written; a backend ended while paused before COMMIT is UnknownOutcome, never retried, nothing written",
+    );
+
+    // --- Review m5: the retry stays within the D7.14 handler deadline ---
+    let base = failures();
+    let before = publication_count(&fixture).await;
+    hooks.arm("publish");
+    let start = tokio::time::Instant::now();
+    let budget = Duration::from_millis(3500);
+    let task = publish_task(&stores, &s05.revision, Some(start + budget));
+    paused(&hooks).await;
+    let winner = published(
+        stores
+            .control
+            .publish(&author, SPEND_APP, &s05.revision, POLICY)
+            .await
+            .unwrap(),
+    );
+    // The racer's 40001 arrives with 1.6 s of its 3.5 s budget left: less
+    // than the retry minimum plus the Stale reserve, so it does not retry.
+    tokio::time::sleep_until(start + Duration::from_millis(1900)).await;
+    hooks.release.notify_one();
+    assert_eq!(
+        task.await.unwrap().unwrap(),
+        PublishResult::Stale(CurrentRevision {
+            publication: Some(winner.publication_id.clone()),
+            revision: Some(s05.revision.clone()),
+            definition_digest: Some(genuine.digest.clone()),
+        })
+    );
+    let elapsed = start.elapsed();
+    assert!(elapsed < budget, "{elapsed:?}");
+    assert_eq!(failures() - base, 1);
+    assert_eq!(publication_count(&fixture).await, before + 1);
+    assert_eq!(
+        super::definitions::PUBLISH_HANDLER_DEADLINE,
+        Duration::from_secs(5)
     );
     check(
         &mut checks,
-        "a publication that loses to a concurrent writer on both attempts returns PublishResult::Stale naming the newest publication (412); neither attempt left a publication or event",
+        "handler deadline (review m5): a publication whose 40001 leaves less than the retry minimum and the Stale reserve of its budget is Stale after one attempt, within the budget; publish bounds every attempt and the Stale read by the 5 s D7.14 handler deadline",
+    );
+
+    // --- Review m4: the independent_review branch ---
+    owner_sql(
+        &fixture,
+        ORG,
+        &format!("INSERT INTO genui.publication_policies VALUES ('{ORG}','{REVIEW_POLICY}',1,'independent_review');"),
+    );
+    grant(&fixture, REVIEWER, "review_publish", &["--app", SPEND_APP]);
+    grant(&fixture, AUTHOR, "review_publish", &["--app", SPEND_APP]);
+    let before = footprint(&fixture).await;
+    // The owner holds review_publish but may not approve its own revision;
+    // a member without review_publish may not approve at all.
+    for member in [&author, &other_member] {
+        assert_eq!(
+            stores
+                .control
+                .publish(member, SPEND_APP, &s05.revision, REVIEW_POLICY)
+                .await,
+            Err(Error::Denied)
+        );
+    }
+    assert_eq!(footprint(&fixture).await, before);
+    let reviewer = request(&stores, ORG, REVIEWER, 1);
+    let reviewed = published(
+        stores
+            .control
+            .publish(&reviewer, SPEND_APP, &s05.revision, REVIEW_POLICY)
+            .await
+            .unwrap(),
+    );
+    let row = fixture
+        .operator()
+        .await
+        .client
+        .query_one(
+            "SELECT policy_kind,author_id::text,approver_id::text,policy_id::text FROM genui.publications WHERE organization_id=$1::text::uuid AND publication_id=$2::text::uuid",
+            &[&ORG, &reviewed.publication_id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            row.get::<_, String>(0),
+            row.get::<_, String>(1),
+            row.get::<_, String>(2),
+            row.get::<_, String>(3)
+        ),
+        (
+            "independent_review".into(),
+            AUTHOR.into(),
+            REVIEWER.into(),
+            REVIEW_POLICY.into()
+        )
+    );
+    assert_eq!(highest(&fixture).await, reviewed.publication_id);
+    check(
+        &mut checks,
+        "independent_review (review m4): under an independent_review policy the owner is refused even with review_publish, a member without review_publish is refused, nothing is written; a non-owner reviewer publishes the owner's revision as approver with the owner as author",
+    );
+
+    // --- ADR-007 amendment (review M2): creator authority on saved work ---
+    grant(&fixture, PRINCIPAL, "run", &["--app", SPEND_APP]);
+    grant(&fixture, PRINCIPAL, "source_read", &["--source", EXPENSES]);
+    let creator = request(&stores, ORG, PRINCIPAL, 1);
+    let second = stores
+        .workspace
+        .create_work(
+            &creator,
+            SPEND_APP,
+            &s05.publication,
+            "Creator authority probe (synthetic)",
+            &[
+                WorkBinding::Source {
+                    input: "expenses".into(),
+                    source: EXPENSES.into(),
+                    revision: EXPENSES_REVISION.into(),
+                },
+                WorkBinding::Records {
+                    input: "decisions".into(),
+                    schema: "decision".into(),
+                },
+            ],
+        )
+        .await
+        .unwrap();
+    let second = second.work;
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.saved_work WHERE organization_id='{ORG}' AND work_id='{second}' AND created_by='{PRINCIPAL}' AND creator_revoked_at IS NULL")).await,
+        1
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND work_id='{second}'")).await,
+        0
+    );
+    let reads = |principal: &'static str, epoch: i64| {
+        let stores = &stores;
+        let second = second.clone();
+        async move {
+            stores
+                .workspace
+                .read_work(&request(stores, ORG, principal, epoch), SPEND_APP, &second)
+                .await
+                .map(|work| work.work)
+        }
+    };
+    assert_eq!(reads(PRINCIPAL, 1).await, Ok(second.clone()));
+    // Not the creator: the author holds run and source_read but no grant.
+    assert_eq!(reads(AUTHOR, 1).await, Err(Error::Denied));
+    // Creator authority is record_read and record_write only.
+    for (action, allowed) in [
+        (Action::RecordWrite, true),
+        (Action::ShareWork, false),
+        (Action::Export, false),
+    ] {
+        let transaction = Transaction::begin(&stores.data.inner, &creator)
+            .await
+            .unwrap();
+        let outcome = transaction
+            .precheck(
+                action,
+                Resource::Work {
+                    app: SPEND_APP,
+                    work: &second,
+                },
+            )
+            .await
+            .map(|_| ());
+        transaction.finish(false).await.unwrap();
+        assert_eq!(outcome.is_ok(), allowed, "{action:?}");
+    }
+    // Every dependency's source_read still applies.
+    let epoch = revoke(&fixture, PRINCIPAL, "source_read", &["--source", EXPENSES])
+        ["membership_epoch"]
+        .as_i64()
+        .unwrap();
+    assert_eq!(epoch, 2);
+    assert_eq!(reads(PRINCIPAL, 2).await, Err(Error::Denied));
+    grant(&fixture, PRINCIPAL, "source_read", &["--source", EXPENSES]);
+    assert_eq!(reads(PRINCIPAL, 2).await, Ok(second.clone()));
+    // The app's run clause still applies.
+    assert_eq!(
+        revoke(&fixture, PRINCIPAL, "run", &["--app", SPEND_APP])["membership_epoch"],
+        3
+    );
+    assert_eq!(reads(PRINCIPAL, 3).await, Err(Error::Denied));
+    grant(&fixture, PRINCIPAL, "run", &["--app", SPEND_APP]);
+    assert_eq!(reads(PRINCIPAL, 3).await, Ok(second.clone()));
+    // The operator ends creator authority; an explicit grant still reads.
+    let ended = operator(
+        &fixture,
+        &[
+            "revoke-creator-authority",
+            "--organization",
+            ORG,
+            "--app",
+            SPEND_APP,
+            "--work",
+            &second,
+        ],
+    );
+    assert_eq!(
+        (
+            &ended["changed"],
+            &ended["membership_epoch"],
+            &ended["creator_principal_id"]
+        ),
+        (&json!(true), &json!(4), &json!(PRINCIPAL))
+    );
+    assert_eq!(reads(PRINCIPAL, 3).await, Err(Error::Denied));
+    assert_eq!(reads(PRINCIPAL, 4).await, Err(Error::Denied));
+    grant(
+        &fixture,
+        PRINCIPAL,
+        "record_read",
+        &["--app", SPEND_APP, "--work", &second],
+    );
+    assert_eq!(reads(PRINCIPAL, 4).await, Ok(second.clone()));
+    check(
+        &mut checks,
+        "creator authority (ADR-007 amendment, review M2): a member who saves work reads it (record_read) and passes record_write as its creator with no permission row, never share_work or export; a non-creator is denied; revoking the dependency's source_read or the app's run denies the creator; revoke-creator-authority ends it (epoch + 1) and an operator record_read grant restores the read",
+    );
+
+    // --- Review m6: each publication.published event names its publication ---
+    let unmatched = scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events e WHERE e.organization_id='{ORG}' AND e.kind='publication.published' AND NOT EXISTS (SELECT 1 FROM genui.publications p WHERE p.organization_id=e.organization_id AND p.app_id=e.app_id AND p.publication_id=e.event_id AND p.approver_id=e.actor_principal_id AND p.definition_digest=e.outcome_digest)")).await;
+    let unrecorded = scalar(&fixture, &format!("SELECT count(*) FROM genui.publications p WHERE p.organization_id='{ORG}' AND p.app_id='{SPEND_APP}' AND NOT EXISTS (SELECT 1 FROM genui.audit_events e WHERE e.organization_id=p.organization_id AND e.event_id=p.publication_id AND e.kind='publication.published')")).await;
+    assert_eq!((unmatched, unrecorded), (0, 0));
+    assert_eq!(publication_count(&fixture).await, 8);
+    check(
+        &mut checks,
+        "audit (review m6): every publication.published event's id is its publication id (same app, approver and definition digest), and every Spend Review publication has its event",
     );
 
     // --- Restart: a new store reloads identical bytes and digests ---
@@ -898,15 +1335,17 @@ async fn campaign() {
     // --- D7.8: both application chains verify from genesis ---
     let out = operator(&fixture, &["verify", "--organization", ORG]);
     assert_eq!(out["verified"], true);
-    // definition.drafted, work.saved and two work.bound for the S05 fixture.
-    assert_eq!(out["chains"]["workspace"]["events"].as_i64(), Some(4));
-    assert_eq!(out["chains"]["control"]["events"].as_i64(), Some(5));
+    // definition.drafted, then work.saved and two work.bound for each of
+    // the S05 work and the creator-authority probe's work.
+    assert_eq!(out["chains"]["workspace"]["events"].as_i64(), Some(7));
+    assert_eq!(out["chains"]["control"]["events"].as_i64(), Some(8));
+    assert_eq!(out["chains"]["operator"]["events"].as_i64(), Some(15));
     let kinds: Vec<String> = fixture
         .operator()
         .await
         .client
         .query(
-            &format!("SELECT kind FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role IN ('workspace','control') ORDER BY writer_role,chain_sequence"),
+            &format!("SELECT kind FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role IN ('workspace','control','operator') ORDER BY writer_role,chain_sequence"),
             &[],
         )
         .await
@@ -914,25 +1353,35 @@ async fn campaign() {
         .iter()
         .map(|row| row.get(0))
         .collect();
-    assert_eq!(
-        kinds,
-        [
-            "publication.published",
-            "publication.published",
-            "publication.published",
-            "publication.published",
-            "publication.published",
-            "definition.drafted",
-            "work.saved",
-            "work.bound",
-            "work.bound",
-        ]
-    );
+    let mut expected = vec!["publication.published"; 8];
+    // create-app, discover, run, source_read (S05); PRINCIPAL's
+    // edit_definition (negatives); two review_publish (m4); the creator probe.
+    expected.extend(["permission.granted"; 7]);
+    expected.extend([
+        "permission.granted",
+        "permission.granted",
+        "permission.revoked",
+        "permission.granted",
+        "permission.revoked",
+        "permission.granted",
+        "creator_authority.revoked",
+        "permission.granted",
+    ]);
+    expected.extend([
+        "definition.drafted",
+        "work.saved",
+        "work.bound",
+        "work.bound",
+        "work.saved",
+        "work.bound",
+        "work.bound",
+    ]);
+    assert_eq!(kinds, expected);
     let out = operator(&fixture, &["verify", "--organization", OTHER]);
     assert_eq!(out["chains"]["workspace"]["events"].as_i64(), Some(0));
     check(
         &mut checks,
-        "the operator recomputes the workspace (definition.drafted, work.saved, work.bound) and control (publication.published) chains from their genesis heads to the heads; the canary chains are untouched",
+        "the operator recomputes the workspace (definition.drafted, work.saved, work.bound), control (publication.published) and operator (permission.granted, permission.revoked, creator_authority.revoked) chains from their genesis heads to the heads; the canary chains are untouched",
     );
 
     restarted.close().await.unwrap();
@@ -956,15 +1405,17 @@ async fn campaign() {
             "s05": {"organization_id": ORG, "app_id": SPEND_APP, "definition_digest": genuine.digest,
                     "policy": POLICY, "expenses_source": EXPENSES, "expenses_revision": EXPENSES_REVISION},
             "admission_refusals": refusals,
+            "same_second_publications": same_second,
             "checks": checks,
             "passed": true,
             "limits": [
                 "Synthetic local password authentication is not RDS IAM.",
                 "Identities are synthetic registry-bound fixtures; no session, route or browser flow is exercised (APP-009/012/013).",
-                "The app shell, permission rows and the Northstar expenses source revision are written by fixture-only operator SQL; their product paths are APP-077 and the import tickets'.",
+                "The app shell and every permission row are written by the operator package's create-app, grant-permission and revoke-permission commands; the Northstar expenses source revision and the independent_review policy row are fixture-only operator SQL (the import tickets and policy seeding own them).",
                 "Source digests are the APP-002 synthetic placeholders; no source bytes were imported.",
                 "The database itself is not restarted (tmpfs fixture); the restart is of every application pool and store.",
-                "The 40001 path is exercised at a statement (the control head lock); a 40001 at COMMIT is classified by the same code path but not provoked here."
+                "The publisher names the policy; the server does not yet resolve the organization's applicable policy (review m3), so an owner could choose owner_publish where an independent_review policy also exists.",
+                "40001 at COMMIT is provoked by a superuser SERIALIZABLE transaction (SSI), the transport loss by pg_terminate_backend, both at a test-only checkpoint before COMMIT."
             ]
         })).unwrap()).unwrap();
     }

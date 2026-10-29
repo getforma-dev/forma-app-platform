@@ -75,6 +75,35 @@ class PureTests(unittest.TestCase):
             with self.subTest(bad=bad[:20]), self.assertRaises(op.Refused):
                 op.parse_grant(bad)
 
+    def test_permission_commands_are_a_closed_set(self):
+        """ADR-007 amendment (APP-010 review M2): grant/revoke take only the permissions the tables allow,
+        never admin_policy, share_work or export, and each permission names exactly its resource."""
+        app, work, source, principal = (str(uuid.uuid4()) for _ in range(4))
+        parser = op.parser()
+        base = ["--organization", ORG, "--principal", principal]
+        self.assertEqual(op.GRANTABLE, {"discover": "app", "run": "app", "edit_definition": "app", "review_publish": "app",
+                                        "record_read": "work", "record_write": "work", "source_read": "source"})
+        self.assertEqual(op.OPERATOR_KINDS[-3:], ("permission.granted", "permission.revoked", "creator_authority.revoked"))
+        for command in ("grant-permission", "revoke-permission"):
+            for good in (["--permission", "run", "--app", app], ["--permission", "review_publish", "--app", app],
+                         ["--permission", "record_write", "--app", app, "--work", work], ["--permission", "source_read", "--source", source]):
+                with self.subTest(command=command, good=good[1]):
+                    op.validate(parser.parse_args([command, *base, *good]))
+            for bad in (["--permission", "admin_policy"], ["--permission", "share_work", "--app", app, "--work", work],
+                        ["--permission", "export", "--app", app, "--work", work], ["--permission", "owner", "--app", app],
+                        ["--permission", "run"], ["--permission", "run", "--app", app, "--work", work],
+                        ["--permission", "record_read", "--app", app], ["--permission", "source_read", "--app", app],
+                        ["--permission", "run", "--app", app.upper()], ["--permission", "source_read", "--source", source, "--app", app]):
+                with self.subTest(command=command, bad=bad[1:3]), self.assertRaises(op.Refused):
+                    op.validate(parser.parse_args([command, *base, *bad]))
+        op.validate(parser.parse_args(["create-app", "--organization", ORG, "--app", app, "--space", source, "--owner", principal]))
+        op.validate(parser.parse_args(["revoke-creator-authority", "--organization", ORG, "--app", app, "--work", work]))
+        for bad in (["create-app", "--organization", ORG, "--app", app, "--space", source],
+                    ["revoke-creator-authority", "--organization", ORG, "--app", app],
+                    ["revoke-creator-authority", "--organization", ORG, "--app", "x", "--work", work]):
+            with self.subTest(bad=bad[0]), self.assertRaises(op.Refused):
+                op.validate(parser.parse_args(bad))
+
     def test_issue_argument_bounds(self):
         parser = op.parser()
         base = ["issue", "--organization", ORG, "--issued-by", "unit", "--grant", "source_read:" + str(uuid.uuid4())]
@@ -383,6 +412,118 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(self.operator_events()[-1], ("membership.revoked",))
         self.assertEqual(self.cli("revoke-membership", "--organization", ORG, "--principal", principal)["changed"], False)
         self.cli("revoke-membership", "--organization", ORG, "--principal", str(uuid.uuid4()), expect=1)
+
+    def member(self, status="active"):
+        principal = str(uuid.uuid4())
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui.principals VALUES (%s,%s,%s,%s,%s)", (ORG, principal, ISSUER, TENANT, "usr_" + principal))
+            c.execute("INSERT INTO genui.memberships VALUES (%s,%s,%s,1)", (ORG, principal, status))
+        return principal
+
+    def space(self):
+        space = str(uuid.uuid4())
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui.spaces VALUES (%s,%s,'Operator test space')", (ORG, space))
+        return space
+
+    def last_operator_event(self):
+        return self.query("""SELECT kind,actor_principal_id::text,app_id::text,work_id::text FROM genui.audit_events
+                             WHERE organization_id=%s AND writer_role='operator' ORDER BY chain_sequence DESC LIMIT 1""", (ORG,))[0]
+
+    def epoch(self, principal):
+        return self.query("SELECT membership_epoch FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (ORG, principal))[0][0]
+
+    def test_create_app_grant_and_revoke_permission_are_operator_events(self):
+        """ADR-007 amendment (APP-010 review M2, m7): app shells and their grants are operator actions."""
+        self.ensure_backfill()
+        owner, other, revoked = self.member(), self.member(), self.member("revoked")
+        space, app = self.space(), str(uuid.uuid4())
+        out = self.cli("create-app", "--organization", ORG, "--app", app, "--space", space, "--owner", owner)
+        self.assertEqual(out, {"app_id": app, "owner_principal_id": owner, "granted": ["edit_definition"]})
+        self.assertEqual(self.query("SELECT space_id::text,owner_principal_id::text FROM genui.apps WHERE organization_id=%s AND app_id=%s",
+                                    (ORG, app)), [(space, owner)])
+        self.assertEqual(self.query("SELECT principal_id::text,permission FROM genui.app_permissions WHERE app_id=%s", (app,)),
+                         [(owner, "edit_definition")])
+        # D7.8 names no operator app-creation kind: the owner's grant is the audited record.
+        self.assertEqual(self.last_operator_event(), ("permission.granted", owner, app, None))
+        before = self.dump()
+        for args in (["--app", app, "--space", space, "--owner", owner],                            # app exists
+                     ["--app", str(uuid.uuid4()), "--space", str(uuid.uuid4()), "--owner", owner],  # unknown space
+                     ["--app", str(uuid.uuid4()), "--space", space, "--owner", revoked],            # inactive owner
+                     ["--app", str(uuid.uuid4()), "--space", space, "--owner", str(uuid.uuid4())]):
+            with self.subTest(args=args[1]):
+                self.cli("create-app", "--organization", ORG, *args, expect=1)
+        self.assertEqual(self.dump(), before)
+
+        epoch = self.epoch(other)
+        granted = self.cli("grant-permission", "--organization", ORG, "--principal", other, "--permission", "run", "--app", app)
+        self.assertEqual(granted, {"principal_id": other, "permission": "run", "changed": True, "membership_epoch": epoch})
+        self.assertEqual(self.last_operator_event(), ("permission.granted", other, app, None))
+        events = len(self.operator_events())
+        self.assertEqual(self.cli("grant-permission", "--organization", ORG, "--principal", other, "--permission", "run",
+                                  "--app", app)["changed"], False)
+        self.assertEqual(len(self.operator_events()), events)
+        self.cli("grant-permission", "--organization", ORG, "--principal", other, "--permission", "source_read", "--source", self.source)
+        self.assertEqual(self.query("SELECT permission FROM genui.source_permissions WHERE principal_id=%s", (other,)), [("source_read",)])
+        self.assertEqual(self.last_operator_event(), ("permission.granted", other, None, None))
+        before = self.dump()
+        for principal, extra in ((revoked, ["--permission", "run", "--app", app]),
+                                 (str(uuid.uuid4()), ["--permission", "run", "--app", app]),
+                                 (other, ["--permission", "run", "--app", str(uuid.uuid4())]),
+                                 (other, ["--permission", "record_read", "--app", app, "--work", str(uuid.uuid4())]),
+                                 (other, ["--permission", "source_read", "--source", str(uuid.uuid4())]),
+                                 (other, ["--permission", "admin_policy"])):
+            with self.subTest(extra=extra[1]):
+                self.cli("grant-permission", "--organization", ORG, "--principal", principal, *extra, expect=1)
+        self.cli("grant-permission", "--organization", str(uuid.uuid4()), "--principal", other, "--permission", "run", "--app", app, expect=1)
+        self.assertEqual(self.dump(), before)
+
+        revoked_out = self.cli("revoke-permission", "--organization", ORG, "--principal", other, "--permission", "run", "--app", app)
+        self.assertEqual(revoked_out, {"principal_id": other, "permission": "run", "changed": True, "membership_epoch": epoch + 1})
+        self.assertEqual(self.query("SELECT count(*) FROM genui.app_permissions WHERE app_id=%s AND principal_id=%s", (app, other)), [(0,)])
+        self.assertEqual(self.last_operator_event(), ("permission.revoked", other, app, None))
+        events = len(self.operator_events())
+        again = self.cli("revoke-permission", "--organization", ORG, "--principal", other, "--permission", "run", "--app", app)
+        self.assertEqual((again["changed"], again["membership_epoch"]), (False, epoch + 1))
+        self.assertEqual(len(self.operator_events()), events)
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+
+    def test_revoke_creator_authority_is_ordered_and_audited(self):
+        """ADR-007 amendment (APP-010 review M2): creator authority ends only by the operator command."""
+        self.ensure_backfill()
+        creator, space, app = self.member(), self.space(), str(uuid.uuid4())
+        self.cli("create-app", "--organization", ORG, "--app", app, "--space", space, "--owner", creator)
+        revision, publication, policy = (str(uuid.uuid4()) for _ in range(3))
+        works = {"created": str(uuid.uuid4()), "legacy": str(uuid.uuid4())}
+        digest = "sha256:" + "d" * 64
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui.definition_revisions VALUES (%s,%s,%s,1,%s,'\\x7b7d')", (ORG, app, revision, digest))
+            c.execute("INSERT INTO genui.publication_policies VALUES (%s,%s,1,'owner_publish')", (ORG, policy))
+            c.execute("""INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,
+                         policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,
+                         published_at,canonical_envelope,publication_sequence)
+                         VALUES (%s,%s,%s,%s,%s,%s,1,'owner_publish',%s,%s,1,1,1,%s,now(),'\\x7b7d',1)""",
+                      (ORG, app, publication, revision, digest, policy, creator, creator, digest))
+            c.execute("""INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by)
+                         VALUES (%s,%s,%s,%s,1,'',%s)""", (ORG, app, works["created"], publication, creator))
+            c.execute("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context) VALUES (%s,%s,%s,%s,1,'')",
+                      (ORG, app, works["legacy"], publication))
+        epoch = self.epoch(creator)
+        out = self.cli("revoke-creator-authority", "--organization", ORG, "--app", app, "--work", works["created"])
+        self.assertEqual(out, {"work_id": works["created"], "creator_principal_id": creator, "changed": True, "membership_epoch": epoch + 1})
+        self.assertEqual(self.query("SELECT created_by::text,creator_revoked_at IS NOT NULL FROM genui.saved_work WHERE work_id=%s",
+                                    (works["created"],)), [(creator, True)])
+        self.assertEqual(self.last_operator_event(), ("creator_authority.revoked", creator, app, works["created"]))
+        events = len(self.operator_events())
+        again = self.cli("revoke-creator-authority", "--organization", ORG, "--app", app, "--work", works["created"])
+        self.assertEqual((again["changed"], again["membership_epoch"]), (False, epoch + 1))
+        self.assertEqual(len(self.operator_events()), events)
+        before = self.dump()
+        for work in (works["legacy"], str(uuid.uuid4())):  # no creator recorded; unknown work
+            with self.subTest(work=work):
+                self.cli("revoke-creator-authority", "--organization", ORG, "--app", app, "--work", work, expect=1)
+        self.assertEqual(self.dump(), before)
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
 
     def test_forged_operator_identity_and_application_roles_are_refused(self):
         self.ensure_backfill()

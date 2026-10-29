@@ -47,8 +47,10 @@ ADMISSION_TABLES = ('access_codes','audit_events','audit_heads','code_grant_temp
 CHAIN_KINDS = {
     'genui_admit': ('admission', ('admission.pending','admission.redeemed','admission.denied_for_reconciliation',
                                   'session.sign_out','session.sign_out_all')),
+    # 0005 widens the operator list in place (ALTER POLICY): ADR-007 amendment 2026-10-29 (APP-010 review M2).
     'genui_owner': ('operator', ('organization.provisioned','handle.rotated','code.issued','code.revoked','code.extended',
-                                 'membership.revoked','entitlement.revoked')),
+                                 'membership.revoked','entitlement.revoked','permission.granted','permission.revoked',
+                                 'creator_authority.revoked')),
 }
 
 
@@ -105,15 +107,18 @@ AUDIT_EVENT_COLUMNS = ('organization_id','event_id','writer_role','chain_sequenc
 # Migration 0005 (ADR-007 D7.3/D7.8, APP-010): column-limited INSERTs for the
 # definition, publication and saved-work transactions and the two application
 # audit chains. 0002 already grants the SELECTs on every business relation.
+# Review m2: no INSERT on apps (workspace) or publication_policies (control):
+# app shells and policy rows are operator writes in Phase 1 ("never earlier").
 DEFINITION_WORK_GRANTS = set().union(
-    _role_columns('genui_workspace','apps','INSERT','organization_id','app_id','space_id','owner_principal_id'),
     _role_columns('genui_workspace','definition_revisions','INSERT','organization_id','app_id','revision_id','schema_version','digest',
                   'canonical_content'),
     _role_columns('genui_workspace','definition_inputs','INSERT','organization_id','app_id','revision_id','input_id','kind',
                   'contract_digest','canonical_contract'),
     _role_columns('genui_workspace','definition_record_schemas','INSERT','organization_id','app_id','revision_id','schema_id',
                   'schema_version','digest','canonical_schema'),
-    _role_columns('genui_workspace','saved_work','INSERT','organization_id','app_id','work_id','publication_id','version','context'),
+    # ADR-007 amendment (review M2): the creator is recorded, never creator_revoked_at.
+    _role_columns('genui_workspace','saved_work','INSERT','organization_id','app_id','work_id','publication_id','version','context',
+                  'created_by'),
     _role_columns('genui_workspace','record_collections','INSERT','organization_id','app_id','work_id','publication_id','collection_id',
                   'schema_id','schema_version'),
     _role_columns('genui_workspace','work_bindings','INSERT','organization_id','app_id','work_id','publication_id','input_id','kind',
@@ -121,10 +126,11 @@ DEFINITION_WORK_GRANTS = set().union(
                   'revision_policy'),
     _role_columns('genui_workspace','work_source_dependencies','INSERT','organization_id','app_id','work_id','input_id','source_id',
                   'source_revision_id','source_digest'),
-    _role_columns('genui_control','publication_policies','INSERT','organization_id','policy_id','policy_version','kind'),
+    # ADR-007 amendment (review M1): publication_sequence orders an app's publications.
     _role_columns('genui_control','publications','INSERT','organization_id','app_id','publication_id','definition_revision_id',
                   'definition_digest','policy_id','policy_version','policy_kind','author_id','approver_id','approver_epoch',
-                  'renderer_version','operator_version','admission_digest','published_at','canonical_envelope'),
+                  'renderer_version','operator_version','admission_digest','published_at','canonical_envelope',
+                  'publication_sequence'),
     _role_columns('genui_control','publication_inputs','INSERT','organization_id','app_id','publication_id','definition_revision_id',
                   'input_id','kind','contract_digest'),
     _role_columns('genui_control','publication_record_schemas','INSERT','organization_id','app_id','publication_id',
@@ -773,14 +779,12 @@ def definition_work_checks(pg, passed, denied):
              (org0,APP,revision,sha('draft'),b'{}')),
             ("INSERT INTO genui.definition_inputs(organization_id,app_id,revision_id,input_id,kind,contract_digest,canonical_contract) VALUES (%s,%s,%s,'events','source',%s,%s)",
              (org0,APP,revision,sha('contract'),b'{}')),
-            ("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context) VALUES (%s,%s,%s,%s,1,'grant probe')",
-             (org0,APP,str(uuid.uuid4()),PUB)),
+            ("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES (%s,%s,%s,%s,1,'grant probe',%s)",
+             (org0,APP,str(uuid.uuid4()),PUB,P)),
             event(org0,'workspace','definition.drafted'),
             ("UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s AND writer_role='workspace'",(org0,)),
         ],
         'genui_control':[
-            ("INSERT INTO genui.publication_policies(organization_id,policy_id,policy_version,kind) VALUES (%s,%s,1,'independent_review')",
-             (org0,str(uuid.uuid4()))),
             event(org0,'control','publication.published'),
             ("UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s AND writer_role='control'",(org0,)),
         ],
@@ -798,7 +802,28 @@ def definition_work_checks(pg, passed, denied):
                 if other!=chain:
                     assert c.execute('UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s AND writer_role=%s',(org0,other)).rowcount==0
             c.rollback()
-    passed('0005 grants: genui_workspace inserts drafts, saved work and workspace-chain events, genui_control inserts policy rows and control-chain events; each reads, locks and advances only its own head (rolled back)')
+    passed('0005 grants: genui_workspace inserts drafts, its own saved work and workspace-chain events, genui_control inserts control-chain events; each reads, locks and advances only its own head (rolled back)')
+    # ADR-007 amendment 2026-10-29 (review M1, M2): saved_work.created_by and
+    # creator_revoked_at with the composite foreign key to memberships and the
+    # workspace's RESTRICTIVE creator check; publications.publication_sequence
+    # unique per (organization_id, app_id).
+    with pg.connect('postgres') as c:
+        columns=c.execute("""SELECT c.relname::text,a.attname::text,format_type(a.atttypid,a.atttypmod),a.attnotnull FROM pg_attribute a
+          JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui'
+          AND (c.relname::text,a.attname::text) IN (('saved_work','created_by'),('saved_work','creator_revoked_at'),('publications','publication_sequence'))
+          ORDER BY 1,2""").fetchall()
+        assert columns==[('publications','publication_sequence','genui.safe_counter',True),('saved_work','created_by','uuid',False),
+                         ('saved_work','creator_revoked_at','timestamp with time zone',False)],columns
+        keys=c.execute("""SELECT conrelid::regclass::text,contype::text,pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid IN
+          ('genui.saved_work'::regclass,'genui.publications'::regclass) AND (pg_get_constraintdef(oid) LIKE '%created_by%'
+          OR pg_get_constraintdef(oid) LIKE '%publication_sequence%') ORDER BY 1""").fetchall()
+        assert keys==[('genui.publications','u','UNIQUE (organization_id, app_id, publication_sequence)'),
+                      ('genui.saved_work','f','FOREIGN KEY (organization_id, created_by) REFERENCES genui.memberships(organization_id, principal_id)')],keys
+        creator=c.execute("""SELECT policyname::text,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
+          AND tablename='saved_work' AND policyname<>'tenant_scope'""").fetchall()
+        assert creator==[('saved_work_creator','RESTRICTIVE',['genui_workspace'],'INSERT',None,
+                          "(created_by = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid)")],creator
+    passed('0005 creator authority and publication order (ADR-007 amendment): saved_work.created_by/creator_revoked_at with the composite memberships key and the workspace RESTRICTIVE creator check; publications.publication_sequence NOT NULL and unique per app')
     pub_row=("INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope) VALUES (%s,%s,%s,%s,%s,%s,1,'owner_publish',%s,%s,1,1,1,%s,now(),%s)",
              (org0,APP,str(uuid.uuid4()),'00000000-0000-4000-8000-000000000067',sha('d'),OWNER_PUBLISH_POLICY,P,P,sha('d'),b'{}'))
     draft_row=("INSERT INTO genui.definition_revisions(organization_id,app_id,revision_id,schema_version,digest,canonical_content) VALUES (%s,%s,%s,1,%s,%s)",
@@ -809,6 +834,14 @@ def definition_work_checks(pg, passed, denied):
             ('workspace cannot write publications','genui_workspace',pub_row),
             ('workspace cannot write publication inputs','genui_workspace',("INSERT INTO genui.publication_inputs(organization_id,app_id,publication_id,definition_revision_id,input_id,kind,contract_digest) VALUES (%s,%s,%s,%s,'events','source',%s)",(org0,APP,PUB,'00000000-0000-4000-8000-000000000067',sha('c')))),
             ('workspace cannot write publication policies','genui_workspace',("INSERT INTO genui.publication_policies(organization_id,policy_id,policy_version,kind) VALUES (%s,%s,1,'owner_publish')",(org0,str(uuid.uuid4())))),
+            # Review m2: policy rows and app shells are operator writes only.
+            ('control cannot write publication policies','genui_control',("INSERT INTO genui.publication_policies(organization_id,policy_id,policy_version,kind) VALUES (%s,%s,1,'independent_review')",(org0,str(uuid.uuid4())))),
+            ('workspace cannot create an app shell','genui_workspace',("INSERT INTO genui.apps(organization_id,app_id,space_id,owner_principal_id) VALUES (%s,%s,'00000000-0000-4000-8000-000000000384',%s)",(org0,str(uuid.uuid4()),P))),
+            # ADR-007 amendment: a saved work names its creator, and only as the scoped principal.
+            ('workspace cannot save work for another creator','genui_workspace',("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES (%s,%s,%s,%s,1,'x','00000000-0000-4000-8000-0000000000ca')",(org0,APP,str(uuid.uuid4()),PUB))),
+            ('workspace cannot save work without a creator','genui_workspace',work_row),
+            ('workspace cannot revoke creator authority','genui_workspace',("UPDATE genui.saved_work SET creator_revoked_at=now()",())),
+            ('control cannot rewrite a publication sequence','genui_control',("UPDATE genui.publications SET publication_sequence=publication_sequence",())),
             ('control cannot write saved work','genui_control',work_row),
             ('control cannot write definition revisions','genui_control',draft_row),
             ('control cannot write work bindings','genui_control',("INSERT INTO genui.work_bindings(organization_id,app_id,work_id,publication_id,input_id,kind,contract_digest) VALUES (%s,%s,%s,%s,'x','source',%s)",(org0,APP,WORK,PUB,sha('c')))),
@@ -1319,7 +1352,8 @@ def qualify():
                   WHERE p.schemaname='genui' AND p.tablename=t.tablename AND p.policyname='tenant_scope' AND p.permissive='PERMISSIVE'
                   AND p.cmd='ALL' AND p.roles='{public}' AND p.qual IS NOT NULL AND p.with_check IS NOT NULL)""").fetchone()==(0,)
                 assert c.execute("""SELECT count(*) FROM pg_policies WHERE schemaname='genui' AND policyname<>'tenant_scope'
-                  AND NOT (permissive='RESTRICTIVE' AND tablename IN ('audit_events','audit_heads'))""").fetchone()==(0,)
+                  AND NOT (permissive='RESTRICTIVE' AND tablename IN ('audit_events','audit_heads'))
+                  AND NOT (permissive='RESTRICTIVE' AND tablename='saved_work' AND policyname='saved_work_creator')""").fetchone()==(0,)
                 lock=c.execute("SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit FROM pg_roles WHERE rolname='genui_lock'").fetchone()
                 assert lock==(False,)*7
                 assert c.execute("SELECT count(*) FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname='genui_lock')").fetchone()==(0,)

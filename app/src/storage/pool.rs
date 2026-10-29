@@ -440,6 +440,10 @@ impl Lease {
     /// definite rollback and the connection is reset and reused as usual. Any
     /// other COMMIT failure, a transport loss included, is `UnknownOutcome`.
     pub async fn commit_serializable(self, transaction_deadline: Instant) -> Result<bool> {
+        // APP-010 review m1: the definition campaign pauses here to doom the
+        // transaction through SSI (40001 at COMMIT) or to end its backend.
+        #[cfg(test)]
+        self.checkpoint("commit").await;
         let committed =
             match timeout_at(transaction_deadline, self.client().batch_execute("COMMIT")).await {
                 Ok(Ok(())) => true,

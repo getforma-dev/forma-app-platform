@@ -9,6 +9,14 @@ genui_owner under explicit organization scope in D7.1's lock order
 (organization FOR SHARE, then the member or code row FOR UPDATE, then the
 operator audit head) and appends to the `operator` audit chain.
 
+Authority on apps and saved work (ADR-007 amendment of 2026-10-29, APP-010
+review M2 and m7): `create-app` writes an app shell and its owner's
+`edit_definition`; `grant-permission` and `revoke-permission` write one row of
+the closed GRANTABLE set (a revocation advances the member's epoch);
+`revoke-creator-authority` ends a saved work's creator authority. Each change
+appends `permission.granted`, `permission.revoked` or
+`creator_authority.revoked` to the operator chain.
+
 A new access code's secret (32 CSPRNG bytes, base32) is printed exactly once,
 on standard output, after its transaction commits. It is never logged, stored
 or written anywhere else; only its domain-separated digest is stored. Listing
@@ -56,8 +64,19 @@ DEFAULTS = {
     "handle_bytes": 16,
 }
 CHAINS = ("workspace", "control", "data", "admission", "operator")
+# D7.8's closed operator kinds; the last three arrive with the ADR-007 amendment
+# of 2026-10-29 (APP-010 review M2) and migration 0005's widened operator policy.
 OPERATOR_KINDS = ("organization.provisioned", "handle.rotated", "code.issued", "code.revoked", "code.extended",
-                  "membership.revoked", "entitlement.revoked")
+                  "membership.revoked", "entitlement.revoked", "permission.granted", "permission.revoked",
+                  "creator_authority.revoked")
+# ADR-007 amendment (APP-010 review M2, m7): what grant-permission/revoke-permission
+# may write, and the resource each permission names. A closed subset of what the
+# 0002 permission tables allow: never admin_policy (governance), share_work or
+# export (no Phase 1 path uses them).
+GRANTABLE = {"discover": "app", "run": "app", "edit_definition": "app", "review_publish": "app",
+             "record_read": "work", "record_write": "work", "source_read": "source"}
+# The (app, work, source) arguments each resource takes, exactly.
+RESOURCE_SHAPE = {"app": (True, False, False), "work": (True, True, False), "source": (False, False, True)}
 CODE_DOMAIN = b"forma:access-code:v1"
 HANDLE_DOMAIN = b"forma:signin-handle:v1"
 EMAIL_DOMAIN = b"forma:intended-email:v1"
@@ -202,6 +221,20 @@ def parser():
         q = sub.add_parser(name)
         q.add_argument("--organization", required=True)
         q.add_argument("--principal", required=True)
+    # ADR-007 amendment 2026-10-29 (APP-010 review M2, m7): app shells, their
+    # grants and creator-authority revocation are operator actions in Phase 1.
+    for name in ("grant-permission", "revoke-permission"):
+        q = sub.add_parser(name)
+        for arg in ("--organization", "--principal", "--permission"):
+            q.add_argument(arg, required=True)
+        for arg in ("--app", "--work", "--source"):
+            q.add_argument(arg)
+    q = sub.add_parser("create-app")
+    for arg in ("--organization", "--app", "--space", "--owner"):
+        q.add_argument(arg, required=True)
+    q = sub.add_parser("revoke-creator-authority")
+    for arg in ("--organization", "--app", "--work"):
+        q.add_argument(arg, required=True)
     return p
 
 
@@ -209,9 +242,14 @@ def validate(args):
     """Every argument is checked before any connection is opened."""
     if hasattr(args, "organization"):
         identifier(args.organization)
-    for name in ("code_id", "principal"):
-        if hasattr(args, name):
+    for name in ("code_id", "principal", "app", "work", "source", "space", "owner"):
+        if getattr(args, name, None) is not None:
             identifier(getattr(args, name))
+    if args.command in ("grant-permission", "revoke-permission"):
+        resource = GRANTABLE.get(args.permission)
+        require(resource is not None, "permission_refused")
+        given = tuple(getattr(args, name) is not None for name in ("app", "work", "source"))
+        require(given == RESOURCE_SHAPE[resource], "resource_refused")
     if args.command == "provision":
         require(1 <= len(args.display_name) <= 200 and args.display_name.isprintable(), "malformed_display_name")
         require(1 <= len(args.issuer) <= 512 and args.issuer.isascii() and args.issuer.isprintable(), "malformed_issuer")
@@ -272,7 +310,7 @@ def lock_organization(c, organization, active=False, lock=True):
     require(not active or row[0] == "active", "organization_inactive")
 
 
-def append(c, organization, kind, code_id=None, actor=None):
+def append(c, organization, kind, code_id=None, actor=None, app=None, work=None):
     """D7.8 append on the operator chain: the head row lock serializes appenders."""
     require(kind in OPERATOR_KINDS, "kind_refused")
     head = c.execute("SELECT chain_sequence,head_hash FROM genui.audit_heads WHERE organization_id=%s AND writer_role='operator' FOR UPDATE",
@@ -280,15 +318,15 @@ def append(c, organization, kind, code_id=None, actor=None):
     require(head is not None, "audit_chain_not_provisioned")
     sequence, previous = head[0] + 1, head[1]
     occurred = c.execute("SELECT date_trunc('second',now())").fetchone()[0]
-    body = {"actor_principal_id": actor, "app_id": None, "chain_sequence": sequence, "code_id": code_id,
+    body = {"actor_principal_id": actor, "app_id": app, "chain_sequence": sequence, "code_id": code_id,
             "event_id": str(uuid.uuid4()), "kind": kind, "occurred_at": timestamp(occurred),
             "organization_id": organization, "outcome_digest": None, "previous_hash": previous,
-            "record_id": None, "work_id": None, "writer_role": "operator"}
+            "record_id": None, "work_id": work, "writer_role": "operator"}
     digest = event_hash(previous, body)
     c.execute("""INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,actor_principal_id,app_id,
                  work_id,record_id,code_id,outcome_digest,occurred_at,previous_hash,hash)
-                 VALUES (%s,%s,'operator',%s,%s,%s,NULL,NULL,NULL,%s,NULL,%s,%s,%s)""",
-              (organization, body["event_id"], sequence, kind, actor, code_id, occurred, previous, digest))
+                 VALUES (%s,%s,'operator',%s,%s,%s,%s,%s,NULL,%s,NULL,%s,%s,%s)""",
+              (organization, body["event_id"], sequence, kind, actor, app, work, code_id, occurred, previous, digest))
     c.execute("UPDATE genui.audit_heads SET chain_sequence=%s,head_hash=%s WHERE organization_id=%s AND writer_role='operator'",
               (sequence, digest, organization))
 
@@ -542,6 +580,118 @@ def revoke_membership(c, args):
     append(c, org, "membership.revoked", actor=principal)
     c.commit()
     return {"principal_id": principal, "changed": True, "membership_epoch": epoch}
+
+
+def lock_active_member(c, org, principal):
+    """Organization (active) FOR SHARE, then the member FOR UPDATE; the member must be active."""
+    lock_organization(c, org, active=True)
+    status, epoch = lock_member(c, org, principal)
+    require(status == "active", "member_inactive")
+    return epoch
+
+
+def permission_statements(args):
+    """The fixed (exists, insert, delete) statements of one closed permission; never caller SQL."""
+    org, principal, permission = args.organization, args.principal, args.permission
+    resource = GRANTABLE[permission]
+    if resource == "app":
+        return (("SELECT 1 FROM genui.apps WHERE organization_id=%s AND app_id=%s", (org, args.app)),
+                ("""INSERT INTO genui.app_permissions(organization_id,principal_id,app_id,permission) VALUES (%s,%s,%s,%s)
+                    ON CONFLICT DO NOTHING""", (org, principal, args.app, permission)),
+                ("""DELETE FROM genui.app_permissions WHERE organization_id=%s AND principal_id=%s AND app_id=%s AND permission=%s""",
+                 (org, principal, args.app, permission)))
+    if resource == "work":
+        return (("SELECT 1 FROM genui.saved_work WHERE organization_id=%s AND app_id=%s AND work_id=%s", (org, args.app, args.work)),
+                ("""INSERT INTO genui.work_permissions(organization_id,principal_id,app_id,work_id,permission) VALUES (%s,%s,%s,%s,%s)
+                    ON CONFLICT DO NOTHING""", (org, principal, args.app, args.work, permission)),
+                ("""DELETE FROM genui.work_permissions WHERE organization_id=%s AND principal_id=%s AND app_id=%s AND work_id=%s
+                    AND permission=%s""", (org, principal, args.app, args.work, permission)))
+    return (("SELECT 1 FROM genui.sources WHERE organization_id=%s AND source_id=%s", (org, args.source)),
+            ("""INSERT INTO genui.source_permissions(organization_id,principal_id,source_id,permission) VALUES (%s,%s,%s,%s)
+                ON CONFLICT DO NOTHING""", (org, principal, args.source, permission)),
+            ("""DELETE FROM genui.source_permissions WHERE organization_id=%s AND principal_id=%s AND source_id=%s AND permission=%s""",
+             (org, principal, args.source, permission)))
+
+
+def grant_permission(c, args):
+    """ADR-007 amendment (APP-010 review M2): org FOR SHARE, member FOR UPDATE, the row, one event.
+
+    Adding authority advances no epoch; an existing grant changes nothing and is not audited again.
+    """
+    org, principal = args.organization, args.principal
+    begin(c, org)
+    epoch = lock_active_member(c, org, principal)
+    exists, insert, _ = permission_statements(args)
+    require(c.execute(*exists).fetchone() is not None, "resource_unknown")
+    changed = c.execute(*insert).rowcount == 1
+    if changed:
+        append(c, org, "permission.granted", actor=principal, app=args.app, work=args.work)
+    c.commit()
+    return {"principal_id": principal, "permission": args.permission, "changed": changed, "membership_epoch": epoch}
+
+
+def revoke_permission(c, args):
+    """Revocation (D7.1 order): org FOR SHARE, member FOR UPDATE, delete, membership_epoch + 1, one event."""
+    org, principal = args.organization, args.principal
+    begin(c, org)
+    _, epoch = lock_member(c, org, principal)
+    _, _, delete = permission_statements(args)
+    if c.execute(*delete).rowcount == 0:
+        c.commit()
+        return {"principal_id": principal, "permission": args.permission, "changed": False, "membership_epoch": epoch}
+    epoch = c.execute("""UPDATE genui.memberships SET membership_epoch=membership_epoch+1 WHERE organization_id=%s AND principal_id=%s
+          RETURNING membership_epoch""", (org, principal)).fetchone()[0]
+    append(c, org, "permission.revoked", actor=principal, app=args.app, work=args.work)
+    c.commit()
+    return {"principal_id": principal, "permission": args.permission, "changed": True, "membership_epoch": epoch}
+
+
+def create_app(c, args):
+    """An app shell and its owner's edit_definition grant in one transaction.
+
+    D7.8 names no operator app-creation kind, so the owner's `permission.granted`
+    event (with the app id) is the audited record of the creation.
+    """
+    org, app, owner = args.organization, args.app, args.owner
+    begin(c, org)
+    lock_active_member(c, org, owner)
+    require(c.execute("SELECT count(*) FROM genui.apps WHERE organization_id=%s AND app_id=%s", (org, app)).fetchone() == (0,), "app_exists")
+    require(c.execute("SELECT 1 FROM genui.spaces WHERE organization_id=%s AND space_id=%s", (org, args.space)).fetchone() is not None,
+            "space_unknown")
+    c.execute("INSERT INTO genui.apps(organization_id,app_id,space_id,owner_principal_id) VALUES (%s,%s,%s,%s)", (org, app, args.space, owner))
+    c.execute("INSERT INTO genui.app_permissions(organization_id,principal_id,app_id,permission) VALUES (%s,%s,%s,'edit_definition')",
+              (org, owner, app))
+    append(c, org, "permission.granted", actor=owner, app=app)
+    c.commit()
+    return {"app_id": app, "owner_principal_id": owner, "granted": ["edit_definition"]}
+
+
+def revoke_creator_authority(c, args):
+    """ADR-007 amendment (APP-010 review M2): ends a saved work's creator authority.
+
+    ADR-004 order: org FOR SHARE, the creator's membership FOR UPDATE, then the
+    work's creator_revoked_at, membership_epoch + 1 and one event. The creator
+    column is immutable (no application UPDATE), so reading it first is safe.
+    """
+    org, app, work = args.organization, args.app, args.work
+    begin(c, org)
+    lock_organization(c, org)
+    row = c.execute("SELECT created_by::text FROM genui.saved_work WHERE organization_id=%s AND app_id=%s AND work_id=%s",
+                    (org, app, work)).fetchone()
+    require(row is not None, "work_unknown")
+    require(row[0] is not None, "creator_unknown")
+    creator = row[0]
+    _, epoch = lock_member(c, org, creator)
+    result = {"work_id": work, "creator_principal_id": creator, "changed": False, "membership_epoch": epoch}
+    if c.execute("""UPDATE genui.saved_work SET creator_revoked_at=now() WHERE organization_id=%s AND app_id=%s AND work_id=%s
+          AND creator_revoked_at IS NULL""", (org, app, work)).rowcount == 0:
+        c.commit()
+        return result
+    epoch = c.execute("""UPDATE genui.memberships SET membership_epoch=membership_epoch+1 WHERE organization_id=%s AND principal_id=%s
+          RETURNING membership_epoch""", (org, creator)).fetchone()[0]
+    append(c, org, "creator_authority.revoked", actor=creator, app=app, work=work)
+    c.commit()
+    return dict(result, changed=True, membership_epoch=epoch)
 
 
 def verify(c, args):
@@ -833,7 +983,8 @@ def reconcile(c, args):
 
 COMMANDS = {"provision": provision, "backfill": backfill, "issue": issue, "list": list_codes, "revoke": revoke,
             "extend": extend, "revoke-entitlement": revoke_entitlement, "revoke-membership": revoke_membership, "verify": verify,
-            "reconcile": reconcile}
+            "reconcile": reconcile, "grant-permission": grant_permission, "revoke-permission": revoke_permission,
+            "create-app": create_app, "revoke-creator-authority": revoke_creator_authority}
 
 
 def provider_configuration(args):
