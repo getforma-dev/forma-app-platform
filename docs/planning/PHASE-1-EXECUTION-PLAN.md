@@ -231,6 +231,8 @@ Done 2026-10-29 in the implementer's worktree and merged (`dc3900d`, `26c1622`):
 - [ ] **Step 4: Run** all local checks; expected: pass.
 - [ ] **Step 5: Independent review** → `evidence/APP-013/independent-review.md`; move APP-013 to In review; commit (`feat(records): atomic declared command with outcome and audit (APP-013)`).
 
+ADR-009 D9.8 obligation (recorded by the Phase 2 plan): migration 0006 also creates `genui.query_receipts` with the D9.8 columns, so Phase 2's receipt citation builds on it.
+
 ### Task 11: APP-014 — retries, conflicts and both authorization race orders
 
 **Files:**
@@ -286,6 +288,8 @@ B1–B3 belong to APP-075, B4 to APP-077 and B5 to APP-080 (ADR-008); both depen
 **Files:** Create `app/operator/Dockerfile`, `app/operator/Dockerfile.dockerignore`, `app/operator/operator.py` (subcommands `migrate`, `seed`, `admission {issue,list,revoke,extend}`, `upload-sources`, `verify-catalog`), `app/operator/requirements.lock`; modify `infra/src/stack.ts` (optional `OperatorTask` definition using the migration execution role and `PGPASSWORD` secret; overrides ≤8,192 bytes; `entryPoint` matches).
 
 - [ ] Steps: package `runtime.apply_migrations`, `tenant_seed.seed`, `contracts/validate.py` and fixtures, `admission_operator.py`; S3 upload of fixture source bytes to `o/<org>/sources/…` with KMS; tests; image build; CDK tests; review; commit.
+
+ADR-009 B1 obligation (recorded by the Phase 2 plan): `upload-sources` writes the B1 object layout (`o/{org}/s/{source}/r/{rev}/original` and `…/part.parquet`), not D7.10's earlier key.
 
 ### Task B5 (APP-080, deferred by ADR-008): Two-process race coordinator (local proof)
 
