@@ -210,3 +210,27 @@ Recorded by the implementer, not the reviewer. Fixes are in `da3d203` (on `e195e
 | m10 disabled-state `Fn::Select` | **Declined here; left to APP-078.** `infra/src/stack.ts:225` is unchanged. APP-078 owns the CloudFormation and Fargate behaviour and can apply the `Fn.conditionIf` pull resource with the stack update that proves it. | — |
 
 Not changed: `app/migrations`, the storage definition files, `Tickets/` and `docs/`.
+
+## Re-check (2026-10-29)
+
+Independent re-check of M1–M3 (Claude, not the implementer) at the merged tip `d6986c2ea474573d056c98b0704435358e5486cf`. The fixes merged in `3f918fb`; since then the fixture provenance repair (`faf4b6c`), APP-010 (migration 0005, `definitions.rs`) and the APP-073 provider fixes changed the seed and source hashes. Local Docker only; no AWS resource was touched. The re-recorded bindings are in [README.md](README.md) and its `image/`, `entry/`, `local-positive/` and `checks/`; no source, pin, hash or allowlist entry needed a change.
+
+**Verdict: no blocking findings.** M1, M2 and M3 are resolved at `d6986c2`.
+
+| Finding | Re-check at `d6986c2` | Status |
+| --- | --- | --- |
+| M1 harness seed pins from the wrong edition | `managed_qualification.rs:97-123` `SEED_INPUTS` is the single path list: `setup.json` `74608644…`, edition `impl-2026-10-28.1` `northstar.json` `45639ea3…` and `spend-review.json` `4a4581f5…`, `tenant_seed.py` `c9073aee…`, `contracts/validate.py` `c5ae11fe…`. Each declared hash equals `shasum` of the repository file, and `tenant_seed.py:31` reads that edition folder. `local_harness.py:106-122` parses the same table from the entry source and recomputes every pin; `check_image.py:221,232` use `expected_pins()`. The Rust test `tests.rs:975` (`seed_catalog_and_migration_pins_match_repository_files`) and `test_tools.py:31,42,52` pass. The pins moved by `faf4b6c`/APP-010 were carried by the `3f918fb` merge, and the tests caught nothing stale. End to end, the executable's reported `resource_pins` equal the harness recomputation (check_image "resource pins equal the repository recomputation" met), and the positive run reports exactly those pins. | Resolved |
+| M2 allowlist counted directory re-includes | `check_image.py:95-107` drops `!dir/` lines and raises unless the next line is `dir/**`. Both re-includes (`Dockerfile.dockerignore:52-53`, `:57-58`) are closed. `allowlist()` returns 50 files, the 42 `SOURCES` plus 8 build files, with no `SOURCES` entry missing. "qualification context is exactly the explicit allowlist" is met with `missing: []` and `extra: []`. `test_tools.py:71,78` pass. | Resolved |
+| M3 evidence bound to a stale revision | Rebuilt the image at `d6986c2` and reran `check_image.py` (27 of 27), `local_harness.py` (10 of 10) and the real-transport cleanup campaign (three cases, cleanup confirmed, 0 server sessions and 0 slots), plus the native (36 checks) and admission campaigns. The evidence tables now record the values at the tip: 42 bound inputs (29 Rust sources), a 50-file context with `catalog-v5.json`, bundle `a8857489…`, executable `b3ea2a49…`, image `d3af3ac0…`, database version 5, catalog `02e1c79b…`, manifest `b3cc8070…`, and the seed pins above. The `da3d203` and `5023eb9` values are kept only as named history. | Resolved |
+
+Results at `d6986c2` (`CARGO_BUILD_JOBS=2`, after `npm ci && npm run build` in `app/admin`):
+
+- **Rust.** `cargo test --lib`: 74 passed, 7 ignored. `cargo test --locked`: 74 + 1 + 2 passed. `storage::` (CI form): 31 passed, 6 ignored. `storage::managed_qualification`: 20 passed, 3 ignored. fmt, clippy `-D warnings` and the MSRV 1.85 check are clean.
+- **Python.** Qualification tool tests: 6 passed. Runtime tests: 115 passed, 1 skipped, including the 18 supervisor tests. Scripts tests: 17 passed. `check-schema-pins.py`: `agree: true` at version 5.
+- **Infra.** Typecheck clean; 19 of 19 template tests pass.
+
+Notes, none blocking:
+
+- `check_image.py --base-revision d6986c2` compares the service context with the tip itself, so that expectation holds trivially here. Separately, no file of the 155-file service context changed in the APP-075 fix commits (`git diff --name-only e195ebf 8001228`), and the context holds no qualification input.
+- The real-transport campaign still reaches the fixture through `Settings::fixture`, as recorded. The production `Settings::new` path is covered by the local positive.
+- Docker state after the run (containers, images, volumes, networks) equals the pre-run lists. The temporary venv links were removed.

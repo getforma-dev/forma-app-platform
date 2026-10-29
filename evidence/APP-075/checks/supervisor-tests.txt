@@ -18,6 +18,6 @@ test_reviewed_ca_pin_is_the_packaged_bundle (test_qualification_supervisor.Super
 test_sigterm_kills_the_child_removes_files_and_reports (test_qualification_supervisor.SupervisorTests.test_sigterm_kills_the_child_removes_files_and_reports) ... ok
 
 ----------------------------------------------------------------------
-Ran 18 tests in 4.815s
+Ran 18 tests in 3.802s
 
 OK

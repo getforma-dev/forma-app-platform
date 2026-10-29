@@ -1,5 +1,5 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.21s
-     Running unittests src/lib.rs (target/debug/deps/genui-bad07dc2164afccd)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running unittests src/lib.rs (target/debug/deps/genui-391b09847189badc)
 
 running 1 test
 APP008 check: operator defaults (D7.17) recorded before any code exists
@@ -14,19 +14,22 @@ APP008 check: identical retry returns the stored admission without a second slot
 APP008 check: after a store restart the admission persists and its identical retry still replays
 APP008 check: an entitlement that expires after the precheck is refused by the fence's re-read, and an expired entitlement denies the next precheck
 APP008 check: operation-first: the operator's entitlement revocation waits on the member fence until the operation commits; the next request (old or new epoch) is refused
+APP008 check: an identical retry after the member's entitlement was revoked is refused, not replayed as admitted
 APP008 check: code revocation blocks unused pending admissions and new reservations while an already-admitted member's entitlement stays active
 APP008 check: revocation-first: the fence waits behind the operator's entitlement revocation and then refuses; entitlement revocation alone denies the member
 APP008 check: redemption-first: the operator's code revocation waits on the code row until the redemption commits; the admission stands and the code is then revoked
 APP008 check: revocation-first: the redemption waits on the code row behind the revocation and then refuses with no principal, membership or entitlement
 APP008 check: two principals racing for the last slot (observed lock wait): exactly one holds it and is admitted, the other is refused as exhausted
 APP008 check: two concurrent identical redemptions return one stored admission and consume exactly one slot
+APP008 check: a membership revocation that commits while an identical retry is in flight (after the stored redemption was found) makes the retry refused; no slot is consumed
 APP008 check: reservation expiry, pending-admission expiry (denied for reconciliation) and code expiry refuse; extension is audited and an expired code is never resurrected
 APP008 check: sign-out advances only the member's own current epoch; the stale request is refused afterwards; two concurrent sign-outs queue on the member row (one advances, one refuses) without deadlock
 APP008 check: an inactive provider binding refuses both the pending admission and the redemption before any definer call
+APP008 check: item 7 (loopback fAuth stand-in, simulated transport): identities created at the provider through confirmed server-only invitations gain no principal, membership or entitlement once the code is revoked, expired or exhausted; the failed remote revocation leaves the code revoked; reconcile confirms every remote revocation without a second create
 APP008 check: application roles as forged operators are refused by the command and by PostgreSQL (42501); a wrong operator password is refused; nothing was written
-APP008 check: operator and admission audit chains recompute from genesis to their heads in both organizations; no issued code appears in a full database dump
+APP008 check: operator and admission audit chains recompute from genesis to their heads in both organizations; no issued code and no provider invitation token appears in a full database dump
 APP008 check: local database and private fixture files removed
 test storage::admission_qualification::native_admission_campaign ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 53 filtered out; finished in 16.63s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 80 filtered out; finished in 19.56s
 
