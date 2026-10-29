@@ -31,7 +31,7 @@ Each is marked at its point of change. B4 (a `REPEATABLE READ READ ONLY` record 
 | B22 | 0002:85 `CHECK (operator_version = 1)`, `CHECK (renderer_version = 1)` | version fixed at 1 | CHECK broadened to `>= 1`; per-operator and per-renderer identities in the envelope | D9.6 |
 | B23 | ADR-004:20–21 (READ COMMITTED; fences only for member roles) | worker never fenced | cited with B9: the worker takes the member fence through `WorkerScope` under READ COMMITTED | D9.4 |
 
-Not amended, with the reason: ADR-004:26 and D7.6 (X1 keeps READ COMMITTED READ WRITE); D7.10's fetch verification (M6 keeps `normalized_digest` as the Parquet bytes' digest); ADR-007's `query_receipts` owner (M10 keeps APP-013's 0006); design A6 retention (D9.15 implements it).
+Not amended, with the reason: ADR-004:26 and D7.6 (X1 keeps READ COMMITTED READ WRITE); D7.10's fetch verification (M6 keeps `normalized_digest` as the Parquet bytes' digest); ADR-007's `query_receipts` owner (M10 keeps APP-013's 0007); design A6 retention (D9.15 implements it).
 
 ## Decisions
 
@@ -128,7 +128,7 @@ Rust is the single source of truth for the grammar: admission and typing happen 
 
 **Records into a query (map §5.1 #6).** D7.6 is unchanged: the data role reads in `READ COMMITTED READ WRITE`, takes the member and work fences first (ADR-004:22, :26), then reads the snapshot sequence and the record rows in **one statement**: a CTE selects `next_commit_sequence − 1` from `organization_sequences` as S and the latest revision of each record with `commit_sequence ≤ S`. One READ COMMITTED statement sees one snapshot, and commands commit in sequence order (D7.7's row lock), so S and the rows agree; the transaction commits and execution runs outside it. Any further statement (drilldown pages, re-derivation) filters by `commit_sequence ≤ S` from the receipt; committed revisions are immutable, so those reads are stable. The binary passes the rows to the engine child on stdin as typed forma-json-v1 lines with the plan, loaded into a temporary table; a record input is bounded at 100,000 rows and 64 MiB (design:313), and anything larger, or a read past `statement_timeout`, is refused (`narrow_the_query`, `resource_limit`), never partial.
 
-**Receipts (M10).** `genui.query_receipts(organization_id, receipt_id, digest UNIQUE per organization, canonical_receipt, cited_by_outcome NULL, created_at)` is created by APP-013's migration 0006, as ADR-007 assigns, with this column set; APP-023 adds only columns (`mapping_version` source entries live in the canonical receipt). Receipts are stored only when cited by a committed record command or an explicit "keep", at most one per commit. Drilldown is a reproducible predicate with 500-row pages. **Quarantine (m4):** `source_revisions.quarantined_at NULL`; the operator subcommand `verify-receipts` (B15, APP-023) re-derives cited receipts and on a mismatch sets it with `revision.quarantined` on the `operator` chain; a query against a quarantined revision is refused with `source_quarantined`.
+**Receipts (M10).** `genui.query_receipts(organization_id, receipt_id, digest UNIQUE per organization, canonical_receipt, cited_by_outcome NULL, created_at)` is created by APP-013's migration 0007, as ADR-007 assigns, with this column set; APP-023 adds only columns (`mapping_version` source entries live in the canonical receipt). Receipts are stored only when cited by a committed record command or an explicit "keep", at most one per commit. Drilldown is a reproducible predicate with 500-row pages. **Quarantine (m4):** `source_revisions.quarantined_at NULL`; the operator subcommand `verify-receipts` (B15, APP-023) re-derives cited receipts and on a mismatch sets it with `revision.quarantined` on the `operator` chain; a query against a quarantined revision is refused with `source_quarantined`.
 
 ### D9.9 Upload transport (B17)
 
@@ -191,7 +191,7 @@ APP-015 opens the contract edition and creates `genui.jobs`, `job_queue`, `job_c
 | M7 staging deletes and lifecycle | Fixed: per-tenant lifecycle rules, explicit SSE-KMS on copy, APP-016 owner, "expires within 2 days" (D9.3). |
 | M8 upload deadline and order | Fixed: 120 s with 64 KiB/s floor; authorize → PUT → verify → enqueue; no transaction during transfer (D9.9). |
 | M9 limits | Fixed: 6,000 queries/hour, storage over non-deleted revisions with a member delete, `entitlement_limits` with `set-limits`, durable versus in-process counters (D9.12, D9.13). |
-| M10 `query_receipts` owner | Fixed: APP-013's 0006 creates it with D9.8's columns; APP-023 adds columns only (D9.8). |
+| M10 `query_receipts` owner | Fixed: APP-013's 0007 creates it with D9.8's columns; APP-023 adds columns only (D9.8). |
 | M11 cache acceptance and key | Fixed: `(organization, digest)` key in the per-organization directory; APP-024 ticket amendment recorded (D9.7, D9.14). |
 | M12 CSV records and A5 | Fixed: B5 names the cell-derived CSV bound (no requalification); B6 names A5's reduction (D9.2). |
 | M13 amendment ledger | Fixed: Amendments table B1–B18, B4 withdrawn and not reused, non-amendments stated; Consequences mirror it. |
