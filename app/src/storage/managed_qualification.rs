@@ -24,7 +24,7 @@ const REGISTRY: &str = "/run/genui/app008-managed-registry.json";
 const CA: &str = "/etc/ssl/certs/rds-global-bundle.pem";
 const FIXTURE_SHA: &str = "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459";
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v3.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v4.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const RESERVE: Duration = Duration::from_secs(4);
 

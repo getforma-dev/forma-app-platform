@@ -50,7 +50,7 @@ fn command(mut command: Command, input: &[u8], label: &str) -> String {
     assert!(output.status.success(), "fixture command refused: {label}");
     String::from_utf8(output.stdout).expect("fixture UTF-8 output")
 }
-fn docker(args: &[&str], input: &[u8], label: &str) -> String {
+pub(super) fn docker(args: &[&str], input: &[u8], label: &str) -> String {
     let mut cmd = Command::new("docker");
     cmd.args(args);
     command(cmd, input, label)
@@ -68,6 +68,16 @@ fn private_write(path: &Path, bytes: &[u8]) {
     file.sync_all().unwrap();
     drop(file);
     fs::rename(temporary, path).unwrap();
+}
+
+/// The locked Python environment used for migrations, seed and the operator
+/// command; overridable for a checkout whose venv lives elsewhere.
+pub(super) fn fixture_python() -> PathBuf {
+    std::env::var_os("GENUI_NATIVE_FIXTURE_PYTHON")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/.venv/bin/python")
+        })
 }
 
 pub(super) struct PrivateDirectory(pub PathBuf);
@@ -90,18 +100,18 @@ impl Drop for PrivateDirectory {
     }
 }
 
-struct Fixture {
-    directory: PrivateDirectory,
-    name: String,
-    port: u16,
+pub(super) struct Fixture {
+    pub directory: PrivateDirectory,
+    pub name: String,
+    pub port: u16,
     credentials: PathBuf,
     registry: PathBuf,
-    ca: PathBuf,
-    removed: bool,
-    server_version: String,
+    pub ca: PathBuf,
+    pub removed: bool,
+    pub server_version: String,
 }
-struct Operator {
-    client: tokio_postgres::Client,
+pub(super) struct Operator {
+    pub client: tokio_postgres::Client,
     driver: tokio::task::JoinHandle<()>,
 }
 impl Drop for Operator {
@@ -133,7 +143,7 @@ impl Drop for Fixture {
     }
 }
 impl Fixture {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let directory = PrivateDirectory::new();
         let name = directory
             .0
@@ -317,10 +327,7 @@ impl Fixture {
         let app = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let repo = app.parent().unwrap();
         let script = "import sys\nfrom pathlib import Path\nimport psycopg\nimport runtime\nfrom tenant_seed import make_bundles,seed\nwith psycopg.connect(host='127.0.0.1',port=int(sys.argv[1]),user='genui_migration',dbname='genui',connect_timeout=3) as c:\n runtime.apply_migrations(c,Path(sys.argv[2]))\n seed(c,make_bundles())\n";
-        let python = std::env::var_os("GENUI_NATIVE_FIXTURE_PYTHON")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| app.join("runtime/.venv/bin/python"));
-        let mut cmd = Command::new(python);
+        let mut cmd = Command::new(fixture_python());
         cmd.current_dir(app.join("runtime")).args([
             "-c",
             script,
@@ -347,7 +354,7 @@ impl Fixture {
         private_write(&fixture.registry,&serde_json::to_vec(&json!({"schema_version":1,"registry_version":"00000000-0000-4000-8000-000000000aaa","bindings":[{"issuer":"app008-fixture-only","provider_tenant_id":format!("ten_{ORG}"),"organization_id":ORG},{"issuer":"app008-fixture-only","provider_tenant_id":format!("ten_{OTHER}"),"organization_id":OTHER}]})).unwrap());
         fixture
     }
-    fn sql(&self, sql: &str, database: &str) -> String {
+    pub fn sql(&self, sql: &str, database: &str) -> String {
         docker(
             &[
                 "exec",
@@ -375,7 +382,7 @@ impl Fixture {
         }
         private_write(&self.credentials,&serde_json::to_vec(&json!({"schema_version":1,"generation":format!("00000000-0000-4000-8000-{generation:012x}"),"issued_at":now,"expires_at":now+lifetime,"database":{"host":host,"name":"genui","port":5432,"roles":roles},"storage":{}})).unwrap());
     }
-    fn settings(&self) -> Settings {
+    pub fn settings(&self) -> Settings {
         Settings::fixture(
             self.credentials.clone(),
             self.registry.clone(),
@@ -401,7 +408,7 @@ impl Fixture {
             registry_sha256: stores.registry_identity().sha256.clone(),
         }
     }
-    async fn operator(&self) -> Operator {
+    pub async fn operator(&self) -> Operator {
         let mut config = tokio_postgres::Config::new();
         config
             .host("127.0.0.1")
@@ -879,9 +886,9 @@ async fn campaign() {
     fixture.sql("GRANT genui_owner TO genui_worker", "genui");
     assert!(Lease::acquire(&identity.worker.inner).await.is_err());
     fixture.sql("REVOKE genui_owner FROM genui_worker", "genui");
-    fixture.sql("ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check; UPDATE genui_meta.schema_version SET version=4;","genui");
+    fixture.sql("ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check; UPDATE genui_meta.schema_version SET version=5;","genui");
     assert!(Lease::acquire(&identity.worker.inner).await.is_err());
-    fixture.sql("UPDATE genui_meta.schema_version SET version=3; ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK(version BETWEEN 1 AND 3);","genui");
+    fixture.sql("UPDATE genui_meta.schema_version SET version=4; ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK(version BETWEEN 1 AND 4);","genui");
     let lease = Lease::acquire(&identity.worker.inner).await.unwrap();
     drop(lease);
     identity.close().await.unwrap();
@@ -977,7 +984,7 @@ async fn campaign() {
     version.readiness().await.unwrap();
     fixture.sql("UPDATE genui_meta.schema_version SET version=1", "genui");
     // The canonical catalog is structural; version 1 is legal row data under
-    // unchanged v3 constraints, so this exercises the post-catalog read.
+    // unchanged v4 constraints, so this exercises the post-catalog read.
     let operator = fixture.operator().await;
     super::catalog::Catalog::embedded()
         .unwrap()
@@ -988,11 +995,11 @@ async fn campaign() {
     version.close().await.unwrap();
     let version_fresh = Stores::new(fixture.settings()).unwrap();
     refuse_all_roles(&version_fresh).await;
-    fixture.sql("UPDATE genui_meta.schema_version SET version=3", "genui");
+    fixture.sql("UPDATE genui_meta.schema_version SET version=4", "genui");
     version_fresh.readiness().await.unwrap();
     version_fresh.close().await.unwrap();
     drop(operator);
-    check(&mut checks,"legal version-one row with unchanged v3 catalog refuses new connections, recycle and readiness until version-three restoration");
+    check(&mut checks,"legal version-one row with unchanged v4 catalog refuses new connections, recycle and readiness until version-four restoration");
 
     // pg_temp is implicitly searched before relations unless listed explicitly.
     // A temporary sequence can observe evaluation even in READ ONLY, so this

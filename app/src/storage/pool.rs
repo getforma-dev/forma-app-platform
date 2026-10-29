@@ -355,6 +355,9 @@ pub(super) struct RolePool {
     pub registry: Arc<Registry>,
 }
 impl RolePool {
+    pub fn role(&self) -> Role {
+        self.manager.role
+    }
     async fn acquire(self: &Arc<Self>) -> Result<Lease> {
         let deadline = Instant::now() + ACQUIRE;
         let admitted = capacity().admitted[self.manager.role.index()]
@@ -491,7 +494,7 @@ async fn verify_schema_version(client: &Client) -> Result<()> {
         )
         .await
         .map_err(|_| Error::Unavailable)?;
-    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 3 {
+    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 4 {
         return Err(Error::Unavailable);
     }
     Ok(())

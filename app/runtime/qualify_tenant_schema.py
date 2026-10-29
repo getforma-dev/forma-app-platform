@@ -69,7 +69,8 @@ ADMIT_GRANTS = set().union(
     _columns('code_reservations','INSERT','organization_id','reservation_id','code_id','kind','context_digest','issuer',
              'provider_tenant_id','provider_subject','state','expires_at'),
     _columns('code_reservations','UPDATE','state','consumed_at'),
-    _columns('principals','SELECT','organization_id','principal_id','issuer','provider_tenant_id','provider_subject'),
+    # Review m2: no function reads principals.principal_id.
+    _columns('principals','SELECT','organization_id','issuer','provider_tenant_id','provider_subject'),
     _columns('principals','INSERT','organization_id','principal_id','issuer','provider_tenant_id','provider_subject'),
     _columns('memberships','SELECT','organization_id','principal_id','membership_epoch'),
     _columns('memberships','INSERT','organization_id','principal_id','status','membership_epoch'),
@@ -87,6 +88,12 @@ ADMIT_GRANTS = set().union(
     _columns('audit_heads','SELECT','organization_id','writer_role','chain_sequence','head_hash'),
     _columns('audit_heads','UPDATE','chain_sequence','head_hash'),
 )
+
+
+# Migration 0004 (ADR-007 D7.3, APP-073 Task 5): the entitlement columns the
+# shared member precheck and fence read, for exactly these three roles.
+ENTITLEMENT_READS = {(role,'entitlements','SELECT',column) for role in ('genui_workspace','genui_control','genui_data')
+                     for column in ('organization_id','principal_id','entitlement_id','status','expires_at')}
 
 
 def sha(value):
@@ -181,9 +188,9 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
-        assert not {t for t in actual if t[0] in APP_ROLES and t[1] in ADMISSION_TABLES+('code_index','handle_index')}
+        assert {t for t in actual if t[0] in APP_ROLES and t[1] in ADMISSION_TABLES+('code_index','handle_index')}==ENTITLEMENT_READS
         schema=set(c.execute("""SELECT n.nspname,a.privilege_type FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) a
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND pg_get_userbyid(a.grantee)='genui_admit'""").fetchall())
         assert schema=={('genui','USAGE'),('genui_private','USAGE')},schema
@@ -192,7 +199,7 @@ def admission_checks(pg, passed, denied):
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND a.privilege_type='EXECUTE' AND a.grantee<>p.proowner""").fetchall())
         assert executes=={('lock_member_authority',r) for r in ('genui_workspace','genui_control','genui_data')}|{('lock_work_revision','genui_data')}|{
             (name,'genui_workspace') for name in ADMIT_FUNCTIONS},executes
-    passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants; EXECUTE on the six functions is genui_workspace only',
+    passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads (D7.3); EXECUTE on the six functions is genui_workspace only',
            admit_grant_count=len(ADMIT_GRANTS))
 
     # --- genui_admit attributes, memberships and function properties (D7.1, A3, A4) ---
@@ -294,6 +301,11 @@ def admission_checks(pg, passed, denied):
         for table in ('genui_private.code_index','genui_private.handle_index'):
             denied(role+' cannot read '+table+' directly',role,'SELECT organization_id FROM '+table)
         for table in ADMISSION_TABLES:
+            if table=='entitlements' and role!='genui_worker':
+                # 0004 grants the precheck columns only (D7.3); every other column stays unreadable.
+                denied(role+' cannot read entitlements.kind',role,'SELECT kind FROM genui.entitlements')
+                denied(role+' cannot read entitlements.revoked_at',role,'SELECT revoked_at FROM genui.entitlements')
+                continue
             denied(role+' cannot read '+table+' directly',role,'SELECT organization_id FROM genui.'+table)
         denied(role+' cannot insert an access code directly',role,
                "INSERT INTO genui.access_codes(organization_id,code_id) VALUES (%s,%s)",(org0,str(uuid.uuid4())))
@@ -384,6 +396,12 @@ def admission_checks(pg, passed, denied):
     assert outcome(call(org0,PENDING,(org0,r_y,*person(org0,'y'))))==['revoked']
     assert outcome(call(org0,PENDING,(org0,r_z,*person(org0,'z'))))==['reservation_expired']
     assert call(org1,PENDING,(org0,r_m,*person(org0,'w')))==[]
+    # Review m3: malformed identity input is a storage error and returns no row, never 23514/23503.
+    before=row_counts(org0)
+    for bad in ((identity[org0][0],identity[org0][1],'s'*257),(identity[org0][0],identity[org0][1],''),
+                ('',identity[org0][1],'usr_m3'),(identity[org0][0],'t'*257,'usr_m3')):
+        assert call(org0,PENDING,(org0,r_m,*bad))==[]
+    assert row_counts(org0)==before
     passed('record_pending_admission: pending (24 h, identity-bound, reservation consumed, one audit event), reservation_expired, expired, revoked, exhausted by D7.17 arithmetic, already_member writes nothing; foreign scope refuses')
 
     # --- admit_redemption outcomes ---
@@ -419,6 +437,7 @@ def admission_checks(pg, passed, denied):
     assert outcome(call(org0,ADMIT,(org0,str(uuid.uuid4()),*a,payload)))==['mismatch']
     assert call(org1,ADMIT,(org1,p_a,*a,payload))==[(None,None,None,None,'mismatch')]
     assert call(org1,ADMIT,(org0,p_a,*a,payload))==[] and call(org0,ADMIT,(org0,p_a,*a,'malformed'))==[]
+    assert call(org0,ADMIT,(org0,p_a,a[0],a[1],'s'*257,payload))==[] and call(org0,ADMIT,(org0,p_a,'',a[1],a[2],payload))==[]
     assert row_counts(org0)==before and code_state(org0,'main')==(1,'exhausted')
     passed('admit_redemption admitted: principal, epoch-1 membership, verbatim template grants, 30-day entitlement, redemption and one audit event in one call; single-use code with one pending admission admitted then exhausted; replay returns the stored result; changed payload, other identity, unknown and foreign pending refuse with no write')
 
@@ -455,12 +474,21 @@ def admission_checks(pg, passed, denied):
     with pg.connect('postgres') as c:
         assert c.execute('SELECT state FROM genui.code_reservations WHERE organization_id=%s AND reservation_id=%s',(org0,pe)).fetchone()==('denied_for_reconciliation',)
     assert outcome(call(org0,ADMIT,(org0,pe,*e,sha('p-e'))))==['expired']
-    before=row_counts(org0)
-    assert outcome(call(org0,ADMIT,(org0,pf,*f,sha('p-f'))))==['revoked']
-    assert outcome(call(org0,ADMIT,(org0,pg_,*g,sha('p-g'))))==['expired']
-    assert outcome(call(org0,ADMIT,(org0,ph,*h,sha('p-h'))))==['exhausted']
-    assert row_counts(org0)==before
-    passed('admit_redemption: exhausted status at max (2 of 2), already_member consumes nothing, expired pending marked denied_for_reconciliation with one audit event, revoked, expired code and recheck-exhausted refuse without writes')
+    # Review M1 (ADR-006 Flow 2): a code-side refusal also denies the pending
+    # admission for reconciliation with one audit event; a retry answers expired.
+    for pending_id,who,label,expected,code_label in ((pf,f,'p-f','revoked','admit-revoked'),(pg_,g,'p-g','expired','admit-code-expired'),
+                                                     (ph,h,'p-h','exhausted','admit-exhausted')):
+        before=row_counts(org0); state=code_state(org0,code_label)
+        assert outcome(call(org0,ADMIT,(org0,pending_id,*who,sha(label))))==[expected]
+        after=row_counts(org0)
+        assert {k:after[k]-before[k] for k in after}=={**{k:0 for k in after},'audit_events':1},(label,after)
+        with pg.connect('postgres') as c:
+            assert c.execute('SELECT state FROM genui.code_reservations WHERE organization_id=%s AND reservation_id=%s',(org0,pending_id)).fetchone()==('denied_for_reconciliation',)
+            assert c.execute("""SELECT kind,actor_principal_id,code_id::text,outcome_digest FROM genui.audit_events WHERE organization_id=%s
+              AND writer_role='admission' ORDER BY chain_sequence DESC LIMIT 1""",(org0,)).fetchone()==('admission.denied_for_reconciliation',None,codes[code_label][0],None)
+        assert outcome(call(org0,ADMIT,(org0,pending_id,*who,sha(label))))==['expired']
+        assert row_counts(org0)==after and code_state(org0,code_label)==state
+    passed('admit_redemption: exhausted status at max (2 of 2), already_member consumes nothing; an expired pending admission and one whose code was revoked, expired or (operator-forced) exhausted are each marked denied_for_reconciliation with one audit event and no grant, slot or count change; retries answer expired')
 
     # --- Concurrency: observed lock waits (pg_stat_activity), never timing guesses ---
     def blocked(first, second, holder_role='genui_workspace'):
@@ -517,7 +545,20 @@ def admission_checks(pg, passed, denied):
     after=row_counts(org0)
     assert after['code_redemptions']-before['code_redemptions']==1 and after['principals']-before['principals']==1
     assert code_state(org0,'race-admit')==(1,'exhausted')
-    passed('concurrent last-slot races admit exactly one: two pending admissions (one pending, one exhausted), redemption versus new pending admission in both orders, and two identical redemptions (admitted, replayed) with one slot consumed')
+    # (4) Review M2: one identity admitted concurrently through two codes; the
+    # loser waits on the principals unique key and answers already_member.
+    code(org0,'race-two-codes-a'); code(org0,'race-two-codes-b')
+    t=person(org0,'t')
+    pt_a=pending_for(org0,'race-two-codes-a',t); pt_b=pending_for(org0,'race-two-codes-b',t)
+    before=row_counts(org0)
+    held,waited=blocked(in_scope(org0,ADMIT,(org0,pt_a,*t,sha('p-t'))),in_scope(org0,ADMIT,(org0,pt_b,*t,sha('p-t'))))
+    assert (outcome(held),outcome(waited))==(['admitted'],['already_member'])
+    after=row_counts(org0)
+    assert after['principals']-before['principals']==1 and after['code_redemptions']-before['code_redemptions']==1
+    assert code_state(org0,'race-two-codes-b')==(0,'active')
+    with pg.connect('postgres') as c:
+        assert c.execute('SELECT state FROM genui.code_reservations WHERE organization_id=%s AND reservation_id=%s',(org0,pt_b)).fetchone()==('live',)
+    passed('concurrent last-slot races admit exactly one: two pending admissions (one pending, one exhausted), redemption versus new pending admission in both orders, two identical redemptions (admitted, replayed) with one slot consumed, and one identity through two codes (admitted, already_member with no write)')
 
     # --- advance_member_epoch (D7.1, D7.9 session lock order) ---
     principal_c1=call(org0,'SELECT principal_id::text FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)',(org0,pc_1,*c_1,sha('p-c1')))[0][0]
@@ -558,8 +599,15 @@ def admission_checks(pg, passed, denied):
         c.rollback()
     assert chains[org1]==['admission.pending','admission.redeemed']
     assert chains[org0].count('admission.redeemed')>=8 and chains[org0].count('session.sign_out')==1 and chains[org0].count('session.sign_out_all')==1
-    assert chains[org0].count('admission.denied_for_reconciliation')==1
-    passed('audit chains verify per organization: every hash recomputed in chain_sequence order from the genesis head, tail equals head; a tampered event fails verification',
+    assert chains[org0].count('admission.denied_for_reconciliation')==4
+    # Review m5: code_redemptions.audit_event_id has no FK (D7.8), so the set
+    # check covers it: every redemption names its own admission.redeemed event.
+    with pg.connect('postgres') as c:
+        assert c.execute("""SELECT count(*) FROM genui.code_redemptions d WHERE NOT EXISTS (SELECT 1 FROM genui.audit_events e
+          WHERE e.organization_id=d.organization_id AND e.event_id=d.audit_event_id AND e.writer_role='admission' AND e.kind='admission.redeemed'
+          AND e.code_id=d.code_id AND e.actor_principal_id=d.principal_id AND e.outcome_digest=d.payload_digest)""").fetchone()==(0,)
+        assert c.execute('SELECT count(*) FROM genui.code_redemptions').fetchone()[0]>=10
+    passed('audit chains verify per organization: every hash recomputed in chain_sequence order from the genesis head, tail equals head; a tampered event fails verification; every redemption resolves to its own admission.redeemed event',
            admission_events={org:len(kinds) for org,kinds in chains.items()})
     # Mismatched writer_role/kind INSERTs are refused by the RESTRICTIVE policies.
     def event(org, writer, kind, sequence):

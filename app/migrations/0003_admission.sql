@@ -184,7 +184,7 @@ GRANT SELECT(organization_id,code_id,permission,app_id,work_id,source_id) ON gen
 GRANT SELECT(organization_id,reservation_id,code_id,kind,context_digest,issuer,provider_tenant_id,provider_subject,state,expires_at),
  INSERT(organization_id,reservation_id,code_id,kind,context_digest,issuer,provider_tenant_id,provider_subject,state,expires_at),
  UPDATE(state,consumed_at) ON genui.code_reservations TO genui_admit;
-GRANT SELECT(organization_id,principal_id,issuer,provider_tenant_id,provider_subject),
+GRANT SELECT(organization_id,issuer,provider_tenant_id,provider_subject),
  INSERT(organization_id,principal_id,issuer,provider_tenant_id,provider_subject) ON genui.principals TO genui_admit;
 GRANT SELECT(organization_id,principal_id,membership_epoch),
  INSERT(organization_id,principal_id,status,membership_epoch),UPDATE(membership_epoch) ON genui.memberships TO genui_admit;
@@ -262,7 +262,12 @@ CREATE FUNCTION genui_private.record_pending_admission(p_org uuid,p_reservation 
 DECLARE o_status text; v_code_id uuid; v_code record; v_res record; v_live bigint; v_id uuid; v_expires timestamptz;
  v_kind text:='admission.pending'; v_actor uuid; v_digest text; v_seq bigint; v_prev text; v_event uuid; v_at timestamptz; v_body text; v_hash text;
 BEGIN
- IF nullif(current_setting('genui.organization_id',true),'') IS DISTINCT FROM p_org::text THEN RETURN; END IF;
+ -- Malformed identity input is a storage error, not a business refusal: no row
+ -- (the 0002 column bounds). Binding existence and active state are the
+ -- storage module's registry and binding check before this call.
+ IF nullif(current_setting('genui.organization_id',true),'') IS DISTINCT FROM p_org::text
+  OR length(p_issuer) NOT BETWEEN 1 AND 512 OR length(p_provider_tenant) NOT BETWEEN 1 AND 256
+  OR length(p_provider_subject) NOT BETWEEN 1 AND 256 THEN RETURN; END IF;
  SELECT o.status INTO o_status FROM genui.organizations o WHERE o.organization_id=p_org FOR SHARE;
  IF NOT FOUND OR o_status<>'active' THEN RETURN; END IF;
  SELECT r.code_id INTO v_code_id FROM genui.code_reservations r
@@ -319,7 +324,9 @@ DECLARE o_status text; v_code_id uuid; v_code record; v_pend record; v_red recor
  v_kind text; v_actor uuid; v_digest text; v_seq bigint; v_prev text; v_event uuid; v_at timestamptz; v_body text; v_hash text;
 BEGIN
  IF nullif(current_setting('genui.organization_id',true),'') IS DISTINCT FROM p_org::text
-  OR p_payload_digest !~ '^sha256:[0-9a-f]{64}$' THEN RETURN; END IF;
+  OR p_payload_digest !~ '^sha256:[0-9a-f]{64}$'
+  OR length(p_issuer) NOT BETWEEN 1 AND 512 OR length(p_provider_tenant) NOT BETWEEN 1 AND 256
+  OR length(p_provider_subject) NOT BETWEEN 1 AND 256 THEN RETURN; END IF;
  SELECT o.status INTO o_status FROM genui.organizations o WHERE o.organization_id=p_org FOR SHARE;
  IF NOT FOUND OR o_status<>'active' THEN RETURN; END IF;
  SELECT r.code_id INTO v_code_id FROM genui.code_reservations r
@@ -354,32 +361,43 @@ BEGIN
    AND p.provider_tenant_id=p_provider_tenant AND p.provider_subject=p_provider_subject) THEN
   RETURN QUERY SELECT NULL::uuid,NULL::bigint,NULL::uuid,NULL::uuid,'already_member'::text; RETURN;
  ELSIF v_code.status='revoked' THEN
-  RETURN QUERY SELECT NULL::uuid,NULL::bigint,NULL::uuid,NULL::uuid,'revoked'::text; RETURN;
+  -- ADR-006 Flow 2: a pending admission whose code was meanwhile revoked,
+  -- expired or exhausted is denied and recorded for operator reconciliation.
+  UPDATE genui.code_reservations SET state='denied_for_reconciliation' WHERE organization_id=p_org AND reservation_id=p_pending_admission;
+  v_outcome:='revoked'; v_kind:='admission.denied_for_reconciliation';
  ELSIF v_code.status='expired' OR v_code.expires_at<=now() THEN
-  RETURN QUERY SELECT NULL::uuid,NULL::bigint,NULL::uuid,NULL::uuid,'expired'::text; RETURN;
+  UPDATE genui.code_reservations SET state='denied_for_reconciliation' WHERE organization_id=p_org AND reservation_id=p_pending_admission;
+  v_outcome:='expired'; v_kind:='admission.denied_for_reconciliation';
  ELSE
   -- D7.17: remaining excludes the pending admission being judged.
   SELECT count(*) INTO v_others FROM genui.code_reservations r WHERE r.organization_id=p_org AND r.code_id=v_code_id
    AND r.kind='pending' AND r.state='live' AND r.expires_at>now() AND r.reservation_id<>p_pending_admission;
   IF v_code.status='exhausted' OR v_code.max_redemptions-v_code.redeemed_count-v_others<1 THEN
-   RETURN QUERY SELECT NULL::uuid,NULL::bigint,NULL::uuid,NULL::uuid,'exhausted'::text; RETURN;
+   UPDATE genui.code_reservations SET state='denied_for_reconciliation' WHERE organization_id=p_org AND reservation_id=p_pending_admission;
+   v_outcome:='exhausted'; v_kind:='admission.denied_for_reconciliation';
+  ELSE
+   v_principal:=gen_random_uuid(); v_entitlement:=gen_random_uuid(); v_redemption:=gen_random_uuid(); v_epoch:=1;
+   -- A concurrent admission of the same identity through another code waits on
+   -- the unique key and then answers already_member; this is the branch's first
+   -- write, so returning writes nothing and needs no savepoint.
+   INSERT INTO genui.principals(organization_id,principal_id,issuer,provider_tenant_id,provider_subject)
+    VALUES (p_org,v_principal,p_issuer,p_provider_tenant,p_provider_subject)
+    ON CONFLICT (organization_id,issuer,provider_tenant_id,provider_subject) DO NOTHING;
+   IF NOT FOUND THEN RETURN QUERY SELECT NULL::uuid,NULL::bigint,NULL::uuid,NULL::uuid,'already_member'::text; RETURN; END IF;
+   INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES (p_org,v_principal,'active',v_epoch);
+   INSERT INTO genui.app_permissions(organization_id,principal_id,app_id,permission)
+    SELECT p_org,v_principal,t.app_id,t.permission FROM genui.code_grant_templates t
+    WHERE t.organization_id=p_org AND t.code_id=v_code_id AND t.permission IN ('discover','run','edit_definition');
+   INSERT INTO genui.work_permissions(organization_id,principal_id,app_id,work_id,permission)
+    SELECT p_org,v_principal,t.app_id,t.work_id,t.permission FROM genui.code_grant_templates t
+    WHERE t.organization_id=p_org AND t.code_id=v_code_id AND t.permission IN ('record_read','record_write','share_work','export');
+   INSERT INTO genui.source_permissions(organization_id,principal_id,source_id,permission)
+    SELECT p_org,v_principal,t.source_id,t.permission FROM genui.code_grant_templates t
+    WHERE t.organization_id=p_org AND t.code_id=v_code_id AND t.permission='source_read';
+   INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at)
+    VALUES (p_org,v_principal,v_entitlement,'active',v_code.kind,now(),now()+interval '30 days');
+   v_outcome:='admitted'; v_kind:='admission.redeemed'; v_actor:=v_principal; v_digest:=p_payload_digest;
   END IF;
-  v_principal:=gen_random_uuid(); v_entitlement:=gen_random_uuid(); v_redemption:=gen_random_uuid(); v_epoch:=1;
-  INSERT INTO genui.principals(organization_id,principal_id,issuer,provider_tenant_id,provider_subject)
-   VALUES (p_org,v_principal,p_issuer,p_provider_tenant,p_provider_subject);
-  INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES (p_org,v_principal,'active',v_epoch);
-  INSERT INTO genui.app_permissions(organization_id,principal_id,app_id,permission)
-   SELECT p_org,v_principal,t.app_id,t.permission FROM genui.code_grant_templates t
-   WHERE t.organization_id=p_org AND t.code_id=v_code_id AND t.permission IN ('discover','run','edit_definition');
-  INSERT INTO genui.work_permissions(organization_id,principal_id,app_id,work_id,permission)
-   SELECT p_org,v_principal,t.app_id,t.work_id,t.permission FROM genui.code_grant_templates t
-   WHERE t.organization_id=p_org AND t.code_id=v_code_id AND t.permission IN ('record_read','record_write','share_work','export');
-  INSERT INTO genui.source_permissions(organization_id,principal_id,source_id,permission)
-   SELECT p_org,v_principal,t.source_id,t.permission FROM genui.code_grant_templates t
-   WHERE t.organization_id=p_org AND t.code_id=v_code_id AND t.permission='source_read';
-  INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at)
-   VALUES (p_org,v_principal,v_entitlement,'active',v_code.kind,now(),now()+interval '30 days');
-  v_outcome:='admitted'; v_kind:='admission.redeemed'; v_actor:=v_principal; v_digest:=p_payload_digest;
  END IF;
  -- D7.8 append on the admission chain; the head row lock serializes appenders.
  SELECT h.chain_sequence,h.head_hash INTO v_seq,v_prev FROM genui.audit_heads h

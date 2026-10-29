@@ -15,6 +15,8 @@ from validate import canonical, digest, validate_bundle  # noqa: E402
 ORGANIZATIONS = ("00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002")
 SPACE = "00000000-0000-4000-8000-000000000384"
 ISSUER = "app008-fixture-only"
+# Synthetic fixture entitlement window (APP-073); fixed so the seed stays idempotent.
+ENTITLEMENT_WINDOW = ("2026-10-01T00:00:00+00:00", "2036-10-01T00:00:00+00:00")
 
 
 def make_bundles():
@@ -38,7 +40,10 @@ def seed(connection, bundles):
     """Caller owns the entire transaction; a changed existing seed refuses whole.
 
     All bundles validate before the first SQL write. This only seeds the declared
-    synthetic contract shape and never provisions a provider or active entitlement.
+    synthetic contract shape and never provisions a provider. Since APP-073 every
+    member action requires a current entitlement, so each active synthetic member
+    receives one deterministic, explicitly synthetic entitlement (fixed window,
+    kind member_invite); it is fixture authority, never an admission result.
     """
     from psycopg import sql
     if connection.autocommit:
@@ -77,6 +82,9 @@ def seed(connection, bundles):
         for principal, (status, epoch) in actors.items():
             put('principals', ('organization_id','principal_id','issuer','provider_tenant_id','provider_subject'), (o,principal,ISSUER,tenant,'usr_'+principal), 2)
             put('memberships', ('organization_id','principal_id','status','membership_epoch'), (o,principal,status,epoch), 2)
+            if status == 'active':
+                put('entitlements', ('organization_id','principal_id','entitlement_id','status','kind','starts_at','expires_at','revoked_at'),
+                    (o,principal,'0000e000-0000-4000-8000-'+principal[-12:],'active','member_invite',*ENTITLEMENT_WINDOW,None), 3)
         put('organization_permissions', ('organization_id','principal_id','permission'),
             (o,'00000000-0000-4000-8000-000000000f00','admin_policy'), 3)
         put('spaces', ('organization_id','space_id','display_name'), (o,SPACE,'Synthetic fixture space'), 2)

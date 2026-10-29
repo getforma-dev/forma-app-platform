@@ -4,10 +4,10 @@ use super::{
 };
 use std::sync::Arc;
 use tokio::time::{timeout_at, Instant};
-use tokio_postgres::{types::ToSql, Row};
+use tokio_postgres::{error::SqlState, types::ToSql, Row};
 
-/// No public constructor, deserializer or clone. APP-009/073 must supply the
-/// reviewed adapter/admission transition before ordinary production access.
+/// No public constructor, deserializer or clone. APP-009 must supply the
+/// reviewed session adapter before ordinary production access.
 ///
 /// ```compile_fail
 /// use genui::storage::TrustedRequest;
@@ -90,13 +90,17 @@ pub(super) struct Precheck<'a> {
 }
 pub(super) struct Permit<'a, 'r> {
     transaction: &'a mut Transaction<'r>,
+    request: &'r TrustedRequest,
     precheck: Precheck<'r>,
 }
 
+/// A member transaction carries its trusted request; the nonmember entry
+/// (ADR-007 D7.1, admission only) carries none and can never precheck, fence
+/// or obtain a `Permit`.
 pub(super) struct Transaction<'a> {
     pub lease: Lease,
     pub deadline: Instant,
-    request: &'a TrustedRequest,
+    request: Option<&'a TrustedRequest>,
 }
 impl<'a> Transaction<'a> {
     pub async fn begin(pool: &Arc<RolePool>, request: &'a TrustedRequest) -> Result<Self> {
@@ -113,6 +117,29 @@ impl<'a> Transaction<'a> {
                     &request.organization,
                 ),
         )?;
+        Self::open(
+            pool,
+            Some(request),
+            &request.organization,
+            &request.principal,
+            &request.epoch.to_string(),
+        )
+        .await
+    }
+    /// ADR-007 D7.1 private nonmember entry for the admission definer calls:
+    /// workspace pool only, organization scope (or none, for the two pre-scope
+    /// lookups) and no principal or epoch. It never issues a member `Permit`.
+    pub async fn begin_nonmember(pool: &Arc<RolePool>, organization: Option<&str>) -> Result<Self> {
+        require(pool.role() == Role::Workspace && organization.is_none_or(valid_id))?;
+        Self::open(pool, None, organization.unwrap_or(""), "", "").await
+    }
+    async fn open(
+        pool: &Arc<RolePool>,
+        request: Option<&'a TrustedRequest>,
+        organization: &str,
+        principal: &str,
+        epoch: &str,
+    ) -> Result<Self> {
         let lease = Lease::acquire(pool).await?;
         let deadline = lease.transaction_deadline()?;
         let transaction = Self {
@@ -126,8 +153,11 @@ impl<'a> Transaction<'a> {
         #[cfg(test)]
         transaction.lease.checkpoint("begin").await;
         transaction.query("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch',$3,true)",
-            &[&request.organization, &request.principal, &request.epoch.to_string()]).await?;
+            &[&organization, &principal, &epoch]).await?;
         Ok(transaction)
+    }
+    fn member(&self) -> Result<&'a TrustedRequest> {
+        self.request.ok_or(Error::Denied)
     }
     pub async fn batch(&self, sql: &str) -> Result<()> {
         timeout_at(self.deadline, self.lease.client().batch_execute(sql))
@@ -141,22 +171,46 @@ impl<'a> Transaction<'a> {
             .map_err(|_| Error::Deadline)?
             .map_err(|_| Error::Unavailable)
     }
+    /// As `query`, but a database refusal keeps its SQLSTATE so that the
+    /// storage module can classify it (ADR-007 D7.9). Nothing leaves storage.
+    pub async fn query_classified(
+        &self,
+        sql: &str,
+        params: &[&(dyn ToSql + Sync)],
+    ) -> Result<std::result::Result<Vec<Row>, SqlState>> {
+        match timeout_at(self.deadline, self.lease.client().query(sql, params))
+            .await
+            .map_err(|_| Error::Deadline)?
+        {
+            Ok(rows) => Ok(Ok(rows)),
+            Err(error) => error.code().cloned().map(Err).ok_or(Error::Unavailable),
+        }
+    }
     pub async fn precheck(&self, action: Action, resource: Resource<'a>) -> Result<Precheck<'a>> {
+        let request = self.member()?;
         require(self.lease.role() != Role::Worker)?;
-        let rows = self.query("SELECT o.status,m.status,m.membership_epoch FROM genui.organizations o JOIN genui.memberships m USING(organization_id) WHERE o.organization_id=$1::text::uuid AND m.principal_id=$2::text::uuid", &[&self.request.organization,&self.request.principal]).await?;
+        let rows = self.query("SELECT o.status,m.status,m.membership_epoch FROM genui.organizations o JOIN genui.memberships m USING(organization_id) WHERE o.organization_id=$1::text::uuid AND m.principal_id=$2::text::uuid", &[&request.organization,&request.principal]).await?;
         let row = rows.first().ok_or(Error::Denied)?;
         require(
             text(row, 0)? == "active"
                 && text(row, 1)? == "active"
-                && integer(row, 2)? == self.request.epoch,
+                && integer(row, 2)? == request.epoch,
         )?;
+        self.entitlement(request).await?;
         let precheck = Precheck { action, resource };
-        self.permissions(&precheck).await?;
+        self.permissions(request, &precheck).await?;
         Ok(precheck)
     }
-    async fn permissions(&self, precheck: &Precheck<'_>) -> Result<()> {
-        let org = &self.request.organization;
-        let principal = &self.request.principal;
+    /// APP-073 (ADR-003, ADR-004): every member action also needs a current
+    /// trial entitlement, judged on the wall clock of this statement so that
+    /// an entitlement expiring inside the transaction is not honored later.
+    async fn entitlement(&self, request: &TrustedRequest) -> Result<()> {
+        let rows = self.query("SELECT 1 FROM genui.entitlements WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND status='active' AND expires_at>clock_timestamp() LIMIT 1", &[&request.organization,&request.principal]).await?;
+        require(!rows.is_empty())
+    }
+    async fn permissions(&self, request: &TrustedRequest, precheck: &Precheck<'_>) -> Result<()> {
+        let org = &request.organization;
+        let principal = &request.principal;
         let action = precheck.action.permission();
         let rows = match precheck.resource {
             Resource::Organization if precheck.action == Action::AdminPolicy => self.query(
@@ -178,12 +232,18 @@ impl<'a> Transaction<'a> {
         require(!rows.is_empty())
     }
     pub async fn fence<'t>(&'t mut self, precheck: Precheck<'a>) -> Result<Permit<'t, 'a>> {
-        let rows = self.query("SELECT organization_active,member_active,membership_epoch FROM genui_private.lock_member_authority($1::text::uuid,$2::text::uuid,$3)", &[&self.request.organization,&self.request.principal,&self.request.epoch]).await?;
+        let request = self.member()?;
+        let rows = self.query("SELECT organization_active,member_active,membership_epoch FROM genui_private.lock_member_authority($1::text::uuid,$2::text::uuid,$3)", &[&request.organization,&request.principal,&request.epoch]).await?;
         let row = rows.first().ok_or(Error::Denied)?;
-        require(boolean(row, 0)? && boolean(row, 1)? && integer(row, 2)? == self.request.epoch)?;
-        self.permissions(&precheck).await?;
+        require(boolean(row, 0)? && boolean(row, 1)? && integer(row, 2)? == request.epoch)?;
+        // Entitlement revocation advances the epoch under the member lock
+        // (operator channel), so this re-read after the fence also observes
+        // expiry that happened since the precheck.
+        self.entitlement(request).await?;
+        self.permissions(request, &precheck).await?;
         Ok(Permit {
             transaction: self,
+            request,
             precheck,
         })
     }
@@ -219,7 +279,7 @@ impl Permit<'_, '_> {
         let Resource::App(app) = self.precheck.resource else {
             return Err(Error::Denied);
         };
-        let rows = self.transaction.query("SELECT publication_id::text,definition_digest::text FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND publication_id=$3::text::uuid", &[&self.transaction.request.organization,&app,&publication]).await?;
+        let rows = self.transaction.query("SELECT publication_id::text,definition_digest::text FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND publication_id=$3::text::uuid", &[&self.request.organization,&app,&publication]).await?;
         let row = rows.first().ok_or(Error::Denied)?;
         Ok(Publication {
             publication_id: text(row, 0)?,
@@ -236,14 +296,14 @@ impl Permit<'_, '_> {
         let Resource::Work { app, work } = self.precheck.resource else {
             return Err(Error::Denied);
         };
-        let pin = self.transaction.query("SELECT publication_id::text,version FROM genui.saved_work WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[&self.transaction.request.organization,&app,&work]).await?;
+        let pin = self.transaction.query("SELECT publication_id::text,version FROM genui.saved_work WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[&self.request.organization,&app,&work]).await?;
         let pin = pin.first().ok_or(Error::Denied)?;
         let publication = text(pin, 0)?;
         let version = integer(pin, 1)?;
-        let locked = self.transaction.query("SELECT publication_id::text,work_version FROM genui_private.lock_work_revision($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5)", &[&self.transaction.request.organization,&app,&work,&publication,&version]).await?;
+        let locked = self.transaction.query("SELECT publication_id::text,work_version FROM genui_private.lock_work_revision($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5)", &[&self.request.organization,&app,&work,&publication,&version]).await?;
         let locked = locked.first().ok_or(Error::Denied)?;
         require(text(locked, 0)? == publication && integer(locked, 1)? == version)?;
-        let rows = self.transaction.query("SELECT record_id::text,current_version FROM genui.internal_records WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND collection_id=$4::text::uuid AND record_id=$5::text::uuid", &[&self.transaction.request.organization,&app,&work,&collection,&record]).await?;
+        let rows = self.transaction.query("SELECT record_id::text,current_version FROM genui.internal_records WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND collection_id=$4::text::uuid AND record_id=$5::text::uuid", &[&self.request.organization,&app,&work,&collection,&record]).await?;
         let row = rows.first().ok_or(Error::Denied)?;
         Ok(Record {
             record_id: text(row, 0)?,
