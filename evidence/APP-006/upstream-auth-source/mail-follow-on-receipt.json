@@ -1,0 +1,19 @@
+{
+  "scope": "Received source-only FormaStack mail follow-on plan; not implementation or hosted evidence",
+  "source": "/Users/victorvillacis/dev/Forma/work/FORMA-247/MAIL-VERIFICATION-FOLLOW-ON-PLAN.md",
+  "sha256": "680987a5b519852b047c299d0f0f803a9cb3608e4c89ad151b6cb0c8267cff7c",
+  "reported_fauth_source": "dfba787295b880816fd95295b507a4527c51e62f",
+  "received_from_thread": "01a18408-d9ee-7501-98ba-83b062f4d121",
+  "received_date_utc": "2026-10-29",
+  "genui_dependencies": [
+    "APP-009 ordinary sign-in and restricted pending-verification session contract",
+    "APP-074 backend resend and actual public verification/admission journey"
+  ],
+  "limitations": [
+    "No source implementation, new image, provider mail request or paid-scope expansion.",
+    "Current no-SMTP image/rehearsal remains unchanged and cannot close verified-mailbox activation.",
+    "Exact GenUI ordinary entry and pending/resend route contract remains to be reviewed; operator qualification routes are not substitutes."
+  ],
+  "retained_copy": "MAIL-VERIFICATION-FOLLOW-ON-PLAN.txt",
+  "packaging_note": "Original bytes retained as text because producer Markdown contains absolute checkout source references; planning checker rejects those as portable active Markdown links."
+}
