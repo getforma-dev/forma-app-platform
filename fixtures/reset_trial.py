@@ -20,11 +20,6 @@ import sys
 from verify import DEFAULT, ROOT, load_package, sha
 
 ROLES = ("genui_workspace", "genui_control", "genui_data", "genui_worker")
-TABLES = tuple(sorted(("organizations", "provider_tenant_bindings", "principals", "memberships", "spaces", "apps",
-    "definition_revisions", "definition_inputs", "definition_record_schemas", "publication_policies", "publications",
-    "publication_inputs", "publication_record_schemas", "saved_work", "sources", "source_revisions", "record_collections",
-    "work_bindings", "work_source_dependencies", "internal_records", "internal_record_revisions", "record_source_dependencies",
-    "organization_permissions", "app_permissions", "work_permissions", "source_permissions")))
 AUTHOR = "00000000-0000-4000-8000-000000000066"
 ADMIN = "00000000-0000-4000-8000-000000000f00"
 
@@ -128,19 +123,28 @@ def owned_workspace(helper, receipt):
             receipt["removed"] = pg.removed
 
 
-def snapshot(pg, runtime, migration_dir, organizations, sql):
+def catalog_inventory(runtime, migration_dir):
+    """Current pinned catalog file and its tenant tables; never learned from a database."""
+    _, catalogs = runtime.catalog_resources(migration_dir)
+    latest = max(catalogs)
+    tables = tuple(sorted(row[1] for row in catalogs[latest]["relations"] if row[0] == "genui" and row[2] in ("r", "p")))
+    require(tables, "catalog relation inventory missing")
+    return migration_dir / f"catalog-v{latest}.json", tables
+
+
+def snapshot(pg, runtime, migration_dir, organizations, sql, catalog_file, tables):
     rows = {}
     with pg.connect() as c:
         runtime.verify_schema_catalog(c, migration_dir)
         found = tuple(row[0] for row in c.execute("SELECT tablename FROM pg_tables WHERE schemaname='genui' ORDER BY tablename").fetchall())
-        require(found == TABLES, "unexpected fixture relation inventory")
+        require(tuple(sorted(found)) == tables, "unexpected fixture relation inventory")
         version = c.execute("SELECT singleton,version FROM genui_meta.schema_version").fetchall()
         history = c.execute("SELECT version,sha256,applied_at::text FROM genui_meta.schema_migrations ORDER BY version").fetchall()
         c.execute("SET LOCAL ROLE genui_owner")
         for org in organizations:
             context(c, org)
             rows[org] = {}
-            for table in TABLES:
+            for table in tables:
                 query = sql.SQL('SELECT to_jsonb(t)::text FROM genui.{} AS t ORDER BY to_jsonb(t)::text COLLATE "C" LIMIT 1001').format(sql.Identifier(table))
                 values = [json.loads(row[0]) for row in c.execute(query).fetchall()]
                 require(len(values) <= 1000, "fixture row bound exceeded")
@@ -148,11 +152,11 @@ def snapshot(pg, runtime, migration_dir, organizations, sql):
                 rows[org][table] = values
     logical = {"tenant_relations": rows, "schema_version": version,
                "migration_history": [[row[0], row[1]] for row in history],
-               "catalog_digest": sha(migration_dir / "catalog-v2.json")}
+               "catalog_digest": sha(catalog_file)}
     # Local disposable superuser is read-only here: prove no third tenant or
     # otherwise invisible rows were omitted by the two scoped snapshots.
     with pg.connect("postgres") as c:
-        for table in TABLES:
+        for table in tables:
             total = c.execute(sql.SQL("SELECT count(*) FROM genui.{}").format(sql.Identifier(table))).fetchone()[0]
             require(total == sum(len(rows[org][table]) for org in organizations), "snapshot omitted out-of-scope rows")
     require(len(encoded(logical)) <= 10 * 1024 * 1024, "fixture logical snapshot too large")
@@ -166,7 +170,7 @@ def exact_rows(actual, expected, reason):
     require(sorted(actual, key=encoded) == sorted(expected, key=encoded), reason)
 
 
-def verify_seed_manifest(state, setup, bundles, seed_module):
+def verify_seed_manifest(state, setup, bundles, seed_module, tables):
     organizations = setup["organizations"]
     require([item["organization_id"] for item in organizations] == list(seed_module.ORGANIZATIONS), "setup organization inventory differs")
     expected_apps = {(org["organization_id"], item["app_id"]) for org in organizations for item in org["contract_shape_seeds"]}
@@ -199,17 +203,17 @@ def verify_seed_manifest(state, setup, bundles, seed_module):
             require(bytes.fromhex(actual_publication["canonical_envelope"][2:]) == seed_module.canonical(bundle["publication"]), "seeded publication bytes differ")
         for name, expected in (("apps", apps), ("saved_work", work), ("internal_records", records), ("app_permissions", app_grants), ("work_permissions", work_grants), ("source_permissions", source_grants)):
             exact_rows(tables[name], expected, name + " manifest mismatch")
-    return {"organizations": len(organizations), "principals": sum(len(o["principals"]) for o in organizations), "bundles": len(bundles), "table_count_per_organization": len(TABLES),
-            "scope": "exact seeded identities, bindings, memberships, app/work/record identities, grants and canonical definitions/publications; all 26 relation rows retained for reset equality"}
+    return {"organizations": len(organizations), "principals": sum(len(o["principals"]) for o in organizations), "bundles": len(bundles), "table_count_per_organization": len(tables),
+            "scope": f"exact seeded identities, bindings, memberships, app/work/record identities, grants and canonical definitions/publications; all {len(tables)} relation rows retained for reset equality"}
 
 
-def role_trials(pg, initial, organizations, sql, psycopg):
+def role_trials(pg, initial, organizations, sql, psycopg, tables):
     results = []
     for role in ROLES:
         with pg.connect(role) as c:
             require(c.execute("SELECT session_user::text,current_user::text").fetchone() == (role, role), "database role mismatch")
             require(c.execute("SELECT count(*) FROM genui.organizations").fetchone() == (0,), "unscoped role saw tenant data")
-            allowed = [table for table in TABLES if c.execute("SELECT has_table_privilege(current_user,%s,'SELECT')", ("genui." + table,)).fetchone()[0]]
+            allowed = [table for table in tables if c.execute("SELECT has_table_privilege(current_user,%s,'SELECT')", ("genui." + table,)).fetchone()[0]]
             for org in organizations:
                 context(c, org)
                 other = next(item for item in organizations if item != org)
@@ -272,6 +276,9 @@ def run_trial(output, *, _fail_after_mutation=False):
         inputs = [Path(__file__), ROOT / "fixtures/verify.py", DEFAULT / "manifest.json", DEFAULT / "setup.json", ROOT / "app/runtime/runtime.py", ROOT / "app/runtime/tenant_seed.py", ROOT / "app/runtime/qualify_tenant_schema.py", ROOT / "app/runtime/requirements.lock", ROOT / "contracts/requirements.lock", ROOT / "contracts/validate.py", ROOT / "contracts/implementation-lock.json", *sorted(migration_dir.glob("*"))]
         report["source_pins"] = {str(p.relative_to(ROOT)): sha(p) for p in inputs if p.is_file()}
         report["seed_bundle_digest"] = "sha256:" + hashlib.sha256(seed_module.canonical(bundles)).hexdigest()
+        # The relation inventory is the pinned current catalog's, read through the
+        # runtime's manifest/hash checks; both are among the source pins above.
+        catalog_file, tables = catalog_inventory(runtime, migration_dir)
         for ordinal in (1, 2):
             require(all(sha(ROOT / name) == value for name, value in report["source_pins"].items()), "reset inputs changed during qualification")
             receipt = {"ordinal": ordinal}
@@ -282,22 +289,22 @@ def run_trial(output, *, _fail_after_mutation=False):
                         runtime.apply_migrations(c, migration_dir)
                     with pg.connect() as c:
                         seed_module.seed(c, bundles)
-                    state = snapshot(pg, runtime, migration_dir, organizations, sql)
-                    receipt["seed_manifest"] = verify_seed_manifest(state, setup, bundles, seed_module)
+                    state = snapshot(pg, runtime, migration_dir, organizations, sql, catalog_file, tables)
+                    receipt["seed_manifest"] = verify_seed_manifest(state, setup, bundles, seed_module, tables)
                     save(output / f"workspace-{ordinal}-initial.json", state)
                     receipt["initial_state_digest"] = state["digest"]
                     with pg.connect() as c:
                         seed_module.seed(c, bundles)
-                    require(snapshot(pg, runtime, migration_dir, organizations, sql)["logical"] == state["logical"], "repeat seed changed logical state")
+                    require(snapshot(pg, runtime, migration_dir, organizations, sql, catalog_file, tables)["logical"] == state["logical"], "repeat seed changed logical state")
                     receipt["repeat_seed_identical"] = True
-                    receipt["role_trials"] = role_trials(pg, state, organizations, sql, psycopg)
+                    receipt["role_trials"] = role_trials(pg, state, organizations, sql, psycopg, tables)
                     if ordinal == 1:
                         first = state
                         mutation = mutate_owned_work(pg, setup)
                         save(output / "operator-mutation.json", mutation)
-                        changed = snapshot(pg, runtime, migration_dir, organizations, sql)
+                        changed = snapshot(pg, runtime, migration_dir, organizations, sql, catalog_file, tables)
                         save(output / "workspace-1-mutated.json", changed)
-                        differences = [(org, table) for org in organizations for table in TABLES if first["logical"]["tenant_relations"][org][table] != changed["logical"]["tenant_relations"][org][table]]
+                        differences = [(org, table) for org in organizations for table in tables if first["logical"]["tenant_relations"][org][table] != changed["logical"]["tenant_relations"][org][table]]
                         require(differences == [(organizations[0], "saved_work")] and changed["digest"] != first["digest"], "mutation escaped exact first-workspace target")
                         try:
                             with pg.connect() as c:
@@ -306,13 +313,13 @@ def run_trial(output, *, _fail_after_mutation=False):
                             require(str(exc) == "existing seed differs; no authority overwritten", "wrong changed-seed refusal")
                         else:
                             raise TrialError("seed overwrote changed work")
-                        require(snapshot(pg, runtime, migration_dir, organizations, sql)["logical"] == changed["logical"], "refused seed changed mutated state")
+                        require(snapshot(pg, runtime, migration_dir, organizations, sql, catalog_file, tables)["logical"] == changed["logical"], "refused seed changed mutated state")
                         receipt.update(mutated_state_digest=changed["digest"], changed_seed_refused_without_overwrite=True)
                         if _fail_after_mutation:
                             raise InjectedFailure("intentional cleanup check after committed disposable mutation")
                     else:
                         require(first["logical"] == state["logical"], "fresh disposable reset differs from initial logical state")
-                        report["reset_comparison"] = {"equal": True, "initial_digest": first["digest"], "fresh_reset_digest": state["digest"], "relations_per_org": len(TABLES), "organizations": len(organizations), "all_columns_and_rows_compared": True}
+                        report["reset_comparison"] = {"equal": True, "initial_digest": first["digest"], "fresh_reset_digest": state["digest"], "relations_per_org": len(tables), "organizations": len(organizations), "all_columns_and_rows_compared": True}
             finally:
                 save(output / f"workspace-{ordinal}-receipt.json", receipt)
             require(receipt["removed"], "workspace removal not confirmed")
