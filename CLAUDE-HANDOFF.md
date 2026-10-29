@@ -20,6 +20,8 @@ The dependency order below ("APP-009 needs APP-006/008/073…") is superseded by
 
 Landed on `main`: PR 1 (`2172ad4`) — APP-006, APP-008, APP-011 Done. On `phase-one-spikes` (pushed, tip `7d566b2`): ADR-007 revised and amended after three reviews; ADR-009 revised and re-reviewed (no blockers); Phase 2 execution plan (`docs/planning/PHASE-2-EXECUTION-PLAN.md`) and the APP-027/APP-081 split; migrations 0003 (admission) and 0004 (entitlement reads) with the storage admission module and `admission_operator.py`, all review majors fixed; contract edition `impl-2026-10-29.2`; parser-host packaging (Phase 2 Task A4). fAuth is live at `https://auth-staging.getforma.dev` (FORMA-367 cleared; DNS A record by GenUI via the Porkbun API, key held privately in the session scratchpad, not in git); SES production access pending (FORMA-366).
 
+Update at ~22:30 UTC: APP-075 (B1–B3) and APP-073 items 6–7 (provider invitations, reconciliation) are merged with all local checks green; both still need an independent review (APP-075 also a fresh `check_image.py` run, its image allowlist grew). APP-073's provider slice works against a loopback fake only; live fAuth invitation evidence is APP-074/076. Provider operations write no audit events because D7.8's kinds are closed — an ADR-007 amendment if wanted.
+
 In flight when the checkpoint was written (each in its own worktree under `.claude/worktrees/`; nothing pushed from them yet):
 - APP-073 items 6–7 (provider invitations and reconciliation) — worktree `agent-a0fdb56e28a311db3`.
 - APP-075 managed entry (plan B1–B3) — worktree `agent-aafe83d78bac0d915`.
