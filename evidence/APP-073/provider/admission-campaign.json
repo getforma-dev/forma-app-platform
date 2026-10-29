@@ -123,6 +123,7 @@
     "presignup_reservations_live_max": 10,
     "provider": {
       "connect_timeout_seconds": 5,
+      "create_send_margin_seconds": 5,
       "list_page_size": 200,
       "list_pages_max": 50,
       "provider_invitation_hours_default": 72,
