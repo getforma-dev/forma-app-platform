@@ -358,26 +358,39 @@ class MigrationRunnerTests(unittest.TestCase):
             self.assertIn('SELECT pg_advisory_xact_lock(1819409017, 2)', database.statements)
             self.assertEqual(database.statements.count(database.query), 1)
 
-    def test_history_check_relaxed_to_latest(self):
+    def test_new_ledger_starts_at_version_two_and_every_step_is_proven(self):
+        # ADR-007 D7.12: the runner creates the ledger at the historical bound and
+        # each later migration ALTERs both version CHECKs, so a fresh or legacy
+        # install passes through every reviewed catalog, proven step by step.
+        self.assertEqual(runtime.LEDGER_VERSION, 2)
+        bound = f'CHECK (version BETWEEN 1 AND {runtime.LEDGER_VERSION})'
         with tempfile.TemporaryDirectory() as tmp:
             directory = synthetic_versions(tmp, 3)
+            third = (directory / '0003_unit_only_marker.sql').read_text()
             for created in (False, True):  # fresh database, then preserved legacy version 1
                 with self.subTest(created=created):
                     database = MigrationRecorder(directory, 1, ledger=False, created=created)
                     runtime.apply_migrations(database, directory)
-                    ledger = [s for s in database.statements if s.startswith('SET LOCAL ROLE genui_owner;')]
-                    self.assertEqual(len(ledger), 1)
-                    self.assertEqual(ledger[0].count('CHECK (version BETWEEN 1 AND 3)'), 2)
-                    self.assertNotIn('BETWEEN 1 AND 2', ledger[0])
+                    ledger, = [s for s in database.statements if s.startswith('SET LOCAL ROLE genui_owner;')]
+                    self.assertEqual((ledger.count('BETWEEN 1 AND '), ledger.count(bound)), (2, 2))
                     self.assertEqual(database.applied(), [2, 3] if created else [1, 2, 3])
                     self.assertEqual(([version for version, _ in database.history], database.version), ([1, 2, 3], 3))
+                    # Proof of version 1, of version 2 before 0003 runs, and finally of version 3.
+                    proofs = [index for index, s in enumerate(database.statements) if s == database.query]
+                    self.assertEqual(len(proofs), 3)
+                    self.assertLess(proofs[1], database.statements.index(third))
                     self.assertEqual(database.statements[-1], database.query)
-        # The reviewed two-version manifest keeps its exact bound.
+                    # A step whose catalog differs is refused before the next migration runs.
+                    database = MigrationRecorder(directory, 1, ledger=False, created=created)
+                    database.drift[2] = json.dumps({'unreviewed': []})
+                    with self.assertRaises(runtime.Refused): runtime.apply_migrations(database, directory)
+                    self.assertEqual(database.applied(), [2] if created else [1, 2])
+        # The reviewed two-version manifest: the same bound, version 1 then final version 2 proof.
         database = MigrationRecorder(MIGRATIONS, 1, ledger=False)
         runtime.apply_migrations(database, MIGRATIONS)
         ledger, = [s for s in database.statements if s.startswith('SET LOCAL ROLE genui_owner;')]
-        self.assertEqual(ledger.count('CHECK (version BETWEEN 1 AND 2)'), 2)
-        self.assertEqual(database.version, 2)
+        self.assertEqual((ledger.count('BETWEEN 1 AND '), ledger.count(bound)), (2, 2))
+        self.assertEqual((database.version, database.statements.count(database.query)), (2, 2))
 
     def test_apply_migrations_proves_each_intermediate_version_before_the_next(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -490,10 +503,12 @@ class GeneratorTests(unittest.TestCase):
                         # One snapshot after every migration, all taken before any refusal.
                         self.assertEqual(statements.count(query), 3)
                         self.assertEqual(feed, [])
-                        # Snapshots start from the at-rest version-2 ledger bound so that
-                        # catalog-v2 stays the state real version-2 databases are in.
+                        # As in the runner, the upgrade to version 2 creates the ledger at
+                        # its historical bound, so catalog-v2 is the real version-2 state.
                         ledger, = [s for s in statements if s.startswith('SET LOCAL ROLE genui_owner;')]
                         self.assertEqual(ledger.count('CHECK (version BETWEEN 1 AND 2)'), 2)
+                        second = (directory / '0002_tenant_foundation.sql').read_bytes().decode('utf-8')
+                        self.assertLess(statements.index(ledger), statements.index(second))
 
 
 class IdentityRegistryFileTests(unittest.TestCase):

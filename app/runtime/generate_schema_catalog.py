@@ -10,15 +10,8 @@ import json
 from pathlib import Path
 
 import runtime
+from runtime import LEDGER_VERSION
 from qualify_tenant_schema import LocalPostgres, MIGRATIONS, IMAGE
-
-# The version-2 upgrade created the ledger and real version-2 databases keep
-# its BETWEEN 1 AND 2 bound at rest. Every later migration ALTERs both version
-# CHECKs to its own number (ADR-007 D7.12), so applying each one on top yields
-# that version's at-rest catalog. A fresh N-version install starts the ledger
-# at BETWEEN 1 AND N instead; the runner's final proof against catalog-vN is
-# what shows both paths converge.
-LEDGER_VERSION = 2
 
 
 def readable(value):
@@ -47,9 +40,12 @@ def generate(destination):
             snapshot(1)
             # Deliberate candidate construction from reviewed SQL, confined to
             # this newly created local fixture. This is not a migration bypass
-            # on an operator-supplied connection or managed endpoint.
-            runtime.initialize_migration_history(c,sources[0][1],LEDGER_VERSION)
+            # on an operator-supplied connection or managed endpoint. As in the
+            # runner, the upgrade to LEDGER_VERSION creates the ledger at its
+            # historical bound and each later migration ALTERs both version
+            # CHECKs (ADR-007 D7.12), so every snapshot is that version's state.
             for version,digest,source in sources[1:]:
+                if version==LEDGER_VERSION: runtime.initialize_migration_history(c,sources[0][1])
                 c.execute(source)
                 c.execute('INSERT INTO genui_meta.schema_migrations(version,sha256) VALUES (%s,%s)',(version,digest))
                 c.execute('UPDATE genui_meta.schema_version SET version=%s WHERE singleton',(version,))

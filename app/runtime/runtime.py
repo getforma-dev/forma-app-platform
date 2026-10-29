@@ -23,6 +23,10 @@ ROLES = ("workspace", "control", "data", "worker")
 # manifest itself; scripts/check-schema-pins.py keeps this value, the manifest,
 # the native version check and both embedded catalogs on the same version.
 DATABASE_SCHEMA_VERSION = 2
+# The version whose upgrade created genui_meta.schema_migrations. A new ledger
+# always starts at its historical BETWEEN 1 AND 2 bound; every later migration
+# ALTERs both version CHECKs to its own number (ADR-007 D7.12).
+LEDGER_VERSION = 2
 INITIAL_MIGRATION_SHA256 = "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963"
 QUALIFICATION_JSON_ENV = "GENUI_AUTH_QUALIFICATION_CONFIG_JSON"
 QUALIFICATION_FILE_ENV = "GENUI_AUTH_QUALIFICATION_CONFIG_FILE"
@@ -324,8 +328,8 @@ def migration_manifest(directory):
     manifest = json.loads((Path(directory) / "manifest.json").read_text())
     require(isinstance(manifest, dict) and set(manifest) == {"schema_version", "database_version", "migrations", "catalog"})
     latest = manifest["database_version"]
-    # Version 2 introduced the ledger; four digits number every file.
-    require(manifest["schema_version"] == 1 and type(latest) is int and 2 <= latest <= 9999)
+    # LEDGER_VERSION introduced the ledger; four digits number every file.
+    require(manifest["schema_version"] == 1 and type(latest) is int and LEDGER_VERSION <= latest <= 9999)
     require(isinstance(manifest["migrations"], list) and len(manifest["migrations"]) == latest)
     require(isinstance(manifest["catalog"], list) and len(manifest["catalog"]) == latest + 1)
     return manifest
@@ -399,19 +403,19 @@ def proven_catalog_version(connection, directory, versions=None):
     return matches[0]
 
 
-def initialize_migration_history(connection, initial_digest, latest):
+def initialize_migration_history(connection, initial_digest):
     """Only after the verified legacy catalog, in the same upgrade transaction.
 
-    Both version CHECKs admit 1..latest, the manifest's N for the runner.
+    Both version CHECKs start at the historical BETWEEN 1 AND LEDGER_VERSION
+    bound for any manifest; later migrations ALTER them (ADR-007 D7.12).
     """
-    require(type(latest) is int and 2 <= latest <= 9999)
     connection.execute("""SET LOCAL ROLE genui_owner;
       CREATE TABLE genui_meta.schema_migrations (
         version integer PRIMARY KEY CHECK (version BETWEEN 1 AND %d),
         sha256 text NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'), applied_at timestamptz NOT NULL DEFAULT clock_timestamp());
       ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check;
       ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK (version BETWEEN 1 AND %d);
-      RESET ROLE;""" % (latest, latest))
+      RESET ROLE;""" % (LEDGER_VERSION, LEDGER_VERSION))
     connection.execute("INSERT INTO genui_meta.schema_migrations(version,sha256) VALUES (1,%s)", (initial_digest,))
 
 
@@ -437,9 +441,9 @@ def apply_migrations(connection, directory):
     if has_history:
         # A committed history1 cannot be produced by this atomic runner. Never
         # treat a partial/forged ledger as permission to skip the legacy proof.
-        # Versions 2..N carry the ledger: the exact reviewed catalog proves the
-        # recorded version before the ledger or version row is read.
-        recorded = proven_catalog_version(connection, directory, range(2, latest + 1))
+        # Versions LEDGER_VERSION..N carry the ledger: the exact reviewed catalog
+        # proves the recorded version before the ledger or version row is read.
+        recorded = proven_catalog_version(connection, directory, range(LEDGER_VERSION, latest + 1))
         require(connection.execute("SELECT version,sha256 FROM genui_meta.schema_migrations ORDER BY version").fetchall()
                 == [(version, digest) for version, digest, _ in sources[:recorded]])
         require(connection.execute("SELECT singleton,version FROM genui_meta.schema_version").fetchall() == [(True, recorded)])
@@ -448,16 +452,17 @@ def apply_migrations(connection, directory):
     else:
         verify_schema_catalog(connection, directory, 1)
         require(connection.execute("SELECT singleton,version FROM genui_meta.schema_version").fetchall() == [(True, 1)])
-        initialize_migration_history(connection, sources[0][1], latest)
+        initialize_migration_history(connection, sources[0][1])
         recorded = 1
     for version, digest, source in sources[recorded:]:
         connection.execute(source)
         connection.execute("INSERT INTO genui_meta.schema_migrations(version,sha256) VALUES (%s,%s)", (version, digest))
         connection.execute("UPDATE genui_meta.schema_version SET version=%s WHERE singleton", (version,))
-        # Each recorded-version step must reach its reviewed at-rest catalog
-        # before the next runs. A ledger created just above admits 1..N, so
-        # its intermediate states are proven only by the final catalog-vN.
-        if has_history and version < latest:
+        # Every step, on every path, must reach its reviewed catalog before the
+        # next runs: the ledger starts at its historical bound and each later
+        # migration ALTERs both CHECKs, so migration k leaves catalog-vk. The
+        # last step's proof is the final one below.
+        if version < latest:
             verify_schema_catalog(connection, directory, version)
     require(connection.execute("SELECT version FROM genui_meta.schema_version").fetchone() == (latest,))
     verify_schema_catalog(connection, directory, latest)

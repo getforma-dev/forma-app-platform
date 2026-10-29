@@ -124,7 +124,7 @@ def qualify():
                 with drift.connect() as c:
                     if legacy:
                         c.execute((MIGRATIONS/'0001_role_foundation.sql').read_text())
-                        runtime.initialize_migration_history(c,runtime.INITIAL_MIGRATION_SHA256,latest)
+                        runtime.initialize_migration_history(c,runtime.INITIAL_MIGRATION_SHA256)
                     else: runtime.apply_migrations(c,MIGRATIONS)
                     c.execute(statement)
                 # Mutation is committed before opening the real migration call.
@@ -392,7 +392,7 @@ def qualify():
             ): drift_refused(pg,label,statements)
             for inheritance in (False,True):
                 with pg.connect() as c:
-                    runtime.initialize_migration_history(c,runtime.INITIAL_MIGRATION_SHA256,latest)
+                    runtime.initialize_migration_history(c,runtime.INITIAL_MIGRATION_SHA256)
                     if inheritance: c.execute('ALTER ROLE genui_workspace INHERIT')
                     c.execute('SET LOCAL search_path=pg_catalog')
                     before=c.execute(catalog_query).fetchall()
