@@ -28,6 +28,13 @@ app/src/storage/**
 !app/src/storage/tests.rs
 !app/src/storage/qualification.rs
 !app/src/storage/qualification_cases.rs
+!app/src/admission/
+app/src/admission/**
+!app/src/admission/mod.rs
+!app/src/admission/canonical.rs
+!app/src/admission/digest.rs
+!app/src/admission/validate.rs
+# admission/tests.rs is cfg(test) only; its include_str! of ../contracts/ never compiles in a release build.
 !app/admin/
 app/admin/**
 !app/admin/package.json
