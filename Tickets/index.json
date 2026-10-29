@@ -32,9 +32,11 @@
         "APP-013",
         "APP-014",
         "APP-075",
+        "APP-077",
+        "APP-078",
         "APP-076"
       ],
-      "ticket_count": 18,
+      "ticket_count": 20,
       "done_count": 6,
       "blocked_count": 2
     },
@@ -413,8 +415,8 @@
       "Requirements": "C01, C11, N7, P11, R15, S06, SR1, SR3",
       "Depends on": "APP-007",
       "External dependencies": "None beyond listed local predecessors",
-      "Assignee": "GenUI \u2014 Codex tenant-foundation lead",
-      "Branch / PR": "phase-one-spikes; local acceptance source 20a480b (reviewed slices through acbde9b); exact-source CI refused for organization billing, landing pending",
+      "Assignee": "GenUI \u2014 Claude session (successor to the Codex tenant-foundation lead); independent reviewer named at review",
+      "Branch / PR": "phase-one-spikes; local acceptance source 20a480b (reviewed slices through acbde9b), unpushed at the move; no CI run exists for it. The last pushed source 677d7bd was refused before execution for organization billing (run 40812964992). Done revision recorded at landing.",
       "Team": "GenUI",
       "Blocked by": "None \u2014 accepted ADR-004 directs parallel schema and native transaction implementation.",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -2397,7 +2399,7 @@
     },
     {
       "id": "APP-075",
-      "title": "Qualify the tenant foundation on managed RDS",
+      "title": "Finish the managed qualification entry, image and supervisor",
       "path": "0-backlog/APP-075.md",
       "Field": "Value",
       "---": "---",
@@ -2410,8 +2412,8 @@
       "Order": "75",
       "Size": "L",
       "Repos": "forma-app-platform",
-      "Decision": "ADR-005 splits ADR-004 slice 3's managed qualification out of APP-008 so dependent local work can proceed; every managed obligation is inherited verbatim.",
-      "Requirements": "C01, C11, N7, P11, R15, S06, SR1, SR3",
+      "Decision": "ADR-005 splits ADR-004 slice 3's managed qualification out of APP-008; this ticket owns the local preparation of the isolated qualification executable, image and supervisor (managed-harness-preparation slice 2).",
+      "Requirements": "C01, C11, N7, SR1, SR3",
       "Depends on": "APP-008",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
@@ -2421,6 +2423,63 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-008"
+      ]
+    },
+    {
+      "id": "APP-077",
+      "title": "Package the operator tools and prove the two-process race coordinator",
+      "path": "0-backlog/APP-077.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "IAM",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Verification",
+      "Sprint": "S02",
+      "Phase": "PH01",
+      "Order": "76",
+      "Size": "L",
+      "Repos": "forma-app-platform",
+      "Decision": "ADR-005: the separate migration-identity operator package and the run-scoped advisory-beacon race coordinator (managed-harness-preparation slice 3) are prepared and proven locally before any managed window.",
+      "Requirements": "C01, C11, N7, SR1, SR3",
+      "Depends on": "APP-008",
+      "External dependencies": "None beyond listed local predecessors",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-008"
+      ]
+    },
+    {
+      "id": "APP-078",
+      "title": "Qualify the tenant foundation on managed RDS in one reserved window",
+      "path": "0-backlog/APP-078.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "IAM",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Verification",
+      "Sprint": "S02",
+      "Phase": "PH01",
+      "Order": "77",
+      "Size": "L",
+      "Repos": "forma-app-platform",
+      "Decision": "ADR-005: the managed plan's ordered run and required matrix are this ticket's acceptance in full; the items below index that plan and do not reduce it.",
+      "Requirements": "C01, C11, N7, P11, S06, SR1, SR3",
+      "Depends on": "APP-075, APP-077",
+      "External dependencies": "None beyond listed local predecessors",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-075",
+        "APP-077"
       ]
     },
     {
@@ -2435,13 +2494,13 @@
       "Type": "Verification",
       "Sprint": "S02",
       "Phase": "PH01",
-      "Order": "76",
+      "Order": "78",
       "Size": "L",
       "Repos": "forma-app-platform",
       "Decision": "ADR-005 consolidates the hosted and managed acceptance items of APP-012/073 and the PH01 integrated demonstration into one reviewed trial on the exact candidate build.",
       "Requirements": "C01, C06, C07, C11, C15, N4, N5, R15, R16, S06, SR1, SR2, SR7, SR10, SR12",
-      "Depends on": "APP-012, APP-013, APP-014, APP-074, APP-075",
-      "External dependencies": "None beyond listed local predecessors",
+      "Depends on": "APP-012, APP-013, APP-014, APP-074, APP-078",
+      "External dependencies": "FormaStack-operated hosted fAuth with mail transport inside the reserved window, under a separately approved auth allowance (FORMA-247 mail follow-on); consumed through APP-074",
       "Assignee": "Unassigned \u2014 GenUI",
       "Branch / PR": "Not started",
       "Team": "GenUI",
@@ -2452,7 +2511,7 @@
         "APP-013",
         "APP-014",
         "APP-074",
-        "APP-075"
+        "APP-078"
       ]
     }
   ]

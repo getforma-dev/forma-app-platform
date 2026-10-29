@@ -4,7 +4,7 @@
 
 Prepared 2026-10-29 by the GenUI owner (Claude) after reading every remaining PH01 ticket, the code, the design and both team handoffs. Status: plan, not evidence. Nothing here is implemented, deployed or accepted. The orchestrator executing this plan is the GenUI owner and single GenUI operator; the FormaStack/fAuth lane is a separate Claude session (see [CROSS-TEAM-HANDOFF](CROSS-TEAM-HANDOFF.md), last sections).
 
-**Goal:** Close PH01: all eighteen tickets Done (APP-001–014, APP-073–076) and an accepted `evidence/phases/PH01/GATE.md`, proving invite → verified sign-in → current entitlement → authorized query → visible receipt → explicit command → atomic outcome/audit → restart/reopen on the managed synthetic environment.
+**Goal:** Close PH01: all twenty tickets Done (APP-001–014, APP-073–078) and an accepted `evidence/phases/PH01/GATE.md`, proving invite → verified sign-in → current entitlement → authorized query → visible receipt → explicit command → atomic outcome/audit → restart/reopen on the managed synthetic environment.
 
 **Architecture:** One Rust business binary (axum 0.8, forma-server 3.2.0 SSR pages) over four fixed-role PostgreSQL pools with transaction-local tenant scope, FORCE RLS and definer fence functions (ADR-004); a Python support process for credentials, migrations and the bounded query worker; fAuth as the identity provider behind GenUI's own opaque sessions (ADR-003, ADR-006); operator-only admission ledger (APP-073); managed RDS/ECS on AWS for the two hosted trials (APP-075, APP-076). Local tickets prove behavior on real PostgreSQL 16.13 with TLS in Docker; hosted and managed acceptance live only in APP-006/074/075/076.
 
@@ -57,7 +57,7 @@ Task 2 records these in `docs/architecture/ADR-007-PHASE-1-WRITE-AUTHORITY.md` a
 - **D7.14 Trusted proxy and limits.** `axum::serve(..).into_make_service_with_connect_info::<SocketAddr>()`; the client address is the rightmost `X-Forwarded-For` hop because only the ALB can reach the task; in-process token buckets per address class, per account and global with the ADR-006 values; bodies ≤4 KiB on auth/admission forms, 64 KiB on JSON command/query routes; handler deadline 5 s.
 - **D7.15 HTTP contract.** JSON routes under `/v1/`, pages unversioned; errors `application/problem+json` `{ "code": "<stable>" }` only; authenticated responses `Cache-Control: no-store`; unknown paths get a fallback that answers the same uniform 404 with security headers.
 - **D7.16 Idempotency key for pre-activation forms** travels as a typed prop rendered into a hidden field (static SSR routes refuse `config_json`); the island mints its own key when active.
-- **D7.17 Admission defaults recorded before any code is issued** (ADR-003 requires them): trial entitlement 30 days, code expiry 14 days (operator maximum 30), `max_redemptions` default 1 (maximum 10), reservation lifetime 10 minutes, list/audit page 100 rows, resend cooldown 60 s and 5 per 24 h.
+- **D7.17 Admission defaults recorded before any code is issued** (ADR-003 requires them): trial entitlement 30 days, code expiry 14 days (operator maximum 30), `max_redemptions` default 1 (maximum 10), pre-signup reservation 10 minutes, post-signup pending admission 24 hours (bound to the provider identity, counted against remaining redemptions, committing nothing until an exchange reports `email_verified` true), list/audit page 100 rows, resend cooldown 60 s and 5 per 24 h.
 
 ## Operating rules for the orchestrator
 
@@ -76,7 +76,7 @@ Victor: GitHub billing ─┐
 T1 land APP-008 + APP-011 (CI, main) ──► APP-073/APP-010 Selected
 T2 ADR-007 ──► T3 runner N-versions ──► T4 0003 ──► T5 APP-073 ──► T7 APP-009 ──► T8 APP-074 local
                                      └─► T6 APP-010 ─────────────────────────────► T9 APP-012 ──► T10 APP-013 ──► T11 APP-014
-Track B (APP-075): B1 entry tests → B2 local harness → B3 image/supervisor → B4 operator package → B5 coordinator → B6 RDS window (after any auth window) → B7 review
+Track B: APP-075 (B1 entry tests → B2 local harness → B3 image/supervisor) ∥ APP-077 (B4 operator package → B5 coordinator) → APP-078 (B6 RDS window after any auth window → B7 review)
 Track C (hosted):  C1 pre-start → C2 joint identity rehearsal (APP-006 consumer items) → FormaStack mail follow-on + controlled-mail trial → C3 FORMA-247 cleared → C4 APP-074 hosted
 Track D:           APP-076 integrated trial (needs T11, C4, B7) → PH01 GATE.md
 ```
@@ -85,7 +85,7 @@ Track D:           APP-076 integrated trial (needs T11, C4, B7) → PH01 GATE.md
 
 ## Track A — local implementation
 
-### Task 1: Land APP-008 and APP-011 once GitHub billing clears
+### Task 1: Land APP-008 and APP-011 once Actions run
 
 **Files:**
 - Modify: `Tickets/3-in-review/APP-008.md`, `Tickets/9-blocked/APP-011.md` (log, move to Done), `evidence/APP-008/ci/<sha>.json`, `evidence/APP-011/ci.json`
@@ -94,7 +94,8 @@ Track D:           APP-076 integrated trial (needs T11, C4, B7) → PH01 GATE.md
 - Consumes: Victor's billing fix (the refused annotation disappears from a planning-run retry).
 - Produces: `origin/main` at the reviewed head; APP-008 and APP-011 Done, which makes `board.py next` list APP-073 and APP-010.
 
-- [ ] **Step 1: Confirm billing is cleared with one cheap run** — trigger only the `planning` workflow (`gh workflow run planning.yml --ref phase-one-spikes`) and read `gh run view <id> --json jobs`; expected: `steps` > 0 and conclusion success. If still refused, stop and report; do not retrigger.
+- [ ] **Step 0: Decide the draft's fate before the exact-source push** — run `cargo +1.93.1 clippy --locked --all-targets -- -D warnings` and `cargo +1.85.0 check --locked --lib --tests` on the tip; if either fails on `app/src/storage/managed_qualification.rs`, revert `4ac7639` onto an `app-075` branch so the pushed tip carries only reviewed code; record the chosen Done revision in APP-008's Branch/PR field.
+- [ ] **Step 1: Confirm Actions run with one cheap workflow** — after the repository is public, trigger only `planning.yml` (`gh workflow run planning.yml --ref phase-one-spikes`) and read `gh run view <id> --json jobs`; expected: `steps` > 0 and conclusion success. If still refused, stop and report (an account payment lock may also block public repositories); do not retrigger.
 - [ ] **Step 2: Push `phase-one-spikes`** (`git push origin phase-one-spikes`) and watch the ten workflows; record each run id and conclusion in `evidence/APP-008/ci/<HEAD-sha>.json`.
 - [ ] **Step 3: Fix forward any failure** in its own commit (format, clippy, the ignored native campaign on Linux, fixtures reset trial); rerun; never edit historical receipts.
 - [ ] **Step 4: Land** — open a PR to `main`, obtain the independent reviewer's note, merge with a merge commit, record the merge sha in both tickets, move APP-008 and APP-011 to `4-done/`, repair incoming links, render and check the board, commit.
@@ -154,7 +155,7 @@ Track D:           APP-076 integrated trial (needs T11, C4, B7) → PH01 GATE.md
 
 **Interfaces:**
 - Consumes: `genui_private.resolve_code`, `admit_redemption`, `advance_member_epoch`; `Transaction::begin`; `storage::Error`.
-- Produces: `pub struct VerifiedNonmember { pub(super) issuer: String, pub(super) provider_tenant: String, pub(super) provider_subject: String, pub(super) registry_sha256: String }` (constructed only inside `storage`; APP-009's session adapter fills it); `pub enum Admission { Admitted { principal: String, epoch: i64, entitlement: String }, Pending { reason: PendingReason }, Refused }`; `impl Workspace { pub async fn resolve_code(&self, code_digest: &str) -> Result<Option<String>>; pub async fn reserve_code(&self, organization: &str, code_digest: &str, context_digest: &str) -> Result<Option<String>>; pub async fn admit(&self, identity: &VerifiedNonmember, organization: &str, code_digest: &str, reservation: &str, payload_digest: &str) -> Result<Admission>; pub async fn advance_epoch(&self, request: &TrustedRequest, reason: &str) -> Result<i64> }`; `precheck` additionally requires an `entitlements` row with `status='active' AND expires_at > now()` for the principal, and `fence` re-reads it after `lock_member_authority`; operator CLI `python3 app/runtime/admission_operator.py {issue,list,revoke,extend} --organization <uuid> …` running as `genui_migration` → `SET LOCAL ROLE genui_owner`, printing the raw code exactly once to stdout and nothing to logs.
+- Produces: `pub struct VerifiedNonmember { pub(super) issuer: String, pub(super) provider_tenant: String, pub(super) provider_subject: String, pub(super) registry_sha256: String }` (constructed only inside `storage`; APP-009's session adapter fills it); `pub enum Admission { Admitted { principal: String, epoch: i64, entitlement: String }, Pending { reason: PendingReason }, Refused }`; `impl Workspace { pub async fn resolve_code(&self, code_digest: &str) -> Result<Option<String>>; pub async fn reserve_code(&self, organization: &str, code_digest: &str, context_digest: &str) -> Result<Option<String>>; pub async fn record_pending_admission(&self, identity: &VerifiedNonmember, organization: &str, code_digest: &str, handoff: &str) -> Result<String>; pub async fn admit(&self, identity: &VerifiedNonmember, organization: &str, pending_admission: &str, payload_digest: &str) -> Result<Admission> /* callers invoke it only after an exchange reporting email_verified true */; pub async fn advance_epoch(&self, request: &TrustedRequest, reason: &str) -> Result<i64> }`; `precheck` additionally requires an `entitlements` row with `status='active' AND expires_at > now()` for the principal, and `fence` re-reads it after `lock_member_authority`; operator CLI `python3 app/runtime/admission_operator.py {issue,list,revoke,extend} --organization <uuid> …` running as `genui_migration` → `SET LOCAL ROLE genui_owner`, printing the raw code exactly once to stdout and nothing to logs.
 
 - [ ] **Step 1: Write failing Rust tests** (in `qualification_cases.rs`/`qualification.rs`, Docker fixture): `admission_resolves_only_known_digests_without_scope`, `admission_commits_membership_entitlement_audit_atomically`, `identical_retry_returns_stored_outcome_without_second_slot`, `changed_payload_or_principal_refuses_outcome`, `last_slot_race_admits_exactly_one` (two `admit` calls with `TestHooks` phase `admit`), `redemption_vs_code_revocation_both_orders`, `entitlement_use_vs_revocation_both_orders`, `expired_entitlement_denies_precheck_fence_and_delivery`, `forged_operator_identity_cannot_issue` (an app role calling the operator SQL path is refused).
 - [ ] **Step 2: Run** the campaign; expected: FAIL (`Workspace::admit` undefined).
@@ -185,10 +186,10 @@ Track D:           APP-076 integrated trial (needs T11, C4, B7) → PH01 GATE.md
 - Modify: `app/src/main.rs` (routes per ADR-006; feature-gated harness per D7.13; `into_make_service_with_connect_info`), `app/Cargo.toml` (`[features] qualification-harness = []`), `app/src/auth_qualification.rs` (`#![cfg(feature = "qualification-harness")]`), `app/admin/build.ts`, pins, `.dockerignore`, `app/runtime/smoke_http.py` and `evidence/APP-006/hosted-callback/http_probe.py` expectations for the new routes
 
 **Interfaces:**
-- Consumes: `genui_auth_verifier::{Verifier, Config, ContractProfile::Forma248AccessOnly, VerifiedIdentity}`; `Workspace::{resolve_code, reserve_code, admit, advance_epoch}`; `Registry::agrees`; ADR-006 routes, cookies and lifetimes; 0005 tables `genui.prelogin_flows(organization_id, flow_id, kind CHECK IN ('signin','signup'), state_digest, nonce, code_verifier_digest-free: verifier stored encrypted, signup_handoff_id NULL, client_address_class, created_at, expires_at)`, `genui.pre_access_sessions(organization_id, session_id, issuer, provider_tenant_id, provider_subject, email_verified boolean, admission_flow_id, refresh_token_ciphertext bytea, created_at, last_seen_at, expires_at, revoked_at)`, `genui.sessions(organization_id, session_id, principal_id FK memberships, membership_epoch_at_mint, entitlement_id, registry_sha256, created_at, last_seen_at, absolute_expires_at, revoked_at)` with cookie values stored as SHA-256 digests.
+- Consumes: `genui_auth_verifier::{Verifier, Config, ContractProfile::Forma248AccessOnly, VerifiedIdentity}`; `Workspace::{resolve_code, reserve_code, record_pending_admission, admit, advance_epoch}`; `Registry::agrees`; ADR-006 routes, cookies and lifetimes; 0005 tables `genui.prelogin_flows(organization_id, flow_id, kind CHECK IN ('signin','signup'), state_digest, nonce, code_verifier_digest-free: verifier stored encrypted, signup_handoff_id NULL, client_address_class, created_at, expires_at)`, `genui.pre_access_sessions(organization_id, session_id, issuer, provider_tenant_id, provider_subject, email_verified boolean, admission_flow_id, refresh_token_ciphertext bytea, created_at, last_seen_at, expires_at, revoked_at)`, `genui.sessions(organization_id, session_id, principal_id FK memberships, membership_epoch_at_mint, entitlement_id, registry_sha256, created_at, last_seen_at, absolute_expires_at, revoked_at)` with cookie values stored as SHA-256 digests.
 - Produces: `impl Workspace { pub async fn begin_flow(&self, organization: &str, kind: FlowKind, handoff: Option<&str>) -> Result<FlowStart /* cookie value, state, code_challenge */>; pub async fn complete_flow(&self, cookie: &str, state: &str) -> Result<FlowRecord>; pub async fn mint_pre_access(&self, flow: &FlowRecord, identity: &VerifiedIdentity, email_verified: bool, refresh: &[u8]) -> Result<PreAccess>; pub async fn mint_session(&self, pre: &PreAccess, admitted: &AdmittedMember) -> Result<SessionCookie>; pub async fn resolve_session(&self, cookie: &str) -> Result<TrustedRequest>; pub async fn resolve_pre_access(&self, cookie: &str) -> Result<PreAccess>; pub async fn sign_out(&self, cookie: &str) -> Result<()>; pub async fn sign_out_all(&self, request: &TrustedRequest) -> Result<()> }`; `auth::routes::router(state) -> Router` mounting exactly the ADR-006 routes; `auth::csrf::require_same_origin(headers) -> Result<(), Problem>`; `auth::provider::Client { par, exchange, refresh, logout, resend }` bounded 1 s connect / 3 s total, `deny_unknown_fields` structs; `TrustedRequest` is constructed only in `sessions.rs` from the session row, the current `memberships.membership_epoch` and `stores.registry_identity()`.
 
-- [ ] **Step 1: Write failing tests** (`auth/tests.rs` with the synthetic loopback issuer and the Docker storage fixture): one test per ADR-006 route row plus `pre_access_cannot_reach_protected_routes_or_mint_session`, `replayed_callback_mismatched_state_unknown_kid_forged_token_refused`, `cross_site_post_is_403_cross_site`, `idle_and_absolute_expiry_and_signout_everywhere_invalidate_and_bump_epoch`, `pending_resend_mapping_for_all_five_provider_outcomes`, `both_admission_completion_orders_mint_at_most_one_session`, `revoked_entitlement_during_pending_never_mints`, `release_build_has_no_harness_routes_and_refuses_qualification_env`, `no_provider_token_or_set_cookie_reaches_browser`.
+- [ ] **Step 1: Write failing tests** (`auth/tests.rs` with the synthetic loopback issuer and the Docker storage fixture): one test per ADR-006 route row plus `pre_access_cannot_reach_protected_routes_or_mint_session`, `replayed_callback_mismatched_state_unknown_kid_forged_token_refused`, `cross_site_post_is_403_cross_site`, `idle_and_absolute_expiry_and_signout_everywhere_invalidate_and_bump_epoch`, `pending_resend_mapping_for_all_five_provider_outcomes`, `both_admission_completion_orders_mint_at_most_one_session`, `unverified_mailbox_commits_no_slot_membership_or_entitlement`, `revoked_entitlement_during_pending_never_mints`, `release_build_has_no_harness_routes_and_refuses_qualification_env`, `no_provider_token_or_set_cookie_reaches_browser`.
 - [ ] **Step 2: Run**; expected: FAIL.
 - [ ] **Step 3: Implement** 0005 and the eight pins (5), extract the harness helpers into `auth/*` (keep `auth_qualification.rs` compiling behind the feature), implement `sessions.rs`, routes, SSR pages (`SigninProps { handle_known: bool, csrf: String }`, `PendingProps { resend_available: bool, cooldown_seconds: u32, csrf: String }`), the fallback handler, and the router changes.
 - [ ] **Step 4: Run** all local checks, `scripts/check-foundation.py` (updated smoke expectations), the Docker image build with the new allowlist and `qualify_image.py`; expected: pass; page sizes under 28,420 B forma / 76,800 B page.
@@ -262,9 +263,9 @@ Track D:           APP-076 integrated trial (needs T11, C4, B7) → PH01 GATE.md
 
 ---
 
-## Track B — APP-075 managed tenant qualification (parallel with Track A)
+## Track B — managed tenant qualification: APP-075, APP-077, APP-078 (parallel with Track A)
 
-Preparation steps (B1–B5) are local and may run as APP-075 preparation evidence while APP-008 awaits landing; the board status moves only when `board.py next` lists APP-075.
+B1–B3 belong to APP-075 and B4–B5 to APP-077; both depend only on APP-008 and may run as preparation evidence while APP-008 awaits landing (board status moves only when `board.py next` lists them). B6–B7 are APP-078, the single reserved window, which depends on both and on a Victor-approved slot outside any auth window.
 
 ### Task B1: Finish and test the managed-entry draft
 
@@ -294,13 +295,13 @@ Preparation steps (B1–B5) are local and may run as APP-075 preparation evidenc
 
 - [ ] Steps: tests first (supervisor refusals, exact args, no serve), implement, build image, confined `qualify_image.py`-style checks, CDK tests, independent review, commit.
 
-### Task B4: Operator package (migrate, seed, admission operator, fixture upload)
+### Task B4 (APP-077): Operator package (migrate, seed, admission operator, fixture upload)
 
 **Files:** Create `app/operator/Dockerfile`, `app/operator/Dockerfile.dockerignore`, `app/operator/operator.py` (subcommands `migrate`, `seed`, `admission {issue,list,revoke,extend}`, `upload-sources`, `verify-catalog`), `app/operator/requirements.lock`; modify `infra/src/stack.ts` (optional `OperatorTask` definition using the migration execution role and `PGPASSWORD` secret; overrides ≤8,192 bytes; `entryPoint` matches).
 
 - [ ] Steps: package `runtime.apply_migrations`, `tenant_seed.seed`, `contracts/validate.py` and fixtures, `admission_operator.py`; S3 upload of fixture source bytes to `o/<org>/sources/…` with KMS; tests; image build; CDK tests; review; commit.
 
-### Task B5: Two-process race coordinator (local proof)
+### Task B5 (APP-077): Two-process race coordinator (local proof)
 
 **Files:** Create `app/qualification/race_coordinator.py`, `app/src/storage/managed_races.rs` (cfg(test)); `evidence/APP-075/coordinator/README.md`.
 
@@ -308,11 +309,11 @@ Preparation steps (B1–B5) are local and may run as APP-075 preparation evidenc
 
 - [ ] Steps: tests on disposable PG 16.13/TLS first; implement; run; review; commit.
 
-### Task B6: The RDS window (after APP-008 Done, after any auth window, Victor-approved)
+### Task B6 (APP-078): The RDS window (after APP-075 and APP-077 Done, after any auth window, Victor-approved)
 
 - [ ] Reconcile the ledger basis; new window UUID via `infra/scripts/preflight.py --input … --ledger …` (count 0, `extra_task_hours` ≥ 2); TemplateURL upload path reviewed; stack update with the new `ImageDigest` and the two optional task definitions after observing 0/0/0 and the consumer stopped.
-- [ ] Follow `evidence/APP-008/managed-plan.md` steps 1–7 exactly, applying every landed migration and seeding; run the matrix via the qualification task; probe `https://beta.getforma.dev` from the production image; stop everything; observe STOPPED; clean up; reconcile the ledger.
-- [ ] Retain receipts under `evidence/APP-075/managed/`; independent review; move APP-075 to In review, then Done after CI/landing of any source changes.
+- [ ] Decide and review the drift-trial target (temporary restored instance with reviewed `rds-db:connect` bindings, or a recorded limitation) and the ten-minute campaign cap before reserving; follow `evidence/APP-008/managed-plan.md` steps 1–7 exactly, including the read-only pre-mutation comparison with its stop-for-review rule, applying every landed migration and seeding; run the matrix via the qualification task; probe `https://beta.getforma.dev` from the production image; stop everything; observe STOPPED; clean up; reconcile the ledger.
+- [ ] Retain receipts under `evidence/APP-078/`; independent review; move APP-078 to In review, then Done after CI/landing of any source changes.
 
 ---
 
@@ -344,16 +345,16 @@ Preparation steps (B1–B5) are local and may run as APP-075 preparation evidenc
 
 ## Track D — APP-076 integrated managed trial and the PH01 gate
 
-- [ ] After Tasks 9–11, B6 and C3: one reserved window; operator task applies remaining migrations; run the APP-076 acceptance list end to end on `https://beta.getforma.dev` with the hosted fAuth; stop, clean up, reconcile; independent review; APP-076 Done.
+- [ ] After Tasks 9–11, B6 (APP-078) and C3, under a separately approved hosted-auth allowance for this window: one reserved window; operator task applies remaining migrations; run the APP-076 acceptance list end to end on `https://beta.getforma.dev` with the hosted fAuth; stop, clean up, reconcile; independent review; APP-076 Done.
 - [ ] Create `evidence/phases/PH01/GATE.md` from `Tickets/_tools/PHASE-GATE.md`, bind every exit criterion to its ticket evidence, record limits and amendments (ADR-005/006/007), obtain the independent reviewer's decision, then set `gate_status: passed` with the evidence reference in `Tickets/plan.json`, render and check the board, update `docs/planning/PHASE-2-HANDOFF.md` to READY.
 
 ---
 
 ## Victor's actions (only these)
 
-1. Clear `getforma-dev` GitHub Actions billing ("recent account payments have failed or your spending limit needs to be increased"). Everything that ends in Done waits on it.
-2. Approve each proposed window slot (joint identity rehearsal; APP-075 RDS window; APP-076 window), each a few dollars inside the $100 cap.
-3. Optional: if billing stays blocked for days, decide whether recorded local runs of each workflow's exact commands may serve as interim landing evidence (ADR-005 item 7). Default: no.
+1. Repository visibility: public with the all-rights-reserved notice while CI is needed (done at his direction on 2026-10-29); set it back to private after deployment, remembering that any fork made meanwhile stays public.
+2. Approve each proposed window slot (joint identity rehearsal; APP-078 RDS window; APP-076 window), each a few dollars inside the $100 cap.
+3. Approve the additional hosted-auth allowances FormaStack needs to operate fAuth with mail during the controlled-mail trial (APP-074) and the integrated trial (APP-076); the existing $5 covers only the identity-only rehearsal.
 
 ## Self-review
 

@@ -6,7 +6,7 @@ Claude took over the GenUI lane on 2026-10-29 and is the single GenUI operator. 
 
 What changed today:
 
-- [ADR-005](docs/architecture/ADR-005-PHASE-1-SEQUENCING.md) restructured the dependency graph (it was circular and serialized behind cloud windows): APP-008 moved to In review on its local acceptance; **APP-075** (managed tenant qualification on RDS) and **APP-076** (integrated managed trial) were added, so PH01 now has 18 tickets; APP-009 depends on APP-008/073 and consumes the pinned identity contract; APP-012 is local-first; the hosted items of APP-012/073 live in APP-076. Nothing was weakened; every moved sentence is verbatim in its new owner.
+- [ADR-005](docs/architecture/ADR-005-PHASE-1-SEQUENCING.md) restructured the dependency graph (it was circular and serialized behind cloud windows): APP-008 moved to In review on its local acceptance; **APP-075** (managed tenant qualification on RDS) and **APP-076** (integrated managed trial) were added, so PH01 now has 20 tickets (APP-075 was split the same day into APP-075/077/078 after independent review); APP-009 depends on APP-008/073 and consumes the pinned identity contract; APP-012 is local-first; the hosted items of APP-012/073 live in APP-076. Nothing was weakened; every moved sentence is verbatim in its new owner.
 - [ADR-006](docs/architecture/ADR-006-SIGNIN-AND-VERIFICATION-PENDING.md) fixes the sign-in, verification-pending and backend-resend route contract FormaStack needed; FormaStack has implemented its side on an unmerged branch and supplied exact lifetimes.
 - [PHASE-1-EXECUTION-PLAN](docs/planning/PHASE-1-EXECUTION-PLAN.md) is the step-by-step plan for the orchestrator, including the ADR-007 decisions (write authority, schema layout, query execution) that must be recorded before the first new migration.
 - Fresh read-only AWS snapshot at 17:40:59 UTC: service 0/0/0, no tasks, RDS available 16.13, both ECR indices unchanged, ledger hash unchanged. Actual October budget headroom is $2.51 (the $25 "unallocated" is a fixed reserve preflight requires); the ledger 24-hour rule lapses 22:39:50 UTC today.
@@ -54,6 +54,8 @@ Victor authorized coordination with that other chat. Both sides have been told t
 - No model calls before APP-043. No real customer data or external-beta readiness claim from synthetic/local tests.
 
 ## Actual Phase1 status
+
+*2026-10-29 (Claude):* ADR-005 adds APP-075/076/077/078; PH01 is now 20 tickets and the board 78; APP-008 is In review. The counts and the In-progress row below are the transfer-time snapshot.
 
 The [Phase1 board](Tickets/phases/PH01.md) is authoritative. **Six of16 tickets are Done; ten remain.** Ticket counts are not a percentage of effort. Most end-to-end product integration is still ahead.
 

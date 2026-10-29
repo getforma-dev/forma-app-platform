@@ -1,0 +1,74 @@
+{
+  "observed_at_utc": "2026-10-29T17:40:59Z",
+  "scope": "Read-only GenUI control-plane snapshot by the Claude GenUI owner at takeover; no mutation; request IDs were not captured because --query output was used, so this is a reported read with retained values rather than a request-identity receipt",
+  "commands": [
+    "aws ecs describe-services --region us-east-1 --cluster GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN --services GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF --cli-read-timeout 20 --cli-connect-timeout 10",
+    "aws ecs list-tasks --region us-east-1 --cluster GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN --desired-status {RUNNING,PENDING,STOPPED}",
+    "aws rds describe-db-instances --region us-east-1 --db-instance-identifier genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg",
+    "aws cloudformation describe-stacks --region us-east-1 --stack-name GenuiSyntheticFoundation",
+    "aws ecr describe-images --region us-east-1 --repository-name genui-synthetic --image-ids imageDigest=sha256:a4a47707... imageDigest=sha256:5ee5ad16... imageDigest=sha256:770bcb00...",
+    "aws scheduler list-schedules --region us-east-1",
+    "shasum -a 256 .cache/operations/beta/budget-ledger.json"
+  ],
+  "service": {
+    "status": "ACTIVE",
+    "desiredCount": 0,
+    "runningCount": 0,
+    "pendingCount": 0,
+    "taskDefinition": "GenuiSyntheticFoundationTaskE2459512:2"
+  },
+  "cluster_tasks": {
+    "RUNNING": [],
+    "PENDING": [],
+    "STOPPED": []
+  },
+  "rds": {
+    "identifier": "genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg",
+    "resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+    "status": "available",
+    "engine_version": "16.13",
+    "class": "db.t4g.small",
+    "deletion_protection": true,
+    "auto_minor_version_upgrade": false,
+    "publicly_accessible": false
+  },
+  "stack": {
+    "status": "UPDATE_COMPLETE",
+    "last_updated": "2026-10-29T00:43:53.211000+00:00"
+  },
+  "ecr_images": [
+    {
+      "digest": "sha256:a4a47707e1e4028221cba7f5f0dfdf03ef663c6f46d0686a27632c4fd5fc5d08",
+      "tags": [
+        "app006-18c33f5-arm64"
+      ],
+      "pushed": "2026-10-28T21:06:07.659000-04:00"
+    },
+    {
+      "digest": "sha256:5ee5ad165bca1e37bc2efe13f2fb727912c008cbe721b18f452a98482404cedc",
+      "tags": [
+        "app006-key-8fca35c-arm64"
+      ],
+      "pushed": "2026-10-28T22:33:05.597000-04:00"
+    },
+    {
+      "digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+      "tags": [
+        "app007-8f8c34b-arm64"
+      ],
+      "pushed": "2026-10-28T18:27:50.734000-04:00"
+    }
+  ],
+  "schedules": [
+    {
+      "name": "GenuiSyntheticFoundation-DeploymentExpiry-P2FWIBRKKAC1",
+      "state": "ENABLED",
+      "group": "GenuiSyntheticFoundation-ExpiryScheduleGroup-1GXBT2YNEMFEK",
+      "note": "expired stop-only schedule; never restarts compute"
+    }
+  ],
+  "ledger_sha256": "bf5ff561052c334e17e936ffce444a90df44660cc30af8fc9689bc6a3d65f616",
+  "github_actions": {
+    "state": "refused before execution for organization billing at the 17:13Z retry; repository to become public at Victor's direction later the same day"
+  }
+}
