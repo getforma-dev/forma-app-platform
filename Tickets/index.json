@@ -38,7 +38,7 @@
       ],
       "ticket_count": 20,
       "done_count": 9,
-      "blocked_count": 1
+      "blocked_count": 0
     },
     {
       "id": "PH02",
@@ -2519,11 +2519,11 @@
     {
       "id": "APP-076",
       "title": "Run the beta go-live trial on the live deployment",
-      "path": "9-blocked/APP-076.md",
+      "path": "0-backlog/APP-076.md",
       "Field": "Value",
       "---": "---",
       "Epic": "VAL",
-      "Status": "Blocked",
+      "Status": "Backlog",
       "Priority": "P0",
       "Type": "Verification",
       "Sprint": "S02",
@@ -2534,12 +2534,12 @@
       "Decision": "ADR-005 consolidated the hosted and managed acceptance items of APP-012/073 and the PH01 integrated demonstration here. ADR-008 makes this the beta go-live trial on the live deployment at beta.getforma.dev in installed Chrome with real mail, after which the service stays running as the invite-first beta; native Safari/Firefox, deployed negatives and the RDS lock-observation repeat are APP-079/APP-080.",
       "Requirements": "C01, C06, C07, C11, C15, N4, N5, R15, R16, S06, SR1, SR2, SR7, SR10, SR12",
       "Depends on": "APP-012, APP-013, APP-014, APP-074, APP-078",
-      "External dependencies": "FORMA-366 (qualified mail image and inbox trial), FORMA-367 (lean always-on fAuth deployment)",
+      "External dependencies": "FORMA-366 (cleared 2026-10-29), FORMA-367 (cleared 2026-10-29)",
       "Assignee": "Unassigned \u2014 GenUI",
       "Branch / PR": "Not started",
       "Team": "GenUI",
-      "Blocked by": "FormaStack FORMA-366 (the merged mail slice, gatewasm PR 20 `1bf5d3b`, is not yet a qualified image with a controlled-inbox trial) and FORMA-367 (no lean always-on fAuth deployment exists yet; Victor approved it to FormaStack on 2026-10-29 at about $33/month using SES SMTP). GenUI's own always-on hosting figure (ADR-008) is still pending with Victor. The beta cannot admit invited outsiders without a deployed issuer and verification mail.",
-      "Unblock evidence": "FORMA-366 supplies the qualified fAuth image and the controlled-inbox trial receipt; FORMA-367 supplies the lean deployment under Victor's approved figure with the beta client registration (exact callback, `return_entry_url`), the smoke test and the deployed issuer identity plus `ten_`/`usr_` identifiers delivered privately; GenUI records them in `evidence/APP-006/upstream-auth-source/` and sets both gates cleared.",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-012",
         "APP-013",
