@@ -1,0 +1,20 @@
+E
+======================================================================
+ERROR: test_contracts (unittest.loader._FailedTest.test_contracts)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_contracts
+Traceback (most recent call last):
+  File "/Users/victorvillacis/.pyenv/versions/3.11.0/lib/python3.11/unittest/loader.py", line 407, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/victorvillacis/.pyenv/versions/3.11.0/lib/python3.11/unittest/loader.py", line 350, in _get_module_from_name
+    __import__(name)
+  File "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/.claude/worktrees/agent-af76d9aa850667e0b/contracts/test_contracts.py", line 9, in <module>
+    from validate import (ContractError, SCHEMA, canonical, digest, domain_name, exact_rational, loads, payload_digest, validate,
+ImportError: cannot import name 'domain_name' from 'validate' (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/.claude/worktrees/agent-af76d9aa850667e0b/contracts/validate.py)
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)

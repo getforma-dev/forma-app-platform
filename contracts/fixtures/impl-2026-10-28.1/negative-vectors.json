@@ -1,0 +1,624 @@
+[
+  {
+    "name": "model code is refused",
+    "path": [
+      "definition",
+      "content",
+      "javascript"
+    ],
+    "value": "return fetch(secret)",
+    "expected": "schema:"
+  },
+  {
+    "name": "model grants are refused",
+    "path": [
+      "definition",
+      "content",
+      "grants"
+    ],
+    "value": [
+      "admin"
+    ],
+    "expected": "schema:"
+  },
+  {
+    "name": "model SQL is refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      0,
+      "query",
+      "sql"
+    ],
+    "value": "SELECT * FROM secrets",
+    "expected": "schema:"
+  },
+  {
+    "name": "unknown renderer refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      0,
+      "kind"
+    ],
+    "value": "script",
+    "expected": "schema:"
+  },
+  {
+    "name": "unknown operator refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      0,
+      "query",
+      "operations",
+      0,
+      "type"
+    ],
+    "value": "sql",
+    "expected": "schema:"
+  },
+  {
+    "name": "unknown version refused",
+    "path": [
+      "definition",
+      "schema_version"
+    ],
+    "value": 2,
+    "expected": "schema:"
+  },
+  {
+    "name": "nonopaque entity identifier refused",
+    "path": [
+      "definition",
+      "app_id"
+    ],
+    "value": "northstar",
+    "expected": "schema:"
+  },
+  {
+    "name": "concrete source in reusable input refused",
+    "path": [
+      "definition",
+      "content",
+      "inputs",
+      0,
+      "source_revision_id"
+    ],
+    "value": "00000000-0000-4000-8000-000000000555",
+    "expected": "schema:"
+  },
+  {
+    "name": "concrete source in publication refused",
+    "path": [
+      "publication",
+      "source_revision_id"
+    ],
+    "value": "00000000-0000-4000-8000-000000000555",
+    "expected": "schema:"
+  },
+  {
+    "name": "request supplied tenant refused",
+    "path": [
+      "command",
+      "organization_id"
+    ],
+    "value": "00000000-0000-4000-8000-000000000555",
+    "expected": "schema:"
+  },
+  {
+    "name": "request supplied principal refused",
+    "path": [
+      "command",
+      "principal_id"
+    ],
+    "value": "00000000-0000-4000-8000-000000000555",
+    "expected": "schema:"
+  },
+  {
+    "name": "request supplied permission refused",
+    "path": [
+      "command",
+      "permission"
+    ],
+    "value": "admin",
+    "expected": "schema:"
+  },
+  {
+    "name": "short idempotency key refused",
+    "path": [
+      "command",
+      "idempotency_key"
+    ],
+    "value": "ik-1",
+    "expected": "schema:"
+  },
+  {
+    "name": "unsafe exact money representation refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "query",
+      "operations",
+      0,
+      "value",
+      "minor_units"
+    ],
+    "value": "020000",
+    "expected": "schema:",
+    "fixture": "spend-review"
+  },
+  {
+    "name": "unsupported currency refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "query",
+      "operations",
+      0,
+      "value",
+      "currency"
+    ],
+    "value": "EUR",
+    "expected": "schema:",
+    "fixture": "spend-review"
+  },
+  {
+    "name": "changed definition digest refused",
+    "path": [
+      "definition",
+      "content",
+      "title"
+    ],
+    "value": "Changed",
+    "expected": "definition digest mismatch"
+  },
+  {
+    "name": "duplicate view id refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "id"
+    ],
+    "value": "total",
+    "expected": "duplicate view id",
+    "rehash_definition": true
+  },
+  {
+    "name": "unknown input in query refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      0,
+      "query",
+      "inputs"
+    ],
+    "value": [
+      "secret"
+    ],
+    "expected": "query names unknown input",
+    "rehash_definition": true
+  },
+  {
+    "name": "unknown query field refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      0,
+      "query",
+      "operations",
+      0,
+      "measures",
+      0,
+      "field",
+      "field_id"
+    ],
+    "value": "secret",
+    "expected": "unknown query field",
+    "rehash_definition": true
+  },
+  {
+    "name": "sum text refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      0,
+      "query",
+      "operations",
+      0,
+      "measures",
+      0,
+      "field",
+      "field_id"
+    ],
+    "value": "destination",
+    "expected": "sum requires numeric",
+    "rehash_definition": true
+  },
+  {
+    "name": "layout escape refused",
+    "path": [
+      "definition",
+      "content",
+      "default_layout",
+      0,
+      "column"
+    ],
+    "value": 1,
+    "expected": "layout exceeds grid",
+    "rehash_definition": true
+  },
+  {
+    "name": "missing layout refused",
+    "path": [
+      "definition",
+      "content",
+      "default_layout"
+    ],
+    "value": [],
+    "expected": "schema:"
+  },
+  {
+    "name": "undeclared command refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      3,
+      "command_id"
+    ],
+    "value": "unknown",
+    "expected": "form requires declared",
+    "rehash_definition": true
+  },
+  {
+    "name": "independent self approval refused",
+    "path": [
+      "publication",
+      "approver_id"
+    ],
+    "value": "00000000-0000-4000-8000-000000000066",
+    "expected": "independent reviewer"
+  },
+  {
+    "name": "changed publication contract digest refused",
+    "path": [
+      "publication",
+      "input_contract_digests",
+      0,
+      "digest"
+    ],
+    "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "expected": "publication input contract mismatch"
+  },
+  {
+    "name": "changed record schema digest refused",
+    "path": [
+      "publication",
+      "record_schema_digests",
+      0,
+      "digest"
+    ],
+    "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "expected": "publication record schema mismatch"
+  },
+  {
+    "name": "cross organization source refused",
+    "path": [
+      "sources",
+      0,
+      "organization_id"
+    ],
+    "value": "00000000-0000-4000-8000-000000000999",
+    "expected": "cross-organization"
+  },
+  {
+    "name": "cross app work refused",
+    "path": [
+      "work",
+      "app_id"
+    ],
+    "value": "00000000-0000-4000-8000-000000000999",
+    "expected": "cross-app"
+  },
+  {
+    "name": "cross work command refused",
+    "path": [
+      "command",
+      "work_id"
+    ],
+    "value": "00000000-0000-4000-8000-000000000999",
+    "expected": "cross-work"
+  },
+  {
+    "name": "cross principal outcome refused",
+    "path": [
+      "outcome",
+      "principal_id"
+    ],
+    "value": "00000000-0000-4000-8000-000000000999",
+    "expected": "cross-principal"
+  },
+  {
+    "name": "changed source digest refused",
+    "path": [
+      "sources",
+      0,
+      "normalized_digest"
+    ],
+    "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "expected": "source identity mismatch"
+  },
+  {
+    "name": "missing source revision refused",
+    "path": [
+      "work",
+      "bindings",
+      0,
+      "source_revision_id"
+    ],
+    "value": "00000000-0000-4000-8000-000000000999",
+    "expected": "source revision missing"
+  },
+  {
+    "name": "incompatible binding refused",
+    "path": [
+      "work",
+      "bindings",
+      0,
+      "contract_digest"
+    ],
+    "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "expected": "binding contract mismatch"
+  },
+  {
+    "name": "deleted source is not substituted",
+    "path": [
+      "sources",
+      0,
+      "deleted_at"
+    ],
+    "value": "2026-10-28T12:00:00Z",
+    "expected": "deleted source"
+  },
+  {
+    "name": "source parser version unknown refused",
+    "path": [
+      "sources",
+      0,
+      "parser_version"
+    ],
+    "value": 2,
+    "expected": "schema:"
+  },
+  {
+    "name": "formula cache policy not implicitly allowed",
+    "path": [
+      "sources",
+      0,
+      "formula_policy"
+    ],
+    "value": "cached",
+    "expected": "schema:"
+  },
+  {
+    "name": "source row cap refused",
+    "path": [
+      "sources",
+      0,
+      "row_count"
+    ],
+    "value": 1000001,
+    "expected": "source row cap exceeded"
+  },
+  {
+    "name": "inverted CSV physical span refused",
+    "path": [
+      "sources",
+      0,
+      "provenance_sample",
+      0,
+      "physical_line_end"
+    ],
+    "value": 1,
+    "expected": "inverted physical span"
+  },
+  {
+    "name": "receipt content mutation refused",
+    "path": [
+      "receipt",
+      "filter_epoch"
+    ],
+    "value": 2,
+    "expected": "receipt digest mismatch"
+  },
+  {
+    "name": "receipt query mutation refused",
+    "path": [
+      "receipt",
+      "provenance",
+      "query_digest"
+    ],
+    "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "expected": "receipt query mismatch",
+    "rehash_receipt": true
+  },
+  {
+    "name": "receipt omission of source refused",
+    "path": [
+      "receipt",
+      "source_revisions"
+    ],
+    "value": [],
+    "expected": "source evidence dependency mismatch",
+    "rehash_receipt": true
+  },
+  {
+    "name": "partial total refused",
+    "path": [
+      "receipt",
+      "partial"
+    ],
+    "value": true,
+    "expected": "schema:"
+  },
+  {
+    "name": "preview cannot claim publication",
+    "path": [
+      "receipt",
+      "mode"
+    ],
+    "value": "synthetic_preview",
+    "expected": "only published receipt",
+    "rehash_receipt": true
+  },
+  {
+    "name": "command field outside declaration refused",
+    "path": [
+      "command",
+      "values",
+      0,
+      "field_id"
+    ],
+    "value": "permission",
+    "expected": "command field is not writable"
+  },
+  {
+    "name": "command enum not admitted refused",
+    "path": [
+      "command",
+      "values",
+      0,
+      "value",
+      "value"
+    ],
+    "value": "paid",
+    "expected": "command value type/unit mismatch"
+  },
+  {
+    "name": "payload mutation refused",
+    "path": [
+      "command",
+      "values",
+      1,
+      "value",
+      "value"
+    ],
+    "value": "changed",
+    "expected": "command payload mismatch"
+  },
+  {
+    "name": "unknown client is not committed outcome",
+    "path": [
+      "outcome",
+      "state"
+    ],
+    "value": "unknown_to_client",
+    "expected": "schema:"
+  },
+  {
+    "name": "accepted is not committed outcome",
+    "path": [
+      "outcome",
+      "state"
+    ],
+    "value": "accepted",
+    "expected": "schema:"
+  },
+  {
+    "name": "retry shorter than declared refused",
+    "path": [
+      "outcome",
+      "retry_expires_at"
+    ],
+    "value": "2026-10-29T11:01:00Z",
+    "expected": "retry horizon"
+  },
+  {
+    "name": "retry longer than declared refused",
+    "path": [
+      "outcome",
+      "retry_expires_at"
+    ],
+    "value": "2026-10-30T12:01:00Z",
+    "expected": "retry horizon"
+  },
+  {
+    "name": "invalid calendar date refused",
+    "path": [
+      "outcome",
+      "committed_at"
+    ],
+    "value": "2026-02-30T12:01:00Z",
+    "expected": "schema:"
+  },
+  {
+    "name": "trailing newline identifier refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      0,
+      "id"
+    ],
+    "value": "total\n",
+    "expected": "schema:"
+  },
+  {
+    "name": "timestamp offset refused",
+    "path": [
+      "outcome",
+      "committed_at"
+    ],
+    "value": "2026-10-28T08:01:00-04:00",
+    "expected": "schema:"
+  },
+  {
+    "name": "timestamp fractions refused",
+    "path": [
+      "outcome",
+      "committed_at"
+    ],
+    "value": "2026-10-28T12:01:00.000Z",
+    "expected": "schema:"
+  },
+  {
+    "name": "invalid month refused",
+    "path": [
+      "outcome",
+      "committed_at"
+    ],
+    "value": "2026-13-28T12:01:00Z",
+    "expected": "schema:"
+  },
+  {
+    "name": "missing record collection refused",
+    "path": [
+      "work",
+      "record_collections"
+    ],
+    "value": [],
+    "expected": "one collection per declared record schema"
+  },
+  {
+    "name": "create with existing record version refused",
+    "path": [
+      "command",
+      "expected_record_version"
+    ],
+    "value": 1,
+    "expected": "create expects absent record"
+  }
+]

@@ -95,8 +95,68 @@ DEFS.update({
     "command_outcome": entity("command_outcome", {**SCOPE, "work_id": UUID, "principal_id": UUID, "command_id": ID, "idempotency_key": {"type": "string", "pattern": "^[0-9a-f]{32}(?![\\s\\S])"}, "payload_digest": DIGEST, "state": {"const": "committed"}, "record_id": UUID, "record_version": POS, "work_version": POS, "commit_sequence": POS, "audit_event_id": UUID, "committed_at": TIME, "retry_expires_at": TIME}),
     "job_state": entity("job_state", {"organization_id": UUID, "job_id": UUID, "state": enum("queued", "running", "failed", "done"), "claim_sequence": INT, "result_digest": DIGEST, "failure_code": ID}, optional=("result_digest", "failure_code")),
 })
-SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://getforma.dev/contracts/impl-2026-10-28.1/schema.json", "$defs": DEFS,
-          "oneOf": [ref(n) for n in ("app_definition", "publication", "saved_work", "source_revision", "query_receipt", "command_request", "command_outcome", "job_state")]}
+
+# Edition impl-2026-10-29.2 (ADR-009 D9.6). Everything above is edition impl-2026-10-28.1, unchanged: its
+# documents keep schema_version 1 and validate exactly as before. A kind whose shape D9.6 changes gains
+# schema_version 2 with a closed `_v2` shape; saved_work, command_request and command_outcome are unchanged
+# and stay at schema_version 1. Definition queries and views keep registry edition 1 (`VERSION`).
+VERSION_2 = {"const": 2}
+COVERAGE = enum("complete", "partial")
+POSITIVE_INTEGER_TEXT = {"type": "string", "pattern": "^[1-9][0-9]{0,37}(?![\\s\\S])"}
+OPERATOR_IDS = tuple(op["properties"]["type"]["const"] for op in OPERATORS)
+# D9.13 limits a 429 body names; queue limits cover the D9.2 job and D9.7 query queues.
+LIMITS = ("organization_queue", "task_queue", "imports_per_day", "stored_original_bytes", "queries_per_hour")
+# Problem codes this edition registers (D9.6, D9.9 B17); other codes belong to the HTTP layer's own registry.
+PROBLEM_CODES = ("source_deleted", "source_quarantined", "unknown_value_in_aggregate", "lookup_ambiguous",
+                 "resource_limit", "payload_too_large", "limit_exceeded")
+RATIO_V2 = tagged("ratio", {**OPERATORS[6]["properties"], "type": {"const": "ratio"},
+                            "denominator": {"oneOf": [*OPERATORS[6]["properties"]["denominator"]["oneOf"], tagged("window_minutes", {})]}})
+assert OPERATOR_IDS[6] == "ratio"
+OPERATORS_V2 = [*OPERATORS[:6], RATIO_V2, *OPERATORS[7:]]
+
+
+def entity_v2(kind, fields, optional=()):
+    return obj({"kind": {"const": kind}, "schema_version": VERSION_2, **fields}, optional)
+
+
+def identities(item, maximum):
+    # Sorted ascending and unique by name; the order is checked by validate.py.
+    return arr(item, maximum)
+
+
+DEFS.update({
+    "input_contract_v2": obj({**DEFS["input_contract"]["properties"], "coverage": COVERAGE}),
+    "query_v2": obj({**DEFS["query"]["properties"], "operations": arr({"oneOf": OPERATORS_V2}, 8, 1)}, optional=("window",)),
+    "operator_identity": obj({"id": enum(*OPERATOR_IDS), "version": POS}),
+    "renderer_identity": obj({"kind": enum(*RENDERERS), "version": POS}),
+    "receipt_source": obj({**DEFS["source_dependency"]["properties"], "mapping_version": POS}),
+    "exact_rational": tagged("exact_rational", {"numerator": INTEGER_TEXT, "denominator": POSITIVE_INTEGER_TEXT}),
+    "problem": obj({"status": {"type": "integer", "minimum": 400, "maximum": 599}, "code": enum(*PROBLEM_CODES), "limit": enum(*LIMITS),
+                    "retry_after_seconds": POS}, optional=("limit", "retry_after_seconds")),
+})
+DEFS["view_v2"] = obj({**DEFS["view"]["properties"], "query": ref("query_v2")}, optional=("query", "command_id", "text"))
+DEFS["definition_content_v2"] = obj({**DEFS["definition_content"]["properties"], "inputs": arr(ref("input_contract_v2"), 8), "views": arr(ref("view_v2"), 24, 1)})
+DEFS.update({
+    "app_definition_v2": entity_v2("app_definition", {**SCOPE, "revision_id": UUID, "content": ref("definition_content_v2"), "digest": DIGEST}),
+    "publication_v2": entity_v2("publication", {**{k: v for k, v in DEFS["publication"]["properties"].items() if k not in ("kind", "schema_version")},
+                                               "renderer_version": POS, "operator_version": POS,
+                                               "operators": identities(ref("operator_identity"), len(OPERATOR_IDS)),
+                                               "renderers": identities(ref("renderer_identity"), len(RENDERERS))}),
+    "source_revision_v2": entity_v2("source_revision", {**{k: v for k, v in DEFS["source_revision"]["properties"].items() if k not in ("kind", "schema_version")},
+                                                       "input_contract": ref("input_contract_v2"), "coverage": COVERAGE, "rows_digest": DIGEST}, optional=("deleted_at",)),
+    "query_receipt_v2": entity_v2("query_receipt", {**{k: v for k, v in DEFS["query_receipt"]["properties"].items() if k not in ("kind", "schema_version")},
+                                                   "operator_version": POS, "operators": identities(ref("operator_identity"), len(OPERATOR_IDS)),
+                                                   "renderers": arr(ref("renderer_identity"), 1, 1), "source_revisions": arr(ref("receipt_source"), 8),
+                                                   "partial": {"type": "boolean"}}, optional=("publication_id",)),
+    "job_state_v2": entity_v2("job_state", {"organization_id": UUID, "job_id": UUID, "state": enum("queued", "running", "failed", "done", "cancelled"),
+                                           "claim_sequence": INT, "cancel_requested": {"type": "boolean"}, "queue_position": POS, "expected_wait_seconds": INT,
+                                           "result_digest": DIGEST, "failure_code": ID},
+                              optional=("queue_position", "expected_wait_seconds", "result_digest", "failure_code")),
+})
+ENTITIES = ("app_definition", "publication", "saved_work", "source_revision", "query_receipt", "command_request", "command_outcome", "job_state",
+            "app_definition_v2", "publication_v2", "source_revision_v2", "query_receipt_v2", "job_state_v2")
+SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://getforma.dev/contracts/impl-2026-10-29.2/schema.json", "$defs": DEFS,
+          "oneOf": [ref(n) for n in ENTITIES]}
 
 if __name__ == "__main__":
     Path(__file__).with_name("schema.json").write_text(json.dumps(SCHEMA, indent=2) + "\n")

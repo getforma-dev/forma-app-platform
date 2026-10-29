@@ -4,7 +4,8 @@
 //! [`canonical`] is the restricted forma-json-v1 encoding,
 //! [`digest`](mod@digest) the domain-separated SHA-256 identities and
 //! [`validate`] the closed `app_definition` contract of edition
-//! impl-2026-10-28.1, reproducing `contracts/schema.py` and
+//! impl-2026-10-29.2 (schema versions 1 and 2, ADR-009 D9.6) and its
+//! `exact_rational` value, reproducing `contracts/schema.py` and
 //! `contracts/validate.py`. Nothing here stores, renders or authorizes: an
 //! admitted digest is content identity, never a grant, and organization scope
 //! always comes from the trusted request.
@@ -16,7 +17,7 @@ pub mod validate;
 
 pub use canonical::{decode, encode};
 pub use digest::digest;
-pub use validate::{admit_definition, AdmittedDefinition};
+pub use validate::{admit_definition, check_exact_rational, exact_rational, AdmittedDefinition};
 
 /// Why a document was refused. Each variant has a stable [`code`](Self::code).
 /// Text payloads name a location such as `$.content.views[0].kind`, plus a

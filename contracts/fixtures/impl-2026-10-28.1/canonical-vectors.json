@@ -1,0 +1,55 @@
+[
+  {
+    "name": "sorted_ascii_keys",
+    "value": {
+      "z": 0,
+      "a": true
+    },
+    "utf8_hex": "7b2261223a747275652c227a223a307d",
+    "digest": "sha256:4c74ad2a9e53fdf4380016eb6adb9156a798a0715b4760828b19d3c93e37b266"
+  },
+  {
+    "name": "unicode_scalar",
+    "value": {
+      "text": "é 😀"
+    },
+    "utf8_hex": "7b2274657874223a22c3a920f09f9880227d",
+    "digest": "sha256:1ae7d4d052ba2f61d54e9ddafe1b99a1465b733752a7a072e170c63a52913403"
+  },
+  {
+    "name": "controls",
+    "value": {
+      "text": "line\n\t\"\\"
+    },
+    "utf8_hex": "7b2274657874223a226c696e655c6e5c745c225c5c227d",
+    "digest": "sha256:1dd50cbe7a2e01d4cb05f19e7b6679672324c42c00b4ad9f6cf7c6a5559b9084"
+  },
+  {
+    "name": "safe_integer_edge",
+    "value": {
+      "n": 9007199254740991
+    },
+    "utf8_hex": "7b226e223a393030373139393235343734303939317d",
+    "digest": "sha256:93c17467f818b4ac776233b1bb4214aee14411cf50ce5e3e0a1cd2e9937af51e"
+  },
+  {
+    "name": "ordered_array",
+    "value": [
+      3,
+      1,
+      null
+    ],
+    "utf8_hex": "5b332c312c6e756c6c5d",
+    "digest": "sha256:3bf158d66e11acdfd96420eed4a3b6372a74ba616d8c067a9643ce978f8bfad4"
+  },
+  {
+    "name": "exact_money",
+    "value": {
+      "minor_units": "45000",
+      "currency": "USD",
+      "minor_unit_exponent": 2
+    },
+    "utf8_hex": "7b2263757272656e6379223a22555344222c226d696e6f725f756e69745f6578706f6e656e74223a322c226d696e6f725f756e697473223a223435303030227d",
+    "digest": "sha256:82d6c627bcc47d933bbe1386066fa4f9690adf0d67b95fbc4340c9c58e57f13f"
+  }
+]

@@ -5,7 +5,7 @@
   },
   "definition": {
     "kind": "app_definition",
-    "schema_version": 1,
+    "schema_version": 2,
     "organization_id": "00000000-0000-4000-8000-000000000064",
     "app_id": "00000000-0000-4000-8000-000000000065",
     "revision_id": "00000000-0000-4000-8000-000000000067",
@@ -41,7 +41,8 @@
               },
               "nullable": false
             }
-          ]
+          ],
+          "coverage": "complete"
         },
         {
           "id": "inventory",
@@ -56,7 +57,8 @@
               },
               "nullable": false
             }
-          ]
+          ],
+          "coverage": "complete"
         },
         {
           "id": "decisions",
@@ -82,7 +84,8 @@
               },
               "nullable": false
             }
-          ]
+          ],
+          "coverage": "complete"
         }
       ],
       "views": [
@@ -195,6 +198,51 @@
           "renderer_version": 1,
           "title": "caution",
           "text": "An unmatched destination does not establish compromise."
+        },
+        {
+          "id": "rate",
+          "kind": "summary",
+          "renderer_version": 1,
+          "title": "rate",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "events"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [],
+                "measures": [
+                  {
+                    "id": "total_bytes",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "events",
+                      "field_id": "bytes"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "ratio",
+                "numerator": "total_bytes",
+                "denominator": {
+                  "type": "window_minutes"
+                },
+                "output_field": "bytes_per_minute",
+                "output_unit": "byte_per_minute",
+                "zero_denominator": "error",
+                "rounding": "exact_rational"
+              }
+            ],
+            "null_policy": "unknown",
+            "window": {
+              "start": "2026-10-22T10:00:00Z",
+              "end": "2026-10-22T10:10:00Z",
+              "bounds": "half_open"
+            }
+          }
         }
       ],
       "record_schemas": [
@@ -272,31 +320,37 @@
           "column": 0,
           "row": 4,
           "width": 12
+        },
+        {
+          "view_id": "rate",
+          "column": 0,
+          "row": 5,
+          "width": 12
         }
       ]
     },
-    "digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2"
+    "digest": "sha256:8ddb54f27a3c571c607bd3a49a4c9da8893350232fcf3830d6dfe5c71af8144b"
   },
   "publication": {
     "kind": "publication",
-    "schema_version": 1,
+    "schema_version": 2,
     "organization_id": "00000000-0000-4000-8000-000000000064",
     "app_id": "00000000-0000-4000-8000-000000000065",
     "publication_id": "00000000-0000-4000-8000-000000000068",
     "definition_revision_id": "00000000-0000-4000-8000-000000000067",
-    "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
+    "definition_digest": "sha256:8ddb54f27a3c571c607bd3a49a4c9da8893350232fcf3830d6dfe5c71af8144b",
     "input_contract_digests": [
       {
         "input_id": "events",
-        "digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64"
+        "digest": "sha256:dc645731bf58dd9cbab8ec6f58fcc40c958f70c4c0ba1cd5724278e02d9e6fde"
       },
       {
         "input_id": "inventory",
-        "digest": "sha256:53b5cb65050c39caa0de6fc590582b4041dc29d2a2aa7b35455e45c522233361"
+        "digest": "sha256:f8898cfb27f37aed12cc3e23f7b52f1978bd44bb0ebc9c4079c5df4d770b9fa7"
       },
       {
         "input_id": "decisions",
-        "digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5"
+        "digest": "sha256:31d540de02ec89911ff90269e98297dc0158c475c34f53306e7c090e56f32269"
       }
     ],
     "record_schema_digests": [
@@ -307,6 +361,50 @@
     ],
     "renderer_version": 1,
     "operator_version": 1,
+    "operators": [
+      {
+        "id": "aggregate",
+        "version": 1
+      },
+      {
+        "id": "lookup",
+        "version": 1
+      },
+      {
+        "id": "project",
+        "version": 1
+      },
+      {
+        "id": "ratio",
+        "version": 1
+      },
+      {
+        "id": "time_bucket",
+        "version": 1
+      }
+    ],
+    "renderers": [
+      {
+        "kind": "form",
+        "version": 1
+      },
+      {
+        "kind": "note",
+        "version": 1
+      },
+      {
+        "kind": "summary",
+        "version": 1
+      },
+      {
+        "kind": "table",
+        "version": 1
+      },
+      {
+        "kind": "timeline",
+        "version": 1
+      }
+    ],
     "admission_digest": "sha256:5cfcd8f03cb75371d08d27a1c60c53af892de1d1d4f477cceea6133fe68d247f",
     "policy": {
       "id": "00000000-0000-4000-8000-00000000006c",
@@ -334,7 +432,7 @@
         "source_revision_id": "00000000-0000-4000-8000-00000000006f",
         "source_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
         "kind": "source",
-        "contract_digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64"
+        "contract_digest": "sha256:dc645731bf58dd9cbab8ec6f58fcc40c958f70c4c0ba1cd5724278e02d9e6fde"
       },
       {
         "input_id": "inventory",
@@ -342,12 +440,12 @@
         "source_revision_id": "00000000-0000-4000-8000-000000000071",
         "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
         "kind": "source",
-        "contract_digest": "sha256:53b5cb65050c39caa0de6fc590582b4041dc29d2a2aa7b35455e45c522233361"
+        "contract_digest": "sha256:f8898cfb27f37aed12cc3e23f7b52f1978bd44bb0ebc9c4079c5df4d770b9fa7"
       },
       {
         "input_id": "decisions",
         "kind": "records",
-        "contract_digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5",
+        "contract_digest": "sha256:31d540de02ec89911ff90269e98297dc0158c475c34f53306e7c090e56f32269",
         "collection_id": "00000000-0000-4000-8000-00000000006a",
         "schema_id": "decision",
         "schema_version": 1,
@@ -379,12 +477,14 @@
   "sources": [
     {
       "kind": "source_revision",
-      "schema_version": 1,
+      "schema_version": 2,
       "organization_id": "00000000-0000-4000-8000-000000000064",
       "source_id": "00000000-0000-4000-8000-00000000006e",
       "revision_id": "00000000-0000-4000-8000-00000000006f",
       "content_digest": "sha256:f85bf298e932bbd0636a7f24b4c92a4cb1fa17e7402af5458b434e045fbe7371",
       "normalized_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+      "rows_digest": "sha256:5472906608d9e3bf1f48bda2a1e09bd4b6b7b06887626760d55ec597c3a883c7",
+      "coverage": "complete",
       "input_contract": {
         "id": "events",
         "contract_id": "events_v1",
@@ -413,7 +513,8 @@
             },
             "nullable": false
           }
-        ]
+        ],
+        "coverage": "complete"
       },
       "parser_version": 1,
       "mapping_version": 1,
@@ -435,12 +536,14 @@
     },
     {
       "kind": "source_revision",
-      "schema_version": 1,
+      "schema_version": 2,
       "organization_id": "00000000-0000-4000-8000-000000000064",
       "source_id": "00000000-0000-4000-8000-000000000070",
       "revision_id": "00000000-0000-4000-8000-000000000071",
       "content_digest": "sha256:7b34d38d5be8165b9ad55bfed89ae8dfe7ed1611e8b010f9d657004855f103b3",
       "normalized_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+      "rows_digest": "sha256:ced5f6f6385a4224495d35fee55db80920e1f6cc4497b9e90bb3754937c0069d",
+      "coverage": "complete",
       "input_contract": {
         "id": "inventory",
         "contract_id": "inventory_v1",
@@ -454,7 +557,8 @@
             },
             "nullable": false
           }
-        ]
+        ],
+        "coverage": "complete"
       },
       "parser_version": 1,
       "mapping_version": 1,
@@ -477,27 +581,41 @@
   ],
   "receipt": {
     "kind": "query_receipt",
-    "schema_version": 1,
+    "schema_version": 2,
     "organization_id": "00000000-0000-4000-8000-000000000064",
     "app_id": "00000000-0000-4000-8000-000000000065",
     "work_id": "00000000-0000-4000-8000-000000000069",
     "mode": "published",
-    "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
+    "definition_digest": "sha256:8ddb54f27a3c571c607bd3a49a4c9da8893350232fcf3830d6dfe5c71af8144b",
     "publication_id": "00000000-0000-4000-8000-000000000068",
     "view_id": "total",
     "operator_version": 1,
+    "operators": [
+      {
+        "id": "aggregate",
+        "version": 1
+      }
+    ],
+    "renderers": [
+      {
+        "kind": "summary",
+        "version": 1
+      }
+    ],
     "source_revisions": [
       {
         "input_id": "events",
         "source_id": "00000000-0000-4000-8000-00000000006e",
         "source_revision_id": "00000000-0000-4000-8000-00000000006f",
-        "source_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119"
+        "source_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+        "mapping_version": 1
       },
       {
         "input_id": "inventory",
         "source_id": "00000000-0000-4000-8000-000000000070",
         "source_revision_id": "00000000-0000-4000-8000-000000000071",
-        "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4"
+        "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+        "mapping_version": 1
       }
     ],
     "record_snapshot_sequence": 0,
@@ -514,7 +632,7 @@
       "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66",
       "predicate_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
     },
-    "digest": "sha256:08747f83d3334a56ea0fb7f64932c9bcc509b03d2dad4b0947a6a7b0f0fe12cb"
+    "digest": "sha256:c5add7f052dfab26d32658e4b8869725801914093ec1466919d10c74ccdeda12"
   },
   "command": {
     "kind": "command_request",

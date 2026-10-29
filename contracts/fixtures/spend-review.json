@@ -5,7 +5,7 @@
   },
   "definition": {
     "kind": "app_definition",
-    "schema_version": 1,
+    "schema_version": 2,
     "organization_id": "00000000-0000-4000-8000-0000000000c8",
     "app_id": "00000000-0000-4000-8000-0000000000c9",
     "revision_id": "00000000-0000-4000-8000-0000000000cb",
@@ -35,7 +35,8 @@
               },
               "nullable": false
             }
-          ]
+          ],
+          "coverage": "complete"
         },
         {
           "id": "decisions",
@@ -61,7 +62,8 @@
               },
               "nullable": false
             }
-          ]
+          ],
+          "coverage": "complete"
         }
       ],
       "views": [
@@ -226,24 +228,24 @@
         }
       ]
     },
-    "digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9"
+    "digest": "sha256:7cc165a3717617a543073373f59453bb7d7bdefede40f30519a2701be993e6b8"
   },
   "publication": {
     "kind": "publication",
-    "schema_version": 1,
+    "schema_version": 2,
     "organization_id": "00000000-0000-4000-8000-0000000000c8",
     "app_id": "00000000-0000-4000-8000-0000000000c9",
     "publication_id": "00000000-0000-4000-8000-0000000000cc",
     "definition_revision_id": "00000000-0000-4000-8000-0000000000cb",
-    "definition_digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9",
+    "definition_digest": "sha256:7cc165a3717617a543073373f59453bb7d7bdefede40f30519a2701be993e6b8",
     "input_contract_digests": [
       {
         "input_id": "expenses",
-        "digest": "sha256:e9650e90a6e8748127f430e10119a52f16b2b39263eab9c77b7a6209931325fe"
+        "digest": "sha256:992f8d8f49e7e530de5977197ace735ae64eddb5b554a44c79b6d2c475b6cc84"
       },
       {
         "input_id": "decisions",
-        "digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5"
+        "digest": "sha256:31d540de02ec89911ff90269e98297dc0158c475c34f53306e7c090e56f32269"
       }
     ],
     "record_schema_digests": [
@@ -254,6 +256,34 @@
     ],
     "renderer_version": 1,
     "operator_version": 1,
+    "operators": [
+      {
+        "id": "filter",
+        "version": 1
+      },
+      {
+        "id": "project",
+        "version": 1
+      }
+    ],
+    "renderers": [
+      {
+        "kind": "detail",
+        "version": 1
+      },
+      {
+        "kind": "form",
+        "version": 1
+      },
+      {
+        "kind": "status",
+        "version": 1
+      },
+      {
+        "kind": "table",
+        "version": 1
+      }
+    ],
     "admission_digest": "sha256:7359dddea2a26685e53c47f3d394fa32060f8ccd9162b5de8e16afbe5989b062",
     "policy": {
       "id": "00000000-0000-4000-8000-0000000000d0",
@@ -281,12 +311,12 @@
         "source_revision_id": "00000000-0000-4000-8000-0000000000d3",
         "source_digest": "sha256:8bb3fac8a6c29cb3ba4f8b4b324ea4e65726f1d08c8c254b83dd30a58e659cc1",
         "kind": "source",
-        "contract_digest": "sha256:e9650e90a6e8748127f430e10119a52f16b2b39263eab9c77b7a6209931325fe"
+        "contract_digest": "sha256:992f8d8f49e7e530de5977197ace735ae64eddb5b554a44c79b6d2c475b6cc84"
       },
       {
         "input_id": "decisions",
         "kind": "records",
-        "contract_digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5",
+        "contract_digest": "sha256:31d540de02ec89911ff90269e98297dc0158c475c34f53306e7c090e56f32269",
         "collection_id": "00000000-0000-4000-8000-0000000000ce",
         "schema_id": "decision",
         "schema_version": 1,
@@ -312,12 +342,14 @@
   "sources": [
     {
       "kind": "source_revision",
-      "schema_version": 1,
+      "schema_version": 2,
       "organization_id": "00000000-0000-4000-8000-0000000000c8",
       "source_id": "00000000-0000-4000-8000-0000000000d2",
       "revision_id": "00000000-0000-4000-8000-0000000000d3",
       "content_digest": "sha256:1f11ea8babe357e4c7a1387ec4d1a437ed11b9a3f28e49a046f8bf61df12d104",
       "normalized_digest": "sha256:8bb3fac8a6c29cb3ba4f8b4b324ea4e65726f1d08c8c254b83dd30a58e659cc1",
+      "rows_digest": "sha256:2a073e83af9f228eaae6fc7d96bf5068ac4da74b6aa91953cec13e3c30d6ac92",
+      "coverage": "complete",
       "input_contract": {
         "id": "expenses",
         "contract_id": "expenses_v1",
@@ -340,7 +372,8 @@
             },
             "nullable": false
           }
-        ]
+        ],
+        "coverage": "complete"
       },
       "parser_version": 1,
       "mapping_version": 1,
@@ -363,21 +396,34 @@
   ],
   "receipt": {
     "kind": "query_receipt",
-    "schema_version": 1,
+    "schema_version": 2,
     "organization_id": "00000000-0000-4000-8000-0000000000c8",
     "app_id": "00000000-0000-4000-8000-0000000000c9",
     "work_id": "00000000-0000-4000-8000-0000000000cd",
     "mode": "published",
-    "definition_digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9",
+    "definition_digest": "sha256:7cc165a3717617a543073373f59453bb7d7bdefede40f30519a2701be993e6b8",
     "publication_id": "00000000-0000-4000-8000-0000000000cc",
     "view_id": "expenses",
     "operator_version": 1,
+    "operators": [
+      {
+        "id": "project",
+        "version": 1
+      }
+    ],
+    "renderers": [
+      {
+        "kind": "table",
+        "version": 1
+      }
+    ],
     "source_revisions": [
       {
         "input_id": "expenses",
         "source_id": "00000000-0000-4000-8000-0000000000d2",
         "source_revision_id": "00000000-0000-4000-8000-0000000000d3",
-        "source_digest": "sha256:8bb3fac8a6c29cb3ba4f8b4b324ea4e65726f1d08c8c254b83dd30a58e659cc1"
+        "source_digest": "sha256:8bb3fac8a6c29cb3ba4f8b4b324ea4e65726f1d08c8c254b83dd30a58e659cc1",
+        "mapping_version": 1
       }
     ],
     "record_snapshot_sequence": 0,
@@ -394,7 +440,7 @@
       "query_digest": "sha256:dc62bc9d96cd4ff342c4a081e3e4f76ca37c618ef47222c3582cd6b71a18dfbf",
       "predicate_digest": "sha256:dc62bc9d96cd4ff342c4a081e3e4f76ca37c618ef47222c3582cd6b71a18dfbf"
     },
-    "digest": "sha256:cbee9c90a4a65dd15545ea479edff9d65305b3168bf307f44e8304ad8db740ca"
+    "digest": "sha256:1080664aa3c58ddfa7b0cc0cd6aaedc59a8eeeb2cd4b6402cf5ed3a97d6748cc"
   },
   "command": {
     "kind": "command_request",
