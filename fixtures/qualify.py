@@ -11,11 +11,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import importlib.util
 import json
+import os
 from pathlib import Path
 import platform
 import subprocess
 import sys
 import tempfile
+import tomllib
 
 from verify import DEFAULT, ROOT, load_package, sha, table, timestamp, verify
 
@@ -41,13 +43,55 @@ def parser_rows(report):
     return [dict(zip(grid[0], values)) for values in grid[1:]]
 
 
+# Ambient Cargo/rustc knobs that would change the compiled parser without touching any pinned file.
+BUILD_OVERRIDES = ("RUSTFLAGS", "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS", "CARGO_BUILD_RUSTC", "CARGO_BUILD_RUSTC_WRAPPER", "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER", "CARGO_BUILD_TARGET_DIR")
+
+
+def parser_binding(output):
+    """Bind the parser under test to APP-004's recorded qualification inputs.
+
+    The recorded WASM digest is host-specific: the wasm32 build embeds absolute
+    Cargo registry and checkout paths, and evidence/APP-004/reproducibility.json
+    claims no cross-host byte identity. Every recorded source file, Cargo.lock,
+    the vendored ZIP provenance and the rustc/cargo release must match instead,
+    and the locked build is rerun so the artifacts cannot be stale.
+    """
+    spike = ROOT / "spikes/APP-004"
+    qualified = json.loads((ROOT / "evidence/APP-004/build-metadata.json").read_text())
+    drift = sorted(name for name, digest in qualified["source_files_sha256"].items() if not (spike / name).is_file() or sha(spike / name) != digest)
+    if drift or sha(spike / "Cargo.lock") != qualified["cargo_lock_sha256"] or sha(spike / "vendor/provenance.json") != qualified["vendor_provenance_sha256"]:
+        raise AssertionError("APP-004 parser source differs from the qualified capture: " + " ".join(drift or ["Cargo.lock/vendor provenance"]))
+    overrides = sorted(name for name in os.environ if name in BUILD_OVERRIDES or name.startswith(("CARGO_PROFILE_", "CARGO_TARGET_")))
+    if overrides:
+        raise AssertionError("ambient Cargo/rustc build overrides refused: " + " ".join(overrides))
+    channel = "+" + tomllib.loads((spike / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
+    outputs = {}
+    with (output / "parser-build.log").open("w") as log:
+        for name, command in (("vendor", [sys.executable, "verify_vendor.py"]), ("rustc", ["rustc", channel, "-vV"]), ("cargo", ["cargo", channel, "-V"]),
+                              ("guest", ["cargo", channel, "build", "--locked", "-p", "parser-guest", "--target", "wasm32-unknown-unknown", "--release"]),
+                              ("host", ["cargo", channel, "build", "--locked", "-p", "parser-host"])):
+            result = subprocess.run(command, cwd=spike, capture_output=True, text=True, timeout=900)
+            log.write("$ " + " ".join(command) + "\n" + result.stdout + result.stderr + "\n")
+            if result.returncode:
+                raise AssertionError("APP-004 parser step failed: " + name)
+            outputs[name] = result.stdout.strip()
+    rustc = dict(line.split(": ", 1) for line in outputs["rustc"].splitlines() if ": " in line)
+    recorded = dict(line.split(": ", 1) for line in qualified["rustc"].splitlines() if ": " in line)
+    if outputs["cargo"] != qualified["cargo"] or any(rustc.get(key) != recorded[key] for key in ("release", "commit-hash", "commit-date", "LLVM version")):
+        raise AssertionError("parser toolchain differs from the APP-004 qualified rustc/cargo")
+    return {"source_files_matched": len(qualified["source_files_sha256"]), "cargo_lock_sha256": qualified["cargo_lock_sha256"], "vendor_provenance_sha256": qualified["vendor_provenance_sha256"],
+            "vendor_verification": outputs["vendor"], "cargo": outputs["cargo"], "rustc": {key: rustc[key] for key in ("release", "commit-hash", "LLVM version", "host")},
+            "app004_recorded_wasm_sha256": qualified["wasm_sha256"], "app004_recorded_host": recorded["host"], "app004_recorded_platform": qualified["platform"]}
+
+
 def parser_checks(output, manifest):
     host = ROOT / "spikes/APP-004/target/debug/parser-host"
     wasm = ROOT / "spikes/APP-004/target/wasm32-unknown-unknown/release/parser_guest.wasm"
+    binding = parser_binding(output)
     artifact_pins = {str(path.relative_to(ROOT)): sha(path) for path in (host, wasm)}
-    qualified = json.loads((ROOT / "evidence/APP-004/build-metadata.json").read_text())
-    if qualified["wasm_sha256"] != artifact_pins[str(wasm.relative_to(ROOT))]:
-        raise AssertionError("current parser WASM differs from APP-004 qualified artifact")
+    binding["wasm_sha256"] = artifact_pins[str(wasm.relative_to(ROOT))]
+    binding["wasm_matches_app004_recorded_bytes"] = binding["wasm_sha256"] == binding["app004_recorded_wasm_sha256"]
+    binding["basis"] = "recorded APP-004 source files, Cargo.lock, vendored ZIP provenance and rustc/cargo identity are byte-identical and the locked build was rerun; byte identity with the recorded arm64 macOS artifact is reported, not required, because wasm32 bytes embed absolute registry/checkout paths"
     reports = {}
 
     def one(entry):
@@ -79,7 +123,7 @@ def parser_checks(output, manifest):
         for name, report in pool.map(one, manifest["sources"]):
             reports[name] = report
             print("parser checked " + name, flush=True)
-    return reports, artifact_pins
+    return reports, artifact_pins, binding
 
 
 def query_checks(output, reports, oracle):
@@ -171,8 +215,9 @@ def run(output):
                 raise AssertionError(name + " failed")
         oracle = verify()
         save(output / "oracle.json", oracle)
-        reports, pins = parser_checks(output, manifest)
+        reports, pins, binding = parser_checks(output, manifest)
         summary["parser_artifacts"] = pins
+        summary["parser_binding"] = binding
         summary["parser_cases"] = len(reports)
         summary["query_subset"] = query_checks(output, reports, oracle)
         summary["seed_alignment"] = seed_manifest_checks(output)
