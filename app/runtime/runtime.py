@@ -19,6 +19,9 @@ import time
 import uuid
 
 ROLES = ("workspace", "control", "data", "worker")
+# The image's schema-version pin. Runner and probe comparisons use the pinned
+# manifest itself; scripts/check-schema-pins.py keeps this value, the manifest,
+# the native version check and both embedded catalogs on the same version.
 DATABASE_SCHEMA_VERSION = 2
 INITIAL_MIGRATION_SHA256 = "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963"
 QUALIFICATION_JSON_ENV = "GENUI_AUTH_QUALIFICATION_CONFIG_JSON"
@@ -273,14 +276,16 @@ def migration_directory():
 def probe_database(connection, username):
     """Catalog proof precedes every application metadata/version read."""
     require(username in tuple("genui_" + name for name in ROLES))
-    verify_schema_catalog(connection, migration_directory())
+    directory = migration_directory()
+    verify_schema_catalog(connection, directory)
+    latest = migration_manifest(directory)["database_version"]
     row = connection.execute("""SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_database(),
       r.rolsuper,r.rolcreatedb,r.rolcreaterole,r.rolbypassrls,r.rolcanlogin,
       pg_catalog.pg_has_role(current_user,'genui_owner','MEMBER'),pg_catalog.pg_has_role(current_user,'rds_iam','MEMBER'),
       (SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid=pg_catalog.pg_backend_pid()),
       (SELECT version FROM genui_meta.schema_version WHERE singleton=true)
       FROM pg_catalog.pg_roles r WHERE r.rolname=current_user""").fetchone()
-    require(row == (username,username,"genui",False,False,False,False,True,False,True,True,DATABASE_SCHEMA_VERSION))
+    require(row == (username,username,"genui",False,False,False,False,True,False,True,True,latest))
     memberships = connection.execute("""SELECT r.rolname::pg_catalog.text FROM pg_catalog.pg_roles r
       WHERE r.rolname NOT IN (current_user,'rds_iam')
       AND pg_catalog.pg_has_role(current_user,r.oid,'MEMBER') ORDER BY r.rolname""").fetchall()
@@ -311,22 +316,35 @@ def probe(path, generation):
     return {"generation": generation, "file_sha256": value["_file_sha256"], "expires_at": value["expires_at"], "checked_at": int(time.time())}
 
 
+MIGRATION_FILE = re.compile(r"([0-9]{4})_[a-z0-9]+(?:_[a-z0-9]+)*\.sql")
+
+
+def migration_manifest(directory):
+    """Exact manifest shape; the latest version N is learned only from it."""
+    manifest = json.loads((Path(directory) / "manifest.json").read_text())
+    require(isinstance(manifest, dict) and set(manifest) == {"schema_version", "database_version", "migrations", "catalog"})
+    latest = manifest["database_version"]
+    # Version 2 introduced the ledger; four digits number every file.
+    require(manifest["schema_version"] == 1 and type(latest) is int and 2 <= latest <= 9999)
+    require(isinstance(manifest["migrations"], list) and len(manifest["migrations"]) == latest)
+    require(isinstance(manifest["catalog"], list) and len(manifest["catalog"]) == latest + 1)
+    return manifest
+
+
 def migration_sources(directory):
-    """Only the two reviewed image-local migrations; no caller SQL or downgrade."""
+    """Only the manifest's N reviewed image-local migrations; no caller SQL or downgrade."""
     directory = Path(directory)
-    manifest = json.loads((directory / "manifest.json").read_text())
-    require(set(manifest) == {"schema_version", "database_version", "migrations", "catalog"})
-    require(manifest["schema_version"] == 1 and manifest["database_version"] == DATABASE_SCHEMA_VERSION)
-    require(len(manifest["migrations"]) == 2)
-    expected = ("0001_role_foundation.sql", "0002_tenant_foundation.sql")
+    manifest = migration_manifest(directory)
     result = []
-    for version, (item, name) in enumerate(zip(manifest["migrations"], expected), 1):
-        require(set(item) == {"version", "file", "sha256"} and item["version"] == version and item["file"] == name)
-        raw = (directory / name).read_bytes()
+    for version, item in enumerate(manifest["migrations"], 1):
+        require(isinstance(item, dict) and set(item) == {"version", "file", "sha256"} and item["version"] == version)
+        named = MIGRATION_FILE.fullmatch(item["file"]) if isinstance(item["file"], str) else None
+        require(named is not None and int(named.group(1)) == version)
+        raw = (directory / item["file"]).read_bytes()
         require(0 < len(raw) <= 262144 and hashlib.sha256(raw).hexdigest() == item["sha256"])
         if version == 1: require(item["sha256"] == INITIAL_MIGRATION_SHA256)
         result.append((version, item["sha256"], raw.decode("utf-8")))
-    require({p.name for p in directory.glob("*.sql")} == set(expected))
+    require({p.name for p in directory.glob("*.sql")} == {item["file"] for item in manifest["migrations"]})
     catalog_resources(directory)
     return result
 
@@ -334,13 +352,11 @@ def migration_sources(directory):
 def catalog_resources(directory):
     """Image-pinned, readable logical catalogs; never learn expected state live."""
     directory = Path(directory)
-    manifest = json.loads((directory / "manifest.json").read_text())
-    entries = manifest["catalog"]
-    names = ("catalog-query.json", "catalog-v1.json", "catalog-v2.json")
-    require(isinstance(entries, list) and len(entries) == len(names))
+    manifest = migration_manifest(directory)
+    names = ("catalog-query.json", *("catalog-v%d.json" % version for version in range(1, manifest["database_version"] + 1)))
     documents = []
-    for item, name in zip(entries, names):
-        require(set(item) == {"file", "sha256"} and item["file"] == name)
+    for item, name in zip(manifest["catalog"], names):
+        require(isinstance(item, dict) and set(item) == {"file", "sha256"} and item["file"] == name)
         raw = (directory / name).read_bytes()
         require(0 < len(raw) <= 262144 and hashlib.sha256(raw).hexdigest() == item["sha256"])
         documents.append(json.loads(raw))
@@ -351,37 +367,51 @@ def catalog_resources(directory):
             and isinstance(query["sql"], str) and 0 < len(query["sql"].encode()) <= 65536)
     for expected in documents[1:]:
         require(isinstance(expected, dict) and expected and all(isinstance(rows, list) and len(rows) < 1025 for rows in expected.values()))
-    require(set(documents[1]) == set(documents[2]))
-    return query, {1: documents[1], 2: documents[2]}
+    require(all(set(expected) == set(documents[1]) for expected in documents[2:]))
+    return query, dict(enumerate(documents[1:], 1))
 
 
-def verify_schema_catalog(connection, directory, version=DATABASE_SCHEMA_VERSION):
+def verify_schema_catalog(connection, directory, version=None):
     """Same app-readable projection is embedded by native admission/readiness.
 
     Caller owns a transaction; catalog-first deparsing is transaction-local.
     Compare exact logical facts before reading untrusted metadata relations.
+    Without a version, the manifest's latest version is required.
     """
+    return proven_catalog_version(connection, directory, None if version is None else (version,))
+
+
+def proven_catalog_version(connection, directory, versions=None):
+    """The one candidate version whose reviewed catalog exactly matches; default latest."""
     require(not connection.autocommit)
     require(connection.execute("SHOW session_replication_role").fetchone() == ("origin",))
     query, expected = catalog_resources(directory)
-    require(version in expected)
+    versions = (max(expected),) if versions is None else tuple(versions)
+    require(versions and all(version in expected for version in versions))
     # An omitted pg_temp is implicitly searched first for relations/types.
     # List it explicitly last, including on operator connections with TEMP.
     connection.execute("SET LOCAL search_path=pg_catalog, pg_temp")
     rows = connection.execute(query["sql"]).fetchall()
     require(len(rows) == 1 and isinstance(rows[0][0], str) and 0 < len(rows[0][0].encode()) <= query["max_output_bytes"])
-    require(json.loads(rows[0][0]) == expected[version])
+    actual = json.loads(rows[0][0])
+    matches = [version for version in versions if actual == expected[version]]
+    require(len(matches) == 1)
+    return matches[0]
 
 
-def initialize_migration_history(connection, initial_digest):
-    """Only after the verified legacy catalog, in the same upgrade transaction."""
+def initialize_migration_history(connection, initial_digest, latest):
+    """Only after the verified legacy catalog, in the same upgrade transaction.
+
+    Both version CHECKs admit 1..latest, the manifest's N for the runner.
+    """
+    require(type(latest) is int and 2 <= latest <= 9999)
     connection.execute("""SET LOCAL ROLE genui_owner;
       CREATE TABLE genui_meta.schema_migrations (
-        version integer PRIMARY KEY CHECK (version BETWEEN 1 AND 2),
+        version integer PRIMARY KEY CHECK (version BETWEEN 1 AND %d),
         sha256 text NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'), applied_at timestamptz NOT NULL DEFAULT clock_timestamp());
       ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check;
-      ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK (version BETWEEN 1 AND 2);
-      RESET ROLE;""")
+      ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK (version BETWEEN 1 AND %d);
+      RESET ROLE;""" % (latest, latest))
     connection.execute("INSERT INTO genui_meta.schema_migrations(version,sha256) VALUES (1,%s)", (initial_digest,))
 
 
@@ -395,6 +425,7 @@ def apply_migrations(connection, directory):
     # Fix this transaction's lookup path before identity/advisory/metadata reads.
     connection.execute("SET LOCAL search_path=pg_catalog, pg_temp")
     sources = migration_sources(directory)
+    latest = len(sources)
     require(connection.execute("SELECT session_user::text,current_user::text,current_database()").fetchone()
             == ("genui_migration", "genui_migration", "genui"))
     connection.execute("SELECT pg_advisory_xact_lock(1819409017, 2)")
@@ -406,20 +437,30 @@ def apply_migrations(connection, directory):
     if has_history:
         # A committed history1 cannot be produced by this atomic runner. Never
         # treat a partial/forged ledger as permission to skip the legacy proof.
-        verify_schema_catalog(connection, directory, 2)
+        # Versions 2..N carry the ledger: the exact reviewed catalog proves the
+        # recorded version before the ledger or version row is read.
+        recorded = proven_catalog_version(connection, directory, range(2, latest + 1))
         require(connection.execute("SELECT version,sha256 FROM genui_meta.schema_migrations ORDER BY version").fetchall()
-                == [(version, digest) for version, digest, _ in sources])
-        require(connection.execute("SELECT singleton,version FROM genui_meta.schema_version").fetchall() == [(True, 2)])
-        return
-    verify_schema_catalog(connection, directory, 1)
-    require(connection.execute("SELECT singleton,version FROM genui_meta.schema_version").fetchall() == [(True, 1)])
-    initialize_migration_history(connection, sources[0][1])
-    for version, digest, source in sources[1:]:
+                == [(version, digest) for version, digest, _ in sources[:recorded]])
+        require(connection.execute("SELECT singleton,version FROM genui_meta.schema_version").fetchall() == [(True, recorded)])
+        if recorded == latest:
+            return
+    else:
+        verify_schema_catalog(connection, directory, 1)
+        require(connection.execute("SELECT singleton,version FROM genui_meta.schema_version").fetchall() == [(True, 1)])
+        initialize_migration_history(connection, sources[0][1], latest)
+        recorded = 1
+    for version, digest, source in sources[recorded:]:
         connection.execute(source)
         connection.execute("INSERT INTO genui_meta.schema_migrations(version,sha256) VALUES (%s,%s)", (version, digest))
         connection.execute("UPDATE genui_meta.schema_version SET version=%s WHERE singleton", (version,))
-    require(connection.execute("SELECT version FROM genui_meta.schema_version").fetchone() == (DATABASE_SCHEMA_VERSION,))
-    verify_schema_catalog(connection, directory, 2)
+        # Each recorded-version step must reach its reviewed at-rest catalog
+        # before the next runs. A ledger created just above admits 1..N, so
+        # its intermediate states are proven only by the final catalog-vN.
+        if has_history and version < latest:
+            verify_schema_catalog(connection, directory, version)
+    require(connection.execute("SELECT version FROM genui_meta.schema_version").fetchone() == (latest,))
+    verify_schema_catalog(connection, directory, latest)
 
 
 def migrate():

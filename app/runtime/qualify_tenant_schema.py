@@ -88,6 +88,13 @@ def qualify():
             'Native pool cancellation/reuse and actual managed trials remain separate.']}
     def passed(name, **facts): report['checks'].append({'name':name,'passed':True,**facts})
     catalog_query=json.loads((MIGRATIONS/'catalog-query.json').read_text())['sql']
+    # Version, relation and pinned-file expectations follow the manifest and its
+    # latest reviewed catalog; never a constant that a new migration must edit.
+    manifest=runtime.migration_manifest(MIGRATIONS)
+    sources=runtime.migration_sources(MIGRATIONS)
+    latest=len(sources)
+    tenant_tables=sorted(row[1] for row in runtime.catalog_resources(MIGRATIONS)[1][latest]['relations']
+                         if row[0]=='genui' and row[2] in ('r','p'))
     def drift_refused(pg, name, statements):
         # These mutations are visible to the actual runner in one transaction.
         # A Python Refused must leave that drift untouched; only the test rolls
@@ -117,7 +124,7 @@ def qualify():
                 with drift.connect() as c:
                     if legacy:
                         c.execute((MIGRATIONS/'0001_role_foundation.sql').read_text())
-                        runtime.initialize_migration_history(c,runtime.INITIAL_MIGRATION_SHA256)
+                        runtime.initialize_migration_history(c,runtime.INITIAL_MIGRATION_SHA256,latest)
                     else: runtime.apply_migrations(c,MIGRATIONS)
                     c.execute(statement)
                 # Mutation is committed before opening the real migration call.
@@ -222,13 +229,13 @@ def qualify():
             passed('managed-style absence of optional creator-only grants permits exact version1 verification and upgrade')
             remove_creator_bookkeeping()
             with compatibility.connect() as c:
-                runtime.verify_schema_catalog(c,MIGRATIONS,2)
+                runtime.verify_schema_catalog(c,MIGRATIONS,latest)
                 runtime.apply_migrations(c,MIGRATIONS)
-            passed('managed-style absence of optional creator-only grants permits exact version2 repeat')
+            passed('managed-style absence of optional creator-only grants permits exact version'+str(latest)+' repeat')
             with compatibility.connect('postgres') as c:
                 c.execute('REVOKE genui_owner FROM genui_migration CASCADE')
             with compatibility.connect() as c:
-                try: runtime.verify_schema_catalog(c,MIGRATIONS,2)
+                try: runtime.verify_schema_catalog(c,MIGRATIONS,latest)
                 except runtime.Refused: pass
                 else: raise AssertionError('required explicit migration-owner grant was normalized away')
             passed('required explicit migration-owner access remains exact and cannot be normalized away')
@@ -248,7 +255,7 @@ def qualify():
                   $$ BEGIN PERFORM pg_catalog.nextval('app008_untrusted.marker'); END $$;
                   CREATE FUNCTION app008_untrusted.version_marker() RETURNS integer LANGUAGE plpgsql AS
                   $$ BEGIN PERFORM pg_catalog.nextval('app008_untrusted.marker'); RETURN 1; END $$""")
-            for version in (1,2):
+            for version in (1,latest):
                 with shadow.connect('postgres') as c:
                     c.execute("ALTER DATABASE genui SET search_path=app008_untrusted,pg_catalog")
                 with shadow.connect() as c:
@@ -301,14 +308,14 @@ def qualify():
                 c.execute("""CREATE SEQUENCE app008_untrusted.probe_marker;
                   CREATE FUNCTION app008_untrusted.probe_version_marker() RETURNS integer
                   LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS
-                  $$ BEGIN PERFORM pg_catalog.nextval('app008_untrusted.probe_marker'); RETURN 2; END $$;
+                  $$ BEGIN PERFORM pg_catalog.nextval('app008_untrusted.probe_marker'); RETURN %d; END $$;
                   DROP TABLE genui_meta.schema_version;
                   CREATE VIEW genui_meta.schema_version AS SELECT true AS singleton,app008_untrusted.probe_version_marker() AS version;
-                  GRANT SELECT ON genui_meta.schema_version TO genui_workspace""")
+                  GRANT SELECT ON genui_meta.schema_version TO genui_workspace""" % latest)
             with shadow.connect('genui_workspace') as c:
                 # This is a real view expression, reachable by the exact probe
                 # role. The read-write control proves the sequence marker fires.
-                assert c.execute('SELECT version FROM genui_meta.schema_version WHERE singleton=true').fetchone()==(2,)
+                assert c.execute('SELECT version FROM genui_meta.schema_version WHERE singleton=true').fetchone()==(latest,)
             with shadow.connect() as c:
                 assert c.execute('SELECT is_called FROM app008_untrusted.probe_marker').fetchone()==(True,)
                 c.execute("SELECT pg_catalog.setval('app008_untrusted.probe_marker',1,false)")
@@ -343,10 +350,10 @@ def qualify():
             before=fresh.digest()
             with fresh.connect() as c:
                 runtime.apply_migrations(c,MIGRATIONS)
-                assert c.execute('SELECT singleton,version FROM genui_meta.schema_version').fetchall()==[(True,2)]
+                assert c.execute('SELECT singleton,version FROM genui_meta.schema_version').fetchall()==[(True,latest)]
                 assert c.execute('SELECT version,sha256 FROM genui_meta.schema_migrations ORDER BY version').fetchall()==[(v,h) for v,h,_ in runtime.migration_sources(MIGRATIONS)]
             assert fresh.digest()==before
-            passed('fresh checksummed version2 install and exact repeat')
+            passed('fresh checksummed version'+str(latest)+' install and exact repeat')
     finally:
         report['fresh_container_removed']=fresh.removed
     pg=LocalPostgres()
@@ -358,11 +365,12 @@ def qualify():
                 fault=Path(tmp)
                 for file in MIGRATIONS.iterdir():
                     if file.is_file(): shutil.copyfile(file,fault/file.name)
-                target=fault/'0002_tenant_foundation.sql'
+                # Interrupt the last migration, after every earlier one ran.
+                faulted=json.loads((fault/'manifest.json').read_text())
+                target=fault/faulted['migrations'][-1]['file']
                 target.write_text(target.read_text()+"\nDO $$ BEGIN RAISE EXCEPTION 'synthetic migration interruption' USING ERRCODE='P0001'; END $$;\n")
-                manifest=json.loads((fault/'manifest.json').read_text())
-                manifest['migrations'][1]['sha256']=hashlib.sha256(target.read_bytes()).hexdigest()
-                (fault/'manifest.json').write_text(json.dumps(manifest))
+                faulted['migrations'][-1]['sha256']=hashlib.sha256(target.read_bytes()).hexdigest()
+                (fault/'manifest.json').write_text(json.dumps(faulted))
                 for initial in ('fresh','version1'):
                     before=pg.digest()
                     try:
@@ -384,7 +392,7 @@ def qualify():
             ): drift_refused(pg,label,statements)
             for inheritance in (False,True):
                 with pg.connect() as c:
-                    runtime.initialize_migration_history(c,runtime.INITIAL_MIGRATION_SHA256)
+                    runtime.initialize_migration_history(c,runtime.INITIAL_MIGRATION_SHA256,latest)
                     if inheritance: c.execute('ALTER ROLE genui_workspace INHERIT')
                     c.execute('SET LOCAL search_path=pg_catalog')
                     before=c.execute(catalog_query).fetchall()
@@ -405,12 +413,12 @@ def qualify():
             with pg.connect() as c: c.execute('DROP TABLE genui_meta.unexpected_partial_state')
             passed('partial version1 state refuses without inventing migration history')
             with pg.connect() as c: runtime.apply_migrations(c,MIGRATIONS)
-            passed('transactional verified version1-to-version2 migration')
+            passed('transactional verified version1-to-version'+str(latest)+' migration')
             before=pg.digest()
             with pg.connect() as c: runtime.apply_migrations(c,MIGRATIONS)
             assert pg.digest()==before
             passed('checksummed repeat has identical schema/data dump')
-            with pg.connect() as c: c.execute("UPDATE genui_meta.schema_migrations SET sha256=repeat('0',64) WHERE version=2")
+            with pg.connect() as c: c.execute("UPDATE genui_meta.schema_migrations SET sha256=repeat('0',64) WHERE version=%s",(latest,))
             before=pg.digest()
             try:
                 with pg.connect() as c: runtime.apply_migrations(c,MIGRATIONS)
@@ -418,7 +426,7 @@ def qualify():
             else: raise AssertionError('altered recorded checksum accepted')
             assert pg.digest()==before
             with pg.connect() as c:
-                c.execute('UPDATE genui_meta.schema_migrations SET sha256=%s WHERE version=2',(runtime.migration_sources(MIGRATIONS)[1][1],))
+                c.execute('UPDATE genui_meta.schema_migrations SET sha256=%s WHERE version=%s',(sources[-1][1],latest))
             passed('altered recorded checksum refuses without altering database')
             for label, statements in (
                 ('missing real table',["SET LOCAL ROLE genui_owner", "DROP TABLE genui.organization_permissions"]),
@@ -481,7 +489,7 @@ def qualify():
 
             with pg.connect('postgres') as c:
                 tables=c.execute("SELECT tablename FROM pg_tables WHERE schemaname='genui' ORDER BY tablename").fetchall()
-                assert len(tables)==26
+                assert len(tables)==len(tenant_tables) and sorted(table for (table,) in tables)==tenant_tables
                 assert c.execute("""SELECT count(*) FROM pg_class t JOIN pg_namespace n ON n.oid=t.relnamespace
                   WHERE n.nspname='genui' AND t.relkind='r' AND
                   (NOT t.relrowsecurity OR NOT t.relforcerowsecurity OR pg_get_userbyid(t.relowner)<>'genui_owner')""").fetchone()==(0,)
@@ -703,7 +711,8 @@ def qualify():
             assert pg.digest()==before
             passed('operator seed refuses changed existing epoch without overwriting authority')
             report['source_sha256']={str(p.relative_to(Path(__file__).resolve().parents[2])):hashlib.sha256(p.read_bytes()).hexdigest()
-                                    for p in (Path(runtime.__file__),Path(__file__),Path(__file__).with_name('tenant_seed.py'),MIGRATIONS/'manifest.json',MIGRATIONS/'0001_role_foundation.sql',MIGRATIONS/'0002_tenant_foundation.sql',MIGRATIONS/'catalog-query.json',MIGRATIONS/'catalog-v1.json',MIGRATIONS/'catalog-v2.json')}
+                                    for p in (Path(runtime.__file__),Path(__file__),Path(__file__).with_name('tenant_seed.py'),MIGRATIONS/'manifest.json',
+                                              *(MIGRATIONS/item['file'] for item in manifest['migrations']+manifest['catalog']))}
             report['passed']=True
     finally:
         report['container_removed']=pg.removed
