@@ -1,0 +1,18 @@
+{
+  "source_revision": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+  "local_image": "sha256:5ee5ad165bca1e37bc2efe13f2fb727912c008cbe721b18f452a98482404cedc",
+  "architecture": "arm64",
+  "os": "linux",
+  "actual_exported_context_matches_commit": true,
+  "context_sha256": {
+    ".dockerignore": "3a8eebc3fcd544add374ba2c5a0ce1c4f4f8dd44d93e3b2c6a74868f1412e1e7",
+    "Cargo.lock": "caec3dcdcb3228c1e98b7ef177517408485ecc3ac5af5b48927d81e87e050b8d",
+    "Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+    "Dockerfile": "eff94a1d093d95215ebe292a110207f0bbd5205176739ef87943b44ccfc133de",
+    "examples/hosted_key_qualification.rs": "4875cd8a222437eeddac1f26605ffc3f8f635a1af874adb241460e2d2e6d0095",
+    "src/lib.rs": "4fbfa5be174bde8f1a5410f66e4b5d53abae03d8860f7b02921b1eb99e68e39e"
+  },
+  "target_tag": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic:app006-key-8fca35c-arm64",
+  "scope": "standalone canonical consumer qualification image, not app service",
+  "published": false
+}

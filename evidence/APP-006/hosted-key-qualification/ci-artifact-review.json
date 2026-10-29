@@ -1,0 +1,207 @@
+{
+  "source_revision": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+  "passed": true,
+  "workflow_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40805999646",
+  "checks": [
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "cwd": "spikes/APP-006",
+      "exit_code": 0,
+      "elapsed_seconds": 0.084,
+      "output": "01-fmt.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "spikes/APP-006",
+      "exit_code": 0,
+      "elapsed_seconds": 28.442,
+      "output": "02-clippy.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--all-targets",
+        "--",
+        "--test-threads=2",
+        "--nocapture"
+      ],
+      "cwd": "spikes/APP-006",
+      "exit_code": 0,
+      "elapsed_seconds": 31.453,
+      "output": "03-test.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--example",
+        "hosted_key_qualification"
+      ],
+      "cwd": "spikes/APP-006",
+      "exit_code": 0,
+      "elapsed_seconds": 1.466,
+      "output": "04-build.log"
+    },
+    {
+      "command": [
+        "python3",
+        "qualify_hosted_key_boundary.py",
+        "--executable",
+        "target/debug/examples/hosted_key_qualification"
+      ],
+      "cwd": "spikes/APP-006",
+      "exit_code": 0,
+      "elapsed_seconds": 92.166,
+      "output": "05-private-pipe.log"
+    }
+  ],
+  "source_hashes_match_commit": true,
+  "compiler": "rustc 1.93.1 (01f6ddf75 2026-02-11)\nbinary: rustc\ncommit-hash: 01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf\ncommit-date: 2026-02-11\nhost: x86_64-unknown-linux-gnu\nrelease: 1.93.1\nLLVM version: 21.1.8",
+  "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+  "private_pipe_cases": [
+    {
+      "case": "no-arguments",
+      "passed": true,
+      "failure_code": "arguments_forbidden",
+      "elapsed_seconds": 0.003
+    },
+    {
+      "case": "regular-file-refused",
+      "passed": true,
+      "failure_code": "input_requires_pipe",
+      "elapsed_seconds": 0.003
+    },
+    {
+      "case": "empty-pipe",
+      "passed": true,
+      "failure_code": "input_size",
+      "elapsed_seconds": 0.003
+    },
+    {
+      "case": "oversized-pipe",
+      "passed": true,
+      "failure_code": "input_size",
+      "elapsed_seconds": 0.003
+    },
+    {
+      "case": "oversized-without-eof",
+      "passed": true,
+      "failure_code": "input_size",
+      "elapsed_seconds": 0.004
+    },
+    {
+      "case": "incomplete-without-eof",
+      "passed": true,
+      "failure_code": "input_deadline",
+      "elapsed_seconds": 2.019
+    },
+    {
+      "case": "malformed-private-input",
+      "passed": true,
+      "failure_code": "input_schema",
+      "elapsed_seconds": 0.003
+    },
+    {
+      "case": "duplicate-field",
+      "passed": true,
+      "failure_code": "input_schema",
+      "elapsed_seconds": 0.003
+    },
+    {
+      "case": "unknown-field",
+      "passed": true,
+      "failure_code": "input_schema",
+      "elapsed_seconds": 0.002
+    },
+    {
+      "case": "foreign-endpoint",
+      "passed": true,
+      "failure_code": "input_contract",
+      "elapsed_seconds": 0.003
+    },
+    {
+      "case": "expired-envelope",
+      "passed": true,
+      "failure_code": "input_contract",
+      "elapsed_seconds": 0.003
+    },
+    {
+      "case": "non-synthetic-envelope",
+      "passed": true,
+      "failure_code": "input_contract",
+      "elapsed_seconds": 0.003
+    },
+    {
+      "case": "blocked-output-whole-process-deadline",
+      "passed": true,
+      "exit_code": 124,
+      "elapsed_seconds": 90.002
+    }
+  ],
+  "image": {
+    "schema_version": 1,
+    "passed": true,
+    "scope": "actual nonroot Linux image boundary negatives; no hosted issuer or token",
+    "image_id": "sha256:cad5dca215183b7952789ee60c84b676ae079b2a2cbc71687adb3dc51e5fff26",
+    "architecture": "amd64",
+    "os": "linux",
+    "declared_source_sha256": {
+      "Dockerfile": "eff94a1d093d95215ebe292a110207f0bbd5205176739ef87943b44ccfc133de",
+      ".dockerignore": "3a8eebc3fcd544add374ba2c5a0ce1c4f4f8dd44d93e3b2c6a74868f1412e1e7",
+      "Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+      "Cargo.lock": "caec3dcdcb3228c1e98b7ef177517408485ecc3ac5af5b48927d81e87e050b8d",
+      "src/lib.rs": "4fbfa5be174bde8f1a5410f66e4b5d53abae03d8860f7b02921b1eb99e68e39e",
+      "examples/hosted_key_qualification.rs": "4875cd8a222437eeddac1f26605ffc3f8f635a1af874adb241460e2d2e6d0095",
+      "qualify_hosted_key_image.py": "3f427c76e321b7a9a87ea7050dbb8580486590582981be046b793907a62f57ea"
+    },
+    "checks": [
+      {
+        "case": "empty-input",
+        "passed": true,
+        "container_removed": true,
+        "failure_code": "input_size",
+        "elapsed_seconds": 0.214,
+        "process_os": "linux",
+        "process_architecture": "x86_64"
+      },
+      {
+        "case": "malformed-private-input",
+        "passed": true,
+        "container_removed": true,
+        "failure_code": "input_schema",
+        "elapsed_seconds": 0.173,
+        "process_os": "linux",
+        "process_architecture": "x86_64"
+      },
+      {
+        "case": "oversized-input",
+        "passed": true,
+        "container_removed": true,
+        "failure_code": "input_size",
+        "elapsed_seconds": 0.166,
+        "process_os": "linux",
+        "process_architecture": "x86_64"
+      }
+    ]
+  },
+  "limits": [
+    "Only local Linux mock/boundary cases; no hosted authentication.",
+    "CI AMD64 image is separate from the reviewed local ARM64 image."
+  ]
+}

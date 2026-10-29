@@ -1,0 +1,74 @@
+{
+  "source_revision": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+  "all_eight_passed": true,
+  "checks": [
+    {
+      "conclusion": "success",
+      "databaseId": 40805999439,
+      "headSha": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+      "name": "Released baseline",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40805999439"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40805999649,
+      "headSha": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+      "name": "Planning integrity",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40805999649"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40805999607,
+      "headSha": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+      "name": "Contract qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40805999607"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40805999632,
+      "headSha": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+      "name": "Bounded query qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40805999632"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40805999441,
+      "headSha": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+      "name": "Published canvas consumer",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40805999441"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40805999740,
+      "headSha": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+      "name": "Parser qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40805999740"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40805999646,
+      "headSha": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+      "name": "Auth consumer qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40805999646"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40805999808,
+      "headSha": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+      "name": "Foundation preparation",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40805999808"
+    }
+  ],
+  "limits": [
+    "CI built an AMD64 qualification image; the separately tested local ARM64 image requires its own registry binding.",
+    "No hosted issuer, callback, mailbox, membership, session, custody or rotation acceptance."
+  ]
+}

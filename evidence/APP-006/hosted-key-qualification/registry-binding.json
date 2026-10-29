@@ -1,0 +1,15 @@
+{
+  "source_revision": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+  "repository": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic",
+  "tag": "app006-key-8fca35c-arm64",
+  "index_digest": "sha256:5ee5ad165bca1e37bc2efe13f2fb727912c008cbe721b18f452a98482404cedc",
+  "arm64_manifest_digest": "sha256:e72c13558e7e08a172012d0534f6dbbb1a5f1584d2faf7248b81f1f9f91a81fa",
+  "config_digest": "sha256:a20ec823828edadbde6f133218db28b7e0a20e3c31f67b7d470ca6f08188b193",
+  "index_bytes": 856,
+  "arm64_manifest_bytes": 1247,
+  "manifest_bytes_independently_hashed": true,
+  "published": true,
+  "deployed_or_executed_hosted": false,
+  "scope": "operator-only canonical verifier qualification; not GenUI service image",
+  "recorded_at": "2026-10-29T02:34:31.310348+00:00"
+}
