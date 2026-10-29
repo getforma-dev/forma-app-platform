@@ -1,0 +1,2 @@
+    Checking forma-app-platform v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/.claude/worktrees/agent-aafe83d78bac0d915/app)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.65s

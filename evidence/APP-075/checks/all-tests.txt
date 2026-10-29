@@ -1,0 +1,76 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+     Running unittests src/lib.rs (target/debug/deps/genui-bad07dc2164afccd)
+
+running 54 tests
+test admission::tests::digests_are_domain_separated_and_registered ... ok
+test admission::tests::unregistered_digest_domain_is_refused - should panic ... ok
+test admission::tests::fixtures_digests_match_python ... ok
+test admission::tests::strict_decoder_matches_python_loads ... ok
+test auth_qualification::tests::expiry_restart_and_attempt_limits_fail_closed ... ok
+test auth_qualification::tests::existing_login_uses_server_bound_pkce_and_expected_subject ... ok
+test auth_qualification::tests::concurrent_and_sequential_replay_exchange_exactly_once ... ok
+test auth_qualification::tests::production_configuration_cannot_select_test_transport_or_identity ... ok
+test auth_qualification::tests::operator_and_caller_selected_inputs_never_start_provider_work ... ok
+test auth_qualification::tests::canceled_exchange_or_verification_keeps_cleanup_unresolved ... ok
+test auth_qualification::tests::foreign_verified_tenant_is_refused_and_logout_is_requested ... ok
+test auth_qualification::tests::state_cookie_and_parser_refusals_never_exchange ... ok
+test config::tests::refuse_expiry_shared_credentials_and_role_interchange_without_disclosure ... ok
+test readiness::tests::late_or_other_generation_probe_cannot_extend_credentials ... ok
+test storage::admission::tests::code_digest_matches_the_operator_vector_for_every_accepted_spelling ... ok
+test storage::admission::tests::digest_shape_and_sign_out_reasons_are_closed ... ok
+test storage::admission::tests::handle_digest_matches_the_operator_vector_and_is_strict ... ok
+test storage::admission::tests::malformed_codes_have_no_digest ... ok
+test storage::admission_qualification::native_admission_campaign ... ignored, requires local Docker, OpenSSL and the locked migration/contract Python environments
+test storage::managed_qualification::managed_readonly_entry ... ignored, operator-only exact selector, fixed arming and private immutable run manifest required
+test auth_qualification::tests::real_router_and_backend_par_exchange_create_no_app_authority ... ok
+test storage::managed_qualification::tests::child_entry ... ignored, child process helper for APP-075 output-boundary tests
+test config::tests::file_reader_rejects_fifo_symlink_and_oversized_input ... ok
+test storage::managed_qualification::tests::entry_cannot_select_a_fixture_endpoint_or_insecure_transport ... ok
+test storage::managed_qualification::tests::managed_cleanup_with_real_transports ... ignored, requires local Docker, OpenSSL and the locked migration/contract Python environments
+test storage::managed_qualification::tests::entry_panic_is_labeled_and_never_confirms_cleanup ... ok
+test admission::tests::unregistered_renderer_or_operator_version_refuses ... ok
+test auth_qualification::tests::token_shape_binding_redirect_body_and_cleanup_refusals ... ok
+test admission::tests::rejects_unknown_fields_executable_strings_and_client_grants_with_coded_reason ... ok
+test storage::managed_qualification::tests::registry_bytes_are_the_canonical_cross_language_vector ... ok
+test storage::managed_qualification::tests::case_panic_output_is_sanitized_and_cleanup_is_proven ... ok
+test storage::managed_qualification::tests::refusals_before_store_construction_are_not_applicable ... ok
+test admission::tests::rejects_over_complex_definitions ... ok
+test admission::tests::canonical_vectors_match_contracts_lock ... ok
+test storage::managed_qualification::tests::source_bundle_covers_every_compiled_source ... ok
+test storage::managed_qualification::tests::original_deadline_bounds_span_remaining_time_and_issue_skew ... ok
+test storage::managed_qualification::tests::seed_catalog_and_migration_pins_match_repository_files ... ok
+test storage::managed_qualification::tests::private_inputs_refuse_links_modes_owners_fifos_directories_and_size ... ok
+test storage::managed_qualification::tests::reports_are_sanitized_closed_and_bounded ... ok
+test storage::managed_qualification::tests::manifest_is_closed_and_refuses_duplicate_or_unknown_keys ... ok
+test storage::pool::lifecycle_tests::abort_request_retains_permits_until_transport_drop ... ok
+test storage::qualification::native_postgres_campaign ... ignored, requires local Docker, OpenSSL and the locked migration/contract Python environments
+test storage::managed_qualification::tests::valid_inputs_load_and_bind_the_original_deadline ... ok
+test storage::tests::production_settings_allow_only_fixed_rds_endpoint ... ok
+test storage::tests::unknown_permissions_and_noncanonical_ids_deny ... ok
+test storage::tests::private_registry_rejects_links_modes_duplicates_unknowns_and_large_documents ... ok
+test admission::tests::shape_and_reference_rules_match_validate_py ... ok
+test storage::managed_qualification::tests::selector_arming_scope_and_uid_are_exact ... ok
+test storage::managed_qualification::tests::registry_ca_and_credential_files_are_bound ... ok
+test storage::managed_qualification::tests::target_organizations_and_every_pin_are_fixed ... ok
+test storage::managed_qualification::tests::watchdog_exits_at_the_original_deadline_without_a_result ... ok
+test storage::managed_qualification::tests::supervise_proves_cleanup_on_success_panic_and_cooperative_timeout ... ok
+test storage::managed_qualification::tests::supervise_never_confirms_cleanup_for_an_unacknowledged_abort ... ok
+test auth_qualification::tests::token_and_logout_timeouts_are_bounded_and_never_retry ... ok
+
+test result: ok. 49 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 6.03s
+
+     Running unittests src/main.rs (target/debug/deps/forma_app_platform-15f607b802f32a26)
+
+running 1 test
+test tests::required_native_routes_refuse_browser_and_missing_outputs ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests genui
+
+running 2 tests
+test src/storage/admission.rs - storage::admission::VerifiedNonmember (line 21) - compile fail ... ok
+test src/storage/authorization.rs - storage::authorization::TrustedRequest (line 12) - compile fail ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+

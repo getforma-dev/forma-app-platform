@@ -1,0 +1,21 @@
+{
+  "agree": true,
+  "pins": {
+    "app/migrations/manifest.json database_version": 4,
+    "app/runtime/runtime.py DATABASE_SCHEMA_VERSION": 4,
+    "app/src/storage/catalog.rs EXPECTED include": 4,
+    "app/src/storage/managed_qualification.rs CATALOG include": 4,
+    "app/src/storage/pool.rs verify_schema_version literal": 4
+  },
+  "catalog_bound": {
+    "app/migrations/catalog-query.json max_output_bytes": 524288,
+    "app/migrations/catalog-query.json SQL octet_length literal": 524288,
+    "app/runtime/runtime.py CATALOG_BOUND": 524288,
+    "app/src/storage/catalog.rs BOUND": 524288
+  },
+  "catalog_version_checks": {
+    "catalog-v2.json": 2,
+    "catalog-v3.json": 3,
+    "catalog-v4.json": 4
+  }
+}

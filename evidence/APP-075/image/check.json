@@ -1,0 +1,497 @@
+{
+  "cleanup": {
+    "genui-app075-check-bfa2bd6245-entry-list": true,
+    "genui-app075-check-bfa2bd6245-entry-unarmed": true,
+    "genui-app075-check-bfa2bd6245-mount": true,
+    "genui-app075-check-bfa2bd6245-probe": true,
+    "genui-app075-check-bfa2bd6245-supervisor-ca-directory-mount": true,
+    "genui-app075-check-bfa2bd6245-supervisor-default-unarmed": true,
+    "genui-app075-check-bfa2bd6245-supervisor-no-credential-source": true,
+    "genui-app075-check-bfa2bd6245-supervisor-operator-password": true,
+    "genui-app075-check-bfa2bd6245-supervisor-program-directory-mount": true,
+    "genui-app075-check-bfa2bd6245-supervisor-run-extra-argument": true,
+    "genui-app075-check-bfa2bd6245-supervisor-serve": true
+  },
+  "cleanup_complete": true,
+  "context_source_bundle_sha256": "85381e18f1a44cfc1b907893dbc60b71e13087007566e10091c3cf372aea0bcf",
+  "entry_unarmed": {
+    "exit_code": 101,
+    "result": {
+      "ca_sha256_self_consistency_only": null,
+      "checks": [],
+      "cleanup_applicable": false,
+      "cleanup_confirmed": false,
+      "declared_control_plane_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+      "error": "configuration_refused",
+      "limits": [
+        "Fixture identities are synthetic; no hosted identity or application admission is established.",
+        "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
+        "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
+      ],
+      "manifest_sha256": null,
+      "original_expires_at": null,
+      "original_issued_at": null,
+      "passed": false,
+      "resource_pins": {
+        "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+        "catalog_sha256": "8f8e280bc2f16192c649357ae3a56a97c9ac35dae66c485278dc92e85cd9f82e",
+        "database_version": 4,
+        "fixture_setup_sha256": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
+        "migrations_manifest_sha256": "a76c830ba8de3e7947b3a9588bba0d8b734eff3625ee4e145efd1af6a2562867",
+        "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+        "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+        "source_bundle_sha256": "85381e18f1a44cfc1b907893dbc60b71e13087007566e10091c3cf372aea0bcf"
+      },
+      "run_id": null,
+      "schema_version": 1,
+      "scope": "APP-008 isolated application-data-read-only qualification"
+    }
+  },
+  "expectations": [
+    {
+      "detail": {
+        "extra": [],
+        "missing": []
+      },
+      "expectation": "qualification context is exactly the explicit allowlist",
+      "met": true
+    },
+    {
+      "expectation": "every compiled Rust source is in the context and in the entry's source bundle",
+      "met": true
+    },
+    {
+      "expectation": "context carries the reviewed RDS CA bundle",
+      "met": true
+    },
+    {
+      "detail": {
+        "differing": []
+      },
+      "expectation": "service context bytes equal the base revision",
+      "met": true
+    },
+    {
+      "expectation": "service context has no qualification inputs",
+      "met": true
+    },
+    {
+      "expectation": "image runs the supervisor as UID 65532 with only `run`",
+      "met": true
+    },
+    {
+      "expectation": "image exposes no port and declares only the private run volume",
+      "met": true
+    },
+    {
+      "expectation": "image environment carries no credential, endpoint or arming value",
+      "met": true
+    },
+    {
+      "expectation": "probe ran as UID 65532",
+      "met": true
+    },
+    {
+      "expectation": "reviewed RDS CA is pinned at the fixed path, read-only",
+      "met": true
+    },
+    {
+      "expectation": "executable matches its build identity, mode 0555",
+      "met": true
+    },
+    {
+      "expectation": "supervisor and runtime helper equal the repository files",
+      "met": true
+    },
+    {
+      "expectation": "no set-id file under /app",
+      "met": true
+    },
+    {
+      "expectation": "executable selected exactly refuses an unarmed run before any store exists",
+      "met": true
+    },
+    {
+      "expectation": "executable's source-bundle pin equals the recomputation from the exported context",
+      "met": true
+    },
+    {
+      "detail": {
+        "expected": {
+          "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+          "catalog_sha256": "8f8e280bc2f16192c649357ae3a56a97c9ac35dae66c485278dc92e85cd9f82e",
+          "database_version": 4,
+          "fixture_setup_sha256": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
+          "migrations_manifest_sha256": "a76c830ba8de3e7947b3a9588bba0d8b734eff3625ee4e145efd1af6a2562867",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "source_bundle_sha256": "85381e18f1a44cfc1b907893dbc60b71e13087007566e10091c3cf372aea0bcf"
+        },
+        "reported": {
+          "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+          "catalog_sha256": "8f8e280bc2f16192c649357ae3a56a97c9ac35dae66c485278dc92e85cd9f82e",
+          "database_version": 4,
+          "fixture_setup_sha256": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
+          "migrations_manifest_sha256": "a76c830ba8de3e7947b3a9588bba0d8b734eff3625ee4e145efd1af6a2562867",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "source_bundle_sha256": "85381e18f1a44cfc1b907893dbc60b71e13087007566e10091c3cf372aea0bcf"
+        }
+      },
+      "expectation": "executable's resource pins equal the repository recomputation",
+      "met": true
+    },
+    {
+      "expectation": "the managed entry is an ignored test of the executable",
+      "met": true
+    },
+    {
+      "expectation": "supervisor serve exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor run-extra-argument exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor default-unarmed exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor operator-password exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor ca-directory-mount exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor program-directory-mount exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor no-credential-source exits 3 with credential_refresh_unavailable and launches nothing",
+      "met": true
+    }
+  ],
+  "ignored_tests": [
+    "storage::admission_qualification::native_admission_campaign",
+    "storage::managed_qualification::managed_readonly_entry",
+    "storage::managed_qualification::tests::child_entry",
+    "storage::managed_qualification::tests::managed_cleanup_with_real_transports",
+    "storage::qualification::native_postgres_campaign"
+  ],
+  "image": "genui-app075-qualification:local",
+  "image_identity": {
+    "architecture": "arm64",
+    "cmd": [
+      "run"
+    ],
+    "entrypoint": [
+      "python3",
+      "/app/qualification_supervisor.py"
+    ],
+    "env_names": [
+      "AWS_CONFIG_FILE",
+      "AWS_SHARED_CREDENTIALS_FILE",
+      "GPG_KEY",
+      "LANG",
+      "PATH",
+      "PYTHONDONTWRITEBYTECODE",
+      "PYTHONUNBUFFERED",
+      "PYTHON_SHA256",
+      "PYTHON_VERSION"
+    ],
+    "exposed_ports": [],
+    "id": "sha256:ff9f0fe0f55ed0cc115fe60e3e367a0b6b9e365d5824b44676897be70bf17e1d",
+    "os": "linux",
+    "size": 481393284,
+    "user": "65532:65532",
+    "volumes": [
+      "/run/genui"
+    ]
+  },
+  "label": "genui-app075-check-bfa2bd6245",
+  "passed": true,
+  "probe": {
+    "app_files": [
+      "/app/qualification/build-identity.json",
+      "/app/qualification/genui-storage-tests",
+      "/app/qualification_supervisor.py",
+      "/app/requirements.lock",
+      "/app/runtime.py"
+    ],
+    "ca_mode": "0o444",
+    "ca_sha256": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+    "egid": 65532,
+    "euid": 65532,
+    "executable_mode": "0o555",
+    "executable_sha256": "0f3be387d802f62e70f3f3a71340bb0f6676e5bbf9ce6d6140e4c3f0c4556ef6",
+    "identity": {
+      "cargo_artifact": "genui-df3b8685482dcc7f",
+      "executable": "/app/qualification/genui-storage-tests",
+      "executable_sha256": "0f3be387d802f62e70f3f3a71340bb0f6676e5bbf9ce6d6140e4c3f0c4556ef6",
+      "rustc": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+      "schema_version": 1
+    },
+    "run_directory": [
+      "0o700",
+      65532
+    ],
+    "runtime_sha256": "c3144e033b00adf774a41a26fb0fe274dae40354a290f9165d2fbbe17988a925",
+    "setid_files": [],
+    "supervisor_sha256": "d3edfa89056a3613cf20a97f95c45bec62927cbe5b0abe017499c0a3be5c1cf8"
+  },
+  "qualification_context": {
+    "count": 41,
+    "files": {
+      "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+      "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+      "app/certs/rds-global-bundle.pem": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+      "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+      "app/migrations/catalog-v4.json": "8f8e280bc2f16192c649357ae3a56a97c9ac35dae66c485278dc92e85cd9f82e",
+      "app/migrations/manifest.json": "a76c830ba8de3e7947b3a9588bba0d8b734eff3625ee4e145efd1af6a2562867",
+      "app/qualification/Dockerfile": "0086034301cb3a77917a47d4a3164a400e0aba40ed1c3948a9b331cb5193c04b",
+      "app/qualification/Dockerfile.dockerignore": "67ed7939c66553910a365bbf0844a739e3850725fa0bba4997c434855670b0c1",
+      "app/runtime/qualification_supervisor.py": "d3edfa89056a3613cf20a97f95c45bec62927cbe5b0abe017499c0a3be5c1cf8",
+      "app/runtime/requirements.lock": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+      "app/runtime/runtime.py": "c3144e033b00adf774a41a26fb0fe274dae40354a290f9165d2fbbe17988a925",
+      "app/src/admission/canonical.rs": "60f02ccbe42c86fddd55554dde9f2f0e0f9237fc891746be51e51e2872ce72f3",
+      "app/src/admission/digest.rs": "492d56d739fb0a72e30704992c08bd125f14e95c8eb83abd0d8805f95fb46c4c",
+      "app/src/admission/mod.rs": "37e12a5a55ec4ec3c7e080ac2605ff402d94552e89fb26d139c9ad246b5c4d14",
+      "app/src/admission/tests.rs": "2fbfc9e04725f560fae218eb718d4ef215ddb71acb8df2d4efa24b406cf5fa35",
+      "app/src/admission/validate.rs": "5088c7925dd81ced583e4c50502f00ba2fb89032e7f8124df90e300e25331263",
+      "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+      "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+      "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+      "app/src/lib.rs": "b2cc80afb641691a7760dd8d2d537e29d6d69e367c74f21534cfc939eda2614a",
+      "app/src/readiness.rs": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513",
+      "app/src/roles.rs": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216",
+      "app/src/storage/admission.rs": "a319c067cd855624718e85a6303b90229b4b94fd26ea38a2a7851077b3842ba2",
+      "app/src/storage/admission_qualification.rs": "0f22a46cda2d4260cdc9e769bdcae34479cd0c83a7be1206f9fbef9186c90081",
+      "app/src/storage/authorization.rs": "d6a4a97610099deb35e2444259a1711417c451adfaff1661ebf88ce95a5fd216",
+      "app/src/storage/catalog.rs": "c918de107b426a2d0484e9828fb5d0629d78e5371631493e41e680d83833ccc5",
+      "app/src/storage/managed_qualification.rs": "4f17b0729245e623b4e362ff932cd2345c30ad07efe24d0c88d45e40c973c04c",
+      "app/src/storage/managed_qualification/tests.rs": "c1ad20305bc50f5903bac880976493b24b06e26155566da7eba509963d5bfde1",
+      "app/src/storage/mod.rs": "32190011adad5b2864590d0bfd71d7a31c1252eff4cf3e863890a00a5fcc26a5",
+      "app/src/storage/pool.rs": "e40930aeed25a55aced8d5d37dd694882d77ff1d6a73ae8e60694535b2a242b3",
+      "app/src/storage/qualification.rs": "66c71658b81f1f3d39d2a6656e7bc89deee2599b1a3ab98003978070a33962a4",
+      "app/src/storage/qualification_cases.rs": "80e3fbbd31a16e5cb022882bd56107f6d01327d98026df4cf134445e3f3cf9d8",
+      "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+      "app/src/storage/tests.rs": "6e2a1747c398f0a064a25e945ba3b2a9ce65bdedd17e6750a1f8ae66b4d63232",
+      "contracts/fixtures/canonical-vectors.json": "33b46ff5970bdcd5259f23bdb5e9a7fcda4c5eeffebe93e0fedfebf5f661203d",
+      "contracts/fixtures/negative-vectors.json": "089e9a3017adda324a2a150fb68d5aa497889cd104d2f7096b9128d520764e75",
+      "contracts/fixtures/northstar.json": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+      "contracts/fixtures/spend-review.json": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+      "contracts/implementation-lock.json": "9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45",
+      "spikes/APP-006/Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+      "spikes/APP-006/src/lib.rs": "4fbfa5be174bde8f1a5410f66e4b5d53abae03d8860f7b02921b1eb99e68e39e"
+    }
+  },
+  "recorded_at": "2026-10-29T21:40:03.700287+00:00",
+  "scope": "APP-075 local confined qualification-image checks; no AWS/RDS/registry",
+  "service_context": {
+    "base_revision": "e57ce89",
+    "base_tracked_files": 1368,
+    "count": 46,
+    "files": {
+      ".dockerignore": "a19856a8df02c43e8706e9f5f7c14626f04cb39a8a10d14c61da4e601785031f",
+      "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+      "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+      "app/Dockerfile": "afed8202d419597a83e9c26989842e5dcd480fe23785751a1eb5db78fe64cba3",
+      "app/admin/build.ts": "e10c5974fa648f2223a06470c6cf4ed5edbeb80636874aa69ef06f092188d7d4",
+      "app/admin/package-lock.json": "a5850cd7fed748d29a1270bc05f41912c3ae9fa2058e6941d6af36c440e7acfd",
+      "app/admin/package.json": "ee3e1d528fd3a9c5776a44d11300de92c6d4fbd8c831dcd19cefa3308eaef70f",
+      "app/admin/src/about/app.tsx": "7bd3e6488d907b74e19b579a6cd6f77e47802ce02013c340923edf70611381b3",
+      "app/admin/src/home/app.tsx": "70d76cc4226e22523c321884f884100928b5241acc5a14b5bb49a69c16bbc804",
+      "app/admin/src/styles/app.css": "8098e2c0b9b4368f0dd8bbdda48d30b1fabf8585a7c916adc9e6e98f21947a83",
+      "app/admin/tsconfig.json": "8f54953b133871cc1c728d72bf59b8e03eb929a85a60da177368619f5a2049a4",
+      "app/certs/rds-global-bundle.pem": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+      "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+      "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+      "app/migrations/0003_admission.sql": "3317bed31f4ae29b9aef2cc9429ecc4d88fe560cfadac891d3beae9fd02ed903",
+      "app/migrations/0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
+      "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+      "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+      "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+      "app/migrations/catalog-v3.json": "16fcd0edbfdea34bc6208cdef7cd2afa618babd7888ba49a282c1b8a62196245",
+      "app/migrations/catalog-v4.json": "8f8e280bc2f16192c649357ae3a56a97c9ac35dae66c485278dc92e85cd9f82e",
+      "app/migrations/manifest.json": "a76c830ba8de3e7947b3a9588bba0d8b734eff3625ee4e145efd1af6a2562867",
+      "app/runtime/requirements.lock": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+      "app/runtime/runtime.py": "c3144e033b00adf774a41a26fb0fe274dae40354a290f9165d2fbbe17988a925",
+      "app/src/admission/canonical.rs": "60f02ccbe42c86fddd55554dde9f2f0e0f9237fc891746be51e51e2872ce72f3",
+      "app/src/admission/digest.rs": "492d56d739fb0a72e30704992c08bd125f14e95c8eb83abd0d8805f95fb46c4c",
+      "app/src/admission/mod.rs": "37e12a5a55ec4ec3c7e080ac2605ff402d94552e89fb26d139c9ad246b5c4d14",
+      "app/src/admission/validate.rs": "5088c7925dd81ced583e4c50502f00ba2fb89032e7f8124df90e300e25331263",
+      "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+      "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+      "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+      "app/src/lib.rs": "b2cc80afb641691a7760dd8d2d537e29d6d69e367c74f21534cfc939eda2614a",
+      "app/src/main.rs": "6d0a1e5cd599605cfdf21335e1cf545e260961aa2b60c00739879456746f8451",
+      "app/src/readiness.rs": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513",
+      "app/src/roles.rs": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216",
+      "app/src/storage/admission.rs": "a319c067cd855624718e85a6303b90229b4b94fd26ea38a2a7851077b3842ba2",
+      "app/src/storage/authorization.rs": "d6a4a97610099deb35e2444259a1711417c451adfaff1661ebf88ce95a5fd216",
+      "app/src/storage/catalog.rs": "c918de107b426a2d0484e9828fb5d0629d78e5371631493e41e680d83833ccc5",
+      "app/src/storage/mod.rs": "32190011adad5b2864590d0bfd71d7a31c1252eff4cf3e863890a00a5fcc26a5",
+      "app/src/storage/pool.rs": "e40930aeed25a55aced8d5d37dd694882d77ff1d6a73ae8e60694535b2a242b3",
+      "app/src/storage/qualification.rs": "66c71658b81f1f3d39d2a6656e7bc89deee2599b1a3ab98003978070a33962a4",
+      "app/src/storage/qualification_cases.rs": "80e3fbbd31a16e5cb022882bd56107f6d01327d98026df4cf134445e3f3cf9d8",
+      "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+      "app/src/storage/tests.rs": "6e2a1747c398f0a064a25e945ba3b2a9ce65bdedd17e6750a1f8ae66b4d63232",
+      "spikes/APP-006/Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+      "spikes/APP-006/src/lib.rs": "4fbfa5be174bde8f1a5410f66e4b5d53abae03d8860f7b02921b1eb99e68e39e"
+    }
+  },
+  "supervisor_cases": [
+    {
+      "case": "serve",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": null,
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "run-extra-argument",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": null,
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "default-unarmed",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": null,
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "operator-password",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": null,
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "ca-directory-mount",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": "4b8b72d3-ef50-4c78-a744-cd7679157a46",
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "program-directory-mount",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": "4b8b72d3-ef50-4c78-a744-cd7679157a46",
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "no-credential-source",
+      "exit_code": 3,
+      "stderr": [
+        "credential_refresh_unavailable"
+      ],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "credential_refresh_unavailable",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": "4b8b72d3-ef50-4c78-a744-cd7679157a46",
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    }
+  ]
+}
