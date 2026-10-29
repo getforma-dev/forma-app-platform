@@ -60,10 +60,12 @@ app/runtime/**
 app/migrations/**
 !app/migrations/0001_role_foundation.sql
 !app/migrations/0002_tenant_foundation.sql
+!app/migrations/0003_admission.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
 !app/migrations/catalog-v1.json
 !app/migrations/catalog-v2.json
+!app/migrations/catalog-v3.json
 !app/certs/
 app/certs/**
 !app/certs/rds-global-bundle.pem

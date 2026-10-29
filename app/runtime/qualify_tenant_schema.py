@@ -4,9 +4,11 @@ Run with the existing locked runtime + contract validator environments. A unique
 Docker database publishes only a random loopback port and is removed in finally.
 """
 import argparse
+from datetime import timezone
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 import shutil
 import tempfile
@@ -25,6 +27,569 @@ P = '00000000-0000-4000-8000-000000000066'
 APP = '00000000-0000-4000-8000-000000000065'
 WORK = '00000000-0000-4000-8000-000000000069'
 PUB = '00000000-0000-4000-8000-000000000068'
+APP_ROLES = ('genui_workspace','genui_control','genui_data','genui_worker')
+# ADR-007 D7.1: the six genui_admit definer functions, exact identity arguments and results.
+ADMIT_FUNCTIONS = {
+    'resolve_code': ('p_code_digest text', 'uuid'),
+    'resolve_handle': ('p_handle_digest text', 'uuid'),
+    'reserve_code': ('p_org uuid, p_code_digest text, p_context_digest text',
+                     'TABLE(reservation_id uuid, expires_at timestamp with time zone, outcome text)'),
+    'record_pending_admission': ('p_org uuid, p_reservation uuid, p_issuer text, p_provider_tenant text, p_provider_subject text',
+                                 'TABLE(pending_admission_id uuid, expires_at timestamp with time zone, outcome text)'),
+    'admit_redemption': ('p_org uuid, p_pending_admission uuid, p_issuer text, p_provider_tenant text, p_provider_subject text, p_payload_digest text',
+                         'TABLE(principal_id uuid, membership_epoch bigint, entitlement_id uuid, redemption_id uuid, outcome text)'),
+    'advance_member_epoch': ('p_org uuid, p_principal uuid, p_reason text', 'bigint'),
+}
+# Relations migration 0003 adds to genui (D7.3: each states RLS, FORCE and tenant_scope).
+ADMISSION_TABLES = ('access_codes','audit_events','audit_heads','code_grant_templates','code_redemptions',
+                    'code_reservations','entitlements','provider_invitations')
+# D7.8 closed chains and kinds for the roles that hold INSERT on audit_events in 0003.
+CHAIN_KINDS = {
+    'genui_admit': ('admission', ('admission.pending','admission.redeemed','admission.denied_for_reconciliation',
+                                  'session.sign_out','session.sign_out_all')),
+    'genui_owner': ('operator', ('organization.provisioned','handle.rotated','code.issued','code.revoked','code.extended',
+                                 'membership.revoked','entitlement.revoked')),
+}
+
+
+def _columns(relation, privilege, *columns):
+    return {('genui_admit', relation, privilege, column) for column in columns}
+
+
+# ADR-007 D7.1 (A4): genui_admit's exact column grants; nothing at table level.
+ADMIT_GRANTS = set().union(
+    _columns('organizations','SELECT','organization_id','status'), _columns('organizations','UPDATE','status'),
+    _columns('code_index','SELECT','code_digest','organization_id'),
+    _columns('handle_index','SELECT','handle_digest','organization_id','retired_at'),
+    _columns('access_codes','SELECT','organization_id','code_id','code_digest','kind','status','max_redemptions','redeemed_count','expires_at'),
+    _columns('access_codes','UPDATE','redeemed_count','status'),
+    _columns('code_grant_templates','SELECT','organization_id','code_id','permission','app_id','work_id','source_id'),
+    _columns('code_reservations','SELECT','organization_id','reservation_id','code_id','kind','context_digest','issuer',
+             'provider_tenant_id','provider_subject','state','expires_at'),
+    _columns('code_reservations','INSERT','organization_id','reservation_id','code_id','kind','context_digest','issuer',
+             'provider_tenant_id','provider_subject','state','expires_at'),
+    _columns('code_reservations','UPDATE','state','consumed_at'),
+    _columns('principals','SELECT','organization_id','principal_id','issuer','provider_tenant_id','provider_subject'),
+    _columns('principals','INSERT','organization_id','principal_id','issuer','provider_tenant_id','provider_subject'),
+    _columns('memberships','SELECT','organization_id','principal_id','membership_epoch'),
+    _columns('memberships','INSERT','organization_id','principal_id','status','membership_epoch'),
+    _columns('memberships','UPDATE','membership_epoch'),
+    _columns('organization_permissions','INSERT','organization_id','principal_id','permission'),
+    _columns('app_permissions','INSERT','organization_id','principal_id','app_id','permission'),
+    _columns('work_permissions','INSERT','organization_id','principal_id','app_id','work_id','permission'),
+    _columns('source_permissions','INSERT','organization_id','principal_id','source_id','permission'),
+    _columns('entitlements','INSERT','organization_id','principal_id','entitlement_id','status','kind','starts_at','expires_at'),
+    _columns('code_redemptions','SELECT','organization_id','redemption_id','principal_id','pending_admission_id','entitlement_id','payload_digest'),
+    _columns('code_redemptions','INSERT','organization_id','redemption_id','code_id','principal_id','pending_admission_id',
+             'entitlement_id','payload_digest','committed_at','audit_event_id'),
+    _columns('audit_events','INSERT','organization_id','event_id','writer_role','chain_sequence','kind','actor_principal_id',
+             'app_id','work_id','record_id','code_id','outcome_digest','occurred_at','previous_hash','hash'),
+    _columns('audit_heads','SELECT','organization_id','writer_role','chain_sequence','head_hash'),
+    _columns('audit_heads','UPDATE','chain_sequence','head_hash'),
+)
+
+
+def sha(value):
+    return 'sha256:'+hashlib.sha256(value.encode()).hexdigest()
+
+
+def genesis(organization, writer_role):
+    """D7.8 genesis head hash, recomputed independently of the database."""
+    return 'sha256:'+hashlib.sha256(b'forma:audit-genesis:v1\x00'+organization.encode()+b'\x00'+writer_role.encode()).hexdigest()
+
+
+def verify_chain(c, organization, writer_role):
+    """D7.8 verification: recompute every hash in chain_sequence order; the tail equals the head."""
+    head=c.execute('SELECT chain_sequence,head_hash FROM genui.audit_heads WHERE organization_id=%s AND writer_role=%s',(organization,writer_role)).fetchone()
+    events=c.execute("""SELECT organization_id::text,event_id::text,writer_role,chain_sequence,kind,actor_principal_id::text,app_id::text,
+      work_id::text,record_id::text,code_id::text,outcome_digest::text,occurred_at,previous_hash,hash FROM genui.audit_events
+      WHERE organization_id=%s AND writer_role=%s ORDER BY chain_sequence""",(organization,writer_role)).fetchall()
+    previous,sequence=genesis(organization,writer_role),1
+    for row in events:
+        names=('organization_id','event_id','writer_role','chain_sequence','kind','actor_principal_id','app_id','work_id',
+               'record_id','code_id','outcome_digest','occurred_at','previous_hash')
+        body=dict(zip(names,row[:13]))
+        assert body['occurred_at'].microsecond==0 and row[3]==sequence+1 and row[12]==previous,(organization,writer_role,row[3])
+        body['occurred_at']=body['occurred_at'].astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        computed='sha256:'+hashlib.sha256(b'forma:audit-event:v1\x00'+previous.encode()+canonical(body)).hexdigest()
+        assert computed==row[13],('audit hash mismatch',organization,writer_role,row[3])
+        previous,sequence=computed,row[3]
+    assert head==(sequence,previous),('audit head differs from chain tail',organization,writer_role)
+    return [row[4] for row in events]
+
+
+def admission_checks(pg, passed, denied):
+    """ADR-007 Consequences for migration 0003 on the actual local database.
+
+    Fixture rows are written as the operator channel would (genui_migration
+    acting as genui_owner under explicit organization scope); every admission
+    behavior runs as genui_workspace through the six definer functions.
+    """
+    org0,org1=ORGANIZATIONS
+    def org_scope(c, org):
+        c.execute("SELECT set_config('genui.organization_id',%s,true),set_config('genui.principal_id','',true),set_config('genui.membership_epoch','',true)",(org,))
+    def operator(c, org):
+        c.execute('SET LOCAL ROLE genui_owner'); org_scope(c,org)
+    def owner_sql(org, statement, params=()):
+        with pg.connect() as c:
+            operator(c,org); return c.execute(statement,params).rowcount
+    def call(org, statement, params, role='genui_workspace', member=None):
+        with pg.connect(role) as c:
+            if member is None: org_scope(c,org)
+            else: scope(c,org,member[0],member[1])
+            return c.execute(statement,params).fetchall()
+    RESERVE='SELECT reservation_id::text,expires_at,outcome FROM genui_private.reserve_code(%s,%s,%s)'
+    PENDING='SELECT pending_admission_id::text,expires_at,outcome FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)'
+    ADMIT='SELECT principal_id::text,membership_epoch,entitlement_id::text,redemption_id::text,outcome FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)'
+    ADVANCE='SELECT genui_private.advance_member_epoch(%s,%s,%s)'
+    def reserve(org, digest, context=None):
+        return call(org,RESERVE,(org,digest,context or sha('context-'+uuid.uuid4().hex)))
+    def outcome(rows): return [row[-1] for row in rows]
+    with pg.connect('postgres') as c:
+        identity={org:c.execute('SELECT issuer,provider_tenant_id FROM genui.provider_tenant_bindings WHERE organization_id=%s',(org,)).fetchone() for org in ORGANIZATIONS}
+        source0=c.execute('SELECT source_id::text FROM genui.sources WHERE organization_id=%s ORDER BY source_id LIMIT 1',(org0,)).fetchone()[0]
+        app1,work1=c.execute('SELECT app_id::text,work_id::text FROM genui.saved_work WHERE organization_id=%s ORDER BY app_id,work_id LIMIT 1',(org1,)).fetchone()
+        seeded_subject=c.execute('SELECT provider_subject FROM genui.principals WHERE organization_id=%s AND principal_id=%s',(org0,P)).fetchone()[0]
+        organizations_before=c.execute('SELECT organization_id::text,xmin::text,ctid::text,status FROM genui.organizations ORDER BY organization_id').fetchall()
+    def person(org, label): return (*identity[org],'usr_admission_'+label)
+
+    # --- Structure: relations, RLS, policies, indexes (D7.2, D7.3, D7.5, D7.8) ---
+    with pg.connect('postgres') as c:
+        rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",(list(ADMISSION_TABLES),)).fetchall()
+        assert rows==[(t,True,True,'genui_owner') for t in sorted(ADMISSION_TABLES)],rows
+        policy="(organization_id = (NULLIF(current_setting('genui.organization_id'::text, true), ''::text))::uuid)"
+        rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
+          AND policyname='tenant_scope' AND tablename = ANY(%s) ORDER BY tablename""",(list(ADMISSION_TABLES),)).fetchall()
+        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in sorted(ADMISSION_TABLES)],rows
+        rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner),
+          (SELECT count(*) FROM pg_policy p WHERE p.polrelid=c.oid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+          WHERE n.nspname='genui_private' AND c.relkind='r' ORDER BY c.relname""").fetchall()
+        assert rows==[('code_index',False,False,'genui_owner',0),('handle_index',False,False,'genui_owner',0)],rows
+    passed('0003 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the two genui_private indexes carry no RLS',
+           tables=list(ADMISSION_TABLES))
+
+    # --- Exact (role, relation, privilege, column) grant set (D7.3 + D7.1) ---
+    acl_roles=('genui_lock','genui_admit')+APP_ROLES
+    with pg.connect('postgres') as c:
+        actual=set(c.execute("""SELECT pg_get_userbyid(a.grantee),c.relname,a.privilege_type,NULL::text FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN LATERAL aclexplode(c.relacl) a
+          WHERE n.nspname IN ('genui','genui_private','genui_meta') AND pg_get_userbyid(a.grantee) = ANY(%s)
+          UNION ALL SELECT pg_get_userbyid(a.grantee),c.relname,a.privilege_type,d.attname::text FROM pg_attribute d
+          JOIN pg_class c ON c.oid=d.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN LATERAL aclexplode(d.attacl) a
+          WHERE n.nspname IN ('genui','genui_private','genui_meta') AND pg_get_userbyid(a.grantee) = ANY(%s)""",(list(acl_roles),list(acl_roles))).fetchall())
+        previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
+        expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
+        expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
+        expected|=ADMIT_GRANTS
+        assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
+        assert not {t for t in actual if t[0] in APP_ROLES and t[1] in ADMISSION_TABLES+('code_index','handle_index')}
+        schema=set(c.execute("""SELECT n.nspname,a.privilege_type FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) a
+          WHERE n.nspname IN ('genui','genui_private','genui_meta') AND pg_get_userbyid(a.grantee)='genui_admit'""").fetchall())
+        assert schema=={('genui','USAGE'),('genui_private','USAGE')},schema
+        executes=set(c.execute("""SELECT p.proname,pg_get_userbyid(a.grantee) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+          CROSS JOIN LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+          WHERE n.nspname IN ('genui','genui_private','genui_meta') AND a.privilege_type='EXECUTE' AND a.grantee<>p.proowner""").fetchall())
+        assert executes=={('lock_member_authority',r) for r in ('genui_workspace','genui_control','genui_data')}|{('lock_work_revision','genui_data')}|{
+            (name,'genui_workspace') for name in ADMIT_FUNCTIONS},executes
+    passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants; EXECUTE on the six functions is genui_workspace only',
+           admit_grant_count=len(ADMIT_GRANTS))
+
+    # --- genui_admit attributes, memberships and function properties (D7.1, A3, A4) ---
+    with pg.connect('postgres') as c:
+        assert c.execute("""SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit
+          FROM pg_roles WHERE rolname='genui_admit'""").fetchone()==(False,)*7
+        assert c.execute("SELECT count(*) FROM pg_auth_members WHERE member='genui_admit'::regrole").fetchone()==(0,)
+        incoming=c.execute("""SELECT m.rolname,a.admin_option,a.inherit_option,a.set_option FROM pg_auth_members a JOIN pg_roles m ON m.oid=a.member
+          WHERE a.roleid='genui_admit'::regrole ORDER BY a.admin_option""").fetchall()
+        assert incoming==[('genui_migration',False,False,True),('genui_migration',True,False,False)],incoming
+        assert c.execute("""SELECT count(*) FROM pg_roles r WHERE r.rolname<>'genui_admit' AND pg_has_role('genui_admit',r.oid,'MEMBER')""").fetchone()==(0,)
+        assert c.execute("SELECT has_schema_privilege('genui_admit','genui_private','CREATE'),has_schema_privilege('genui_admit','genui','CREATE')").fetchone()==(False,False)
+        assert c.execute("SELECT has_database_privilege('genui_admit','genui','CONNECT')").fetchone()==(False,)
+        functions=c.execute("""SELECT p.proname,pg_get_function_identity_arguments(p.oid),pg_get_function_result(p.oid),p.prosecdef,p.proisstrict,
+          p.provolatile::text,p.proconfig,p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+          WHERE n.nspname='genui_private' AND pg_get_userbyid(p.proowner)='genui_admit' ORDER BY p.proname""").fetchall()
+        assert {r[0]:(r[1],r[2]) for r in functions}==ADMIT_FUNCTIONS,functions
+        assert all(r[3:7]==(True,True,'v',['search_path=pg_catalog, pg_temp']) for r in functions),functions
+        # A4: organizations.status is lock-enabling only; no body writes the organization.
+        writes=[r[0] for r in functions if re.search(r'\b(update|insert\s+into|delete\s+from)\s+genui\.organizations\b',r[7],re.I)]
+        assert writes==[] and all(re.search(r'genui\.organizations\s+o\s+where\s+o\.organization_id\s*=\s*p_org\s+for\s+share',r[7],re.I)
+                                  for r in functions if r[0] not in ('resolve_code','resolve_handle')),writes
+    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; six exact STRICT VOLATILE definers with fixed search_path and no organizations write',
+           incoming=[list(r) for r in incoming])
+
+    # --- RESTRICTIVE audit bindings: INSERT holders equal policy targets (D7.8) ---
+    with pg.connect('postgres') as c:
+        holders=lambda table,privilege: {r[0] for r in c.execute("""SELECT DISTINCT pg_get_userbyid(a.grantee) FROM pg_class c
+          CROSS JOIN LATERAL aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a WHERE c.oid=%s::regclass AND a.privilege_type=%s
+          UNION SELECT DISTINCT pg_get_userbyid(a.grantee) FROM pg_attribute d CROSS JOIN LATERAL aclexplode(d.attacl) a
+          WHERE d.attrelid=%s::regclass AND a.privilege_type=%s""",('genui.'+table,privilege,'genui.'+table,privilege)).fetchall()}
+        policies=c.execute("""SELECT tablename,policyname,permissive,roles::text[],cmd,qual,with_check FROM pg_policies
+          WHERE schemaname='genui' AND tablename IN ('audit_events','audit_heads') AND policyname<>'tenant_scope' ORDER BY tablename,policyname""").fetchall()
+        for role,(chain,kinds) in CHAIN_KINDS.items():
+            name='admission_chain' if chain=='admission' else 'operator_chain'
+            check="((writer_role = '%s'::text) AND (kind = ANY (ARRAY[%s])))"%(chain,', '.join("'%s'::text"%k for k in kinds))
+            assert ('audit_events',name,'RESTRICTIVE',[role],'INSERT',None,check) in policies,(role,policies)
+            assert ('audit_heads',name,'RESTRICTIVE',[role],'UPDATE',"(writer_role = '%s'::text)"%chain,None) in policies,(role,policies)
+        assert len(policies)==4,policies
+        targets=lambda table,cmd: {r[3][0] for r in policies if r[0]==table and r[4]==cmd}
+        assert holders('audit_events','INSERT')==targets('audit_events','INSERT')=={'genui_admit','genui_owner'}
+        assert holders('audit_heads','UPDATE')==targets('audit_heads','UPDATE')=={'genui_admit','genui_owner'}
+        # Insert-only for every role (D7.8), the owner included.
+        assert holders('audit_events','UPDATE')==holders('audit_events','DELETE')==holders('audit_events','TRUNCATE')==set()
+    passed('every INSERT holder on audit_events (genui_admit, genui_owner) has its RESTRICTIVE chain/kind policy and its own-chain head UPDATE policy',
+           policies=[list(p[:5]) for p in policies])
+
+    # --- Operator fixture (as the D7.19 operator channel would write it) ---
+    with pg.connect() as c:
+        for org in ORGANIZATIONS:
+            operator(c,org)
+            for chain in ('admission','operator'):
+                c.execute('INSERT INTO genui.audit_heads VALUES (%s,%s,1,%s)',(org,chain,genesis(org,chain)))
+        operator(c,org0)
+        c.execute("INSERT INTO genui_private.handle_index VALUES (%s,%s,NULL),(%s,%s,now()-interval '1 hour'),(%s,%s,now()+interval '1 hour'),(%s,%s,NULL)",
+                  (sha('handle-live-0'),org0,sha('handle-retired-0'),org0,sha('handle-rotating-0'),org0,sha('handle-live-1'),org1))
+    codes={}
+    def code(org, label, max_redemptions=1, status='active', redeemed=0, issued='now()', expires="now()+interval '14 days'", templates=None):
+        digest=sha('code-'+label); code_id=str(uuid.uuid4())
+        with pg.connect() as c:
+            operator(c,org)
+            c.execute('INSERT INTO genui_private.code_index VALUES (%s,%s)',(digest,org))
+            c.execute(f"""INSERT INTO genui.access_codes(organization_id,code_id,code_digest,kind,status,destination_organization_id,max_redemptions,
+              redeemed_count,issued_at,expires_at,trial_days,issued_by,revoked_at) VALUES (%s,%s,%s,'trial',%s,%s,%s,%s,{issued},{expires},30,'qualification-operator',
+              CASE WHEN %s='revoked' THEN now() END)""",(org,code_id,digest,status,org,max_redemptions,redeemed,status))
+            for permission,app,work,source in (templates if templates is not None else
+                    ([('discover',APP,None,None),('run',APP,None,None),('record_read',APP,WORK,None),('source_read',None,None,source0)] if org==org0
+                     else [('discover',app1,None,None),('record_read',app1,work1,None)])):
+                c.execute('INSERT INTO genui.code_grant_templates VALUES (%s,%s,%s,%s,%s,%s)',(org,code_id,permission,app,work,source))
+        codes[label]=(code_id,digest)
+        return code_id,digest
+    def code_state(org, label):
+        with pg.connect('postgres') as c:
+            return c.execute('SELECT redeemed_count,status FROM genui.access_codes WHERE organization_id=%s AND code_id=%s',(org,codes[label][0])).fetchone()
+    def row_counts(org):
+        with pg.connect('postgres') as c:
+            return {t:c.execute(sql.SQL('SELECT count(*) FROM genui.{} WHERE organization_id=%s').format(sql.Identifier(t)),(org,)).fetchone()[0]
+                    for t in ('principals','memberships','app_permissions','work_permissions','source_permissions','entitlements',
+                              'code_reservations','code_redemptions','audit_events')}
+    # D7.17 and template constraints refuse malformed issuance even from the operator.
+    with pg.connect() as c:
+        operator(c,org0)
+        c.execute('INSERT INTO genui_private.code_index VALUES (%s,%s)',(sha('code-constraint-probe'),org0))
+    for label,statement,params in (
+        ('max_redemptions above 10',"INSERT INTO genui.access_codes VALUES (%s,%s,%s,'trial','active',%s,11,0,now(),now()+interval '1 day',30,'op',NULL)",None),
+        ('expiry beyond 30 days',"INSERT INTO genui.access_codes VALUES (%s,%s,%s,'trial','active',%s,1,0,now(),now()+interval '31 days',30,'op',NULL)",None),
+        ('foreign destination',"INSERT INTO genui.access_codes VALUES (%s,%s,%s,'trial','active','"+org1+"',1,0,now(),now()+interval '1 day',30,'op',NULL)",'dest'),
+        ('trial other than 30 days',"INSERT INTO genui.access_codes VALUES (%s,%s,%s,'trial','active',%s,1,0,now(),now()+interval '1 day',7,'op',NULL)",None),
+    ):
+        args=(org0,str(uuid.uuid4()),sha('code-constraint-probe')) if params else (org0,str(uuid.uuid4()),sha('code-constraint-probe'),org0)
+        denied('operator issuance refuses '+label,'genui_migration',statement,args,expected='23514')
+    code(org0,'template-probe')
+    for permission,app,work,source in (('admin_policy',None,None,None),('review_publish',APP,None,None),('record_read',APP,None,None),('source_read',APP,None,source0)):
+        denied('grant template refuses '+permission+(' without its exact resource shape' if permission in ('record_read','source_read') else ''),'genui_migration',
+               'INSERT INTO genui.code_grant_templates VALUES (%s,%s,%s,%s,%s,%s)',(org0,codes['template-probe'][0],permission,app,work,source),expected='23514')
+
+    # --- code_index/handle_index reachable only through their functions (D7.2) ---
+    for role in APP_ROLES:
+        for table in ('genui_private.code_index','genui_private.handle_index'):
+            denied(role+' cannot read '+table+' directly',role,'SELECT organization_id FROM '+table)
+        for table in ADMISSION_TABLES:
+            denied(role+' cannot read '+table+' directly',role,'SELECT organization_id FROM genui.'+table)
+        denied(role+' cannot insert an access code directly',role,
+               "INSERT INTO genui.access_codes(organization_id,code_id) VALUES (%s,%s)",(org0,str(uuid.uuid4())))
+        denied(role+' cannot insert a reservation directly',role,
+               "INSERT INTO genui.code_reservations(organization_id,reservation_id) VALUES (%s,%s)",(org0,str(uuid.uuid4())))
+        denied(role+' cannot insert an entitlement directly',role,
+               "INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id) VALUES (%s,%s,%s)",(org0,P,str(uuid.uuid4())))
+        denied(role+' cannot insert an audit event directly',role,
+               "INSERT INTO genui.audit_events(organization_id,event_id) VALUES (%s,%s)",(org0,str(uuid.uuid4())))
+        denied(role+' cannot advance an audit head directly',role,
+               "UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s",(org0,))
+        denied(role+' cannot UPDATE membership epoch directly',role,
+               "UPDATE genui.memberships SET membership_epoch=membership_epoch WHERE organization_id=%s",(org0,))
+        denied(role+' cannot SET ROLE genui_admit',role,'SET ROLE genui_admit')
+        if role!='genui_workspace':
+            for name,(arguments,_) in ADMIT_FUNCTIONS.items():
+                # Non-NULL arguments: a STRICT call on NULL constants folds away before the EXECUTE check.
+                values=','.join("'%s'::%s"%(str(uuid.uuid4()) if kind=='uuid' else 'x',kind) for kind in (a.split()[1] for a in arguments.split(', ')))
+                denied(role+' cannot execute '+name,role,'SELECT genui_private.%s(%s)'%(name,values))
+
+    # --- resolve_code / resolve_handle before any scope ---
+    code(org1,'org1-main')
+    code(org0,'main')
+    with pg.connect('genui_workspace') as c:
+        assert c.execute("SELECT current_setting('genui.organization_id',true)").fetchone() in (('',),(None,))
+        resolved=lambda f,d: c.execute(f'SELECT genui_private.{f}(%s)::text',(d,)).fetchone()[0]
+        assert resolved('resolve_code',codes['main'][1])==org0 and resolved('resolve_code',codes['org1-main'][1])==org1
+        assert resolved('resolve_code',sha('code-unknown')) is None and resolved('resolve_code','not-a-digest') is None
+        assert resolved('resolve_handle',sha('handle-live-0'))==org0 and resolved('resolve_handle',sha('handle-live-1'))==org1
+        assert resolved('resolve_handle',sha('handle-rotating-0'))==org0
+        assert resolved('resolve_handle',sha('handle-retired-0')) is None and resolved('resolve_handle',sha('handle-unknown')) is None
+    passed('resolve_code/resolve_handle before scope: known digests map to their organization; unknown, malformed and retired return NULL')
+
+    # --- reserve_code outcomes (D7.1, D7.17) ---
+    code(org0,'expired',issued="now()-interval '20 days'",expires="now()-interval '1 day'")
+    code(org0,'revoked',status='revoked')
+    code(org0,'exhausted',status='exhausted',redeemed=1)
+    code(org0,'many',max_redemptions=10)
+    assert outcome(reserve(org0,codes['expired'][1]))==['expired']
+    assert outcome(reserve(org0,codes['revoked'][1]))==['revoked']
+    assert outcome(reserve(org0,codes['exhausted'][1]))==['exhausted']
+    assert reserve(org0,sha('code-unknown'))==[] and reserve(org0,codes['org1-main'][1])==[]
+    assert call(org1,RESERVE,(org0,codes['main'][1],sha('ctx')))==[] and call(org0,RESERVE,(org0,codes['main'][1],'malformed'))==[]
+    reserved=[reserve(org0,codes['many'][1]) for _ in range(10)]
+    assert all(outcome(r)==['reserved'] for r in reserved)
+    assert outcome(reserve(org0,codes['many'][1]))==['too_many_reservations']
+    with pg.connect('postgres') as c:
+        rows=c.execute("""SELECT kind,state,consumed_at IS NULL,expires_at>now()+interval '9 minutes' AND expires_at<=now()+interval '10 minutes',
+          issuer IS NULL FROM genui.code_reservations WHERE organization_id=%s AND code_id=%s""",(org0,codes['many'][0])).fetchall()
+        assert rows==[('presignup','live',True,True,True)]*10,rows
+    assert code_state(org0,'many')==(0,'active')
+    owner_sql(org0,"UPDATE genui.code_reservations SET expires_at=now()-interval '1 second' WHERE organization_id=%s AND reservation_id=%s",(org0,reserved[0][0][0]))
+    assert outcome(reserve(org0,codes['many'][1]))==['reserved']
+    passed('reserve_code: reserved, expired, revoked, exhausted, too_many_reservations at 10 live (expired ones not counted); unknown, foreign, unscoped and malformed refuse with no row; presignup never counts')
+
+    # --- record_pending_admission outcomes and D7.17 arithmetic ---
+    a=person(org0,'a'); b=person(org0,'b')
+    r_a=reserve(org0,codes['main'][1])[0][0]; r_b=reserve(org0,codes['main'][1])[0][0]
+    before=row_counts(org0)
+    p_a=call(org0,PENDING,(org0,r_a,*a))
+    assert outcome(p_a)==['pending']
+    p_a=p_a[0][0]
+    after=row_counts(org0)
+    assert {k:after[k]-before[k] for k in after}=={**{k:0 for k in after},'code_reservations':1,'audit_events':1}
+    assert outcome(call(org0,PENDING,(org0,r_a,*b)))==['reservation_expired']
+    assert outcome(call(org0,PENDING,(org0,str(uuid.uuid4()),*b)))==['reservation_expired']
+    # Single-use code: one live pending admission leaves remaining = 0.
+    assert outcome(call(org0,PENDING,(org0,r_b,*b)))==['exhausted']
+    assert outcome(reserve(org0,codes['main'][1]))==['exhausted']
+    assert code_state(org0,'main')==(0,'active')
+    with pg.connect('postgres') as c:
+        assert c.execute("""SELECT kind,state,consumed_at IS NOT NULL FROM genui.code_reservations WHERE organization_id=%s AND reservation_id=%s""",(org0,r_a)).fetchone()==('presignup','consumed',True)
+        assert c.execute("""SELECT kind,state,issuer,provider_tenant_id,provider_subject,expires_at>now()+interval '23 hours' AND expires_at<=now()+interval '24 hours'
+          FROM genui.code_reservations WHERE organization_id=%s AND reservation_id=%s""",(org0,p_a)).fetchone()==('pending','live',*a,True)
+    code(org0,'member-check',max_redemptions=2)
+    r_m=reserve(org0,codes['member-check'][1])[0][0]
+    before=row_counts(org0)
+    assert outcome(call(org0,PENDING,(org0,r_m,identity[org0][0],identity[org0][1],seeded_subject)))==['already_member']
+    assert row_counts(org0)==before
+    with pg.connect('postgres') as c:
+        assert c.execute('SELECT state FROM genui.code_reservations WHERE organization_id=%s AND reservation_id=%s',(org0,r_m)).fetchone()==('live',)
+    code(org0,'late-expiry',issued="now()-interval '2 days'"); code(org0,'late-revoke')
+    r_x=reserve(org0,codes['late-expiry'][1])[0][0]; r_y=reserve(org0,codes['late-revoke'][1])[0][0]; r_z=reserve(org0,codes['member-check'][1])[0][0]
+    owner_sql(org0,"UPDATE genui.access_codes SET expires_at=now()-interval '1 second' WHERE organization_id=%s AND code_id=%s",(org0,codes['late-expiry'][0]))
+    owner_sql(org0,"UPDATE genui.access_codes SET status='revoked',revoked_at=now() WHERE organization_id=%s AND code_id=%s",(org0,codes['late-revoke'][0]))
+    owner_sql(org0,"UPDATE genui.code_reservations SET expires_at=now()-interval '1 second' WHERE organization_id=%s AND reservation_id=%s",(org0,r_z))
+    assert outcome(call(org0,PENDING,(org0,r_x,*person(org0,'x'))))==['expired']
+    assert outcome(call(org0,PENDING,(org0,r_y,*person(org0,'y'))))==['revoked']
+    assert outcome(call(org0,PENDING,(org0,r_z,*person(org0,'z'))))==['reservation_expired']
+    assert call(org1,PENDING,(org0,r_m,*person(org0,'w')))==[]
+    passed('record_pending_admission: pending (24 h, identity-bound, reservation consumed, one audit event), reservation_expired, expired, revoked, exhausted by D7.17 arithmetic, already_member writes nothing; foreign scope refuses')
+
+    # --- admit_redemption outcomes ---
+    payload=sha('payload-a')
+    before=row_counts(org0)
+    admitted=call(org0,ADMIT,(org0,p_a,*a,payload))
+    assert [r[1:2]+r[4:] for r in admitted]==[(1,'admitted')]
+    principal_a,_,entitlement_a,redemption_a,_=admitted[0]
+    after=row_counts(org0)
+    assert {k:after[k]-before[k] for k in after}=={'principals':1,'memberships':1,'app_permissions':2,'work_permissions':1,'source_permissions':1,
+        'entitlements':1,'code_reservations':0,'code_redemptions':1,'audit_events':1}
+    # Single-use code with exactly one pending admission is admitted, then exhausted.
+    assert code_state(org0,'main')==(1,'exhausted')
+    with pg.connect('postgres') as c:
+        assert c.execute('SELECT issuer,provider_tenant_id,provider_subject FROM genui.principals WHERE organization_id=%s AND principal_id=%s',(org0,principal_a)).fetchone()==a
+        assert c.execute('SELECT status,membership_epoch FROM genui.memberships WHERE organization_id=%s AND principal_id=%s',(org0,principal_a)).fetchone()==('active',1)
+        assert sorted(c.execute('SELECT app_id::text,permission FROM genui.app_permissions WHERE organization_id=%s AND principal_id=%s',(org0,principal_a)).fetchall())==[(APP,'discover'),(APP,'run')]
+        assert c.execute('SELECT app_id::text,work_id::text,permission FROM genui.work_permissions WHERE organization_id=%s AND principal_id=%s',(org0,principal_a)).fetchall()==[(APP,WORK,'record_read')]
+        assert c.execute('SELECT source_id::text,permission FROM genui.source_permissions WHERE organization_id=%s AND principal_id=%s',(org0,principal_a)).fetchall()==[(source0,'source_read')]
+        assert c.execute('SELECT count(*) FROM genui.organization_permissions WHERE organization_id=%s AND principal_id=%s',(org0,principal_a)).fetchone()==(0,)
+        assert c.execute("""SELECT entitlement_id::text,status,kind,expires_at-starts_at,revoked_at FROM genui.entitlements
+          WHERE organization_id=%s AND principal_id=%s""",(org0,principal_a)).fetchone()[:4]==(entitlement_a,'active','trial',
+            c.execute("SELECT interval '30 days'").fetchone()[0])
+        red=c.execute("""SELECT d.redemption_id::text,d.code_id::text,d.pending_admission_id::text,d.payload_digest::text,e.kind,e.actor_principal_id::text,e.outcome_digest::text
+          FROM genui.code_redemptions d JOIN genui.audit_events e ON e.organization_id=d.organization_id AND e.event_id=d.audit_event_id
+          WHERE d.organization_id=%s AND d.principal_id=%s""",(org0,principal_a)).fetchall()
+        assert red==[(redemption_a,codes['main'][0],p_a,payload,'admission.redeemed',principal_a,payload)],red
+        assert c.execute('SELECT state FROM genui.code_reservations WHERE organization_id=%s AND reservation_id=%s',(org0,p_a)).fetchone()==('consumed',)
+    before=row_counts(org0)
+    assert call(org0,ADMIT,(org0,p_a,*a,payload))==[(principal_a,1,entitlement_a,redemption_a,'replayed')]
+    assert outcome(call(org0,ADMIT,(org0,p_a,*a,sha('payload-changed'))))==['mismatch']
+    assert outcome(call(org0,ADMIT,(org0,p_a,*b,payload)))==['mismatch']
+    assert outcome(call(org0,ADMIT,(org0,str(uuid.uuid4()),*a,payload)))==['mismatch']
+    assert call(org1,ADMIT,(org1,p_a,*a,payload))==[(None,None,None,None,'mismatch')]
+    assert call(org1,ADMIT,(org0,p_a,*a,payload))==[] and call(org0,ADMIT,(org0,p_a,*a,'malformed'))==[]
+    assert row_counts(org0)==before and code_state(org0,'main')==(1,'exhausted')
+    passed('admit_redemption admitted: principal, epoch-1 membership, verbatim template grants, 30-day entitlement, redemption and one audit event in one call; single-use code with one pending admission admitted then exhausted; replay returns the stored result; changed payload, other identity, unknown and foreign pending refuse with no write')
+
+    def pending_for(org, label, who):
+        r=reserve(org,codes[label][1])[0][0]
+        rows=call(org,PENDING,(org,r,*who)); assert outcome(rows)==['pending'],rows
+        return rows[0][0]
+    code(org0,'two',max_redemptions=2)
+    c_1=person(org0,'c1'); c_2=person(org0,'c2')
+    pc_1=pending_for(org0,'two',c_1); pc_2=pending_for(org0,'two',c_2)
+    assert outcome(call(org0,ADMIT,(org0,pc_1,*c_1,sha('p-c1'))))==['admitted'] and code_state(org0,'two')==(1,'active')
+    assert outcome(call(org0,ADMIT,(org0,pc_2,*c_2,sha('p-c2'))))==['admitted'] and code_state(org0,'two')==(2,'exhausted')
+    code(org0,'member-first'); code(org0,'member-second')
+    d=person(org0,'d')
+    pd_1=pending_for(org0,'member-first',d); pd_2=pending_for(org0,'member-second',d)
+    assert outcome(call(org0,ADMIT,(org0,pd_1,*d,sha('p-d'))))==['admitted']
+    before=row_counts(org0)
+    assert outcome(call(org0,ADMIT,(org0,pd_2,*d,sha('p-d'))))==['already_member']
+    assert row_counts(org0)==before and code_state(org0,'member-second')==(0,'active')
+    for label in ('admit-expired','admit-revoked','admit-code-expired','admit-exhausted'):
+        code(org0,label,issued="now()-interval '2 days'")
+    e=person(org0,'e'); f=person(org0,'f'); g=person(org0,'g'); h=person(org0,'h')
+    pe=pending_for(org0,'admit-expired',e); pf=pending_for(org0,'admit-revoked',f)
+    pg_=pending_for(org0,'admit-code-expired',g); ph=pending_for(org0,'admit-exhausted',h)
+    owner_sql(org0,"UPDATE genui.code_reservations SET expires_at=now()-interval '1 second' WHERE organization_id=%s AND reservation_id=%s",(org0,pe))
+    owner_sql(org0,"UPDATE genui.access_codes SET status='revoked',revoked_at=now() WHERE organization_id=%s AND code_id=%s",(org0,codes['admit-revoked'][0]))
+    owner_sql(org0,"UPDATE genui.access_codes SET expires_at=now()-interval '1 second' WHERE organization_id=%s AND code_id=%s",(org0,codes['admit-code-expired'][0]))
+    # Operator-forced exhaustion (not reachable through the functions) proves the recheck at commit.
+    owner_sql(org0,"UPDATE genui.access_codes SET redeemed_count=1,status='exhausted' WHERE organization_id=%s AND code_id=%s",(org0,codes['admit-exhausted'][0]))
+    before=row_counts(org0)
+    assert outcome(call(org0,ADMIT,(org0,pe,*e,sha('p-e'))))==['expired']
+    after=row_counts(org0)
+    assert {k:after[k]-before[k] for k in after}=={**{k:0 for k in after},'audit_events':1}
+    with pg.connect('postgres') as c:
+        assert c.execute('SELECT state FROM genui.code_reservations WHERE organization_id=%s AND reservation_id=%s',(org0,pe)).fetchone()==('denied_for_reconciliation',)
+    assert outcome(call(org0,ADMIT,(org0,pe,*e,sha('p-e'))))==['expired']
+    before=row_counts(org0)
+    assert outcome(call(org0,ADMIT,(org0,pf,*f,sha('p-f'))))==['revoked']
+    assert outcome(call(org0,ADMIT,(org0,pg_,*g,sha('p-g'))))==['expired']
+    assert outcome(call(org0,ADMIT,(org0,ph,*h,sha('p-h'))))==['exhausted']
+    assert row_counts(org0)==before
+    passed('admit_redemption: exhausted status at max (2 of 2), already_member consumes nothing, expired pending marked denied_for_reconciliation with one audit event, revoked, expired code and recheck-exhausted refuse without writes')
+
+    # --- Concurrency: observed lock waits (pg_stat_activity), never timing guesses ---
+    def blocked(first, second, holder_role='genui_workspace'):
+        """first(conn) runs in an open transaction; second(conn) must wait on its lock until first commits."""
+        with pg.connect(holder_role) as one, pg.connect('genui_workspace') as two, pg.connect('postgres',autocommit=True) as observer:
+            held=first(one); out=[]; errors=[]
+            def run():
+                try: out.append(second(two)); two.commit()
+                except BaseException as error: errors.append(repr(error))
+            thread=threading.Thread(target=run); thread.start(); deadline=time.monotonic()+3
+            while time.monotonic()<deadline:
+                if observer.execute('SELECT wait_event_type FROM pg_stat_activity WHERE pid=%s',(two.info.backend_pid,)).fetchone()==('Lock',): break
+                if not thread.is_alive(): raise AssertionError('second transaction did not block: '+repr(errors or out))
+                time.sleep(.01)
+            else: raise AssertionError('lock-wait observation deadline')
+            one.commit(); thread.join(4); assert not thread.is_alive() and not errors,errors
+            return held,out[0]
+    def in_scope(org, statement, params, member=None):
+        def run(c):
+            if member is None: org_scope(c,org)
+            else: scope(c,org,member[0],member[1])
+            return c.execute(statement,params).fetchall()
+        return run
+    # (1) Two identities race record_pending_admission for the last slot of a single-use code.
+    code(org0,'race-pending')
+    i=person(org0,'i'); j=person(org0,'j')
+    r_i=reserve(org0,codes['race-pending'][1])[0][0]; r_j=reserve(org0,codes['race-pending'][1])[0][0]
+    held,waited=blocked(in_scope(org0,PENDING,(org0,r_i,*i)),in_scope(org0,PENDING,(org0,r_j,*j)))
+    assert (outcome(held),outcome(waited))==(['pending'],['exhausted'])
+    # (2) Last slot: a redemption and a new pending admission race in both orders.
+    for order in ('admit-first','pending-first'):
+        label='race-slot-'+order
+        code(org0,label,max_redemptions=2)
+        k=person(org0,'k-'+order); l=person(org0,'l-'+order); m=person(org0,'m-'+order)
+        pk=pending_for(org0,label,k)
+        assert outcome(call(org0,ADMIT,(org0,pk,*k,sha('p-k'))))==['admitted']
+        # Both presignup reservations are taken while one slot remains.
+        r_l=reserve(org0,codes[label][1])[0][0]; r_m=reserve(org0,codes[label][1])[0][0]
+        pl=call(org0,PENDING,(org0,r_l,*l)); assert outcome(pl)==['pending']; pl=pl[0][0]
+        assert outcome(reserve(org0,codes[label][1]))==['exhausted']  # remaining = 2 - 1 - 1 live pending
+        admit=in_scope(org0,ADMIT,(org0,pl,*l,sha('p-l')))
+        pend=in_scope(org0,PENDING,(org0,r_m,*m))
+        if order=='admit-first':
+            held,waited=blocked(admit,pend); assert (outcome(held),outcome(waited))==(['admitted'],['exhausted'])
+        else:
+            held,waited=blocked(pend,admit); assert (outcome(held),outcome(waited))==(['exhausted'],['admitted'])
+        assert code_state(org0,label)==(2,'exhausted')
+    # (3) Two concurrent identical redemptions of one pending admission: one admits, one replays.
+    code(org0,'race-admit')
+    n=person(org0,'n'); pn=pending_for(org0,'race-admit',n)
+    before=row_counts(org0)
+    held,waited=blocked(in_scope(org0,ADMIT,(org0,pn,*n,sha('p-n'))),in_scope(org0,ADMIT,(org0,pn,*n,sha('p-n'))))
+    assert outcome(held)==['admitted'] and waited==[held[0][:4]+('replayed',)]
+    after=row_counts(org0)
+    assert after['code_redemptions']-before['code_redemptions']==1 and after['principals']-before['principals']==1
+    assert code_state(org0,'race-admit')==(1,'exhausted')
+    passed('concurrent last-slot races admit exactly one: two pending admissions (one pending, one exhausted), redemption versus new pending admission in both orders, and two identical redemptions (admitted, replayed) with one slot consumed')
+
+    # --- advance_member_epoch (D7.1, D7.9 session lock order) ---
+    principal_c1=call(org0,'SELECT principal_id::text FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)',(org0,pc_1,*c_1,sha('p-c1')))[0][0]
+    def epoch(principal):
+        with pg.connect('postgres') as c:
+            return c.execute('SELECT membership_epoch FROM genui.memberships WHERE organization_id=%s AND principal_id=%s',(org0,principal)).fetchone()[0]
+    assert call(org0,ADVANCE,(org0,principal_a,'session.sign_out'),member=(principal_a,1))==[(2,)] and epoch(principal_a)==2
+    before=row_counts(org0)
+    assert call(org0,ADVANCE,(org0,principal_c1,'session.sign_out'),member=(principal_a,2))==[(None,)]
+    assert call(org0,ADVANCE,(org0,principal_a,'session.sign_out'),member=(principal_a,1))==[(None,)]
+    for reason in ('membership.revoked','session.signed_in','admission.redeemed'):
+        assert call(org0,ADVANCE,(org0,principal_a,reason),member=(principal_a,2))==[(None,)]
+    assert call(org1,ADVANCE,(org0,principal_a,'session.sign_out'),member=(principal_a,2))==[(None,)]
+    assert row_counts(org0)==before and epoch(principal_a)==2 and epoch(principal_c1)==1
+    assert call(org0,ADVANCE,(org0,principal_a,'session.sign_out_all'),member=(principal_a,2))==[(3,)]
+    # The operator's revocation order holds the member row: the sign-out waits, then refuses the moved epoch.
+    def revoke(c):
+        operator(c,org0)
+        c.execute('SELECT organization_id FROM genui.organizations WHERE organization_id=%s FOR SHARE',(org0,))
+        c.execute('SELECT principal_id FROM genui.memberships WHERE organization_id=%s AND principal_id=%s FOR UPDATE',(org0,principal_a))
+        c.execute('UPDATE genui.memberships SET membership_epoch=membership_epoch+1 WHERE organization_id=%s AND principal_id=%s',(org0,principal_a))
+    _,waited=blocked(revoke,in_scope(org0,ADVANCE,(org0,principal_a,'session.sign_out'),member=(principal_a,3)),holder_role='genui_migration')
+    assert waited==[(None,)] and epoch(principal_a)==4
+    passed('advance_member_epoch: own epoch advances with one audit event per sign-out reason; another principal, stale epoch, foreign scope and any other reason refuse with no write; it waits on the member row and refuses after a concurrent epoch move')
+
+    # --- Org 1 admission and audit chain verification (D7.8) ---
+    o=person(org1,'o'); r_o=reserve(org1,codes['org1-main'][1])[0][0]
+    po=call(org1,PENDING,(org1,r_o,*o))[0][0]
+    assert outcome(call(org1,ADMIT,(org1,po,*o,sha('p-o'))))==['admitted']
+    with pg.connect('postgres') as c:
+        chains={org:verify_chain(c,org,'admission') for org in ORGANIZATIONS}
+        assert verify_chain(c,org0,'operator')==[] and verify_chain(c,org1,'operator')==[]
+        # Positive control: a tampered stored kind no longer verifies.
+        c.execute("UPDATE genui.audit_events SET kind='admission.pending' WHERE organization_id=%s AND writer_role='admission' AND chain_sequence=3",(org0,))
+        try: verify_chain(c,org0,'admission')
+        except AssertionError: pass
+        else: raise AssertionError('tampered audit chain verified')
+        c.rollback()
+    assert chains[org1]==['admission.pending','admission.redeemed']
+    assert chains[org0].count('admission.redeemed')>=8 and chains[org0].count('session.sign_out')==1 and chains[org0].count('session.sign_out_all')==1
+    assert chains[org0].count('admission.denied_for_reconciliation')==1
+    passed('audit chains verify per organization: every hash recomputed in chain_sequence order from the genesis head, tail equals head; a tampered event fails verification',
+           admission_events={org:len(kinds) for org,kinds in chains.items()})
+    # Mismatched writer_role/kind INSERTs are refused by the RESTRICTIVE policies.
+    def event(org, writer, kind, sequence):
+        return ("""INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,occurred_at,previous_hash,hash)
+          VALUES (%s,%s,%s,%s,%s,now(),%s,%s)""",(org,str(uuid.uuid4()),writer,sequence,kind,sha('prev-'+uuid.uuid4().hex),sha('h')))
+    for writer,kind in (('workspace','session.signed_in'),('operator','code.issued'),('admission','code.issued'),('admission','work.saved')):
+        statement,params=event(org0,writer,kind,10**6)
+        denied('genui_admit INSERT refuses writer_role '+writer+' kind '+kind,'genui_migration',statement,params,set_role='genui_admit')
+    for writer,kind in (('admission','admission.redeemed'),('workspace','session.signed_in'),('operator','admission.pending')):
+        statement,params=event(org0,writer,kind,10**6)
+        denied('operator INSERT refuses writer_role '+writer+' kind '+kind,'genui_migration',statement,params)
+    for role,writer,kind in (('genui_admit','admission','session.sign_out'),('genui_owner','operator','code.issued')):
+        with pg.connect() as c:
+            c.execute(sql.SQL('SET LOCAL ROLE {}').format(sql.Identifier(role))); org_scope(c,org0)
+            statement,params=event(org0,writer,kind,10**6); c.execute(statement,params)
+            # Own-chain head only: the other chain's head row is invisible to UPDATE.
+            other='operator' if writer=='admission' else 'admission'
+            assert c.execute('UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s AND writer_role=%s',(org0,other)).rowcount==0
+            assert c.execute('UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s AND writer_role=%s',(org0,writer)).rowcount==1
+            c.rollback()
+    for statement in ('UPDATE genui.audit_events SET kind=kind','DELETE FROM genui.audit_events'):
+        denied('genui_admit cannot '+statement.split()[0]+' audit events','genui_migration',statement,set_role='genui_admit')
+    for statement in ('UPDATE genui.audit_events SET kind=kind','DELETE FROM genui.audit_events','TRUNCATE genui.audit_events'):
+        denied('operator cannot '+statement.split()[0]+' audit events','genui_migration',statement)
+    passed('RESTRICTIVE chain bindings: mismatched writer_role or kind refuses for genui_admit and the operator, matching rows are accepted, head UPDATE reaches only the own chain, audit events are never updated or deleted')
+
+    # --- A4 negative test: no function call wrote genui.organizations ---
+    with pg.connect('postgres') as c:
+        assert c.execute('SELECT organization_id::text,xmin::text,ctid::text,status FROM genui.organizations ORDER BY organization_id').fetchall()==organizations_before
+    passed('no admission function call wrote genui.organizations: tuple xmin/ctid/status unchanged across every call (FOR SHARE locks only)')
 
 
 def command(args, check=True):
@@ -81,10 +646,12 @@ def scope(c, org=ORGANIZATIONS[0], principal=P, epoch=1):
 
 
 def qualify():
-    report={'schema_version':1,'scope':'APP-008 real local PostgreSQL schema/ACL qualification',
+    report={'schema_version':1,'scope':'APP-008/APP-073 real local PostgreSQL schema/ACL and admission-function qualification',
             'managed_acceptance':False,'image':IMAGE,'server_version':'16.13','network':'random loopback-only published port',
             'checks':[],'passed':False,'limits':['Local trust authentication is not RDS IAM/TLS qualification.',
-            'Operator-seeded contract shapes are not source import, hosted identity, admission or successful application business writes.',
+            'Operator-seeded contract shapes are not source import, hosted identity or successful application business writes.',
+            'Admission functions are exercised directly as genui_workspace with fixture codes written as the operator channel would; '
+            'the storage-module admission path, the operator package, sessions and hosted identity are not exercised.',
             'Native pool cancellation/reuse and actual managed trials remain separate.']}
     def passed(name, **facts): report['checks'].append({'name':name,'passed':True,**facts})
     catalog_query=json.loads((MIGRATIONS/'catalog-query.json').read_text())['sql']
@@ -212,7 +779,7 @@ def qualify():
                       JOIN pg_roles parent ON parent.oid=a.roleid JOIN pg_roles member ON member.oid=a.member
                       JOIN pg_roles grantor ON grantor.oid=a.grantor
                       WHERE member.rolname='genui_migration' AND parent.rolname IN
-                      ('genui_owner','genui_lock','genui_workspace','genui_control','genui_data','genui_worker')
+                      ('genui_owner','genui_lock','genui_admit','genui_workspace','genui_control','genui_data','genui_worker')
                       AND a.admin_option AND NOT a.inherit_option AND NOT a.set_option""").fetchall()
                     assert rows
                     for role,grantor in rows:
@@ -221,7 +788,8 @@ def qualify():
                         # grant. Retain precisely the separately required operator
                         # owner/helper access under the fixture administrator.
                         if role=='genui_owner': c.execute('GRANT genui_owner TO genui_migration WITH ADMIN FALSE, INHERIT TRUE, SET TRUE')
-                        elif role=='genui_lock': c.execute('GRANT genui_lock TO genui_migration WITH ADMIN FALSE, INHERIT FALSE, SET TRUE')
+                        elif role in ('genui_lock','genui_admit'):
+                            c.execute(sql.SQL('GRANT {} TO genui_migration WITH ADMIN FALSE, INHERIT FALSE, SET TRUE').format(sql.Identifier(role)))
             remove_creator_bookkeeping()
             with compatibility.connect() as c:
                 runtime.verify_schema_catalog(c,MIGRATIONS,1)
@@ -500,14 +1068,25 @@ def qualify():
                   JOIN pg_attribute a ON a.attrelid=t.oid AND a.attnum=k.conkey[1]
                   JOIN pg_attribute b ON b.attrelid=k.confrelid AND b.attnum=k.confkey[1]
                   WHERE n.nspname='genui' AND k.contype='f' AND (a.attname<>'organization_id' OR b.attname<>'organization_id')""").fetchone()==(0,)
-                assert c.execute("SELECT count(*) FROM pg_policies WHERE schemaname='genui' AND (qual IS NULL OR with_check IS NULL)").fetchone()==(0,)
+                # Every genui table has exactly one permissive tenant_scope policy
+                # with both USING and WITH CHECK; the only other policies are the
+                # RESTRICTIVE audit chain bindings (ADR-007 D7.8), checked below.
+                assert c.execute("""SELECT count(*) FROM pg_tables t WHERE t.schemaname='genui' AND 1<>(SELECT count(*) FROM pg_policies p
+                  WHERE p.schemaname='genui' AND p.tablename=t.tablename AND p.policyname='tenant_scope' AND p.permissive='PERMISSIVE'
+                  AND p.cmd='ALL' AND p.roles='{public}' AND p.qual IS NOT NULL AND p.with_check IS NOT NULL)""").fetchone()==(0,)
+                assert c.execute("""SELECT count(*) FROM pg_policies WHERE schemaname='genui' AND policyname<>'tenant_scope'
+                  AND NOT (permissive='RESTRICTIVE' AND tablename IN ('audit_events','audit_heads'))""").fetchone()==(0,)
                 lock=c.execute("SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit FROM pg_roles WHERE rolname='genui_lock'").fetchone()
                 assert lock==(False,)*7
                 assert c.execute("SELECT count(*) FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname='genui_lock')").fetchone()==(0,)
                 assert c.execute("SELECT has_schema_privilege('genui_lock','genui_private','CREATE'),has_schema_privilege('genui_lock','genui','CREATE')").fetchone()==(False,False)
                 functions=c.execute("""SELECT p.proname,pg_get_userbyid(p.proowner),p.prosecdef,p.proconfig
                   FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='genui_private' ORDER BY p.proname""").fetchall()
-                assert len(functions)==2 and all(r[1:] == ('genui_lock',True,['search_path=pg_catalog, genui, pg_temp']) for r in functions)
+                # The two 0002 fences stay genui_lock's; the six D7.1 admission
+                # functions (checked in detail by admission_checks) are genui_admit's.
+                assert sorted(r for r in functions if r[1]=='genui_lock')==[(name,'genui_lock',True,['search_path=pg_catalog, genui, pg_temp'])
+                    for name in ('lock_member_authority','lock_work_revision')]
+                assert sorted(r[0] for r in functions if r[1]!='genui_lock')==sorted(ADMIT_FUNCTIONS)
                 assert c.execute("""SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace,
                   LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
                   WHERE n.nspname='genui_private' AND a.grantee=0 AND a.privilege_type='EXECUTE'""").fetchone()==(0,)
@@ -517,11 +1096,13 @@ def qualify():
             passed('all real tenant relations have owner/FORCE-RLS/policies/tenant-leading indexes and FKs',table_count=len(tables))
             passed('lock definer is non-login non-inheriting minimal role with exact three UPDATE columns')
 
-            def denied(name, role, statement, params=(), expected='42501', org=ORGANIZATIONS[0]):
+            def denied(name, role, statement, params=(), expected='42501', org=ORGANIZATIONS[0], set_role='genui_owner'):
                 try:
                     with pg.connect(role) as c:
                         scope(c,org)
-                        if role=='genui_migration': c.execute('SET LOCAL ROLE genui_owner')
+                        # The operator identity acts as genui_owner, or (fixture only)
+                        # as genui_admit through its SET-only membership.
+                        if role=='genui_migration': c.execute(sql.SQL('SET LOCAL ROLE {}').format(sql.Identifier(set_role)))
                         c.execute(statement,params)
                 except psycopg.Error as e:
                     assert e.sqlstate==expected,(name,e.sqlstate)
@@ -710,6 +1291,7 @@ def qualify():
             else: raise AssertionError('seed reset an existing changed membership epoch')
             assert pg.digest()==before
             passed('operator seed refuses changed existing epoch without overwriting authority')
+            admission_checks(pg,passed,denied)
             report['source_sha256']={str(p.relative_to(Path(__file__).resolve().parents[2])):hashlib.sha256(p.read_bytes()).hexdigest()
                                     for p in (Path(runtime.__file__),Path(__file__),Path(__file__).with_name('tenant_seed.py'),MIGRATIONS/'manifest.json',
                                               *(MIGRATIONS/item['file'] for item in manifest['migrations']+manifest['catalog']))}

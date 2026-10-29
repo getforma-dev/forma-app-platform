@@ -19,10 +19,17 @@ import time
 import uuid
 
 ROLES = ("workspace", "control", "data", "worker")
-# The image's schema-version pin. Runner and probe comparisons use the pinned
-# manifest itself; scripts/check-schema-pins.py keeps this value, the manifest,
-# the native version check and both embedded catalogs on the same version.
-DATABASE_SCHEMA_VERSION = 2
+# The image's schema-version pin. The production entry points (migrate, probe)
+# refuse a manifest naming any other version before connecting; runner and
+# probe comparisons then use the pinned manifest itself.
+# scripts/check-schema-pins.py keeps this value, the manifest, the native
+# version check and both embedded catalogs on the same version.
+DATABASE_SCHEMA_VERSION = 3
+# Byte bound of the canonical catalog projection and of each catalog file
+# (ADR-007 D7.12, moved once in 0003's slice). It must equal catalog-query.json
+# max_output_bytes and its SQL octet_length literal and the native BOUND;
+# scripts/check-schema-pins.py checks that agreement group.
+CATALOG_BOUND = 524288
 # The version whose upgrade created genui_meta.schema_migrations. A new ledger
 # always starts at its historical BETWEEN 1 AND 2 bound; every later migration
 # ALTERs both version CHECKs to its own number (ADR-007 D7.12).
@@ -300,6 +307,7 @@ def probe(path, generation):
     import psycopg
     value = load(path)
     require(value["generation"] == generation)
+    require(migration_manifest(migration_directory())["database_version"] == DATABASE_SCHEMA_VERSION)
     db = value["database"]
     for name in ROLES:
         role = db["roles"][name]
@@ -362,12 +370,12 @@ def catalog_resources(directory):
     for item, name in zip(manifest["catalog"], names):
         require(isinstance(item, dict) and set(item) == {"file", "sha256"} and item["file"] == name)
         raw = (directory / name).read_bytes()
-        require(0 < len(raw) <= 262144 and hashlib.sha256(raw).hexdigest() == item["sha256"])
+        require(0 < len(raw) <= CATALOG_BOUND and hashlib.sha256(raw).hexdigest() == item["sha256"])
         documents.append(json.loads(raw))
     query = documents[0]
     require(set(query) == {"schema_version", "search_path", "max_output_bytes", "section_row_limit", "sql"})
     require(query["schema_version"] == 1 and query["search_path"] == "pg_catalog, pg_temp"
-            and query["max_output_bytes"] == 262144 and query["section_row_limit"] == 1025
+            and query["max_output_bytes"] == CATALOG_BOUND and query["section_row_limit"] == 1025
             and isinstance(query["sql"], str) and 0 < len(query["sql"].encode()) <= 65536)
     for expected in documents[1:]:
         require(isinstance(expected, dict) and expected and all(isinstance(rows, list) and len(rows) < 1025 for rows in expected.values()))
@@ -471,6 +479,7 @@ def apply_migrations(connection, directory):
 def migrate():
     import psycopg
     require(os.environ["PGDATABASE"] == "genui" and os.environ["PGUSER"] == "genui_migration")
+    require(migration_manifest(migration_directory())["database_version"] == DATABASE_SCHEMA_VERSION)
     with psycopg.connect(host=os.environ["PGHOST"], port=5432, dbname="genui", user="genui_migration", password=os.environ["PGPASSWORD"],
                          sslmode="verify-full", sslrootcert=os.environ["PGSSLROOTCERT"], connect_timeout=5,
                          options="-c statement_timeout=30000 -c lock_timeout=5000") as connection:

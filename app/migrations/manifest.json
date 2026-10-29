@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 2,
+  "database_version": 3,
   "migrations": [
     {
       "version": 1,
@@ -11,12 +11,17 @@
       "version": 2,
       "file": "0002_tenant_foundation.sql",
       "sha256": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5"
+    },
+    {
+      "version": 3,
+      "file": "0003_admission.sql",
+      "sha256": "865ec1d5da6cec11da85b593e626fa6bad1361397e61a2aee9a8e60a62088d0b"
     }
   ],
   "catalog": [
     {
       "file": "catalog-query.json",
-      "sha256": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963"
+      "sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba"
     },
     {
       "file": "catalog-v1.json",
@@ -25,6 +30,10 @@
     {
       "file": "catalog-v2.json",
       "sha256": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954"
+    },
+    {
+      "file": "catalog-v3.json",
+      "sha256": "aacabcfb668058f64b5065e55789cee93960c7af656884e6eec37d13aff51cb8"
     }
   ]
 }

@@ -28,16 +28,20 @@ WRITES = ('INSERT ', 'UPDATE ', 'SET LOCAL ROLE ')
 
 
 def synthetic_versions(target, latest):
-    """Reviewed two-version directory plus tiny unit-only versions 3..latest.
+    """Reviewed versions 1-2 plus tiny unit-only versions 3..latest.
 
-    Each synthetic migration is a comment and a SELECT; each synthetic catalog
-    adds one marker relation row and keeps the reviewed sections. Only runner
-    bookkeeping is exercised: nothing here is schema SQL or reaches PostgreSQL.
+    Only the reviewed 0001/0002 files, catalog-query.json and catalog-v1/v2 are
+    copied, whatever later reviewed migrations exist, so the runner bookkeeping
+    is exercised on a fixed shape. Each synthetic migration is a comment and a
+    SELECT; each synthetic catalog adds one marker relation row and keeps the
+    reviewed sections. Nothing here is schema SQL or reaches PostgreSQL.
     """
     target = Path(target)
-    for p in MIGRATIONS.iterdir():
-        if p.is_file(): shutil.copyfile(p, target / p.name)
-    manifest = json.loads((target / 'manifest.json').read_text())
+    manifest = json.loads((MIGRATIONS / 'manifest.json').read_text())
+    manifest['migrations'] = manifest['migrations'][:2]
+    manifest['catalog'] = manifest['catalog'][:3]
+    for name in ('catalog-query.json', 'catalog-v1.json', 'catalog-v2.json', *(item['file'] for item in manifest['migrations'])):
+        shutil.copyfile(MIGRATIONS / name, target / name)
     catalog = json.loads((target / 'catalog-v2.json').read_text())
     for version in range(3, latest + 1):
         name = f'{version:04d}_unit_only_marker.sql'
@@ -226,7 +230,8 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaises(runtime.Refused): runtime.probe(self.path,self.value['generation'])
             storage.assert_not_called()
 
-    def test_real_probe_requires_exact_schema_two_before_storage(self):
+    def test_real_probe_requires_exact_image_schema_version_before_storage(self):
+        current = runtime.DATABASE_SCHEMA_VERSION
         class Connection:
             def __init__(self, user, version): self.user, self.version = user, version
             def __enter__(self): return self
@@ -239,12 +244,12 @@ class RuntimeTests(unittest.TestCase):
             def list_objects_v2(self, **kwargs): return {}
             def encrypt(self, **kwargs): return {'CiphertextBlob':b'unit-only'}
             def decrypt(self, **kwargs): return {'Plaintext':b'genui-foundation-readiness-v1'}
-        for version in (1,2,3):
+        for version in (1,current-1,current,current+1):
             with self.subTest(version=version), patch.dict(os.environ, {'GENUI_RDS_CA_FILE':'/unit-only/ca.pem'}), \
                  patch('psycopg.connect',side_effect=lambda **kw: Connection(kw['user'],version)), \
                  patch.object(runtime,'verify_schema_catalog'), \
                  patch.object(runtime,'scoped_session',return_value=Session()) as storage:
-                if version==2:
+                if version==current:
                     result=runtime.probe(self.path,self.value['generation'])
                     self.assertEqual(result['generation'],self.value['generation'])
                     self.assertEqual(storage.call_count,2)
@@ -269,20 +274,36 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaises(runtime.Refused): runtime.probe(self.path, str(uuid.uuid4()))
             connect.assert_not_called()
 
+    def test_production_entry_points_refuse_a_manifest_other_than_the_image_pin(self):
+        # Runner review M1: the image's DATABASE_SCHEMA_VERSION is load-bearing
+        # for the two production entry points, before any connection is made.
+        self.assertEqual(runtime.migration_manifest(MIGRATIONS)['database_version'], runtime.DATABASE_SCHEMA_VERSION)
+        env = {'GENUI_RDS_CA_FILE': '/unit-only/ca.pem', 'PGDATABASE': 'genui', 'PGUSER': 'genui_migration',
+               'PGHOST': 'synthetic.invalid', 'PGPASSWORD': 'unit-only', 'PGSSLROOTCERT': '/unit-only/ca.pem'}
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = synthetic_versions(tmp, runtime.DATABASE_SCHEMA_VERSION + 1)
+            for name, call in (('probe', lambda: runtime.probe(self.path, self.value['generation'])), ('migrate', runtime.migrate)):
+                with self.subTest(entry=name), patch.dict(os.environ, env), \
+                     patch.object(runtime, 'migration_directory', return_value=directory), \
+                     patch('psycopg.connect') as connect, patch.object(runtime, 'scoped_session') as storage:
+                    with self.assertRaises(runtime.Refused): call()
+                    connect.assert_not_called(); storage.assert_not_called()
+
 
 class MigrationSourceTests(unittest.TestCase):
-    def test_exact_two_migrations_and_original_bytes_are_required(self):
+    def test_exact_reviewed_migrations_and_original_bytes_are_required(self):
         source=Path(runtime.__file__).resolve().parent.parent/'migrations'
-        self.assertEqual([row[0] for row in runtime.migration_sources(source)],[1,2])
+        reviewed=runtime.migration_manifest(source)['database_version']
+        self.assertEqual([row[0] for row in runtime.migration_sources(source)],list(range(1,reviewed+1)))
         for case in ('unknown_version','reorder','extra_sql','changed_second','changed_catalog','changed_query','changed_original_even_with_new_hash'):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
                 target=Path(tmp)
                 for p in source.iterdir():
                     if p.is_file(): shutil.copyfile(p,target/p.name)
                 manifest=json.loads((target/'manifest.json').read_text())
-                if case=='unknown_version': manifest['database_version']=3
+                if case=='unknown_version': manifest['database_version']=reviewed+1
                 elif case=='reorder': manifest['migrations'].reverse()
-                elif case=='extra_sql': (target/'0003_unreviewed.sql').write_text('SELECT 1;')
+                elif case=='extra_sql': (target/f'{reviewed+1:04d}_unreviewed.sql').write_text('SELECT 1;')
                 elif case=='changed_second': (target/'0002_tenant_foundation.sql').write_text('SELECT 1;')
                 elif case=='changed_catalog': (target/'catalog-v2.json').write_text('{}')
                 elif case=='changed_query': (target/'catalog-query.json').write_text('{"sql":"SELECT 1"}')
@@ -385,12 +406,14 @@ class MigrationRunnerTests(unittest.TestCase):
                     database.drift[2] = json.dumps({'unreviewed': []})
                     with self.assertRaises(runtime.Refused): runtime.apply_migrations(database, directory)
                     self.assertEqual(database.applied(), [2] if created else [1, 2])
-        # The reviewed two-version manifest: the same bound, version 1 then final version 2 proof.
+        # The reviewed manifest: the same bound, then one proof per version 1..N.
+        reviewed = runtime.migration_manifest(MIGRATIONS)['database_version']
         database = MigrationRecorder(MIGRATIONS, 1, ledger=False)
         runtime.apply_migrations(database, MIGRATIONS)
         ledger, = [s for s in database.statements if s.startswith('SET LOCAL ROLE genui_owner;')]
         self.assertEqual((ledger.count('BETWEEN 1 AND '), ledger.count(bound)), (2, 2))
-        self.assertEqual((database.version, database.statements.count(database.query)), (2, 2))
+        self.assertEqual((database.version, database.statements.count(database.query)), (reviewed, reviewed))
+        self.assertEqual(database.applied(), list(range(2, reviewed + 1)))
 
     def test_apply_migrations_proves_each_intermediate_version_before_the_next(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -483,10 +506,14 @@ class GeneratorTests(unittest.TestCase):
                 small = generator.readable({'relations': [['genui', 'unit_only', 'r']]})
                 base = len(generator.readable({'relations': [['pad', '']]}).encode())
                 def padded(size): return generator.readable({'relations': [['pad', 'x' * (size - base)]]})
-                self.assertEqual(len(padded(209715).encode()), 209715)
-                cases = (('at_cap', padded(209715), None),
-                         ('file_over_cap', padded(209716), 'catalog-v3 candidate exceeds 209715 bytes'),
-                         ('projection_over_cap', padded(209715) + ' ', 'catalog-v3 candidate exceeds 209715 bytes'))
+                # ADR-007 D7.12: 80 % of the moved 524,288-byte bound.
+                self.assertEqual((runtime.CATALOG_BOUND, runtime.CATALOG_BOUND * 4 // 5), (524288, 419430))
+                self.assertEqual(len(padded(419430).encode()), 419430)
+                cases = (('at_cap', padded(419430), None),
+                         # Compact body under the guard, readable file over it.
+                         ('file_over_cap', json.dumps(json.loads(padded(419431)), separators=(',', ':')),
+                          r'catalog-v3 candidate file length 419431 exceeds 419430 bytes'),
+                         ('projection_over_cap', padded(419430) + ' ', r'catalog-v3 candidate body length 419431 exceeds 419430 bytes'))
                 for case, third, refusal in cases:
                     with self.subTest(case=case):
                         feed[:] = [small, small, third]; statements.clear()
@@ -495,7 +522,7 @@ class GeneratorTests(unittest.TestCase):
                             receipt = generator.generate(output)
                             self.assertEqual(sorted(p.name for p in output.iterdir()),
                                              ['catalog-v1.json', 'catalog-v2.json', 'catalog-v3.json', 'generation.json'])
-                            self.assertEqual(len((output / 'catalog-v3.json').read_bytes()), 209715)
+                            self.assertEqual(len((output / 'catalog-v3.json').read_bytes()), 419430)
                             self.assertEqual(sorted(receipt['candidate_sha256']), ['catalog-v1.json', 'catalog-v2.json', 'catalog-v3.json'])
                         else:
                             with self.assertRaisesRegex(ValueError, refusal): generator.generate(output)
