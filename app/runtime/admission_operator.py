@@ -281,16 +281,16 @@ def append(c, organization, kind, code_id=None, actor=None):
 
 
 def organization_sequence_hook(c, organization):
-    """D7.7 TODO(APP-013, migration 0006): organization_sequences arrives with 0006.
+    """D7.7 TODO(APP-013, migration 0007): organization_sequences arrives with 0007.
 
     Until then there is nothing to create. When the relation exists this hook
-    refuses, so provisioning and backfill cannot silently skip the row; 0006's
+    refuses, so provisioning and backfill cannot silently skip the row; 0007's
     slice must replace it with the D7.7 insert (next_commit_sequence = 1, or
     1 + max(internal_record_revisions.commit_sequence) for a backfill).
     """
     require(c.execute("SELECT to_regclass('genui.organization_sequences') IS NULL").fetchone() == (True,),
             "organization_sequences_hook_not_implemented")
-    return "organization_sequences: not created; the relation arrives with migration 0006 (D7.7)"
+    return "organization_sequences: not created; the relation arrives with migration 0007 (D7.7)"
 
 
 # --- commands -----------------------------------------------------------------

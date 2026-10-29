@@ -105,7 +105,7 @@ The service deploys stop-then-start (`minHealthyPercent 0`, `maxHealthyPercent 1
 
 ### D7.19 Operator channel
 
-The operator package (APP-077) is the only writer of `handle_index`, `code_index`, `access_codes` issuance, `code_grant_templates`, organization provisioning (`organizations`, `organization_sequences`, the five `audit_heads`), membership and entitlement revocation, code revocation and extension, and the backfill of D7.7. It connects as the migration identity, sets explicit organization scope for every tenant write, follows the lock orders of D7.1 and D7.9, and writes the `operator` audit chain. Its commands are closed subcommands, never generic SQL.
+The operator package (APP-077) is the only writer of `handle_index`, `code_index`, `access_codes` issuance, `code_grant_templates`, organization provisioning (`organizations`, `organization_sequences`, the five `audit_heads`), membership and entitlement revocation, code revocation and extension, and the backfill of D7.7. It connects as the migration identity, sets explicit organization scope for every tenant write, follows the lock orders of D7.1 and D7.9, and writes the `operator` audit chain. Its commands are closed subcommands, never generic SQL. Trial extension is a code operation only (`extend` moves a code's expiry later and never shortens it; a member's entitlement is extended by issuing a new code), and the backfill of genesis heads writes no audit event because the genesis heads are themselves the record (APP-073 review).
 
 ## Consequences
 
