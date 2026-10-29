@@ -1,8 +1,12 @@
 name: Parser release qualification
 # ADR-009 D9.1: parser-host and its guest are built in the image from parser/
 # with its own lockfile; the guest bytes extracted from that image are the
-# bytes qualified, and a release refuses a guest digest without a passing
-# record (scripts/check-parser-record.py, run by the release preflight).
+# bytes qualified, and a release refuses parser bytes without a passing
+# record (scripts/check-parser-record.py, run by the release preflight). Only a
+# push run composes a record (a pull_request run's GITHUB_SHA is a synthetic
+# merge commit); `check` verifies the run and this artifact through the API.
+# Steps that pipe into tee run under `shell: bash` (-eo pipefail), so a failed
+# cargo test fails its step rather than taking tee's status.
 on:
   push:
   pull_request:
@@ -17,6 +21,7 @@ jobs:
       CARGO_BUILD_JOBS: '2'
     defaults:
       run:
+        shell: bash
         working-directory: parser
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -45,6 +50,9 @@ jobs:
     timeout-minutes: 60
     env:
       CARGO_BUILD_JOBS: '2'
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -53,7 +61,9 @@ jobs:
       - name: Install the recorded Rust toolchain
         run: rustup toolchain install 1.93.1 --profile minimal --component clippy,rustfmt --target wasm32-unknown-unknown
       - name: Build the runtime image
-        run: docker build --tag genui-parser-release --file app/Dockerfile .
+        # The record names this platform; a release image for another one has
+        # a different host digest and needs its own record (review M3).
+        run: docker build --platform linux/amd64 --tag genui-parser-release --file app/Dockerfile .
       - name: Extract the image's parser bytes and manifest
         run: |
           EXTRACTED="$RUNNER_TEMP/image-parser"
@@ -78,19 +88,27 @@ jobs:
             --parser-host "$EXTRACTED/parser-host" --parser-wasm "$EXTRACTED/parser_guest.wasm" --parser-manifest "$EXTRACTED/parser-manifest.json"
       - name: Exercise the image and its parser artifacts under runtime controls
         run: python3 app/runtime/qualify_image.py --image genui-parser-release --output "$EXTRACTED/image-qualification.json"
-      - name: Record the qualified digest and check the release refusal
+      - name: Test the release record gate
+        run: python3 -m unittest discover -s scripts -p 'test_check_parser_record.py' -v
+      - name: Record the qualified bytes (push runs only)
+        if: github.event_name == 'push'
         run: |
-          python3 -m unittest discover -s scripts -p 'test_check_parser_record.py' -v
-          python3 scripts/check-parser-record.py compose --wasm "$EXTRACTED/parser_guest.wasm" --manifest "$EXTRACTED/parser-manifest.json" \
+          python3 scripts/check-parser-record.py compose --wasm "$EXTRACTED/parser_guest.wasm" --host "$EXTRACTED/parser-host" \
+            --manifest "$EXTRACTED/parser-manifest.json" --platform linux/amd64 \
             --suite-log "$EXTRACTED/hostile-suite.log" --qualify-summary "$EXTRACTED/fixtures/summary.json" \
             --output-dir evidence/APP-017/parser-records \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" --commit "$GITHUB_SHA"
-          python3 scripts/check-parser-record.py --wasm-sha256 "$(sha256sum "$EXTRACTED/parser_guest.wasm" | cut -d' ' -f1)"
+      # The record alone, at the artifact's root: `check` downloads this
+      # artifact and requires the committed record to equal its bytes.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && github.event_name == 'push'
+        with:
+          name: app-017-parser-record
+          path: evidence/APP-017/parser-records
+          retention-days: 90
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: app-017-parser-record
-          path: |
-            evidence/APP-017/parser-records
-            ${{ runner.temp }}/image-parser
+          name: app-017-parser-evidence
+          path: ${{ runner.temp }}/image-parser
           retention-days: 90

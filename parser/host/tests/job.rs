@@ -301,6 +301,25 @@ fn job_mode_refuses_guest_bytes_that_differ_from_the_expected_digest() {
 }
 
 #[test]
+fn qualified_host_bytes_are_named_in_the_log() {
+    // scripts/check-parser-record.py binds this line to the manifest's host
+    // digest: the release record names the host these job tests ran.
+    let host = host_path();
+    let bytes = std::fs::read(&host).expect("the parser-host under test");
+    println!(
+        "QUALIFIED_HOST sha256:{} bytes={} path={}",
+        hex(&bytes),
+        bytes.len(),
+        host.display()
+    );
+    let job = run(&frame(
+        &config(json!({"profile":"demo","format":"csv"})),
+        b"a\n",
+    ));
+    assert_eq!(job.code, 0, "stderr={}", job.stderr);
+}
+
+#[test]
 fn job_process_runs_exactly_one_job() {
     // Everything after the config is input to EOF: a second frame is never a
     // second job in the same process (one Engine per job).

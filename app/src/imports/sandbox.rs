@@ -3,13 +3,16 @@
 //! The image's `parser-manifest.json` names the guest and host bytes the
 //! image build produced; `verify_manifest` checks them at startup and refuses
 //! a mismatch. That is an integrity check, not the release allowlist: a
-//! release separately refuses a guest digest without a passing image-bytes
-//! qualification record (`scripts/check-parser-record.py`).
+//! release separately refuses parser bytes (guest, host and sources) without
+//! a passing, CI-verified image-bytes qualification record
+//! (`scripts/check-parser-record.py`).
 //!
 //! Each parse spawns `parser-host --job` under `supervise::run_confined` in the
 //! job slot (2.5 GiB RSS line, the guest's 120 s deadline plus a 5 s
 //! backstop). The host re-hashes the guest against the verified digest before
-//! it compiles it, and its report must name that digest.
+//! it compiles it, and its report must name that digest. Its report must also
+//! name the caller's expected input digest, after exactly the expected length
+//! was fed, or the parse is a failure.
 use crate::supervise::{run_confined, Confinement, Killed};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -18,10 +21,15 @@ use std::{
     io::Read,
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
-    sync::OnceLock,
+    pin::Pin,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, OnceLock,
+    },
+    task::{Context, Poll},
     time::Duration,
 };
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf};
 
 /// Set by the image (app/Dockerfile) to the manifest its build wrote.
 pub const MANIFEST_ENV: &str = "GENUI_PARSER_MANIFEST_FILE";
@@ -57,6 +65,15 @@ pub struct ParserIdentity {
     pub wasm: PathBuf,
     pub wasm_sha256: String,
     pub manifest_sha256: String,
+}
+
+/// What the caller knows the whole input to be (the upload's `content_digest`
+/// and `byte_length`). A parse completes only for exactly these bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpectedInput {
+    /// 64 lowercase hex characters, without the `sha256:` prefix.
+    pub sha256: String,
+    pub bytes: u64,
 }
 
 #[derive(Debug)]
@@ -187,13 +204,14 @@ pub fn verify_manifest_at(path: &Path) -> Result<ParserIdentity, &'static str> {
 /// Parse with the identity `verify_manifest` installed at startup.
 pub async fn parse(
     input: impl AsyncRead + Unpin + Send + 'static,
+    expected: &ExpectedInput,
     config: &ParseConfig,
     deadline: Duration,
 ) -> Result<ParseOutput, ParseRefusal> {
     let identity = IDENTITY
         .get()
         .ok_or(ParseRefusal::Failure("parser_identity_missing"))?;
-    parse_with(identity, input, config, deadline).await
+    parse_with(identity, input, expected, config, deadline).await
 }
 
 fn frame_config(config: &ParseConfig) -> Vec<u8> {
@@ -208,10 +226,36 @@ fn frame_config(config: &ParseConfig) -> Vec<u8> {
     serde_json::to_vec(&value).expect("a JSON object serializes")
 }
 
-/// Run one `parser-host --job` process for one parse.
+/// Counts the bytes the caller's input yields on their way to the child.
+struct Counted<R> {
+    inner: R,
+    bytes: Arc<AtomicU64>,
+}
+
+impl<R: AsyncRead + Unpin> AsyncRead for Counted<R> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let before = buf.filled().len();
+        let polled = Pin::new(&mut self.inner).poll_read(cx, buf);
+        if let Poll::Ready(Ok(())) = polled {
+            let read = (buf.filled().len() - before) as u64;
+            self.bytes.fetch_add(read, Ordering::Relaxed);
+        }
+        polled
+    }
+}
+
+/// Run one `parser-host --job` process for one parse. The result stands only
+/// for `expected`: the host's report must name its digest and the child must
+/// have been fed exactly its length, so a source that ends early without an
+/// error never completes as the whole input.
 pub async fn parse_with(
     identity: &ParserIdentity,
     input: impl AsyncRead + Unpin + Send + 'static,
+    expected: &ExpectedInput,
     config: &ParseConfig,
     deadline: Duration,
 ) -> Result<ParseOutput, ParseRefusal> {
@@ -236,6 +280,11 @@ pub async fn parse_with(
         deadline: deadline.min(GUEST_DEADLINE) + BACKSTOP,
         nofile: 64,
         core: 0,
+    };
+    let fed = Arc::new(AtomicU64::new(0));
+    let input = Counted {
+        inner: input,
+        bytes: Arc::clone(&fed),
     };
     let output = run_confined(
         command,
@@ -266,7 +315,13 @@ pub async fn parse_with(
     }
     let document: Value = serde_json::from_slice(&output.stdout)
         .map_err(|_| ParseRefusal::Failure("parser_output_invalid"))?;
+    // The child read to EOF before it reported a digest, so `fed` is final.
+    let whole_input = report["input_sha256"] == format!("sha256:{}", expected.sha256)
+        && fed.load(Ordering::Relaxed) == expected.bytes;
     match (code, document["status"].as_str()) {
+        (Some(0), Some("parsed")) if !whole_input => {
+            Err(ParseRefusal::Failure("input_digest_mismatch"))
+        }
         (Some(0), Some("parsed")) => Ok(ParseOutput {
             document,
             report,
@@ -277,6 +332,13 @@ pub async fn parse_with(
                 .as_str()
                 .ok_or(ParseRefusal::Failure("parser_output_invalid"))?
                 .to_owned();
+            // Only `input_limit` is decided before the whole input is read,
+            // and its report names no digest; every other refusal is about
+            // exactly the expected bytes.
+            let before_reading = reason == "input_limit" && report["input_sha256"].is_null();
+            if !before_reading && !whole_input {
+                return Err(ParseRefusal::Failure("input_digest_mismatch"));
+            }
             let available_sheets = match document.get("available_sheets") {
                 None => None,
                 Some(sheets) => Some(
@@ -313,9 +375,13 @@ mod tests {
     struct TempDir(PathBuf);
     impl TempDir {
         fn new(tag: &str) -> Self {
+            // Parallel tests can read the same clock value (microsecond
+            // resolution on macOS); the counter keeps names distinct.
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
             let path = std::env::temp_dir().join(format!(
-                "genui-parser-{tag}-{}-{}",
+                "genui-parser-{tag}-{}-{}-{}",
                 std::process::id(),
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
@@ -330,14 +396,18 @@ mod tests {
             let _ = std::fs::remove_dir_all(&self.0);
         }
     }
-    /// A stand-in `parser-host` that reports what one process received.
-    fn stub(body: &str) -> Fixture {
+    /// A stand-in `parser-host`; `$INPUT_HEX` is the digest it reports for
+    /// `seen`, the input an honest host would have read.
+    fn stub_seeing(body: &str, seen: &[u8]) -> Fixture {
         let directory = TempDir::new("stub");
         let wasm = directory.0.join("parser_guest.wasm");
         std::fs::write(&wasm, b"\0asm\x01\0\0\0stub").unwrap();
         let wasm_sha256 = hex(&std::fs::read(&wasm).unwrap());
         let host = directory.0.join("parser-host");
-        let script = format!("#!/bin/sh\nWASM_HEX={wasm_sha256}\n{body}\n");
+        let script = format!(
+            "#!/bin/sh\nWASM_HEX={wasm_sha256}\nINPUT_HEX={}\n{body}\n",
+            hex(seen)
+        );
         std::fs::write(&host, &script).unwrap();
         std::fs::set_permissions(&host, std::fs::Permissions::from_mode(0o755)).unwrap();
         let identity = ParserIdentity {
@@ -352,10 +422,19 @@ mod tests {
             identity,
         }
     }
+    fn stub(body: &str) -> Fixture {
+        stub_seeing(body, b"a\n")
+    }
+    fn expect(input: &[u8]) -> ExpectedInput {
+        ExpectedInput {
+            sha256: hex(input),
+            bytes: input.len() as u64,
+        }
+    }
     const REPORTING_STUB: &str = r#"bytes=$(/usr/bin/wc -c | /usr/bin/tr -d ' ')
 envs=$(/usr/bin/env | /usr/bin/grep -v -E '^(PWD|SHLVL|_|OLDPWD)=' | /usr/bin/tr '\n' ';')
 printf '{"status":"parsed","result":{"pid":%s,"stdin_bytes":%s,"env":"%s","args":"%s"}}' "$$" "$bytes" "$envs" "$*"
-printf '{"status":"parsed","reason":null,"wasm_sha256":"sha256:%s"}\n' "$WASM_HEX" >&2
+printf '{"status":"parsed","reason":null,"wasm_sha256":"sha256:%s","input_sha256":"sha256:%s"}\n' "$WASM_HEX" "$INPUT_HEX" >&2
 exit 0"#;
     fn csv() -> ParseConfig {
         ParseConfig {
@@ -367,13 +446,14 @@ exit 0"#;
     #[tokio::test]
     async fn parser_host_runs_one_job_per_process_with_cleared_environment() {
         std::env::set_var("GENUI_PARSER_LEAK_PROBE", "must-not-leak");
-        let fixture = stub(REPORTING_STUB);
         let input = b"a,b\n1,2\n".to_vec();
+        let fixture = stub_seeing(REPORTING_STUB, &input);
         let mut pids = Vec::new();
         for _ in 0..2 {
             let output = parse_with(
                 &fixture.identity,
                 std::io::Cursor::new(input.clone()),
+                &expect(&input),
                 &csv(),
                 Duration::from_secs(10),
             )
@@ -400,15 +480,17 @@ exit 0"#;
 
     #[tokio::test]
     async fn frame_carries_the_selected_sheet_and_demo_profile_only() {
-        let fixture = stub(
+        let fixture = stub_seeing(
             r#"config=$(/usr/bin/tail -c +5)
 printf '{"status":"parsed","result":{"config":%s}}' "$config"
-printf '{"status":"parsed","wasm_sha256":"sha256:%s"}\n' "$WASM_HEX" >&2"#,
+printf '{"status":"parsed","wasm_sha256":"sha256:%s","input_sha256":"sha256:%s"}\n' "$WASM_HEX" "$INPUT_HEX" >&2"#,
+            b"",
         );
         let output = parse_with(
             &fixture.identity,
             // No input bytes: everything after the length prefix is the config.
             std::io::Cursor::new(Vec::new()),
+            &expect(b""),
             &ParseConfig {
                 format: Format::Xlsx,
                 sheet: Some("Inventory".into()),
@@ -425,15 +507,17 @@ printf '{"status":"parsed","wasm_sha256":"sha256:%s"}\n' "$WASM_HEX" >&2"#,
 
     #[tokio::test]
     async fn refusal_exit_two_returns_reason_and_available_sheets() {
-        let fixture = stub(
+        let fixture = stub_seeing(
             r#"/bin/cat > /dev/null
 printf '{"status":"refused","reason":"sheet_selection_required","no_revision_created":true,"available_sheets":["Inventory","Other"]}'
-printf '{"status":"refused","reason":"sheet_selection_required","wasm_sha256":"sha256:%s"}\n' "$WASM_HEX" >&2
+printf '{"status":"refused","reason":"sheet_selection_required","wasm_sha256":"sha256:%s","input_sha256":"sha256:%s"}\n' "$WASM_HEX" "$INPUT_HEX" >&2
 exit 2"#,
+            b"PK",
         );
         let refusal = parse_with(
             &fixture.identity,
             std::io::Cursor::new(b"PK".to_vec()),
+            &expect(b"PK"),
             &ParseConfig {
                 format: Format::Xlsx,
                 sheet: None,
@@ -485,6 +569,7 @@ exit 2"#,
             let outcome = parse_with(
                 &fixture.identity,
                 std::io::Cursor::new(b"a\n".to_vec()),
+                &expect(b"a\n"),
                 &csv(),
                 Duration::from_secs(10),
             )
@@ -494,11 +579,74 @@ exit 2"#,
     }
 
     #[tokio::test]
+    async fn input_that_ends_early_without_an_error_is_never_parsed() {
+        // The source stops at 8 of 12 bytes with Ok(0): to the child that is
+        // a complete input. The parse is bound to the expected digest and
+        // length, so it never completes as the whole upload (review m4).
+        let whole = b"a,b\n1,2\n3,4\n";
+        let early = &whole[..8];
+        let honest = stub_seeing(REPORTING_STUB, early);
+        // A host that reported the whole digest anyway is caught by length.
+        let lying = stub_seeing(REPORTING_STUB, whole);
+        for fixture in [&honest, &lying] {
+            let outcome = parse_with(
+                &fixture.identity,
+                std::io::Cursor::new(early.to_vec()),
+                &expect(whole),
+                &csv(),
+                Duration::from_secs(10),
+            )
+            .await;
+            assert_eq!(
+                outcome.unwrap_err(),
+                ParseRefusal::Failure("input_digest_mismatch")
+            );
+        }
+        // A refusal is bound the same way; only `input_limit`, which the host
+        // decides before it has read (and hashed) the whole input, has none.
+        for (reason, digest, expected) in [
+            (
+                "formula_refused",
+                "\"sha256:'\"$INPUT_HEX\"'\"",
+                ParseRefusal::Failure("input_digest_mismatch"),
+            ),
+            (
+                "formula_refused",
+                "null",
+                ParseRefusal::Failure("input_digest_mismatch"),
+            ),
+            (
+                "input_limit",
+                "null",
+                ParseRefusal::Refused {
+                    reason: "input_limit".into(),
+                    available_sheets: None,
+                },
+            ),
+        ] {
+            let body = format!(
+                "/bin/cat > /dev/null\nprintf '{{\"status\":\"refused\",\"reason\":\"{reason}\",\"no_revision_created\":true}}'\nprintf '{{\"status\":\"refused\",\"reason\":\"{reason}\",\"wasm_sha256\":\"sha256:%s\",\"input_sha256\":{digest}}}\\n' \"$WASM_HEX\" >&2\nexit 2"
+            );
+            let fixture = stub_seeing(&body, early);
+            let outcome = parse_with(
+                &fixture.identity,
+                std::io::Cursor::new(early.to_vec()),
+                &expect(whole),
+                &csv(),
+                Duration::from_secs(10),
+            )
+            .await;
+            assert_eq!(outcome.unwrap_err(), expected, "{reason} {digest}");
+        }
+    }
+
+    #[tokio::test]
     async fn parse_without_a_verified_manifest_is_refused() {
         // Unit tests never install the process-wide identity.
         assert_eq!(
             parse(
                 std::io::Cursor::new(b"a\n".to_vec()),
+                &expect(b"a\n"),
                 &csv(),
                 Duration::from_secs(1)
             )
@@ -631,6 +779,7 @@ exit 2"#,
         let output = parse_with(
             &identity,
             std::io::Cursor::new(csv_bytes.clone()),
+            &expect(&csv_bytes),
             &csv(),
             Duration::from_secs(120),
         )
@@ -643,10 +792,23 @@ exit 2"#,
             format!("sha256:{}", hex(&csv_bytes))
         );
         assert!(output.peak_rss_bytes > 0);
+        // The real host parses a source that ended early; the parent refuses it.
+        let early = csv_bytes[..csv_bytes.len() - 3].to_vec();
+        let refusal = parse_with(
+            &identity,
+            std::io::Cursor::new(early),
+            &expect(&csv_bytes),
+            &csv(),
+            Duration::from_secs(120),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(refusal, ParseRefusal::Failure("input_digest_mismatch"));
         let workbook = std::fs::read(fixtures.join("valid.xlsx")).unwrap();
         let refusal = parse_with(
             &identity,
             std::io::Cursor::new(workbook.clone()),
+            &expect(&workbook),
             &ParseConfig {
                 format: Format::Xlsx,
                 sheet: None,
@@ -664,7 +826,8 @@ exit 2"#,
         );
         let output = parse_with(
             &identity,
-            std::io::Cursor::new(workbook),
+            std::io::Cursor::new(workbook.clone()),
+            &expect(&workbook),
             &ParseConfig {
                 format: Format::Xlsx,
                 sheet: Some("Other".into()),
@@ -677,9 +840,11 @@ exit 2"#,
             output.document["result"]["cells"][0]["value"]["value"],
             "Other sheet only"
         );
+        let formula = std::fs::read(fixtures.join("formula.xlsx")).unwrap();
         let refusal = parse_with(
             &identity,
-            std::io::Cursor::new(std::fs::read(fixtures.join("formula.xlsx")).unwrap()),
+            std::io::Cursor::new(formula.clone()),
+            &expect(&formula),
             &ParseConfig {
                 format: Format::Xlsx,
                 sheet: Some("Inventory".into()),
