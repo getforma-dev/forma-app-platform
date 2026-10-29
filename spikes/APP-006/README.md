@@ -52,9 +52,25 @@ python3 qualify.py --output ../../evidence/APP-006/local
 python3 verify_source.py --checkout /Users/victorvillacis/dev/Forma/work/FORMA-247/gatewasm
 ```
 
-The runner records exact source hashes, toolchain, registry licenses/checksums, command output and exit codes. It runs `cargo fmt --all --check`, `cargo clippy --locked --all-targets -- -D warnings` and `cargo test --locked -- --test-threads=2 --nocapture` with `CARGO_BUILD_JOBS=2`. The workflow performs the same checks on Ubuntu and retains artifacts. Local results are in [APP-006 evidence](../../evidence/APP-006/README.md); CI is only passed when an actual run receipt is recorded there.
+The runner records exact source hashes, toolchain, registry licenses/checksums, command output and exit codes. It runs formatting, strict all-target Clippy and all-target tests, builds the standalone qualification example and exercises its private-pipe boundaries. Build concurrency defaults to two jobs and accepts an explicit one-job limit. The workflow performs the same checks on Ubuntu, builds/tests the separate image and retains artifacts. Local results are in [APP-006 evidence](../../evidence/APP-006/README.md); CI is only passed when an actual run receipt is recorded there.
 
 Dependencies are exact released versions with a Cargo lock: base64 0.22.1, ring 0.17.14, serde 1.0.229, serde_json 1.0.154 and Tokio 1.53.3 match versions already used in this app; reqwest 0.12.28 is also locked by the inspected auth repository. The fixed [ring Ed25519 verifier](https://docs.rs/ring/0.17.14/ring/signature/index.html) keeps cryptography outside our parser; [reqwest's client controls](https://docs.rs/reqwest/0.12.28/reqwest/struct.ClientBuilder.html) supply verified TLS, total timeouts and explicit redirect/retry/proxy policy. Serde derives enforce closed/duplicate-field refusal. Cargo resolver 3 keeps the declared Rust 1.85 floor compatible while the tested toolchain is 1.93.1. No framework or app dependency upgrade is made.
+
+## Hosted refresh qualification preparation
+
+`Verifier::diagnostics()` observes coherent reserved-refresh, accepted-keyset,
+cache-key-count and generation counters under the existing bounded mutex. It
+does not fetch or change cache policy. Cancellation may stop a reserved attempt
+before it reaches the issuer; a counter is not an external access log.
+
+The separate operator-only `hosted_key_qualification` executable uses one real
+production verifier and a real 61-second cooldown. It accepts one bounded private
+stdin pipe, exposes no listener, and emits redacted cases/counters only. Its fixed
+90-second process watchdog also covers blocked output. The normal local runner
+now includes all-target tests and actual private-pipe boundary checks; CI also
+builds and checks its separate nonroot image without network access. See the
+[campaign contract and limits](../../evidence/APP-006/hosted-key-qualification/README.md).
+These local checks are preparation, not hosted or callback acceptance.
 
 ## Remaining acceptance
 

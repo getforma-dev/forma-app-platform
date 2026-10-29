@@ -1,0 +1,24 @@
+{
+  "scope": "compiler floor compatibility only; no hosted execution",
+  "command": [
+    "cargo",
+    "+1.85.0",
+    "check",
+    "--manifest-path",
+    "spikes/APP-006/Cargo.toml",
+    "--locked",
+    "--all-targets"
+  ],
+  "exit_code": 0,
+  "passed": true,
+  "cargo_build_jobs": 1,
+  "rustc": "rustc 1.85.0 (4d91de4e4 2025-02-17)\nbinary: rustc\ncommit-hash: 4d91de4e48198da2e33413efdcd9cd2cc0c46688\ncommit-date: 2025-02-17\nhost: aarch64-apple-darwin\nrelease: 1.85.0\nLLVM version: 19.1.7",
+  "source_sha256": {
+    "Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+    "Cargo.lock": "caec3dcdcb3228c1e98b7ef177517408485ecc3ac5af5b48927d81e87e050b8d",
+    "src/lib.rs": "4fbfa5be174bde8f1a5410f66e4b5d53abae03d8860f7b02921b1eb99e68e39e",
+    "src/tests.rs": "d30a302586f4b5097345bdcc702f7787fa36ed4b4838084350b7039f336c553d",
+    "examples/hosted_key_qualification.rs": "4875cd8a222437eeddac1f26605ffc3f8f635a1af874adb241460e2d2e6d0095"
+  },
+  "recorded_at": "2026-10-29T02:18:45.193186+00:00"
+}

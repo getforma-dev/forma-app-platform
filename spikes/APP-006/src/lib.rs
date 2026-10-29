@@ -140,6 +140,19 @@ struct Cache {
     fresh_until: Option<Instant>,
     attempted_at: Option<Instant>,
     generation: u64,
+    refresh_attempts: u64,
+    accepted_keysets: u64,
+}
+
+/// A bounded, coherent observation of this verifier instance. No key IDs,
+/// identities, tokens, URLs or clock values are exposed. Attempts are reserved
+/// before I/O; cancellation may prevent a reserved attempt reaching the issuer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Diagnostics {
+    pub refresh_attempts: u64,
+    pub accepted_keysets: u64,
+    pub cached_access_keys: usize,
+    pub generation: u64,
 }
 
 /// Share one instance per configured issuer in a process. The attempt budget is
@@ -154,6 +167,20 @@ pub struct Verifier {
 impl Verifier {
     pub fn new(config: Config) -> Result<Self, Refusal> {
         Self::construct(config, false, unix_time)
+    }
+
+    /// Observe counters without fetching, changing freshness or resetting the
+    /// attempt budget. A concurrent operation cannot expose a partial snapshot.
+    pub async fn diagnostics(&self) -> Result<Diagnostics, Refusal> {
+        let cache = timeout_at(Instant::now() + VERIFY_DEADLINE, self.cache.lock())
+            .await
+            .map_err(|_| Refusal::Deadline)?;
+        Ok(Diagnostics {
+            refresh_attempts: cache.refresh_attempts,
+            accepted_keysets: cache.accepted_keysets,
+            cached_access_keys: cache.keys.len(),
+            generation: cache.generation,
+        })
     }
 
     fn construct(
@@ -302,6 +329,7 @@ impl Verifier {
         // new sign-ins until an allowed successful refresh; existing app sessions
         // are outside this verifier. An unknown kid never becomes a cached key.
         cache.attempted_at = Some(now);
+        cache.refresh_attempts = cache.refresh_attempts.saturating_add(1);
         cache.keys.clear();
         cache.fresh_until = None;
         cache.generation = cache
@@ -318,6 +346,7 @@ impl Verifier {
         let matches = keys.iter().any(|key| key.kid == kid);
         cache.keys = keys;
         cache.fresh_until = Some(fresh_until);
+        cache.accepted_keysets = cache.accepted_keysets.saturating_add(1);
         if !matches {
             return Err(Refusal::UnknownKey);
         }

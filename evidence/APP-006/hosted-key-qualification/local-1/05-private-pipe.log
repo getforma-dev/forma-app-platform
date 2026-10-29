@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "passed": true,
+  "scope": "local real process/pipe boundary only; no hosted issuer or successful token",
+  "executable_sha256": "d1ead9ccb87413b8f12cb9d2bfd64df0e1536f3c97d93bdb35db002369819661",
+  "checks": [
+    {
+      "case": "no-arguments",
+      "passed": true,
+      "failure_code": "arguments_forbidden",
+      "elapsed_seconds": 0.009
+    },
+    {
+      "case": "regular-file-refused",
+      "passed": true,
+      "failure_code": "input_requires_pipe",
+      "elapsed_seconds": 0.003
+    },
+    {
+      "case": "empty-pipe",
+      "passed": true,
+      "failure_code": "input_size",
+      "elapsed_seconds": 0.004
+    },
+    {
+      "case": "oversized-pipe",
+      "passed": true,
+      "failure_code": "input_size",
+      "elapsed_seconds": 0.003
+    },
+    {
+      "case": "oversized-without-eof",
+      "passed": true,
+      "failure_code": "input_size",
+      "elapsed_seconds": 0.006
+    },
+    {
+      "case": "incomplete-without-eof",
+      "passed": true,
+      "failure_code": "input_deadline",
+      "elapsed_seconds": 2.015
+    },
+    {
+      "case": "malformed-private-input",
+      "passed": true,
+      "failure_code": "input_schema",
+      "elapsed_seconds": 0.005
+    },
+    {
+      "case": "duplicate-field",
+      "passed": true,
+      "failure_code": "input_schema",
+      "elapsed_seconds": 0.004
+    },
+    {
+      "case": "unknown-field",
+      "passed": true,
+      "failure_code": "input_schema",
+      "elapsed_seconds": 0.004
+    },
+    {
+      "case": "foreign-endpoint",
+      "passed": true,
+      "failure_code": "input_contract",
+      "elapsed_seconds": 0.004
+    },
+    {
+      "case": "expired-envelope",
+      "passed": true,
+      "failure_code": "input_contract",
+      "elapsed_seconds": 0.004
+    },
+    {
+      "case": "non-synthetic-envelope",
+      "passed": true,
+      "failure_code": "input_contract",
+      "elapsed_seconds": 0.004
+    },
+    {
+      "case": "blocked-output-whole-process-deadline",
+      "passed": true,
+      "exit_code": 124,
+      "elapsed_seconds": 90.009
+    }
+  ]
+}

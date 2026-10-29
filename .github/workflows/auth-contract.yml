@@ -22,6 +22,10 @@ jobs:
         run: rustup toolchain install 1.93.1 --profile minimal --component clippy,rustfmt
       - name: Qualify local consumer refusals and bounded HTTP refresh
         run: python3 qualify.py --output "$RUNNER_TEMP/auth-consumer-qualification"
+      - name: Build the separate canonical consumer qualification image
+        run: docker build --file Dockerfile --tag genui-auth-key-qualification-ci .
+      - name: Qualify the nonroot image without network access
+        run: python3 qualify_hosted_key_image.py --image genui-auth-key-qualification-ci --output "$RUNNER_TEMP/auth-consumer-qualification/image-boundary.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

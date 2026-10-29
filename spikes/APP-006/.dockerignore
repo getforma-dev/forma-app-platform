@@ -1,0 +1,13 @@
+# Only the standalone canonical-consumer qualifier. No fixture, target, log,
+# credential, source-contract or application deployment content is included.
+**
+!.dockerignore
+!Dockerfile
+!Cargo.toml
+!Cargo.lock
+!src/
+src/**
+!src/lib.rs
+!examples/
+examples/**
+!examples/hosted_key_qualification.rs

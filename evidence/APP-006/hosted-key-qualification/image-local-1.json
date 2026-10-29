@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "passed": true,
+  "scope": "actual nonroot Linux image boundary negatives; no hosted issuer or token",
+  "image_id": "sha256:5ee5ad165bca1e37bc2efe13f2fb727912c008cbe721b18f452a98482404cedc",
+  "architecture": "arm64",
+  "os": "linux",
+  "declared_source_sha256": {
+    "Dockerfile": "eff94a1d093d95215ebe292a110207f0bbd5205176739ef87943b44ccfc133de",
+    ".dockerignore": "3a8eebc3fcd544add374ba2c5a0ce1c4f4f8dd44d93e3b2c6a74868f1412e1e7",
+    "Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+    "Cargo.lock": "caec3dcdcb3228c1e98b7ef177517408485ecc3ac5af5b48927d81e87e050b8d",
+    "src/lib.rs": "4fbfa5be174bde8f1a5410f66e4b5d53abae03d8860f7b02921b1eb99e68e39e",
+    "examples/hosted_key_qualification.rs": "4875cd8a222437eeddac1f26605ffc3f8f635a1af874adb241460e2d2e6d0095",
+    "qualify_hosted_key_image.py": "3f427c76e321b7a9a87ea7050dbb8580486590582981be046b793907a62f57ea"
+  },
+  "checks": [
+    {
+      "case": "empty-input",
+      "passed": true,
+      "container_removed": true,
+      "failure_code": "input_size",
+      "elapsed_seconds": 0.132,
+      "process_os": "linux",
+      "process_architecture": "aarch64"
+    },
+    {
+      "case": "malformed-private-input",
+      "passed": true,
+      "container_removed": true,
+      "failure_code": "input_schema",
+      "elapsed_seconds": 0.117,
+      "process_os": "linux",
+      "process_architecture": "aarch64"
+    },
+    {
+      "case": "oversized-input",
+      "passed": true,
+      "container_removed": true,
+      "failure_code": "input_size",
+      "elapsed_seconds": 0.128,
+      "process_os": "linux",
+      "process_architecture": "aarch64"
+    }
+  ]
+}

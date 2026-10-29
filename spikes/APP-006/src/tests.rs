@@ -860,3 +860,143 @@ async fn access_only_set_has_bounded_unique_validated_keys_and_atomic_replacemen
     v.verify(&keys[0].token(), TENANT).await.unwrap();
     v.verify(&keys[1].token(), TENANT).await.unwrap();
 }
+
+#[tokio::test]
+async fn diagnostics_count_accepted_unknown_key_refresh_without_resetting_budget() {
+    let key = IssuerKey::fresh();
+    let unknown = IssuerKey::fresh();
+    let mock = Mock::start(ok(key.jwks())).await;
+    let verifier = mock.verifier();
+    assert_eq!(
+        verifier.diagnostics().await.unwrap(),
+        Diagnostics {
+            refresh_attempts: 0,
+            accepted_keysets: 0,
+            cached_access_keys: 0,
+            generation: 0
+        }
+    );
+    assert_eq!(mock.hits(), 0);
+    verifier.verify(&key.token(), TENANT).await.unwrap();
+    let first = verifier.diagnostics().await.unwrap();
+    assert_eq!(
+        first,
+        Diagnostics {
+            refresh_attempts: 1,
+            accepted_keysets: 1,
+            cached_access_keys: 1,
+            generation: 1
+        }
+    );
+    assert_eq!(
+        verifier.verify(&unknown.token(), TENANT).await.err(),
+        Some(Refusal::RefreshThrottled)
+    );
+    assert_eq!(verifier.diagnostics().await.unwrap(), first);
+    // Existing private test-only clock seam; no hosted elapsed-time claim.
+    allow_refresh(&verifier).await;
+    assert_eq!(
+        verifier.verify(&unknown.token(), TENANT).await.err(),
+        Some(Refusal::UnknownKey)
+    );
+    let second = verifier.diagnostics().await.unwrap();
+    assert_eq!(
+        second,
+        Diagnostics {
+            refresh_attempts: 2,
+            accepted_keysets: 2,
+            cached_access_keys: 1,
+            generation: 2
+        }
+    );
+    assert_eq!(
+        verifier.verify(&unknown.token(), TENANT).await.err(),
+        Some(Refusal::RefreshThrottled)
+    );
+    verifier.verify(&key.token(), TENANT).await.unwrap();
+    assert_eq!(verifier.diagnostics().await.unwrap(), second);
+    assert_eq!(mock.hits(), 2);
+}
+
+#[tokio::test]
+async fn diagnostics_preserve_failed_and_cancelled_attempts_without_accepted_keysets() {
+    let key = IssuerKey::fresh();
+    let mock = Mock::start(Reply::Body {
+        status: 503,
+        headers: "Cache-Control: public, max-age=3600\r\n".into(),
+        body: b"{}".to_vec(),
+        delay: Duration::ZERO,
+        chunked: false,
+    })
+    .await;
+    let verifier = Arc::new(mock.verifier());
+    assert_eq!(
+        verifier.verify(&key.token(), TENANT).await.err(),
+        Some(Refusal::KeysetUnavailable)
+    );
+    assert_eq!(
+        verifier.diagnostics().await.unwrap(),
+        Diagnostics {
+            refresh_attempts: 1,
+            accepted_keysets: 0,
+            cached_access_keys: 0,
+            generation: 1
+        }
+    );
+    allow_refresh(&verifier).await;
+    mock.set(Reply::Body {
+        status: 200,
+        headers: "Cache-Control: public, max-age=3600\r\n".into(),
+        body: key.jwks(),
+        delay: Duration::from_secs(10),
+        chunked: false,
+    });
+    let child_verifier = verifier.clone();
+    let token = key.token();
+    let child = tokio::spawn(async move { child_verifier.verify(&token, TENANT).await });
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while mock.hits() < 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    child.abort();
+    assert!(child.await.unwrap_err().is_cancelled());
+    let after = verifier.diagnostics().await.unwrap();
+    assert_eq!(
+        after,
+        Diagnostics {
+            refresh_attempts: 2,
+            accepted_keysets: 0,
+            cached_access_keys: 0,
+            generation: 2
+        }
+    );
+    assert_eq!(
+        verifier.verify(&key.token(), TENANT).await.err(),
+        Some(Refusal::RefreshThrottled)
+    );
+    assert_eq!(verifier.diagnostics().await.unwrap(), after);
+    assert_eq!(mock.hits(), 2);
+}
+
+#[tokio::test(start_paused = true)]
+async fn diagnostics_observation_is_bounded_and_does_not_modify_cache() {
+    let key = IssuerKey::fresh();
+    let mock = Mock::start(ok(key.jwks())).await;
+    let verifier = mock.verifier();
+    let held = verifier.cache.lock().await;
+    assert_eq!(verifier.diagnostics().await, Err(Refusal::Deadline));
+    drop(held);
+    assert_eq!(
+        verifier.diagnostics().await.unwrap(),
+        Diagnostics {
+            refresh_attempts: 0,
+            accepted_keysets: 0,
+            cached_access_keys: 0,
+            generation: 0
+        }
+    );
+    assert_eq!(mock.hits(), 0);
+}
