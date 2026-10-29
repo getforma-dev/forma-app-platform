@@ -22,7 +22,9 @@ ENTITLEMENT_WINDOW = ("2026-10-01T00:00:00+00:00", "2036-10-01T00:00:00+00:00")
 def make_bundles():
     result = []
     for name, organization in (("northstar", ORGANIZATIONS[0]), ("northstar", ORGANIZATIONS[1]), ("spend-review", ORGANIZATIONS[1])):
-        bundle = copy.deepcopy(json.loads((CONTRACTS / "fixtures" / (name + ".json")).read_text()))
+        # PH01 seeding is edition impl-2026-10-28.1 data (operator-seeded revisions; ADR-009 D9.3), so it reads
+        # that edition's retained fixtures, not the current edition's.
+        bundle = copy.deepcopy(json.loads((CONTRACTS / "fixtures" / "impl-2026-10-28.1" / (name + ".json")).read_text()))
         old = bundle["context"]["organization_id"]
         def replace(value):
             if isinstance(value, dict): return {k: replace(v) for k, v in value.items()}

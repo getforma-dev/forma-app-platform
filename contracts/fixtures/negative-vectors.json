@@ -62,15 +62,6 @@
     "expected": "schema:"
   },
   {
-    "name": "unknown version refused",
-    "path": [
-      "definition",
-      "schema_version"
-    ],
-    "value": 2,
-    "expected": "schema:"
-  },
-  {
     "name": "nonopaque entity identifier refused",
     "path": [
       "definition",
@@ -466,15 +457,6 @@
     "rehash_receipt": true
   },
   {
-    "name": "partial total refused",
-    "path": [
-      "receipt",
-      "partial"
-    ],
-    "value": true,
-    "expected": "schema:"
-  },
-  {
     "name": "preview cannot claim publication",
     "path": [
       "receipt",
@@ -620,5 +602,291 @@
     ],
     "value": 1,
     "expected": "create expects absent record"
+  },
+  {
+    "name": "unregistered schema version refused",
+    "path": [
+      "definition",
+      "schema_version"
+    ],
+    "value": 3,
+    "expected": "schema:"
+  },
+  {
+    "name": "edition two input without coverage refused",
+    "path": [
+      "definition",
+      "content",
+      "inputs",
+      0,
+      "coverage"
+    ],
+    "operation": "remove",
+    "expected": "schema:"
+  },
+  {
+    "name": "unknown coverage refused",
+    "path": [
+      "definition",
+      "content",
+      "inputs",
+      0,
+      "coverage"
+    ],
+    "value": "unknown",
+    "expected": "schema:"
+  },
+  {
+    "name": "partial records input refused",
+    "path": [
+      "definition",
+      "content",
+      "inputs",
+      2,
+      "coverage"
+    ],
+    "value": "partial",
+    "expected": "records input requires complete coverage",
+    "rehash_definition": true
+  },
+  {
+    "name": "window denominator without window refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      5,
+      "query",
+      "window"
+    ],
+    "operation": "remove",
+    "expected": "window_minutes denominator requires a window",
+    "rehash_definition": true
+  },
+  {
+    "name": "window denominator over a partial minute refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      5,
+      "query",
+      "window",
+      "end"
+    ],
+    "value": "2026-10-22T10:10:30Z",
+    "expected": "window must be a whole number of minutes",
+    "rehash_definition": true
+  },
+  {
+    "name": "client supplied window length refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      5,
+      "query",
+      "operations",
+      1,
+      "denominator",
+      "minutes"
+    ],
+    "value": 10,
+    "expected": "schema:"
+  },
+  {
+    "name": "source coverage differs from its contract refused",
+    "path": [
+      "sources",
+      0,
+      "coverage"
+    ],
+    "value": "partial",
+    "expected": "source coverage mismatch"
+  },
+  {
+    "name": "source without rows digest refused",
+    "path": [
+      "sources",
+      0,
+      "rows_digest"
+    ],
+    "operation": "remove",
+    "expected": "schema:"
+  },
+  {
+    "name": "edition one source shape refused under schema version two",
+    "path": [
+      "sources",
+      0,
+      "coverage"
+    ],
+    "operation": "remove",
+    "expected": "schema:"
+  },
+  {
+    "name": "edition two source member refused under schema version one",
+    "path": [
+      "sources",
+      0,
+      "schema_version"
+    ],
+    "value": 1,
+    "expected": "schema:"
+  },
+  {
+    "name": "publication operator identities mismatch refused",
+    "path": [
+      "publication",
+      "operators"
+    ],
+    "value": [],
+    "expected": "publication operator identities mismatch"
+  },
+  {
+    "name": "unsorted operator identities refused",
+    "path": [
+      "publication",
+      "operators"
+    ],
+    "value": [
+      {
+        "id": "time_bucket",
+        "version": 1
+      },
+      {
+        "id": "aggregate",
+        "version": 1
+      }
+    ],
+    "expected": "operator identities must be sorted and unique"
+  },
+  {
+    "name": "duplicate renderer identity refused",
+    "path": [
+      "publication",
+      "renderers"
+    ],
+    "value": [
+      {
+        "kind": "form",
+        "version": 1
+      },
+      {
+        "kind": "form",
+        "version": 1
+      }
+    ],
+    "expected": "renderer identities must be sorted and unique"
+  },
+  {
+    "name": "unregistered operator identity refused",
+    "path": [
+      "publication",
+      "operators",
+      0,
+      "id"
+    ],
+    "value": "sql",
+    "expected": "schema:"
+  },
+  {
+    "name": "publication renderer identities mismatch refused",
+    "path": [
+      "publication",
+      "renderers"
+    ],
+    "value": [
+      {
+        "kind": "summary",
+        "version": 1
+      }
+    ],
+    "expected": "publication renderer identities mismatch"
+  },
+  {
+    "name": "zero registry edition refused",
+    "path": [
+      "publication",
+      "operator_version"
+    ],
+    "value": 0,
+    "expected": "schema:"
+  },
+  {
+    "name": "publication registry edition mismatch refused",
+    "path": [
+      "publication",
+      "operator_version"
+    ],
+    "value": 2,
+    "expected": "publication registry edition mismatch"
+  },
+  {
+    "name": "receipt operator identities mismatch refused",
+    "path": [
+      "receipt",
+      "operators"
+    ],
+    "value": [],
+    "expected": "receipt operator identities mismatch",
+    "rehash_receipt": true
+  },
+  {
+    "name": "receipt renderer identities mismatch refused",
+    "path": [
+      "receipt",
+      "renderers"
+    ],
+    "value": [
+      {
+        "kind": "table",
+        "version": 1
+      }
+    ],
+    "expected": "receipt renderer identities mismatch",
+    "rehash_receipt": true
+  },
+  {
+    "name": "receipt identity lists are bound by its digest",
+    "path": [
+      "receipt",
+      "operators"
+    ],
+    "value": [],
+    "expected": "receipt digest mismatch"
+  },
+  {
+    "name": "receipt source without mapping version refused",
+    "path": [
+      "receipt",
+      "source_revisions",
+      0,
+      "mapping_version"
+    ],
+    "operation": "remove",
+    "expected": "schema:"
+  },
+  {
+    "name": "receipt mapping version mismatch refused",
+    "path": [
+      "receipt",
+      "source_revisions",
+      0,
+      "mapping_version"
+    ],
+    "value": 2,
+    "expected": "receipt mapping version mismatch",
+    "rehash_receipt": true
+  },
+  {
+    "name": "partial receipt over complete coverage refused",
+    "path": [
+      "receipt",
+      "partial"
+    ],
+    "value": true,
+    "expected": "receipt partial must equal",
+    "rehash_receipt": true
   }
 ]

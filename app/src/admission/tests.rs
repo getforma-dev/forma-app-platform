@@ -1,18 +1,39 @@
-//! APP-010 admission against the locked contract edition impl-2026-10-28.1.
-//! Every expected byte string, digest and verdict here is locked in
+//! APP-010 admission against the locked contract edition impl-2026-10-29.2 and
+//! the edition impl-2026-10-28.1 it retains (ADR-009 D9.6). Every expected byte
+//! string, digest and verdict here is locked in
 //! `contracts/implementation-lock.json` or was produced by the Python reference
 //! (`contracts/validate.py` on Python 3.11.0) from the same input.
 use super::canonical::{decode, encode, MAX_DOCUMENT_BYTES};
 use super::digest::{self, digest, DOMAINS};
-use super::validate::{admit_definition, AdmittedDefinition, MAX_DEFINITION_BYTES};
+use super::validate::{
+    admit_definition, check_exact_rational, exact_rational, AdmittedDefinition,
+    MAX_DEFINITION_BYTES,
+};
 use super::AdmissionError::{self, *};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
 const LOCK: &str = include_str!("../../../contracts/implementation-lock.json");
-/// Every locked `contracts/fixtures/*.json` artifact.
-const FIXTURES: [(&str, &str); 4] = [
+/// Every locked `contracts/fixtures/**/*.json` artifact: edition two's, then
+/// the retained edition one's.
+const FIXTURES: [(&str, &str); 8] = [
+    (
+        "contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json",
+        include_str!("../../../contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-28.1/negative-vectors.json",
+        include_str!("../../../contracts/fixtures/impl-2026-10-28.1/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-28.1/northstar.json",
+        include_str!("../../../contracts/fixtures/impl-2026-10-28.1/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-28.1/spend-review.json",
+        include_str!("../../../contracts/fixtures/impl-2026-10-28.1/spend-review.json"),
+    ),
     (
         "contracts/fixtures/canonical-vectors.json",
         include_str!("../../../contracts/fixtures/canonical-vectors.json"),
@@ -162,7 +183,7 @@ const PYTHON_REFUSED: [&[u8]; 55] = [
 ];
 
 /// `{}` in every registered domain, from validate.py `digest(name, {})`.
-const DOMAIN_DIGESTS: [(&str, &str); 8] = [
+const DOMAIN_DIGESTS: [(&str, &str); 10] = [
     (
         "forma:app-definition:v1",
         "sha256:084dfaff00f2bb828c01a6262d2fa4e3d1cb8178151511976d85c73868b2ed3b",
@@ -194,6 +215,14 @@ const DOMAIN_DIGESTS: [(&str, &str); 8] = [
     (
         "forma:result:v1",
         "sha256:e64268741d1dcc2933132abf459c5f66d635773d21489a604aa7affda1fd5e40",
+    ),
+    (
+        "forma:normalized-rows:v1",
+        "sha256:88d78f5aefbf22c671780bc9b8b33a3c4056cf1530ad15133af4fcc77ad919ae",
+    ),
+    (
+        "forma:job-payload:v1",
+        "sha256:6543802750686a3a2c6de5e84c01ecd2f73199bcf17c36315f968478fae2eb44",
     ),
 ];
 
@@ -466,7 +495,18 @@ fn schema_vector(name: &str) -> (&'static str, &'static str) {
             "unregistered_operator",
             "$.content.views[0].query.operations[0].type",
         ),
-        "unknown version refused" => ("encoding", "$.schema_version"),
+        // Edition one's vector sets schema version 2 on an edition-one document.
+        // Edition two registers version 2, so the refusal now names the first
+        // edition-two member the document lacks; the verdict is unchanged.
+        "unknown version refused" => ("encoding", "$.content.inputs[0].coverage"),
+        "unregistered schema version refused" => ("encoding", "$.schema_version"),
+        "edition two input without coverage refused" | "unknown coverage refused" => {
+            ("encoding", "$.content.inputs[0].coverage")
+        }
+        "client supplied window length refused" => (
+            "unknown_field",
+            "$.content.views[5].query.operations[1].denominator.minutes",
+        ),
         "nonopaque entity identifier refused" => ("encoding", "$.app_id"),
         "concrete source in reusable input refused" => {
             ("unknown_field", "$.content.inputs[0].source_revision_id")
@@ -529,7 +569,7 @@ fn sized_definition(target: usize) -> Value {
 fn canonical_vectors_match_contracts_lock() {
     // The embedded vectors and specimens are exactly the locked edition's set.
     let lock: Value = serde_json::from_str(LOCK).unwrap();
-    assert_eq!(lock["edition"], "impl-2026-10-28.1");
+    assert_eq!(lock["edition"], "impl-2026-10-29.2");
     assert_eq!(lock["canonical_encoding"], "forma-json-v1");
     let locked_fixtures: BTreeSet<&str> = lock["artifacts"]
         .as_object()
@@ -545,16 +585,16 @@ fn canonical_vectors_match_contracts_lock() {
 
     // Positive vectors: identical bytes and digests from the value and from text.
     let vectors = locked("contracts/fixtures/canonical-vectors.json");
-    assert_eq!(vectors.as_array().unwrap().len(), 6);
+    assert_eq!(vectors.as_array().unwrap().len(), EDITION_TWO_VECTORS);
     for vector in vectors.as_array().unwrap() {
         let name = vector["name"].as_str().unwrap();
+        let domain = vector
+            .get("domain")
+            .and_then(Value::as_str)
+            .unwrap_or(digest::RESULT);
         let canonical = encode(&vector["value"]).unwrap();
         assert_eq!(hex(&canonical), vector["utf8_hex"], "{name}");
-        assert_eq!(
-            digest(digest::RESULT, &canonical),
-            vector["digest"],
-            "{name}"
-        );
+        assert_eq!(digest(domain, &canonical), vector["digest"], "{name}");
         let spaced = serde_json::to_vec_pretty(&vector["value"]).unwrap();
         assert_eq!(
             encode(&decode(&spaced).unwrap()).unwrap(),
@@ -565,17 +605,25 @@ fn canonical_vectors_match_contracts_lock() {
 
     // Negative vectors: each definition mutation fails whole-output admission
     // with its coded reason; validate.py's own message for its reference rules.
+    assert_eq!(
+        negative_vectors("contracts/fixtures/negative-vectors.json", bundle),
+        EDITION_TWO_DEFINITION_VECTORS
+    );
+    canonical_refusals();
+}
+
+/// Applies every negative vector of one locked file to the bundles `load`
+/// returns; returns how many mutate a definition, each of which admission
+/// refuses with its coded reason.
+fn negative_vectors(path: &str, load: fn(&str) -> Value) -> usize {
     let mut definition_vectors = 0;
-    for vector in locked("contracts/fixtures/negative-vectors.json")
-        .as_array()
-        .unwrap()
-    {
+    for vector in locked(path).as_array().unwrap() {
         let name = vector["name"].as_str().unwrap();
         let fixture = vector
             .get("fixture")
             .and_then(Value::as_str)
             .unwrap_or("northstar");
-        let mut document = bundle(fixture);
+        let mut document = load(fixture);
         let before = document["definition"].clone();
         mutate(&mut document, vector);
         let entity = vector["path"][0].as_str().unwrap();
@@ -611,8 +659,10 @@ fn canonical_vectors_match_contracts_lock() {
         assert_eq!(error.code(), code, "{name}: {error}");
         assert!(error.to_string().contains(detail), "{name}: {error}");
     }
-    assert_eq!(definition_vectors, 19);
+    definition_vectors
+}
 
+fn canonical_refusals() {
     // validate.py canonical(): key order never matters, array order, Unicode
     // form and domain always do, and unrepresentable values are refused.
     let reordered = decode(br#"{"b":2,"a":1}"#).unwrap();
@@ -747,7 +797,7 @@ fn fixtures_digests_match_python() {
                 admitted.renderer_version,
                 admitted.operator_version
             ),
-            (1, 1, 1)
+            (2, 1, 1)
         );
         assert_eq!(
             admitted.view_count,
@@ -1230,8 +1280,12 @@ fn unregistered_renderer_or_operator_version_refuses() {
         rehash(&mut definition);
         assert!(admit(&definition).is_ok(), "{kind}");
     }
-    // Another contract schema version is not this edition's encoding.
+    // A schema version outside the registered editions is not an encoding of
+    // either, and the edition-one shape is not an edition-two definition.
     let mut definition = northstar_definition();
+    definition["schema_version"] = json!(3);
+    assert_eq!(admit(&definition).unwrap_err().code(), "encoding");
+    let mut definition = rich_definition();
     definition["schema_version"] = json!(2);
     assert_eq!(admit(&definition).unwrap_err().code(), "encoding");
 }
@@ -1277,4 +1331,325 @@ fn shape_and_reference_rules_match_validate_py() {
             ),
         }
     }
+}
+
+/// Canonical vectors of edition two: edition one's six, two normalized-row
+/// streams, one job payload and four exact rationals.
+const EDITION_TWO_VECTORS: usize = 13;
+/// Edition two's negative vectors that mutate a definition.
+const EDITION_TWO_DEFINITION_VECTORS: usize = 25;
+
+/// Edition impl-2026-10-28.1's locked fixture identities; edition two retains
+/// these copies byte-identically and the lock names them again.
+const EDITION_ONE: [(&str, &str); 4] = [
+    (
+        "contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json",
+        "33b46ff5970bdcd5259f23bdb5e9a7fcda4c5eeffebe93e0fedfebf5f661203d",
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-28.1/negative-vectors.json",
+        "089e9a3017adda324a2a150fb68d5aa497889cd104d2f7096b9128d520764e75",
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-28.1/northstar.json",
+        "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-28.1/spend-review.json",
+        "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+    ),
+];
+
+fn retained(name: &str) -> Value {
+    locked(&format!("contracts/fixtures/impl-2026-10-28.1/{name}.json"))
+}
+
+#[test]
+fn edition_two_vectors_match_contracts_lock() {
+    let lock: Value = serde_json::from_str(LOCK).unwrap();
+    assert_eq!(lock["edition"], "impl-2026-10-29.2");
+    let retained_lock = &lock["retained_editions"]["impl-2026-10-28.1"]["artifacts"];
+    for (path, identity) in EDITION_ONE {
+        assert_eq!(retained_lock[path], identity, "{path}");
+    }
+
+    // Every vector reproduces in its own registered domain; new domains appear.
+    let vectors = locked("contracts/fixtures/canonical-vectors.json");
+    let mut domains = BTreeSet::new();
+    let mut rationals = 0;
+    for vector in vectors.as_array().unwrap() {
+        let name = vector["name"].as_str().unwrap();
+        let domain = vector
+            .get("domain")
+            .and_then(Value::as_str)
+            .unwrap_or(digest::RESULT);
+        assert!(DOMAINS.contains(&domain), "{name}");
+        let canonical = encode(&vector["value"]).unwrap();
+        assert_eq!(hex(&canonical), vector["utf8_hex"], "{name}");
+        assert_eq!(digest(domain, &canonical), vector["digest"], "{name}");
+        domains.insert(domain);
+        if let Some(rational) = vector.get("rational") {
+            rationals += 1;
+            let reduced = exact_rational(
+                rational["numerator"].as_str().unwrap(),
+                rational["denominator"].as_str().unwrap(),
+            )
+            .unwrap();
+            assert_eq!(reduced, vector["value"], "{name}");
+            check_exact_rational(&vector["value"]).unwrap();
+        }
+        if domain == digest::NORMALIZED_ROWS {
+            // The streamed row identity equals the identity of the whole array.
+            let rows = vector["value"].as_array().unwrap();
+            assert_eq!(
+                digest::normalized_rows(rows.iter()).unwrap(),
+                vector["digest"],
+                "{name}"
+            );
+        }
+    }
+    assert!(domains.contains(digest::NORMALIZED_ROWS));
+    assert!(domains.contains(digest::JOB_PAYLOAD));
+    assert!(rationals >= 3);
+    assert_eq!(DOMAINS.len(), 10);
+
+    // exact_rational: lowest terms, positive denominator, at most 38 digits.
+    let largest = "9".repeat(38);
+    assert!(exact_rational(&largest, "1").is_ok());
+    let over = format!("1{}", "0".repeat(38));
+    let under = format!("-1{}", "0".repeat(38));
+    for (numerator, denominator, rule) in [
+        ("1", "0", "zero denominator"),
+        (over.as_str(), "1", "38 digits"),
+        ("1", under.as_str(), "38 digits"),
+        ("1.5", "1", "decimal integer"),
+        ("01", "1", "decimal integer"),
+        ("-0", "1", "decimal integer"),
+        ("", "1", "decimal integer"),
+    ] {
+        let error = exact_rational(numerator, denominator).unwrap_err();
+        assert!(
+            error.to_string().contains(rule),
+            "{numerator}/{denominator}: {error}"
+        );
+    }
+    for (value, rule) in [
+        (
+            json!({"numerator": "2", "denominator": "4"}),
+            "lowest terms",
+        ),
+        (
+            json!({"numerator": "0", "denominator": "2"}),
+            "lowest terms",
+        ),
+        (
+            json!({"numerator": "-6", "denominator": "9"}),
+            "lowest terms",
+        ),
+        (json!({"numerator": "1", "denominator": "0"}), "positive"),
+        (json!({"numerator": "1", "denominator": "-2"}), "positive"),
+        (json!({"numerator": "-0", "denominator": "1"}), "integer"),
+        (
+            json!({"numerator": "1".repeat(39), "denominator": "1"}),
+            "integer",
+        ),
+        (json!({"numerator": 1, "denominator": "1"}), "integer"),
+        (
+            json!({"numerator": "1", "denominator": "1", "unit": "byte"}),
+            "unit",
+        ),
+    ] {
+        let mut tagged = value.clone();
+        tagged["type"] = json!("exact_rational");
+        let error = check_exact_rational(&tagged).unwrap_err();
+        assert_eq!(error.code(), "encoding", "{value}");
+        assert!(error.to_string().contains(rule), "{value}: {error}");
+    }
+
+    // Edition-two definitions admit at schema version 2 with validate.py's digests.
+    for name in ["northstar", "spend-review"] {
+        let definition = &bundle(name)["definition"];
+        assert_eq!(definition["schema_version"], 2, "{name}");
+        let admitted = admit(definition).unwrap();
+        assert_eq!(admitted.digest, definition["digest"], "{name}");
+        assert_eq!(admitted.schema_version, 2, "{name}");
+    }
+
+    // Coverage on every edition-two input, complete for records.
+    let refuse = |pointer: &str, value: Option<Value>, code: &str, rule: &str| {
+        let mut definition = northstar_definition();
+        set(&mut definition, pointer, value);
+        rehash(&mut definition);
+        let error = admit(&definition).unwrap_err();
+        assert_eq!(error.code(), code, "{pointer}: {error}");
+        assert!(error.to_string().contains(rule), "{pointer}: {error}");
+    };
+    refuse(
+        "/content/inputs/0/coverage",
+        None,
+        "encoding",
+        "$.content.inputs[0].coverage",
+    );
+    refuse(
+        "/content/inputs/0/coverage",
+        Some(json!("unknown")),
+        "encoding",
+        "$.content.inputs[0].coverage",
+    );
+    refuse(
+        "/content/inputs/2/coverage",
+        Some(json!("partial")),
+        "encoding",
+        "records input requires complete coverage",
+    );
+    let mut partial = northstar_definition();
+    set(
+        &mut partial,
+        "/content/inputs/0/coverage",
+        Some(json!("partial")),
+    );
+    rehash(&mut partial);
+    assert!(admit(&partial).is_ok());
+
+    // The window-derived denominator needs a whole-minute window.
+    let rate = "/content/views/5/query";
+    let definition = northstar_definition();
+    assert_eq!(
+        definition.pointer(&format!("{rate}/operations/1/denominator")),
+        Some(&json!({"type": "window_minutes"}))
+    );
+    refuse(
+        &format!("{rate}/window"),
+        None,
+        "encoding",
+        "window_minutes denominator requires a window",
+    );
+    refuse(
+        &format!("{rate}/window/end"),
+        Some(json!("2026-10-22T10:10:30Z")),
+        "encoding",
+        "window must be a whole number of minutes",
+    );
+    refuse(
+        &format!("{rate}/operations/1/denominator"),
+        Some(json!({"type": "window_minutes", "minutes": 10})),
+        "unknown_field",
+        "denominator.minutes",
+    );
+    let mut spanning = northstar_definition();
+    set(
+        &mut spanning,
+        &format!("{rate}/window"),
+        Some(
+            json!({"start": "2024-02-28T23:59:00Z", "end": "2024-03-01T00:01:00Z", "bounds": "half_open"}),
+        ),
+    );
+    rehash(&mut spanning);
+    assert!(admit(&spanning).is_ok());
+
+    // Each schema version admits only its own shape.
+    let mut edition_one_shape = retained("northstar")["definition"].clone();
+    edition_one_shape["schema_version"] = json!(2);
+    let error = admit(&edition_one_shape).unwrap_err();
+    assert_eq!(error.code(), "encoding");
+    assert!(
+        error.to_string().contains("$.content.inputs[0].coverage"),
+        "{error}"
+    );
+    let mut ahead = northstar_definition();
+    ahead["schema_version"] = json!(3);
+    assert_eq!(admit(&ahead).unwrap_err().code(), "encoding");
+}
+
+#[test]
+fn edition_one_definitions_still_admit() {
+    let lock: Value = serde_json::from_str(LOCK).unwrap();
+    for (path, identity) in EDITION_ONE {
+        let (_, text) = FIXTURES.iter().find(|(name, _)| *name == path).unwrap();
+        assert_eq!(hex(&Sha256::digest(text.as_bytes())), identity, "{path}");
+        assert_eq!(lock["artifacts"][path], identity, "{path}");
+    }
+
+    // Every edition-one vector is retained verbatim and reproduces unchanged.
+    let current = locked("contracts/fixtures/canonical-vectors.json");
+    let vectors = retained("canonical-vectors");
+    assert_eq!(vectors.as_array().unwrap().len(), 6);
+    for vector in vectors.as_array().unwrap() {
+        let name = vector["name"].as_str().unwrap();
+        assert!(current.as_array().unwrap().contains(vector), "{name}");
+        let canonical = encode(&vector["value"]).unwrap();
+        assert_eq!(hex(&canonical), vector["utf8_hex"], "{name}");
+        assert_eq!(
+            digest(digest::RESULT, &canonical),
+            vector["digest"],
+            "{name}"
+        );
+    }
+
+    // Stored edition-one definitions admit unchanged at schema version 1.
+    for name in ["northstar", "spend-review"] {
+        let bundle = retained(name);
+        let definition = &bundle["definition"];
+        let admitted = admit(definition).unwrap();
+        assert_eq!(admitted.digest, definition["digest"], "{name}");
+        assert_eq!(bundle["publication"]["definition_digest"], admitted.digest);
+        assert_eq!(bundle["receipt"]["definition_digest"], admitted.digest);
+        assert_eq!(
+            (
+                admitted.schema_version,
+                admitted.renderer_version,
+                admitted.operator_version
+            ),
+            (1, 1, 1),
+            "{name}"
+        );
+        let contracts = bundle["publication"]["input_contract_digests"]
+            .as_array()
+            .unwrap();
+        for (input, contract) in definition["content"]["inputs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(contracts)
+        {
+            assert_eq!(
+                contract["digest"],
+                digest(digest::INPUT_CONTRACT, &encode(input).unwrap())
+            );
+        }
+    }
+
+    // Edition-one negative vectors keep their verdicts against edition-one bundles.
+    assert_eq!(
+        negative_vectors(
+            "contracts/fixtures/impl-2026-10-28.1/negative-vectors.json",
+            retained
+        ),
+        19
+    );
+
+    // An edition-two member is not part of an edition-one definition.
+    let mut definition = retained("northstar")["definition"].clone();
+    definition["content"]["inputs"][0]["coverage"] = json!("complete");
+    rehash(&mut definition);
+    assert_eq!(
+        admit(&definition),
+        Err(UnknownField("$.content.inputs[0].coverage".into()))
+    );
+    let mut definition = retained("northstar")["definition"].clone();
+    definition["content"]["views"][0]["query"] = json!({
+        "operator_version": 1, "inputs": ["events"], "null_policy": "unknown",
+        "window": {"start": "2026-10-22T10:00:00Z", "end": "2026-10-22T10:10:00Z", "bounds": "half_open"},
+        "operations": [
+            {"type": "aggregate", "group_by": [], "measures": [{"id": "total_bytes", "operation": "sum", "field": {"input_id": "events", "field_id": "bytes"}}]},
+            {"type": "ratio", "numerator": "total_bytes", "denominator": {"type": "window_minutes"}, "output_field": "rate", "output_unit": "byte_per_minute", "zero_denominator": "error", "rounding": "exact_rational"}
+        ]
+    });
+    rehash(&mut definition);
+    let error = admit(&definition).unwrap_err();
+    assert_eq!(error.code(), "encoding");
+    assert!(
+        error.to_string().contains("operations[1].denominator.type"),
+        "{error}"
+    );
 }
