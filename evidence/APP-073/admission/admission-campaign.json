@@ -49,6 +49,10 @@
       "passed": true
     },
     {
+      "name": "an identical retry after the member's entitlement was revoked is refused, not replayed as admitted",
+      "passed": true
+    },
+    {
       "name": "code revocation blocks unused pending admissions and new reservations while an already-admitted member's entitlement stays active",
       "passed": true
     },
@@ -70,6 +74,10 @@
     },
     {
       "name": "two concurrent identical redemptions return one stored admission and consume exactly one slot",
+      "passed": true
+    },
+    {
+      "name": "a membership revocation that commits while an identical retry is in flight (after the stored redemption was found) makes the retry refused; no slot is consumed",
       "passed": true
     },
     {
