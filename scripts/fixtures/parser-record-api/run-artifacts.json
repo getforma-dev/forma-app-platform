@@ -1,0 +1,24 @@
+{
+  "total_count": 1,
+  "artifacts": [
+    {
+      "id": 12937866961,
+      "name": "app-017-parser-record",
+      "size_in_bytes": 4433551,
+      "url": "https://api.github.com/repos/getforma-dev/forma-app-platform/actions/artifacts/12937866961",
+      "archive_download_url": "https://api.github.com/repos/getforma-dev/forma-app-platform/actions/artifacts/12937866961/zip",
+      "expired": false,
+      "digest": "sha256:087c9c1f4afb08a9e8dda311c65f755a4b78f837d126a374f32271fd08436afb",
+      "created_at": "2026-10-29T22:20:40Z",
+      "updated_at": "2026-10-29T22:20:40Z",
+      "expires_at": "2027-01-27T22:09:45Z",
+      "workflow_run": {
+        "id": 40963687082,
+        "repository_id": 1437433309,
+        "head_repository_id": 1437433309,
+        "head_branch": "phase-one-spikes",
+        "head_sha": "e195ebfdc605dbec9b7e5d895ecc4b2ebdf02819"
+      }
+    }
+  ]
+}
