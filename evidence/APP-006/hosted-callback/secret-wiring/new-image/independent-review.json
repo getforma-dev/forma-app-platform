@@ -1,0 +1,131 @@
+{
+  "reviewer": "managed_trial_plan",
+  "recorded_at_utc": "2026-10-29T00:40:16.871Z",
+  "verdict": "No blocking finding in the local combined-image source/receipt binding",
+  "local_tag": "genui-app006-wiring:local-20261029",
+  "changed_inputs_from_prior_image": [
+    "app/runtime/runtime.py"
+  ],
+  "checks": {
+    "all_current_input_hashes_match": true,
+    "all_recorded_commands_passed": true,
+    "author_container_absent_genui-app006-wiring-callback-e1564e62af": true,
+    "author_container_absent_genui-app006-wiring-supervisor-6b03d68029": true,
+    "author_probes_use_local_network_none_image": true,
+    "before_after_hashes_identical": true,
+    "callback_receipt_passes_without_provider": true,
+    "dockerignore_matches_independent_full_context_export": true,
+    "exact_24_input_names_match_independent_context": true,
+    "foundation_receipt_binds_exact_image": true,
+    "historical_receipt_hashes_preserved": true,
+    "image_uses_reviewed_startup": true,
+    "local_image_metadata_matches": true,
+    "no_dockerfile_specific_ignore": true,
+    "only_runtime_changed_since_prior_callback_image": true,
+    "probe_source_hashes_match": true,
+    "supervisor_receipt_binds_reviewed_runtime": true
+  },
+  "current_input_count": 24,
+  "evidence_sha256": {
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/callback-http.json": "216982c6f87bb902c0a997b446569ab76904516b2e9cf80cbef27603700815fd",
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/cleanup-checks.json": "f588822a2f5020a9b6b4d746984904c5609338f37522c41b67d713506057fc97",
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/foundation-image.json": "a7fbc446d78d55e19dccffc3d68cfc0c1f5c9b2ed48c500325310f9a98d34de9",
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/image-receipt.json": "a97544effc5fe2fb2f30698dac5e5597b0309d6b8aa75971b8874b2f313bef1c",
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/source-after.json": "97b0a52c13df1e32b99ae12be3ad2ffd07b7f600b9976abb6ce2000096b35705",
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/source-before.json": "970c0469ecae9f99cfabfc3e702cf2c9ef952a221bed62e041c9fd2ab323b9e6",
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/supervisor-http.json": "c7280ad49541f4aaf4fa20bf47f0c6ad1b43cd1cc09abe87610e73372f021ede"
+  },
+  "image_id": "sha256:a4a47707e1e4028221cba7f5f0dfdf03ef663c6f46d0686a27632c4fd5fc5d08",
+  "passed": true,
+  "source_sha256": {
+    ".dockerignore": "5665f3bfea45b181d6c55817f5265873efccfe6477e7bd47b88c619f9845d819",
+    "app/Cargo.lock": "cbcffaa97848413578aceb5d52fe4d396ff5c821d9f978580d0eb5c027552ea6",
+    "app/Cargo.toml": "1049e0f7a93284183456be8d2d45a93571f8896df945d3101170e70d89ca78be",
+    "app/Dockerfile": "d507566be86285de7f9f2e2c84ab9022a550666a944fd5c1f0bfcc7e1feb4225",
+    "app/admin/build.ts": "e10c5974fa648f2223a06470c6cf4ed5edbeb80636874aa69ef06f092188d7d4",
+    "app/admin/package-lock.json": "a5850cd7fed748d29a1270bc05f41912c3ae9fa2058e6941d6af36c440e7acfd",
+    "app/admin/package.json": "ee3e1d528fd3a9c5776a44d11300de92c6d4fbd8c831dcd19cefa3308eaef70f",
+    "app/admin/src/about/app.tsx": "7bd3e6488d907b74e19b579a6cd6f77e47802ce02013c340923edf70611381b3",
+    "app/admin/src/home/app.tsx": "70d76cc4226e22523c321884f884100928b5241acc5a14b5bb49a69c16bbc804",
+    "app/admin/src/styles/app.css": "8098e2c0b9b4368f0dd8bbdda48d30b1fabf8585a7c916adc9e6e98f21947a83",
+    "app/admin/tsconfig.json": "8f54953b133871cc1c728d72bf59b8e03eb929a85a60da177368619f5a2049a4",
+    "app/certs/rds-global-bundle.pem": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/runtime/requirements.lock": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+    "app/runtime/runtime.py": "b0082c07c26ce9f2ed03e76620b237fee6fe0c07c03e0494d9899be3d9a8b75e",
+    "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+    "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+    "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+    "app/src/lib.rs": "70c08fdb2cb4e15502667305046c6c8649b208c8a34fd7339686ca9ce82bb278",
+    "app/src/main.rs": "ee4ab55eb64570e6649dea3a50fb81d7a4e2906b5595136cf9756630bdbeddf3",
+    "app/src/readiness.rs": "b0ffff33e9978aea8af1c8656da9d0e58f49d2976a60b5ef85188b8c8d71d8f5",
+    "app/src/roles.rs": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216",
+    "spikes/APP-006/Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+    "spikes/APP-006/src/lib.rs": "484ef0aa0a3b78cf01212435315f756245be50b59a9c46f4932573a5cc751542"
+  },
+  "independent_packaged_runtime_check": {
+    "container_name": "genui-app006-image-review-7a9b4c04dcb8",
+    "image_id": "sha256:a4a47707e1e4028221cba7f5f0dfdf03ef663c6f46d0686a27632c4fd5fc5d08",
+    "command_create": [
+      "docker",
+      "create",
+      "--name",
+      "genui-app006-image-review-7a9b4c04dcb8",
+      "--network",
+      "none",
+      "--read-only",
+      "--cap-drop",
+      "ALL",
+      "--security-opt",
+      "no-new-privileges",
+      "--tmpfs",
+      "/run/genui:rw,noexec,nosuid,size=1048576,mode=0700",
+      "--entrypoint",
+      "/bin/true",
+      "sha256:a4a47707e1e4028221cba7f5f0dfdf03ef663c6f46d0686a27632c4fd5fc5d08"
+    ],
+    "command_copy": [
+      "docker",
+      "cp",
+      "genui-app006-image-review-7a9b4c04dcb8:/app/runtime.py",
+      "<private temporary directory>/runtime.py"
+    ],
+    "status_during_copy": "created",
+    "container_started": false,
+    "network_mode": "none",
+    "published_ports": false,
+    "anonymous_volumes_created": false,
+    "packaged_runtime_sha256": "b0082c07c26ce9f2ed03e76620b237fee6fe0c07c03e0494d9899be3d9a8b75e",
+    "matches_reviewed_source": true,
+    "command_cleanup": [
+      "docker",
+      "rm",
+      "--volumes",
+      "genui-app006-image-review-7a9b4c04dcb8"
+    ],
+    "container_absence_confirmed": true,
+    "temporary_copy_removed": true
+  },
+  "assessment": [
+    "The 24 input names exactly match the prior independently exported Docker context; ignore hash and Dockerfile remain unchanged and no Dockerfile-specific ignore exists.",
+    "Before/after/current input hashes agree; only the previously reviewed runtime handoff differs from the prior callback image.",
+    "Foundation receipt binds the requested exact local image ID and ARM64 architecture. Callback and supervisor command receipts use the same local tag with network none; supervisor receipt and independent extraction match the reviewed runtime hash.",
+    "Historical receipts and all probe script hashes remain unchanged. Author probe-container absence independently confirmed; foundation volume cleanup is supported by inspected author evidence.",
+    "Local image is Linux ARM64, UID65532:65532, with python3 /app/runtime.py and serve startup."
+  ],
+  "limitations": [
+    "This is a local working-tree/content-hash candidate, not proof of an immutable-commit build or registry manifest digest.",
+    "No broad tests were rerun. Author image probes were inspected; reviewer independently checked metadata, all input/receipt hashes, exact probe-container cleanup and extracted runtime.",
+    "The reviewer did not independently rerun or observe historical foundation volume cleanup; its passed receipt was inspected.",
+    "Exact combined-source commit CI, publication/deployment digest binding and live ECS secret delivery/hosted identity acceptance remain root-owned later gates."
+  ],
+  "actions": {
+    "provider_calls": 0,
+    "cloud_calls": 0,
+    "credential_reads": 0,
+    "image_publication": false,
+    "source_edits": 0,
+    "staging": false,
+    "commits": false
+  }
+}

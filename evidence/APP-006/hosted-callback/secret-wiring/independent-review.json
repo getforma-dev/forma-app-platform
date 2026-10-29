@@ -1,0 +1,114 @@
+{
+  "reviewer": "managed_trial_plan",
+  "recorded_at_utc": "2026-10-29T00:27:26.059Z",
+  "scope": "Independent source and local synthetic review of optional APP-006 configuration transport and conditional infrastructure secret injection",
+  "verdict": "No blocking finding in the reviewed source; integration and managed acceptance remain open",
+  "base_commit": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+  "source_sha256": {
+    "app/Dockerfile": "d507566be86285de7f9f2e2c84ab9022a550666a944fd5c1f0bfcc7e1feb4225",
+    "app/runtime/runtime.py": "b0082c07c26ce9f2ed03e76620b237fee6fe0c07c03e0494d9899be3d9a8b75e",
+    "app/runtime/test_runtime.py": "96bf1c8d59220e1dceb5028ad5b3fb7541fec41a1b7d6f3de68c98eb02ac89a4",
+    "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+    "evidence/APP-006/hosted-callback/secret-wiring/author-checks.json": "7003262f7c185cce3b9184d2e828efea8a258c829f83872f4290db6f66267250",
+    "evidence/APP-006/hosted-callback/secret-wiring/infra-author.json": "4c551d25bfc7a08a3aeb4c37802f111ab17c67d5dff7bfd974ee26b8e0fa56a8",
+    "evidence/APP-006/hosted-callback/secret-wiring/qualify.py": "bca2a0797354939c0e4b2e8a5edc878ae1b36d7bcb34789d32e01683aee25cef",
+    "infra/src/stack.ts": "8d3058943c36062724a6dfd21c1c78d57219dfad6359b7d3326ec663f95c3cfa",
+    "infra/test/security.test.ts": "d5ac9a6739fff5c854f2a511b98863730e9ef4d5f88a7d299d8eaa8e34326386"
+  },
+  "findings": [],
+  "inspected_boundaries": [
+    "JSON environment variable is removed before transport validation, managed refresh or child creation; only serve accepts it and any simultaneous explicit file variable refuses.",
+    "Transport enforces nonempty UTF-8 <=8192 bytes without duplicating Rust JSON/schema/expiry/identity policy.",
+    "Existing absolute private parent must be current-UID mode0700 and its final component cannot be a symlink. File is new random exclusive no-follow mode0600, single-link, current UID.",
+    "Held directory and non-inheritable file descriptors preserve identity. Recheck occurs before Rust launch; cleanup verifies the current named inode and refuses an observed replacement or additional hardlink.",
+    "Child receives only private file path. Absent injection preserves default-disabled and existing externally owned file configuration. Non-serve raw injection refuses before managed operations.",
+    "Rust still opens the explicit private file without following symlinks or blocking on FIFO, bounds reads and exclusively validates callback configuration.",
+    "Qualification secret ARN defaults empty. Enabled IAM policy grants only exact-secret GetSecretValue to the app execution role; no task-role secret access, new secret resource, decrypt grant, migration change or raw secret parameter/output.",
+    "Enabled app receives full JSON secret by ARN; optional path environment variable is not injected. Root must complete the stopped-service stack update before activation."
+  ],
+  "independent_checks": [
+    {
+      "command": "app/runtime/.venv/bin/python -m unittest discover -s app/runtime -v",
+      "cwd": ".",
+      "exit_code": 0,
+      "tests": 22,
+      "passed": 22,
+      "failed": 0,
+      "duration_seconds": 9.562,
+      "output": "test_absent_json_preserves_default_and_explicit_path_is_never_owned (test_runtime.QualificationSecretTests.test_absent_json_preserves_default_and_explicit_path_is_never_owned) ... ok\ntest_actual_nonserve_commands_refuse_injection_before_managed_operations (test_runtime.QualificationSecretTests.test_actual_nonserve_commands_refuse_injection_before_managed_operations) ... ok\ntest_cleanup_refuses_replaced_or_newly_linked_file_without_deleting_it (test_runtime.QualificationSecretTests.test_cleanup_refuses_replaced_or_newly_linked_file_without_deleting_it) ... ok\ntest_existing_regular_symlink_hardlink_and_fifo_names_are_not_clobbered (test_runtime.QualificationSecretTests.test_existing_regular_symlink_hardlink_and_fifo_names_are_not_clobbered) ... ok\ntest_failed_preparation_does_not_refresh_launch_or_delete_existing_credentials (test_runtime.QualificationSecretTests.test_failed_preparation_does_not_refresh_launch_or_delete_existing_credentials) ... ok\ntest_new_real_private_file_is_exact_and_cleanup_preserves_other_files (test_runtime.QualificationSecretTests.test_new_real_private_file_is_exact_and_cleanup_preserves_other_files) ... ok\ntest_real_cancelled_child_ignoring_term_is_killed_and_cleanup_is_bounded (test_runtime.QualificationSecretTests.test_real_cancelled_child_ignoring_term_is_killed_and_cleanup_is_bounded) ... ok\ntest_real_successful_and_failed_children_receive_only_private_path (test_runtime.QualificationSecretTests.test_real_successful_and_failed_children_receive_only_private_path) ... ok\ntest_startup_failure_and_cancel_after_write_clean_file_without_secret_output (test_runtime.QualificationSecretTests.test_startup_failure_and_cancel_after_write_clean_file_without_secret_output) ... ok\ntest_transport_consumption_byte_limit_and_no_duplicate_auth_policy (test_runtime.QualificationSecretTests.test_transport_consumption_byte_limit_and_no_duplicate_auth_policy) ... ok\ntest_unsafe_missing_or_linked_parent_refuses_without_creating_files (test_runtime.QualificationSecretTests.test_unsafe_missing_or_linked_parent_refuses_without_creating_files) ... ok\ntest_write_failure_removes_only_new_file (test_runtime.QualificationSecretTests.test_write_failure_removes_only_new_file) ... ok\ntest_cleanup_rejects_an_unrelated_bucket_before_aws_client (test_runtime.RuntimeTests.test_cleanup_rejects_an_unrelated_bucket_before_aws_client) ... ok\ntest_expired_future_overlong_and_role_interchange_refused (test_runtime.RuntimeTests.test_expired_future_overlong_and_role_interchange_refused) ... ok\ntest_fifo_and_oversized_file_are_refused_without_blocking (test_runtime.RuntimeTests.test_fifo_and_oversized_file_are_refused_without_blocking) ... ok\ntest_generation_change_refused_before_network (test_runtime.RuntimeTests.test_generation_change_refused_before_network) ... ok\ntest_mutating_qualification_is_not_a_readiness_side_effect (test_runtime.RuntimeTests.test_mutating_qualification_is_not_a_readiness_side_effect) ... ok\ntest_permission_and_symlink_denial (test_runtime.RuntimeTests.test_permission_and_symlink_denial) ... ok\ntest_private_atomic_rotation_changes_identity (test_runtime.RuntimeTests.test_private_atomic_rotation_changes_identity) ... ok\ntest_rds_superuser_membership_refused_even_with_false_superuser_flags (test_runtime.RuntimeTests.test_rds_superuser_membership_refused_even_with_false_superuser_flags) ... ok\ntest_real_probe_refuses_unexpected_db_identity_before_storage (test_runtime.RuntimeTests.test_real_probe_refuses_unexpected_db_identity_before_storage) ... ok\ntest_same_generation_byte_change_has_distinct_fingerprint (test_runtime.RuntimeTests.test_same_generation_byte_change_has_distinct_fingerprint) ... ok\n\n----------------------------------------------------------------------\nRan 22 tests in 9.562s\n\nOK\n"
+    },
+    {
+      "command": [
+        "python3",
+        "-"
+      ],
+      "exit_code": 0,
+      "native_binary_sha256": "9ef589248cd9620ba035cfa8f229274bdcdfa990fe30d0f14fa3c220741334df",
+      "native_supervisor": {
+        "all_owned_files_removed": true,
+        "passed": true,
+        "results": [
+          {
+            "callback_status": 404,
+            "mode": "disabled",
+            "private_handoff_file_count": 0,
+            "provider_requests": 0
+          },
+          {
+            "callback_status": 303,
+            "mode": "injected",
+            "private_handoff_file_count": 1,
+            "provider_requests": 0
+          },
+          {
+            "mode": "malformed",
+            "rust_rejected_before_listen": true
+          }
+        ],
+        "scope": "real supervisor and native binary with synthetic managed-refresh fixture",
+        "secret_output": false
+      },
+      "stdin_source": "import hashlib,importlib.util,json\nfrom pathlib import Path\np=Path('evidence/APP-006/hosted-callback/secret-wiring/qualify.py').resolve()\nspec=importlib.util.spec_from_file_location('secret_wire_review',p); m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\nbinary=Path('app/target/debug/forma-app-platform').resolve()\nbefore=hashlib.sha256(binary.read_bytes()).hexdigest()\nresult=m.native_supervisor_probe(str(Path('app/runtime/.venv/bin/python').resolve()),binary)\nassert hashlib.sha256(binary.read_bytes()).hexdigest()==before\nprint(json.dumps({'native_binary_sha256':before,'native_supervisor':result},sort_keys=True))\n"
+    },
+    {
+      "command": "./node_modules/.bin/tsx --test test/security.test.ts",
+      "cwd": "infra",
+      "exit_code": 0,
+      "tests": 15,
+      "passed": 15,
+      "failed": 0,
+      "output": "TAP version 13\n# test/security.test.ts:7:37\n# WARNING Parameters/QualificationConfigSecretArn: Parameter 'QualificationConfigSecretArn' appears to be a password but does not have NoEcho set to true (CloudFormation Validate)\n#    SecurityQualification aws-cdk-lib.Stack\n#    Acknowledge with 'CloudFormation-Validate::W2509'\n# A copy of this report can be found in: /private/var/folders/rh/_w3bj3lx0fg0z2vvj9wkbvmr0000gn/T/cdk.outqhqu3h/validation-report.json\n# Subtest: managed data stays private, encrypted, retained and versioned\nok 1 - managed data stays private, encrypted, retained and versioned\n  ---\n  duration_ms: 4.291709\n  type: 'test'\n  ...\n# Subtest: only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact\nok 2 - only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact\n  ---\n  duration_ms: 0.817542\n  type: 'test'\n  ...\n# Subtest: operator and certificate are required; broad/private/placeholder networks fail\nok 3 - operator and certificate are required; broad/private/placeholder networks fail\n  ---\n  duration_ms: 0.642125\n  type: 'test'\n  ...\n# Subtest: expiry is one UTC execution that can update only this service in this cluster\nok 4 - expiry is one UTC execution that can update only this service in this cluster\n  ---\n  duration_ms: 0.403917\n  type: 'test'\n  ...\n# Subtest: expiry schedule ARN output uses the actual group and schedule names without GetAtt\nok 5 - expiry schedule ARN output uses the actual group and schedule names without GetAtt\n  ---\n  duration_ms: 0.11725\n  type: 'test'\n  ...\n# Subtest: digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints\nok 6 - digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints\n  ---\n  duration_ms: 1.903041\n  type: 'test'\n  ...\n# Subtest: task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it\nok 7 - task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it\n  ---\n  duration_ms: 0.24875\n  type: 'test'\n  ...\n# Subtest: each DB identity connects only as its fixed username on this database\nok 8 - each DB identity connects only as its fixed username on this database\n  ---\n  duration_ms: 0.447666\n  type: 'test'\n  ...\n# Subtest: tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required\nok 9 - tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required\n  ---\n  duration_ms: 0.490209\n  type: 'test'\n  ...\n# Subtest: execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants\nok 10 - execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants\n  ---\n  duration_ms: 0.544792\n  type: 'test'\n  ...\n# Subtest: only migration execution role receives admin secret; migration has no tenant AWS authority\nok 11 - only migration execution role receives admin secret; migration has no tenant AWS authority\n  ---\n  duration_ms: 0.219875\n  type: 'test'\n  ...\n# Subtest: app environment contains identities only and one private ephemeral credential mount\nok 12 - app environment contains identities only and one private ephemeral credential mount\n  ---\n  duration_ms: 0.249916\n  type: 'test'\n  ...\n# Subtest: qualification secret parameter accepts only empty or the exact rehearsal account/region/name scope\nok 13 - qualification secret parameter accepts only empty or the exact rehearsal account/region/name scope\n  ---\n  duration_ms: 0.136625\n  type: 'test'\n  ...\n# Subtest: qualification is disabled by default without an app secret or a live optional read policy\nok 14 - qualification is disabled by default without an app secret or a live optional read policy\n  ---\n  duration_ms: 0.371916\n  type: 'test'\n  ...\n# Subtest: enabled qualification injects the whole exact secret only into the app through its execution role\nok 15 - enabled qualification injects the whole exact secret only into the app through its execution role\n  ---\n  duration_ms: 0.202416\n  type: 'test'\n  ...\n1..15\n# tests 15\n# suites 0\n# pass 15\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1782.972333\n"
+    },
+    {
+      "command": "git diff --check",
+      "cwd": ".",
+      "exit_code": 0
+    },
+    {
+      "check": "Runtime and infra author receipt hashes match current source after independent checks",
+      "passed": true
+    }
+  ],
+  "warning_review": "CDK W2509 is a name heuristic on QualificationConfigSecretArn; this parameter contains a nonsecret identifier, not secret JSON. The exact ARN remains visible for preflight comparison.",
+  "operational_prerequisites": [
+    "Root binds exact optional ARN, reviewed image/source and environment in preflight before any activation.",
+    "Observe all service tasks stopped; finish the entire stack update including its conditional execution-role policy before activation.",
+    "Build/CI/deploy the combined reviewed runtime; the earlier callback-only image predates this handoff.",
+    "Live ECS secret injection, same image UID/private-volume behavior and hosted identity/callback acceptance still require separate managed evidence."
+  ],
+  "limitations": [
+    "Private directory and same-UID processes are trusted. stat followed by unlink is not an atomic inode-conditional syscall; observed replacement protection is not a hostile same-UID race boundary.",
+    "Environment removal prevents ordinary child inheritance; it does not claim memory zeroization or erasure of the initial process environment from privileged inspection.",
+    "SIGKILL/host crash cannot execute finally; task/ephemeral-volume teardown owns that case.",
+    "Native probes use synthetic managed refresh and exercise route wiring/refusal only; they do not contact the provider or prove identity, membership, entitlements, session admission, mail delivery or revocation.",
+    "The native binary hash matches author evidence; these checks do not establish a new deployed image.",
+    "Author typecheck evidence inspected; no broad duplicate build or live cloud calls performed."
+  ],
+  "actions": {
+    "aws_calls": 0,
+    "credential_reads": 0,
+    "implementation_edits": 0,
+    "staging": false,
+    "commits": false
+  }
+}

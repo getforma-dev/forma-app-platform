@@ -19,6 +19,8 @@ import time
 import uuid
 
 ROLES = ("workspace", "control", "data", "worker")
+QUALIFICATION_JSON_ENV = "GENUI_AUTH_QUALIFICATION_CONFIG_JSON"
+QUALIFICATION_FILE_ENV = "GENUI_AUTH_QUALIFICATION_CONFIG_FILE"
 
 
 class Refused(ValueError):
@@ -28,6 +30,111 @@ class Refused(ValueError):
 def require(condition):
     if not condition:
         raise Refused("runtime configuration refused")
+
+
+def take_qualification_json(mode):
+    """Remove optional injected bytes before any operation/child can inherit them.
+
+    Only UTF-8 transport/size is checked here. Rust owns JSON/schema/expiry and
+    authentication policy. No exception or logging may include the raw value.
+    """
+    if QUALIFICATION_JSON_ENV not in os.environ:
+        return None
+    raw = os.environ.pop(QUALIFICATION_JSON_ENV)
+    require(mode == "serve" and QUALIFICATION_FILE_ENV not in os.environ)
+    require(0 < len(raw) <= 8192 and raw.strip())
+    try:
+        payload = raw.encode("utf-8", errors="strict")
+    except UnicodeError:
+        raise Refused("runtime configuration refused") from None
+    require(0 < len(payload) <= 8192)
+    return payload
+
+
+class QualificationFile:
+    """One newly created secret file; never replace or clean someone else's file."""
+    def __init__(self, runtime_path, payload):
+        self.directory_fd = None
+        self.file_fd = None
+        self.identity = None
+        self.name = None
+        path = Path(runtime_path)
+        require(path.is_absolute())
+        self.directory = path.parent
+        descriptor = None
+        try:
+            # Require the existing private volume. Do not follow its final
+            # directory component or create a replacement on injection failure.
+            self.directory_fd = os.open(self.directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            self.directory_identity = os.fstat(self.directory_fd)
+            self.check_directory()
+            self.name = ".auth-qualification-" + uuid.uuid4().hex + ".json"
+            descriptor = os.open(self.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                                 0o600, dir_fd=self.directory_fd)
+            # Record ownership immediately: even a later write/fsync failure
+            # cleans only this inode, never an existing path or replacement.
+            self.identity = os.fstat(descriptor)
+            # Keep the inode alive through cleanup so unlink/replacement cannot
+            # recycle its number and fool the ownership comparison. This fd is
+            # non-inheritable and is never passed to the child.
+            self.file_fd = os.dup(descriptor)
+            os.set_inheritable(self.file_fd, False)
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "wb") as stream:
+                descriptor = None
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.fsync(self.directory_fd)
+            self.check_file()
+        except BaseException:
+            if descriptor is not None:
+                os.close(descriptor)
+            self.close()
+            raise
+
+    @property
+    def path(self):
+        return self.directory / self.name
+
+    def check_directory(self):
+        opened = os.fstat(self.directory_fd)
+        named = self.directory.lstat()
+        require(stat.S_ISDIR(opened.st_mode) and opened.st_uid == os.geteuid()
+                and stat.S_IMODE(opened.st_mode) == 0o700
+                and stat.S_ISDIR(named.st_mode)
+                and (opened.st_dev, opened.st_ino) == (named.st_dev, named.st_ino)
+                and (opened.st_dev, opened.st_ino) == (self.directory_identity.st_dev, self.directory_identity.st_ino))
+
+    def check_file(self):
+        self.check_directory()
+        current = os.stat(self.name, dir_fd=self.directory_fd, follow_symlinks=False)
+        require(stat.S_ISREG(current.st_mode) and current.st_uid == os.geteuid()
+                and stat.S_IMODE(current.st_mode) == 0o600 and current.st_nlink == 1
+                and (current.st_dev, current.st_ino) == (self.identity.st_dev, self.identity.st_ino))
+
+    def close(self):
+        if self.directory_fd is None:
+            return
+        try:
+            if self.identity is not None:
+                try:
+                    current = os.stat(self.name, dir_fd=self.directory_fd, follow_symlinks=False)
+                except FileNotFoundError:
+                    return
+                require(stat.S_ISREG(current.st_mode) and current.st_uid == os.geteuid()
+                        and current.st_nlink == 1
+                        and (current.st_dev, current.st_ino) == (self.identity.st_dev, self.identity.st_ino))
+                os.unlink(self.name, dir_fd=self.directory_fd)
+                os.fsync(self.directory_fd)
+        finally:
+            try:
+                if self.file_fd is not None:
+                    os.close(self.file_fd)
+                    self.file_fd = None
+            finally:
+                os.close(self.directory_fd)
+                self.directory_fd = None
 
 
 def load(path, now=None):
@@ -266,28 +373,55 @@ def cleanup(report_path):
 
 
 def serve(path):
+    injected = take_qualification_json("serve")
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT): signal.signal(sig, lambda *_: stop.set())
     child = None
-    Path(path).parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    qualification_file = None
+    credentials_started = False
     try:
+        if injected is not None:
+            qualification_file = QualificationFile(path, injected)
+        injected = None
+        Path(path).parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        child_environment = os.environ.copy()
+        # Always omit the raw injected value; the file path is the only handoff.
+        child_environment.pop(QUALIFICATION_JSON_ENV, None)
+        if qualification_file is not None:
+            child_environment[QUALIFICATION_FILE_ENV] = str(qualification_file.path)
         while not stop.is_set():
             try:
+                credentials_started = True
                 refresh(path)
-                if child is None:
-                    child = subprocess.Popen([os.environ.get("GENUI_BINARY", "/app/genui")])
             except Exception:
                 # SDK/driver errors can contain tokens/connection strings. No raw errors.
                 print("credential_refresh_unavailable", file=sys.stderr, flush=True)
+            else:
+                if child is None:
+                    # Unsafe/replaced handoff state is a terminal refusal, not
+                    # a transient managed-dependency retry.
+                    if qualification_file is not None:
+                        qualification_file.check_file()
+                    try:
+                        child = subprocess.Popen([os.environ.get("GENUI_BINARY", "/app/genui")], env=child_environment)
+                    except Exception:
+                        print("credential_refresh_unavailable", file=sys.stderr, flush=True)
             for _ in range(240 if child else 5):
                 if child and child.poll() is not None: return child.returncode
                 if stop.wait(1): break
     finally:
-        if child and child.poll() is None:
-            child.terminate()
-            try: child.wait(timeout=5)
-            except subprocess.TimeoutExpired: child.kill(); child.wait()
-        Path(path).unlink(missing_ok=True)
+        try:
+            if child and child.poll() is None:
+                child.terminate()
+                try: child.wait(timeout=5)
+                except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=5)
+        finally:
+            try:
+                if qualification_file is not None:
+                    qualification_file.close()
+            finally:
+                if credentials_started:
+                    Path(path).unlink(missing_ok=True)
     return 0
 
 
@@ -295,6 +429,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup")); parser.add_argument("--generation"); parser.add_argument("--report")
     args = parser.parse_args()
     try:
+        # Probe helpers launched by Rust inherit only the path and ignore it.
+        # A raw injection in any non-serve mode is removed and refused before
+        # credential refresh, managed probes, migration or qualification runs.
+        if args.mode != "serve": take_qualification_json(args.mode)
         path = os.environ.get("GENUI_RUNTIME_CONFIG_FILE", "/run/genui/credentials.json")
         if args.mode == "refresh": refresh(path)
         elif args.mode == "probe": print(json.dumps(probe(path, args.generation)))

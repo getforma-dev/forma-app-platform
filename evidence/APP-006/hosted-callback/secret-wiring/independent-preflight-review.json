@@ -1,0 +1,156 @@
+{
+  "reviewer": "managed_trial_plan",
+  "recorded_at_utc": "2026-10-29T00:32:19.562Z",
+  "verdict": "No remaining blocking finding in the reviewed preflight extension",
+  "source_sha256": {
+    "infra/scripts/preflight.py": "47037e5a307195efa1e95e26fc4d3925fbc8b7657d9bbfe02836444d8c5d34cd",
+    "infra/test/preflight_test.py": "d28105ea08bc8da886cdb84a34f3cc40ef693d7979ed1cd386f81351858bd23f"
+  },
+  "resolved_findings": [
+    {
+      "priority": 1,
+      "title": "Alternative configuration channels bypassed secret binding",
+      "initial_evidence": "independent-preflight-initial-failure.json",
+      "resolution": "Root rejects all plain GENUI_AUTH_QUALIFICATION_* entries and nonempty environmentFiles; entryPoint/command overrides also refuse. Both disabled and enabled plans now fail before any UpdateService in all12 independent mutations."
+    }
+  ],
+  "review_boundaries": [
+    "Optional input uses same exact account/region/prefix/name/suffix ARN boundary as infrastructure; unknown JSON fields, values/selectors/wildcards/other scopes refuse.",
+    "Absent and explicitly empty ARN normalize to the exact previous disabled ledger hash; enabling/changing/removing an enabled ARN cannot reuse an already-bound window.",
+    "Reports explicitly emit empty qualification parameter when disabled. A legacy missing live parameter is accepted only for disabled configuration; unexpected or missing enabled ARN refuses.",
+    "Before UpdateService, activation checks exact task definition revision, sole workspace container, pinned image digest, architecture, reviewed image startup, no alternative qualification environment/environmentFiles, and exact JSON secret list without extra entries.",
+    "Existing completed-stack, exact expiry schedule/role/target/retry, live service, count, clock, concurrent-ledger and spending checks remain in place."
+  ],
+  "independent_checks": [
+    {
+      "command": "python3 -m unittest discover -s infra/test -p preflight_test.py -v",
+      "exit_code": 0,
+      "tests": 22,
+      "failed": 0,
+      "duration_seconds": 0.217,
+      "output": "test_activation_checks_live_stop_and_service_before_count_one (preflight_test.Preflight.test_activation_checks_live_stop_and_service_before_count_one) ... ok\ntest_activation_late_response_requests_stop_instead_of_reporting_success (preflight_test.Preflight.test_activation_late_response_requests_stop_instead_of_reporting_success) ... ok\ntest_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry (preflight_test.Preflight.test_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry) ... ok\ntest_calendar_expiry_and_future_boundaries (preflight_test.Preflight.test_calendar_expiry_and_future_boundaries) ... ok\ntest_cli_persists_private_reservation_and_retry_does_not_charge_twice (preflight_test.Preflight.test_cli_persists_private_reservation_and_retry_does_not_charge_twice) ... ok\ntest_cli_will_not_initialize_a_missing_ledger (preflight_test.Preflight.test_cli_will_not_initialize_a_missing_ledger) ... ok\ntest_concurrent_preflights_cannot_spend_the_same_remaining_allowance (preflight_test.Preflight.test_concurrent_preflights_cannot_spend_the_same_remaining_allowance) ... ok\ntest_known_spending_and_auth_overrun_reduce_remaining_budget (preflight_test.Preflight.test_known_spending_and_auth_overrun_reduce_remaining_budget) ... ok\ntest_legacy_stack_without_optional_parameter_is_disabled_only (preflight_test.Preflight.test_legacy_stack_without_optional_parameter_is_disabled_only) ... ok\ntest_live_secret_parameter_drift_refuses_before_update (preflight_test.Preflight.test_live_secret_parameter_drift_refuses_before_update) ... ok\ntest_live_service_count_must_be_an_integer_within_the_plan (preflight_test.Preflight.test_live_service_count_must_be_an_integer_within_the_plan) ... ok\ntest_live_task_image_architecture_and_secret_injection_must_match (preflight_test.Preflight.test_live_task_image_architecture_and_secret_injection_must_match) ... ok\ntest_month_rollover_reserves_retained_resources_in_both_months (preflight_test.Preflight.test_month_rollover_reserves_retained_resources_in_both_months) ... ok\ntest_new_window_cannot_reset_prior_reservations (preflight_test.Preflight.test_new_window_cannot_reset_prior_reservations) ... ok\ntest_optional_secret_preserves_disabled_window_and_binds_enabled_window (preflight_test.Preflight.test_optional_secret_preserves_disabled_window_and_binds_enabled_window) ... ok\ntest_plain_environment_files_and_startup_cannot_bypass_secret_selection (preflight_test.Preflight.test_plain_environment_files_and_startup_cannot_bypass_secret_selection) ... ok\ntest_public_transition_reuses_window_without_resetting_expiry_or_reservation (preflight_test.Preflight.test_public_transition_reuses_window_without_resetting_expiry_or_reservation) ... ok\ntest_refuses_stale_ledger_missing_allowances_and_invalid_cidr (preflight_test.Preflight.test_refuses_stale_ledger_missing_allowances_and_invalid_cidr) ... ok\ntest_secret_input_refuses_wrong_scope_selectors_raw_values_and_unknown_fields (preflight_test.Preflight.test_secret_input_refuses_wrong_scope_selectors_raw_values_and_unknown_fields) ... ok\ntest_selected_secret_requires_exact_live_injection (preflight_test.Preflight.test_selected_secret_requires_exact_live_injection) ... ok\ntest_stop_count_requires_integer_zero_not_boolean_float_or_string (preflight_test.Preflight.test_stop_count_requires_integer_zero_not_boolean_float_or_string) ... ok\ntest_window_identity_rejects_extended_time_or_changed_artifact (preflight_test.Preflight.test_window_identity_rejects_extended_time_or_changed_artifact) ... ok\n\n----------------------------------------------------------------------\nRan 22 tests in 0.217s\n\nOK\n"
+    },
+    {
+      "check": "Independent fake-call matrix repeats original bypass and startup overrides under disabled/enabled plans",
+      "results": [
+        {
+          "case": "plain_json_environment",
+          "enabled": false,
+          "refused": true,
+          "update_service_calls": 0
+        },
+        {
+          "case": "plain_file_environment",
+          "enabled": false,
+          "refused": true,
+          "update_service_calls": 0
+        },
+        {
+          "case": "unknown_qualification_environment",
+          "enabled": false,
+          "refused": true,
+          "update_service_calls": 0
+        },
+        {
+          "case": "environment_file",
+          "enabled": false,
+          "refused": true,
+          "update_service_calls": 0
+        },
+        {
+          "case": "entrypoint",
+          "enabled": false,
+          "refused": true,
+          "update_service_calls": 0
+        },
+        {
+          "case": "command",
+          "enabled": false,
+          "refused": true,
+          "update_service_calls": 0
+        },
+        {
+          "case": "plain_json_environment",
+          "enabled": true,
+          "refused": true,
+          "update_service_calls": 0
+        },
+        {
+          "case": "plain_file_environment",
+          "enabled": true,
+          "refused": true,
+          "update_service_calls": 0
+        },
+        {
+          "case": "unknown_qualification_environment",
+          "enabled": true,
+          "refused": true,
+          "update_service_calls": 0
+        },
+        {
+          "case": "environment_file",
+          "enabled": true,
+          "refused": true,
+          "update_service_calls": 0
+        },
+        {
+          "case": "entrypoint",
+          "enabled": true,
+          "refused": true,
+          "update_service_calls": 0
+        },
+        {
+          "case": "command",
+          "enabled": true,
+          "refused": true,
+          "update_service_calls": 0
+        }
+      ],
+      "scope": "local fixture only; fake AWS call function; no credentials or live calls",
+      "source_sha256": {
+        "infra/scripts/preflight.py": "47037e5a307195efa1e95e26fc4d3925fbc8b7657d9bbfe02836444d8c5d34cd",
+        "infra/test/preflight_test.py": "d28105ea08bc8da886cdb84a34f3cc40ef693d7979ed1cd386f81351858bd23f"
+      }
+    },
+    {
+      "check": "Compatibility with explicit empty ECS list properties and unchanged ordinary runtime environment",
+      "results": [
+        {
+          "enabled": false,
+          "explicit_empty_lists_and_existing_runtime_environment_accepted": true,
+          "update_service_calls": 1
+        },
+        {
+          "enabled": true,
+          "explicit_empty_lists_and_existing_runtime_environment_accepted": true,
+          "update_service_calls": 1
+        }
+      ]
+    },
+    {
+      "check": "Compare new reserve against prior committed HEAD reserve using the same synthetic config/ledger",
+      "prior_HEAD_legacy_reservation_unchanged": true,
+      "absent_and_explicit_empty_same_prior_binding": true,
+      "new_reports_explicitly_disabled": true,
+      "prior_ledger_reused_without_recharge": true
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "limits": [
+    "Review and reproductions used local synthetic fixtures and fake AWS calls only.",
+    "ARN/task-definition binding does not inspect or pin a Secrets Manager value/version. Rust remains responsible for configuration schema, expiry and identity policy; managed operator provisioning must retain reviewed secret provenance.",
+    "Activation response is not task health, managed secret delivery, hosted identity, session admission or proof of eventual scheduled stop.",
+    "Cloud state is observed through sequential API calls rather than an atomic cross-service transaction; retained reservations and operational reconciliation remain necessary for unknown outcomes.",
+    "Final combined-source CI and managed acceptance remain separate."
+  ],
+  "actions": {
+    "aws_calls": 0,
+    "credential_reads": 0,
+    "implementation_edits": 0,
+    "staging": false,
+    "commits": false
+  }
+}

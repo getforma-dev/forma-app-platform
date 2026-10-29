@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
-import { GenuiFoundation, OPERATOR_CIDR_PATTERN } from '../src/stack.js';
+import { GenuiFoundation, OPERATOR_CIDR_PATTERN, QUALIFICATION_SECRET_ARN_PATTERN } from '../src/stack.js';
 
 const template = Template.fromStack(new GenuiFoundation(new App(), 'SecurityQualification'));
 const document = template.toJSON();
@@ -22,16 +22,18 @@ const reference = (id: string) => ({ 'Fn::GetAtt': [id, 'GroupId'] });
 
 // Independent evaluation checks derived repository names, including nested paths.
 function resolve(value: any, parameters: Record<string, string>): any {
-  if (Array.isArray(value)) return value.map(item => resolve(item, parameters));
+  if (Array.isArray(value)) return value.map(item => resolve(item, parameters)).filter(item => item !== undefined);
   if (value === null || typeof value !== 'object') return value;
+  if (value.Ref === 'AWS::NoValue') return undefined;
   if (value.Ref) return parameters[value.Ref] ?? `reference:${value.Ref}`;
   if (value['Fn::GetAtt']) return `arn:fixture:${value['Fn::GetAtt'].join(':')}`;
   if (value['Fn::Join']) return resolve(value['Fn::Join'][1], parameters).join(value['Fn::Join'][0]);
   if (value['Fn::Split']) return resolve(value['Fn::Split'][1], parameters).split(value['Fn::Split'][0]);
   if (value['Fn::Select']) return resolve(value['Fn::Select'][1], parameters)[Number(value['Fn::Select'][0])];
   if (value['Fn::Equals']) return resolve(value['Fn::Equals'][0], parameters) === resolve(value['Fn::Equals'][1], parameters);
+  if (value['Fn::Not']) return !resolve(value['Fn::Not'][0], parameters);
   if (value['Fn::If']) return resolve(value['Fn::If'][resolve(document.Conditions[value['Fn::If'][0]], parameters) ? 1 : 2], parameters);
-  return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, resolve(child, parameters)]));
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, resolve(child, parameters)]).filter(([, child]) => child !== undefined));
 }
 
 test('managed data stays private, encrypted, retained and versioned', () => {
@@ -193,7 +195,7 @@ test('execution roles pull exactly the selected ECR repository; no exec, pass-ro
 });
 
 test('only migration execution role receives admin secret; migration has no tenant AWS authority', () => {
-  const readers = entries('AWS::IAM::Policy').filter(([, value]) => value.Properties.PolicyDocument.Statement.some((statement: any) => actions(statement).includes('secretsmanager:GetSecretValue')));
+  const readers = entries('AWS::IAM::Policy').filter(([, value]) => !value.Condition && value.Properties.PolicyDocument.Statement.some((statement: any) => actions(statement).includes('secretsmanager:GetSecretValue')));
   assert.equal(readers.length, 1); assert.deepEqual(readers[0][1].Properties.Roles, [{ Ref: role('MigrationExecutionRole') }]);
   const migration = one('AWS::ECS::TaskDefinition', 'MigrationTask')[1].Properties;
   assert.deepEqual(document.Outputs.MigrationTaskRoleArn.Value, { 'Fn::GetAtt': [role('MigrationRole'), 'Arn'] });
@@ -209,7 +211,7 @@ test('app environment contains identities only and one private ephemeral credent
   const task = one('AWS::ECS::TaskDefinition', 'Task')[1].Properties;
   assert.deepEqual(task.Volumes, [{ Name: 'runtime-config' }]);
   const container = task.ContainerDefinitions[0];
-  assert.equal(container.Secrets, undefined); assert.deepEqual(container.MountPoints, [{ ContainerPath: '/run/genui', ReadOnly: false, SourceVolume: 'runtime-config' }]);
+  assert.equal(resolve(container.Secrets, { QualificationConfigSecretArn: '' }), undefined); assert.deepEqual(container.MountPoints, [{ ContainerPath: '/run/genui', ReadOnly: false, SourceVolume: 'runtime-config' }]);
   assert.equal(container.EntryPoint, undefined); assert.equal(container.Command, undefined);
   const environment = Object.fromEntries(container.Environment.map((value: any) => [value.Name, value.Value]));
   assert.equal(environment.GENUI_RUNTIME_CONFIG_FILE, '/run/genui/credentials.json'); assert.equal(environment.GENUI_RDS_CA_FILE, '/etc/ssl/certs/rds-global-bundle.pem'); assert.equal(environment.FORMA_BIND_ADDRESS, '0.0.0.0'); assert.equal(environment.FORMA_PORT, '3000');
@@ -221,4 +223,60 @@ test('app environment contains identities only and one private ephemeral credent
   for (const tenant of tenants) {
     assert.deepEqual(Object.keys(tenant).sort(), ['kms_key_arn', 'organization_id', 'prefix', 'role_arn']); assert.equal(tenant.prefix, `o/${tenant.organization_id}/`);
   }
+});
+
+test('qualification secret parameter accepts only empty or the exact rehearsal account/region/name scope', () => {
+  const parameter = document.Parameters.QualificationConfigSecretArn;
+  assert.equal(parameter.Default, '');
+  assert.equal(parameter.AllowedPattern, QUALIFICATION_SECRET_ARN_PATTERN);
+  const pattern = new RegExp(parameter.AllowedPattern);
+  const arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-northstar-A1b2C3';
+  for (const valid of ['', arn, arn.replace('northstar', 'canary-2026-10-28')]) assert.equal(pattern.test(valid), true, valid);
+  for (const invalid of [
+    ' ', '\n', arn + '\n', arn + ':password::', arn + ':AWSCURRENT',
+    arn.replace('us-east-1', 'us-west-2'), arn.replace('877573132739', '123456789012'),
+    arn.replace('genui-qualification-', 'production-'), arn.replace('northstar', '*'),
+    arn.replace('northstar', '../northstar'), arn.replace('northstar', 'Northstar'),
+    arn.replace('northstar', ''), arn.replace('northstar', 'a'.repeat(81)),
+    arn.replace('A1b2C3', 'short'), arn.replace('A1b2C3', 'toolong'),
+  ]) assert.equal(pattern.test(invalid), false, invalid);
+});
+
+test('qualification is disabled by default without an app secret or a live optional read policy', () => {
+  const parameters = { QualificationConfigSecretArn: document.Parameters.QualificationConfigSecretArn.Default };
+  const [optionalId, optional] = one('AWS::IAM::Policy', 'QualificationConfigRead');
+  assert.equal(resolve(document.Conditions[optional.Condition], parameters), false);
+  const activeReaders = entries('AWS::IAM::Policy').filter(([, resource]) =>
+    (!resource.Condition || resolve(document.Conditions[resource.Condition], parameters)) &&
+    resource.Properties.PolicyDocument.Statement.some((statement: any) => actions(statement).includes('secretsmanager:GetSecretValue')));
+  assert.equal(activeReaders.length, 1);
+  assert.deepEqual(activeReaders[0][1].Properties.Roles, [{ Ref: role('MigrationExecutionRole') }]);
+  const app = resolve(one('AWS::ECS::TaskDefinition', 'Task')[1].Properties, parameters);
+  assert.equal(Object.hasOwn(app.ContainerDefinitions[0], 'Secrets'), false);
+  assert.equal(document.Parameters.ServiceDesiredCount.Default, 0);
+  // A false condition must not suppress the default task/service through DependsOn.
+  for (const resource of Object.values(document.Resources) as any[]) {
+    assert.equal(array(resource.DependsOn ?? []).includes(optionalId), false);
+  }
+  template.resourceCountIs('AWS::SecretsManager::Secret', 1); // Existing migration secret only.
+});
+
+test('enabled qualification injects the whole exact secret only into the app through its execution role', () => {
+  const arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-review-A1b2C3';
+  const parameters = { QualificationConfigSecretArn: arn };
+  const [, optional] = one('AWS::IAM::Policy', 'QualificationConfigRead');
+  assert.equal(resolve(document.Conditions[optional.Condition], parameters), true);
+  assert.deepEqual(optional.Properties.Roles, [{ Ref: role('ExecutionRole') }]);
+  assert.deepEqual(resolve(optional.Properties.PolicyDocument, parameters), {
+    Version: '2012-10-17', Statement: [{ Effect: 'Allow', Action: 'secretsmanager:GetSecretValue', Resource: arn }],
+  });
+  const app = one('AWS::ECS::TaskDefinition', 'Task')[1].Properties.ContainerDefinitions[0];
+  assert.deepEqual(resolve(app.Secrets, parameters), [{ Name: 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', ValueFrom: arn }]);
+  assert.equal(app.Environment.some((entry: any) => entry.Name.startsWith('GENUI_AUTH_QUALIFICATION_')), false);
+  const migration = one('AWS::ECS::TaskDefinition', 'MigrationTask')[1].Properties.ContainerDefinitions[0];
+  assert.deepEqual(migration.Secrets.map((entry: any) => entry.Name), ['PGPASSWORD']);
+  assert.equal(JSON.stringify(migration).includes('QualificationConfigSecretArn'), false);
+  assert.equal(policy(role('TaskRole')).some(statement => actions(statement).some(action => action.startsWith('secretsmanager:'))), false);
+  assert.equal(policy(role('MigrationRole')).length, 0);
+  assert.equal(JSON.stringify(document.Outputs).includes('QualificationConfigSecretArn'), false);
 });

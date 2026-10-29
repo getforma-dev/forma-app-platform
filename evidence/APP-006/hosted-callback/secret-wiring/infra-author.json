@@ -1,0 +1,62 @@
+{
+  "author": "managed_restore_ops_review; optional infrastructure implementation assigned by root",
+  "recorded_at_utc": "2026-10-29T00:23:44.603618+00:00",
+  "base_commit": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+  "source_sha256": {
+    "infra/src/stack.ts": "8d3058943c36062724a6dfd21c1c78d57219dfad6359b7d3326ec663f95c3cfa",
+    "infra/test/security.test.ts": "d5ac9a6739fff5c854f2a511b98863730e9ef4d5f88a7d299d8eaa8e34326386"
+  },
+  "change": "Optional ARN-parameterized full JSON secret injection into the app task; conditional exact-secret GetSecretValue on its execution role only.",
+  "toolchains": {
+    "node": "22.21.0",
+    "npm": "11.6.2"
+  },
+  "checks": [
+    {
+      "command": "./node_modules/.bin/tsx --test test/security.test.ts",
+      "cwd": "infra",
+      "exit_code": 0,
+      "tests": 15,
+      "passed": 15,
+      "failed": 0,
+      "new_tests": 3
+    },
+    {
+      "command": "npm run typecheck",
+      "cwd": "infra",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "cwd": ".",
+      "exit_code": 0
+    }
+  ],
+  "asserted_boundaries": [
+    "Empty default removes optional policy from active resources and removes the app Secrets property; service count remains zero.",
+    "Strict full ARN permits only us-east-1/account877573132739/genui-qualification- names with bounded lowercase name and normal six-character generated suffix. Other account/region/prefix/wildcards/selectors/whitespace/lengths fail.",
+    "Enabled policy contains only secretsmanager:GetSecretValue on the exact supplied ARN and only the app execution role. No task-role or migration-role privileges change.",
+    "Enabled app secret is only GENUI_AUTH_QUALIFICATION_CONFIG_JSON with full ARN ValueFrom; no FILE env or raw secret in template, output or plain environment.",
+    "Migration retains only PGPASSWORD from its existing separate execution channel; no additional secret is created.",
+    "No unconditional dependency on the conditional policy can suppress default task/service resources.",
+    "Existing network, schedule, stopped-service, image, storage, task size and role tests continue to pass."
+  ],
+  "runtime_contract": "The separately owned runtime consumes 1..8192 UTF-8 bytes in GENUI_AUTH_QUALIFICATION_CONFIG_JSON only for serve, privately materializes the file, removes raw env and passes only its file path to the Rust child. Schema/expiry/operator auth remains the Rust validator responsibility.",
+  "operational_requirements": [
+    "Observe all service tasks stopped before changing image/config; complete the entire stack update including the conditional policy before activating through preflight.",
+    "Root owns binding the selected optional ARN in preflight; this change does not edit the preflight script.",
+    "Supply a separately reviewed runtime image with the JSON-to-private-file handoff before enabling injection; old foundation image does not establish this capability.",
+    "No custom-key decrypt grant is added. Use the reviewed same-account Secrets Manager default-key provisioning path, or separately review any required key authority."
+  ],
+  "warnings": [
+    {
+      "code": "CloudFormation-Validate::W2509",
+      "message": "CDK name heuristic treats QualificationConfigSecretArn as a password parameter. The value is a nonsecret identifier only; NoEcho remains unset so the exact ARN can be checked by live preflight. No secret value is a stack parameter."
+    }
+  ],
+  "limits": [
+    "Source/template tests are local and do not prove live ECS secret delivery, private-file lifecycle, hosted identity or application admission.",
+    "No AWS calls, secret reads/creation, staging or commits by this author.",
+    "Changes are left for root independent source/synthesis review and final CI."
+  ]
+}

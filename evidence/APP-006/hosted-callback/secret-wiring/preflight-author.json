@@ -1,0 +1,16 @@
+{
+  "author": "GenUI root",
+  "at_utc": "2026-10-29T00:41:52.240044+00:00",
+  "source_sha256": {
+    "infra/scripts/preflight.py": "47037e5a307195efa1e95e26fc4d3925fbc8b7657d9bbfe02836444d8c5d34cd",
+    "infra/test/preflight_test.py": "d28105ea08bc8da886cdb84a34f3cc40ef693d7979ed1cd386f81351858bd23f"
+  },
+  "command": "python3 -m unittest discover -s infra/test -p preflight_test.py -v",
+  "passed_tests": 22,
+  "scope": "Optional configuration ARN input and immutable reservation binding; actual activation checks exact image/architecture/secret channel and refuses environment/startup bypasses before UpdateService.",
+  "independent_initial_finding_preserved": "independent-preflight-initial-failure.json",
+  "limits": [
+    "Local mocked control-plane responses; final CI and actual managed activation under this source remain required.",
+    "No secret value is read by preflight; ARN binding is not configuration-content attestation or hosted auth acceptance."
+  ]
+}

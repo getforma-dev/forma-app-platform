@@ -1,0 +1,27 @@
+{
+  "all_owned_files_removed": true,
+  "fixture_tree_removed": true,
+  "passed": true,
+  "results": [
+    {
+      "callback_status": 404,
+      "mode": "disabled",
+      "private_handoff_file_count": 0,
+      "provider_requests": 0
+    },
+    {
+      "callback_status": 303,
+      "mode": "injected",
+      "private_handoff_file_count": 1,
+      "provider_requests": 0
+    },
+    {
+      "mode": "malformed",
+      "rust_rejected_before_listen": true
+    }
+  ],
+  "runtime_from_image": true,
+  "runtime_sha256": "b0082c07c26ce9f2ed03e76620b237fee6fe0c07c03e0494d9899be3d9a8b75e",
+  "scope": "real supervisor and native binary with synthetic managed-refresh fixture",
+  "secret_output": false
+}

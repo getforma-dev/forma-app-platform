@@ -17,7 +17,9 @@ The source pins in the receipt are explicitly **configured** pins. They require 
 
 ## Private configuration and limits
 
-Absent `GENUI_AUTH_QUALIFICATION_CONFIG_FILE`, every harness route is absent. An invalid/empty configured value or invalid file stops startup. The file is read once, with an absolute path, regular file/no final symlink, current process ownership, no group/other permission and maximum 8 KiB. Its immediate directory must have current process ownership and no group/other permission. In the local image, the process UID is 65532: provision a separate 0600 file in a 0700 owned directory, such as `/run/genui/qualification.json`. The existing runtime credential generator does **not** create this file. Root owns any later secret-store/task wiring; none is deployed here.
+Absent `GENUI_AUTH_QUALIFICATION_CONFIG_FILE`, every harness route is absent. An invalid/empty configured value or invalid file stops startup. The file is read once, with an absolute path, regular file/no final symlink, current process ownership, no group/other permission and maximum 8 KiB. Its immediate directory must have current process ownership and no group/other permission. In the local image, the process UID is 65532: provision a separate 0600 file in a 0700 owned directory, such as `/run/genui/qualification.json`. The original callback image did **not** create this file; the subsequent optional runtime handoff below adds that preparation. No secret-store/task wiring is claimed deployed here.
+
+The subsequent [optional runtime handoff](secret-wiring/README.md) adds reviewed secret-JSON materialization in the supervisor. Its source, tests and independent review are separate from the original callback/image records below; the earlier local image predates this follow-up. Actual task secret delivery and hosted acceptance still require managed evidence.
 
 The JSON object has exactly these supported fields:
 

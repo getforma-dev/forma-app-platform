@@ -1,0 +1,48 @@
+{
+  "reviewer": "managed_trial_plan",
+  "recorded_at_utc": "2026-10-29T00:30:13.829Z",
+  "status": "blocking finding reported to root; source not changed by reviewer",
+  "finding": {
+    "priority": 1,
+    "title": "Bind alternate configuration delivery channels before activation",
+    "file": "infra/scripts/preflight.py",
+    "scope": "activate live task definition validation",
+    "description": "The live secrets array may match the selected empty/ARN plan while plain container environment supplies GENUI_AUTH_QUALIFICATION_CONFIG_JSON or GENUI_AUTH_QUALIFICATION_CONFIG_FILE. Runtime accepts those channels. Nonempty environmentFiles is also unchecked. All three fixture mutations reach UpdateService despite a disabled reservation.",
+    "requested_repair": "Reject any plain GENUI_AUTH_QUALIFICATION_* environment entry and nonempty environmentFiles before UpdateService, preserving the current template's sole injected JSON-secret channel; cover disabled and enabled plans."
+  },
+  "reproduction": {
+    "results": [
+      {
+        "case": "plain_json_environment",
+        "unexpected_activation_accepted": true,
+        "update_service_requested": true
+      },
+      {
+        "case": "plain_file_environment",
+        "unexpected_activation_accepted": true,
+        "update_service_requested": true
+      },
+      {
+        "case": "environment_file",
+        "unexpected_activation_accepted": true,
+        "update_service_requested": true
+      }
+    ],
+    "scope": "local fixture only; fake AWS call function; no credentials or live calls",
+    "source_sha256": {
+      "infra/scripts/preflight.py": "01fba5f096c00459c97f5aa84cced2da360fd0ff9e88275b068f48330c8e0f33",
+      "infra/test/preflight_test.py": "ab3e31391fea2a83388c5518c423f76875b1a47be8d8bc5c5df045a05bd95d65"
+    }
+  },
+  "existing_suite": {
+    "command": "python3 -m unittest discover -s infra/test -p preflight_test.py -v",
+    "exit_code": 0,
+    "tests": 21,
+    "output": "test_activation_checks_live_stop_and_service_before_count_one (preflight_test.Preflight.test_activation_checks_live_stop_and_service_before_count_one) ... ok\ntest_activation_late_response_requests_stop_instead_of_reporting_success (preflight_test.Preflight.test_activation_late_response_requests_stop_instead_of_reporting_success) ... ok\ntest_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry (preflight_test.Preflight.test_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry) ... ok\ntest_calendar_expiry_and_future_boundaries (preflight_test.Preflight.test_calendar_expiry_and_future_boundaries) ... ok\ntest_cli_persists_private_reservation_and_retry_does_not_charge_twice (preflight_test.Preflight.test_cli_persists_private_reservation_and_retry_does_not_charge_twice) ... ok\ntest_cli_will_not_initialize_a_missing_ledger (preflight_test.Preflight.test_cli_will_not_initialize_a_missing_ledger) ... ok\ntest_concurrent_preflights_cannot_spend_the_same_remaining_allowance (preflight_test.Preflight.test_concurrent_preflights_cannot_spend_the_same_remaining_allowance) ... ok\ntest_known_spending_and_auth_overrun_reduce_remaining_budget (preflight_test.Preflight.test_known_spending_and_auth_overrun_reduce_remaining_budget) ... ok\ntest_legacy_stack_without_optional_parameter_is_disabled_only (preflight_test.Preflight.test_legacy_stack_without_optional_parameter_is_disabled_only) ... ok\ntest_live_secret_parameter_drift_refuses_before_update (preflight_test.Preflight.test_live_secret_parameter_drift_refuses_before_update) ... ok\ntest_live_service_count_must_be_an_integer_within_the_plan (preflight_test.Preflight.test_live_service_count_must_be_an_integer_within_the_plan) ... ok\ntest_live_task_image_architecture_and_secret_injection_must_match (preflight_test.Preflight.test_live_task_image_architecture_and_secret_injection_must_match) ... ok\ntest_month_rollover_reserves_retained_resources_in_both_months (preflight_test.Preflight.test_month_rollover_reserves_retained_resources_in_both_months) ... ok\ntest_new_window_cannot_reset_prior_reservations (preflight_test.Preflight.test_new_window_cannot_reset_prior_reservations) ... ok\ntest_optional_secret_preserves_disabled_window_and_binds_enabled_window (preflight_test.Preflight.test_optional_secret_preserves_disabled_window_and_binds_enabled_window) ... ok\ntest_public_transition_reuses_window_without_resetting_expiry_or_reservation (preflight_test.Preflight.test_public_transition_reuses_window_without_resetting_expiry_or_reservation) ... ok\ntest_refuses_stale_ledger_missing_allowances_and_invalid_cidr (preflight_test.Preflight.test_refuses_stale_ledger_missing_allowances_and_invalid_cidr) ... ok\ntest_secret_input_refuses_wrong_scope_selectors_raw_values_and_unknown_fields (preflight_test.Preflight.test_secret_input_refuses_wrong_scope_selectors_raw_values_and_unknown_fields) ... ok\ntest_selected_secret_requires_exact_live_injection (preflight_test.Preflight.test_selected_secret_requires_exact_live_injection) ... ok\ntest_stop_count_requires_integer_zero_not_boolean_float_or_string (preflight_test.Preflight.test_stop_count_requires_integer_zero_not_boolean_float_or_string) ... ok\ntest_window_identity_rejects_extended_time_or_changed_artifact (preflight_test.Preflight.test_window_identity_rejects_extended_time_or_changed_artifact) ... ok\n\n----------------------------------------------------------------------\nRan 21 tests in 0.215s\n\nOK\n"
+  },
+  "actions": {
+    "aws_calls": 0,
+    "credential_reads": 0,
+    "implementation_edits": 0
+  }
+}

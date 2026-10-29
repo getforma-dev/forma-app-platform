@@ -16,6 +16,7 @@ import { Construct } from 'constructs';
 const octet = '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])';
 export const OPERATOR_CIDR_PATTERN = `^(?!(?:0|10|127)\\.)(?!100\\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\\.)(?!169\\.254\\.)(?!172\\.(?:1[6-9]|2[0-9]|3[01])\\.)(?!192\\.168\\.)(?!192\\.0\\.[02]\\.)(?!192\\.88\\.99\\.)(?!198\\.(?:18|19)\\.)(?!198\\.51\\.100\\.)(?!203\\.0\\.113\\.)(?!2(?:2[4-9]|[3-5][0-9])\\.)${octet}(?:\\.${octet}){3}/32(?![\\s\\S])`;
 export const EXPIRY_UTC_PATTERN = '^20[0-9]{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z(?![\\s\\S])';
+export const QUALIFICATION_SECRET_ARN_PATTERN = '^(?:|arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-[a-z0-9][a-z0-9-]{0,79}-[A-Za-z0-9]{6})(?![\\s\\S])';
 
 /** Reviewable deployment model. Synth/tests never create cloud resources. */
 export class GenuiFoundation extends Stack {
@@ -40,6 +41,13 @@ export class GenuiFoundation extends Stack {
     const desiredCount = new CfnParameter(this, 'ServiceDesiredCount', {
       type: 'Number', default: 0, allowedValues: ['0'],
       description: 'Template creates service at zero; later unrelated updates may preserve actual count drift. Observe service/tasks stopped before replacing image/window/schedule. Activate only through the live-checked preflight path.',
+    });
+    const qualificationSecretArn = new CfnParameter(this, 'QualificationConfigSecretArn', {
+      type: 'String', default: '', allowedPattern: QUALIFICATION_SECRET_ARN_PATTERN,
+      description: 'Optional full ARN of an existing genui-qualification- secret in the approved account/region. Empty disables injection and its read policy. The secret contains the complete operator-only rehearsal JSON; never place its value in parameters.',
+    });
+    const qualificationConfigured = new CfnCondition(this, 'QualificationConfigured', {
+      expression: Fn.conditionNot(Fn.conditionEquals(qualificationSecretArn.valueAsString, '')),
     });
     Tags.of(this).add('Operator', operator.valueAsString, { excludeResourceTypes: ['aws:cdk:stack'] });
     Tags.of(this).add('ApprovedMonthlyBudgetUsd', budget.valueAsString, { excludeResourceTypes: ['aws:cdk:stack'] });
@@ -115,7 +123,13 @@ export class GenuiFoundation extends Stack {
       role.addToPolicy(new iam.PolicyStatement({ actions: ['ecr:BatchCheckLayerAvailability', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchGetImage'], resources: [repositoryArn] }));
       return role;
     };
-    const task = new ecs.FargateTaskDefinition(this, 'Task', { cpu: 2048, memoryLimitMiB: 8192, taskRole, executionRole: makeExecutionRole('ExecutionRole'), runtimePlatform });
+    const executionRole = makeExecutionRole('ExecutionRole');
+    const qualificationSecretRead = new iam.CfnPolicy(this, 'QualificationConfigRead', {
+      policyName: 'genui-qualification-config-read', roles: [executionRole.roleName],
+      policyDocument: { Version: '2012-10-17', Statement: [{ Effect: 'Allow', Action: 'secretsmanager:GetSecretValue', Resource: qualificationSecretArn.valueAsString }] },
+    });
+    qualificationSecretRead.cfnOptions.condition = qualificationConfigured;
+    const task = new ecs.FargateTaskDefinition(this, 'Task', { cpu: 2048, memoryLimitMiB: 8192, taskRole, executionRole, runtimePlatform });
     task.addVolume({ name: 'runtime-config' });
     const log = new logs.LogGroup(this, 'Logs', { retention: logs.RetentionDays.ONE_MONTH, removalPolicy: RemovalPolicy.RETAIN });
     const runtimeEnvironment = {
@@ -133,6 +147,13 @@ export class GenuiFoundation extends Stack {
     });
     container.addMountPoints({ sourceVolume: 'runtime-config', containerPath: '/run/genui', readOnly: false });
     container.addPortMappings({ containerPort: 3000 });
+    // Keep both optional capabilities absent when disabled. Tasks must remain
+    // stopped until the stack update (including the conditional policy) finishes.
+    // An unconditional dependency on that policy would also suppress disabled resources.
+    (task.node.defaultChild as ecs.CfnTaskDefinition).addPropertyOverride('ContainerDefinitions.0.Secrets',
+      Fn.conditionIf(qualificationConfigured.logicalId,
+        [{ Name: 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', ValueFrom: qualificationSecretArn.valueAsString }],
+        { Ref: 'AWS::NoValue' }));
 
     const albSecurity = new ec2.SecurityGroup(this, 'AlbSecurity', { vpc, allowAllOutbound: false });
     albSecurity.addIngressRule(ec2.Peer.ipv4(Fn.conditionIf(publicIngress.logicalId, '0.0.0.0/0', operatorCidr.valueAsString).toString()), ec2.Port.tcp(443), 'Public beta HTTPS or the temporary operator-only trial');

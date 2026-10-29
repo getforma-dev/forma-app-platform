@@ -1,0 +1,73 @@
+{
+  "source": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+  "observed_at_utc": "2026-10-29T00:31:10.917519+00:00",
+  "checks": [
+    {
+      "conclusion": "success",
+      "databaseId": 40790794997,
+      "headSha": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40790794997",
+      "workflowName": "Planning integrity"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40790795117,
+      "headSha": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40790795117",
+      "workflowName": "Contract qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40790795001,
+      "headSha": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40790795001",
+      "workflowName": "Auth consumer qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40790794998,
+      "headSha": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40790794998",
+      "workflowName": "Bounded query qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40790795564,
+      "headSha": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40790795564",
+      "workflowName": "Released baseline"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40790794981,
+      "headSha": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40790794981",
+      "workflowName": "Parser qualification"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40790794974,
+      "headSha": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40790794974",
+      "workflowName": "Published canvas consumer"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40790794982,
+      "headSha": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40790794982",
+      "workflowName": "Foundation preparation"
+    }
+  ],
+  "limits": [
+    "This source predates optional configuration secret handoff. No hosted auth readiness is established."
+  ]
+}

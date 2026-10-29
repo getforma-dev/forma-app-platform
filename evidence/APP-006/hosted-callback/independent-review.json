@@ -87,13 +87,12 @@
   "author_evidence_inspected": {
     "record": "local-checks.json",
     "passed": true,
-    "qualified_runtime_build_inputs_still_match": false,
     "only_post_check_change": [
       "app/README.md"
     ],
     "local_image": {
       "tag": "genui-app006-callback:local-20261028",
-      "id": "sha256:e1267eef293e3a54763b773a810484a25b51acdb6b69bfd18b6b6b28a6f349b2",
+      "id": "sha256:94aa02172556744b78a1d85233e7eb57f97f47cc39c55d0ceb5fd3062e862ae3",
       "architecture": "arm64",
       "os": "linux",
       "registry_publication": false
@@ -103,7 +102,8 @@
       "app/README.md documentation",
       "root .dockerignore allowlist repair"
     ],
-    "current_status": "Initial full local/image campaign was inspected; author is refreshing image evidence after root ignore repair."
+    "current_status": "Final author image requalification passed after repaired Docker ignore; image-inputs.json records all24 actual context input hashes.",
+    "final_image_input_record": "image-inputs.json"
   },
   "open_findings": []
 }

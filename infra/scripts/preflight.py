@@ -67,7 +67,10 @@ def months_between(start, end):
 
 
 def reserve(config, ledger, now):
-    exact_keys(config, ['window_id', 'account', 'region', 'hostname', 'operator', 'ingress_mode', 'operator_ipv4_cidr', 'deployment_expires_at_utc', 'tls_certificate_arn', 'image_digest', 'image_architecture', 'service_desired_count', 'extra_task_hours'], 'deployment')
+    optional = ['qualification_config_secret_arn'] if isinstance(config, dict) and 'qualification_config_secret_arn' in config else []
+    exact_keys(config, ['window_id', 'account', 'region', 'hostname', 'operator', 'ingress_mode', 'operator_ipv4_cidr', 'deployment_expires_at_utc', 'tls_certificate_arn', 'image_digest', 'image_architecture', 'service_desired_count', 'extra_task_hours'] + optional, 'deployment')
+    qualification_arn = config.get('qualification_config_secret_arn', '')
+    require(isinstance(qualification_arn, str) and re.fullmatch(r'(?:|arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-[a-z0-9][a-z0-9-]{0,79}-[A-Za-z0-9]{6})', qualification_arn), 'qualification configuration must be empty or an exact approved secret ARN')
     require(str(uuid.UUID(config['window_id'])) == config['window_id'], 'window_id must be a canonical UUID retained across retry')
     require(config['account'] == '877573132739' and config['region'] == 'us-east-1', 'unexpected account or region')
     require(config['hostname'] == 'beta.getforma.dev', 'unexpected beta hostname')
@@ -87,7 +90,11 @@ def reserve(config, ledger, now):
     require(isinstance(ledger['months'], dict) and isinstance(ledger['windows'], dict), 'invalid ledger collections')
     # The same prepaid window covers migration at count zero, its /32 trial,
     # and public/count-one operation. Neither transition extends its deadline.
-    immutable = {k: v for k, v in config.items() if k not in ('ingress_mode', 'service_desired_count')}
+    # Missing and explicitly empty both mean disabled. Preserve the exact
+    # binding of earlier disabled windows; enabling/changing a secret is a new
+    # immutable input and cannot repurpose an already reserved window.
+    immutable = {k: v for k, v in config.items() if k not in ('ingress_mode', 'service_desired_count')
+                 and not (k == 'qualification_config_secret_arn' and v == '')}
     encoded = json.dumps(immutable, sort_keys=True, separators=(',', ':')).encode()
     binding = hashlib.sha256(encoded).hexdigest()
     for key, old in ledger['windows'].items():
@@ -134,7 +141,8 @@ def reserve(config, ledger, now):
     parameters = {'Operator': config['operator'], 'MonthlyBudgetUsd': '100', 'IngressMode': config['ingress_mode'],
                   'OperatorIpv4Cidr': config['operator_ipv4_cidr'], 'DeploymentExpiresAtUtc': config['deployment_expires_at_utc'],
                   'TlsCertificateArn': config['tls_certificate_arn'], 'ImageDigest': config['image_digest'],
-                  'ImageArchitecture': config['image_architecture'], 'ServiceDesiredCount': '0'}
+                  'ImageArchitecture': config['image_architecture'], 'ServiceDesiredCount': '0',
+                  'QualificationConfigSecretArn': qualification_arn}
     return updated, {'status': 'reserved_local_plan_only', 'window_id': config['window_id'], 'input_sha256': binding,
                      'observed_at_utc': now.strftime('%Y-%m-%dT%H:%M:%SZ'), 'reused_reservation': existing is not None,
                      'monthly_budget_cents': CAP, 'genui_allocation_cents': GENUI_CAP, 'cost_by_month': reports,
@@ -154,7 +162,8 @@ def activate(config, report, call, clock):
     require(stack['StackStatus'] in ('CREATE_COMPLETE', 'UPDATE_COMPLETE'), 'stack must be complete before activation')
     parameters = {v['ParameterKey']: v['ParameterValue'] for v in stack['Parameters']}
     expected = report['cloudformation_parameters']
-    require(all(parameters.get(k) == str(v) for k, v in expected.items()), 'deployed parameters differ from the reserved plan')
+    require(parameters.get('QualificationConfigSecretArn', '') == config.get('qualification_config_secret_arn', ''), 'deployed qualification secret differs from the reserved plan')
+    require(all(parameters.get(k, '' if k == 'QualificationConfigSecretArn' else None) == str(v) for k, v in expected.items()), 'deployed parameters differ from the reserved plan')
     outputs = {v['OutputKey']: v['OutputValue'] for v in stack['Outputs']}
     arn = outputs['DeploymentExpiryScheduleArn']
     prefix = 'arn:aws:scheduler:us-east-1:877573132739:schedule/'
@@ -174,6 +183,18 @@ def activate(config, report, call, clock):
     cluster_arn = 'arn:aws:ecs:us-east-1:877573132739:cluster/' + outputs['ClusterName']
     service_arn = 'arn:aws:ecs:us-east-1:877573132739:service/' + outputs['ClusterName'] + '/' + outputs['ServiceName']
     require(payload == {'Cluster': cluster_arn, 'Service': service_arn, 'DesiredCount': 0}, 'stop target must address this exact cluster/service with count zero')
+    definition = call('ecs', 'describe-task-definition', '--task-definition', outputs['TaskDefinition'])['taskDefinition']
+    require(definition['taskDefinitionArn'] == outputs['TaskDefinition'], 'unexpected live task definition')
+    containers = definition['containerDefinitions']
+    require(len(containers) == 1 and containers[0]['name'] == 'workspace', 'unexpected application container boundary')
+    require(containers[0]['image'] == config['image_digest'] and definition['runtimePlatform']['cpuArchitecture'] == config['image_architecture'], 'live image or architecture differs from the reserved plan')
+    require(containers[0].get('entryPoint', []) == [] and containers[0].get('command', []) == [], 'live service must use the reviewed image startup')
+    require(containers[0].get('environmentFiles', []) == [] and
+            not any(item['name'].startswith('GENUI_AUTH_QUALIFICATION_') for item in containers[0].get('environment', [])),
+            'live qualification configuration cannot bypass the reviewed secret channel')
+    qualification_arn = config.get('qualification_config_secret_arn', '')
+    expected_secrets = [{'name': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'valueFrom': qualification_arn}] if qualification_arn else []
+    require(containers[0].get('secrets', []) == expected_secrets, 'live qualification secret injection differs from the reserved plan')
     def current_service():
         result = call('ecs', 'describe-services', '--cluster', cluster_arn, '--services', service_arn)
         require(not result.get('failures') and len(result['services']) == 1, 'intended service is unavailable')

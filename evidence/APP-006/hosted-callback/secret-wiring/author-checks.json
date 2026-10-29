@@ -1,0 +1,48 @@
+{
+  "recorded_at": "2026-10-29T00:07:55.680158+00:00",
+  "scope": "local optional APP-006 secret handoff; no cloud, provider or real credentials",
+  "source_sha256": {
+    "app/runtime/runtime.py": "b0082c07c26ce9f2ed03e76620b237fee6fe0c07c03e0494d9899be3d9a8b75e",
+    "app/runtime/test_runtime.py": "96bf1c8d59220e1dceb5028ad5b3fb7541fec41a1b7d6f3de68c98eb02ac89a4"
+  },
+  "passed": true,
+  "unit_tests": {
+    "command": [
+      "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app/runtime/.venv/bin/python",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "app/runtime",
+      "-v"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "test_absent_json_preserves_default_and_explicit_path_is_never_owned (test_runtime.QualificationSecretTests.test_absent_json_preserves_default_and_explicit_path_is_never_owned) ... ok\ntest_actual_nonserve_commands_refuse_injection_before_managed_operations (test_runtime.QualificationSecretTests.test_actual_nonserve_commands_refuse_injection_before_managed_operations) ... ok\ntest_cleanup_refuses_replaced_or_newly_linked_file_without_deleting_it (test_runtime.QualificationSecretTests.test_cleanup_refuses_replaced_or_newly_linked_file_without_deleting_it) ... ok\ntest_existing_regular_symlink_hardlink_and_fifo_names_are_not_clobbered (test_runtime.QualificationSecretTests.test_existing_regular_symlink_hardlink_and_fifo_names_are_not_clobbered) ... ok\ntest_failed_preparation_does_not_refresh_launch_or_delete_existing_credentials (test_runtime.QualificationSecretTests.test_failed_preparation_does_not_refresh_launch_or_delete_existing_credentials) ... ok\ntest_new_real_private_file_is_exact_and_cleanup_preserves_other_files (test_runtime.QualificationSecretTests.test_new_real_private_file_is_exact_and_cleanup_preserves_other_files) ... ok\ntest_real_cancelled_child_ignoring_term_is_killed_and_cleanup_is_bounded (test_runtime.QualificationSecretTests.test_real_cancelled_child_ignoring_term_is_killed_and_cleanup_is_bounded) ... ok\ntest_real_successful_and_failed_children_receive_only_private_path (test_runtime.QualificationSecretTests.test_real_successful_and_failed_children_receive_only_private_path) ... ok\ntest_startup_failure_and_cancel_after_write_clean_file_without_secret_output (test_runtime.QualificationSecretTests.test_startup_failure_and_cancel_after_write_clean_file_without_secret_output) ... ok\ntest_transport_consumption_byte_limit_and_no_duplicate_auth_policy (test_runtime.QualificationSecretTests.test_transport_consumption_byte_limit_and_no_duplicate_auth_policy) ... ok\ntest_unsafe_missing_or_linked_parent_refuses_without_creating_files (test_runtime.QualificationSecretTests.test_unsafe_missing_or_linked_parent_refuses_without_creating_files) ... ok\ntest_write_failure_removes_only_new_file (test_runtime.QualificationSecretTests.test_write_failure_removes_only_new_file) ... ok\ntest_cleanup_rejects_an_unrelated_bucket_before_aws_client (test_runtime.RuntimeTests.test_cleanup_rejects_an_unrelated_bucket_before_aws_client) ... ok\ntest_expired_future_overlong_and_role_interchange_refused (test_runtime.RuntimeTests.test_expired_future_overlong_and_role_interchange_refused) ... ok\ntest_fifo_and_oversized_file_are_refused_without_blocking (test_runtime.RuntimeTests.test_fifo_and_oversized_file_are_refused_without_blocking) ... ok\ntest_generation_change_refused_before_network (test_runtime.RuntimeTests.test_generation_change_refused_before_network) ... ok\ntest_mutating_qualification_is_not_a_readiness_side_effect (test_runtime.RuntimeTests.test_mutating_qualification_is_not_a_readiness_side_effect) ... ok\ntest_permission_and_symlink_denial (test_runtime.RuntimeTests.test_permission_and_symlink_denial) ... ok\ntest_private_atomic_rotation_changes_identity (test_runtime.RuntimeTests.test_private_atomic_rotation_changes_identity) ... ok\ntest_rds_superuser_membership_refused_even_with_false_superuser_flags (test_runtime.RuntimeTests.test_rds_superuser_membership_refused_even_with_false_superuser_flags) ... ok\ntest_real_probe_refuses_unexpected_db_identity_before_storage (test_runtime.RuntimeTests.test_real_probe_refuses_unexpected_db_identity_before_storage) ... ok\ntest_same_generation_byte_change_has_distinct_fingerprint (test_runtime.RuntimeTests.test_same_generation_byte_change_has_distinct_fingerprint) ... ok\n\n----------------------------------------------------------------------\nRan 22 tests in 9.574s\n\nOK\n"
+  },
+  "native_binary_sha256": "9ef589248cd9620ba035cfa8f229274bdcdfa990fe30d0f14fa3c220741334df",
+  "native_supervisor": {
+    "scope": "real supervisor and native binary with synthetic managed-refresh fixture",
+    "results": [
+      {
+        "mode": "disabled",
+        "callback_status": 404,
+        "private_handoff_file_count": 0,
+        "provider_requests": 0
+      },
+      {
+        "mode": "injected",
+        "callback_status": 303,
+        "private_handoff_file_count": 1,
+        "provider_requests": 0
+      },
+      {
+        "mode": "malformed",
+        "rust_rejected_before_listen": true
+      }
+    ],
+    "all_owned_files_removed": true,
+    "secret_output": false,
+    "passed": true
+  }
+}

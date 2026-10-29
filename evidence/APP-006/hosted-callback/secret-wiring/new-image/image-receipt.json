@@ -1,0 +1,129 @@
+{
+  "recorded_at": "2026-10-29T00:34:48.415177+00:00",
+  "scope": "local ARM64 combined callback and secret-handoff image; no managed acceptance",
+  "tag": "genui-app006-wiring:local-20261029",
+  "commands": [
+    {
+      "name": "build",
+      "command": [
+        "docker",
+        "build",
+        "--platform",
+        "linux/arm64",
+        "--tag",
+        "genui-app006-wiring:local-20261029",
+        "--file",
+        "app/Dockerfile",
+        "."
+      ],
+      "exit_code": 0,
+      "log": "build.log"
+    },
+    {
+      "name": "foundation-image",
+      "command": [
+        "python3",
+        "app/runtime/qualify_image.py",
+        "--image",
+        "genui-app006-wiring:local-20261029",
+        "--output",
+        "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/evidence/APP-006/hosted-callback/secret-wiring/new-image/foundation-image.json"
+      ],
+      "exit_code": 0,
+      "log": "foundation-image.log"
+    },
+    {
+      "name": "callback-http",
+      "command": [
+        "docker",
+        "run",
+        "--name",
+        "genui-app006-wiring-callback-e1564e62af",
+        "--rm",
+        "-i",
+        "--network=none",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--cpus=2",
+        "--memory=1g",
+        "--memory-swap=1g",
+        "--pids-limit=128",
+        "--tmpfs",
+        "/tmp:rw,noexec,nosuid,size=16777216,mode=1777",
+        "--entrypoint",
+        "python3",
+        "genui-app006-wiring:local-20261029",
+        "-",
+        "--binary",
+        "/app/genui",
+        "--directory",
+        "/tmp"
+      ],
+      "exit_code": 0,
+      "log": "callback-http.log",
+      "stdin_sha256": "858488df012addd8c0f5e2bc48a1686211d797ec20eba84eb4110da82f420a73",
+      "stdin_description": "unchanged evidence/APP-006/hosted-callback/http_probe.py"
+    },
+    {
+      "name": "supervisor-http",
+      "command": [
+        "docker",
+        "run",
+        "--name",
+        "genui-app006-wiring-supervisor-6b03d68029",
+        "--rm",
+        "-i",
+        "--network=none",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--cpus=2",
+        "--memory=1g",
+        "--memory-swap=1g",
+        "--pids-limit=128",
+        "--tmpfs",
+        "/tmp:rw,noexec,nosuid,size=16777216,mode=1777",
+        "--entrypoint",
+        "python3",
+        "genui-app006-wiring:local-20261029",
+        "-"
+      ],
+      "exit_code": 0,
+      "log": "supervisor-http.log",
+      "stdin_sha256": "d18381c78f09983c7b01abbbf65bc6c00b6c18051cef8b995570e619ce0d36be",
+      "stdin_description": "existing reviewed secret-wiring native_supervisor_probe; actual /app/runtime.py and /app/genui, temporary synthetic test_runtime fixture only"
+    }
+  ],
+  "passed": true,
+  "registry_publication": false,
+  "cloud_operations": false,
+  "image": {
+    "id": "sha256:a4a47707e1e4028221cba7f5f0dfdf03ef663c6f46d0686a27632c4fd5fc5d08",
+    "architecture": "arm64",
+    "os": "linux",
+    "user": "65532:65532",
+    "tag": "genui-app006-wiring:local-20261029"
+  },
+  "source_input_count": 24,
+  "source_inputs_unchanged": true,
+  "historical_evidence_unchanged": {
+    "local-checks.json": "f1973410ff11bedb145cef89d22f8285197a7db49ba4af9ca3f5ac0abf38591b",
+    "pre-context-repair-checks.json": "3176d289c022b112375f7a11f57ba008fa0d5c50830563d36f593aee19c0dc52",
+    "image-inputs.json": "68d19775490bf2f1d7eeea9206024e05e7f5c9654ad96e555f92450243f8dd71",
+    "post-check-documentation.json": "2bb313ff381f091a773756816b793388df69d62f35d3f3104e3086fbac307c22",
+    "secret-wiring/author-checks.json": "7003262f7c185cce3b9184d2e828efea8a258c829f83872f4290db6f66267250"
+  },
+  "foundation_image_passed": true,
+  "callback_http_passed": true,
+  "supervisor_http_passed": true,
+  "owned_probe_containers_removed": true,
+  "foundation_temporary_volume_removed": true,
+  "probe_source_sha256": {
+    "evidence/APP-006/hosted-callback/http_probe.py": "858488df012addd8c0f5e2bc48a1686211d797ec20eba84eb4110da82f420a73",
+    "evidence/APP-006/hosted-callback/secret-wiring/qualify.py": "bca2a0797354939c0e4b2e8a5edc878ae1b36d7bcb34789d32e01683aee25cef",
+    "app/runtime/test_runtime.py": "96bf1c8d59220e1dceb5028ad5b3fb7541fec41a1b7d6f3de68c98eb02ac89a4",
+    "app/runtime/qualify_image.py": "2a149b298747d26e73d8742ea2b8582b0e6002cbe05dda02c07c8ee862f957f7",
+    "app/runtime/smoke_http.py": "ece8976ff89e708a155b98e00c1986e0fca62514e83aca5862400f5493f574c0"
+  }
+}

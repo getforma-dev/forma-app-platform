@@ -1,0 +1,30 @@
+{
+  "enabled_process_restarted": true,
+  "passed": true,
+  "private_files_removed": true,
+  "runs": [
+    {
+      "callback_status": 404,
+      "enabled": false,
+      "managed_readiness_without_probe": 503,
+      "protected_routes": 404,
+      "provider_requests": 0
+    },
+    {
+      "callback_status": 303,
+      "enabled": true,
+      "managed_readiness_without_probe": 503,
+      "protected_routes": 404,
+      "provider_requests": 0
+    },
+    {
+      "callback_status": 303,
+      "enabled": true,
+      "managed_readiness_without_probe": 503,
+      "protected_routes": 404,
+      "provider_requests": 0
+    }
+  ],
+  "scope": "local native HTTP routing, default-off and privacy; no hosted identity or mailbox evidence",
+  "synthetic_capabilities_in_native_output": false
+}

@@ -1,0 +1,32 @@
+{
+  "owned_probe_containers": [
+    {
+      "name": "genui-app006-wiring-callback-e1564e62af",
+      "command": [
+        "docker",
+        "ps",
+        "--all",
+        "--filter",
+        "name=^/genui-app006-wiring-callback-e1564e62af$",
+        "--format",
+        "{{.Names}}"
+      ],
+      "absent": true
+    },
+    {
+      "name": "genui-app006-wiring-supervisor-6b03d68029",
+      "command": [
+        "docker",
+        "ps",
+        "--all",
+        "--filter",
+        "name=^/genui-app006-wiring-supervisor-6b03d68029$",
+        "--format",
+        "{{.Names}}"
+      ],
+      "absent": true
+    }
+  ],
+  "foundation_volume_removed": true,
+  "source_and_historical_evidence_still_match": true
+}

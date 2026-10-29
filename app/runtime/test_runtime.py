@@ -1,10 +1,17 @@
 """Unit-only failure-path checks. No AWS/RDS calls or managed acceptance."""
 import copy
+import contextlib
+import io
 import importlib.util
 import json
 import os
 from pathlib import Path
 import tempfile
+import signal
+import stat
+import subprocess
+import sys
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -122,6 +129,245 @@ class RuntimeTests(unittest.TestCase):
         with patch('psycopg.connect') as connect:
             with self.assertRaises(runtime.Refused): runtime.probe(self.path, str(uuid.uuid4()))
             connect.assert_not_called()
+
+
+class QualificationSecretTests(unittest.TestCase):
+    PAYLOAD = '{"operator_token":"synthetic-only-not-a-real-credential"}'
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="genui-qualification-secret-unit-")
+        self.directory = Path(self.tmp.name)
+        self.directory.chmod(0o700)
+        self.path = self.directory / "credentials.json"
+        self.value = fixture()
+
+    def tearDown(self):
+        self.directory.chmod(0o700)
+        self.tmp.cleanup()
+
+    def auth_files(self):
+        return list(self.directory.glob('.auth-qualification-*'))
+
+    def test_transport_consumption_byte_limit_and_no_duplicate_auth_policy(self):
+        for raw in (self.PAYLOAD, '\u00e9' * 4096, '{invalid-json-for-rust-to-refuse'):
+            with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: raw}, clear=True):
+                self.assertEqual(runtime.take_qualification_json('serve'), raw.encode('utf-8'))
+                self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
+        for raw in ('', ' \n ', 'x' * 8193, '\u00e9' * 4097, '\udcff'):
+            with self.subTest(kind=len(raw)), patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: raw}, clear=True):
+                with self.assertRaises(runtime.Refused) as error:
+                    runtime.take_qualification_json('serve')
+                self.assertEqual(str(error.exception), 'runtime configuration refused')
+                self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertIsNone(runtime.take_qualification_json('serve'))
+        with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD, runtime.QUALIFICATION_FILE_ENV: ''}, clear=True):
+            with self.assertRaises(runtime.Refused): runtime.take_qualification_json('serve')
+            self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
+
+    def test_new_real_private_file_is_exact_and_cleanup_preserves_other_files(self):
+        self.path.write_text('unrelated-existing-credential-file')
+        owned = runtime.QualificationFile(self.path, self.PAYLOAD.encode())
+        path = owned.path
+        self.assertEqual(path.parent, self.directory)
+        self.assertEqual(path.read_bytes(), self.PAYLOAD.encode())
+        info = path.stat()
+        self.assertEqual(stat.S_IMODE(info.st_mode), 0o600)
+        self.assertEqual(info.st_uid, os.geteuid())
+        self.assertEqual(info.st_nlink, 1)
+        self.assertFalse(os.get_inheritable(owned.file_fd))
+        owned.check_file()
+        owned.close()
+        owned.close()
+        self.assertFalse(path.exists())
+        self.assertIsNone(owned.file_fd)
+        self.assertEqual(self.path.read_text(), 'unrelated-existing-credential-file')
+
+    def test_existing_regular_symlink_hardlink_and_fifo_names_are_not_clobbered(self):
+        fixed = uuid.UUID(int=0)
+        collision = self.directory / ('.auth-qualification-' + fixed.hex + '.json')
+        target = self.directory / 'unrelated.json'
+        target.write_text('preserve-me')
+        for kind in ('regular', 'symlink', 'hardlink', 'fifo'):
+            with self.subTest(kind=kind):
+                if kind == 'regular': collision.write_text('existing-file')
+                elif kind == 'symlink': collision.symlink_to(target)
+                elif kind == 'hardlink': os.link(target, collision)
+                else: os.mkfifo(collision, 0o600)
+                before = collision.lstat()
+                started = time.monotonic()
+                with patch.object(runtime.uuid, 'uuid4', return_value=fixed):
+                    with self.assertRaises(OSError): runtime.QualificationFile(self.path, self.PAYLOAD.encode())
+                after = collision.lstat()
+                self.assertEqual((before.st_dev, before.st_ino, before.st_mode), (after.st_dev, after.st_ino, after.st_mode))
+                self.assertEqual(target.read_text(), 'preserve-me')
+                self.assertLess(time.monotonic() - started, 0.5)
+                collision.unlink()
+
+    def test_unsafe_missing_or_linked_parent_refuses_without_creating_files(self):
+        self.directory.chmod(0o755)
+        with self.assertRaises(runtime.Refused): runtime.QualificationFile(self.path, self.PAYLOAD.encode())
+        self.directory.chmod(0o700)
+        link = self.directory / 'linked'
+        link.symlink_to(self.directory, target_is_directory=True)
+        with self.assertRaises(OSError): runtime.QualificationFile(link / 'credentials.json', self.PAYLOAD.encode())
+        missing = self.directory / 'missing'
+        with self.assertRaises(OSError): runtime.QualificationFile(missing / 'credentials.json', self.PAYLOAD.encode())
+        self.assertFalse(missing.exists())
+        with self.assertRaises(runtime.Refused): runtime.QualificationFile(Path('relative/credentials.json'), self.PAYLOAD.encode())
+        self.assertEqual(self.auth_files(), [])
+
+    def test_cleanup_refuses_replaced_or_newly_linked_file_without_deleting_it(self):
+        for kind in ('regular', 'symlink', 'hardlink'):
+            with self.subTest(kind=kind):
+                owned = runtime.QualificationFile(self.path, self.PAYLOAD.encode())
+                target = self.directory / ('target-' + kind)
+                if kind == 'hardlink':
+                    os.link(owned.path, target)
+                else:
+                    owned.path.unlink()
+                    target.write_text('unrelated-preserve')
+                    if kind == 'regular': owned.path.write_text('replacement-preserve')
+                    else: owned.path.symlink_to(target)
+                before = owned.path.lstat()
+                with self.assertRaises(runtime.Refused): owned.close()
+                after = owned.path.lstat()
+                self.assertEqual((before.st_dev, before.st_ino), (after.st_dev, after.st_ino))
+                self.assertIsNone(owned.directory_fd)
+                self.assertIsNone(owned.file_fd)
+                self.assertTrue(target.exists())
+                owned.path.unlink(); target.unlink()
+
+    def test_write_failure_removes_only_new_file(self):
+        self.path.write_text('existing-preserve')
+        with patch.object(runtime.os, 'fsync', side_effect=OSError('synthetic-write-failure')):
+            with self.assertRaises(OSError): runtime.QualificationFile(self.path, self.PAYLOAD.encode())
+        self.assertEqual(self.auth_files(), [])
+        self.assertEqual(self.path.read_text(), 'existing-preserve')
+
+    def test_failed_preparation_does_not_refresh_launch_or_delete_existing_credentials(self):
+        self.path.write_text('existing-preserve')
+        self.directory.chmod(0o755)
+        with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, clear=True), \
+             patch.object(runtime.signal, 'signal'), patch.object(runtime, 'refresh') as refresh, patch.object(runtime.subprocess, 'Popen') as child:
+            with self.assertRaises(runtime.Refused): runtime.serve(self.path)
+            refresh.assert_not_called(); child.assert_not_called()
+            self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
+        self.directory.chmod(0o700)
+        self.assertEqual(self.path.read_text(), 'existing-preserve')
+        self.assertEqual(self.auth_files(), [])
+
+    def child_script(self, exit_code=0, wait_for_termination=False):
+        script = self.directory / 'child.py'
+        report = self.directory / 'child-report.json'
+        source = f'''#!{sys.executable}
+import json, os, signal, stat, time
+from pathlib import Path
+if {wait_for_termination!r}: signal.signal(signal.SIGTERM, signal.SIG_IGN)
+path = os.environ.get({runtime.QUALIFICATION_FILE_ENV!r})
+info = None if path is None else Path(path).stat()
+content_ok = path is None or Path(path).read_text() == {self.PAYLOAD!r}
+result = {{'raw_env_absent': {runtime.QUALIFICATION_JSON_ENV!r} not in os.environ,
+           'path_present': path is not None, 'content_ok': content_ok,
+           'mode': None if info is None else stat.S_IMODE(info.st_mode),
+           'owned': info is None or info.st_uid == os.geteuid()}}
+Path({str(report)!r}).write_text(json.dumps(result))
+if {wait_for_termination!r}:
+    while True: time.sleep(0.05)
+raise SystemExit({exit_code})
+'''
+        script.write_text(source); script.chmod(0o700)
+        return script, report
+
+    def test_real_successful_and_failed_children_receive_only_private_path(self):
+        for exit_code in (0, 7):
+            with self.subTest(exit_code=exit_code):
+                script, report = self.child_script(exit_code)
+                env = {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD, 'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
+                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
+                     patch.object(runtime, 'refresh', side_effect=lambda path: runtime.atomic_write(path, self.value)) as refresh:
+                    self.assertEqual(runtime.serve(self.path), exit_code)
+                    self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
+                    self.assertNotIn(runtime.QUALIFICATION_FILE_ENV, os.environ)
+                    refresh.assert_called_once()
+                self.assertEqual(json.loads(report.read_text()), {'raw_env_absent': True, 'path_present': True, 'content_ok': True, 'mode': 0o600, 'owned': True})
+                self.assertEqual(self.auth_files(), [])
+                self.assertFalse(self.path.exists())
+
+    def test_absent_json_preserves_default_and_explicit_path_is_never_owned(self):
+        for explicit in (False, True):
+            with self.subTest(explicit=explicit):
+                script, report = self.child_script()
+                existing = self.directory / 'explicit.json'
+                existing.write_text(self.PAYLOAD); existing.chmod(0o600)
+                env = {'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
+                if explicit: env[runtime.QUALIFICATION_FILE_ENV] = str(existing)
+                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
+                     patch.object(runtime, 'refresh', side_effect=lambda path: runtime.atomic_write(path, self.value)):
+                    self.assertEqual(runtime.serve(self.path), 0)
+                value = json.loads(report.read_text())
+                self.assertTrue(value['raw_env_absent'])
+                self.assertEqual(value['path_present'], explicit)
+                self.assertEqual(existing.read_text(), self.PAYLOAD)
+                self.assertEqual(self.auth_files(), [])
+
+    def test_startup_failure_and_cancel_after_write_clean_file_without_secret_output(self):
+        for failure in ('refresh', 'launch', 'interrupt'):
+            with self.subTest(failure=failure):
+                stop = threading.Event()
+                output = io.StringIO()
+                def refresh(path):
+                    self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
+                    self.assertEqual(len(self.auth_files()), 1)
+                    if failure == 'refresh':
+                        stop.set(); raise OSError(self.PAYLOAD)
+                    if failure == 'interrupt': raise KeyboardInterrupt()
+                    runtime.atomic_write(path, self.value)
+                def launch(*args, **kwargs):
+                    self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, kwargs['env'])
+                    stop.set(); raise OSError(self.PAYLOAD)
+                with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, clear=True), \
+                     patch.object(runtime.signal, 'signal'), patch.object(runtime.threading, 'Event', return_value=stop), \
+                     patch.object(runtime, 'refresh', side_effect=refresh), patch.object(runtime.subprocess, 'Popen', side_effect=launch), \
+                     contextlib.redirect_stderr(output):
+                    if failure == 'interrupt':
+                        with self.assertRaises(KeyboardInterrupt): runtime.serve(self.path)
+                    else: self.assertEqual(runtime.serve(self.path), 0)
+                self.assertNotIn(self.PAYLOAD, output.getvalue())
+                self.assertEqual(self.auth_files(), [])
+
+    def test_real_cancelled_child_ignoring_term_is_killed_and_cleanup_is_bounded(self):
+        script, report = self.child_script(wait_for_termination=True)
+        stop = threading.Event()
+        def cancel_when_started():
+            deadline = time.monotonic() + 3
+            while not report.exists() and time.monotonic() < deadline: time.sleep(0.01)
+            stop.set()
+        watcher = threading.Thread(target=cancel_when_started, daemon=True)
+        env = {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD, 'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
+        started = time.monotonic()
+        watcher.start()
+        with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
+             patch.object(runtime.threading, 'Event', return_value=stop), \
+             patch.object(runtime, 'refresh', side_effect=lambda path: runtime.atomic_write(path, self.value)):
+            self.assertEqual(runtime.serve(self.path), 0)
+        watcher.join(timeout=1)
+        self.assertTrue(report.exists())
+        self.assertTrue(json.loads(report.read_text())['raw_env_absent'])
+        self.assertLess(time.monotonic() - started, 8)
+        self.assertEqual(self.auth_files(), [])
+        self.assertFalse(self.path.exists())
+
+    def test_actual_nonserve_commands_refuse_injection_before_managed_operations(self):
+        for mode in ('refresh', 'probe', 'migrate', 'qualify', 'cleanup'):
+            with self.subTest(mode=mode):
+                process = subprocess.run([sys.executable, str(Path(runtime.__file__).resolve()), mode],
+                                         env={runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD},
+                                         capture_output=True, text=True, timeout=3)
+                self.assertEqual(process.returncode, 1)
+                self.assertEqual(process.stdout, '')
+                self.assertEqual(process.stderr, 'managed_dependency_operation_refused\n')
+                self.assertNotIn(self.PAYLOAD, process.stdout + process.stderr)
 
 
 if __name__ == '__main__': unittest.main()
