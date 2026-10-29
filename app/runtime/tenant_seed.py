@@ -17,6 +17,10 @@ SPACE = "00000000-0000-4000-8000-000000000384"
 ISSUER = "app008-fixture-only"
 # Synthetic fixture entitlement window (APP-073); fixed so the seed stays idempotent.
 ENTITLEMENT_WINDOW = ("2026-10-01T00:00:00+00:00", "2036-10-01T00:00:00+00:00")
+# APP-010 (plan Task 6): each fixture organization's owner_publish policy, version 1,
+# seeded by the operator package under scope (never by a migration). Policy rows
+# carry no audit event: D7.8's operator kinds are closed and name none.
+OWNER_PUBLISH_POLICY = "00000000-0000-4000-8000-0000000000e0"
 
 
 def make_bundles():
@@ -46,6 +50,7 @@ def seed(connection, bundles):
     member action requires a current entitlement, so each active synthetic member
     receives one deterministic, explicitly synthetic entitlement (fixed window,
     kind member_invite); it is fixture authority, never an admission result.
+    Since APP-010 each organization also receives its owner_publish policy row.
     """
     from psycopg import sql
     if connection.autocommit:
@@ -90,6 +95,7 @@ def seed(connection, bundles):
         put('organization_permissions', ('organization_id','principal_id','permission'),
             (o,'00000000-0000-4000-8000-000000000f00','admin_policy'), 3)
         put('spaces', ('organization_id','space_id','display_name'), (o,SPACE,'Synthetic fixture space'), 2)
+        put('publication_policies', ('organization_id','policy_id','policy_version','kind'), (o,OWNER_PUBLISH_POLICY,1,'owner_publish'), 3)
         put('apps', ('organization_id','app_id','space_id','owner_principal_id'), (o,a,SPACE,p), 2)
         put('definition_revisions', ('organization_id','app_id','revision_id','schema_version','digest','canonical_content'), (o,a,r,1,d['digest'],canonical(d['content'])), 3)
         for item in d['content']['inputs']:

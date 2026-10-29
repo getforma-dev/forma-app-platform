@@ -26,6 +26,8 @@
 !app/src/storage/admission_qualification.rs
 !app/src/storage/authorization.rs
 !app/src/storage/catalog.rs
+!app/src/storage/definition_qualification.rs
+!app/src/storage/definitions.rs
 !app/src/storage/managed_qualification.rs
 !app/src/storage/managed_qualification/tests.rs
 !app/src/storage/pool.rs
@@ -35,7 +37,7 @@
 !app/src/storage/tests.rs
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
-!app/migrations/catalog-v4.json
+!app/migrations/catalog-v5.json
 !app/certs/rds-global-bundle.pem
 !app/runtime/runtime.py
 !app/runtime/qualification_supervisor.py

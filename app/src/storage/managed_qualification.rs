@@ -90,7 +90,7 @@ const SEED_NORTHSTAR_SHA: &str = "45639ea369193d60f45fbafbe6c3aad648881017df5761
 const SEED_SPEND_REVIEW_SHA: &str =
     "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650";
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v4.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v5.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -108,7 +108,7 @@ const RESULT_LIMIT: usize = 8192;
 /// Every source compiled into the library test executable, in this order.
 /// Embedded catalog/migration resources are pinned separately below. This is
 /// a binding of compiled inputs, not a whole-image or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 30] = [
+const SOURCES: [(&str, &[u8]); 32] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -164,6 +164,14 @@ const SOURCES: [(&str, &[u8]); 30] = [
         include_bytes!("authorization.rs"),
     ),
     ("app/src/storage/catalog.rs", include_bytes!("catalog.rs")),
+    (
+        "app/src/storage/definition_qualification.rs",
+        include_bytes!("definition_qualification.rs"),
+    ),
+    (
+        "app/src/storage/definitions.rs",
+        include_bytes!("definitions.rs"),
+    ),
     (
         "app/src/storage/managed_qualification.rs",
         include_bytes!("managed_qualification.rs"),

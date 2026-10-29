@@ -19,7 +19,7 @@ import uuid
 import psycopg
 from psycopg import sql
 import runtime
-from tenant_seed import ORGANIZATIONS, make_bundles, seed, canonical
+from tenant_seed import ORGANIZATIONS, OWNER_PUBLISH_POLICY, make_bundles, seed, canonical
 
 IMAGE = "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
 MIGRATIONS = Path(__file__).resolve().parents[1] / 'migrations'
@@ -94,6 +94,51 @@ ADMIT_GRANTS = set().union(
 # shared member precheck and fence read, for exactly these three roles.
 ENTITLEMENT_READS = {(role,'entitlements','SELECT',column) for role in ('genui_workspace','genui_control','genui_data')
                      for column in ('organization_id','principal_id','entitlement_id','status','expires_at')}
+
+
+def _role_columns(role, relation, privilege, *columns):
+    return {(role, relation, privilege, column) for column in columns}
+
+
+AUDIT_EVENT_COLUMNS = ('organization_id','event_id','writer_role','chain_sequence','kind','actor_principal_id','app_id','work_id',
+                       'record_id','code_id','outcome_digest','occurred_at','previous_hash','hash')
+# Migration 0005 (ADR-007 D7.3/D7.8, APP-010): column-limited INSERTs for the
+# definition, publication and saved-work transactions and the two application
+# audit chains. 0002 already grants the SELECTs on every business relation.
+DEFINITION_WORK_GRANTS = set().union(
+    _role_columns('genui_workspace','apps','INSERT','organization_id','app_id','space_id','owner_principal_id'),
+    _role_columns('genui_workspace','definition_revisions','INSERT','organization_id','app_id','revision_id','schema_version','digest',
+                  'canonical_content'),
+    _role_columns('genui_workspace','definition_inputs','INSERT','organization_id','app_id','revision_id','input_id','kind',
+                  'contract_digest','canonical_contract'),
+    _role_columns('genui_workspace','definition_record_schemas','INSERT','organization_id','app_id','revision_id','schema_id',
+                  'schema_version','digest','canonical_schema'),
+    _role_columns('genui_workspace','saved_work','INSERT','organization_id','app_id','work_id','publication_id','version','context'),
+    _role_columns('genui_workspace','record_collections','INSERT','organization_id','app_id','work_id','publication_id','collection_id',
+                  'schema_id','schema_version'),
+    _role_columns('genui_workspace','work_bindings','INSERT','organization_id','app_id','work_id','publication_id','input_id','kind',
+                  'contract_digest','source_id','source_revision_id','source_digest','collection_id','schema_id','schema_version',
+                  'revision_policy'),
+    _role_columns('genui_workspace','work_source_dependencies','INSERT','organization_id','app_id','work_id','input_id','source_id',
+                  'source_revision_id','source_digest'),
+    _role_columns('genui_control','publication_policies','INSERT','organization_id','policy_id','policy_version','kind'),
+    _role_columns('genui_control','publications','INSERT','organization_id','app_id','publication_id','definition_revision_id',
+                  'definition_digest','policy_id','policy_version','policy_kind','author_id','approver_id','approver_epoch',
+                  'renderer_version','operator_version','admission_digest','published_at','canonical_envelope'),
+    _role_columns('genui_control','publication_inputs','INSERT','organization_id','app_id','publication_id','definition_revision_id',
+                  'input_id','kind','contract_digest'),
+    _role_columns('genui_control','publication_record_schemas','INSERT','organization_id','app_id','publication_id',
+                  'definition_revision_id','schema_id','schema_version','digest'),
+    *(_role_columns(role,'audit_events','INSERT',*AUDIT_EVENT_COLUMNS) for role in ('genui_workspace','genui_control')),
+    *(_role_columns(role,'audit_heads','SELECT','organization_id','writer_role','chain_sequence','head_hash')
+      for role in ('genui_workspace','genui_control')),
+    *(_role_columns(role,'audit_heads','UPDATE','chain_sequence','head_hash') for role in ('genui_workspace','genui_control')),
+)
+# D7.8 closed chains and kinds of the two application roles 0005 binds.
+APPLICATION_CHAIN_KINDS = {
+    'genui_workspace': ('workspace', ('session.signed_in','app.created','definition.drafted','work.saved','work.bound')),
+    'genui_control': ('control', ('publication.published','policy.changed')),
+}
 
 
 def sha(value):
@@ -188,9 +233,12 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS|ENTITLEMENT_READS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
-        assert {t for t in actual if t[0] in APP_ROLES and t[1] in ADMISSION_TABLES+('code_index','handle_index')}==ENTITLEMENT_READS
+        # Application roles reach 0003's relations only through 0004's entitlement
+        # reads and 0005's own-chain audit append (D7.8); never the code ledger.
+        assert {t for t in actual if t[0] in APP_ROLES and t[1] in ADMISSION_TABLES+('code_index','handle_index')}==ENTITLEMENT_READS|{
+            t for t in DEFINITION_WORK_GRANTS if t[1] in ('audit_events','audit_heads')}
         schema=set(c.execute("""SELECT n.nspname,a.privilege_type FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) a
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND pg_get_userbyid(a.grantee)='genui_admit'""").fetchall())
         assert schema=={('genui','USAGE'),('genui_private','USAGE')},schema
@@ -199,8 +247,8 @@ def admission_checks(pg, passed, denied):
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND a.privilege_type='EXECUTE' AND a.grantee<>p.proowner""").fetchall())
         assert executes=={('lock_member_authority',r) for r in ('genui_workspace','genui_control','genui_data')}|{('lock_work_revision','genui_data')}|{
             (name,'genui_workspace') for name in ADMIT_FUNCTIONS},executes
-    passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads (D7.3); EXECUTE on the six functions is genui_workspace only',
-           admit_grant_count=len(ADMIT_GRANTS))
+    passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns (D7.3); EXECUTE on the six functions is genui_workspace only',
+           admit_grant_count=len(ADMIT_GRANTS),definition_work_grant_count=len(DEFINITION_WORK_GRANTS))
 
     # --- genui_admit attributes, memberships and function properties (D7.1, A3, A4) ---
     with pg.connect('postgres') as c:
@@ -238,13 +286,22 @@ def admission_checks(pg, passed, denied):
             check="((writer_role = '%s'::text) AND (kind = ANY (ARRAY[%s])))"%(chain,', '.join("'%s'::text"%k for k in kinds))
             assert ('audit_events',name,'RESTRICTIVE',[role],'INSERT',None,check) in policies,(role,policies)
             assert ('audit_heads',name,'RESTRICTIVE',[role],'UPDATE',"(writer_role = '%s'::text)"%chain,None) in policies,(role,policies)
-        assert len(policies)==4,policies
+        for role,(chain,kinds) in APPLICATION_CHAIN_KINDS.items():
+            name=chain+'_chain'
+            check="((writer_role = '%s'::text) AND (kind = ANY (ARRAY[%s])))"%(chain,', '.join("'%s'::text"%k for k in kinds))
+            assert ('audit_events',name,'RESTRICTIVE',[role],'INSERT',None,check) in policies,(role,policies)
+            assert ('audit_heads',name,'RESTRICTIVE',[role],'UPDATE',"(writer_role = '%s'::text)"%chain,None) in policies,(role,policies)
+            # D7.3 "audit_heads (own chain)": the head read is bound to the chain too.
+            assert ('audit_heads',name+'_read','RESTRICTIVE',[role],'SELECT',"(writer_role = '%s'::text)"%chain,None) in policies,(role,policies)
+        assert len(policies)==10,policies
         targets=lambda table,cmd: {r[3][0] for r in policies if r[0]==table and r[4]==cmd}
-        assert holders('audit_events','INSERT')==targets('audit_events','INSERT')=={'genui_admit','genui_owner'}
-        assert holders('audit_heads','UPDATE')==targets('audit_heads','UPDATE')=={'genui_admit','genui_owner'}
+        writers={'genui_admit','genui_owner','genui_workspace','genui_control'}
+        assert holders('audit_events','INSERT')==targets('audit_events','INSERT')==writers
+        assert holders('audit_heads','UPDATE')==targets('audit_heads','UPDATE')==writers
+        assert targets('audit_heads','SELECT')=={'genui_workspace','genui_control'}
         # Insert-only for every role (D7.8), the owner included.
         assert holders('audit_events','UPDATE')==holders('audit_events','DELETE')==holders('audit_events','TRUNCATE')==set()
-    passed('every INSERT holder on audit_events (genui_admit, genui_owner) has its RESTRICTIVE chain/kind policy and its own-chain head UPDATE policy',
+    passed('every INSERT holder on audit_events (genui_admit, genui_owner, and since 0005 genui_workspace, genui_control) has its RESTRICTIVE chain/kind policy and its own-chain head UPDATE policy; the two application roles also read only their own head',
            policies=[list(p[:5]) for p in policies])
     # D7.8 (as amended, 0003 review m4 / APP-073 review M2): every chain hash is genui.digest.
     with pg.connect('postgres') as c:
@@ -325,6 +382,16 @@ def admission_checks(pg, passed, denied):
                 denied(role+' cannot read entitlements.kind',role,'SELECT kind FROM genui.entitlements')
                 denied(role+' cannot read entitlements.revoked_at',role,'SELECT revoked_at FROM genui.entitlements')
                 continue
+            if table=='audit_heads' and role in APPLICATION_CHAIN_KINDS:
+                # 0005 (D7.3): workspace and control read their own chain's head
+                # only; definition_work_checks proves it once those heads exist.
+                with pg.connect(role) as c:
+                    scope(c,org0)
+                    assert c.execute('SELECT count(*) FROM genui.audit_heads').fetchone()==(0,)
+                    assert c.execute("UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s",(org0,)).rowcount==0
+                    c.rollback()
+                passed(role+' sees and advances no admission or operator head (0005 own-chain binding)')
+                continue
             denied(role+' cannot read '+table+' directly',role,'SELECT organization_id FROM genui.'+table)
         denied(role+' cannot insert an access code directly',role,
                "INSERT INTO genui.access_codes(organization_id,code_id) VALUES (%s,%s)",(org0,str(uuid.uuid4())))
@@ -334,8 +401,9 @@ def admission_checks(pg, passed, denied):
                "INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id) VALUES (%s,%s,%s)",(org0,P,str(uuid.uuid4())))
         denied(role+' cannot insert an audit event directly',role,
                "INSERT INTO genui.audit_events(organization_id,event_id) VALUES (%s,%s)",(org0,str(uuid.uuid4())))
-        denied(role+' cannot advance an audit head directly',role,
-               "UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s",(org0,))
+        if role not in APPLICATION_CHAIN_KINDS:
+            denied(role+' cannot advance an audit head directly',role,
+                   "UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s",(org0,))
         denied(role+' cannot UPDATE membership epoch directly',role,
                "UPDATE genui.memberships SET membership_epoch=membership_epoch WHERE organization_id=%s",(org0,))
         denied(role+' cannot SET ROLE genui_admit',role,'SET ROLE genui_admit')
@@ -674,6 +742,99 @@ def admission_checks(pg, passed, denied):
     passed('no admission function call wrote genui.organizations: tuple xmin/ctid/status unchanged across every call (FOR SHARE locks only)')
 
 
+def definition_work_checks(pg, passed, denied):
+    """ADR-007 D7.3/D7.8 for migration 0005 (APP-010) on the actual local database.
+
+    The storage-module transactions themselves (precheck, fence, admission,
+    publication, saved work, restart) are the Rust definition campaign's; this
+    proves the grant and chain-binding layer they rely on, as each role.
+    """
+    org0,org1=ORGANIZATIONS
+    with pg.connect('postgres') as c:
+        policies=c.execute("SELECT organization_id::text,policy_version,kind FROM genui.publication_policies WHERE policy_id=%s ORDER BY 1",
+                           (OWNER_PUBLISH_POLICY,)).fetchall()
+        assert policies==[(org,1,'owner_publish') for org in ORGANIZATIONS],policies
+    passed('the operator seed (not a migration) gives each fixture organization its owner_publish policy row (plan Task 6)',policy_id=OWNER_PUBLISH_POLICY)
+    # Genesis heads for the two application chains, as the operator backfill writes them (D7.7, D7.19).
+    with pg.connect() as c:
+        for org in ORGANIZATIONS:
+            c.execute('SET LOCAL ROLE genui_owner')
+            c.execute("SELECT set_config('genui.organization_id',%s,true)",(org,))
+            for chain in ('workspace','control'):
+                c.execute('INSERT INTO genui.audit_heads VALUES (%s,%s,1,%s) ON CONFLICT DO NOTHING',(org,chain,genesis(org,chain)))
+            c.execute('RESET ROLE')
+    def event(org, writer, kind):
+        return ("""INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,occurred_at,previous_hash,hash)
+          VALUES (%s,%s,%s,%s,%s,now(),%s,%s)""",(org,str(uuid.uuid4()),writer,10**6,kind,sha('prev-'+uuid.uuid4().hex),sha('h-'+uuid.uuid4().hex)))
+    revision=str(uuid.uuid4())
+    writes={
+        'genui_workspace':[
+            ("INSERT INTO genui.definition_revisions(organization_id,app_id,revision_id,schema_version,digest,canonical_content) VALUES (%s,%s,%s,1,%s,%s)",
+             (org0,APP,revision,sha('draft'),b'{}')),
+            ("INSERT INTO genui.definition_inputs(organization_id,app_id,revision_id,input_id,kind,contract_digest,canonical_contract) VALUES (%s,%s,%s,'events','source',%s,%s)",
+             (org0,APP,revision,sha('contract'),b'{}')),
+            ("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context) VALUES (%s,%s,%s,%s,1,'grant probe')",
+             (org0,APP,str(uuid.uuid4()),PUB)),
+            event(org0,'workspace','definition.drafted'),
+            ("UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s AND writer_role='workspace'",(org0,)),
+        ],
+        'genui_control':[
+            ("INSERT INTO genui.publication_policies(organization_id,policy_id,policy_version,kind) VALUES (%s,%s,1,'independent_review')",
+             (org0,str(uuid.uuid4()))),
+            event(org0,'control','publication.published'),
+            ("UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s AND writer_role='control'",(org0,)),
+        ],
+    }
+    for role,statements in writes.items():
+        chain=APPLICATION_CHAIN_KINDS[role][0]
+        with pg.connect(role) as c:
+            scope(c,org0)
+            for statement,params in statements:
+                assert c.execute(statement,params).rowcount==1,(role,statement)
+            # D7.3 own chain: the role reads and locks only its own head.
+            assert c.execute('SELECT writer_role FROM genui.audit_heads').fetchall()==[(chain,)]
+            assert c.execute('SELECT writer_role FROM genui.audit_heads FOR UPDATE').fetchall()==[(chain,)]
+            for other in ('workspace','control','data','admission','operator'):
+                if other!=chain:
+                    assert c.execute('UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s AND writer_role=%s',(org0,other)).rowcount==0
+            c.rollback()
+    passed('0005 grants: genui_workspace inserts drafts, saved work and workspace-chain events, genui_control inserts policy rows and control-chain events; each reads, locks and advances only its own head (rolled back)')
+    pub_row=("INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope) VALUES (%s,%s,%s,%s,%s,%s,1,'owner_publish',%s,%s,1,1,1,%s,now(),%s)",
+             (org0,APP,str(uuid.uuid4()),'00000000-0000-4000-8000-000000000067',sha('d'),OWNER_PUBLISH_POLICY,P,P,sha('d'),b'{}'))
+    draft_row=("INSERT INTO genui.definition_revisions(organization_id,app_id,revision_id,schema_version,digest,canonical_content) VALUES (%s,%s,%s,1,%s,%s)",
+               (org0,APP,str(uuid.uuid4()),sha('draft'),b'{}'))
+    work_row=("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context) VALUES (%s,%s,%s,%s,1,'x')",
+              (org0,APP,str(uuid.uuid4()),PUB))
+    for name,role,(statement,params) in (
+            ('workspace cannot write publications','genui_workspace',pub_row),
+            ('workspace cannot write publication inputs','genui_workspace',("INSERT INTO genui.publication_inputs(organization_id,app_id,publication_id,definition_revision_id,input_id,kind,contract_digest) VALUES (%s,%s,%s,%s,'events','source',%s)",(org0,APP,PUB,'00000000-0000-4000-8000-000000000067',sha('c')))),
+            ('workspace cannot write publication policies','genui_workspace',("INSERT INTO genui.publication_policies(organization_id,policy_id,policy_version,kind) VALUES (%s,%s,1,'owner_publish')",(org0,str(uuid.uuid4())))),
+            ('control cannot write saved work','genui_control',work_row),
+            ('control cannot write definition revisions','genui_control',draft_row),
+            ('control cannot write work bindings','genui_control',("INSERT INTO genui.work_bindings(organization_id,app_id,work_id,publication_id,input_id,kind,contract_digest) VALUES (%s,%s,%s,%s,'x','source',%s)",(org0,APP,WORK,PUB,sha('c')))),
+            ('data cannot write definition revisions','genui_data',draft_row),
+            ('data cannot write publications','genui_data',pub_row),
+            ('data cannot write saved work','genui_data',work_row),
+            ('worker cannot write saved work','genui_worker',work_row),
+            ('workspace cannot write permission rows','genui_workspace',("INSERT INTO genui.app_permissions(organization_id,principal_id,app_id,permission) VALUES (%s,%s,%s,'review_publish')",(org0,P,APP))),
+            ('control cannot write permission rows','genui_control',("INSERT INTO genui.work_permissions(organization_id,principal_id,app_id,work_id,permission) VALUES (%s,%s,%s,%s,'export')",(org0,P,APP,WORK))),
+            ('workspace cannot write the source ledger','genui_workspace',("INSERT INTO genui.sources(organization_id,source_id) VALUES (%s,%s)",(org0,str(uuid.uuid4())))),
+            ('workspace cannot write another organization (FORCE RLS)','genui_workspace',(draft_row[0],(org1,)+draft_row[1][1:])),
+            ('workspace cannot append to the control chain','genui_workspace',event(org0,'control','publication.published')),
+            ('workspace cannot append a control kind','genui_workspace',event(org0,'workspace','publication.published')),
+            ('workspace cannot append an admission kind','genui_workspace',event(org0,'workspace','admission.redeemed')),
+            ('control cannot append to the workspace chain','genui_control',event(org0,'workspace','work.saved')),
+            ('control cannot append a workspace kind','genui_control',event(org0,'control','definition.drafted')),
+            ('data cannot append audit events before 0007','genui_data',event(org0,'data','command.committed')),
+            ('workspace cannot UPDATE audit events','genui_workspace',('UPDATE genui.audit_events SET kind=kind',())),
+            ('control cannot DELETE audit events','genui_control',('DELETE FROM genui.audit_events',())),
+            ('workspace cannot rewrite a draft','genui_workspace',('UPDATE genui.definition_revisions SET digest=digest',())),
+            ('control cannot rewrite a publication','genui_control',('UPDATE genui.publications SET admission_digest=admission_digest',())),
+            ('workspace cannot delete saved work','genui_workspace',('DELETE FROM genui.saved_work',()))):
+        denied('0005 '+name,role,statement,params)
+    passed('0005 role separation: workspace never publishes, control never saves work, data/worker write neither, no role writes permission rows, rewrites or deletes drafts, publications, saved work or audit events, or appends to another chain or kind')
+
+
 def command(args, check=True):
     p = subprocess.run(args, capture_output=True, text=True, timeout=60)
     if check and p.returncode: raise RuntimeError('local Docker operation failed: '+p.stderr[-1200:])
@@ -728,12 +889,13 @@ def scope(c, org=ORGANIZATIONS[0], principal=P, epoch=1):
 
 
 def qualify():
-    report={'schema_version':1,'scope':'APP-008/APP-073 real local PostgreSQL schema/ACL and admission-function qualification',
+    report={'schema_version':1,'scope':'APP-008/APP-073/APP-010 real local PostgreSQL schema/ACL, admission-function and definition/work grant qualification',
             'managed_acceptance':False,'image':IMAGE,'server_version':'16.13','network':'random loopback-only published port',
             'checks':[],'passed':False,'limits':['Local trust authentication is not RDS IAM/TLS qualification.',
             'Operator-seeded contract shapes are not source import, hosted identity or successful application business writes.',
             'Admission functions are exercised directly as genui_workspace with fixture codes written as the operator channel would; '
             'the storage-module admission path, the operator package, sessions and hosted identity are not exercised.',
+            'The 0005 definition/work grants are exercised as raw role statements; the storage-module definition, publication and saved-work transactions are the Rust definition campaign.',
             'Native pool cancellation/reuse and actual managed trials remain separate.']}
     def passed(name, **facts): report['checks'].append({'name':name,'passed':True,**facts})
     catalog_query=json.loads((MIGRATIONS/'catalog-query.json').read_text())['sql']
@@ -1374,6 +1536,7 @@ def qualify():
             assert pg.digest()==before
             passed('operator seed refuses changed existing epoch without overwriting authority')
             admission_checks(pg,passed,denied)
+            definition_work_checks(pg,passed,denied)
             report['source_sha256']={str(p.relative_to(Path(__file__).resolve().parents[2])):hashlib.sha256(p.read_bytes()).hexdigest()
                                     for p in (Path(runtime.__file__),Path(__file__),Path(__file__).with_name('tenant_seed.py'),MIGRATIONS/'manifest.json',
                                               *(MIGRATIONS/item['file'] for item in manifest['migrations']+manifest['catalog']))}
