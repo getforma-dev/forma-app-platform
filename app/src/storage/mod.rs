@@ -59,6 +59,8 @@ fn valid_id(value: &str) -> bool {
 }
 
 #[cfg(test)]
+mod managed_qualification;
+#[cfg(test)]
 mod qualification;
 #[cfg(test)]
 mod qualification_cases;
