@@ -70,7 +70,7 @@ Track D:           APP-076 beta go-live trial in Chrome (needs T11, C3, FORMA-36
 ### Task 1: Land APP-008 and APP-011 once Actions run
 
 **Files:**
-- Modify: `Tickets/3-in-review/APP-008.md`, `Tickets/9-blocked/APP-011.md` (log, move to Done), `evidence/APP-008/ci/<sha>.json`, `evidence/APP-011/ci.json`
+- Modify: `Tickets/3-in-review/APP-008.md`, `Tickets/3-in-review/APP-011.md` (log, move to Done), `evidence/APP-008/ci/<sha>.json`, `evidence/APP-011/ci.json`
 
 **Interfaces:**
 - Consumes: Victor's billing fix (the refused annotation disappears from a planning-run retry).
@@ -314,10 +314,10 @@ The joint six-hour identity rehearsal, its pre-start list and its in-window runb
 - [x] `handoff/forma-247/README.md`, `config.example.json` and `provision.py` at gatewasm `dfba787` and `MAIL-VERIFICATION.md` plus the `return_entry_url` provisioning change at `1bf5d3b` are hash-bound in `evidence/APP-006/upstream-auth-source/merged-contract-2026-10-29/` (fetched from the now-public repository, blob SHA-1s matching GitHub's tree; the FormaStack checkout was not touched). APP-006 records the server-only invitation and PAR contract and the mail contract as accepted merged source; verification is attested through `user.email_verified`, not a JWT claim.
 - [x] Gate split applied in `Tickets/external-dependencies.json`: FORMA-247/248 cleared by disposition with the disposition record as evidence; FORMA-365 blocks APP-058 and APP-079; FORMA-366 (mail qualification) and FORMA-367 (lean deployment) block APP-076.
 
-### Task C1: Victor's two choices (they block only the hosted steps C2–C3 and Track D)
+### Task C1: Victor's two choices (the GenUI figure still blocks the hosted steps C3 and Track D; SES and FORMA-367 are approved)
 
-- [ ] The monthly figure for the always-on beta (ADR-008 default about $185–205/month including FormaStack's lean fAuth, or a scheduled daily window). Record it as a dated amendment in `docs/planning/SYNTHETIC-ENVIRONMENT-COST.md` and rewrite the ledger `basis` in `.cache/operations/beta/budget-ledger.json` from actual retained resources before any reservation.
-- [ ] The mail transport (default Amazon SES SMTP in account 877573132739 with a verified `getforma.dev` sender; alternative Resend). GenUI creates the DNS records at Porkbun and records the record ids privately; FormaStack configures fAuth's SMTP secret.
+- [ ] The monthly figure for the always-on beta (ADR-008 default about $185–210/month including FormaStack's lean fAuth, or a scheduled daily window). Record it as a dated amendment in `docs/planning/SYNTHETIC-ENVIRONMENT-COST.md` and rewrite the ledger `basis` in `.cache/operations/beta/budget-ledger.json` from actual retained resources before any reservation.
+- [x] The mail transport: Victor approved SES SMTP with FORMA-367 on 2026-10-29 ("Approved: deploy the lean always-on fAuth (FORMA-367) at about $33/month using SES SMTP. Coordinate the timing with GenUI.", relayed by FormaStack). Default as planned: Amazon SES SMTP in account 877573132739 with a verified `getforma.dev` sender; alternative Resend). GenUI creates the DNS records at Porkbun and records the record ids privately; FormaStack configures fAuth's SMTP secret.
 
 ### Task C2: FormaStack deploys fAuth lean for the beta (FORMA-367 deployment, FORMA-366 mail qualification; FormaStack's work, GenUI receives)
 
@@ -339,7 +339,7 @@ The joint six-hour identity rehearsal, its pre-start list and its in-window runb
 
 ## Victor's actions (only these)
 
-1. Approve the monthly figure for the always-on beta (ADR-008; default about $185–205/month including FormaStack's lean fAuth) or choose the scheduled-window alternative.
+1. Approve the monthly figure for the always-on beta (ADR-008; default about $185–210/month including FormaStack's lean fAuth) or choose the scheduled-window alternative.
 2. Choose the mail transport (default Amazon SES with a verified `getforma.dev` sender) and approve its small cost.
 3. Approve the APP-078 window slot when GenUI proposes it (a few dollars inside the approved figure).
 

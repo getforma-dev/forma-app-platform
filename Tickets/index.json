@@ -38,7 +38,7 @@
       ],
       "ticket_count": 20,
       "done_count": 6,
-      "blocked_count": 2
+      "blocked_count": 1
     },
     {
       "id": "PH02",
@@ -344,11 +344,11 @@
     {
       "id": "APP-006",
       "title": "Revalidate fAuth contract and integration prerequisites",
-      "path": "2-in-progress/APP-006.md",
+      "path": "3-in-review/APP-006.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "In progress",
+      "Status": "In review",
       "Priority": "P0",
       "Type": "Spike",
       "Sprint": "S01",
@@ -545,11 +545,11 @@
     {
       "id": "APP-011",
       "title": "Package reproducible synthetic sources and expected outcomes",
-      "path": "9-blocked/APP-011.md",
+      "path": "3-in-review/APP-011.md",
       "Field": "Value",
       "---": "---",
       "Epic": "VAL",
-      "Status": "Blocked",
+      "Status": "In review",
       "Priority": "P0",
       "Type": "Verification",
       "Sprint": "S02",
@@ -564,8 +564,8 @@
       "Assignee": "GenUI \u2014 synthetic fixture lead",
       "Branch / PR": "phase-one-spikes; fixture package paths owned independently",
       "Team": "GenUI",
-      "Blocked by": "The Synthetic fixture qualification workflow has not yet passed on the exact source: its first run (40931497331 on `a0a75a8`, the repository now public) failed in `fixtures/qualify.py` because it required byte identity with APP-004's arm64 macOS WASM digest, which the wasm32 build cannot give across hosts; the binding fix is merged and runs on the next push. Local package acceptance and review have passed.",
-      "Unblock evidence": "The fixtures workflow succeeds on the exact pushed source with the new input binding recorded in its `summary.json`; record the run and land the reviewed change. Do not treat the earlier account-level refusal as a test result.",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-002",
         "APP-007"
