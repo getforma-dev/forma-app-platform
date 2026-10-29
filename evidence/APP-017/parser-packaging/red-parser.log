@@ -1,0 +1,230 @@
+   Compiling rustversion v1.0.23
+   Compiling cfg-if v1.0.5
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling encoding_rs v0.8.42
+   Compiling memchr v2.8.3
+   Compiling crc32fast v1.5.3
+   Compiling serde_core v1.0.228
+   Compiling multiversion_no_op v1.0.0
+   Compiling scopeguard v1.2.0
+   Compiling getrandom v0.4.3
+   Compiling syn v2.0.119
+   Compiling zlib-rs v0.6.8
+   Compiling bumpalo v3.20.3
+   Compiling simd-adler32 v0.3.10
+   Compiling equivalent v1.0.3
+   Compiling log v0.4.34
+   Compiling serde v1.0.228
+   Compiling hashbrown v0.17.1
+   Compiling indexmap v2.14.2
+   Compiling flate2 v1.1.10
+   Compiling zopfli v0.8.4
+   Compiling serde_derive v1.0.228
+   Compiling typed-path v0.13.0
+   Compiling debug_unsafe v0.1.4
+   Compiling serde_json v1.0.145
+   Compiling atoi_simd v0.18.1
+   Compiling zip v9.1.3 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/.claude/worktrees/agent-a564e5697d0c04781/parser/vendor/zip-9.1.3)
+   Compiling quick-xml v0.42.0
+   Compiling codepage v0.1.3
+   Compiling byteorder v1.5.0
+   Compiling itoa v1.0.18
+   Compiling ryu v1.0.23
+   Compiling fast-float2 v0.2.4
+   Compiling calamine v0.37.0
+   Compiling csv-core v0.1.13
+   Compiling parser-guest v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/.claude/worktrees/agent-a564e5697d0c04781/parser/guest)
+    Finished `release` profile [optimized] target(s) in 16.54s
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+   Compiling serde_core v1.0.228
+   Compiling syn v2.0.119
+   Compiling serde v1.0.228
+   Compiling log v0.4.34
+   Compiling cranelift-srcgen v0.123.19
+   Compiling cfg-if v1.0.5
+   Compiling cranelift-assembler-x64-meta v0.123.19
+   Compiling serde_derive v1.0.228
+   Compiling libc v0.2.191
+   Compiling allocator-api2 v0.2.21
+   Compiling bumpalo v3.20.3
+   Compiling pulley-macros v36.0.19
+   Compiling equivalent v1.0.3
+   Compiling hashbrown v0.17.1
+   Compiling indexmap v2.14.2
+   Compiling cranelift-bitset v0.123.19
+   Compiling libm v0.2.16
+   Compiling foldhash v0.1.5
+   Compiling cranelift-isle v0.123.19
+   Compiling pulley-interpreter v36.0.19
+   Compiling hashbrown v0.15.5
+   Compiling target-lexicon v0.13.5
+   Compiling memchr v2.8.3
+   Compiling crc32fast v1.5.3
+   Compiling cranelift-codegen-shared v0.123.19
+   Compiling heck v0.5.0
+   Compiling cranelift-codegen-meta v0.123.19
+   Compiling cranelift-entity v0.123.19
+   Compiling smallvec v1.16.4
+   Compiling cranelift-assembler-x64 v0.123.19
+   Compiling bitflags v2.13.2
+   Compiling anyhow v1.0.100
+   Compiling cranelift-codegen v0.123.19
+   Compiling wasmtime-internal-math v36.0.19
+   Compiling gimli v0.32.3
+   Compiling syn v3.0.9
+   Compiling rustc-hash v2.1.3
+   Compiling version_check v0.9.5
+   Compiling thiserror v2.0.21
+   Compiling arbitrary v1.5.0
+   Compiling leb128fmt v0.1.0
+   Compiling cranelift-control v0.123.19
+   Compiling generic-array v0.14.7
+   Compiling regalloc2 v0.12.2
+   Compiling thiserror-impl v2.0.21
+   Compiling cranelift-bforest v0.123.19
+   Compiling wasmparser v0.236.1
+   Compiling object v0.37.3
+   Compiling semver v1.0.28
+   Compiling wasm-encoder v0.236.1
+   Compiling typenum v1.20.1
+   Compiling cobs v0.3.0
+   Compiling wasmtime-internal-versioned-export-macros v36.0.19
+   Compiling termcolor v1.4.1
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.15
+   Compiling cc v1.10.0
+   Compiling wasmprinter v0.236.1
+   Compiling postcard v1.1.3
+   Compiling wasm-encoder v0.262.0
+   Compiling rustix v1.1.6
+   Compiling either v1.19.0
+   Compiling wasmtime-internal-unwinder v36.0.19
+   Compiling unicode-width v0.2.3
+   Compiling wast v262.0.0
+   Compiling itertools v0.14.0
+   Compiling wasmtime-environ v36.0.19
+   Compiling wasmtime v36.0.19
+   Compiling cranelift-native v0.123.19
+   Compiling cranelift-frontend v0.123.19
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling errno v0.3.14
+   Compiling serde_json v1.0.145
+   Compiling cfg_aliases v0.2.2
+   Compiling nix v0.31.3
+   Compiling digest v0.10.7
+   Compiling wasmtime-internal-cranelift v36.0.19
+   Compiling wat v1.262.0
+   Compiling wasmtime-internal-jit-icache-coherence v36.0.19
+   Compiling cpufeatures v0.2.17
+   Compiling mach2 v0.4.3
+   Compiling wasmtime-internal-asm-macros v36.0.19
+   Compiling itoa v1.0.18
+   Compiling once_cell v1.21.4
+   Compiling getrandom v0.4.3
+   Compiling ryu v1.0.23
+   Compiling wasmtime-internal-slab v36.0.19
+   Compiling sha2 v0.10.9
+   Compiling zlib-rs v0.6.8
+   Compiling simd-adler32 v0.3.10
+   Compiling zopfli v0.8.4
+   Compiling flate2 v1.1.10
+   Compiling typed-path v0.13.0
+   Compiling parser-host v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/.claude/worktrees/agent-a564e5697d0c04781/parser/host)
+   Compiling zip v9.1.3 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/.claude/worktrees/agent-a564e5697d0c04781/parser/vendor/zip-9.1.3)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 52.69s
+     Running unittests src/lib.rs (target/debug/deps/parser_host-2febe6888662d114)
+
+running 1 test
+test tests::native_decode_finishing_after_deadline_cannot_return_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running unittests src/main.rs (target/debug/deps/parser_host-ef91781f5440faaa)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/job.rs (target/debug/deps/job-2c24b2f103e75ae2)
+
+running 7 tests
+test job_binary_refuses_every_hostile_fixture_and_accepts_valid_ones ... FAILED
+test job_mode_caps_input_at_the_demo_profile_before_the_guest ... FAILED
+test job_mode_reads_framed_config_and_input ... FAILED
+test job_mode_refuses_bad_framing_and_configuration_as_failure ... FAILED
+test job_mode_refuses_guest_bytes_that_differ_from_the_expected_digest ... FAILED
+test job_process_runs_exactly_one_job ... FAILED
+test sheet_selection_required_lists_sheets_after_preflight ... FAILED
+
+failures:
+
+---- job_binary_refuses_every_hostile_fixture_and_accepts_valid_ones stdout ----
+
+thread 'job_binary_refuses_every_hostile_fixture_and_accepts_valid_ones' (4928373) panicked at host/tests/job.rs:109:5:
+assertion `left == right` failed: stderr=Error: usage: parser-host <parser.wasm> <input> <config.json>
+
+  left: 1
+ right: 2
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- job_mode_caps_input_at_the_demo_profile_before_the_guest stdout ----
+
+thread 'job_mode_caps_input_at_the_demo_profile_before_the_guest' (4928432) panicked at host/tests/job.rs:109:5:
+assertion `left == right` failed: stderr=Error: usage: parser-host <parser.wasm> <input> <config.json>
+
+  left: 1
+ right: 2
+
+---- job_mode_reads_framed_config_and_input stdout ----
+
+thread 'job_mode_reads_framed_config_and_input' (4928436) panicked at host/tests/job.rs:124:5:
+assertion `left == right` failed: stderr=Error: usage: parser-host <parser.wasm> <input> <config.json>
+
+  left: 1
+ right: 0
+
+---- job_mode_refuses_bad_framing_and_configuration_as_failure stdout ----
+
+thread 'job_mode_refuses_bad_framing_and_configuration_as_failure' (4928439) panicked at host/tests/job.rs:65:40:
+called `Result::unwrap()` on an `Err` value: Error("expected value", line: 1, column: 1)
+
+---- job_mode_refuses_guest_bytes_that_differ_from_the_expected_digest stdout ----
+
+thread 'job_mode_refuses_guest_bytes_that_differ_from_the_expected_digest' (4928442) panicked at host/tests/job.rs:65:40:
+called `Result::unwrap()` on an `Err` value: Error("expected value", line: 1, column: 1)
+
+---- job_process_runs_exactly_one_job stdout ----
+
+thread 'job_process_runs_exactly_one_job' (4928445) panicked at host/tests/job.rs:299:5:
+assertion `left == right` failed: stderr=Error: usage: parser-host <parser.wasm> <input> <config.json>
+
+  left: 1
+ right: 0
+
+---- sheet_selection_required_lists_sheets_after_preflight stdout ----
+
+thread 'sheet_selection_required_lists_sheets_after_preflight' (4928448) panicked at host/tests/job.rs:109:5:
+assertion `left == right` failed: stderr=Error: usage: parser-host <parser.wasm> <input> <config.json>
+
+  left: 1
+ right: 2
+
+
+failures:
+    job_binary_refuses_every_hostile_fixture_and_accepts_valid_ones
+    job_mode_caps_input_at_the_demo_profile_before_the_guest
+    job_mode_reads_framed_config_and_input
+    job_mode_refuses_bad_framing_and_configuration_as_failure
+    job_mode_refuses_guest_bytes_that_differ_from_the_expected_digest
+    job_process_runs_exactly_one_job
+    sheet_selection_required_lists_sheets_after_preflight
+
+test result: FAILED. 0 passed; 7 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.06s
+
+error: test failed, to rerun pass `-p parser-host --test job`
+EXIT=101

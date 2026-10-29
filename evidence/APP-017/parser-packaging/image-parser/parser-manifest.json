@@ -1,0 +1,26 @@
+{
+  "guest": {
+    "bytes": 855790,
+    "path": "/app/parser/parser_guest.wasm",
+    "sha256": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774"
+  },
+  "host": {
+    "bytes": 10795440,
+    "path": "/app/parser/parser-host",
+    "sha256": "44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934"
+  },
+  "schema": "genui-parser-manifest/1",
+  "source": {
+    "cargo_lock_sha256": "d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+    "rust_toolchain": "1.93.1",
+    "rustc": {
+      "LLVM version": "21.1.8",
+      "commit-hash": "01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf",
+      "host": "aarch64-unknown-linux-gnu",
+      "release": "1.93.1"
+    },
+    "source_files": 102,
+    "sources_sha256": "351a64b6aa8ed41c66ba770a73f8065f166a368215076c246b0cddb59c60c7f6",
+    "vendor_provenance_sha256": "5259d9a04cb06b892c19fa17a0c99b0951a40484ae1c25ea98332a12bcf20e1a"
+  }
+}

@@ -1,0 +1,4 @@
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/.claude/worktrees/agent-a564e5697d0c04781/fixtures/qualify.py", line 123, in image_parser_binding
+    raise AssertionError("image parser bytes are not bound to this checkout's parser/: " + " ".join(mismatches))
+AssertionError: image parser bytes are not bound to this checkout's parser/: sources_sha256

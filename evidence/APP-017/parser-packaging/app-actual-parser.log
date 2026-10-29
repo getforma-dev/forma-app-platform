@@ -1,0 +1,9 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.28s
+     Running unittests src/lib.rs (target/debug/deps/genui-475e68124e2da427)
+
+running 1 test
+test imports::sandbox::tests::actual_parser_host_parses_refuses_and_lists_sheets ... ACTUAL_PARSER host_sha256=8882e694f2eeb009bfd67ec49db0ae907a7dacbe82e1886d1739ac70c6d406b0 wasm_sha256=0742df915622ff770d09ac76958d577b61ee42ced7f4c39e34e666a811276e3b peak_rss_bytes=46104576
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 45 filtered out; finished in 3.23s
+

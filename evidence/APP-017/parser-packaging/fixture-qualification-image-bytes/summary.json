@@ -1,0 +1,67 @@
+{
+  "command": "spikes/APP-005/.venv/bin/python fixtures/qualify.py --output /private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/a4/qualify-image --parser-host /Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/.claude/worktrees/agent-a564e5697d0c04781/parser/target/debug/parser-host --parser-wasm /private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/a4/extracted/parser_guest.wasm --parser-manifest /private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/a4/extracted/parser-manifest.json",
+  "finished_at": "2026-10-29T21:07:15.337556+00:00",
+  "limits": [
+    "No real app journeys, account provisioning, database reset, publication, model generation, record mutation or restore acceptance",
+    "CIDR/rate/currency are independent oracle checks; unsupported APP-005 operators remain unsupported",
+    "Actual APP-004 accepted files require mapping; acceptance is not source admission",
+    "APP-008 shape seeds intentionally retain placeholder source/admission/receipt data"
+  ],
+  "parser_artifacts": {
+    "parser_guest": "sha256:a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
+    "parser_host": "sha256:8882e694f2eeb009bfd67ec49db0ae907a7dacbe82e1886d1739ac70c6d406b0"
+  },
+  "parser_binding": {
+    "app004_recorded_rustc_commit": "01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf",
+    "basis": "the guest bytes are the image's own; the manifest written by the image build binds them to parser/ sources, Cargo.lock, vendored ZIP provenance and rustc, each recomputed from this checkout; no rebuild and no cross-host byte identity",
+    "cargo_lock_sha256": "d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+    "host_matches_manifest": false,
+    "host_sha256": "sha256:8882e694f2eeb009bfd67ec49db0ae907a7dacbe82e1886d1739ac70c6d406b0",
+    "mode": "image-bytes",
+    "parser_manifest_sha256": "sha256:a50ab4e26d0f7dcc15e4639030c9cf4be09d8e94439da37f73e10b955a4ac5d7",
+    "rustc": {
+      "LLVM version": "21.1.8",
+      "commit-hash": "01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf",
+      "host": "aarch64-unknown-linux-gnu",
+      "release": "1.93.1"
+    },
+    "source_files": 102,
+    "sources_sha256": "351a64b6aa8ed41c66ba770a73f8065f166a368215076c246b0cddb59c60c7f6",
+    "vendor_provenance_sha256": "5259d9a04cb06b892c19fa17a0c99b0951a40484ae1c25ea98332a12bcf20e1a",
+    "vendor_verification": "Verified 66 published ZIP 9.1.3 files; only the declared manifest feature deletion differs",
+    "wasm_sha256": "sha256:a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774"
+  },
+  "parser_cases": 28,
+  "passed": true,
+  "platform": "macOS-26.1-arm64-arm-64bit",
+  "python": "3.11.0",
+  "query_subset": {
+    "datasets": 4,
+    "duckdb_version": "2.0.0",
+    "queries": 14
+  },
+  "seed_alignment": {
+    "bundles_revalidated": 3,
+    "database_actions": "none",
+    "guarded_reset": "not exercised by this parser/query campaign; see separate APP-011 disposable reset trial",
+    "scope": "read-only contract/setup alignment, not provider provisioning or live tenant qualification",
+    "seed_source_digest": "sha256:66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+    "setup_digest": "sha256:29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459"
+  },
+  "source_pins": {
+    "contracts/implementation-lock.json": "sha256:9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45",
+    "fixtures/generate.py": "sha256:1cb418312d7678c461cada07259bcfa978074afc45b8ef7abf9cde91b753f6b6",
+    "fixtures/phase-one/v1/manifest.json": "sha256:247f009c132c4e5a6185851f086a30ec8d4e583eb51fe204f2378ca7bc1cf4cd",
+    "fixtures/qualify.py": "sha256:698232124de1a9e2ba7f7bb2c2a52c8b3ba9cbcf665d6021ea0732fe7f2cc8fb",
+    "fixtures/reset_trial.py": "sha256:084e6a5f5bb8064257e10cc688a38533f1875c6c19bb1341b22023d5aa6fa23d",
+    "fixtures/test_fixtures.py": "sha256:0b1ca40b37fb32a4a462d2f35e855fe2e0e32743b218a4c3eef25636530917d0",
+    "fixtures/test_reset_trial.py": "sha256:5c50bdfefa2fcf4990992b33ed6514b0c22301260f210d8cde347712264e33a7",
+    "fixtures/verify.py": "sha256:28badd0d7c77ae0db3a33ec0ee0443989c8683f8f8cf921e33a454fabdc49ee2",
+    "spikes/APP-004/Cargo.lock": "sha256:d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+    "spikes/APP-004/guest/src/lib.rs": "sha256:76b510d6d21ae7c5f99f36ffbf7c3ebee13f738a52374258e0a45b8fe57c9009",
+    "spikes/APP-004/host/src/lib.rs": "sha256:bdb98c9a45c1ec081afd12081e4f40675518531474c20e2ab2becfe15c85f667",
+    "spikes/APP-005/query.py": "sha256:d7d724b9e34c3bdb73316eb9f3017c082dfedc3a7b79503cea584d67e06cf187",
+    "spikes/APP-005/requirements.lock": "sha256:06295e1e9bf322670a74bff06616b94ec32b7a912cc4d43afb90d25a25118ca3"
+  },
+  "started_at": "2026-10-29T21:07:03.092179+00:00"
+}

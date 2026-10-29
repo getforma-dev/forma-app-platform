@@ -1,0 +1,3 @@
+$ python verify_vendor.py
+Verified 66 published ZIP 9.1.3 files; only the declared manifest feature deletion differs
+

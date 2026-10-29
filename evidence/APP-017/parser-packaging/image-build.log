@@ -1,0 +1,393 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 3.68kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31
+#2 DONE 0.1s
+
+#3 [internal] load metadata for docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+#3 DONE 0.1s
+
+#4 [internal] load metadata for docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b
+#4 ...
+
+#5 [auth] library/node:pull token for registry-1.docker.io
+#5 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b
+#4 DONE 0.7s
+
+#6 [internal] load .dockerignore
+#6 transferring context: 7.45kB done
+#6 DONE 0.0s
+
+#7 [stage-3  1/11] FROM docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+#7 resolve docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d 0.0s done
+#7 DONE 0.0s
+
+#8 [native 1/9] FROM docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31
+#8 resolve docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31 0.0s done
+#8 CACHED
+
+#9 [browser 1/8] FROM docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b
+#9 resolve docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b 0.0s done
+#9 DONE 0.0s
+
+#10 [internal] load build context
+#10 transferring context: 9.34kB 0.0s done
+#10 DONE 0.0s
+
+#11 [native 2/9] WORKDIR /source/app
+#11 CACHED
+
+#12 [native 3/9] COPY app/Cargo.toml app/Cargo.lock ./
+#12 CACHED
+
+#13 [stage-3  2/11] WORKDIR /app
+#13 CACHED
+
+#14 [stage-3  3/11] COPY app/runtime/requirements.lock ./requirements.lock
+#14 CACHED
+
+#15 [stage-3  4/11] RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r requirements.lock
+#15 CACHED
+
+#16 [browser 2/8] WORKDIR /source/admin
+#16 CACHED
+
+#17 [browser 7/8] COPY app/admin/src ./src
+#17 CACHED
+
+#18 [browser 5/8] RUN npm ci
+#18 CACHED
+
+#19 [browser 6/8] COPY app/admin/build.ts app/admin/tsconfig.json ./
+#19 CACHED
+
+#20 [browser 4/8] COPY app/admin/package.json app/admin/package-lock.json ./
+#20 CACHED
+
+#21 [browser 3/8] RUN npm install --global npm@11.6.2
+#21 CACHED
+
+#22 [browser 8/8] RUN npm run typecheck && npm run build
+#22 CACHED
+
+#23 [parser 2/5] WORKDIR /source/parser
+#23 DONE 0.1s
+
+#24 [native 4/9] COPY app/src ./src
+#24 DONE 0.1s
+
+#25 [parser 3/5] RUN rustup target add --toolchain 1.93.1 wasm32-unknown-unknown && rustup component add --toolchain 1.93.1 clippy rustfmt
+#25 ...
+
+#26 [native 5/9] COPY app/migrations ./migrations
+#26 DONE 0.0s
+
+#27 [native 6/9] COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml
+#27 DONE 0.0s
+
+#28 [native 7/9] COPY spikes/APP-006/src /source/spikes/APP-006/src
+#28 DONE 0.0s
+
+#29 [native 8/9] COPY --from=browser /source/admin/dist ./admin/dist
+#29 DONE 0.1s
+
+#30 [native 9/9] RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=genui-cargo-target-arm64,target=/source/app/target cargo build --release --locked && cp /source/app/target/release/forma-app-platform /source/genui
+#30 1.061    Compiling genui-auth-verifier v0.1.0 (/source/spikes/APP-006)
+#30 4.551    Compiling forma-app-platform v0.1.0 (/source/app)
+#30 ...
+
+#25 [parser 3/5] RUN rustup target add --toolchain 1.93.1 wasm32-unknown-unknown && rustup component add --toolchain 1.93.1 clippy rustfmt
+#25 0.627 info: downloading component 'rust-std' for 'wasm32-unknown-unknown'
+#25 1.481 info: installing component 'rust-std' for 'wasm32-unknown-unknown'
+#25 5.525 info: downloading component 'clippy'
+#25 6.035 info: installing component 'clippy'
+#25 7.671 info: downloading component 'rustfmt'
+#25 8.184 info: installing component 'rustfmt'
+#25 DONE 9.7s
+
+#30 [native 9/9] RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=genui-cargo-target-arm64,target=/source/app/target cargo build --release --locked && cp /source/app/target/release/forma-app-platform /source/genui
+#30 ...
+
+#31 [parser 4/5] COPY parser/ ./
+#31 DONE 0.2s
+
+#30 [native 9/9] RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=genui-cargo-target-arm64,target=/source/app/target cargo build --release --locked && cp /source/app/target/release/forma-app-platform /source/genui
+#30 ...
+
+#32 [parser 5/5] RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=genui-parser-target-arm64,target=/source/parser/target     python3 verify_vendor.py     && cargo build --locked --release -p parser-guest --target wasm32-unknown-unknown     && cargo build --locked --release -p parser-host     && mkdir /source/parser-out     && cp target/wasm32-unknown-unknown/release/parser_guest.wasm target/release/parser-host /source/parser-out/     && rustc -vV > /source/rustc-vv.txt     && python3 write_manifest.py --source /source/parser         --guest /source/parser-out/parser_guest.wasm --guest-path /app/parser/parser_guest.wasm         --host /source/parser-out/parser-host --host-path /app/parser/parser-host         --rustc-vv /source/rustc-vv.txt --output /source/parser-out/parser-manifest.json
+#32 0.678 Verified 66 published ZIP 9.1.3 files; only the declared manifest feature deletion differs
+#32 1.017     Updating crates.io index
+#32 3.795  Downloading crates ...
+#32 4.016   Downloaded rustversion v1.0.23
+#32 4.031   Downloaded simdutf8 v0.1.5
+#32 4.051   Downloaded multiversion_no_op v1.0.0
+#32 4.055   Downloaded equivalent v1.0.3
+#32 4.060   Downloaded debug_unsafe v0.1.4
+#32 4.064   Downloaded codepage v0.1.3
+#32 4.069   Downloaded simd-adler32 v0.3.10
+#32 4.086   Downloaded csv-core v0.1.13
+#32 4.096   Downloaded fast-float2 v0.2.4
+#32 4.109   Downloaded zopfli v0.8.4
+#32 4.121   Downloaded serde_derive v1.0.228
+#32 4.131   Downloaded serde v1.0.228
+#32 4.144   Downloaded indexmap v2.14.2
+#32 4.162   Downloaded typed-path v0.13.0
+#32 4.196   Downloaded hashbrown v0.17.1
+#32 4.231   Downloaded flate2 v1.1.10
+#32 4.249   Downloaded serde_json v1.0.145
+#32 4.271   Downloaded calamine v0.37.0
+#32 4.288   Downloaded zlib-rs v0.6.8
+#32 4.304   Downloaded quick-xml v0.42.0
+#32 4.343   Downloaded bumpalo v3.20.3
+#32 4.352   Downloaded serde_core v1.0.228
+#32 4.377   Downloaded crc32fast v1.5.3
+#32 4.383   Downloaded atoi_simd v0.18.1
+#32 4.395   Downloaded encoding_rs v0.8.42
+#32 4.437   Downloaded libc v0.2.191
+#32 4.796    Compiling rustversion v1.0.23
+#32 5.435    Compiling cfg-if v1.0.5
+#32 6.042    Compiling proc-macro2 v1.0.107
+#32 6.291    Compiling quote v1.0.47
+#32 6.405    Compiling unicode-ident v1.0.27
+#32 6.831    Compiling encoding_rs v0.8.42
+#32 6.902    Compiling serde_core v1.0.228
+#32 7.054    Compiling crc32fast v1.5.3
+#32 7.157    Compiling memchr v2.8.3
+#32 7.669    Compiling multiversion_no_op v1.0.0
+#32 7.769    Compiling scopeguard v1.2.0
+#32 7.798    Compiling getrandom v0.4.3
+#32 10.64    Compiling syn v2.0.119
+#32 13.47    Compiling hashbrown v0.17.1
+#32 13.95    Compiling log v0.4.34
+#32 14.04    Compiling simd-adler32 v0.3.10
+#32 14.23    Compiling serde v1.0.228
+#32 14.36    Compiling equivalent v1.0.3
+#32 14.39    Compiling zlib-rs v0.6.8
+#32 ...
+
+#30 [native 9/9] RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=genui-cargo-target-arm64,target=/source/app/target cargo build --release --locked && cp /source/app/target/release/forma-app-platform /source/genui
+#30 25.40     Finished `release` profile [optimized] target(s) in 25.06s
+#30 DONE 26.5s
+
+#32 [parser 5/5] RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=genui-parser-target-arm64,target=/source/parser/target     python3 verify_vendor.py     && cargo build --locked --release -p parser-guest --target wasm32-unknown-unknown     && cargo build --locked --release -p parser-host     && mkdir /source/parser-out     && cp target/wasm32-unknown-unknown/release/parser_guest.wasm target/release/parser-host /source/parser-out/     && rustc -vV > /source/rustc-vv.txt     && python3 write_manifest.py --source /source/parser         --guest /source/parser-out/parser_guest.wasm --guest-path /app/parser/parser_guest.wasm         --host /source/parser-out/parser-host --host-path /app/parser/parser-host         --rustc-vv /source/rustc-vv.txt --output /source/parser-out/parser-manifest.json
+#32 16.43    Compiling bumpalo v3.20.3
+#32 16.56    Compiling zopfli v0.8.4
+#32 17.33    Compiling flate2 v1.1.10
+#32 17.62    Compiling indexmap v2.14.2
+#32 18.22    Compiling serde_derive v1.0.228
+#32 21.78    Compiling typed-path v0.13.0
+#32 23.52    Compiling serde_json v1.0.145
+#32 23.69    Compiling debug_unsafe v0.1.4
+#32 23.74    Compiling atoi_simd v0.18.1
+#32 23.90    Compiling zip v9.1.3 (/source/parser/vendor/zip-9.1.3)
+#32 27.53    Compiling codepage v0.1.3
+#32 27.67    Compiling quick-xml v0.42.0
+#32 29.55    Compiling fast-float2 v0.2.4
+#32 29.70    Compiling itoa v1.0.18
+#32 29.82    Compiling ryu v1.0.23
+#32 30.00    Compiling byteorder v1.5.0
+#32 30.14    Compiling calamine v0.37.0
+#32 35.77    Compiling csv-core v0.1.13
+#32 36.03    Compiling parser-guest v0.1.0 (/source/parser/guest)
+#32 40.66     Finished `release` profile [optimized] target(s) in 39.83s
+#32 41.05  Downloading crates ...
+#32 41.23   Downloaded cobs v0.3.0
+#32 41.24   Downloaded cpufeatures v0.2.17
+#32 41.25   Downloaded heck v0.5.0
+#32 41.26   Downloaded memfd v0.6.6
+#32 41.27   Downloaded cranelift-srcgen v0.123.19
+#32 41.27   Downloaded wat v1.262.0
+#32 41.28   Downloaded wasmtime-internal-jit-icache-coherence v36.0.19
+#32 41.28   Downloaded wasmtime-internal-math v36.0.19
+#32 41.28   Downloaded wasmtime-internal-jit-debug v36.0.19
+#32 41.29   Downloaded wasmtime-internal-versioned-export-macros v36.0.19
+#32 41.29   Downloaded wasmtime-internal-slab v36.0.19
+#32 41.29   Downloaded wasmtime-internal-fiber v36.0.19
+#32 41.30   Downloaded target-lexicon v0.13.5
+#32 41.30   Downloaded foldhash v0.1.5
+#32 41.31   Downloaded find-msvc-tools v0.1.15
+#32 41.31   Downloaded version_check v0.9.5
+#32 41.32   Downloaded wasmtime-internal-unwinder v36.0.19
+#32 41.33   Downloaded wasmprinter v0.236.1
+#32 41.33   Downloaded pulley-interpreter v36.0.19
+#32 41.34   Downloaded cranelift-isle v0.123.19
+#32 41.36   Downloaded cranelift-frontend v0.123.19
+#32 41.36   Downloaded wasm-encoder v0.262.0
+#32 41.38   Downloaded cranelift-codegen-meta v0.123.19
+#32 41.39   Downloaded wasm-encoder v0.236.1
+#32 41.40   Downloaded regalloc2 v0.12.2
+#32 41.42   Downloaded wast v262.0.0
+#32 41.45   Downloaded wasmtime-internal-cranelift v36.0.19
+#32 41.47   Downloaded itertools v0.14.0
+#32 41.49   Downloaded unicode-width v0.2.3
+#32 41.51   Downloaded wasmtime-environ v36.0.19
+#32 41.53   Downloaded wasmparser v0.236.1
+#32 41.55   Downloaded wasmparser v0.262.0
+#32 41.58   Downloaded gimli v0.32.3
+#32 41.59   Downloaded hashbrown v0.15.5
+#32 41.61   Downloaded libm v0.2.16
+#32 41.63   Downloaded cc v1.10.0
+#32 41.64   Downloaded object v0.37.3
+#32 41.67   Downloaded anyhow v1.0.100
+#32 41.68   Downloaded allocator-api2 v0.2.21
+#32 41.68   Downloaded smallvec v1.16.4
+#32 41.69   Downloaded rustix v1.1.6
+#32 41.75   Downloaded sha2 v0.10.9
+#32 41.76   Downloaded cranelift-assembler-x64-meta v0.123.19
+#32 41.77   Downloaded arbitrary v1.5.0
+#32 41.78   Downloaded addr2line v0.25.1
+#32 41.79   Downloaded termcolor v1.4.1
+#32 41.79   Downloaded semver v1.0.28
+#32 41.80   Downloaded postcard v1.1.3
+#32 41.80   Downloaded cranelift-assembler-x64 v0.123.19
+#32 41.81   Downloaded fallible-iterator v0.3.0
+#32 41.81   Downloaded cranelift-bforest v0.123.19
+#32 41.82   Downloaded either v1.19.0
+#32 41.82   Downloaded digest v0.10.7
+#32 41.83   Downloaded cranelift-entity v0.123.19
+#32 41.83   Downloaded leb128fmt v0.1.0
+#32 41.84   Downloaded generic-array v0.14.7
+#32 41.84   Downloaded embedded-io v0.4.0
+#32 41.84   Downloaded crypto-common v0.1.7
+#32 41.85   Downloaded cranelift-native v0.123.19
+#32 41.85   Downloaded cranelift-control v0.123.19
+#32 41.85   Downloaded cranelift-codegen-shared v0.123.19
+#32 41.85   Downloaded cranelift-bitset v0.123.19
+#32 41.86   Downloaded block-buffer v0.10.4
+#32 41.86   Downloaded wasmtime-internal-asm-macros v36.0.19
+#32 41.86   Downloaded pulley-macros v36.0.19
+#32 41.86   Downloaded wasmtime v36.0.19
+#32 41.92   Downloaded embedded-io v0.6.1
+#32 41.92   Downloaded cranelift-codegen v0.123.19
+#32 41.98   Downloaded linux-raw-sys v0.12.1
+#32 42.27    Compiling proc-macro2 v1.0.107
+#32 42.75    Compiling quote v1.0.47
+#32 43.36    Compiling syn v2.0.119
+#32 45.64    Compiling serde_core v1.0.228
+#32 47.71    Compiling serde v1.0.228
+#32 47.90    Compiling serde_derive v1.0.228
+#32 50.79    Compiling cranelift-srcgen v0.123.19
+#32 50.95    Compiling cranelift-assembler-x64-meta v0.123.19
+#32 52.03    Compiling pulley-macros v36.0.19
+#32 52.31    Compiling cranelift-bitset v0.123.19
+#32 52.43    Compiling hashbrown v0.17.1
+#32 52.94    Compiling log v0.4.34
+#32 53.07    Compiling equivalent v1.0.3
+#32 53.11    Compiling libm v0.2.16
+#32 53.24    Compiling allocator-api2 v0.2.21
+#32 53.46    Compiling cranelift-isle v0.123.19
+#32 53.60    Compiling foldhash v0.1.5
+#32 53.69    Compiling hashbrown v0.15.5
+#32 54.35    Compiling bumpalo v3.20.3
+#32 54.53    Compiling indexmap v2.14.2
+#32 55.25    Compiling pulley-interpreter v36.0.19
+#32 56.45    Compiling cfg-if v1.0.5
+#32 56.52    Compiling target-lexicon v0.13.5
+#32 56.80    Compiling cranelift-codegen-shared v0.123.19
+#32 56.93    Compiling heck v0.5.0
+#32 57.02    Compiling cranelift-codegen-meta v0.123.19
+#32 61.34    Compiling cranelift-entity v0.123.19
+#32 61.62    Compiling cranelift-assembler-x64 v0.123.19
+#32 61.78    Compiling smallvec v1.16.4
+#32 61.95    Compiling anyhow v1.0.100
+#32 62.10    Compiling memchr v2.8.3
+#32 62.89    Compiling cranelift-codegen v0.123.19
+#32 63.51    Compiling wasmtime-internal-math v36.0.19
+#32 64.09    Compiling gimli v0.32.3
+#32 68.97    Compiling syn v3.0.9
+#32 70.65    Compiling bitflags v2.13.2
+#32 70.84    Compiling thiserror v2.0.21
+#32 71.06    Compiling arbitrary v1.5.0
+#32 71.78    Compiling leb128fmt v0.1.0
+#32 71.89    Compiling rustc-hash v2.1.3
+#32 71.93    Compiling crc32fast v1.5.3
+#32 72.04    Compiling version_check v0.9.5
+#32 72.18    Compiling generic-array v0.14.7
+#32 72.30    Compiling regalloc2 v0.12.2
+#32 74.20    Compiling cranelift-control v0.123.19
+#32 74.34    Compiling thiserror-impl v2.0.21
+#32 97.17    Compiling cranelift-bforest v0.123.19
+#32 97.37    Compiling object v0.37.3
+#32 97.64    Compiling wasmparser v0.236.1
+#32 97.82    Compiling libc v0.2.191
+#32 156.0    Compiling wasm-encoder v0.236.1
+#32 156.1    Compiling semver v1.0.28
+#32 156.6    Compiling typenum v1.20.1
+#32 177.9    Compiling cobs v0.3.0
+#32 179.3    Compiling wasmtime-internal-versioned-export-macros v36.0.19
+#32 179.8    Compiling rustix v1.1.6
+#32 180.0    Compiling shlex v2.0.1
+#32 180.1    Compiling find-msvc-tools v0.1.15
+#32 180.2    Compiling termcolor v1.4.1
+#32 180.4    Compiling wasmprinter v0.236.1
+#32 189.1    Compiling cc v1.10.0
+#32 190.2    Compiling postcard v1.1.3
+#32 192.0    Compiling wasm-encoder v0.262.0
+#32 193.7    Compiling either v1.19.0
+#32 193.8    Compiling wasmtime-internal-unwinder v36.0.19
+#32 193.9    Compiling linux-raw-sys v0.12.1
+#32 194.1    Compiling unicode-width v0.2.3
+#32 194.2    Compiling wast v262.0.0
+#32 217.4    Compiling itertools v0.14.0
+#32 218.4    Compiling wasmtime-environ v36.0.19
+#32 222.6    Compiling wasmtime v36.0.19
+#32 222.8    Compiling block-buffer v0.10.4
+#32 222.9    Compiling crypto-common v0.1.7
+#32 223.0    Compiling cranelift-frontend v0.123.19
+#32 224.7    Compiling cranelift-native v0.123.19
+#32 224.7    Compiling serde_json v1.0.145
+#32 224.7    Compiling wasmtime-internal-cranelift v36.0.19
+#32 236.4    Compiling digest v0.10.7
+#32 237.0    Compiling memfd v0.6.6
+#32 237.2    Compiling wat v1.262.0
+#32 237.5    Compiling cpufeatures v0.2.17
+#32 237.5    Compiling wasmtime-internal-jit-icache-coherence v36.0.19
+#32 237.6    Compiling wasmtime-internal-asm-macros v36.0.19
+#32 237.6    Compiling wasmtime-internal-slab v36.0.19
+#32 237.6    Compiling ryu v1.0.23
+#32 237.8    Compiling once_cell v1.21.4
+#32 237.9    Compiling itoa v1.0.18
+#32 257.2    Compiling sha2 v0.10.9
+#32 257.9    Compiling parser-host v0.1.0 (/source/parser/host)
+#32 262.0     Finished `release` profile [optimized] target(s) in 3m 41s
+#32 262.3 {"guest_sha256": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774", "sources_sha256": "351a64b6aa8ed41c66ba770a73f8065f166a368215076c246b0cddb59c60c7f6"}
+#32 DONE 262.5s
+
+#33 [stage-3  5/11] COPY --from=parser /source/parser-out/parser_guest.wasm /source/parser-out/parser-host /app/parser/
+#33 DONE 0.1s
+
+#34 [stage-3  6/11] COPY --from=parser /source/parser-out/parser-manifest.json /app/parser-manifest.json
+#34 DONE 0.0s
+
+#35 [stage-3  7/11] COPY --from=native /source/genui /app/genui
+#35 DONE 0.0s
+
+#36 [stage-3  8/11] COPY app/runtime/runtime.py /app/runtime.py
+#36 DONE 0.0s
+
+#37 [stage-3  9/11] COPY app/migrations /app/migrations
+#37 DONE 0.0s
+
+#38 [stage-3 10/11] COPY app/certs/rds-global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
+#38 DONE 0.0s
+
+#39 [stage-3 11/11] RUN mkdir -p /run/genui && chown 65532:65532 /run/genui && chmod 0700 /run/genui
+#39 DONE 0.2s
+
+#40 exporting to image
+#40 exporting layers
+#40 exporting layers 0.5s done
+#40 exporting manifest sha256:137d1995cd55b21aa35fc19514df74d97e5e4d620984f658f97e47726a306413 done
+#40 exporting config sha256:e861716c2bcf4b83b311b3ba6819d3c906c6be5a8ea0a990bc423a9d989471fd done
+#40 exporting attestation manifest sha256:8e87943bc9fa3ebcf534deb8f8d45c2dfb31a322daf172c7318c7e3bbabb8d87 done
+#40 exporting manifest list sha256:9a7021d50e678e488f87abaf403c3d15f12660b9b21c28e0a56c5fa411777472 done
+#40 naming to docker.io/library/genui-app017-parser-local:latest done
+#40 unpacking to docker.io/library/genui-app017-parser-local:latest
+#40 unpacking to docker.io/library/genui-app017-parser-local:latest 0.2s done
+#40 DONE 0.8s
+EXIT=0
