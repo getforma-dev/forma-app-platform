@@ -6,6 +6,6 @@ test_the_seed_reads_the_pinned_edition (test_tools.SeedInputTests.test_the_seed_
 test_source_names_include_compile_time_inputs (test_tools.SourceTests.test_source_names_include_compile_time_inputs) ... ok
 
 ----------------------------------------------------------------------
-Ran 6 tests in 0.084s
+Ran 6 tests in 0.010s
 
 OK

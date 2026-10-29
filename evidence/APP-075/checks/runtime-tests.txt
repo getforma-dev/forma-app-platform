@@ -20,7 +20,10 @@ test_handle_encoding_and_digest_vector (test_admission_operator.PureTests.test_h
 test_issue_argument_bounds (test_admission_operator.PureTests.test_issue_argument_bounds) ... ok
 test_malformed_codes_normalize_to_nothing (test_admission_operator.PureTests.test_malformed_codes_normalize_to_nothing) ... ok
 test_refusal_output_never_carries_values (test_admission_operator.PureTests.test_refusal_output_never_carries_values) ... ok
+test_a_capability_appears_complete_or_not_at_all (test_provider_invitations.CapabilityTests.test_a_capability_appears_complete_or_not_at_all)
+Review m6: the final name is linked to a fully written, fsynced file, so a sweep never reads a partial one. ... ok
 test_capability_file_is_private_exclusive_bounded_and_destroyable (test_provider_invitations.CapabilityTests.test_capability_file_is_private_exclusive_bounded_and_destroyable) ... ok
+test_only_stale_partial_writes_are_swept (test_provider_invitations.CapabilityTests.test_only_stale_partial_writes_are_swept) ... ok
 test_a_response_past_the_deadline_is_unknown (test_provider_invitations.ClientTests.test_a_response_past_the_deadline_is_unknown) ... ok
 test_create_outcomes_are_classified_and_never_repeated (test_provider_invitations.ClientTests.test_create_outcomes_are_classified_and_never_repeated) ... ok
 test_create_sends_exactly_the_server_only_contract_body (test_provider_invitations.ClientTests.test_create_sends_exactly_the_server_only_contract_body) ... ok
@@ -30,6 +33,8 @@ test_tenant_binding_is_verified_before_any_write (test_provider_invitations.Clie
 test_unreachable_provider_sends_nothing (test_provider_invitations.ClientTests.test_unreachable_provider_sends_nothing) ... ok
 test_absent_and_partial_configuration (test_provider_invitations.ConfigTests.test_absent_and_partial_configuration) ... ok
 test_capability_directory_must_be_private_to_the_operator (test_provider_invitations.ConfigTests.test_capability_directory_must_be_private_to_the_operator) ... ok
+test_capability_directory_refuses_sync_folders_and_reports_its_path_class (test_provider_invitations.ConfigTests.test_capability_directory_refuses_sync_folders_and_reports_its_path_class)
+Review M2 (interim, ADR-003 decision pending): never inside a folder a sync client copies off the host. ... ok
 test_complete_configuration_loads_without_echoing_the_key (test_provider_invitations.ConfigTests.test_complete_configuration_loads_without_echoing_the_key) ... ok
 test_management_key_comes_only_from_a_private_file_or_the_environment (test_provider_invitations.ConfigTests.test_management_key_comes_only_from_a_private_file_or_the_environment) ... ok
 test_url_refusals (test_provider_invitations.ConfigTests.test_url_refusals) ... ok
@@ -37,16 +42,34 @@ test_a_failed_remote_revocation_never_restores_local_access (test_provider_invit
 test_a_second_live_invitation_for_one_address_is_refused (test_provider_invitations.ProviderDatabaseTests.test_a_second_live_invitation_for_one_address_is_refused)
 fAuth's create revokes earlier pending invitations for the address (management.rs:1722-1733). ... ok
 test_ambiguous_remote_match_stays_unknown (test_provider_invitations.ProviderDatabaseTests.test_ambiguous_remote_match_stays_unknown) ... ok
+test_an_unresolvable_create_closes_after_the_provider_expiry (test_provider_invitations.ProviderDatabaseTests.test_an_unresolvable_create_closes_after_the_provider_expiry)
+Review m3: past the invitation's 72 h provider lifetime nothing it made can still be pending. ... ok
 test_code_revocation_destroys_the_capability_and_revokes_remotely (test_provider_invitations.ProviderDatabaseTests.test_code_revocation_destroys_the_capability_and_revokes_remotely) ... ok
 test_contract_mismatch_is_confirmed_unusable_and_revoked (test_provider_invitations.ProviderDatabaseTests.test_contract_mismatch_is_confirmed_unusable_and_revoked) ... ok
 test_definitive_refusal_records_failed_and_the_code_shows_no_usable_invitation (test_provider_invitations.ProviderDatabaseTests.test_definitive_refusal_records_failed_and_the_code_shows_no_usable_invitation) ... ok
+test_invitations_created_by_a_signed_in_user_are_never_attributed (test_provider_invitations.ProviderDatabaseTests.test_invitations_created_by_a_signed_in_user_are_never_attributed)
+Review M1(c): management-key creates carry no inviter (gatewasm management.rs:1678,1744); console ones do. ... ok
 test_issue_creates_one_server_only_invitation_and_keeps_its_token_private (test_provider_invitations.ProviderDatabaseTests.test_issue_creates_one_server_only_invitation_and_keeps_its_token_private) ... ok
 test_issue_refuses_before_any_write_without_a_verified_provider_tenant (test_provider_invitations.ProviderDatabaseTests.test_issue_refuses_before_any_write_without_a_verified_provider_tenant) ... ok
 test_local_revocation_never_waits_for_provider_configuration (test_provider_invitations.ProviderDatabaseTests.test_local_revocation_never_waits_for_provider_configuration) ... ok
+test_only_one_reconcile_runs_per_provider_tenant (test_provider_invitations.ProviderDatabaseTests.test_only_one_reconcile_runs_per_provider_tenant)
+Review M1(b): a second reconcile, and invitation-bearing issuance, refuse while one runs. ... ok
+test_reconcile_never_attributes_one_invitation_to_two_creates (test_provider_invitations.ProviderDatabaseTests.test_reconcile_never_attributes_one_invitation_to_two_creates)
+Review M1/H2: the invitation lies in both unresolved creates' windows, so neither is judged. ... ok
 test_reconcile_propagates_expiry_and_exhaustion_and_ends_the_capability (test_provider_invitations.ProviderDatabaseTests.test_reconcile_propagates_expiry_and_exhaustion_and_ends_the_capability) ... ok
+test_reconcile_records_invitations_the_provider_already_ended (test_provider_invitations.ProviderDatabaseTests.test_reconcile_records_invitations_the_provider_already_ended)
+Review m7: drift upstream (another create, the sweeper, registration, the lifetime) is noticed. ... ok
 test_reconcile_requires_configuration_and_an_operator_identity (test_provider_invitations.ProviderDatabaseTests.test_reconcile_requires_configuration_and_an_operator_identity) ... ok
 test_reconcile_skips_an_operation_held_by_another_operator (test_provider_invitations.ProviderDatabaseTests.test_reconcile_skips_an_operation_held_by_another_operator) ... ok
+test_reconcile_takes_the_remote_id_from_a_stored_capability (test_provider_invitations.ProviderDatabaseTests.test_reconcile_takes_the_remote_id_from_a_stored_capability)
+Review M1/H2b: the crash between the capability file and the outcome UPDATE never costs the capability. ... ok
+test_reconcile_windows_are_bounded_above_by_the_create_deadline (test_provider_invitations.ProviderDatabaseTests.test_reconcile_windows_are_bounded_above_by_the_create_deadline)
+Review M1/H2 with separable windows: one-to-one attribution to the create whose window holds it. ... ok
+test_revocation_during_an_in_flight_create_leaves_no_capability (test_provider_invitations.ProviderDatabaseTests.test_revocation_during_an_in_flight_create_leaves_no_capability)
+Review m1/H1: the create lands after the code was revoked; its capability is never written and it is revoked. ... ok
 test_revocation_of_an_unknown_create_waits_for_its_reconciliation (test_provider_invitations.ProviderDatabaseTests.test_revocation_of_an_unknown_create_waits_for_its_reconciliation) ... ok
+test_the_code_is_printed_even_if_the_provider_phase_fails_after_commit (test_provider_invitations.ProviderDatabaseTests.test_the_code_is_printed_even_if_the_provider_phase_fails_after_commit)
+Review m5: a database error in the revocation that follows a contract mismatch never hides the committed code. ... ok
 test_timed_out_create_is_unknown_within_the_deadline (test_provider_invitations.ProviderDatabaseTests.test_timed_out_create_is_unknown_within_the_deadline) ... ok
 test_unknown_create_outcomes_are_reconciled_by_inspection_without_a_second_create (test_provider_invitations.ProviderDatabaseTests.test_unknown_create_outcomes_are_reconciled_by_inspection_without_a_second_create) ... ok
 test_a_partly_written_run_file_is_removed (test_qualification_supervisor.SupervisorTests.test_a_partly_written_run_file_is_removed) ... ok
@@ -108,6 +131,6 @@ test_real_probe_requires_exact_image_schema_version_before_storage (test_runtime
 test_same_generation_byte_change_has_distinct_fingerprint (test_runtime.RuntimeTests.test_same_generation_byte_change_has_distinct_fingerprint) ... ok
 
 ----------------------------------------------------------------------
-Ran 104 tests in 73.201s
+Ran 116 tests in 100.249s
 
 OK (skipped=1)

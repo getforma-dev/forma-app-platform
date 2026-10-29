@@ -1,17 +1,17 @@
 {
   "cleanup": {
-    "genui-app075-259a8d637a-extract": true,
-    "genui-app075-259a8d637a-hostname-mismatch": true,
-    "genui-app075-259a8d637a-net": true,
-    "genui-app075-259a8d637a-pg": true,
-    "genui-app075-259a8d637a-positive": true,
-    "genui-app075-259a8d637a-root-uid": true,
-    "genui-app075-259a8d637a-run-synthetic-ca:local": true,
-    "genui-app075-259a8d637a-run-untrusted-ca:local": true,
-    "genui-app075-259a8d637a-supervised": true,
-    "genui-app075-259a8d637a-unarmed": true,
-    "genui-app075-259a8d637a-untrusted-ca": true,
-    "genui-app075-259a8d637a-wrong-arguments": true,
+    "genui-app075-00d9122039-extract": true,
+    "genui-app075-00d9122039-hostname-mismatch": true,
+    "genui-app075-00d9122039-net": true,
+    "genui-app075-00d9122039-pg": true,
+    "genui-app075-00d9122039-positive": true,
+    "genui-app075-00d9122039-root-uid": true,
+    "genui-app075-00d9122039-run-synthetic-ca:local": true,
+    "genui-app075-00d9122039-run-untrusted-ca:local": true,
+    "genui-app075-00d9122039-supervised": true,
+    "genui-app075-00d9122039-unarmed": true,
+    "genui-app075-00d9122039-untrusted-ca": true,
+    "genui-app075-00d9122039-wrong-arguments": true,
     "private_directory": true
   },
   "cleanup_complete": true,
@@ -19,11 +19,11 @@
     "identity": {
       "cargo_artifact": "genui-df3b8685482dcc7f",
       "executable": "/app/qualification/genui-storage-tests",
-      "executable_sha256": "9cb8b4455b21ad4ab9f6f6500fde32e5a31140f678f4bc47d594bee1443e3836",
+      "executable_sha256": "b3ea2a49c18f7a5a8fef1afcbfdeecfa56f81a329af4819576e551f42e8f2255",
       "rustc": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
       "schema_version": 1
     },
-    "sha256": "9cb8b4455b21ad4ab9f6f6500fde32e5a31140f678f4bc47d594bee1443e3836"
+    "sha256": "b3ea2a49c18f7a5a8fef1afcbfdeecfa56f81a329af4819576e551f42e8f2255"
   },
   "expectations": [
     {
@@ -69,17 +69,17 @@
   ],
   "expected_pins": {
     "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
-    "catalog_sha256": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
-    "database_version": 4,
-    "fixture_setup_sha256": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
-    "migrations_manifest_sha256": "cc27fbac967824f78a83fa25d80ef6175e3baa616b086cbad181428cc894d74d",
+    "catalog_sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+    "database_version": 5,
+    "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+    "migrations_manifest_sha256": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
     "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
-    "seed_program_sha256": "ee307fb23c2ee0180f27510efa946fdba6269eee104ddb5e08feee56b174fd6b",
+    "seed_program_sha256": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
     "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
     "seed_validator_sha256": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
-    "source_bundle_sha256": "e35e62b8c432f3f499fbfcc3c926ed321d7a592da0a877f105633a0f6e1b39c9"
+    "source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db"
   },
-  "label": "genui-app075-259a8d637a",
+  "label": "genui-app075-00d9122039",
   "network": {
     "alias": "genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg.cg58i06y2r4e.us-east-1.rds.amazonaws.com",
     "driver": "bridge",
@@ -93,9 +93,10 @@
       "0001_role_foundation.sql",
       "0002_tenant_foundation.sql",
       "0003_admission.sql",
-      "0004_entitlement_reads.sql"
+      "0004_entitlement_reads.sql",
+      "0005_definition_work_grants.sql"
     ],
-    "schema_version": 4,
+    "schema_version": 5,
     "server_version": "16.13 (Debian 16.13-1.pgdg13+1)"
   },
   "qualification_image": {
@@ -107,11 +108,11 @@
       "python3",
       "/app/qualification_supervisor.py"
     ],
-    "id": "sha256:fa35554b96140904b46987d0f30fcc05c1fcb00c783d69294e459e7cf9501d14",
+    "id": "sha256:d3af3ac012d54bfb11f2ba3f4483b3b897c85af66717b0100771e187e34d250e",
     "os": "linux",
     "user": "65532:65532"
   },
-  "recorded_at": "2026-10-29T22:49:55.509943+00:00",
+  "recorded_at": "2026-10-29T23:31:08.767254+00:00",
   "runs": [
     {
       "arguments": [
@@ -154,11 +155,11 @@
           "run_directory_uid": 65532
         }
       ],
-      "manifest_sha256": "fcfbc58be6cf02e51b5ceaa0a20d28d6db8cae1cb3f11c65ecae79486be349e7",
+      "manifest_sha256": "40cab3791deb89f3e12fdf96397f6cc0460b133df1b52af1b672bb3519abf96a",
       "name": "positive",
-      "registry_sha256": "041fffdfe2b38178675c702a4288d689e284182750b8b646d2134b9a415382dc",
+      "registry_sha256": "4a5c52562fefb6809bbc4e8bf7d00eca27aef536cb85dc831a97512f87a968cc",
       "result": {
-        "ca_sha256_self_consistency_only": "956ce8f25d1ed3c732940f41b96eee9013661ca75f3e387024360cc988e68cb6",
+        "ca_sha256_self_consistency_only": "6654975f90d56c8064be7fab0a3697298ad66ada7bcb2ae735dcd4f8ca34d507",
         "checks": [
           {
             "name": "aggregate fixed-role native readiness verifies identity, schema and blank scope",
@@ -194,38 +195,38 @@
           "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
           "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
         ],
-        "manifest_sha256": "fcfbc58be6cf02e51b5ceaa0a20d28d6db8cae1cb3f11c65ecae79486be349e7",
-        "original_expires_at": 1793314801,
-        "original_issued_at": 1793314201,
+        "manifest_sha256": "40cab3791deb89f3e12fdf96397f6cc0460b133df1b52af1b672bb3519abf96a",
+        "original_expires_at": 1793317274,
+        "original_issued_at": 1793316674,
         "passed": true,
         "resource_pins": {
           "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
-          "catalog_sha256": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
-          "database_version": 4,
-          "fixture_setup_sha256": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
-          "migrations_manifest_sha256": "cc27fbac967824f78a83fa25d80ef6175e3baa616b086cbad181428cc894d74d",
+          "catalog_sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+          "database_version": 5,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
           "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
-          "seed_program_sha256": "ee307fb23c2ee0180f27510efa946fdba6269eee104ddb5e08feee56b174fd6b",
+          "seed_program_sha256": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
           "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
           "seed_validator_sha256": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
-          "source_bundle_sha256": "e35e62b8c432f3f499fbfcc3c926ed321d7a592da0a877f105633a0f6e1b39c9"
+          "source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db"
         },
-        "run_id": "93ea7b2f-e294-4a26-9970-422a309663a8",
+        "run_id": "a3ea4642-b695-47f0-8006-33217f199a9a",
         "schema_version": 1,
         "scope": "APP-008 isolated application-data-read-only qualification"
       },
       "result_lines": 1,
-      "run_id": "93ea7b2f-e294-4a26-9970-422a309663a8",
-      "seconds": 1.99,
+      "run_id": "a3ea4642-b695-47f0-8006-33217f199a9a",
+      "seconds": 1.75,
       "stderr_bytes": 0,
       "user": "65532:65532"
     },
     {
       "exit_code": 0,
-      "manifest_sha256": "08dec5ebb5032c486dacb83704f77effced96dbe1d924cc9f079cb50448bb0e6",
+      "manifest_sha256": "085d69b8b6a61c6ec5570b00d4e2a0d2d91f7f3f6086f2ef6b726a3759220c0c",
       "name": "supervised_positive",
       "result": {
-        "ca_sha256_self_consistency_only": "956ce8f25d1ed3c732940f41b96eee9013661ca75f3e387024360cc988e68cb6",
+        "ca_sha256_self_consistency_only": "6654975f90d56c8064be7fab0a3697298ad66ada7bcb2ae735dcd4f8ca34d507",
         "checks": [
           {
             "name": "aggregate fixed-role native readiness verifies identity, schema and blank scope",
@@ -261,28 +262,28 @@
           "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
           "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
         ],
-        "manifest_sha256": "08dec5ebb5032c486dacb83704f77effced96dbe1d924cc9f079cb50448bb0e6",
-        "original_expires_at": 1793314803,
-        "original_issued_at": 1793314203,
+        "manifest_sha256": "085d69b8b6a61c6ec5570b00d4e2a0d2d91f7f3f6086f2ef6b726a3759220c0c",
+        "original_expires_at": 1793317276,
+        "original_issued_at": 1793316676,
         "passed": true,
         "resource_pins": {
           "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
-          "catalog_sha256": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
-          "database_version": 4,
-          "fixture_setup_sha256": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
-          "migrations_manifest_sha256": "cc27fbac967824f78a83fa25d80ef6175e3baa616b086cbad181428cc894d74d",
+          "catalog_sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+          "database_version": 5,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
           "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
-          "seed_program_sha256": "ee307fb23c2ee0180f27510efa946fdba6269eee104ddb5e08feee56b174fd6b",
+          "seed_program_sha256": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
           "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
           "seed_validator_sha256": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
-          "source_bundle_sha256": "e35e62b8c432f3f499fbfcc3c926ed321d7a592da0a877f105633a0f6e1b39c9"
+          "source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db"
         },
-        "run_id": "6b3286d0-a066-40c0-bf0e-786bea67d150",
+        "run_id": "e8d6e41a-3ccb-4f4b-8ddb-27eacd0c4979",
         "schema_version": 1,
         "scope": "APP-008 isolated application-data-read-only qualification"
       },
-      "run_id": "6b3286d0-a066-40c0-bf0e-786bea67d150",
-      "seconds": 2.06,
+      "run_id": "e8d6e41a-3ccb-4f4b-8ddb-27eacd0c4979",
+      "seconds": 1.97,
       "stderr_bytes": 0,
       "substitutions": [
         "credential refresh writes the synthetic local-password envelope instead of STS/IAM tokens",
@@ -298,7 +299,7 @@
         "refresh_failures": 0,
         "refreshes": 1,
         "result_retained": true,
-        "run_id": "6b3286d0-a066-40c0-bf0e-786bea67d150",
+        "run_id": "e8d6e41a-3ccb-4f4b-8ddb-27eacd0c4979",
         "schema_version": 1,
         "scope": "APP-075 qualification supervisor",
         "stderr_bytes": 0,
@@ -346,9 +347,9 @@
           "run_directory_uid": 65532
         }
       ],
-      "manifest_sha256": "c55766e953e40803fe4cf09c557a51d40bd155c9ad507d7d27fba2ae50240791",
+      "manifest_sha256": "946fe15bbf5a0e2959b1639a5058e148a47401200394232ddae657f6556bd764",
       "name": "unarmed",
-      "registry_sha256": "240cf6188616fa50da2f381af803f46016cfae6d4b6f5998973a52c5c314e66d",
+      "registry_sha256": "4b992f9ada9faf02a934f84246e9df36c2ac213af9f4ea836c0406e90edde95b",
       "result": {
         "ca_sha256_self_consistency_only": null,
         "checks": [],
@@ -367,23 +368,23 @@
         "passed": false,
         "resource_pins": {
           "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
-          "catalog_sha256": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
-          "database_version": 4,
-          "fixture_setup_sha256": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
-          "migrations_manifest_sha256": "cc27fbac967824f78a83fa25d80ef6175e3baa616b086cbad181428cc894d74d",
+          "catalog_sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+          "database_version": 5,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
           "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
-          "seed_program_sha256": "ee307fb23c2ee0180f27510efa946fdba6269eee104ddb5e08feee56b174fd6b",
+          "seed_program_sha256": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
           "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
           "seed_validator_sha256": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
-          "source_bundle_sha256": "e35e62b8c432f3f499fbfcc3c926ed321d7a592da0a877f105633a0f6e1b39c9"
+          "source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db"
         },
         "run_id": null,
         "schema_version": 1,
         "scope": "APP-008 isolated application-data-read-only qualification"
       },
       "result_lines": 1,
-      "run_id": "b02d5bb6-6ef1-49d2-81fe-4e3c0b30570e",
-      "seconds": 0.27,
+      "run_id": "a9ec0369-dd58-4d9a-81ad-a7c14a44fcc1",
+      "seconds": 0.28,
       "stderr_bytes": 39,
       "user": "65532:65532"
     },
@@ -428,9 +429,9 @@
           "run_directory_uid": 0
         }
       ],
-      "manifest_sha256": "aa50ac86eb4212e78197f33d307ddd7f8f0daf2c87b0705ea9938cc61850173d",
+      "manifest_sha256": "677acb8b92b2806273573353fd92d6b1a7a9e78372f4f65a53c7de42e7a101fd",
       "name": "root-uid",
-      "registry_sha256": "36a1dcdcdeca819b2aacff5a1b11277e551a3c3d2f67d6fa1fe06fb7b83c63b8",
+      "registry_sha256": "5e341a323f2d96fcff78e6ad7fa645fe39622c3dee92a0eb301e5d9207e572ee",
       "result": {
         "ca_sha256_self_consistency_only": null,
         "checks": [],
@@ -449,23 +450,23 @@
         "passed": false,
         "resource_pins": {
           "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
-          "catalog_sha256": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
-          "database_version": 4,
-          "fixture_setup_sha256": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
-          "migrations_manifest_sha256": "cc27fbac967824f78a83fa25d80ef6175e3baa616b086cbad181428cc894d74d",
+          "catalog_sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+          "database_version": 5,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
           "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
-          "seed_program_sha256": "ee307fb23c2ee0180f27510efa946fdba6269eee104ddb5e08feee56b174fd6b",
+          "seed_program_sha256": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
           "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
           "seed_validator_sha256": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
-          "source_bundle_sha256": "e35e62b8c432f3f499fbfcc3c926ed321d7a592da0a877f105633a0f6e1b39c9"
+          "source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db"
         },
         "run_id": null,
         "schema_version": 1,
         "scope": "APP-008 isolated application-data-read-only qualification"
       },
       "result_lines": 1,
-      "run_id": "70ef69dd-21f7-4086-a409-dbbdfd0c9148",
-      "seconds": 0.26,
+      "run_id": "95835683-84db-4809-b2ca-5c3ca17d9aac",
+      "seconds": 0.25,
       "stderr_bytes": 39,
       "user": "0:0"
     },
@@ -508,9 +509,9 @@
           "run_directory_uid": 65532
         }
       ],
-      "manifest_sha256": "b25bde90b0c837228604911d068edefdb779b2e07134c87731ec595f5588cba5",
+      "manifest_sha256": "530307ed9b615b3b9e73cfe704d3488ce369a2f96a9cafdf117358ddd8bb51fe",
       "name": "wrong-arguments",
-      "registry_sha256": "7cf37b53ec259db954c788f07616d5702e76df8de3bab43197f6d5e007c4b87f",
+      "registry_sha256": "e2be3477d5e8ec24af17d3eb24ff32a7e45f24f0e587a5bbdef8fe65fd7915e1",
       "result": {
         "ca_sha256_self_consistency_only": null,
         "checks": [],
@@ -529,22 +530,22 @@
         "passed": false,
         "resource_pins": {
           "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
-          "catalog_sha256": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
-          "database_version": 4,
-          "fixture_setup_sha256": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
-          "migrations_manifest_sha256": "cc27fbac967824f78a83fa25d80ef6175e3baa616b086cbad181428cc894d74d",
+          "catalog_sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+          "database_version": 5,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
           "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
-          "seed_program_sha256": "ee307fb23c2ee0180f27510efa946fdba6269eee104ddb5e08feee56b174fd6b",
+          "seed_program_sha256": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
           "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
           "seed_validator_sha256": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
-          "source_bundle_sha256": "e35e62b8c432f3f499fbfcc3c926ed321d7a592da0a877f105633a0f6e1b39c9"
+          "source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db"
         },
         "run_id": null,
         "schema_version": 1,
         "scope": "APP-008 isolated application-data-read-only qualification"
       },
       "result_lines": 1,
-      "run_id": "798d9ee0-b9d6-4bed-a3d3-bdd8a0d368ef",
+      "run_id": "f4ebd65c-1b16-441f-9fba-3aee4d30978a",
       "seconds": 0.27,
       "stderr_bytes": 0,
       "user": "65532:65532"
@@ -590,11 +591,11 @@
           "run_directory_uid": 65532
         }
       ],
-      "manifest_sha256": "6279622fe95acbe3f5f5f14013c98b17e88d6c0b0dc60e5f53fce7d10e388cc5",
+      "manifest_sha256": "374d21b5b1d5ae3dbf1c0f71697543f6c12879ff6b4b8aeff79b13303ca7dc9a",
       "name": "untrusted-ca",
-      "registry_sha256": "e3cf0dc2fad0ccf9f54c3c693e70b3ae363c086305ddb8c5fea86ffeedd01584",
+      "registry_sha256": "dc3f3341c652f83df3479cfa9fc6e967d004f097bebb25eebe635dbb2ff18bdd",
       "result": {
-        "ca_sha256_self_consistency_only": "867334a1a73ded7f540ca8c5a33527f94e5028e23ac382a6f83ff8953ed3db62",
+        "ca_sha256_self_consistency_only": "36e147f3ba3e3ab3d1ba9492fd1c76e047f2ca94617cabae4967a07d944e14ac",
         "checks": [],
         "cleanup_applicable": true,
         "cleanup_confirmed": true,
@@ -605,28 +606,28 @@
           "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
           "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
         ],
-        "manifest_sha256": "6279622fe95acbe3f5f5f14013c98b17e88d6c0b0dc60e5f53fce7d10e388cc5",
-        "original_expires_at": 1793314806,
-        "original_issued_at": 1793314206,
+        "manifest_sha256": "374d21b5b1d5ae3dbf1c0f71697543f6c12879ff6b4b8aeff79b13303ca7dc9a",
+        "original_expires_at": 1793317278,
+        "original_issued_at": 1793316678,
         "passed": false,
         "resource_pins": {
           "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
-          "catalog_sha256": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
-          "database_version": 4,
-          "fixture_setup_sha256": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
-          "migrations_manifest_sha256": "cc27fbac967824f78a83fa25d80ef6175e3baa616b086cbad181428cc894d74d",
+          "catalog_sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+          "database_version": 5,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
           "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
-          "seed_program_sha256": "ee307fb23c2ee0180f27510efa946fdba6269eee104ddb5e08feee56b174fd6b",
+          "seed_program_sha256": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
           "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
           "seed_validator_sha256": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
-          "source_bundle_sha256": "e35e62b8c432f3f499fbfcc3c926ed321d7a592da0a877f105633a0f6e1b39c9"
+          "source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db"
         },
-        "run_id": "c2c745e0-3e8b-47ac-bbed-bf11e97c0488",
+        "run_id": "2721bdad-f6b5-4d6e-91a7-139f6c002251",
         "schema_version": 1,
         "scope": "APP-008 isolated application-data-read-only qualification"
       },
       "result_lines": 1,
-      "run_id": "c2c745e0-3e8b-47ac-bbed-bf11e97c0488",
+      "run_id": "2721bdad-f6b5-4d6e-91a7-139f6c002251",
       "seconds": 0.3,
       "stderr_bytes": 39,
       "user": "65532:65532"
@@ -672,11 +673,11 @@
           "run_directory_uid": 65532
         }
       ],
-      "manifest_sha256": "925b5aed8d4397b3ead349733acb5b5c04bc905f274e1692aa63b4dd8618755d",
+      "manifest_sha256": "c4837312c4e711ff91ad36a0cf8938e4a2686e5ecc733812b1c94afec540d7c1",
       "name": "hostname-mismatch",
-      "registry_sha256": "88aee907d554a7437d67daa77f898722bea6f738989d794a0e0f8599ef13810c",
+      "registry_sha256": "4af0f84b47918f7b82c9363cc718fac3199e93053a5660f4b6042e4b97e08636",
       "result": {
-        "ca_sha256_self_consistency_only": "956ce8f25d1ed3c732940f41b96eee9013661ca75f3e387024360cc988e68cb6",
+        "ca_sha256_self_consistency_only": "6654975f90d56c8064be7fab0a3697298ad66ada7bcb2ae735dcd4f8ca34d507",
         "checks": [],
         "cleanup_applicable": true,
         "cleanup_confirmed": true,
@@ -687,34 +688,34 @@
           "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
           "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
         ],
-        "manifest_sha256": "925b5aed8d4397b3ead349733acb5b5c04bc905f274e1692aa63b4dd8618755d",
-        "original_expires_at": 1793314807,
-        "original_issued_at": 1793314207,
+        "manifest_sha256": "c4837312c4e711ff91ad36a0cf8938e4a2686e5ecc733812b1c94afec540d7c1",
+        "original_expires_at": 1793317279,
+        "original_issued_at": 1793316679,
         "passed": false,
         "resource_pins": {
           "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
-          "catalog_sha256": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
-          "database_version": 4,
-          "fixture_setup_sha256": "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
-          "migrations_manifest_sha256": "cc27fbac967824f78a83fa25d80ef6175e3baa616b086cbad181428cc894d74d",
+          "catalog_sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+          "database_version": 5,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
           "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
-          "seed_program_sha256": "ee307fb23c2ee0180f27510efa946fdba6269eee104ddb5e08feee56b174fd6b",
+          "seed_program_sha256": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
           "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
           "seed_validator_sha256": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
-          "source_bundle_sha256": "e35e62b8c432f3f499fbfcc3c926ed321d7a592da0a877f105633a0f6e1b39c9"
+          "source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db"
         },
-        "run_id": "a687e623-90ae-4851-a3c1-ba25dfb44c48",
+        "run_id": "cf244267-191f-4680-a538-d9311d9db976",
         "schema_version": 1,
         "scope": "APP-008 isolated application-data-read-only qualification"
       },
       "result_lines": 1,
-      "run_id": "a687e623-90ae-4851-a3c1-ba25dfb44c48",
+      "run_id": "cf244267-191f-4680-a538-d9311d9db976",
       "seconds": 0.29,
       "stderr_bytes": 39,
       "user": "65532:65532"
     }
   ],
   "scope": "APP-075 local-only positive; synthetic CA, local SCRAM, no AWS/RDS",
-  "synthetic_ca_sha256": "956ce8f25d1ed3c732940f41b96eee9013661ca75f3e387024360cc988e68cb6",
-  "untrusted_ca_sha256": "867334a1a73ded7f540ca8c5a33527f94e5028e23ac382a6f83ff8953ed3db62"
+  "synthetic_ca_sha256": "6654975f90d56c8064be7fab0a3697298ad66ada7bcb2ae735dcd4f8ca34d507",
+  "untrusted_ca_sha256": "36e147f3ba3e3ab3d1ba9492fd1c76e047f2ca94617cabae4967a07d944e14ac"
 }

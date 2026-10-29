@@ -3,24 +3,24 @@
 Files: [Dockerfile](../../../app/qualification/Dockerfile), [Dockerfile.dockerignore](../../../app/qualification/Dockerfile.dockerignore), [qualification_supervisor.py](../../../app/runtime/qualification_supervisor.py) with [tests](../../../app/runtime/test_qualification_supervisor.py), [check_image.py](../../../app/qualification/check_image.py), [infra/src/stack.ts](../../../infra/src/stack.ts) and [infra/test/security.test.ts](../../../infra/test/security.test.ts). Build: [build.txt](build.txt). Checks: [check.json](check.json).
 
 ```sh
-docker build --progress=plain -f app/qualification/Dockerfile -t genui-app075-qualification:dispositions .
-app/runtime/.venv/bin/python app/qualification/check_image.py --image genui-app075-qualification:dispositions \
-  --base-revision e195ebf --output evidence/APP-075/image/check.json
-docker image rm genui-app075-qualification:dispositions
+docker build --progress=plain -f app/qualification/Dockerfile -t genui-app075-qualification:recheck .
+app/runtime/.venv/bin/python app/qualification/check_image.py --image genui-app075-qualification:recheck \
+  --base-revision d6986c2 --output evidence/APP-075/image/check.json
+docker image rm genui-app075-qualification:recheck
 ```
 
 ## Image
 
-`sha256:fa35554b96140904b46987d0f30fcc05c1fcb00c783d69294e459e7cf9501d14`, linux/arm64, 489,200,192 bytes, built at `da3d203` (the review fixes on the merged revision `e195ebf`). Executable sha256 `9cb8b4455b21ad4ab9f6f6500fde32e5a31140f678f4bc47d594bee1443e3836`, equal to its `build-identity.json`. Source bundle `e35e62b8c432f3f499fbfcc3c926ed321d7a592da0a877f105633a0f6e1b39c9`. Local only, never pushed, removed after the checks. (The first recording, at `5023eb9`, was image `ff9f0fe0…`, executable `0f3be387…`, bundle `85381e18…`; see Git history.)
+`sha256:d3af3ac012d54bfb11f2ba3f4483b3b897c85af66717b0100771e187e34d250e`, linux/arm64, 498,091,602 bytes, built at the merged tip `d6986c2` for the M1–M3 re-check. Executable sha256 `b3ea2a49c18f7a5a8fef1afcbfdeecfa56f81a329af4819576e551f42e8f2255`, equal to its `build-identity.json`. Source bundle `a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db`. Local only, never pushed, removed after the checks. History (see Git): at `da3d203`, image `fa35554b…`, executable `9cb8b445…`, bundle `e35e62b8…`; at `5023eb9`, image `ff9f0fe0…`, executable `0f3be387…`, bundle `85381e18…`.
 
 - **Stages.**
   - `inputs` (scratch) exists only to export the context.
   - `native` (`rust:1.93.1-bookworm@sha256:7c4ae649…`) runs `cargo test --no-run --locked --lib --message-format=json`. It selects exactly one library test-profile artifact, installs it with mode 0555 and writes `build-identity.json` (executable sha256, `rustc 1.93.1`, Cargo artifact name).
   - The final stage, `python:3.11.14-slim-bookworm@sha256:65a93d69…`, installs `requirements.lock` with hashes and adds the executable, identity, `runtime.py`, the supervisor and the reviewed CA, all read-only. `/run/genui` is 0700/65532 and is the only volume.
 - **Configuration.** `USER 65532:65532`, `ENTRYPOINT python3 /app/qualification_supervisor.py`, `CMD run`. No port. The environment holds no credential, endpoint or arming value.
-- **Context.** BuildKit's per-Dockerfile ignore file is an explicit 48-file allowlist: the 40 compile-time inputs the source bundle binds (27 Rust sources, `app/Cargo.toml`, `app/Cargo.lock`, the APP-006 `Cargo.toml`, the RDS CA and the 9 contract files the tests embed), `manifest.json`, `catalog-query.json`, `catalog-v4.json`, `runtime.py`, the supervisor, `requirements.lock`, the Dockerfile and the ignore file. The exported context equals the allowlist exactly. `check_image.allowlist()` skips the two `!dir/` re-include lines and refuses one not followed at once by its `dir/**` exclusion.
-- **Service image unchanged.** The root `.dockerignore` context (151 files) is byte-identical to `e195ebf`, and it contains no qualification file.
-- **Pins.** The unarmed executable reports database version 4, `catalog-v4.json` `336f870e…`, `manifest.json` `cc27fbac…`, `catalog-query.json` `3e3e744d…`, and the five seed pins (`setup.json` `29221b7a…`, edition `impl-2026-10-28.1` `northstar.json` `45639ea3…` and `spend-review.json` `4a4581f5…`, `tenant_seed.py` `ee307fb2…`, `contracts/validate.py` `c5ae11fe…`), all equal to the repository recomputation.
+- **Context.** BuildKit's per-Dockerfile ignore file is an explicit 50-file allowlist: the 42 compile-time inputs the source bundle binds (29 Rust sources, `app/Cargo.toml`, `app/Cargo.lock`, the APP-006 `Cargo.toml`, the RDS CA and the 9 contract files the tests embed), `manifest.json`, `catalog-query.json`, `catalog-v5.json`, `runtime.py`, the supervisor, `requirements.lock`, the Dockerfile and the ignore file. The exported context equals the allowlist exactly. `check_image.allowlist()` skips the two `!dir/` re-include lines and refuses one not followed at once by its `dir/**` exclusion.
+- **Service image unchanged.** The root `.dockerignore` context is 155 files at `d6986c2` (the check compares it with `d6986c2` itself) and contains no qualification file. None of its files is touched by the APP-075 fix commits `e195ebf..8001228`; at `da3d203` it was 151 files, byte-identical to `e195ebf`.
+- **Pins.** The unarmed executable reports database version 5, `catalog-v5.json` `02e1c79b…`, `manifest.json` `b3cc8070…`, `catalog-query.json` `3e3e744d…`, and the five seed pins (`setup.json` `74608644…`, edition `impl-2026-10-28.1` `northstar.json` `45639ea3…` and `spend-review.json` `4a4581f5…`, `tenant_seed.py` `c9073aee…`, `contracts/validate.py` `c5ae11fe…`), all equal to the repository recomputation. (At `da3d203`: version 4, `336f870e…`, `cc27fbac…`, `setup.json` `29221b7a…`, `tenant_seed.py` `ee307fb2…`.)
 
 ## Confined checks (27 of 27)
 

@@ -1,87 +1,93 @@
-   Compiling forma-app-platform v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/.claude/worktrees/agent-ae3efd87b8b005cad/app)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.84s
-     Running unittests src/lib.rs (target/debug/deps/genui-f88bdb3ca2811e20)
+   Compiling forma-app-platform v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/.claude/worktrees/agent-aa63dda2184d59cf0/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.77s
+     Running unittests src/lib.rs (target/debug/deps/genui-391b09847189badc)
 
-running 75 tests
+running 81 tests
 test admission::tests::digests_are_domain_separated_and_registered ... ok
 test admission::tests::unregistered_digest_domain_is_refused - should panic ... ok
-test admission::tests::strict_decoder_matches_python_loads ... ok
 test admission::tests::fixtures_digests_match_python ... ok
+test admission::tests::strict_decoder_matches_python_loads ... ok
 test auth_qualification::tests::existing_login_uses_server_bound_pkce_and_expected_subject ... ok
 test auth_qualification::tests::concurrent_and_sequential_replay_exchange_exactly_once ... ok
-test auth_qualification::tests::expiry_restart_and_attempt_limits_fail_closed ... ok
-test auth_qualification::tests::canceled_exchange_or_verification_keeps_cleanup_unresolved ... ok
-test auth_qualification::tests::operator_and_caller_selected_inputs_never_start_provider_work ... ok
-test auth_qualification::tests::production_configuration_cannot_select_test_transport_or_identity ... ok
-test auth_qualification::tests::foreign_verified_tenant_is_refused_and_logout_is_requested ... ok
 test admission::tests::edition_two_vectors_match_contracts_lock ... ok
+test auth_qualification::tests::expiry_restart_and_attempt_limits_fail_closed ... ok
+test auth_qualification::tests::production_configuration_cannot_select_test_transport_or_identity ... ok
+test auth_qualification::tests::operator_and_caller_selected_inputs_never_start_provider_work ... ok
+test auth_qualification::tests::canceled_exchange_or_verification_keeps_cleanup_unresolved ... ok
+test auth_qualification::tests::foreign_verified_tenant_is_refused_and_logout_is_requested ... ok
 test auth_qualification::tests::state_cookie_and_parser_refusals_never_exchange ... ok
 test auth_qualification::tests::real_router_and_backend_par_exchange_create_no_app_authority ... ok
 test config::tests::file_reader_rejects_fifo_symlink_and_oversized_input ... ok
 test imports::sandbox::tests::actual_parser_host_parses_refuses_and_lists_sheets ... ignored, needs a built parser-host and guest named by GENUI_TEST_PARSER_MANIFEST
 test config::tests::refuse_expiry_shared_credentials_and_role_interchange_without_disclosure ... ok
-test imports::sandbox::tests::manifest_matching_image_bytes_yields_identity ... ok
-test imports::sandbox::tests::manifest_mismatch_is_refused_at_startup ... ok
-test imports::sandbox::tests::parse_without_a_verified_manifest_is_refused ... ok
-test auth_qualification::tests::token_shape_binding_redirect_body_and_cleanup_refusals ... ok
 test admission::tests::unregistered_renderer_or_operator_version_refuses ... ok
+test imports::sandbox::tests::manifest_matching_image_bytes_yields_identity ... ok
+test auth_qualification::tests::token_shape_binding_redirect_body_and_cleanup_refusals ... ok
+test imports::sandbox::tests::parse_without_a_verified_manifest_is_refused ... ok
+test imports::sandbox::tests::manifest_mismatch_is_refused_at_startup ... ok
 test admission::tests::rejects_unknown_fields_executable_strings_and_client_grants_with_coded_reason ... ok
-test admission::tests::edition_one_definitions_still_admit ... ok
 test admission::tests::rejects_over_complex_definitions ... ok
 test readiness::tests::late_or_other_generation_probe_cannot_extend_credentials ... ok
 test storage::admission::tests::code_digest_matches_the_operator_vector_for_every_accepted_spelling ... ok
 test storage::admission::tests::digest_shape_and_sign_out_reasons_are_closed ... ok
+test admission::tests::edition_one_definitions_still_admit ... ok
 test storage::admission::tests::handle_digest_matches_the_operator_vector_and_is_strict ... ok
 test storage::admission_qualification::native_admission_campaign ... ignored, requires local Docker, OpenSSL and the locked migration/contract Python environments
-test storage::managed_qualification::managed_readonly_entry ... ignored, operator-only exact selector, fixed arming and private immutable run manifest required
+test storage::definition_qualification::native_definition_campaign ... ignored, requires local Docker, OpenSSL and the locked migration/contract Python environments
+test storage::definitions::tests::audit_event_hash_matches_the_operator_and_schema_campaign_definition ... ok
 test storage::admission::tests::malformed_codes_have_no_digest ... ok
+test storage::definitions::tests::readmission_derives_contracts_from_the_admitted_bytes_under_trusted_scope ... ok
+test storage::managed_qualification::managed_readonly_entry ... ignored, operator-only exact selector, fixed arming and private immutable run manifest required
+test storage::definitions::tests::forged_or_unstorable_admissions_are_refused_before_any_storage ... ok
 test admission::tests::canonical_vectors_match_contracts_lock ... ok
+test storage::managed_qualification::tests::case_panic_output_is_sanitized_and_cleanup_is_proven ... ok
 test storage::managed_qualification::tests::child_entry ... ignored, child process helper for APP-075 output-boundary tests
 test storage::managed_qualification::tests::entry_cannot_select_a_fixture_endpoint_or_insecure_transport ... ok
-test storage::managed_qualification::tests::entry_panic_is_labeled_and_never_confirms_cleanup ... ok
-test storage::managed_qualification::tests::managed_cleanup_with_real_transports ... ignored, requires local Docker, OpenSSL and the locked migration/contract Python environments
-test storage::managed_qualification::tests::case_panic_output_is_sanitized_and_cleanup_is_proven ... ok
-test storage::managed_qualification::tests::original_deadline_bounds_span_remaining_time_and_issue_skew ... ok
 test imports::sandbox::tests::frame_carries_the_selected_sheet_and_demo_profile_only ... ok
+test storage::managed_qualification::tests::managed_cleanup_with_real_transports ... ignored, requires local Docker, OpenSSL and the locked migration/contract Python environments
 test admission::tests::shape_and_reference_rules_match_validate_py ... ok
+test storage::managed_qualification::tests::entry_panic_is_labeled_and_never_confirms_cleanup ... ok
+test storage::managed_qualification::tests::original_deadline_bounds_span_remaining_time_and_issue_skew ... ok
+test storage::managed_qualification::tests::a_pass_requires_exactly_the_six_shared_checks ... ok
 test storage::managed_qualification::tests::registry_bytes_are_the_canonical_cross_language_vector ... ok
 test storage::managed_qualification::tests::refusals_before_store_construction_are_not_applicable ... ok
-test storage::managed_qualification::tests::a_pass_requires_exactly_the_six_shared_checks ... ok
 test storage::managed_qualification::tests::private_inputs_refuse_links_modes_owners_fifos_directories_and_size ... ok
 test storage::managed_qualification::tests::seed_catalog_and_migration_pins_match_repository_files ... ok
-test storage::managed_qualification::tests::source_bundle_covers_every_compiled_source ... ok
 test storage::managed_qualification::tests::reports_are_sanitized_closed_and_bounded ... ok
+test storage::managed_qualification::tests::source_bundle_covers_every_compiled_source ... ok
 test storage::managed_qualification::tests::manifest_is_closed_and_refuses_duplicate_or_unknown_keys ... ok
 test imports::sandbox::tests::parser_host_runs_one_job_per_process_with_cleared_environment ... ok
-test storage::managed_qualification::tests::valid_inputs_load_and_bind_the_original_deadline ... ok
 test storage::managed_qualification::tests::registry_ca_and_credential_files_are_bound ... ok
+test storage::managed_qualification::tests::selector_arming_scope_and_uid_are_exact ... ok
+test storage::managed_qualification::tests::valid_inputs_load_and_bind_the_original_deadline ... ok
 test storage::pool::lifecycle_tests::abort_request_retains_permits_until_transport_drop ... ok
 test storage::qualification::native_postgres_campaign ... ignored, requires local Docker, OpenSSL and the locked migration/contract Python environments
 test storage::tests::private_registry_rejects_links_modes_duplicates_unknowns_and_large_documents ... ok
 test storage::tests::production_settings_allow_only_fixed_rds_endpoint ... ok
 test storage::tests::unknown_permissions_and_noncanonical_ids_deny ... ok
 test supervise::tests::child_environment_is_empty ... ok
+test supervise::tests::child_inherits_only_its_three_pipes ... ok
 test supervise::tests::child_limits_are_nofile_and_core_only_from_confinement ... ok
 test supervise::tests::child_that_stops_reading_early_is_not_a_failure ... ok
 test supervise::tests::input_read_failure_kills_and_never_completes ... ok
-test storage::managed_qualification::tests::selector_arming_scope_and_uid_are_exact ... ok
-test supervise::tests::killed_at_rss_line_reports_resource_limit ... ok
 test imports::sandbox::tests::refusal_exit_two_returns_reason_and_available_sheets ... ok
+test supervise::tests::killed_at_rss_line_reports_resource_limit ... ok
 test supervise::tests::signal_exit_reports_crashed ... ok
 test supervise::tests::stderr_beyond_its_bound_is_a_resource_limit ... ok
 test supervise::tests::stdin_streams_to_the_child_and_stdout_returns ... ok
 test supervise::tests::killed_at_deadline_reports_deadline ... ok
 test storage::managed_qualification::tests::target_organizations_and_every_pin_are_fixed ... ok
 test storage::managed_qualification::tests::an_entry_panic_after_load_keeps_the_original_deadline_watchdog ... ok
-test imports::sandbox::tests::protocol_and_identity_violations_are_failures ... ok
 test storage::managed_qualification::tests::watchdog_exits_at_the_original_deadline_without_a_result ... ok
+test imports::sandbox::tests::input_that_ends_early_without_an_error_is_never_parsed ... ok
+test imports::sandbox::tests::protocol_and_identity_violations_are_failures ... ok
 test storage::managed_qualification::tests::supervise_proves_cleanup_on_success_panic_and_cooperative_timeout ... ok
 test storage::managed_qualification::tests::supervise_never_confirms_cleanup_for_an_unacknowledged_abort ... ok
 test auth_qualification::tests::token_and_logout_timeouts_are_bounded_and_never_retry ... ok
 
-test result: ok. 69 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 6.09s
+test result: ok. 74 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 6.06s
 
-     Running unittests src/main.rs (target/debug/deps/forma_app_platform-92f00e5953a1c2a6)
+     Running unittests src/main.rs (target/debug/deps/forma_app_platform-8bba60090459acdf)
 
 running 1 test
 test tests::required_native_routes_refuse_browser_and_missing_outputs ... ok
@@ -91,8 +97,8 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
    Doc-tests genui
 
 running 2 tests
-test src/storage/authorization.rs - storage::authorization::TrustedRequest (line 12) - compile fail ... ok
+test src/storage/authorization.rs - storage::authorization::TrustedRequest (line 15) - compile fail ... ok
 test src/storage/admission.rs - storage::admission::VerifiedNonmember (line 21) - compile fail ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
 

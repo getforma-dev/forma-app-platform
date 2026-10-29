@@ -10,6 +10,8 @@ supervisor-tests 0
 tool-tests 0
 infra-typecheck 0
 infra-tests 0
+native-campaign 0
+admission-campaign 0
 cleanup-campaign 0
 check-image 0
 local-harness 0

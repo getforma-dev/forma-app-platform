@@ -1,17 +1,17 @@
 # APP-075 B2: confined local positive
 
-Harness: [local_harness.py](../../../app/qualification/local_harness.py). Report: [harness.json](harness.json). Label `genui-app075-259a8d637a`, run at 2026-10-29T22:50Z at `da3d203` against qualification image `sha256:fa35554b…` (arm64). The first recording (at `5023eb9`, image `ff9f0fe0…`) is in Git history.
+Harness: [local_harness.py](../../../app/qualification/local_harness.py). Report: [harness.json](harness.json). Label `genui-app075-00d9122039`, run at 2026-10-29T23:31Z at the merged tip `d6986c2` against qualification image `sha256:d3af3ac0…` (arm64). Earlier recordings are in Git history: `da3d203` (label `genui-app075-259a8d637a`, image `fa35554b…`, runs `93ea7b2f…`/`6b3286d0…`, schema 4) and `5023eb9` (image `ff9f0fe0…`).
 
 ```sh
 app/runtime/.venv/bin/python app/qualification/local_harness.py \
-  --image genui-app075-qualification:dispositions --output evidence/APP-075/local-positive/harness.json
+  --image genui-app075-qualification:recheck --output evidence/APP-075/local-positive/harness.json
 ```
 
 ## Setup
 
-- **Executable.** Copied out of the qualification image, which compiled it in `rust:1.93.1-bookworm@sha256:7c4ae649…` with `cargo test --no-run --locked --lib --message-format=json`, taking the path from the artifact metadata. sha256 `9cb8b445…`, equal to the image's build identity.
+- **Executable.** Copied out of the qualification image, which compiled it in `rust:1.93.1-bookworm@sha256:7c4ae649…` with `cargo test --no-run --locked --lib --message-format=json`, taking the path from the artifact metadata. sha256 `b3ea2a49…`, equal to the image's build identity.
 - **PostgreSQL.** `postgres@sha256:5d143123…`, server 16.13. `ssl=on`, with a server certificate signed by a CA created for this run whose only SAN is `genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg.cg58i06y2r4e.us-east-1.rds.amazonaws.com`.
-- **Migrations and seed.** `runtime.apply_migrations` for 0001–0004 (schema version 4) and `tenant_seed.seed(make_bundles())` through the locked runtime and contract environments.
+- **Migrations and seed.** `runtime.apply_migrations` for 0001–0005 (schema version 5) and `tenant_seed.seed(make_bundles())` through the locked runtime and contract environments.
 - **Authentication.** The four application roles get distinct random local passwords. `pg_hba` allows `hostssl … scram-sha-256` only and rejects plaintext TCP. This is local password authentication, **not IAM**.
 - **Network.** The server joins an `--internal` Docker network (no external route and no public DNS) under the exact hostname as a network alias. The run containers join only that network.
 - **Run image.** A throwaway image derived from the qualification image differs only in `/etc/ssl/certs/rds-global-bundle.pem` (the synthetic CA, mode 0444). There are no bind mounts.
@@ -21,13 +21,13 @@ app/runtime/.venv/bin/python app/qualification/local_harness.py \
 
 | Run | Run UUID | Exit | Outcome |
 | --- | --- | --- | --- |
-| positive (direct, exact five arguments) | `93ea7b2f-e294-4a26-9970-422a309663a8` | 0 | `passed:true`, six checks, `cleanup_confirmed:true`, pins equal to the independent recomputation; euid 65532, `/run/genui` 0700/65532, all three files 0600/65532 |
-| supervised positive | `6b3286d0-a066-40c0-bf0e-786bea67d150` | 0 | The supervisor launched the same executable and retained the result (`passed:true`, six checks, confirmed cleanup). Summary: one refresh, child exit 0, files removed. |
-| unarmed | `b02d5bb6-…` | 101 | `configuration_refused`, cleanup not applicable |
-| root UID (`0:0`, run directory owned by root) | `70ef69dd-…` | 101 | `configuration_refused`, cleanup not applicable |
-| wrong arguments (no `--nocapture`) | `798d9ee0-…` | 101 | `configuration_refused`, cleanup not applicable |
-| untrusted CA (manifest pinned to that CA) | `c2c745e0-…` | 101 | `case_refused`: TLS verification failed, cleanup confirmed |
-| trusted CA, certificate for `localhost` only | `a687e623-…` | 101 | `case_refused`: hostname verification failed, cleanup confirmed |
+| positive (direct, exact five arguments) | `a3ea4642-b695-47f0-8006-33217f199a9a` | 0 | `passed:true`, six checks, `cleanup_confirmed:true`, pins equal to the independent recomputation; euid 65532, `/run/genui` 0700/65532, all three files 0600/65532 |
+| supervised positive | `e8d6e41a-3ccb-4f4b-8ddb-27eacd0c4979` | 0 | The supervisor launched the same executable and retained the result (`passed:true`, six checks, confirmed cleanup). Summary: one refresh, child exit 0, files removed. |
+| unarmed | `a9ec0369-…` | 101 | `configuration_refused`, cleanup not applicable |
+| root UID (`0:0`, run directory owned by root) | `95835683-…` | 101 | `configuration_refused`, cleanup not applicable |
+| wrong arguments (no `--nocapture`) | `f4ebd65c-…` | 101 | `configuration_refused`, cleanup not applicable |
+| untrusted CA (manifest pinned to that CA) | `2721bdad-…` | 101 | `case_refused`: TLS verification failed, cleanup confirmed |
+| trusted CA, certificate for `localhost` only | `cf244267-…` | 101 | `case_refused`: hostname verification failed, cleanup confirmed |
 
 The six checks:
 

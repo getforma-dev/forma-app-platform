@@ -1,12 +1,16 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
-     Running unittests src/lib.rs (target/debug/deps/genui-f88bdb3ca2811e20)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+     Running unittests src/lib.rs (target/debug/deps/genui-391b09847189badc)
 
-running 33 tests
+running 37 tests
 test storage::admission::tests::code_digest_matches_the_operator_vector_for_every_accepted_spelling ... ok
 test storage::admission::tests::digest_shape_and_sign_out_reasons_are_closed ... ok
 test storage::admission::tests::handle_digest_matches_the_operator_vector_and_is_strict ... ok
 test storage::admission::tests::malformed_codes_have_no_digest ... ok
 test storage::admission_qualification::native_admission_campaign ... ignored, requires local Docker, OpenSSL and the locked migration/contract Python environments
+test storage::definition_qualification::native_definition_campaign ... ignored, requires local Docker, OpenSSL and the locked migration/contract Python environments
+test storage::definitions::tests::audit_event_hash_matches_the_operator_and_schema_campaign_definition ... ok
+test storage::definitions::tests::forged_or_unstorable_admissions_are_refused_before_any_storage ... ok
+test storage::definitions::tests::readmission_derives_contracts_from_the_admitted_bytes_under_trusted_scope ... ok
 test storage::managed_qualification::managed_readonly_entry ... ignored, operator-only exact selector, fixed arming and private immutable run manifest required
 test storage::managed_qualification::tests::a_pass_requires_exactly_the_six_shared_checks ... ok
 test storage::managed_qualification::tests::an_entry_panic_after_load_keeps_the_original_deadline_watchdog ... ok
@@ -36,5 +40,5 @@ test storage::tests::private_registry_rejects_links_modes_duplicates_unknowns_an
 test storage::tests::production_settings_allow_only_fixed_rds_endpoint ... ok
 test storage::tests::unknown_permissions_and_noncanonical_ids_deny ... ok
 
-test result: ok. 28 passed; 0 failed; 5 ignored; 0 measured; 42 filtered out; finished in 9.90s
+test result: ok. 31 passed; 0 failed; 6 ignored; 0 measured; 44 filtered out; finished in 10.05s
 
