@@ -114,22 +114,42 @@ impl<'a> Transaction<'a> {
             pool,
             request,
             "BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE",
+            None,
+        )
+        .await
+    }
+    /// As `begin`, with lease acquisition and the transaction deadline both
+    /// bounded by `cap` (a caller's handler deadline, D7.14).
+    pub async fn begin_until(
+        pool: &Arc<RolePool>,
+        request: &'a TrustedRequest,
+        cap: Instant,
+    ) -> Result<Self> {
+        Self::begin_with(
+            pool,
+            request,
+            "BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE",
+            Some(cap),
         )
         .await
     }
     /// ADR-007 D7.6 (A1): the control role's publication transaction only.
     /// Everything else stays READ COMMITTED. A 40001 at any statement or at
     /// COMMIT is classified (`serialization_failed`, `commit_serializable`)
-    /// so that the caller can retry once in a new transaction.
+    /// so that the caller can retry once in a new transaction. `cap` bounds
+    /// lease acquisition and the transaction deadline, so that the attempt and
+    /// its retry stay within the D7.14 handler deadline (review m5).
     pub async fn begin_serializable(
         pool: &Arc<RolePool>,
         request: &'a TrustedRequest,
+        cap: Instant,
     ) -> Result<Self> {
         require(pool.role() == Role::Control)?;
         Self::begin_with(
             pool,
             request,
             "BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE",
+            Some(cap),
         )
         .await
     }
@@ -137,6 +157,7 @@ impl<'a> Transaction<'a> {
         pool: &Arc<RolePool>,
         request: &'a TrustedRequest,
         isolation: &'static str,
+        cap: Option<Instant>,
     ) -> Result<Self> {
         require(
             valid_id(&request.organization)
@@ -158,6 +179,7 @@ impl<'a> Transaction<'a> {
             &request.principal,
             &request.epoch.to_string(),
             isolation,
+            cap,
         )
         .await
     }
@@ -175,6 +197,7 @@ impl<'a> Transaction<'a> {
             "",
             "",
             "BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE",
+            None,
         )
         .await
     }
@@ -185,9 +208,27 @@ impl<'a> Transaction<'a> {
         principal: &str,
         epoch: &str,
         isolation: &'static str,
+        cap: Option<Instant>,
     ) -> Result<Self> {
-        let lease = Lease::acquire(pool).await?;
-        let deadline = lease.transaction_deadline()?;
+        let (lease, deadline) = match cap {
+            None => {
+                let lease = Lease::acquire(pool).await?;
+                let deadline = lease.transaction_deadline()?;
+                (lease, deadline)
+            }
+            Some(cap) => {
+                // Nothing has been sent on a lease that is still being
+                // acquired, so abandoning the acquisition at `cap` is safe.
+                let lease = timeout_at(cap, Lease::acquire(pool))
+                    .await
+                    .map_err(|_| Error::Deadline)??;
+                let deadline = lease.transaction_deadline()?.min(cap);
+                if deadline <= Instant::now() {
+                    return Err(Error::Deadline);
+                }
+                (lease, deadline)
+            }
+        };
         let transaction = Self {
             lease,
             deadline,
@@ -288,9 +329,15 @@ impl<'a> Transaction<'a> {
                 require(valid_id(source))?;
                 self.query("SELECT 1 FROM genui.source_permissions p JOIN genui.sources s USING(organization_id,source_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.source_id=$3::text::uuid AND p.permission='source_read'", &[org,principal,&source]).await?
             }
+            // ADR-007 amendment 2026-10-29 (APP-010 review M2): the work's
+            // creator, until the operator revokes it, holds record_read and
+            // record_write on that work. Creator authority replaces only the
+            // work_permissions lookup; the app `run` clause and every
+            // dependency's live `source_read` still apply, and membership
+            // revocation ends it at the precheck above.
             Resource::Work { app, work } if matches!(precheck.action, Action::RecordRead | Action::RecordWrite | Action::ShareWork | Action::Export) => {
                 require(valid_id(app) && valid_id(work))?;
-                self.query("SELECT 1 FROM genui.work_permissions p JOIN genui.saved_work w USING(organization_id,app_id,work_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.app_id=$3::text::uuid AND p.work_id=$4::text::uuid AND p.permission=$5 AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=p.organization_id AND a.principal_id=p.principal_id AND a.app_id=p.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=p.organization_id AND d.app_id=p.app_id AND d.work_id=p.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id=p.principal_id AND s.source_id=d.source_id AND s.permission='source_read')))", &[org,principal,&app,&work,&action]).await?
+                self.query("SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=$3::text::uuid AND w.work_id=$4::text::uuid AND (EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id=$2::text::uuid AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission=$5) OR ($5 IN ('record_read','record_write') AND w.created_by=$2::text::uuid AND w.creator_revoked_at IS NULL)) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id=$2::text::uuid AND a.app_id=w.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id=$2::text::uuid AND s.source_id=d.source_id AND s.permission='source_read')))", &[org,principal,&app,&work,&action]).await?
             }
             _ => return Err(Error::Denied),
         };

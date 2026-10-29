@@ -39,7 +39,7 @@
       "passed": true
     },
     {
-      "name": "stored revision re-admits to the same digest and bytes; publication and saved work read back as canonical documents pinned to that digest",
+      "name": "stored revision re-admits to the same digest and bytes; publication and saved work read back as canonical documents pinned to that digest; the author reads the saved work as its recorded creator with no work permission row",
       "passed": true
     },
     {
@@ -63,7 +63,27 @@
       "passed": true
     },
     {
-      "name": "a publication that loses to a concurrent writer on both attempts returns PublishResult::Stale naming the newest publication (412); neither attempt left a publication or event",
+      "name": "a publication that loses to a concurrent writer on both attempts returns PublishResult::Stale naming the publication with the highest publication_sequence (412), with no wait for a new second; the app's publications are numbered 1..=5 in commit order; neither attempt left a publication or event",
+      "passed": true
+    },
+    {
+      "name": "COMMIT path (review m1): a publication doomed by SSI at COMMIT (40001) is retried once and publishes; doomed at COMMIT on both attempts it is Stale naming the highest-sequence publication with nothing written; a backend ended while paused before COMMIT is UnknownOutcome, never retried, nothing written",
+      "passed": true
+    },
+    {
+      "name": "handler deadline (review m5): a publication whose 40001 leaves less than the retry minimum and the Stale reserve of its budget is Stale after one attempt, within the budget; publish bounds every attempt and the Stale read by the 5 s D7.14 handler deadline",
+      "passed": true
+    },
+    {
+      "name": "independent_review (review m4): under an independent_review policy the owner is refused even with review_publish, a member without review_publish is refused, nothing is written; a non-owner reviewer publishes the owner's revision as approver with the owner as author",
+      "passed": true
+    },
+    {
+      "name": "creator authority (ADR-007 amendment, review M2): a member who saves work reads it (record_read) and passes record_write as its creator with no permission row, never share_work or export; a non-creator is denied; revoking the dependency's source_read or the app's run denies the creator; revoke-creator-authority ends it (epoch + 1) and an operator record_read grant restores the read",
+      "passed": true
+    },
+    {
+      "name": "audit (review m6): every publication.published event's id is its publication id (same app, approver and definition digest), and every Spend Review publication has its event",
       "passed": true
     },
     {
@@ -71,7 +91,7 @@
       "passed": true
     },
     {
-      "name": "the operator recomputes the workspace (definition.drafted, work.saved, work.bound) and control (publication.published) chains from their genesis heads to the heads; the canary chains are untouched",
+      "name": "the operator recomputes the workspace (definition.drafted, work.saved, work.bound), control (publication.published) and operator (permission.granted, permission.revoked, creator_authority.revoked) chains from their genesis heads to the heads; the canary chains are untouched",
       "passed": true
     },
     {
@@ -82,10 +102,11 @@
   "limits": [
     "Synthetic local password authentication is not RDS IAM.",
     "Identities are synthetic registry-bound fixtures; no session, route or browser flow is exercised (APP-009/012/013).",
-    "The app shell, permission rows and the Northstar expenses source revision are written by fixture-only operator SQL; their product paths are APP-077 and the import tickets'.",
+    "The app shell and every permission row are written by the operator package's create-app, grant-permission and revoke-permission commands; the Northstar expenses source revision and the independent_review policy row are fixture-only operator SQL (the import tickets and policy seeding own them).",
     "Source digests are the APP-002 synthetic placeholders; no source bytes were imported.",
     "The database itself is not restarted (tmpfs fixture); the restart is of every application pool and store.",
-    "The 40001 path is exercised at a statement (the control head lock); a 40001 at COMMIT is classified by the same code path but not provoked here."
+    "The publisher names the policy; the server does not yet resolve the organization's applicable policy (review m3), so an owner could choose owner_publish where an independent_review policy also exists.",
+    "40001 at COMMIT is provoked by a superuser SERIALIZABLE transaction (SSI), the transport loss by pg_terminate_backend, both at a test-only checkpoint before COMMIT."
   ],
   "managed_acceptance": false,
   "passed": true,
@@ -97,6 +118,7 @@
     "organization_id": "00000000-0000-4000-8000-000000000001",
     "policy": "00000000-0000-4000-8000-0000000000e0"
   },
+  "same_second_publications": 3,
   "schema_version": 1,
   "scope": "APP-010 isolated native PostgreSQL TLS definition, publication and saved-work qualification",
   "server_version": "16.13 (Debian 16.13-1.pgdg13+1)"

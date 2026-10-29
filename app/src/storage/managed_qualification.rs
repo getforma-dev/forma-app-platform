@@ -113,7 +113,7 @@ const SEED_INPUTS: [(&str, &str, &str); 5] = [
     (
         "seed_program_sha256",
         "app/runtime/tenant_seed.py",
-        "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
+        "73bd6b2d16c636fc3e2a8f91b71507d42aa737823084c7f6a2fe3570ee65fc2e",
     ),
     (
         "seed_validator_sha256",

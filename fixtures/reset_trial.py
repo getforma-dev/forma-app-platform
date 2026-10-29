@@ -190,7 +190,9 @@ def verify_seed_manifest(state, setup, bundles, seed_module, tables):
             bundle = next(b for b in bundles if b["context"]["organization_id"] == oid and b["definition"]["app_id"] == app)
             author, reviewer = fixture["author_principal_id"], fixture["reviewer_principal_id"]
             apps.append({"organization_id": oid, "app_id": app, "space_id": seed_module.SPACE, "owner_principal_id": author})
-            work.append({"organization_id": oid, "app_id": app, "work_id": fixture["work_id"], "publication_id": fixture["publication_id"], "version": fixture["work_version"], "context": bundle["work"]["context"]})
+            # Seeded work records no creator (ADR-007 amendment, APP-010 review M2): its authority is the seeded work grants.
+            work.append({"organization_id": oid, "app_id": app, "work_id": fixture["work_id"], "publication_id": fixture["publication_id"], "version": fixture["work_version"], "context": bundle["work"]["context"],
+                         "created_by": None, "creator_revoked_at": None})
             require(len(fixture["collection_ids"]) == 1, "unexpected seeded collection count")
             records.append({"organization_id": oid, "app_id": app, "work_id": fixture["work_id"], "collection_id": fixture["collection_ids"][0], "record_id": fixture["record_id"], "current_version": fixture["record_version"]})
             for purpose, principal in (("author_app", author), ("reviewer_app", reviewer)):

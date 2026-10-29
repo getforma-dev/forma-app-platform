@@ -6,7 +6,14 @@
 //! more audit events on the role's own chain (D7.8), committed together. The
 //! workspace drafts definition revisions and saves work; only the control role
 //! publishes, in a SERIALIZABLE transaction retried once on SQLSTATE 40001
-//! (D7.6, A1). Nothing a caller supplies is trusted as authority or as
+//! within the D7.14 handler deadline (D7.6, A1). Each publication of an app
+//! takes the next `publication_sequence` under the control-head lock, so the
+//! newest publication is unambiguous, and its `publication.published` event
+//! carries the publication id as its event id (ADR-007 amendment of
+//! 2026-10-29, APP-010 review M1 and m6). A saved work records its creator,
+//! whose authority on that work stands in for `record_read`/`record_write`
+//! grants until the operator revokes it (review M2). Nothing a caller supplies
+//! is trusted as authority or as
 //! admitted content: every definition is re-admitted inside storage, its
 //! organization and app come from the trusted request and the path, its input
 //! contracts and record schemas are derived from the admitted bytes, and a
@@ -23,7 +30,11 @@ use super::{
 use crate::admission::{self, digest, AdmittedDefinition};
 use serde_json::{json, Map, Value};
 use sha2::{Digest as _, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
+use tokio::time::Instant;
 use tokio_postgres::Row;
 
 /// Canonical bytes a reader returns and a column stores (0002 CHECKs).
@@ -35,6 +46,22 @@ const MAX_CONTEXT_CHARACTERS: usize = 2000;
 /// The only definition edition `definition_revisions` stores in Phase 1
 /// (0002: `CHECK (schema_version=1)`); edition 2 waits for its migration.
 const STORED_EDITION: u32 = 1;
+/// ADR-007 D7.14 handler deadline. D7.6's single retry of a publication
+/// happens within it (review m5): every publication transaction, and the
+/// `Stale` read, is bounded by the deadline taken when `publish` starts.
+pub const PUBLISH_HANDLER_DEADLINE: Duration = Duration::from_secs(5);
+/// The end of the handler budget kept back for the `Stale` read.
+const STALE_READ: Duration = Duration::from_secs(1);
+/// A second publication attempt starts only with at least this much budget
+/// left before the `Stale` reserve; otherwise the publication is `Stale` now.
+const RETRY_MINIMUM: Duration = Duration::from_secs(1);
+
+/// Whether a second publication attempt may start at `now` (review m5).
+fn retry_within(now: Instant, deadline: Instant) -> bool {
+    deadline
+        .checked_duration_since(now)
+        .is_some_and(|left| left >= STALE_READ + RETRY_MINIMUM)
+}
 
 /// A drafted, immutable definition revision.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -92,9 +119,10 @@ pub struct PublicationDetail {
     pub record_schemas: Vec<RecordSchema>,
 }
 
-/// The newest publication of the app when a publication lost twice to a
-/// concurrent writer (D7.6, D7.9: 412 naming the current revision). All `None`
-/// when the app has no publication yet.
+/// The app's publication with the highest `publication_sequence` when a
+/// publication lost to a concurrent writer and could not retry (D7.6, D7.9:
+/// 412 naming the current revision). All `None` when the app has no
+/// publication yet.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct CurrentRevision {
     pub publication: Option<String>,
@@ -329,6 +357,10 @@ impl Chain {
 }
 struct Event<'a> {
     kind: &'static str,
+    /// The event id, when the event is the record of one identified object
+    /// (a publication's event id is its publication id, review m6); else a
+    /// fresh UUID from the database.
+    id: Option<&'a str>,
     app: &'a str,
     work: Option<&'a str>,
     outcome: Option<&'a str>,
@@ -397,7 +429,10 @@ async fn append(
         .filter(|s| *s <= 9_007_199_254_740_991)
         .ok_or(Error::Unavailable)?;
     let previous = text(head, 1)?;
-    let id = text(head, 2)?;
+    let id = match event.id {
+        Some(id) => id.to_owned(),
+        None => text(head, 2)?,
+    };
     let occurred = text(head, 3)?;
     let body = event_body(
         chain,
@@ -522,6 +557,7 @@ impl Workspace {
             }
             append(transaction, Chain::Workspace, request, Event {
                 kind: "definition.drafted",
+                id: None,
                 app,
                 work: None,
                 outcome: Some(&content.digest),
@@ -634,8 +670,11 @@ impl Workspace {
     /// Needs `run` on the app and `source_read` on every bound source; each
     /// source revision must be live and carry the published input's contract
     /// digest. A source of another organization is unreachable (scope and
-    /// organization-leading foreign keys). Grants on the new work are not
-    /// written here: permission rows are the operator channel's (D7.3).
+    /// organization-leading foreign keys). No permission row is written and
+    /// no epoch advances: the work records the saving member as its creator,
+    /// whose authority equals `record_read` and `record_write` on it until the
+    /// operator revokes it (ADR-007 amendment, review M2; the RESTRICTIVE
+    /// `saved_work_creator` policy admits only the scoped principal).
     pub async fn create_work(
         &self,
         request: &TrustedRequest,
@@ -697,7 +736,7 @@ impl Workspace {
                 .zip(&ids[1..])
                 .map(|((schema, (version, _)), id)| (schema.as_str(), (id.as_str(), *version)))
                 .collect();
-            transaction.query("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,1,$5)", &[org,&app,&work,&publication,&context]).await?;
+            transaction.query("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,1,$5,$6::text::uuid)", &[org,&app,&work,&publication,&context,&request.principal]).await?;
             for (schema, (collection, version)) in &collections {
                 transaction.query("INSERT INTO genui.record_collections(organization_id,app_id,work_id,publication_id,collection_id,schema_id,schema_version) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text,$7)", &[org,&app,&work,&publication,collection,schema,version]).await?;
             }
@@ -739,6 +778,7 @@ impl Workspace {
             }
             append(transaction, Chain::Workspace, request, Event {
                 kind: "work.saved",
+                id: None,
                 app,
                 work: Some(&work),
                 outcome: None,
@@ -747,6 +787,7 @@ impl Workspace {
             for binding in &bound {
                 append(transaction, Chain::Workspace, request, Event {
                     kind: "work.bound",
+                    id: None,
                     app,
                     work: Some(&work),
                     outcome: Some(binding),
@@ -766,8 +807,9 @@ impl Workspace {
 
     /// Reads a saved work back as its `saved_work` document: bindings and
     /// source dependencies in input order, collections in schema order. Needs
-    /// `record_read` on the work (which also needs `run` and `source_read` on
-    /// every dependency, as every work read does).
+    /// `record_read` on the work, by grant or as its unrevoked creator (which
+    /// also needs `run` and `source_read` on every dependency, as every work
+    /// read does).
     pub async fn read_work(
         &self,
         request: &TrustedRequest,
@@ -872,8 +914,12 @@ impl Control {
     /// owner's revision. The stored content is re-admitted and its admitted
     /// digest becomes the publication's `admission_digest`. SERIALIZABLE; a
     /// 40001 at any statement or at COMMIT is retried once in a new
-    /// transaction, and a second one is `Stale` naming the newest publication
-    /// (D7.6, D7.9). Nothing else retries.
+    /// transaction within the D7.14 handler deadline, and a second one (or one
+    /// that leaves too little of the deadline for a retry) is `Stale` naming
+    /// the app's publication with the highest sequence (D7.6, D7.9). Nothing
+    /// else retries. The caller chooses `policy`; the server does not yet
+    /// resolve the applicable policy itself (review m3, a Phase 1 limit while
+    /// each organization has one policy row).
     pub async fn publish(
         &self,
         request: &TrustedRequest,
@@ -881,9 +927,35 @@ impl Control {
         revision: &str,
         policy: &str,
     ) -> Result<PublishResult> {
+        self.publish_until(
+            request,
+            app,
+            revision,
+            policy,
+            Instant::now() + PUBLISH_HANDLER_DEADLINE,
+        )
+        .await
+    }
+
+    /// `publish` within an explicit handler deadline (review m5).
+    pub(super) async fn publish_until(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        revision: &str,
+        policy: &str,
+        deadline: Instant,
+    ) -> Result<PublishResult> {
         require(valid_id(app) && valid_id(revision) && valid_id(policy))?;
-        for _ in 0..2 {
-            match self.publish_once(request, app, revision, policy).await? {
+        let attempts = deadline.checked_sub(STALE_READ).unwrap_or(deadline);
+        for attempt in 0..2 {
+            if attempt == 1 && !retry_within(Instant::now(), deadline) {
+                break;
+            }
+            match self
+                .publish_once(request, app, revision, policy, attempts)
+                .await?
+            {
                 Attempt::Published(publication) => {
                     return Ok(PublishResult::Published(publication))
                 }
@@ -894,7 +966,7 @@ impl Control {
             }
         }
         Ok(PublishResult::Stale(
-            self.current_revision(request, app).await?,
+            self.current_revision(request, app, deadline).await?,
         ))
     }
 
@@ -904,8 +976,9 @@ impl Control {
         app: &str,
         revision: &str,
         policy: &str,
+        cap: Instant,
     ) -> Result<Attempt> {
-        let mut transaction = Transaction::begin_serializable(&self.inner, request).await?;
+        let mut transaction = Transaction::begin_serializable(&self.inner, request, cap).await?;
         let result = async {
             let org = &request.organization;
             let rows = transaction.query("SELECT policy_version::bigint,kind FROM genui.publication_policies WHERE organization_id=$1::text::uuid AND policy_id=$2::text::uuid ORDER BY policy_version DESC LIMIT 1", &[org,&policy]).await?;
@@ -926,6 +999,19 @@ impl Control {
                 _ => owner != request.principal,
             })?;
             let admitted = stored_revision(transaction, org, app, revision).await?;
+            #[cfg(test)]
+            transaction.lease.checkpoint("publish").await;
+            // Review M1: the control head is locked before the publication is
+            // ordered, so every publisher of the organization is serialized
+            // here; one whose snapshot predates a committed publication fails
+            // with 40001 on this lock (D7.6) instead of reusing its sequence.
+            let head = transaction.query("SELECT 1 FROM genui.audit_heads WHERE organization_id=$1::text::uuid AND writer_role='control' FOR UPDATE", &[org]).await?;
+            if head.is_empty() {
+                return Err(Error::Configuration);
+            }
+            let sequence = transaction.query("SELECT coalesce(max(publication_sequence),0)::bigint+1 FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid", &[org,&app]).await?;
+            let sequence = integer(sequence.first().ok_or(Error::Unavailable)?, 0)?;
+            require_stored(sequence <= 9_007_199_254_740_991)?;
             let (ids, published_at) = fresh(transaction, 1).await?;
             let publication = ids[0].clone();
             let by_input: BTreeMap<&str, &InputContract> =
@@ -954,18 +1040,17 @@ impl Control {
                 "published_at": published_at,
             });
             let envelope = encode(&envelope)?;
-            transaction.query("INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text,$6::text::uuid,$7::bigint,$8,$9::text::uuid,$10::text::uuid,$11::bigint,1,1,$12::text,$13::text::timestamptz,$14)",
-                &[org,&app,&publication,&revision,&admitted.digest,&policy,&policy_version,&policy_kind,&owner,&request.principal,&request.epoch,&admitted.digest,&published_at,&envelope]).await?;
+            transaction.query("INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope,publication_sequence) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text,$6::text::uuid,$7::bigint,$8,$9::text::uuid,$10::text::uuid,$11::bigint,1,1,$12::text,$13::text::timestamptz,$14,$15::bigint)",
+                &[org,&app,&publication,&revision,&admitted.digest,&policy,&policy_version,&policy_kind,&owner,&request.principal,&request.epoch,&admitted.digest,&published_at,&envelope,&sequence]).await?;
             for input in &admitted.inputs {
                 transaction.query("INSERT INTO genui.publication_inputs(organization_id,app_id,publication_id,definition_revision_id,input_id,kind,contract_digest) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text,$6,$7::text)", &[org,&app,&publication,&revision,&input.input,&input.kind,&input.digest]).await?;
             }
             for schema in &admitted.record_schemas {
                 transaction.query("INSERT INTO genui.publication_record_schemas(organization_id,app_id,publication_id,definition_revision_id,schema_id,schema_version,digest) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text,$6,$7::text)", &[org,&app,&publication,&revision,&schema.schema,&schema.version,&schema.digest]).await?;
             }
-            #[cfg(test)]
-            transaction.lease.checkpoint("publish").await;
             append(transaction, Chain::Control, request, Event {
                 kind: "publication.published",
+                id: Some(&publication),
                 app,
                 work: None,
                 outcome: Some(&admitted.digest),
@@ -995,15 +1080,17 @@ impl Control {
         }
     }
 
-    /// The app's newest publication, read under the reader's current
-    /// authority (`discover` is not a control permission, so the same
-    /// `edit_definition` or `review_publish` the publisher holds).
+    /// The app's publication with the highest sequence, read under the
+    /// reader's current authority (`discover` is not a control permission, so
+    /// the same `edit_definition` or `review_publish` the publisher holds),
+    /// within the handler deadline.
     async fn current_revision(
         &self,
         request: &TrustedRequest,
         app: &str,
+        deadline: Instant,
     ) -> Result<CurrentRevision> {
-        let mut transaction = Transaction::begin(&self.inner, request).await?;
+        let mut transaction = Transaction::begin_until(&self.inner, request, deadline).await?;
         let result = async {
             let precheck = match transaction
                 .precheck(Action::EditDefinition, Resource::App(app))
@@ -1017,7 +1104,7 @@ impl Control {
                 }
             };
             let permit = transaction.fence(precheck).await?;
-            let rows = permit.transaction().query("SELECT publication_id::text,definition_revision_id::text,definition_digest::text FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid ORDER BY published_at DESC,publication_id DESC LIMIT 1", &[&request.organization,&app]).await?;
+            let rows = permit.transaction().query("SELECT publication_id::text,definition_revision_id::text,definition_digest::text FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid ORDER BY publication_sequence DESC LIMIT 1", &[&request.organization,&app]).await?;
             Ok(match rows.first() {
                 Some(row) => CurrentRevision {
                     publication: Some(text(row, 0)?),
@@ -1084,6 +1171,23 @@ mod tests {
         let admitted =
             admission::admit_definition(&admission::encode(&definition).unwrap()).unwrap();
         (definition, admitted)
+    }
+
+    #[test]
+    fn a_publication_retry_starts_only_within_the_handler_deadline() {
+        // Review m5: both attempts end by the deadline less the 1 s Stale
+        // reserve, and the Stale read by the deadline, so the whole publish
+        // fits the 5 s D7.14 handler deadline; a retry starts only with its
+        // own 1 s minimum and the reserve still ahead of it.
+        let now = Instant::now();
+        assert_eq!(PUBLISH_HANDLER_DEADLINE, Duration::from_secs(5));
+        assert!(retry_within(now, now + PUBLISH_HANDLER_DEADLINE));
+        assert!(retry_within(now, now + Duration::from_secs(2)));
+        assert!(!retry_within(now, now + Duration::from_millis(1999)));
+        assert!(!retry_within(
+            now + Duration::from_secs(6),
+            now + PUBLISH_HANDLER_DEADLINE
+        ));
     }
 
     #[test]
