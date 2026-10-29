@@ -131,8 +131,12 @@ def run(args, check=True, **kw):
     return p
 
 
-@unittest.skipUnless(shutil.which("docker") and shutil.which("openssl"), "requires local Docker and OpenSSL")
-class DatabaseTests(unittest.TestCase):
+class OperatorDatabase:
+    """One disposable PostgreSQL 16.13 container with a throwaway TLS CA, shared by a TestCase class.
+
+    A mixin, not a TestCase, so other test modules (test_provider_invitations)
+    reuse the fixture without collecting these tests twice.
+    """
     @classmethod
     def setUpClass(cls):
         import psycopg
@@ -198,10 +202,10 @@ class DatabaseTests(unittest.TestCase):
         return cls.psycopg.connect(host="127.0.0.1", port=cls.port, dbname=database, user=role, sslmode="disable",
                                    connect_timeout=3, autocommit=autocommit)
 
-    def cli(self, *args, user="genui_migration", expect=0):
-        env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
+    def cli(self, *args, user="genui_migration", expect=0, env_extra=None):
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("PG", "GENUI_PROVIDER_"))}
         env.update(PGHOST="localhost", PGPORT=str(self.port), PGUSER=user, PGDATABASE="genui",
-                   PGSSLROOTCERT=str(Path(self.directory, "ca.pem")))
+                   PGSSLROOTCERT=str(Path(self.directory, "ca.pem")), **(env_extra or {}))
         p = subprocess.run([sys.executable, str(HERE / "admission_operator.py"), *args], capture_output=True, text=True,
                            timeout=60, env=env, cwd=self.directory)
         self.assertEqual(p.returncode, expect, p.stderr[-400:])
@@ -231,6 +235,24 @@ class DatabaseTests(unittest.TestCase):
     def operator_events(self, org=ORG):
         return self.query("SELECT kind FROM genui.audit_events WHERE organization_id=%s AND writer_role='operator' ORDER BY chain_sequence", (org,))
 
+    def workspace(self):
+        c = self.connect("genui_workspace")
+        c.execute("SELECT set_config('genui.organization_id',%s,true)", (ORG,))
+        return c
+
+    def pending_for(self, digest, subject, context):
+        """Reserve, then record a pending admission as genui_workspace: (outcome, pending id, expiry, presignup id)."""
+        with self.workspace() as c:
+            reservation, _, outcome = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)",
+                                                (ORG, digest, "sha256:" + context * 64)).fetchone()
+            self.assertEqual(outcome, "reserved")
+            pending, expires, outcome = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)",
+                                                  (ORG, reservation, ISSUER, TENANT, subject)).fetchone()
+            return outcome, (str(pending) if pending else None), expires, str(reservation)
+
+
+@unittest.skipUnless(shutil.which("docker") and shutil.which("openssl"), "requires local Docker and OpenSSL")
+class DatabaseTests(OperatorDatabase, unittest.TestCase):
     def test_backfill_creates_five_genesis_heads_once(self):
         first = self.cli("backfill", "--organization", ORG)
         heads = self.query("SELECT writer_role,chain_sequence,head_hash FROM genui.audit_heads WHERE organization_id=%s ORDER BY writer_role", (ORG,))
@@ -306,24 +328,6 @@ class DatabaseTests(unittest.TestCase):
         self.cli("issue", "--organization", str(uuid.uuid4()), "--issued-by", "unit-operator", "--grant", "source_read:" + self.source, expect=1)
         self.assertEqual(self.dump(), before)
 
-    def test_provider_invitation_is_recorded_pending_without_the_address(self):
-        out = self.issue("--provider-email", "Invitee@Example.test", "--provider-role", "user", "--provider-issuer", ISSUER,
-                         "--provider-tenant", TENANT)
-        rows = self.query("""SELECT invitation_id::text,issuer,provider_tenant_id,remote_invitation_id,intended_email_digest,provider_role,
-                             delivery_mode,operation,state FROM genui.provider_invitations WHERE organization_id=%s AND code_id=%s""", (ORG, out["code_id"]))
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0][1:4], (ISSUER, TENANT, None))
-        self.assertEqual(rows[0][4], op.email_digest("invitee@example.test"))
-        self.assertEqual(rows[0][5:], ("user", "server_only", "create", "pending"))
-        self.assertNotIn("nvitee@", self.dump())
-        listed = self.cli("list", "--organization", ORG)
-        entry = next(item for item in listed["codes"] if item["code_id"] == out["code_id"])
-        self.assertEqual(entry["provider_invitations"], [{"invitation_id": rows[0][0], "operation": "create", "state": "pending"}])
-        revoked = self.cli("revoke", "--organization", ORG, "--code-id", out["code_id"])
-        self.assertEqual(revoked["provider_revocations_pending"], 1)
-        self.assertEqual(sorted(r[0] for r in self.query("SELECT operation FROM genui.provider_invitations WHERE code_id=%s", (out["code_id"],))),
-                         ["create", "revoke"])
-
     def test_revoke_and_extend_are_audited_and_bounded(self):
         out = self.issue("--expires-days", "5")
         events = len(self.operator_events())
@@ -394,21 +398,6 @@ class DatabaseTests(unittest.TestCase):
                         c.execute("SELECT set_config('genui.organization_id',%s,true)", (ORG,))
                         c.execute(statement)
         self.assertEqual(self.dump(), before)
-
-    def workspace(self):
-        c = self.connect("genui_workspace")
-        c.execute("SELECT set_config('genui.organization_id',%s,true)", (ORG,))
-        return c
-
-    def pending_for(self, digest, subject, context):
-        """Reserve, then record a pending admission as genui_workspace: (outcome, pending id, expiry, presignup id)."""
-        with self.workspace() as c:
-            reservation, _, outcome = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)",
-                                                (ORG, digest, "sha256:" + context * 64)).fetchone()
-            self.assertEqual(outcome, "reserved")
-            pending, expires, outcome = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)",
-                                                  (ORG, reservation, ISSUER, TENANT, subject)).fetchone()
-            return outcome, (str(pending) if pending else None), expires, str(reservation)
 
     def test_verify_reads_one_snapshot_while_an_admission_appends(self):
         """Review m1: an append committed between verify's head and event reads is not a mismatch."""

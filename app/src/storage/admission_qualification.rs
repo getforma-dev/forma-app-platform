@@ -6,6 +6,9 @@
 //! (`app/runtime/admission_operator.py`) as genui_migration over verify-full
 //! TLS. Fixture-only operator SQL (the local superuser) is used for the
 //! writer-first race orders and for moving clocks, never as a product path.
+//! The provider invitation check (APP-073 item 7) runs the operator against
+//! `app/runtime/fake_fauth.py`, a loopback stand-in for fAuth's management API:
+//! simulated transport, never the deployed fAuth.
 use super::{
     admission::{
         code_digest, Admission, PendingAdmission, PendingReason, Reservation, SignOut,
@@ -20,8 +23,10 @@ use super::{
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
+    io::{BufRead, BufReader, Write},
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::PathBuf,
-    process::{Child, Command, Output, Stdio},
+    process::{Child, ChildStdin, ChildStdout, Command, Output, Stdio},
     sync::Arc,
     time::{Duration, Instant as WallInstant},
 };
@@ -276,6 +281,195 @@ async fn admit_new(stores: &Stores, digest: &str, label: &str) -> (String, i64, 
     let pending_admission = pending(stores, &identity, &reservation).await;
     admitted(stores, &identity, &pending_admission, &sha(label)).await
 }
+/// The loopback fAuth management stand-in (`app/runtime/fake_fauth.py`), a
+/// child process serving on 127.0.0.1 that answers one JSON control line per
+/// request on its stdin. SIMULATED TRANSPORT. Its management key and the
+/// operator's capability directory live in the fixture's private directory.
+struct FakeProvider {
+    child: Child,
+    stdin: Option<ChildStdin>,
+    stdout: BufReader<ChildStdout>,
+    url: String,
+    key_file: PathBuf,
+    capabilities: PathBuf,
+}
+impl FakeProvider {
+    fn start(fixture: &Fixture, tenant: &str) -> Self {
+        let root = fixture.directory.0.join("provider");
+        let capabilities = root.join("capabilities");
+        for dir in [&root, &capabilities] {
+            std::fs::create_dir(dir).unwrap();
+            std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let mut bytes = [0u8; 24];
+        ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut bytes).unwrap();
+        let key_file = root.join("management-key");
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&key_file)
+            .unwrap();
+        let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+        writeln!(file, "mgmt_{hex}").unwrap();
+        drop(file);
+        let app = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let mut child = Command::new(fixture_python())
+            .current_dir(app.join("runtime"))
+            .args(["fake_fauth.py", "--tenant-id", tenant, "--key-file"])
+            .arg(&key_file)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("loopback provider stand-in available");
+        let stdin = child.stdin.take();
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
+        let mut line = String::new();
+        stdout.read_line(&mut line).unwrap();
+        let port = serde_json::from_str::<Value>(&line).expect("stand-in port")["port"]
+            .as_u64()
+            .unwrap();
+        Self {
+            child,
+            stdin,
+            stdout,
+            url: format!("http://127.0.0.1:{port}"),
+            key_file,
+            capabilities,
+        }
+    }
+    fn control(&mut self, command: Value) -> Value {
+        let stdin = self.stdin.as_mut().unwrap();
+        writeln!(stdin, "{command}").unwrap();
+        stdin.flush().unwrap();
+        let mut line = String::new();
+        self.stdout.read_line(&mut line).unwrap();
+        serde_json::from_str(&line).expect("stand-in control reply")
+    }
+    fn env(&self) -> [(&'static str, String); 3] {
+        [
+            ("GENUI_PROVIDER_URL", self.url.clone()),
+            (
+                "GENUI_PROVIDER_MANAGEMENT_KEY_FILE",
+                self.key_file.display().to_string(),
+            ),
+            (
+                "GENUI_PROVIDER_CAPABILITY_DIR",
+                self.capabilities.display().to_string(),
+            ),
+        ]
+    }
+    fn capability(&self, invitation: &str) -> PathBuf {
+        self.capabilities
+            .join(format!("{ORG}.{invitation}.capability"))
+    }
+}
+impl Drop for FakeProvider {
+    fn drop(&mut self) {
+        drop(self.stdin.take());
+        let end = WallInstant::now() + Duration::from_secs(10);
+        while matches!(self.child.try_wait(), Ok(None)) {
+            if WallInstant::now() >= end {
+                let _ = self.child.kill();
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let _ = self.child.wait();
+    }
+}
+fn operator_with(fixture: &Fixture, provider: &FakeProvider, args: &[&str]) -> Value {
+    let mut cmd = cli_command(fixture, "genui_migration", "synthetic-migration", args);
+    cmd.envs(provider.env());
+    accepted(
+        wait(cmd.spawn().expect("operator command available"), args[0]),
+        args[0],
+    )
+}
+struct Invited {
+    issued: Issued,
+    invitation: String,
+    remote: String,
+    email: String,
+}
+/// A one-redemption code with its server-only provider invitation, confirmed
+/// with the capability stored in the operator's private directory.
+fn invite(fixture: &Fixture, provider: &FakeProvider, label: &str, grants: &[String]) -> Invited {
+    let email = format!("{label}@item7.example.test");
+    let tenant = format!("ten_{ORG}");
+    let mut args = vec![
+        "issue",
+        "--organization",
+        ORG,
+        "--issued-by",
+        "admission-campaign",
+        "--max-redemptions",
+        "1",
+        "--provider-email",
+        &email,
+        "--provider-role",
+        "user",
+        "--provider-issuer",
+        ISSUER,
+        "--provider-tenant",
+        &tenant,
+    ];
+    for grant in grants {
+        args.push("--grant");
+        args.push(grant);
+    }
+    let out = operator_with(fixture, provider, &args);
+    let invitation = &out["provider_invitation"];
+    assert_eq!(
+        (
+            invitation["state"].as_str(),
+            invitation["capability_stored"].as_bool()
+        ),
+        (Some("confirmed"), Some(true))
+    );
+    let code = out["code"].as_str().unwrap().to_owned();
+    Invited {
+        issued: Issued {
+            code_id: out["code_id"].as_str().unwrap().to_owned(),
+            digest: code_digest(&code).expect("issued code normalizes"),
+            code,
+        },
+        invitation: invitation["invitation_id"].as_str().unwrap().to_owned(),
+        remote: invitation["remote_invitation_id"]
+            .as_str()
+            .unwrap()
+            .to_owned(),
+        email,
+    }
+}
+/// The provider identity completes through the stored capability (the stand-in
+/// for fAuth's hosted registration consuming the invitation): (subject, token).
+fn provider_signup(provider: &mut FakeProvider, invited: &Invited) -> (String, String) {
+    let record: Value =
+        serde_json::from_slice(&std::fs::read(provider.capability(&invited.invitation)).unwrap())
+            .unwrap();
+    let token = record["invite_token"].as_str().unwrap().to_owned();
+    let reply =
+        provider.control(json!({"op": "register", "invite_token": token, "email": invited.email}));
+    (
+        reply["user_id"]
+            .as_str()
+            .expect("provider identity created")
+            .to_owned(),
+        token,
+    )
+}
+fn provider_identity(stores: &Stores, subject: &str) -> VerifiedNonmember {
+    VerifiedNonmember {
+        issuer: ISSUER.into(),
+        provider_tenant: format!("ten_{ORG}"),
+        provider_subject: subject.into(),
+        registry_sha256: stores.registry_identity().sha256.clone(),
+        email_verified: true,
+    }
+}
+
 async fn reads(stores: &Stores, request: &TrustedRequest) -> bool {
     stores
         .workspace
@@ -321,7 +515,11 @@ async fn campaign() {
         json!({"trial_entitlement_days":30,"code_expiry_days_default":14,"code_expiry_days_max":30,
             "max_redemptions_default":1,"max_redemptions_max":10,"presignup_reservation_minutes":10,
             "presignup_reservations_live_max":10,"pending_admission_hours":24,"list_rows_max":100,
-            "code_secret_bytes":32,"handle_bytes":16})
+            "code_secret_bytes":32,"handle_bytes":16,
+            "provider":{"request_deadline_seconds":10,"connect_timeout_seconds":5,"response_bytes_max":1048576,
+                "list_page_size":200,"list_pages_max":50,"reconcile_grace_seconds":120,
+                "reconcile_clock_skew_seconds":300,"reconcile_operations_max":100,
+                "provider_invitation_hours_default":72}})
     );
     assert_eq!(
         scalar(&fixture, "SELECT count(*) FROM genui.access_codes").await,
@@ -1003,6 +1201,146 @@ async fn campaign() {
     assert_eq!(listed(&fixture, &h.code_id)["redeemed_count"], 0);
     check(&mut checks, "an inactive provider binding refuses both the pending admission and the redemption before any definer call");
 
+    // --- APP-073 item 7: a completed provider identity never outruns the code --
+    // Simulated transport (fake_fauth.py). The provider and GenUI share no
+    // transaction: each identity below is created at the provider through its
+    // confirmed server-only invitation, and only then does the GenUI side fail.
+    let mut provider = FakeProvider::start(&fixture, &format!("ten_{ORG}"));
+    let entitlements_before = scalar(
+        &fixture,
+        &format!("SELECT count(*) FROM genui.entitlements WHERE organization_id='{ORG}'"),
+    )
+    .await;
+    let mut tokens = Vec::new();
+    // Revoked: the identity holds a pending admission; the code is revoked and
+    // its remote revocation fails (503, unknown outcome).
+    let r = invite(&fixture, &provider, "item7-revoked", &grants);
+    codes.push(r.issued.code.clone());
+    let r_reservation = reserved(&stores, &r.issued.digest, "item7-r").await;
+    let (r_user, token) = provider_signup(&mut provider, &r);
+    tokens.push(token);
+    let r_identity = provider_identity(&stores, &r_user);
+    let r_pending = pending(&stores, &r_identity, &r_reservation).await;
+    assert_eq!(
+        provider
+            .control(json!({"op": "fault", "route": "revoke", "mode": "status", "status": 503}))
+            ["ok"],
+        true
+    );
+    let out = operator_with(
+        &fixture,
+        &provider,
+        &[
+            "revoke",
+            "--organization",
+            ORG,
+            "--code-id",
+            &r.issued.code_id,
+        ],
+    );
+    assert_eq!(
+        (
+            out["changed"].as_bool(),
+            out["capabilities_destroyed"].as_i64(),
+            out["provider_revocations"][0]["state"].as_str()
+        ),
+        (Some(true), Some(1), Some("unknown"))
+    );
+    assert!(!provider.capability(&r.invitation).exists());
+    assert_eq!(
+        stores
+            .workspace
+            .admit(&r_identity, ORG, &r_pending, &sha("item7-r"))
+            .await,
+        Ok(Admission::Refused)
+    );
+    // Expired: the code's expiry passes after the identity's pending admission.
+    let e = invite(&fixture, &provider, "item7-expired", &grants);
+    codes.push(e.issued.code.clone());
+    let e_reservation = reserved(&stores, &e.issued.digest, "item7-e").await;
+    let (e_user, token) = provider_signup(&mut provider, &e);
+    tokens.push(token);
+    let e_identity = provider_identity(&stores, &e_user);
+    let e_pending = pending(&stores, &e_identity, &e_reservation).await;
+    superuser(&fixture, &format!("UPDATE genui.access_codes SET expires_at=issued_at+interval '1 millisecond' WHERE code_id='{}'", e.issued.code_id)).await;
+    assert_eq!(
+        stores
+            .workspace
+            .admit(&e_identity, ORG, &e_pending, &sha("item7-e"))
+            .await,
+        Ok(Admission::Refused)
+    );
+    // Exhausted: another identity takes the last slot between the invitee's
+    // pre-signup reservation and its provider identity's callback.
+    let x = invite(&fixture, &provider, "item7-exhausted", &grants);
+    codes.push(x.issued.code.clone());
+    let x_reservation = reserved(&stores, &x.issued.digest, "item7-x").await;
+    admit_new(&stores, &x.issued.digest, "item7-q").await;
+    let (x_user, token) = provider_signup(&mut provider, &x);
+    tokens.push(token);
+    assert_eq!(
+        stores
+            .workspace
+            .record_pending_admission(&provider_identity(&stores, &x_user), ORG, &x_reservation)
+            .await,
+        Ok(PendingAdmission::Exhausted)
+    );
+    for user in [&r_user, &e_user, &x_user] {
+        assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.principals WHERE organization_id='{ORG}' AND provider_subject='{user}'")).await, 0);
+    }
+    for pending_admission in [&r_pending, &e_pending] {
+        assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.code_reservations WHERE reservation_id='{pending_admission}' AND state='denied_for_reconciliation'")).await, 1);
+    }
+    assert_eq!(
+        scalar(
+            &fixture,
+            &format!("SELECT count(*) FROM genui.entitlements WHERE organization_id='{ORG}'"),
+        )
+        .await,
+        entitlements_before + 1,
+        "only the slot-taking identity item7-q was admitted"
+    );
+    // Reconcile propagates expiry and exhaustion and settles the unknown revocation;
+    // the provider identities remain (no cross-service deletion), their invitations consumed.
+    let out = operator_with(&fixture, &provider, &["reconcile", "--organization", ORG]);
+    assert_eq!(out["provider_phase"], "completed");
+    assert_eq!(out["revocations_recorded"], 2);
+    for invited in [&r, &e, &x] {
+        let rows: Vec<(String, String)> = superuser(&fixture, &format!("SELECT operation,state FROM genui.provider_invitations WHERE organization_id='{ORG}' AND code_id='{}' ORDER BY operation", invited.issued.code_id))
+            .await
+            .iter()
+            .map(|row| (row.get(0), row.get(1)))
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                ("create".to_owned(), "confirmed".to_owned()),
+                ("revoke".to_owned(), "confirmed".to_owned())
+            ]
+        );
+        assert_eq!(
+            provider.control(json!({"op": "status", "id": invited.remote}))["status"],
+            "accepted"
+        );
+        assert!(!provider.capability(&invited.invitation).exists());
+    }
+    assert_eq!(
+        provider.control(json!({"op": "count", "method": "POST", "path": "/manage/invites"}))
+            ["count"],
+        3,
+        "one create per code, never repeated"
+    );
+    assert_eq!(listed(&fixture, &r.issued.code_id)["status"], "revoked");
+    assert_eq!(
+        stores
+            .workspace
+            .admit(&r_identity, ORG, &r_pending, &sha("item7-r"))
+            .await,
+        Ok(Admission::Refused)
+    );
+    drop(provider);
+    check(&mut checks, "item 7 (loopback fAuth stand-in, simulated transport): identities created at the provider through confirmed server-only invitations gain no principal, membership or entitlement once the code is revoked, expired or exhausted; the failed remote revocation leaves the code revoked; reconcile confirms every remote revocation without a second create");
+
     // --- ordinary member roles and forged operator identities ----------------
     let before = scalar(&fixture, "SELECT count(*) FROM genui.access_codes").await;
     for (role, password) in [
@@ -1103,15 +1441,19 @@ async fn campaign() {
         assert_eq!(out["verified"], true);
     }
     let out = operator(&fixture, &["verify", "--organization", ORG]);
-    // Eight issuances, two revocations, one extension, one entitlement revocation,
-    // one membership revocation (review m2 race).
-    assert_eq!(out["chains"]["operator"]["events"].as_i64(), Some(13));
+    // Eleven issuances, three revocations, one extension, one entitlement revocation,
+    // one membership revocation (review m2 race). Provider operations are not audit
+    // kinds (D7.8 is closed): the reconcile wrote no event.
+    assert_eq!(out["chains"]["operator"]["events"].as_i64(), Some(17));
     assert!(out["chains"]["admission"]["events"].as_i64().unwrap() >= 10);
     let dump = pg_dump(&fixture, false);
     for code in &codes {
         assert!(!dump.contains(code.as_str()) && !dump.contains(&code.replace('-', "")));
     }
-    check(&mut checks, "operator and admission audit chains recompute from genesis to their heads in both organizations; no issued code appears in a full database dump");
+    for token in &tokens {
+        assert!(!dump.contains(token.as_str()));
+    }
+    check(&mut checks, "operator and admission audit chains recompute from genesis to their heads in both organizations; no issued code and no provider invitation token appears in a full database dump");
 
     stores.close().await.unwrap();
     docker(
@@ -1126,6 +1468,6 @@ async fn campaign() {
         "local database and private fixture files removed",
     );
     if let Some(path) = std::env::var_os("GENUI_ADMISSION_REPORT") {
-        std::fs::write(path, serde_json::to_vec_pretty(&json!({"schema_version":1,"scope":"APP-073 isolated native PostgreSQL TLS admission and operator-command qualification","managed_acceptance":false,"server_version":fixture.server_version,"defaults":defaults,"codes_issued":codes.len(),"checks":checks,"passed":true,"limits":["Synthetic local password authentication is not RDS IAM.","Identities are synthetic registry-bound fixtures; no provider, session or browser flow is exercised (APP-009/074).","Raw codes are never written to this report."]})).unwrap()).unwrap();
+        std::fs::write(path, serde_json::to_vec_pretty(&json!({"schema_version":1,"scope":"APP-073 isolated native PostgreSQL TLS admission and operator-command qualification","managed_acceptance":false,"server_version":fixture.server_version,"defaults":defaults,"codes_issued":codes.len(),"checks":checks,"passed":true,"limits":["Synthetic local password authentication is not RDS IAM.","Identities are synthetic registry-bound fixtures; no session or browser flow is exercised (APP-009/074).","The provider is the loopback fAuth management stand-in app/runtime/fake_fauth.py (simulated transport), never the deployed fAuth; hosted invitation, mail suppression and PAR remain APP-074/076.","Raw codes and provider invitation tokens are never written to this report."]})).unwrap()).unwrap();
     }
 }

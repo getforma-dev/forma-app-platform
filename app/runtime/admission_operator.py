@@ -14,6 +14,18 @@ on standard output, after its transaction commits. It is never logged, stored
 or written anywhere else; only its domain-separated digest is stored. Listing
 and audit show identifiers, status and counts only. Refusals print a fixed
 reason code on standard error and never echo an argument value.
+
+Provider invitations (APP-073 acceptance 6 and 7, ADR-003): `issue` with an
+intended email and the explicit least-privilege role records a `pending` create
+in the code's transaction, then, after COMMIT, sends exactly one server-only
+create to fAuth's management API (provider_management.py) and records
+`confirmed` with the remote invitation id, `failed`, or `unknown`; a create is
+never repeated. The returned `invite_token` goes only to a 0600 capability file
+in the operator's private directory, named by the invitation row. `revoke`
+commits the local revocation first, destroys the code's capability and then
+revokes remotely; `reconcile` settles pending/unknown operations by inspecting
+the provider. Provider settings come only from the environment (GENUI_PROVIDER_*;
+the management key from a 0600 file or the environment, never argv).
 """
 import argparse
 import base64
@@ -26,6 +38,7 @@ import secrets
 import sys
 import uuid
 
+import provider_management as provider
 import runtime
 
 # ADR-007 D7.17, as enforced by migration 0003's CHECKs and definer bodies.
@@ -59,8 +72,8 @@ APP_PERMISSIONS = ("discover", "run", "edit_definition")
 WORK_PERMISSIONS = ("record_read", "record_write", "share_work", "export")
 
 
-class Refused(ValueError):
-    """A refusal whose message is a fixed reason code, never a value."""
+# A refusal whose message is a fixed reason code, never a value (shared with provider_management).
+Refused = provider.Refused
 
 
 def require(condition, reason="refused"):
@@ -165,7 +178,7 @@ def parser():
     p = Parser(description="APP-073 operator admission channel (closed subcommands).")
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("defaults")
-    for name in ("backfill", "list", "verify"):
+    for name in ("backfill", "list", "verify", "reconcile"):
         sub.add_parser(name).add_argument("--organization", required=True)
     q = sub.add_parser("provision")
     for arg in ("--organization", "--display-name", "--issuer", "--provider-tenant"):
@@ -336,8 +349,33 @@ def backfill(c, args):
 
 def issue(c, args):
     org = args.organization
+    invited = args.provider_email is not None
+    client = None
     begin(c, org)
+    if invited:
+        # After the operator identity proof and before any lock or write: the
+        # management key's tenant must be the code's bound, invite-only provider
+        # tenant (GET /manage/config, read-only), so a wrong key never creates an
+        # invitation in another tenant.
+        client = provider.Client(args.provider_config)
+        client.require_tenant(args.provider_tenant)
     lock_organization(c, org, active=True)
+    if invited:
+        # The binding row lock serializes invitation-bearing issuance per provider tenant.
+        require(c.execute("""SELECT active FROM genui.provider_tenant_bindings WHERE organization_id=%s AND issuer=%s
+              AND provider_tenant_id=%s FOR UPDATE""", (org, args.provider_issuer, args.provider_tenant)).fetchone() == (True,),
+                "provider_binding_refused")
+        # fAuth's create revokes every earlier pending invitation for the same
+        # address (management.rs:1722-1733): a second one would silently disable a
+        # live code's invitation, so it waits until that code no longer admits.
+        require(c.execute("""SELECT count(*) FROM genui.provider_invitations p JOIN genui.access_codes a
+              ON a.organization_id=p.organization_id AND a.code_id=p.code_id
+              WHERE p.organization_id=%s AND p.issuer=%s AND p.provider_tenant_id=%s AND p.intended_email_digest=%s
+              AND p.operation='create' AND p.state<>'failed' AND a.status='active' AND a.expires_at>now()
+              AND NOT EXISTS (SELECT 1 FROM genui.provider_invitations r WHERE r.organization_id=p.organization_id
+                              AND r.code_id=p.code_id AND r.operation='revoke')""",
+                          (org, args.provider_issuer, args.provider_tenant, email_digest(args.provider_email))).fetchone() == (0,),
+                "provider_invitation_exists")
     raw = secrets.token_bytes(DEFAULTS["code_secret_bytes"])
     code_id = str(uuid.uuid4())
     c.execute("INSERT INTO genui_private.code_index(code_digest,organization_id) VALUES (%s,%s)", (code_digest(raw), org))
@@ -349,18 +387,24 @@ def issue(c, args):
     for permission, app, work, source in args.templates:
         c.execute("""INSERT INTO genui.code_grant_templates(organization_id,code_id,permission,app_id,work_id,source_id)
                      VALUES (%s,%s,%s,%s,%s,%s)""", (org, code_id, permission, app, work, source))
-    if args.provider_email is not None:
+    invitation_id = str(uuid.uuid4())
+    if invited:
+        # The durable record of the intended create precedes any remote call.
         c.execute("""INSERT INTO genui.provider_invitations(organization_id,invitation_id,issuer,provider_tenant_id,remote_invitation_id,
                      intended_email_digest,provider_role,delivery_mode,operation,state,code_id,created_at,updated_at)
                      VALUES (%s,%s,%s,%s,NULL,%s,%s,'server_only','create','pending',%s,now(),now())""",
-                  (org, str(uuid.uuid4()), args.provider_issuer, args.provider_tenant, email_digest(args.provider_email),
+                  (org, invitation_id, args.provider_issuer, args.provider_tenant, email_digest(args.provider_email),
                    args.provider_role, code_id))
     append(c, org, "code.issued", code_id=code_id)
     expires = c.execute("SELECT expires_at FROM genui.access_codes WHERE organization_id=%s AND code_id=%s", (org, code_id)).fetchone()[0]
     c.commit()
-    # Only after the commit succeeded: the one and only appearance of the secret.
-    return {"code_id": code_id, "code": encode_code(raw), "kind": args.kind, "max_redemptions": args.max_redemptions,
-            "expires_at": timestamp(expires)}
+    # Only after the commit succeeded: the one and only appearance of the secret
+    # (printed by main once the provider phase below has finished).
+    result = {"code_id": code_id, "code": encode_code(raw), "kind": args.kind, "max_redemptions": args.max_redemptions,
+              "expires_at": timestamp(expires)}
+    if invited:
+        result["provider_invitation"] = create_remote(c, org, invitation_id, code_id, args.provider_email, args.provider_role, client)
+    return result
 
 
 def list_codes(c, args):
@@ -383,9 +427,10 @@ def list_codes(c, args):
         FROM genui.access_codes a WHERE a.organization_id=%s ORDER BY a.issued_at DESC,a.code_id LIMIT %s""",
                      (org, DEFAULTS["list_rows_max"] + 1)).fetchall()
     invitations = {}
-    for invitation, code, operation, state in c.execute("""SELECT invitation_id::text,code_id::text,operation,state FROM genui.provider_invitations
-          WHERE organization_id=%s ORDER BY created_at,invitation_id""", (org,)).fetchall():
-        invitations.setdefault(code, []).append({"invitation_id": invitation, "operation": operation, "state": state})
+    for invitation, code, operation, state, remote in c.execute("""SELECT invitation_id::text,code_id::text,operation,state,remote_invitation_id
+          FROM genui.provider_invitations WHERE organization_id=%s ORDER BY created_at,operation,invitation_id""", (org,)).fetchall():
+        invitations.setdefault(code, []).append({"invitation_id": invitation, "operation": operation, "state": state,
+                                                 "remote_invitation_id": remote})
     c.commit()
     codes = [{"code_id": r[0], "kind": r[1], "status": r[2], "max_redemptions": r[3], "redeemed_count": r[4],
               "live_pending_admissions": r[5], "lapsed_pending_admissions": r[10], "denied_for_reconciliation": r[11],
@@ -413,14 +458,31 @@ def revoke(c, args):
     c.execute("UPDATE genui.access_codes SET status='revoked',revoked_at=now() WHERE organization_id=%s AND code_id=%s", (org, code_id))
     # ADR-003: code revocation stops new handoff now and requires the remote
     # revocation of its provider invitation; record that operation as pending.
-    pending = c.execute("""INSERT INTO genui.provider_invitations(organization_id,invitation_id,issuer,provider_tenant_id,remote_invitation_id,
-          intended_email_digest,provider_role,delivery_mode,operation,state,code_id,created_at,updated_at)
-          SELECT organization_id,gen_random_uuid(),issuer,provider_tenant_id,remote_invitation_id,intended_email_digest,provider_role,
-          delivery_mode,'revoke','pending',code_id,now(),now() FROM genui.provider_invitations
-          WHERE organization_id=%s AND code_id=%s AND operation='create' AND state<>'failed'""", (org, code_id)).rowcount
+    revocations = record_revocations(c, org, code_id, lock=False)  # the code row is already held
     append(c, org, "code.revoked", code_id=code_id)
     c.commit()
-    return {"code_id": code_id, "status": "revoked", "changed": True, "provider_revocations_pending": pending}
+    result = {"code_id": code_id, "status": "revoked", "changed": True, "provider_revocations_pending": len(revocations)}
+    # The local revocation above is final whatever happens remotely; a failed or
+    # unknown remote revocation never restores it.
+    config = args.provider_config
+    result.update(provider_phase="not_configured", capabilities_destroyed=None, provider_revocations=[])
+    if config is None:
+        return result
+    try:
+        result["capabilities_destroyed"] = destroy_code_capabilities(c, org, code_id, config.capability_dir)
+        result["provider_revocations"], result["provider_phase"] = [], "completed"
+        if revocations:
+            client = provider.Client(config)
+            try:
+                client.require_tenant(revocations[0][1])
+            except Refused as refusal:
+                result["provider_phase"] = str(refusal)
+                return result
+            result["provider_revocations"] = [process_revoke(c, org, invitation, client) for invitation, _ in revocations]
+    except Exception:
+        _rollback(c)
+        result["provider_phase"] = "incomplete"
+    return result
 
 
 def extend(c, args):
@@ -523,15 +585,272 @@ def verify(c, args):
     return {"organization_id": org, "verified": True, "chains": chains}
 
 
+# --- provider invitation operations (APP-073 acceptance 6 and 7) -------------------
+#
+# State machine of genui.provider_invitations (0003): a `create` row is written
+# `pending` in the code's own transaction; a `revoke` row is written `pending`
+# when the code is revoked, or when reconcile finds the code expired or
+# exhausted, or when a create proves unusable. Each remote call runs while its
+# row is held FOR UPDATE (SKIP LOCKED everywhere else), and its outcome is
+# recorded in the same short transaction. A create moves once to `confirmed`
+# (with the remote id), `failed` (definitively not created) or `unknown`; it is
+# never sent again. Reconcile judges pending/unknown creates only by inspecting
+# the provider's invitation list, and only once they are older than the grace
+# period. Revocation is idempotent upstream, so pending/unknown/failed revokes
+# are simply sent again. Provider operation state is not an audit event: D7.8's
+# operator kinds are closed and name none.
+
+def _rollback(c):
+    try:
+        c.rollback()
+    except Exception:
+        pass
+
+
+def record_revocations(c, org, code_id, lock=True):
+    """One pending `revoke` per non-failed create of the code, unless one exists; (invitation, tenant) pairs.
+
+    Every writer of revoke rows holds the code row FOR UPDATE first (D7.1 order:
+    organization FOR SHARE, then the code), so NOT EXISTS cannot race."""
+    if lock:
+        lock_code(c, org, code_id)
+    return [(r[0], r[1]) for r in c.execute("""INSERT INTO genui.provider_invitations(organization_id,invitation_id,issuer,provider_tenant_id,
+          remote_invitation_id,intended_email_digest,provider_role,delivery_mode,operation,state,code_id,created_at,updated_at)
+          SELECT organization_id,gen_random_uuid(),issuer,provider_tenant_id,remote_invitation_id,intended_email_digest,provider_role,
+          delivery_mode,'revoke','pending',code_id,now(),now() FROM genui.provider_invitations p
+          WHERE p.organization_id=%s AND p.code_id=%s AND p.operation='create' AND p.state<>'failed'
+          AND NOT EXISTS (SELECT 1 FROM genui.provider_invitations r WHERE r.organization_id=p.organization_id AND r.code_id=p.code_id
+                          AND r.operation='revoke')
+          RETURNING invitation_id::text,provider_tenant_id""", (org, code_id)).fetchall()]
+
+
+def destroy_code_capabilities(c, org, code_id, directory):
+    """Revocation ends the private capability locally first, whatever the provider answers."""
+    begin(c, org)
+    invitations = [r[0] for r in c.execute("""SELECT invitation_id::text FROM genui.provider_invitations
+          WHERE organization_id=%s AND code_id=%s AND operation='create'""", (org, code_id)).fetchall()]
+    c.commit()
+    return sum(1 for invitation in invitations if provider.destroy_capability(directory, org, invitation))
+
+
+def operation_result(invitation_id, operation, state, remote, detail, **extra):
+    return dict({"invitation_id": invitation_id, "operation": operation, "state": state, "remote_invitation_id": remote,
+                 "detail": detail}, **extra)
+
+
+def create_remote(c, org, invitation_id, code_id, email, role, client):
+    """Send the one create for this pending row while holding it; record the outcome."""
+    directory = client.config.capability_dir
+    try:
+        begin(c, org)
+        held = c.execute("""SELECT 1 FROM genui.provider_invitations WHERE organization_id=%s AND invitation_id=%s
+              AND operation='create' AND state='pending' FOR UPDATE SKIP LOCKED""", (org, invitation_id)).fetchone()
+        if held is None:
+            _rollback(c)
+            return operation_result(invitation_id, "create", "pending", None, "busy", capability_stored=False)
+        outcome = client.create(email, role)
+        stored, detail = False, outcome.detail
+        if outcome.usable:
+            # The file precedes the database update: a crash in between leaves a
+            # pending row that reconcile confirms, with its capability present.
+            try:
+                provider.write_capability(directory, org, invitation_id, outcome.remote_id, outcome.token, timestamp(outcome.expires_at))
+                stored = True
+            except Refused:
+                detail = "capability_unwritable"
+        c.execute("""UPDATE genui.provider_invitations SET state=%s,remote_invitation_id=%s,updated_at=now()
+              WHERE organization_id=%s AND invitation_id=%s""", (outcome.state, outcome.remote_id, org, invitation_id))
+        revocations = []
+        if outcome.state == "confirmed" and not stored:
+            # It exists remotely but can never be handed off (contract mismatch or
+            # lost capability): revoke it; the operator revokes or keeps the code.
+            revocations = record_revocations(c, org, code_id)
+        c.commit()
+    except Exception:
+        _rollback(c)
+        return operation_result(invitation_id, "create", "pending", None, "outcome_unrecorded",
+                                capability_stored=provider.capability_present(directory, org, invitation_id))
+    result = operation_result(invitation_id, "create", outcome.state, outcome.remote_id, detail, capability_stored=stored)
+    if outcome.provider_error:
+        result["provider_error"] = outcome.provider_error
+    if revocations:
+        result["revocation"] = process_revoke(c, org, revocations[0][0], client)
+    return result
+
+
+def process_revoke(c, org, invitation_id, client):
+    """Send (again) the revocation of one revoke row's remote invitation while holding the row."""
+    begin(c, org)
+    row = c.execute("""SELECT state,code_id::text FROM genui.provider_invitations WHERE organization_id=%s AND invitation_id=%s
+          AND operation='revoke' AND state IN ('pending','unknown','failed') FOR UPDATE SKIP LOCKED""", (org, invitation_id)).fetchone()
+    if row is None:
+        state = c.execute("""SELECT state FROM genui.provider_invitations WHERE organization_id=%s AND invitation_id=%s""",
+                          (org, invitation_id)).fetchone()
+        c.commit()
+        return operation_result(invitation_id, "revoke", state[0] if state else None, None, "busy" if state and state[0] != "confirmed" else "settled")
+    state_before, code_id = row
+    create = c.execute("""SELECT state,remote_invitation_id FROM genui.provider_invitations WHERE organization_id=%s AND code_id=%s
+          AND operation='create'""", (org, code_id)).fetchone()
+    if create is None or create[0] == "failed":
+        c.execute("""UPDATE genui.provider_invitations SET state='confirmed',updated_at=now() WHERE organization_id=%s AND invitation_id=%s""",
+                  (org, invitation_id))
+        c.commit()
+        return operation_result(invitation_id, "revoke", "confirmed", None, "nothing_to_revoke")
+    if create[0] != "confirmed":
+        c.commit()
+        return operation_result(invitation_id, "revoke", state_before, None, "awaiting_create_reconciliation")
+    try:
+        outcome = client.revoke(create[1])
+    except Refused:
+        _rollback(c)
+        return operation_result(invitation_id, "revoke", state_before, create[1], "provider_contract_mismatch")
+    c.execute("""UPDATE genui.provider_invitations SET state=%s,remote_invitation_id=%s,updated_at=now()
+          WHERE organization_id=%s AND invitation_id=%s""", (outcome.state, create[1], org, invitation_id))
+    c.commit()
+    result = operation_result(invitation_id, "revoke", outcome.state, create[1], outcome.detail)
+    if outcome.provider_error:
+        result["provider_error"] = outcome.provider_error
+    return result
+
+
+def reconcile_create(c, org, invitation_id, client, scan):
+    """Judge one pending/unknown create by the provider's own list; never by creating again."""
+    limits = provider.PROVIDER_DEFAULTS
+    begin(c, org)
+    row = c.execute("""SELECT state,intended_email_digest,provider_role,created_at FROM genui.provider_invitations
+          WHERE organization_id=%s AND invitation_id=%s AND operation='create' AND state IN ('pending','unknown')
+          AND updated_at<=now()-make_interval(secs=>%s) FOR UPDATE SKIP LOCKED""",
+                    (org, invitation_id, limits["reconcile_grace_seconds"])).fetchone()
+    if row is None:
+        _rollback(c)
+        return None
+    state_before, digest, role, created = row
+    if "error" not in scan and "invites" not in scan:
+        try:
+            scan["invites"] = client.scan(scan["not_before"])
+        except Refused as refusal:
+            scan["error"] = str(refusal)
+    if "error" in scan:
+        _rollback(c)
+        return operation_result(invitation_id, "create", state_before, None, scan["error"], state_before=state_before, capability_stored=False)
+    # Remote ids already attributed to another operation are never matched twice.
+    known = {r[0] for r in c.execute("""SELECT remote_invitation_id FROM genui.provider_invitations
+          WHERE organization_id=%s AND remote_invitation_id IS NOT NULL""", (org,)).fetchall()}
+    window = created - datetime.timedelta(seconds=limits["reconcile_clock_skew_seconds"])
+    matches = [i for i in scan["invites"] if i.remote_id not in known and email_digest(i.email) == digest and i.role_name == role
+               and i.created_at >= window]
+    if len(matches) > 1:
+        _rollback(c)
+        return operation_result(invitation_id, "create", state_before, None, "ambiguous_remote_match", state_before=state_before,
+                                capability_stored=False)
+    state, remote, detail = ("confirmed", matches[0].remote_id, "found") if matches else ("failed", None, "not_found")
+    c.execute("""UPDATE genui.provider_invitations SET state=%s,remote_invitation_id=%s,updated_at=now()
+          WHERE organization_id=%s AND invitation_id=%s""", (state, remote, org, invitation_id))
+    c.commit()
+    # A capability survives only if this process wrote it before a crash; otherwise
+    # the token of the lost response is unrecoverable and the code must be reissued.
+    stored = state == "confirmed" and provider.capability_present(client.config.capability_dir, org, invitation_id)
+    return operation_result(invitation_id, "create", state, remote, detail, state_before=state_before, capability_stored=stored)
+
+
+def sweep_capabilities(c, org, directory):
+    """End every capability that can no longer be handed off: its code is revoked, expired or
+    exhausted, a revocation is recorded, its create failed or is unknown to the ledger, or the
+    provider's own invitation expiry has passed."""
+    begin(c, org)
+    now, destroyed = datetime.datetime.now(datetime.timezone.utc), 0
+    for invitation in provider.capability_invitations(directory, org):
+        row = c.execute("""SELECT p.state<>'failed' AND a.status='active' AND a.expires_at>now() AND NOT EXISTS (
+              SELECT 1 FROM genui.provider_invitations r WHERE r.organization_id=p.organization_id AND r.code_id=p.code_id
+              AND r.operation='revoke') FROM genui.provider_invitations p JOIN genui.access_codes a
+              ON a.organization_id=p.organization_id AND a.code_id=p.code_id
+              WHERE p.organization_id=%s AND p.invitation_id=%s AND p.operation='create'""", (org, invitation)).fetchone()
+        expiry = provider.capability_expiry(directory, org, invitation)
+        if not (row == (True,) and expiry is not None and expiry > now) and provider.destroy_capability(directory, org, invitation):
+            destroyed += 1
+    c.commit()
+    return destroyed
+
+
+def reconcile(c, args):
+    org, config = args.organization, args.provider_config
+    limits = provider.PROVIDER_DEFAULTS
+    client = provider.Client(config)
+    # 1. Propagate code expiry, exhaustion and any revocation without a recorded
+    #    remote revocation (D7.1 order: organization FOR SHARE, then the codes).
+    begin(c, org)
+    lock_organization(c, org)
+    codes = c.execute("""SELECT a.code_id::text FROM genui.access_codes a WHERE a.organization_id=%s
+          AND (a.status<>'active' OR a.expires_at<=now())
+          AND EXISTS (SELECT 1 FROM genui.provider_invitations p WHERE p.organization_id=a.organization_id AND p.code_id=a.code_id
+                      AND p.operation='create' AND p.state<>'failed')
+          AND NOT EXISTS (SELECT 1 FROM genui.provider_invitations p WHERE p.organization_id=a.organization_id AND p.code_id=a.code_id
+                          AND p.operation='revoke')
+          ORDER BY a.code_id LIMIT %s FOR UPDATE OF a""", (org, limits["reconcile_operations_max"])).fetchall()
+    recorded = sum(len(record_revocations(c, org, code, lock=False)) for (code,) in codes)
+    c.commit()
+    # 2. End capabilities locally before any provider call.
+    destroyed = sweep_capabilities(c, org, config.capability_dir)
+    # 3. Settle remote operations: creates first, so a revocation can follow a confirmed create.
+    begin(c, org)
+    rows = c.execute("""SELECT invitation_id::text,operation,provider_tenant_id,created_at,
+          operation='revoke' OR updated_at<=now()-make_interval(secs=>%s),state FROM genui.provider_invitations
+          WHERE organization_id=%s AND ((operation='create' AND state IN ('pending','unknown'))
+                OR (operation='revoke' AND state IN ('pending','unknown','failed')))
+          ORDER BY operation='revoke',created_at,invitation_id LIMIT %s""",
+                     (limits["reconcile_grace_seconds"], org, limits["reconcile_operations_max"] + 1)).fetchall()
+    c.commit()
+    truncated, rows = len(rows) > limits["reconcile_operations_max"], rows[:limits["reconcile_operations_max"]]
+    ready = [r for r in rows if r[4]]
+    result = {"organization_id": org, "revocations_recorded": recorded, "capabilities_destroyed": destroyed, "operations": [],
+              "deferred": len(rows) - len(ready), "truncated": truncated, "provider_phase": "completed"}
+    if not ready:
+        return result
+    try:
+        tenant = client.tenant()
+    except Refused as refusal:
+        result["provider_phase"] = str(refusal)
+        return result
+    creates = [r[3] for r in ready if r[1] == "create"]
+    scan = {"not_before": min(creates) - datetime.timedelta(seconds=limits["reconcile_clock_skew_seconds"])} if creates else {}
+    for invitation, operation, provider_tenant, _, _, state_before in ready:
+        if provider_tenant != tenant:
+            result["deferred"] += 1
+            continue
+        if operation == "create":
+            entry = reconcile_create(c, org, invitation, client, scan)
+        else:
+            entry = process_revoke(c, org, invitation, client)
+            entry = None if entry["detail"] in ("busy", "settled") else dict(entry, state_before=state_before)
+        if entry is None:
+            result["deferred"] += 1
+        else:
+            result["operations"].append(entry)
+    if "error" in scan:
+        result["provider_phase"] = scan["error"]
+    return result
+
+
 COMMANDS = {"provision": provision, "backfill": backfill, "issue": issue, "list": list_codes, "revoke": revoke,
-            "extend": extend, "revoke-entitlement": revoke_entitlement, "revoke-membership": revoke_membership, "verify": verify}
+            "extend": extend, "revoke-entitlement": revoke_entitlement, "revoke-membership": revoke_membership, "verify": verify,
+            "reconcile": reconcile}
+
+
+def provider_configuration(args):
+    """Validated before any connection: required to create or reconcile, optional to revoke."""
+    if args.command == "issue" and args.provider_email is not None or args.command == "reconcile":
+        return provider.load_config(os.environ, required=True)
+    if args.command == "revoke":
+        return provider.load_config(os.environ, required=False)
+    return None
 
 
 def main(argv=None):
     try:
         args = validate(parser().parse_args(argv))
+        args.provider_config = provider_configuration(args)
         if args.command == "defaults":
-            result = dict(DEFAULTS)
+            result = dict(DEFAULTS, provider=dict(provider.PROVIDER_DEFAULTS))
         else:
             with connect() as connection:
                 result = COMMANDS[args.command](connection, args)
