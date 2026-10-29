@@ -1,5 +1,7 @@
 # Phase 2 handoff — NOT READY
 
+For the October29 transfer between agents, read [the GenUI Claude handoff](../../CLAUDE-HANDOFF.md). It preserves the unfinished APP-008 entry, current operational evidence and separate FormaStack owner. Agent transfer does not pass Phase1 or authorize Phase2 implementation.
+
 Updated: 2026-10-29 UTC, with the invite-first beta amendment in [ADR-003](../architecture/ADR-003-PUBLIC-BETA-ACCESS.md). This is an evidence checklist, not phase acceptance or authorization to implement waiting tickets. The [live ticket board](../../Tickets/TRACKER.md), [phase definitions](../../Tickets/plan.json) and [external gate register](../../Tickets/external-dependencies.json) remain authoritative as work progresses.
 
 [PH01](../../Tickets/phases/PH01.md) contains **16 tickets**: APP-001–014 and APP-073/074. Six are Done (APP-001–005 and APP-007); APP-006 awaits hosted auth, APP-008 tenant isolation is in progress and APP-011 fixture packaging is blocked on GitHub CI availability, and the remaining tickets await their listed predecessors. Its exit gate is pending. [PH02](../../Tickets/phases/PH02.md) is planned, with its gate pending and no currently eligible implementation ticket. No `evidence/phases/PH01/GATE.md` exists; the [gate template](../../Tickets/_tools/PHASE-GATE.md) is reserved for review of an implemented phase.

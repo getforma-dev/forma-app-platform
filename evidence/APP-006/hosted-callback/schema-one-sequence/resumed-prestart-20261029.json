@@ -1,0 +1,36 @@
+{
+  "recorded_at_utc": "2026-10-29T17:12:24.229030+00:00",
+  "scope": "Resumed GenUI auth pre-start read-only control-plane inspection",
+  "passed": true,
+  "service_counts": [
+    0,
+    0,
+    0
+  ],
+  "cluster_active_tasks": 0,
+  "protected_source_resource_id_unchanged": true,
+  "schema_sql_observation": "Historical read-only proof at03:58UTC; fresh SQL observation will be required inside the new reserved interval before callback activation.",
+  "engine": "16.13",
+  "rds_private_encrypted_protected_no_pending_modifications": true,
+  "stack_policy_preserved": true,
+  "beta_certificate_issued": true,
+  "callback_and_keytool_index_bytes_rehashed": true,
+  "old_schedule_is_expired_stop_only_not_activation_authority": true,
+  "ledger_sha256": "bf5ff561052c334e17e936ffce444a90df44660cc30af8fc9689bc6a3d65f616",
+  "new_window_reserved": false,
+  "auth_clock_started": false,
+  "aws_mutations": [],
+  "private_receipt_sha256": {
+    "prestart-active-tasks.json": "6bf784c5565eed5077d77491fb60340c0ffc16408f326e50ddb43e2e2d0619df",
+    "prestart-bootstrap.json": "629903b2e87b5bead2a2c9b8c937ff0fb8d44ee275d1e45383610953b48a397d",
+    "prestart-callback-image.json": "f4a6a4390b2a5239fc913c58b878f68c439ee8075da5b624c96308008a1e7baa",
+    "prestart-certificate.json": "a87206ae3bf95a28217ca3696a92d482de7afea071bdc9b25cb0fbe1e1b2af14",
+    "prestart-database.json": "72609929efe3fc0a8b6dc4ea42c5ea39a1b635caaa56702f20598df1773b2d9e",
+    "prestart-expired-schedule.json": "49e8c83a95e2be4353048c9a2d77cdd11fc6c38b8ee41e567c7c2f98354ef66c",
+    "prestart-keytool-image.json": "08717450b1346ae32eb5a5e641d3e1dcc2d7f46132d118881e3edf9577cef3fa",
+    "prestart-policy.json": "833abcf374148d3c2b9c8db12b75540833252de7fbd02c8c3cb1689c850223ab",
+    "prestart-service.json": "0c37553ce03d7ee5e9a698b998e7a2d40e3f4678a7cecdf64c5dc1b3b84949f1",
+    "prestart-stack.json": "35081f60e59cff7598497931cebbb42e4dd184fe7b4f2055af66c7ad98f41784",
+    "prestart-stopped-tasks.json": "61e8c39ffa1ef5166ae05bf0aa601d558fb5bfee1225e791219db1e7c23c3b5f"
+  }
+}

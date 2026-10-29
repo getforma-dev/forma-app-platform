@@ -1,0 +1,15 @@
+# WITHDRAWN / NO START / NO RESERVATION
+
+The proposed 2026-10-29 interval **17:30–23:30 UTC**, with service cutoff22:00 and90 minutes for cleanup, was withdrawn during this review. The user is handing work to Claude. **This historical review grants no readiness, provisioning or activation signal. No new reservation was saved.** A future operator must agree and review a new future window.
+
+The retained17:12 UTC control-plane receipts match their eleven published hashes: service0/0/0, no active/pending cluster tasks, protected private encrypted PostgreSQL16.13 with no pending modifications, preserved database replacement/delete protection, and an issued beta certificate. Callback/key-tool index bytes independently rehash to their selected digests. The old stop schedule is expired. The native Safari receipt proves an actual fresh about:blank session and cleanup, not hosted login acceptance.
+
+The frozen runbook and its callback source/tests, preflight and stack still match the prior independent review. Its ancillary sequence README changed; this narrow review does not claim that document unchanged or approve its new content. The reviewed manual procedure remains two callback process slots/four starts, a stopped same-ARN secret transition, fixed original expiry and no implicit restart. Private version correlation remains an operator inference.
+
+The forecast reproduces exactly using the existing reservation function **only in memory**: project$98.44, including existing auth$5 once, $25 unallocated, prior compute reservations$2.19 and proposed additional compute$0.95. Remaining headroom is$1.56. This is a forecast with no selected secret ARN, not a reservation, bill or spending cap. The private ledger bytes remain unchanged.
+
+**Carry-forward finding:** the ledger timestamp2026-10-28T22:39:50Z would have met the24-hour rule through the withdrawn activation period (latest eligible activation21:50Z). However, its basis still describes an initial environment in which no GenUI RDS/ALB/task has run. Before any future reservation, reconcile against actual retained resources, prior task durations/spend and unknown outcomes. Preserve all existing cents and immutable prior windows; do not simply advance the timestamp or reset spending. Any later plan needs a fresh time check.
+
+The future operator must repeat the reviewed **schema1 read-only SQL baseline inside the new reserved window before callback activation**. Actual provider identities, secret/version, template upload/change set and run requests still require concrete field review inside that coordinated interval, followed by count-zero stack completion and the existing live schedule/activation checks. No schema2 operation is permitted in this rehearsal. These are unexecuted activation gates, not reasons to invent extra features.
+
+[Exact review record](resumed-prestart-independent-review.json) binds inputs, checks and limitations. This review made no network/cloud/Git calls, no source/private-file edits, no secret read, and no ledger CLI invocation. Only these two review files were written. Work stopped when the interval was withdrawn.

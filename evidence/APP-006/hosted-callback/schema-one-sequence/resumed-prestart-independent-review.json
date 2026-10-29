@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "reviewed_at_utc": "2026-10-29T17:19:05.506011+00:00",
+  "reviewer": "independent agent app008_schema_final_review",
+  "disposition": "WITHDRAWN / NO START / NO RESERVATION",
+  "scope": "Historical read-only review of the withdrawn 2026-10-29 candidate interval; not readiness or execution approval",
+  "reason": "Parent reports user winding down for Claude handoff and FormaStack withdrew the proposed interval during this review.",
+  "ready_for_provisioning": false,
+  "ready_for_activation": false,
+  "start_signal": false,
+  "reservation_persisted_by_review": false,
+  "execution_authorized_by_review": false,
+  "withdrawn_candidate": {
+    "T0": "2026-10-29T17:30:00Z",
+    "Tstop": "2026-10-29T22:00:00Z",
+    "Tend": "2026-10-29T23:30:00Z",
+    "total_hours": 6,
+    "cleanup_minutes": 90
+  },
+  "review_actions": {
+    "aws_calls": 0,
+    "network_calls": 0,
+    "git_operations": 0,
+    "private_file_edits": 0,
+    "source_edits": 0,
+    "ledger_cli_invocations": 0,
+    "in_memory_reserve_calculations_only": true
+  },
+  "historical_observations": [
+    "All eleven private prestart receipt hashes match the public manifest; service desired/running/pending 0/0/0 and cluster RUNNING/PENDING lists empty at the retained observation.",
+    "Retained RDS receipt shows available PostgreSQL16.13, private/encrypted/protected, autoMinorVersionUpgrade false, no pending changes; stack update complete and database replacement/delete denial retained.",
+    "Certificate receipt names beta.getforma.dev and status ISSUED; old stop schedule is expired and cannot authorize activation.",
+    "Rehashed actual callback/key-tool OCI index strings match a4a47707 and 5ee5ad16 with the expected ARM64 children.",
+    "Safari receipt confirms one real native Safari26.1 about:blank session and cleanup; it proves capability, not hosted authentication acceptance.",
+    "Frozen runbook, callback source/tests, preflight and stack hashes still match the prior independent operational review. Its ancillary sequence README changed; this review does not assert it unchanged or approve its new content."
+  ],
+  "prior_review_source_hash_matches": {
+    "evidence/APP-006/hosted-callback/schema-one-sequence/activation-runbook.md": true,
+    "app/src/auth_qualification.rs": true,
+    "app/src/auth_qualification/tests.rs": true,
+    "infra/scripts/preflight.py": true,
+    "infra/src/stack.ts": true,
+    "evidence/APP-006/hosted-callback/README.md": true,
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/source-before.json": true,
+    "evidence/APP-006/hosted-callback/secret-wiring/registry-platform-binding.json": true,
+    "evidence/APP-006/hosted-callback/secret-wiring/ci.json": true,
+    "evidence/APP-006/hosted-key-qualification/registry-binding.json": true,
+    "evidence/APP-006/upstream-auth-source/GENUI-IDENTITY-CONTRACT-2026-10-28.md": true,
+    "evidence/APP-006/hosted-callback/schema-one-sequence/README.md": false,
+    "evidence/APP-006/hosted-callback/schema-one-sequence/independent-review.json": true,
+    "evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/managed-observation.json": true,
+    "evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/managed-independent-review.json": true
+  },
+  "historical_forecast": {
+    "reproduced_exactly_in_memory": true,
+    "recorded_forecast": {
+      "2026-10": {
+        "retained_core_full_month_cents": 5229,
+        "all_window_compute_reservations_cents": 314,
+        "prior_extra_spend_cents": 101,
+        "variable_reserve_cents": 1200,
+        "genui_total_cents": 6844,
+        "auth_spent_or_reserved_cents": 500,
+        "unallocated_cents": 2500,
+        "project_total_cents": 9844
+      }
+    },
+    "new_compute_forecast_cents": 95,
+    "prior_compute_reservations_cents": 219,
+    "auth_allowance_counted_once_cents": 500,
+    "unallocated_cents": 2500,
+    "headroom_cents": 156,
+    "extra_task_hours": 2,
+    "ledger_unchanged": true,
+    "forecast_has_no_selected_secret_arn": true,
+    "no_persisted_new_reservation": true,
+    "not_actual_spend_or_billing_cap": true
+  },
+  "ledger_finding": {
+    "reconciled_at_utc": "2026-10-28T22:39:50Z",
+    "freshness_limit_utc": "2026-10-29T22:39:50Z",
+    "historical_activation_freshness": "The withdrawn plan latest preflight activation time21:50Z precedes the24h freshness limit. This does not establish freshness for any later plan.",
+    "finding": "Reconciliation prose still describes an initial environment in which no GenUI RDS/ALB/task has run. It must be refreshed against retained resources and actual prior task/spend evidence before a future reservation.",
+    "required_next_operator_action": "Preserve every existing cent allocation and prior immutable window; reconcile observed retained costs, actual task usage and unknown outcomes, then record an honest current basis/timestamp. Do not merely roll the timestamp or reset reservations."
+  },
+  "future_gates": [
+    "New coordinated future interval and explicit current readiness review; the withdrawn times are not reusable start authority.",
+    "Fresh live state and ledger reconciliation; compute an actual new immutable reservation only with the real secret ARN and selected expiry.",
+    "Repeat the reviewed schema1 read-only SQL baseline inside that newly reserved window before callback activation; no schema2 migration or other database writer.",
+    "Actual provider identities/private configuration/version receipt, secret requests, template upload/change-set/run requests require concrete field review within the coordinated window.",
+    "Count-zero stack completion, unchanged protected database, future exact stop schedule and existing live preflight checks precede any activation.",
+    "Preserve two deliberate callback process slots/four starts, original expiry, stopped same-ARN transition, no implicit replacement/retry, and separate one-process key qualification."
+  ],
+  "limitations": [
+    "No fresh independent AWS or hosted SQL/browser trial occurred. Review inspected the retained receipts only.",
+    "The real per-window secret, template, change set, run requests and reservation were not reviewed or created.",
+    "No APP-006/008 acceptance, mailbox verification, public-beta readiness or runtime configuration attestation is claimed."
+  ],
+  "input_sha256": {
+    "evidence/APP-006/hosted-callback/schema-one-sequence/activation-runbook.md": "01badd95410539d4514f79f15cb752303bd5bd8a8587ae4c8539bd1d4a638344",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/activation-independent-review.md": "8a1944d35614b42cd5e84accf2da0c54a46b4d0fd74fdf9207af89db683055a6",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/activation-independent-review.json": "06d7332e995586e6d92824da31c6b6b43835fbc6b7941e322c3581e94a96c652",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/resumed-prestart-20261029.json": "6f28c4e544b072d2b3502c3cb6f5ad94fb2a1691729bd9e5df90c2d327d30d51",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/resumed-budget-forecast-20261029.json": "20306cce18065a6c8db0f1fa44f3c768b8d5e569af748cea90b0748e7df36671",
+    ".cache/operations/beta/budget-ledger.json": "bf5ff561052c334e17e936ffce444a90df44660cc30af8fc9689bc6a3d65f616",
+    ".cache/operations/auth-rehearsal-20261029/candidate-budget-forecast.json": "20306cce18065a6c8db0f1fa44f3c768b8d5e569af748cea90b0748e7df36671",
+    ".cache/operations/auth-rehearsal-20261029/forecast-input-not-for-deployment.json": "ed6ade5e408acb6e97d80aa1a0654d553782172a749fcb3385cbb4bd3189d1fa",
+    "/Users/victorvillacis/dev/Forma/work/FORMA-247/rehearsal/joint-callback/native-safari-confirmed-capability-20261029.json": "04ed782e0ede741ded85890d234467d3130d1b0e18907825ec47786e7a850b04",
+    ".cache/operations/auth-rehearsal-20261029/prestart-active-tasks.json": "6bf784c5565eed5077d77491fb60340c0ffc16408f326e50ddb43e2e2d0619df",
+    ".cache/operations/auth-rehearsal-20261029/prestart-bootstrap.json": "629903b2e87b5bead2a2c9b8c937ff0fb8d44ee275d1e45383610953b48a397d",
+    ".cache/operations/auth-rehearsal-20261029/prestart-callback-image.json": "f4a6a4390b2a5239fc913c58b878f68c439ee8075da5b624c96308008a1e7baa",
+    ".cache/operations/auth-rehearsal-20261029/prestart-certificate.json": "a87206ae3bf95a28217ca3696a92d482de7afea071bdc9b25cb0fbe1e1b2af14",
+    ".cache/operations/auth-rehearsal-20261029/prestart-database.json": "72609929efe3fc0a8b6dc4ea42c5ea39a1b635caaa56702f20598df1773b2d9e",
+    ".cache/operations/auth-rehearsal-20261029/prestart-expired-schedule.json": "49e8c83a95e2be4353048c9a2d77cdd11fc6c38b8ee41e567c7c2f98354ef66c",
+    ".cache/operations/auth-rehearsal-20261029/prestart-keytool-image.json": "08717450b1346ae32eb5a5e641d3e1dcc2d7f46132d118881e3edf9577cef3fa",
+    ".cache/operations/auth-rehearsal-20261029/prestart-policy.json": "833abcf374148d3c2b9c8db12b75540833252de7fbd02c8c3cb1689c850223ab",
+    ".cache/operations/auth-rehearsal-20261029/prestart-service.json": "0c37553ce03d7ee5e9a698b998e7a2d40e3f4678a7cecdf64c5dc1b3b84949f1",
+    ".cache/operations/auth-rehearsal-20261029/prestart-stack.json": "35081f60e59cff7598497931cebbb42e4dd184fe7b4f2055af66c7ad98f41784",
+    ".cache/operations/auth-rehearsal-20261029/prestart-stopped-tasks.json": "61e8c39ffa1ef5166ae05bf0aa601d558fb5bfee1225e791219db1e7c23c3b5f"
+  }
+}

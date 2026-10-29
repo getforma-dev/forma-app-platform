@@ -1,5 +1,7 @@
 # Forma app platform
 
+**October 29 transfer:** start with [the GenUI Claude handoff](CLAUDE-HANDOFF.md). Execution is being wound down at Victor's request; Phase1 is incomplete and the proposed hosted-auth window was withdrawn. The handoff identifies the separate FormaStack/fAuth owner and the unaccepted managed-entry draft.
+
 The company app platform built on Forma Stack: teams create, run, adapt and share their own apps. Northstar and Spend Review prove the same platform through two different workflows.
 
 **Phase 1 is underway — October 28, 2026.** APP-001–005 and APP-007 are complete: published Forma **3.2.0**, locked data contracts, and native canvas/parser/query qualifications. APP-007 has retained [managed foundation evidence](evidence/APP-007/managed/README.md): real RDS migration and role denials, two-tenant S3/KMS isolation, TLS, credential refresh and negative-path refusals, snapshot restore, scheduled service stop and recovery of the qualified initial baseline. The final inventory records every observed task stopped. Independent acceptance and all eight [final source CI checks](evidence/APP-007/managed/ci.json) pass at `b925600`, landed on main. The [live board](Tickets/TRACKER.md) records actual review/completion state. Hosted authentication, application tenant/RLS authorization, invite admission and the integrated saved workflow remain open.
