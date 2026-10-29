@@ -120,7 +120,7 @@ Done 2026-10-29 in the implementer's worktree and merged (`dc3900d`, `26c1622`):
 ### Task 4: Migration 0003 — admission ledger, entitlements, audit, definer principal (APP-073 slice 1)
 
 **Files:**
-- Create: `app/migrations/0003_admission_ledger.sql`, `app/migrations/catalog-v3.json` (generated), `evidence/APP-073/schema/README.md`
+- Create: `app/migrations/0003_admission.sql`, `app/migrations/catalog-v3.json` (generated), `evidence/APP-073/schema/README.md`
 - Modify: `app/migrations/manifest.json`, `app/src/storage/catalog.rs:8-10`, `app/src/storage/pool.rs:486-498`, `app/src/storage/managed_qualification.rs` (`expected_pins`), `app/runtime/qualify_tenant_schema.py`, `.dockerignore`
 
 **Interfaces:**
