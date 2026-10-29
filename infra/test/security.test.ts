@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
-import { GenuiFoundation, OPERATOR_CIDR_PATTERN, QUALIFICATION_SECRET_ARN_PATTERN } from '../src/stack.js';
+import { GenuiFoundation, IMAGE_DIGEST_PATTERN, OPERATOR_CIDR_PATTERN, QUALIFICATION_IMAGE_PATTERN, QUALIFICATION_SECRET_ARN_PATTERN } from '../src/stack.js';
 
 const template = Template.fromStack(new GenuiFoundation(new App(), 'SecurityQualification'));
 const document = template.toJSON();
@@ -128,11 +128,14 @@ test('digest-pinned Fargate service has HTTPS and no default live task, exec, NA
   const imagePattern = new RegExp(document.Parameters.ImageDigest.AllowedPattern);
   assert.equal(imagePattern.test('123456789012.dkr.ecr.us-east-1.amazonaws.com/team/genui@sha256:' + 'a'.repeat(64)), true);
   for (const invalid of ['123456789012.dkr.ecr.us-east-1.amazonaws.com/team/genui:latest', ...['/genui', 'team//genui', 'team/../genui', 'genui/'].map(repo => `123456789012.dkr.ecr.us-east-1.amazonaws.com/${repo}@sha256:${'a'.repeat(64)}`), `123456789012.dkr.ecr.us-east-1.amazonaws.com/genui@sha256:${'a'.repeat(64)}\n`]) assert.equal(imagePattern.test(invalid), false, invalid);
-  for (const [, task] of entries('AWS::ECS::TaskDefinition')) {
-    assert.equal(task.Properties.Cpu, '2048'); assert.equal(task.Properties.Memory, '8192');
+  assert.equal(document.Parameters.ImageDigest.AllowedPattern, IMAGE_DIGEST_PATTERN);
+  for (const [id, task] of entries('AWS::ECS::TaskDefinition')) {
+    // The optional APP-075 qualification task is smaller and runs its own image.
+    const qualification = id.startsWith('QualificationTask');
+    assert.equal(task.Properties.Cpu, qualification ? '1024' : '2048'); assert.equal(task.Properties.Memory, qualification ? '2048' : '8192');
     assert.deepEqual(task.Properties.RuntimePlatform, { CpuArchitecture: { Ref: 'ImageArchitecture' }, OperatingSystemFamily: 'LINUX' });
     for (const container of task.Properties.ContainerDefinitions) {
-      assert.deepEqual(container.Image, { Ref: 'ImageDigest' }); assert.equal(container.ReadonlyRootFilesystem, true); assert.equal(container.User, '65532:65532');
+      assert.deepEqual(container.Image, { Ref: qualification ? 'QualificationImageDigest' : 'ImageDigest' }); assert.equal(container.ReadonlyRootFilesystem, true); assert.equal(container.User, '65532:65532');
     }
   }
 });
@@ -181,12 +184,12 @@ test('tenant roles isolate object prefixes and keys; both explicit matching KMS 
 });
 
 test('execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants', () => {
-  for (const prefix of ['ExecutionRole', 'MigrationExecutionRole']) {
+  for (const [prefix, parameter] of [['ExecutionRole', 'ImageDigest'], ['MigrationExecutionRole', 'ImageDigest'], ['QualificationExecutionRole', 'QualificationImageDigest']]) {
     const statements = policy(role(prefix));
     assert.equal(statements.find(statement => statement.Action === 'ecr:GetAuthorizationToken').Resource, '*');
     const pull = statements.find(statement => actions(statement).includes('ecr:BatchGetImage'));
     assert.deepEqual(actions(pull).sort(), ['ecr:BatchCheckLayerAvailability', 'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer']);
-    for (const repo of ['genui', 'team/nested/genui']) assert.equal(resolve(pull.Resource, { 'AWS::Partition': 'aws', ImageDigest: `123456789012.dkr.ecr.us-east-1.amazonaws.com/${repo}@sha256:${'b'.repeat(64)}` }), `arn:aws:ecr:us-east-1:123456789012:repository/${repo}`);
+    for (const repo of ['genui', 'team/nested/genui']) assert.equal(resolve(pull.Resource, { 'AWS::Partition': 'aws', [parameter]: `123456789012.dkr.ecr.us-east-1.amazonaws.com/${repo}@sha256:${'b'.repeat(64)}` }), `arn:aws:ecr:us-east-1:123456789012:repository/${repo}`);
   }
   for (const [, item] of entries('AWS::IAM::Policy')) for (const statement of item.Properties.PolicyDocument.Statement) {
     assert.equal(actions(statement).some(action => action.startsWith('ssmmessages:') || action === 'ecs:ExecuteCommand' || action === 'iam:PassRole' || action === '*'), false);
@@ -279,4 +282,58 @@ test('enabled qualification injects the whole exact secret only into the app thr
   assert.equal(policy(role('TaskRole')).some(statement => actions(statement).some(action => action.startsWith('secretsmanager:'))), false);
   assert.equal(policy(role('MigrationRole')).length, 0);
   assert.equal(JSON.stringify(document.Outputs).includes('QualificationConfigSecretArn'), false);
+});
+
+test('qualification image parameter accepts only empty or a reviewed digest', () => {
+  const parameter = document.Parameters.QualificationImageDigest;
+  assert.equal(parameter.Default, ''); assert.equal(parameter.AllowedPattern, QUALIFICATION_IMAGE_PATTERN);
+  const pattern = new RegExp(parameter.AllowedPattern);
+  const digest = `877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:${'c'.repeat(64)}`;
+  for (const valid of ['', digest]) assert.equal(pattern.test(valid), true, valid);
+  for (const invalid of [' ', '\n', digest + '\n', digest.replace(/@sha256:.*/, ':qualification'), digest.replace('c'.repeat(64), 'C'.repeat(64)), digest.replace('c'.repeat(64), 'c'.repeat(63))]) assert.equal(pattern.test(invalid), false, invalid);
+});
+
+test('qualification task is absent by default; when supplied it is a count-zero standalone task on the runtime role only', () => {
+  const [taskId, task] = one('AWS::ECS::TaskDefinition', 'QualificationTask');
+  const executionId = role('QualificationExecutionRole');
+  const [policyId, executionPolicy] = one('AWS::IAM::Policy', 'QualificationExecutionRoleDefaultPolicy');
+  // Every qualification resource and output exists only under the condition.
+  for (const resource of [task, document.Resources[executionId], executionPolicy]) assert.equal(resource.Condition, 'QualificationTaskEnabled');
+  assert.equal(document.Outputs.QualificationTaskDefinition.Condition, 'QualificationTaskEnabled');
+  const condition = document.Conditions.QualificationTaskEnabled;
+  assert.equal(resolve(condition, { QualificationImageDigest: '' }), false);
+  assert.equal(resolve(condition, { QualificationImageDigest: `877573132739.dkr.ecr.us-east-1.amazonaws.com/genui@sha256:${'d'.repeat(64)}` }), true);
+  for (const [id, resource] of Object.entries(document.Resources) as Array<[string, any]>) {
+    const body = JSON.stringify(resource.Properties ?? {});
+    if ([taskId, executionId, policyId].some(name => body.includes(`"${name}"`)) || body.includes('QualificationImageDigest')) assert.equal(resource.Condition, 'QualificationTaskEnabled', id);
+    assert.equal(array(resource.DependsOn ?? []).some((name: string) => [taskId, executionId, policyId].includes(name)), false, id);
+  }
+  // Count zero: no service, schedule or target references it.
+  for (const [, service] of entries('AWS::ECS::Service')) assert.deepEqual(service.Properties.TaskDefinition, { Ref: one('AWS::ECS::TaskDefinition', 'Task')[0] });
+  assert.equal(JSON.stringify(document.Resources).split(`"${taskId}"`).length - 1, 1); // its own key only: no resource references it
+  // Runtime task role only: the four DB identities and two tenant roles; no migration identity or secret.
+  assert.deepEqual(task.Properties.TaskRoleArn, { 'Fn::GetAtt': [role('TaskRole'), 'Arn'] });
+  assert.deepEqual(task.Properties.ExecutionRoleArn, { 'Fn::GetAtt': [executionId, 'Arn'] });
+  const statements = policy(executionId);
+  assert.deepEqual(statements.flatMap(actions).sort(), ['ecr:BatchCheckLayerAvailability', 'ecr:BatchGetImage', 'ecr:GetAuthorizationToken', 'ecr:GetDownloadUrlForLayer', 'logs:CreateLogStream', 'logs:PutLogEvents']);
+  assert.equal(JSON.stringify(task).includes('MigrationSecret'), false);
+  assert.equal(JSON.stringify(task).includes(role('MigrationRole')), false);
+  const [container] = task.Properties.ContainerDefinitions;
+  assert.equal(task.Properties.ContainerDefinitions.length, 1);
+  assert.deepEqual(container.EntryPoint, ['python3', '/app/qualification_supervisor.py']); assert.deepEqual(container.Command, ['run']);
+  assert.equal(container.Secrets, undefined); assert.equal(container.PortMappings, undefined); assert.equal(container.HealthCheck, undefined);
+  assert.deepEqual(container.MountPoints, [{ ContainerPath: '/run/genui', ReadOnly: false, SourceVolume: 'qualification-run' }]);
+  assert.deepEqual(task.Properties.Volumes, [{ Name: 'qualification-run' }]);
+  const environment = Object.fromEntries(container.Environment.map((value: any) => [value.Name, value.Value]));
+  assert.deepEqual(Object.keys(environment).sort(), ['AWS_REGION', 'GENUI_DATABASE_HOST', 'GENUI_DATABASE_NAME', 'GENUI_DATABASE_PORT', 'GENUI_DATABASE_ROLES_JSON', 'GENUI_EVIDENCE_BUCKET', 'GENUI_TENANTS_JSON', 'PYTHONDONTWRITEBYTECODE']);
+  // Arming value and run manifest arrive only as per-run overrides.
+  assert.equal(Object.keys(environment).some(name => name.startsWith('PG') || /PASSWORD|TOKEN|SECRET|APP008|MANIFEST/.test(name)), false);
+  assert.deepEqual(environment.GENUI_DATABASE_HOST, { 'Fn::GetAtt': [one('AWS::RDS::DBInstance')[0], 'Endpoint.Address'] });
+  assert.equal(container.LogConfiguration.Options['awslogs-stream-prefix'], 'genui-qualification');
+  // Its execution role reads no secret, even when the rehearsal secret is enabled.
+  for (const [, item] of entries('AWS::IAM::Policy')) {
+    if (item.Properties.PolicyDocument.Statement.some((statement: any) => actions(statement).includes('secretsmanager:GetSecretValue'))) {
+      assert.equal(item.Properties.Roles.some((value: any) => value.Ref === executionId), false);
+    }
+  }
 });
