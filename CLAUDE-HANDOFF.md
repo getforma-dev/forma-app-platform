@@ -25,6 +25,8 @@ In flight when the checkpoint was written (each in its own worktree under `.clau
 - APP-075 managed entry (plan B1–B3) — worktree `agent-aafe83d78bac0d915`.
 - Independent review of the parser packaging → `evidence/APP-017/parser-packaging/independent-review.md`.
 
+Parser packaging review landed (`evidence/APP-017/parser-packaging/independent-review.md`, changes requested, no blockers): fix M1 (pipefail and per-section test counts in the release record), M2 (verify the CI run through `gh api` or attestations, pin the repository, compose on push only), M3 (bind `parser-host` digest in the record and check against the image manifest) before APP-017 uses the release gate; **M4 is a design decision before Task A5**: the guest's 5e9 fuel exhausts at about 16,000 five-column CSV records and refuses a 10,000 × 32 XLSX, so ADR-009 D9.2/B5's bounds are unreachable — amend the bounds, cut per-cell cost and requalify, or raise fuel by ADR amendment.
+
 Resume order: merge or finish those three (check each worktree's `git log`/`git status`); then APP-010's migration 0005 (definitions/work grants, plan Task 6), APP-009 sessions (0006, Task 7, needs the private fAuth identifiers file in the FormaStack journey folder), APP-077 operator package, Task 8 APP-074 local, Tasks 9–11. Victor still owes: the GenUI always-on figure.
 
 ### State at the Fable → Opus switch (2026-10-29, evening UTC)
