@@ -30,6 +30,8 @@ Membership grants describe permitted data/actions; the entitlement independently
 
 ## Proposed confidential provider handoff — not yet accepted
 
+*Amendment 2026-10-29:* FormaStack merged the server-only invitation and PAR contract in gatewasm PR18/PR19 (reviewed source `dfba787`); in `server_only` mode the identity role is explicit and required. GenUI formally accepts it only after hash-binding the merged contract under `evidence/APP-006/upstream-auth-source/` (plan Task C0); hosted evidence remains open. The text below is retained as the original decision.
+
 FormaStack is preparing server-only, email-bound invitations with an **explicit** identity role, followed by backend `POST /t/{slug}/oauth/par` carrying the confidential provider `invite_token` and PKCE fields. The browser would receive only the bounded `request_uri`, then the final authorization code and state. This is a proposed source contract still in progress; APP-006 must receive its actual reviewed implementation, limits and hosted evidence before GenUI relies on it. A name or URL in this decision is not proof the endpoint or mode is available.
 
 The current `/manage/invites` default role is administrator and creation is not idempotent. GenUI's operator must select the verified provider's explicit least-privilege identity role and intended email; omission is refused by the operator workflow. The new proposed `delivery_mode: server_only` must suppress the legacy email URL containing a raw invitation token, with observed mail/HTTP evidence. Identity roles never become GenUI membership grants by copying claims.
@@ -59,7 +61,7 @@ APP-015/024/043 and later operations must consume current entitlements when admi
 1. APP-007 qualifies the bounded, public-HTTPS-capable infrastructure and managed isolation within the recorded allowance; it does not implement signup.
 2. APP-008 establishes the tenant/role boundary. APP-073 then adds the real admission ledger, operator code workflow and database concurrency/refusal evidence.
 3. FormaStack supplies the scoped registration/login/client handoff to APP-006. APP-009 consumes that identity contract and APP-073's ledger for pre-access and workspace-session transitions.
-4. APP-074 qualifies the actual public signup/admission path in Chromium, Firefox and WebKit, direct API denials and abuse/concurrency/revocation controls. APP-012 consumes the same gate before its real managed query path; APP-013/014 preserve atomic outcomes and races.
+4. APP-074 qualifies the actual public signup/admission path in installed Chrome, native Safari and Firefox (amended 2026-10-29: WebKit does not substitute for Safari), direct API denials and abuse/concurrency/revocation controls. APP-012 consumes the same gate before its real managed query path; APP-013/014 preserve atomic outcomes and races.
 5. PH01's gate includes APP-073/074 and these public-entry proofs, in addition to every original APP-001–014 obligation. Later phases still own complete imports, model composition, application journeys and pilot readiness.
 
 Receipt requirements: exact source/image/DNS/TLS/issuer/client/callback identities, sanitized enrollment and code lifecycle results, expected/actual API and browser denials, paired isolated organizations, both concurrency orders, restart persistence, bounded cost/rate behavior and independent review. No source-only signup assertion, mock identity, temporary `/32` test, green planning check or static landing page completes this gate.

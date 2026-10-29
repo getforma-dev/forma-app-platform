@@ -2,7 +2,7 @@
 
 # APP-008 schema and migration slice
 
-This is author evidence for the schema/runtime slice of [APP-008](../../../../Tickets/2-in-progress/APP-008.md), implementing [ADR-004](../../../../docs/architecture/ADR-004-TENANT-TRANSACTIONS.md). It does not complete APP-008 or the Phase 1 gate. Independent review, the native pool/authorization slice and coordinated managed qualification remain separate.
+This is author evidence for the schema/runtime slice of [APP-008](../../../../Tickets/3-in-review/APP-008.md), implementing [ADR-004](../../../../docs/architecture/ADR-004-TENANT-TRANSACTIONS.md). It does not complete APP-008 or the Phase 1 gate. Independent review, the native pool/authorization slice and coordinated managed qualification remain separate.
 
 ## Implemented boundary
 

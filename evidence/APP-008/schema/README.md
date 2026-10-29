@@ -2,7 +2,7 @@
 
 Current repair evidence is in [catalog-repair.md](catalog-repair.md); [managed-plan.md](../managed-plan.md) records the reviewed RDS creator-grant normalization and required future managed observations. Independent review found that the original version2 repeat accepted catalog drift and a partial history could bypass legacy checks. Follow-up review found R3: all-role database defaults were omitted, allowing replica mode to disable FK enforcement; [pre-review](pre-review/README.md) preserves those earlier passing but insufficient checks.
 
-This is author evidence for the schema/runtime slice of [APP-008](../../../Tickets/2-in-progress/APP-008.md), implementing [ADR-004](../../../docs/architecture/ADR-004-TENANT-TRANSACTIONS.md). It does not complete APP-008 or the Phase 1 gate. Independent review, the native pool/authorization slice and coordinated managed qualification remain separate.
+This is author evidence for the schema/runtime slice of [APP-008](../../../Tickets/3-in-review/APP-008.md), implementing [ADR-004](../../../docs/architecture/ADR-004-TENANT-TRANSACTIONS.md). It does not complete APP-008 or the Phase 1 gate. Independent review, the native pool/authorization slice and coordinated managed qualification remain separate.
 
 ## Implemented boundary
 

@@ -30,9 +30,11 @@
         "APP-011",
         "APP-012",
         "APP-013",
-        "APP-014"
+        "APP-014",
+        "APP-075",
+        "APP-076"
       ],
-      "ticket_count": 16,
+      "ticket_count": 18,
       "done_count": 6,
       "blocked_count": 2
     },
@@ -395,11 +397,11 @@
     {
       "id": "APP-008",
       "title": "Establish tenant-bearing schema, database roles and deny-by-default authorization",
-      "path": "2-in-progress/APP-008.md",
+      "path": "3-in-review/APP-008.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "In progress",
+      "Status": "In review",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S02",
@@ -407,12 +409,12 @@
       "Order": "8",
       "Size": "L",
       "Repos": "forma-app-platform",
-      "Decision": "Planned implementation; preserve the adopted typed-definition design and record any amendment before changing its contracts.",
+      "Decision": "ADR-004 directs the three slices; ADR-005 moves slice 3's managed RDS qualification to APP-075 so this ticket closes on local acceptance plus exact-source CI and landing.",
       "Requirements": "C01, C11, N7, P11, R15, S06, SR1, SR3",
       "Depends on": "APP-007",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Codex tenant-foundation lead",
-      "Branch / PR": "phase-one-spikes; separate schema/pool/authorization review slices",
+      "Branch / PR": "phase-one-spikes; local acceptance source 20a480b (reviewed slices through acbde9b); exact-source CI refused for organization billing, landing pending",
       "Team": "GenUI",
       "Blocked by": "None \u2014 accepted ADR-004 directs parallel schema and native transaction implementation.",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -463,9 +465,9 @@
       "Order": "10",
       "Size": "L",
       "Repos": "forma-app-platform",
-      "Decision": "Planned implementation; preserve the adopted typed-definition design and record any amendment before changing its contracts.",
+      "Decision": "ADR-005: consume the accepted local verifier and the hash-bound GenUI identity contract; hosted exercise stays in APP-074. ADR-006 fixes the sign-in, verification-pending and resend route contract.",
       "Requirements": "R15, SR2",
-      "Depends on": "APP-006, APP-008, APP-073",
+      "Depends on": "APP-008, APP-073",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
       "Branch / PR": "Not started",
@@ -473,7 +475,6 @@
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
-        "APP-006",
         "APP-008",
         "APP-073"
       ]
@@ -583,7 +584,7 @@
       "Repos": "forma-app-platform",
       "Decision": "Planned implementation; preserve the adopted typed-definition design and record any amendment before changing its contracts.",
       "Requirements": "C06, P06",
-      "Depends on": "APP-003, APP-005, APP-009, APP-010, APP-011, APP-074",
+      "Depends on": "APP-003, APP-005, APP-009, APP-010, APP-011",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
       "Branch / PR": "Not started",
@@ -595,8 +596,7 @@
         "APP-005",
         "APP-009",
         "APP-010",
-        "APP-011",
-        "APP-074"
+        "APP-011"
       ]
     },
     {
@@ -2393,6 +2393,66 @@
         "APP-058",
         "APP-070",
         "APP-071"
+      ]
+    },
+    {
+      "id": "APP-075",
+      "title": "Qualify the tenant foundation on managed RDS",
+      "path": "0-backlog/APP-075.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "IAM",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Verification",
+      "Sprint": "S02",
+      "Phase": "PH01",
+      "Order": "75",
+      "Size": "L",
+      "Repos": "forma-app-platform",
+      "Decision": "ADR-005 splits ADR-004 slice 3's managed qualification out of APP-008 so dependent local work can proceed; every managed obligation is inherited verbatim.",
+      "Requirements": "C01, C11, N7, P11, R15, S06, SR1, SR3",
+      "Depends on": "APP-008",
+      "External dependencies": "None beyond listed local predecessors",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-008"
+      ]
+    },
+    {
+      "id": "APP-076",
+      "title": "Run the Phase 1 integrated managed trial",
+      "path": "0-backlog/APP-076.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "VAL",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Verification",
+      "Sprint": "S02",
+      "Phase": "PH01",
+      "Order": "76",
+      "Size": "L",
+      "Repos": "forma-app-platform",
+      "Decision": "ADR-005 consolidates the hosted and managed acceptance items of APP-012/073 and the PH01 integrated demonstration into one reviewed trial on the exact candidate build.",
+      "Requirements": "C01, C06, C07, C11, C15, N4, N5, R15, R16, S06, SR1, SR2, SR7, SR10, SR12",
+      "Depends on": "APP-012, APP-013, APP-014, APP-074, APP-075",
+      "External dependencies": "None beyond listed local predecessors",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-012",
+        "APP-013",
+        "APP-014",
+        "APP-074",
+        "APP-075"
       ]
     }
   ]

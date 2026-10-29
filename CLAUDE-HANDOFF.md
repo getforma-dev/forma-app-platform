@@ -1,5 +1,20 @@
 # GenUI handoff to Claude
 
+## 2026-10-29 Claude takeover status (read this before the Codex text below)
+
+Claude took over the GenUI lane on 2026-10-29 and is the single GenUI operator. The FormaStack/fAuth lane is the Claude session titled "FormaStack/fAuth prerequisites for GenUI" (`local_4691ee0e-47d3-478e-964c-a24bf5ce30a1`); coordination so far is recorded in [CROSS-TEAM-HANDOFF](docs/planning/CROSS-TEAM-HANDOFF.md). Victor will switch this session's model after planning; the session remains the owner.
+
+What changed today:
+
+- [ADR-005](docs/architecture/ADR-005-PHASE-1-SEQUENCING.md) restructured the dependency graph (it was circular and serialized behind cloud windows): APP-008 moved to In review on its local acceptance; **APP-075** (managed tenant qualification on RDS) and **APP-076** (integrated managed trial) were added, so PH01 now has 18 tickets; APP-009 depends on APP-008/073 and consumes the pinned identity contract; APP-012 is local-first; the hosted items of APP-012/073 live in APP-076. Nothing was weakened; every moved sentence is verbatim in its new owner.
+- [ADR-006](docs/architecture/ADR-006-SIGNIN-AND-VERIFICATION-PENDING.md) fixes the sign-in, verification-pending and backend-resend route contract FormaStack needed; FormaStack has implemented its side on an unmerged branch and supplied exact lifetimes.
+- [PHASE-1-EXECUTION-PLAN](docs/planning/PHASE-1-EXECUTION-PLAN.md) is the step-by-step plan for the orchestrator, including the ADR-007 decisions (write authority, schema layout, query execution) that must be recorded before the first new migration.
+- Fresh read-only AWS snapshot at 17:40:59 UTC: service 0/0/0, no tasks, RDS available 16.13, both ECR indices unchanged, ledger hash unchanged. Actual October budget headroom is $2.51 (the $25 "unallocated" is a fixed reserve preflight requires); the ledger 24-hour rule lapses 22:39:50 UTC today.
+- Victor directed the repository to become **public with an all-rights-reserved notice** so GitHub Actions run free of the organization billing block; it returns to private after deployment. The "keep private" instruction below is superseded.
+
+The dependency order below ("APP-009 needs APP-006/008/073…") is superseded by ADR-005; the board (`python3 Tickets/_tools/board.py next`) is authoritative.
+
+
 Prepared October 29, 2026, at Victor's request to wind down because Codex usage is nearly exhausted. **Phase 1 is not complete.** This is the GenUI lane. A separate FormaStack/fAuth agent is preparing its own Claude handoff; keep the two ownership boundaries below.
 
 ## Read this first
@@ -62,7 +77,7 @@ Phase1 must prove **invite → verified sign-in → current tenant entitlement �
 | Design requirements and phases | [Source guide](docs/planning/SOURCE-GUIDE.md), [roadmap](docs/planning/ROADMAP.md), [quality gates](docs/planning/QUALITY-GATES.md), [ticket index](Tickets/TRACKER.md), [external gates](Tickets/external-dependencies.json) |
 | Runtime and infrastructure | [App runbook](app/README.md), [infra runbook](infra/README.md), [environment](docs/planning/SYNTHETIC-ENVIRONMENT.md), [cost record](docs/planning/SYNTHETIC-ENVIRONMENT-COST.md) |
 | Completed cloud foundation | [APP-007 managed evidence](evidence/APP-007/managed/README.md), [GateWasm teardown](evidence/APP-007/gatewasm-teardown.md) |
-| Local tenant implementation | [APP-008 ticket](Tickets/2-in-progress/APP-008.md), [schema evidence](evidence/APP-008/schema/README.md), [native evidence](evidence/APP-008/native/README.md), [final native R5 review](evidence/APP-008/native/r5/independent-review.md), [schema compatibility review](evidence/APP-008/schema/independent-compatibility-review.md) |
+| Local tenant implementation | [APP-008 ticket](Tickets/3-in-review/APP-008.md), [schema evidence](evidence/APP-008/schema/README.md), [native evidence](evidence/APP-008/native/README.md), [final native R5 review](evidence/APP-008/native/r5/independent-review.md), [schema compatibility review](evidence/APP-008/schema/independent-compatibility-review.md) |
 | Managed tenant work still needed | [Full managed plan](evidence/APP-008/managed-plan.md), [preparation slices](evidence/APP-008/managed-harness-preparation.md), [accepted shared-case extraction](evidence/APP-008/native/shared-cases/README.md), [unfinished entry handoff](evidence/APP-008/native/managed-entry/HANDOFF.md), [incomplete independent review](evidence/APP-008/native/managed-entry/independent-handoff-review.md) |
 | Fixtures | [Fixture package](fixtures/README.md), [APP-011 independent review](evidence/APP-011/independent-review.md), [final reset receipt](evidence/APP-011/reset-independent-catalog-path-final/summary.json) |
 | Auth consumer | [Verifier spike](spikes/APP-006/README.md), [callback contract](evidence/APP-006/hosted-callback/README.md), [private secret transport](evidence/APP-006/hosted-callback/secret-wiring/README.md), [schema1 sequencing](evidence/APP-006/hosted-callback/schema-one-sequence/README.md) |
