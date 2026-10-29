@@ -1,44 +1,205 @@
 //! Isolated, explicitly armed test executable only. Never a service entry.
+//!
+//! APP-075 (ADR-005) owns this entry. It is compiled only into the `cfg(test)`
+//! library test executable and runs the shared application-data-read-only
+//! cases through production `Settings::new`/`Stores` against the fixed RDS
+//! hostname, port 5432 and the CA at its fixed path. It exposes no endpoint,
+//! role, SQL, CA path or transport override.
+//!
+//! # Invocation
+//!
+//! Exactly `<test-executable> --exact
+//! storage::managed_qualification::managed_readonly_entry --ignored
+//! --nocapture --test-threads=1`, as UID 65532, with
+//! `GENUI_APP008_MANAGED_QUALIFICATION=APP-008`, the closed run manifest, the
+//! byte-exact synthetic registry and the credential file owned 0600 in the
+//! 0700 `/run/genui`, and the CA at `/etc/ssl/certs/rds-global-bundle.pem`.
+//!
+//! # Original deadline
+//!
+//! The manifest's `issued_at`/`expires_at` span at most 600 s; `issued_at` may
+//! lead this clock by at most 5 s (as `config.rs` allows) and at least 60 s
+//! must remain when the manifest is validated. The wall clock and the
+//! monotonic clock are sampled together before any file is read, so validation
+//! time never renews the deadline. Cases stop 4 s before the original expiry,
+//! cancellation must be acknowledged 3 s before it and pool closure must finish
+//! 1 s before it. A watchdog thread exits the process with status 124 at the
+//! original expiry whatever the main thread is doing (including a blocked
+//! stdout write); that exit emits no result line.
+//!
+//! # Output (stdout-drain contract)
+//!
+//! stdout carries libtest's own lines, `APP008 check: <name>` progress lines
+//! (the first shares libtest's `test <name> ... ` line) and at most one final
+//! line beginning `APP008_MANAGED_RESULT <json>`, preceded by a newline, whose
+//! JSON is at most 8,192 bytes. Readers select lines by that prefix. The reader (the qualification supervisor or the local
+//! harness) must drain stdout and stderr continuously until EOF: `println!`
+//! blocks on a full pipe, and a stalled reader therefore ends in the watchdog
+//! exit without a result. A missing result line is a failure. stderr is not
+//! part of the contract; a process-wide panic hook installed before anything
+//! else suppresses every panic payload, and task panic payloads are dropped.
+//!
+//! # Cleanup receipt
+//!
+//! `cleanup_confirmed` is true only when the case task finished (or its abort
+//! was acknowledged), `Stores::close` succeeded and all eight transport
+//! permits are free. Refusals before store construction report
+//! `cleanup_applicable:false`. A non-case (entry) panic reports `entry_panic`
+//! with cleanup unconfirmed. `passed:true` requires confirmed cleanup.
 use super::{pool, qualification_cases as cases, valid_id, Settings, Stores, TrustedRequest};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
     fs::OpenOptions,
-    io::Read,
+    future::Future,
+    io::{Read, Write},
     os::unix::fs::{MetadataExt, OpenOptionsExt},
-    path::{Component, Path},
+    panic::{catch_unwind, AssertUnwindSafe},
+    path::{Component, Path, PathBuf},
     sync::{mpsc, Arc},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::time::{timeout_at, Instant};
 
 const ENTRY: &str = "storage::managed_qualification::managed_readonly_entry";
+const ARGUMENTS: [&str; 5] = [
+    "--exact",
+    ENTRY,
+    "--ignored",
+    "--nocapture",
+    "--test-threads=1",
+];
 const SCOPE: &str = "APP-008 isolated application-data-read-only qualification";
 const ARM: &str = "GENUI_APP008_MANAGED_QUALIFICATION";
+const ARM_VALUE: &str = "APP-008";
+const UID: u32 = 65532;
 const HOST: &str = "genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg.cg58i06y2r4e.us-east-1.rds.amazonaws.com";
 const RESOURCE_ID: &str = "db-KW4LRMTPI5YXHZXF4LELQZKTAU";
+const ISSUER: &str = "app008-fixture-only";
 const MANIFEST: &str = "/run/genui/app008-managed-run.json";
 const CREDENTIALS: &str = "/run/genui/credentials.json";
 const REGISTRY: &str = "/run/genui/app008-managed-registry.json";
 const CA: &str = "/etc/ssl/certs/rds-global-bundle.pem";
-const FIXTURE_SHA: &str = "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459";
+// Seed provenance: fixtures/phase-one/v1/setup.json plus the two contract
+// fixtures tenant_seed.make_bundles actually reads. A unit test compares these
+// with the repository bytes; the executable cannot prove which bytes seeded
+// the target, so they are declared pins the operator must match.
+const FIXTURE_SETUP_SHA: &str = "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459";
+const SEED_NORTHSTAR_SHA: &str = "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592";
+const SEED_SPEND_REVIEW_SHA: &str =
+    "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650";
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
 const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v4.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
-const RESERVE: Duration = Duration::from_secs(4);
+const MANIFEST_LIMIT: u64 = 8192;
+const REGISTRY_LIMIT: u64 = 16384;
+const CREDENTIALS_LIMIT: u64 = 65536;
+const CA_LIMIT: u64 = 1024 * 1024;
+const MAX_SPAN: u64 = 600;
+const ISSUED_SKEW: u64 = 5;
+const MIN_REMAINING: Duration = Duration::from_secs(60);
+const CASE_RESERVE: Duration = Duration::from_secs(4);
+const ABORT_RESERVE: Duration = Duration::from_secs(3);
+const CLOSE_RESERVE: Duration = Duration::from_secs(1);
+const RESULT_PREFIX: &str = "APP008_MANAGED_RESULT";
+const RESULT_LIMIT: usize = 8192;
 
-#[derive(Clone, Deserialize, Serialize)]
+/// Every source compiled into the library test executable, in this order.
+/// Embedded catalog/migration resources are pinned separately below. This is
+/// a binding of compiled inputs, not a whole-image or Git-revision attestation.
+const SOURCES: [(&str, &[u8]); 27] = [
+    ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
+    ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
+    (
+        "app/src/admission/canonical.rs",
+        include_bytes!("../admission/canonical.rs"),
+    ),
+    (
+        "app/src/admission/digest.rs",
+        include_bytes!("../admission/digest.rs"),
+    ),
+    (
+        "app/src/admission/mod.rs",
+        include_bytes!("../admission/mod.rs"),
+    ),
+    (
+        "app/src/admission/tests.rs",
+        include_bytes!("../admission/tests.rs"),
+    ),
+    (
+        "app/src/admission/validate.rs",
+        include_bytes!("../admission/validate.rs"),
+    ),
+    (
+        "app/src/auth_qualification.rs",
+        include_bytes!("../auth_qualification.rs"),
+    ),
+    (
+        "app/src/auth_qualification/tests.rs",
+        include_bytes!("../auth_qualification/tests.rs"),
+    ),
+    ("app/src/config.rs", include_bytes!("../config.rs")),
+    ("app/src/lib.rs", include_bytes!("../lib.rs")),
+    ("app/src/readiness.rs", include_bytes!("../readiness.rs")),
+    ("app/src/roles.rs", include_bytes!("../roles.rs")),
+    (
+        "app/src/storage/admission.rs",
+        include_bytes!("admission.rs"),
+    ),
+    (
+        "app/src/storage/admission_qualification.rs",
+        include_bytes!("admission_qualification.rs"),
+    ),
+    (
+        "app/src/storage/authorization.rs",
+        include_bytes!("authorization.rs"),
+    ),
+    ("app/src/storage/catalog.rs", include_bytes!("catalog.rs")),
+    (
+        "app/src/storage/managed_qualification.rs",
+        include_bytes!("managed_qualification.rs"),
+    ),
+    (
+        "app/src/storage/managed_qualification/tests.rs",
+        include_bytes!("managed_qualification/tests.rs"),
+    ),
+    ("app/src/storage/mod.rs", include_bytes!("mod.rs")),
+    ("app/src/storage/pool.rs", include_bytes!("pool.rs")),
+    (
+        "app/src/storage/qualification.rs",
+        include_bytes!("qualification.rs"),
+    ),
+    (
+        "app/src/storage/qualification_cases.rs",
+        include_bytes!("qualification_cases.rs"),
+    ),
+    ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
+    ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
+    (
+        "spikes/APP-006/Cargo.toml",
+        include_bytes!("../../../spikes/APP-006/Cargo.toml"),
+    ),
+    (
+        "spikes/APP-006/src/lib.rs",
+        include_bytes!("../../../spikes/APP-006/src/lib.rs"),
+    ),
+];
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Pins {
     source_bundle_sha256: String,
     fixture_setup_sha256: String,
+    seed_northstar_sha256: String,
+    seed_spend_review_sha256: String,
     catalog_query_sha256: String,
-    catalog_v2_sha256: String,
+    database_version: u32,
+    catalog_sha256: String,
     migrations_manifest_sha256: String,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Manifest {
     schema_version: u32,
@@ -63,12 +224,13 @@ struct Validated {
     deadline: Instant,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Failure {
     Configuration,
     Case,
     Deadline,
     Cleanup,
+    EntryPanic,
 }
 impl Failure {
     fn code(self) -> &'static str {
@@ -77,10 +239,47 @@ impl Failure {
             Self::Case => "case_refused",
             Self::Deadline => "original_deadline_reached",
             Self::Cleanup => "cleanup_unconfirmed",
+            Self::EntryPanic => "entry_panic",
         }
     }
 }
 type Result<T> = std::result::Result<T, Failure>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Cleanup {
+    /// Refused before any store (and therefore transport) could exist.
+    NotApplicable,
+    Confirmed,
+    Unconfirmed,
+}
+
+/// Fixed in the entry; only unit tests substitute private temporary paths.
+struct Paths {
+    manifest: PathBuf,
+    credentials: PathBuf,
+    registry: PathBuf,
+    ca: PathBuf,
+}
+impl Paths {
+    fn fixed() -> Self {
+        Self {
+            manifest: MANIFEST.into(),
+            credentials: CREDENTIALS.into(),
+            registry: REGISTRY.into(),
+            ca: CA.into(),
+        }
+    }
+}
+
+/// Process facts sampled once at entry: arguments, effective UID, arming
+/// value and the paired wall/monotonic clock samples.
+struct Environment {
+    args: Vec<String>,
+    euid: u32,
+    arm: Option<String>,
+    now: SystemTime,
+    monotonic: Instant,
+}
 
 fn require(condition: bool) -> Result<()> {
     if condition {
@@ -95,33 +294,16 @@ fn digest(bytes: &[u8]) -> String {
         .map(|b| format!("{b:02x}"))
         .collect()
 }
+fn lower_hex_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+/// Name + NUL + lowercase file SHA-256 + newline per file, then SHA-256.
 fn source_bundle_sha256() -> String {
-    // Compiled storage/entry inputs, not a claim about the complete image or
-    // an externally supplied Git revision. Name + NUL + file SHA + newline.
-    let files: [(&str, &[u8]); 11] = [
-        ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
-        ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
-        ("app/src/config.rs", include_bytes!("../config.rs")),
-        ("app/src/lib.rs", include_bytes!("../lib.rs")),
-        (
-            "app/src/storage/authorization.rs",
-            include_bytes!("authorization.rs"),
-        ),
-        ("app/src/storage/catalog.rs", include_bytes!("catalog.rs")),
-        (
-            "app/src/storage/managed_qualification.rs",
-            include_bytes!("managed_qualification.rs"),
-        ),
-        ("app/src/storage/mod.rs", include_bytes!("mod.rs")),
-        ("app/src/storage/pool.rs", include_bytes!("pool.rs")),
-        (
-            "app/src/storage/qualification_cases.rs",
-            include_bytes!("qualification_cases.rs"),
-        ),
-        ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
-    ];
     let mut binding = Vec::new();
-    for (name, raw) in files {
+    for (name, raw) in SOURCES {
         binding.extend_from_slice(name.as_bytes());
         binding.push(0);
         binding.extend_from_slice(digest(raw).as_bytes());
@@ -129,23 +311,38 @@ fn source_bundle_sha256() -> String {
     }
     digest(&binding)
 }
+fn database_version() -> u32 {
+    serde_json::from_slice::<Value>(MIGRATIONS)
+        .ok()
+        .and_then(|value| value["database_version"].as_u64())
+        .and_then(|value| u32::try_from(value).ok())
+        .unwrap_or(0)
+}
 fn expected_pins() -> Pins {
     Pins {
         source_bundle_sha256: source_bundle_sha256(),
-        fixture_setup_sha256: FIXTURE_SHA.into(),
+        fixture_setup_sha256: FIXTURE_SETUP_SHA.into(),
+        seed_northstar_sha256: SEED_NORTHSTAR_SHA.into(),
+        seed_spend_review_sha256: SEED_SPEND_REVIEW_SHA.into(),
         catalog_query_sha256: digest(QUERY),
-        catalog_v2_sha256: digest(CATALOG),
+        database_version: database_version(),
+        catalog_sha256: digest(CATALOG),
         migrations_manifest_sha256: digest(MIGRATIONS),
     }
 }
+/// Canonical synthetic registry: serde_json object keys are sorted, compact.
 fn registry_bytes(run: &str) -> Vec<u8> {
     serde_json::to_vec(&json!({"schema_version":1,"registry_version":run,"bindings":[
-        {"issuer":"app008-fixture-only","provider_tenant_id":format!("ten_{}",cases::ORG),"organization_id":cases::ORG},
-        {"issuer":"app008-fixture-only","provider_tenant_id":format!("ten_{}",cases::OTHER),"organization_id":cases::OTHER}
+        {"issuer":ISSUER,"provider_tenant_id":format!("ten_{}",cases::ORG),"organization_id":cases::ORG},
+        {"issuer":ISSUER,"provider_tenant_id":format!("ten_{}",cases::OTHER),"organization_id":cases::OTHER}
     ]})).expect("fixed registry serialization")
 }
 
-fn bytes(path: &Path, limit: u64, private: bool) -> Result<Vec<u8>> {
+/// Reads one input without following links or blocking on FIFOs. Private
+/// inputs must be owned by `uid`, mode 0600, in a 0700 directory owned by
+/// `uid`; the public CA must not be group/world writable. Every input must be
+/// a single-link regular file within `limit` bytes under real directories.
+fn bytes(path: &Path, limit: u64, private: bool, uid: u32) -> Result<Vec<u8>> {
     require(
         path.is_absolute()
             && path
@@ -160,13 +357,12 @@ fn bytes(path: &Path, limit: u64, private: bool) -> Result<Vec<u8>> {
                 .is_dir(),
         )?;
     }
-    let uid = unsafe { libc::geteuid() };
-    let parent = path
-        .parent()
-        .ok_or(Failure::Configuration)?
-        .symlink_metadata()
-        .map_err(|_| Failure::Configuration)?;
     if private {
+        let parent = path
+            .parent()
+            .ok_or(Failure::Configuration)?
+            .symlink_metadata()
+            .map_err(|_| Failure::Configuration)?;
         require(parent.uid() == uid && parent.mode() & 0o777 == 0o700)?;
     }
     let file = OpenOptions::new()
@@ -189,11 +385,10 @@ fn bytes(path: &Path, limit: u64, private: bool) -> Result<Vec<u8>> {
     Ok(raw)
 }
 
-fn parse(raw: &[u8], now: SystemTime) -> Result<Validated> {
-    // Pair the monotonic origin with the caller's fresh wall-clock sample
-    // before parsing/hashing, so validation time cannot renew the deadline.
-    let monotonic_sample = Instant::now();
-    require(!raw.is_empty() && raw.len() <= 8192)?;
+/// Closed manifest: unknown or duplicate keys, a wrong selector/target or
+/// pin, or an original interval outside the bounds refuse the whole run.
+fn parse(raw: &[u8], now: SystemTime, monotonic: Instant) -> Result<Validated> {
+    require(!raw.is_empty() && raw.len() as u64 <= MANIFEST_LIMIT)?;
     let manifest: Manifest = serde_json::from_slice(raw).map_err(|_| Failure::Configuration)?;
     require(manifest.schema_version == 1 && manifest.scope == SCOPE && manifest.armed)?;
     require(valid_id(&manifest.run_id) && manifest.run_id.as_bytes()[14] == b'4')?;
@@ -202,9 +397,9 @@ fn parse(raw: &[u8], now: SystemTime) -> Result<Validated> {
         .map_err(|_| Failure::Configuration)?
         .as_secs();
     require(
-        manifest.issued_at <= now_seconds
+        manifest.issued_at <= now_seconds.saturating_add(ISSUED_SKEW)
             && manifest.expires_at > manifest.issued_at
-            && manifest.expires_at - manifest.issued_at <= 600,
+            && manifest.expires_at - manifest.issued_at <= MAX_SPAN,
     )?;
     let expiry = UNIX_EPOCH
         .checked_add(Duration::from_secs(manifest.expires_at))
@@ -212,7 +407,9 @@ fn parse(raw: &[u8], now: SystemTime) -> Result<Validated> {
     let remaining = expiry
         .duration_since(now)
         .map_err(|_| Failure::Configuration)?;
-    require(remaining > RESERVE && remaining <= Duration::from_secs(600))?;
+    require(
+        remaining >= MIN_REMAINING && remaining <= Duration::from_secs(MAX_SPAN + ISSUED_SKEW),
+    )?;
     require(
         manifest.database_host == HOST
             && manifest.database_port == 5432
@@ -220,46 +417,40 @@ fn parse(raw: &[u8], now: SystemTime) -> Result<Validated> {
             && manifest.declared_rds_resource_id == RESOURCE_ID
             && manifest.organizations == [cases::ORG, cases::OTHER],
     )?;
-    let pins = expected_pins();
-    require(
-        manifest.pins.source_bundle_sha256 == pins.source_bundle_sha256
-            && manifest.pins.fixture_setup_sha256 == pins.fixture_setup_sha256
-            && manifest.pins.catalog_query_sha256 == pins.catalog_query_sha256
-            && manifest.pins.catalog_v2_sha256 == pins.catalog_v2_sha256
-            && manifest.pins.migrations_manifest_sha256 == pins.migrations_manifest_sha256,
-    )?;
+    require(manifest.pins == expected_pins())?;
     require(manifest.registry_sha256 == digest(&registry_bytes(&manifest.run_id)))?;
-    require(
-        manifest.ca_sha256.len() == 64
-            && manifest
-                .ca_sha256
-                .bytes()
-                .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)),
-    )?;
+    require(lower_hex_sha256(&manifest.ca_sha256))?;
     Ok(Validated {
         manifest,
         manifest_sha256: digest(raw),
-        deadline: monotonic_sample + remaining,
+        deadline: monotonic + remaining,
     })
 }
 
-fn load() -> Result<Validated> {
-    require(unsafe { libc::geteuid() } == 65532)?;
-    require(std::env::var(ARM).ok().as_deref() == Some("APP-008"))?;
-    let raw = bytes(Path::new(MANIFEST), 8192, true)?;
-    let validated = parse(&raw, SystemTime::now())?;
-    validate_files(&validated)?;
+fn load(environment: &Environment) -> Result<Validated> {
+    load_as(environment, &Paths::fixed(), UID)
+}
+fn load_as(environment: &Environment, paths: &Paths, uid: u32) -> Result<Validated> {
+    require(environment.euid == uid)?;
+    require(environment.arm.as_deref() == Some(ARM_VALUE))?;
+    let raw = bytes(&paths.manifest, MANIFEST_LIMIT, true, uid)?;
+    let validated = parse(&raw, environment.now, environment.monotonic)?;
+    validate_files(&validated, paths, uid)?;
     Ok(validated)
 }
-fn validate_files(validated: &Validated) -> Result<()> {
-    require(digest(&bytes(Path::new(MANIFEST), 8192, true)?) == validated.manifest_sha256)?;
+/// Re-run after the cases as well: a replaced input voids the receipt.
+fn validate_files(validated: &Validated, paths: &Paths, uid: u32) -> Result<()> {
     require(
-        bytes(Path::new(REGISTRY), 16384, true)? == registry_bytes(&validated.manifest.run_id),
+        digest(&bytes(&paths.manifest, MANIFEST_LIMIT, true, uid)?) == validated.manifest_sha256,
     )?;
-    require(digest(&bytes(Path::new(CA), 1024 * 1024, false)?) == validated.manifest.ca_sha256)?;
-    bytes(Path::new(CREDENTIALS), 65536, true)?;
+    require(
+        bytes(&paths.registry, REGISTRY_LIMIT, true, uid)?
+            == registry_bytes(&validated.manifest.run_id),
+    )?;
+    require(digest(&bytes(&paths.ca, CA_LIMIT, false, uid)?) == validated.manifest.ca_sha256)?;
+    bytes(&paths.credentials, CREDENTIALS_LIMIT, true, uid)?;
     let config =
-        crate::config::Config::load(Path::new(CREDENTIALS)).map_err(|_| Failure::Configuration)?;
+        crate::config::Config::load(&paths.credentials).map_err(|_| Failure::Configuration)?;
     require(config.database_host == HOST && config.database_name == "genui")?;
     require(
         SystemTime::now() < UNIX_EPOCH + Duration::from_secs(validated.manifest.expires_at)
@@ -268,6 +459,7 @@ fn validate_files(validated: &Validated) -> Result<()> {
     Ok(())
 }
 
+/// Exits the whole process with status 124 at the original deadline.
 struct Watchdog(
     Option<mpsc::SyncSender<()>>,
     Option<std::thread::JoinHandle<()>>,
@@ -279,7 +471,7 @@ impl Watchdog {
         let thread = std::thread::Builder::new()
             .name("app008-original-deadline".into())
             .spawn(move || {
-                if receiver.recv_timeout(remaining).is_err() {
+                if let Err(mpsc::RecvTimeoutError::Timeout) = receiver.recv_timeout(remaining) {
                     std::process::exit(124);
                 }
             })
@@ -298,57 +490,58 @@ impl Drop for Watchdog {
     }
 }
 
-async fn execute(validated: &Validated) -> (Result<Vec<Value>>, bool) {
-    let settings = match Settings::new(CREDENTIALS.into(), REGISTRY.into(), CA.into(), HOST.into())
-    {
-        Ok(settings) => settings,
-        Err(_) => return (Err(Failure::Configuration), true),
+fn before(deadline: Instant, reserve: Duration) -> Instant {
+    deadline.checked_sub(reserve).unwrap_or_else(Instant::now)
+}
+
+/// Constructs the stores, runs `cases` in one task bounded by the original
+/// deadline and proves cleanup. Only a finished (or abort-acknowledged) task,
+/// a successful `Stores::close` and eight free transport permits confirm it.
+async fn supervise<F, Fut>(
+    settings: std::result::Result<Settings, super::Error>,
+    deadline: Instant,
+    cases: F,
+    recheck: impl FnOnce() -> Result<()>,
+) -> (Result<Vec<Value>>, Cleanup)
+where
+    F: FnOnce(Arc<Stores>) -> Fut,
+    Fut: Future<Output = Vec<Value>> + Send + 'static,
+{
+    let Ok(settings) = settings else {
+        return (Err(Failure::Configuration), Cleanup::NotApplicable);
     };
     let stores = match Stores::new(settings) {
         Ok(stores) => Arc::new(stores),
-        Err(_) => return (Err(Failure::Configuration), true),
+        Err(_) => return (Err(Failure::Configuration), Cleanup::NotApplicable),
     };
-    let case_stores = stores.clone();
-    let mut task = tokio::spawn(async move {
-        let mut checks = Vec::new();
-        cases::readiness(&case_stores, &mut checks).await;
-        cases::read_only_and_reuse(
-            &case_stores,
-            |organization, principal, epoch| TrustedRequest {
-                organization: organization.into(),
-                principal: principal.into(),
-                epoch,
-                issuer: "app008-fixture-only".into(),
-                provider_tenant: format!("ten_{organization}"),
-                provider_subject: format!("usr_{principal}"),
-                registry_sha256: case_stores.registry_identity().sha256.clone(),
-            },
-            &mut checks,
-        )
-        .await;
-        checks
-    });
-    let (result, task_finished) = match timeout_at(validated.deadline - RESERVE, &mut task).await {
+    let mut task = tokio::spawn(cases(stores.clone()));
+    let (result, task_finished) = match timeout_at(before(deadline, CASE_RESERVE), &mut task).await
+    {
         Ok(Ok(checks)) => (Ok(checks), true),
+        // The JoinError (and any panic payload in it) is dropped unread.
         Ok(Err(_)) => (Err(Failure::Case), true),
         Err(_) => {
             task.abort();
             // Await cancellation before closing pools; no detached owner may
             // survive while a successful cleanup receipt is emitted.
-            let finished = timeout_at(validated.deadline - Duration::from_secs(3), &mut task)
+            let finished = timeout_at(before(deadline, ABORT_RESERVE), &mut task)
                 .await
                 .is_ok();
             (Err(Failure::Deadline), finished)
         }
     };
-    let cleanup = matches!(
-        timeout_at(validated.deadline, stores.close()).await,
+    let closed = matches!(
+        timeout_at(before(deadline, CLOSE_RESERVE), stores.close()).await,
         Ok(Ok(()))
-    ) && pool::slots().0 == 0
-        && task_finished;
-    let result = if !cleanup {
+    );
+    let cleanup = if task_finished && closed && pool::slots().0 == 0 {
+        Cleanup::Confirmed
+    } else {
+        Cleanup::Unconfirmed
+    };
+    let result = if cleanup != Cleanup::Confirmed {
         Err(Failure::Cleanup)
-    } else if validate_files(validated).is_err() {
+    } else if recheck().is_err() {
         Err(Failure::Configuration)
     } else {
         result
@@ -356,13 +549,37 @@ async fn execute(validated: &Validated) -> (Result<Vec<Value>>, bool) {
     (result, cleanup)
 }
 
-fn report(validated: Option<&Validated>, result: Result<Vec<Value>>, cleanup: bool) -> Value {
+async fn production_cases(stores: Arc<Stores>) -> Vec<Value> {
+    let mut checks = Vec::new();
+    cases::readiness(&stores, &mut checks).await;
+    let registry_sha256 = stores.registry_identity().sha256.clone();
+    cases::read_only_and_reuse(
+        &stores,
+        |organization, principal, epoch| TrustedRequest {
+            organization: organization.into(),
+            principal: principal.into(),
+            epoch,
+            issuer: ISSUER.into(),
+            provider_tenant: format!("ten_{organization}"),
+            provider_subject: format!("usr_{principal}"),
+            registry_sha256: registry_sha256.clone(),
+        },
+        &mut checks,
+    )
+    .await;
+    checks
+}
+
+fn report(validated: Option<&Validated>, result: Result<Vec<Value>>, cleanup: Cleanup) -> Value {
     let (passed, checks, error) = match result {
-        Ok(checks) => (true, checks, None),
+        Ok(checks) if cleanup == Cleanup::Confirmed => (true, checks, None),
+        Ok(_) => (false, Vec::new(), Some(Failure::Cleanup.code())),
         Err(error) => (false, Vec::new(), Some(error.code())),
     };
     json!({"schema_version":1,"scope":SCOPE,"passed":passed,"error":error,"checks":checks,
-        "cleanup_confirmed":cleanup,"run_id":validated.map(|v|&v.manifest.run_id),
+        "cleanup_applicable":cleanup != Cleanup::NotApplicable,
+        "cleanup_confirmed":cleanup == Cleanup::Confirmed,
+        "run_id":validated.map(|v|&v.manifest.run_id),
         "original_issued_at":validated.map(|v|v.manifest.issued_at),"original_expires_at":validated.map(|v|v.manifest.expires_at),
         "manifest_sha256":validated.map(|v|&v.manifest_sha256),"resource_pins":expected_pins(),
         "declared_control_plane_resource_id":RESOURCE_ID,
@@ -372,61 +589,105 @@ fn report(validated: Option<&Validated>, result: Result<Vec<Value>>, cleanup: bo
         "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."]})
 }
 
+/// The whole entry after argument capture: selector, arming, inputs,
+/// watchdog, runtime, cases, cleanup and the bounded report.
+fn run(environment: Environment) -> (Value, Option<Watchdog>) {
+    if environment.args != ARGUMENTS {
+        return (
+            report(None, Err(Failure::Configuration), Cleanup::NotApplicable),
+            None,
+        );
+    }
+    let validated = match load(&environment) {
+        Ok(validated) => validated,
+        Err(error) => return (report(None, Err(error), Cleanup::NotApplicable), None),
+    };
+    let watchdog = match Watchdog::start(validated.deadline) {
+        Ok(watchdog) => watchdog,
+        Err(error) => {
+            return (
+                report(Some(&validated), Err(error), Cleanup::NotApplicable),
+                None,
+            )
+        }
+    };
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(_) => {
+            return (
+                report(
+                    Some(&validated),
+                    Err(Failure::Configuration),
+                    Cleanup::NotApplicable,
+                ),
+                Some(watchdog),
+            )
+        }
+    };
+    let settings = Settings::new(CREDENTIALS.into(), REGISTRY.into(), CA.into(), HOST.into());
+    let (outcome, cleanup) = runtime.block_on(supervise(
+        settings,
+        validated.deadline,
+        production_cases,
+        || validate_files(&validated, &Paths::fixed(), UID),
+    ));
+    runtime.shutdown_timeout(Duration::ZERO);
+    (report(Some(&validated), outcome, cleanup), Some(watchdog))
+}
+
+/// Installs the silent panic hook, then runs `body`. A panic escaping `body`
+/// (outside the case task) becomes `entry_panic` with cleanup unconfirmed.
+fn guarded(body: impl FnOnce() -> (Value, Option<Watchdog>)) -> (Value, Option<Watchdog>) {
+    // No assertion or driver panic payload may reach the harness output.
+    std::panic::set_hook(Box::new(|_| {}));
+    catch_unwind(AssertUnwindSafe(body)).unwrap_or_else(|_| {
+        (
+            report(None, Err(Failure::EntryPanic), Cleanup::Unconfirmed),
+            None,
+        )
+    })
+}
+
+/// Writes the single bounded result line; returns whether it passed.
+fn emit(result: Value, watchdog: Option<Watchdog>, out: &mut impl Write) -> bool {
+    let (passed, encoded) = match serde_json::to_string(&result) {
+        Ok(encoded) if encoded.len() <= RESULT_LIMIT => (result["passed"] == true, encoded),
+        _ => (
+            false,
+            json!({"schema_version":1,"scope":SCOPE,"passed":false,"error":"report_refused",
+                "checks":[],"cleanup_applicable":true,"cleanup_confirmed":false})
+            .to_string(),
+        ),
+    };
+    // libtest has already written "test <name> ... " without a newline; the
+    // leading newline puts the result at the start of its own line.
+    let written = write!(out, "\n{RESULT_PREFIX} {encoded}\n").and_then(|_| out.flush());
+    // The watchdog stays armed until the result line is written.
+    drop(watchdog);
+    passed && written.is_ok()
+}
+
 #[test]
 #[ignore = "operator-only exact selector, fixed arming and private immutable run manifest required"]
 fn managed_readonly_entry() -> std::result::Result<(), &'static str> {
-    // No assertion or driver panic payload may reach the test harness output.
-    std::panic::set_hook(Box::new(|_| {}));
-    let result = std::panic::catch_unwind(|| {
-        let args: Vec<String> = std::env::args().skip(1).collect();
-        if args
-            != [
-                "--exact",
-                ENTRY,
-                "--ignored",
-                "--nocapture",
-                "--test-threads=1",
-            ]
-        {
-            return (report(None, Err(Failure::Configuration), true), None);
-        }
-        let validated = match load() {
-            Ok(validated) => validated,
-            Err(error) => return (report(None, Err(error), true), None),
-        };
-        let watchdog = match Watchdog::start(validated.deadline) {
-            Ok(watchdog) => watchdog,
-            Err(error) => return (report(Some(&validated), Err(error), true), None),
-        };
-        let runtime = match tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_all()
-            .build()
-        {
-            Ok(runtime) => runtime,
-            Err(_) => {
-                return (
-                    report(Some(&validated), Err(Failure::Configuration), true),
-                    Some(watchdog),
-                )
-            }
-        };
-        let (outcome, cleanup) = runtime.block_on(execute(&validated));
-        runtime.shutdown_timeout(Duration::ZERO);
-        (report(Some(&validated), outcome, cleanup), Some(watchdog))
-    });
-    let (result, watchdog) =
-        result.unwrap_or_else(|_| (report(None, Err(Failure::Case), false), None));
-    let passed = result["passed"] == true;
-    let encoded = serde_json::to_string(&result).map_err(|_| "managed qualification refused")?;
-    if encoded.len() > 8192 {
-        return Err("managed qualification refused");
-    }
-    println!("APP008_MANAGED_RESULT {encoded}");
-    drop(watchdog);
-    if passed {
+    // Paired clock samples precede every file read (see the module docs).
+    let environment = Environment {
+        args: std::env::args().skip(1).collect(),
+        euid: unsafe { libc::geteuid() },
+        arm: std::env::var(ARM).ok(),
+        now: SystemTime::now(),
+        monotonic: Instant::now(),
+    };
+    let (result, watchdog) = guarded(|| run(environment));
+    if emit(result, watchdog, &mut std::io::stdout().lock()) {
         Ok(())
     } else {
         Err("managed qualification refused")
     }
 }
+
+mod tests;
