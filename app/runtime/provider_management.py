@@ -19,7 +19,11 @@ crates/server/src/handlers/management.rs blob bc12859a):
   invitations for the same address (:1722-1733);
 - `GET /manage/invites?limit=&offset=` → 200 `{invites: [...], total, limit,
   offset}`, `created_at DESC`, limit 1..200 (:1550-1670); there is no lookup by
-  id or address, so inspection pages through the list;
+  id or address, so inspection pages through the list. Each item carries
+  `invited_by_user_id` (:1603,1653): null for a management-key create (the
+  management middleware inserts no user claims, middleware/management_auth.rs:59;
+  create binds the absent claims at :1678,1744), a user id for a console or
+  admin-UI create;
 - `POST /manage/invites/{id}/revoke` → 200 `{success: true, invite_id}`, or 404
   `invite_not_found` when the tenant has no *pending* invitation with that id
   (:1802-1832). Repeating a revoke is therefore safe; repeating a create is not.
@@ -35,9 +39,11 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import socket
 import ssl
 import stat
+import tempfile
 import threading
 import time
 from urllib.parse import urlsplit
@@ -53,6 +59,7 @@ PROVIDER_DEFAULTS = {
     "reconcile_clock_skew_seconds": 300,
     "reconcile_operations_max": 100,
     "provider_invitation_hours_default": 72,
+    "create_send_margin_seconds": 5,
 }
 ENV_URL = "GENUI_PROVIDER_URL"
 ENV_KEY = "GENUI_PROVIDER_MANAGEMENT_KEY"
@@ -125,9 +132,57 @@ def _private_file(path):
         os.close(fd)
 
 
+# Folders whose contents a sync client copies off the operator host (review M2, interim
+# until ADR-003 names the approved store). Matched on any path component, case-folded,
+# of both the configured path and its real path.
+def _sync_class(parts):
+    folded = [part.casefold() for part in parts]
+    for i, part in enumerate(folded):
+        parent = folded[i - 1] if i else ""
+        if parent == "library" and part == "mobile documents" or part == "icloud drive":
+            return "sync:icloud_drive"
+        if parent == "library" and part == "cloudstorage":
+            return "sync:cloud_storage"
+        if part == "dropbox" or part.startswith(("dropbox (", "dropbox-")):
+            return "sync:dropbox"
+        if part in ("google drive", "my drive") or part.startswith("googledrive"):
+            return "sync:google_drive"
+        if part == "onedrive" or part.startswith(("onedrive -", "onedrive-")):
+            return "sync:onedrive"
+    return None
+
+
+def _under(path, root):
+    try:
+        Path(path).relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def directory_class(path):
+    """The capability directory's path class, recorded as evidence: `sync:<client>`
+    (refused), `temporary`, `home` or `other`. Never the path itself."""
+    real = os.path.realpath(path)
+    for candidate in (path, real):
+        found = _sync_class(Path(candidate).parts)
+        if found:
+            return found
+    temporary = {os.path.realpath(tempfile.gettempdir()), "/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp",
+                 "/var/folders", "/private/var/folders"}
+    if any(_under(real, root) or _under(path, root) for root in temporary):
+        return "temporary"
+    home = os.path.expanduser("~")
+    if home != "~" and (_under(real, os.path.realpath(home)) or _under(path, home)):
+        return "home"
+    return "other"
+
+
 def private_directory(path):
-    """An absolute directory, not a link, owned by this user, with no group or other access."""
+    """An absolute directory, not a link, owned by this user, with no group or other access,
+    and not inside a folder that a sync client copies off the host."""
     require(isinstance(path, str) and os.path.isabs(path), "provider_capability_directory_refused")
+    require(not directory_class(path).startswith("sync:"), "provider_capability_directory_synced")
     try:
         info = os.lstat(path)
     except OSError:
@@ -261,8 +316,10 @@ class RevokeOutcome:
 
 
 class Invite:
-    def __init__(self, remote_id, email, role_name, status, created_at):
+    def __init__(self, remote_id, email, role_name, status, created_at, invited_by=None):
         self.remote_id, self.email, self.role_name, self.status, self.created_at = remote_id, email, role_name, status, created_at
+        # None only for a management-key (API) create; a console or admin-UI create names its user.
+        self.invited_by = invited_by
 
 
 # Statuses that the contract returns before any write (management.rs:1680-1712,
@@ -350,14 +407,17 @@ class Client:
             older = False
             for item in body["invites"]:
                 require(isinstance(item, dict) and isinstance(item.get("id"), str) and isinstance(item.get("email"), str)
-                        and isinstance(item.get("status"), str), "provider_contract_mismatch")
+                        and isinstance(item.get("status"), str) and "invited_by_user_id" in item
+                        and (item["invited_by_user_id"] is None or isinstance(item["invited_by_user_id"], str)),
+                        "provider_contract_mismatch")
                 created = parse_time(item.get("created_at"))
                 if created < not_before:
                     older = True
                     continue
                 if item["id"] not in seen:
                     seen.add(item["id"])
-                    invites.append(Invite(item["id"], item["email"], item.get("role_name"), item["status"], created))
+                    invites.append(Invite(item["id"], item["email"], item.get("role_name"), item["status"], created,
+                                          item["invited_by_user_id"]))
             if older or not body["invites"] or (page + 1) * size >= body["total"]:
                 return invites
         raise Refused("provider_inspection_incomplete")
@@ -379,24 +439,43 @@ def _sync_directory(directory):
         os.close(fd)
 
 
+def _partial_path(directory, organization, invitation_id):
+    """A hidden, unique name the sweep never reads as a capability (review m6)."""
+    capability_path(directory, organization, invitation_id)
+    return Path(directory, ".%s.%s.%s.partial" % (organization, invitation_id, secrets.token_hex(8)))
+
+
 def write_capability(directory, organization, invitation_id, remote_id, token, expires_at):
-    """Create the 0600 capability file exclusively (O_EXCL, O_NOFOLLOW); never overwrite."""
+    """Write the 0600 capability under a private partial name, fsync it, then link it to its final
+    name, which never existed (link fails rather than overwrite). The final name therefore only
+    ever holds a complete record, so a concurrent sweep cannot read or delete a half-written one."""
     path = capability_path(directory, organization, invitation_id)
     require(isinstance(token, str) and TOKEN.fullmatch(token) is not None and isinstance(remote_id, str)
             and REMOTE_ID.fullmatch(remote_id) is not None, "provider_contract_mismatch")
     private_directory(str(directory))
     record = {"format": CAPABILITY_FORMAT, "organization_id": organization, "invitation_id": invitation_id,
               "remote_invitation_id": remote_id, "provider_expires_at": expires_at, "invite_token": token}
+    partial = _partial_path(directory, organization, invitation_id)
     try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), 0o600)
+        fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), 0o600)
     except OSError:
         raise Refused("capability_unwritable") from None
     try:
-        os.fchmod(fd, 0o600)
-        os.write(fd, json.dumps(record, sort_keys=True).encode("utf-8"))
-        os.fsync(fd)
+        try:
+            os.fchmod(fd, 0o600)
+            os.write(fd, json.dumps(record, sort_keys=True).encode("utf-8"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        try:
+            os.link(partial, path)
+        except OSError:
+            raise Refused("capability_unwritable") from None
     finally:
-        os.close(fd)
+        try:
+            os.unlink(partial)
+        except FileNotFoundError:
+            pass
     _sync_directory(directory)
     return path
 
@@ -405,8 +484,11 @@ def capability_present(directory, organization, invitation_id):
     return os.path.lexists(capability_path(directory, organization, invitation_id))
 
 
-def capability_expiry(directory, organization, invitation_id):
-    """The provider expiry recorded beside the token, or None when absent or unreadable."""
+def capability_record(directory, organization, invitation_id):
+    """The non-secret part of a well-formed capability (remote id and provider expiry), or None.
+
+    Its remote id came from a 201 that met the server-only contract, so reconcile takes it
+    from here instead of inspecting the provider (review M1(d))."""
     path = capability_path(directory, organization, invitation_id)
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
@@ -414,11 +496,42 @@ def capability_expiry(directory, organization, invitation_id):
         return None
     try:
         record = json.loads(os.read(fd, 65536).decode("utf-8"))
-        return parse_time(record["provider_expires_at"])
+        remote = record["remote_invitation_id"]
+        if (record["format"] != CAPABILITY_FORMAT or record["organization_id"] != organization
+                or record["invitation_id"] != invitation_id or not isinstance(remote, str) or REMOTE_ID.fullmatch(remote) is None
+                or not isinstance(record["invite_token"], str) or TOKEN.fullmatch(record["invite_token"]) is None):
+            return None
+        return {"remote_invitation_id": remote, "provider_expires_at": parse_time(record["provider_expires_at"])}
     except (ValueError, KeyError, TypeError, Refused):
         return None
     finally:
         os.close(fd)
+
+
+def capability_expiry(directory, organization, invitation_id):
+    """The provider expiry recorded beside the token, or None when absent or unreadable."""
+    record = capability_record(directory, organization, invitation_id)
+    return record["provider_expires_at"] if record else None
+
+
+def remove_stale_partials(directory, organization, older_than_seconds):
+    """Unlink this organization's partial writes older than the bound: a writer that stopped between
+    its write and its link (crash). A younger one may still be linked, so it is left alone."""
+    prefix, removed, now = "." + organization + ".", 0, time.time()
+    for name in os.listdir(directory):
+        if not (name.startswith(prefix) and name.endswith(".partial")):
+            continue
+        path = Path(directory, name)
+        try:
+            info = os.lstat(path)
+            if now - info.st_mtime > older_than_seconds:
+                os.unlink(path)
+                removed += 1
+        except FileNotFoundError:
+            continue
+    if removed:
+        _sync_directory(directory)
+    return removed
 
 
 def destroy_capability(directory, organization, invitation_id):

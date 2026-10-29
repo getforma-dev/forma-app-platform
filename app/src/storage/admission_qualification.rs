@@ -519,7 +519,7 @@ async fn campaign() {
             "provider":{"request_deadline_seconds":10,"connect_timeout_seconds":5,"response_bytes_max":1048576,
                 "list_page_size":200,"list_pages_max":50,"reconcile_grace_seconds":120,
                 "reconcile_clock_skew_seconds":300,"reconcile_operations_max":100,
-                "provider_invitation_hours_default":72}})
+                "provider_invitation_hours_default":72,"create_send_margin_seconds":5}})
     );
     assert_eq!(
         scalar(&fixture, "SELECT count(*) FROM genui.access_codes").await,

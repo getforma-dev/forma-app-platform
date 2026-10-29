@@ -97,10 +97,29 @@ class FakeFauth:
         with self.lock:
             return sum(1 for m, p in self.requests if m == method and p == route_path)
 
-    def create_direct(self, email, role="user", created_at=None):
-        """An invitation created outside GenUI (another console or tool)."""
+    def create_direct(self, email, role="user", created_at=None, invited_by=None):
+        """An invitation created outside GenUI: another management-key tool (invited_by None) or a
+        signed-in console or admin user (invited_by is that user's id, onboarding.rs:2618)."""
         with self.lock:
-            return self._create(email, role, created_at)[0]
+            invite_id = self._create(email, role, created_at)[0]
+            self.invites[invite_id]["invited_by_user_id"] = invited_by
+            return invite_id
+
+    def shift(self, predicate, seconds):
+        """Move matching invitations `seconds` into the past (test clock travel, paired with the
+        GenUI fixture's aging of its own rows); returns their ids."""
+        delta = datetime.timedelta(seconds=seconds)
+        with self.lock:
+            moved = [i for i in self.invites.values() if predicate(i)]
+            for invite in moved:
+                for key in ("created_at", "updated_at", "expires_at"):
+                    invite[key] -= delta
+            return [i["id"] for i in moved]
+
+    def set_status(self, invite_id, status):
+        """Upstream drift outside GenUI (the background sweeper, another create for the address)."""
+        with self.lock:
+            self.invites[invite_id].update(status=status, updated_at=_now())
 
     def register(self, invite_token, email):
         """Hosted registration stand-in: a valid pending invitation for this address becomes accepted."""
