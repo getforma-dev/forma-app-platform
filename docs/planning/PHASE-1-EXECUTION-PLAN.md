@@ -326,17 +326,17 @@ The joint six-hour identity rehearsal, its pre-start list and its in-window runb
 ### Task C0: Bind the merged provider contract (done 2026-10-29)
 
 - [x] `handoff/forma-247/README.md`, `config.example.json` and `provision.py` at gatewasm `dfba787` and `MAIL-VERIFICATION.md` plus the `return_entry_url` provisioning change at `1bf5d3b` are hash-bound in `evidence/APP-006/upstream-auth-source/merged-contract-2026-10-29/` (fetched from the now-public repository, blob SHA-1s matching GitHub's tree; the FormaStack checkout was not touched). APP-006 records the server-only invitation and PAR contract and the mail contract as accepted merged source; verification is attested through `user.email_verified`, not a JWT claim.
-- [x] Gate split applied in `Tickets/external-dependencies.json`: FORMA-247/248 cleared by disposition with the disposition record as evidence; FORMA-365 blocks APP-058 and APP-079; FORMA-366 blocks APP-076.
+- [x] Gate split applied in `Tickets/external-dependencies.json`: FORMA-247/248 cleared by disposition with the disposition record as evidence; FORMA-365 blocks APP-058 and APP-079; FORMA-366 (mail qualification) and FORMA-367 (lean deployment) block APP-076.
 
 ### Task C1: Victor's two choices (they block only the hosted steps C2–C3 and Track D)
 
 - [ ] The monthly figure for the always-on beta (ADR-008 default about $185–205/month including FormaStack's lean fAuth, or a scheduled daily window). Record it as a dated amendment in `docs/planning/SYNTHETIC-ENVIRONMENT-COST.md` and rewrite the ledger `basis` in `.cache/operations/beta/budget-ledger.json` from actual retained resources before any reservation.
 - [ ] The mail transport (default Amazon SES SMTP in account 877573132739 with a verified `getforma.dev` sender; alternative Resend). GenUI creates the DNS records at Porkbun and records the record ids privately; FormaStack configures fAuth's SMTP secret.
 
-### Task C2: FormaStack deploys fAuth lean for the beta (FORMA-366; FormaStack's work, GenUI receives)
+### Task C2: FormaStack deploys fAuth lean for the beta (FORMA-367 deployment, FORMA-366 mail qualification; FormaStack's work, GenUI receives)
 
 - [ ] Request from the FormaStack owner, with Victor's approvals quoted: a qualified image at or after `1bf5d3b`, a lean always-on deployment, tenants mapped to Northstar `…0001` and Canary `…0002`, the beta client with exact callback `https://beta.getforma.dev/auth/callback` and `return_entry_url` `https://beta.getforma.dev/signin/{handle}` (handles supplied by GenUI from APP-009's registry), the controlled-inbox trial receipt, and the deployed issuer identity plus `ten_`/`usr_` identifiers delivered privately.
-- [ ] Record the receipt under `evidence/APP-006/upstream-auth-source/`, write the private identity registry file (ADR-004, at most 32 bindings) and the beta client configuration into the execution secret, set FORMA-366 `cleared` in the register, regenerate the board; APP-076 leaves Blocked.
+- [ ] Record the receipt under `evidence/APP-006/upstream-auth-source/`, write the private identity registry file (ADR-004, at most 32 bindings) and the beta client configuration into the execution secret, set FORMA-366 and FORMA-367 `cleared` in the register, regenerate the board; APP-076 leaves Blocked. Request SES production access as soon as Victor chooses SES: the sandbox mails only verified addresses.
 
 ### Task C3: GenUI deploys the beta build (after Tasks 1–11 and B6)
 
