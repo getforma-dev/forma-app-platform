@@ -31,6 +31,7 @@ jobs:
           python3 scripts/check-schema-pins.py
           app/runtime/.venv/bin/python -m unittest discover -s scripts -p 'test_*.py' -v
           app/runtime/.venv/bin/python -m unittest discover -s app/runtime -v
+          app/runtime/.venv/bin/python -m unittest discover -s app/qualification -v
       - name: Build source-owned native page assets
         working-directory: app/admin
         run: |

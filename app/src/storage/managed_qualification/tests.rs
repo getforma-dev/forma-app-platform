@@ -150,6 +150,13 @@ fn valid() -> Value {
     let now = now_seconds();
     manifest_value(now, now + 600)
 }
+/// The six named shared-case checks of a passing run.
+fn six() -> Vec<Value> {
+    CHECKS
+        .iter()
+        .map(|name| json!({"name":name,"passed":true}))
+        .collect()
+}
 
 #[test]
 fn valid_inputs_load_and_bind_the_original_deadline() {
@@ -241,7 +248,9 @@ fn selector_arming_scope_and_uid_are_exact() {
     for args in variants {
         let mut environment = environment();
         environment.args = args;
-        let (result, watchdog) = run(environment);
+        let deadline = OnceLock::new();
+        let (result, watchdog) = run(environment, &deadline);
+        assert!(deadline.get().is_none());
         assert!(watchdog.is_none());
         assert_eq!(result["error"], "configuration_refused");
         assert_eq!(result["cleanup_applicable"], false);
@@ -527,7 +536,7 @@ fn reports_are_sanitized_closed_and_bounded() {
     ]
     .into_iter()
     .collect();
-    let check = || vec![json!({"name":"synthetic","passed":true})];
+    let check = six;
     for (result, cleanup, passed, error, applicable, confirmed) in [
         (Ok(check()), Cleanup::Confirmed, true, None, true, true),
         (
@@ -599,19 +608,30 @@ fn reports_are_sanitized_closed_and_bounded() {
         assert_eq!(line.lines().filter(|l| !l.is_empty()).count(), 1);
         assert!(line.len() <= RESULT_LIMIT + RESULT_PREFIX.len() + 2);
     }
-    // An oversized report is replaced by a bounded refusal, never truncated.
-    let huge = report(
-        None,
-        Ok(vec![json!({"name":"x".repeat(RESULT_LIMIT),"passed":true})]),
-        Cleanup::Confirmed,
-    );
-    let mut out = Vec::new();
-    assert!(!emit(huge, None, &mut out));
-    let line = String::from_utf8(out).unwrap();
-    let body: Value =
-        serde_json::from_str(line.trim().strip_prefix("APP008_MANAGED_RESULT ").unwrap()).unwrap();
-    assert_eq!(body["error"], "report_refused");
-    assert_eq!(body["cleanup_confirmed"], false);
+    // An oversized report is replaced by a bounded refusal, never truncated;
+    // it keeps the report's boolean cleanup state and nothing else.
+    for (applicable, confirmed, expected) in [
+        (json!(false), json!(false), (false, false)),
+        (json!(true), json!(false), (true, false)),
+        (json!(true), json!(true), (true, true)),
+        (json!("false"), json!(1), (true, false)),
+        (Value::Null, Value::Null, (true, false)),
+    ] {
+        let huge = json!({"passed":true,"cleanup_applicable":applicable,"cleanup_confirmed":confirmed,
+            "run_id":RUN,"checks":[{"name":"x".repeat(RESULT_LIMIT),"passed":true}]});
+        let mut out = Vec::new();
+        assert!(!emit(huge, None, &mut out));
+        let line = String::from_utf8(out).unwrap();
+        let body: Value =
+            serde_json::from_str(line.trim().strip_prefix("APP008_MANAGED_RESULT ").unwrap())
+                .unwrap();
+        assert_eq!(body["error"], "report_refused");
+        assert_eq!(body["passed"], false);
+        assert_eq!(body["checks"], json!([]));
+        assert_eq!(body["cleanup_applicable"], expected.0);
+        assert_eq!(body["cleanup_confirmed"], expected.1);
+        assert_eq!(body.as_object().unwrap().len(), 7);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -726,8 +746,18 @@ fn child_entry() -> std::result::Result<(), &'static str> {
         Err(_) => return Ok(()),
     };
     let (result, watchdog) = match mode.as_str() {
-        "entry_panic" => guarded(|| panic!("{}", sentinel())),
-        "case_panic" => guarded(|| {
+        "entry_panic" => guarded(|_| panic!("{}", sentinel())),
+        "entry_panic_after_load" => {
+            let (result, watchdog) = guarded(|deadline| {
+                let _ = deadline.set(Instant::now() + Duration::from_secs(1));
+                panic!("{}", sentinel())
+            });
+            // Stands in for a blocked stdout: only the re-armed watchdog
+            // can end the process at the original deadline.
+            std::thread::sleep(Duration::from_secs(20));
+            (result, watchdog)
+        }
+        "case_panic" => guarded(|_| {
             let inputs = Inputs::new();
             let runtime = tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(2)
@@ -848,6 +878,15 @@ fn entry_panic_is_labeled_and_never_confirms_cleanup() {
 }
 
 #[test]
+fn an_entry_panic_after_load_keeps_the_original_deadline_watchdog() {
+    let output = child("entry_panic_after_load");
+    assert_eq!(output.code, Some(124));
+    assert!(result_line(&output.stdout).is_none());
+    assert!(output.elapsed < Duration::from_secs(10));
+    assert!(!output.stdout.contains(&sentinel()) && !output.stderr.contains(&sentinel()));
+}
+
+#[test]
 fn watchdog_exits_at_the_original_deadline_without_a_result() {
     let output = child("watchdog");
     assert_eq!(output.code, Some(124));
@@ -885,6 +924,42 @@ fn source_bundle_covers_every_compiled_source() {
     ] {
         found.insert(extra.into());
     }
+    // Every file a bound source embeds with include_str!/include_bytes! is a
+    // compile-time input; only the migration resources are pinned separately.
+    let root = repository().canonicalize().unwrap();
+    let rust: Vec<String> = found
+        .iter()
+        .filter(|n| n.ends_with(".rs"))
+        .cloned()
+        .collect();
+    let mut embedded = BTreeSet::new();
+    for name in &rust {
+        let text = fs::read_to_string(repository().join(name)).unwrap();
+        let directory = repository().join(name).parent().unwrap().to_path_buf();
+        for macro_name in ["include_str!(\"", "include_bytes!(\""] {
+            for piece in text.split(macro_name).skip(1) {
+                let relative = &piece[..piece.find('"').unwrap()];
+                let target = directory.join(relative).canonicalize().unwrap();
+                let target = target
+                    .strip_prefix(&root)
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned();
+                if !target.starts_with("app/migrations/") {
+                    embedded.insert(target);
+                }
+            }
+        }
+    }
+    for name in [
+        "app/certs/rds-global-bundle.pem",
+        "contracts/implementation-lock.json",
+        "contracts/fixtures/impl-2026-10-28.1/northstar.json",
+    ] {
+        assert!(embedded.contains(name), "{name}");
+    }
+    found.extend(embedded);
     let bound: BTreeSet<String> = SOURCES.iter().map(|(name, _)| name.to_string()).collect();
     assert_eq!(bound, found);
     let names: Vec<&str> = SOURCES.iter().map(|(name, _)| *name).collect();
@@ -901,18 +976,15 @@ fn seed_catalog_and_migration_pins_match_repository_files() {
     let repo = repository();
     let sha = |path: &str| digest(&fs::read(repo.join(path)).unwrap());
     let pins = expected_pins();
-    assert_eq!(
-        pins.fixture_setup_sha256,
-        sha("fixtures/phase-one/v1/setup.json")
-    );
-    assert_eq!(
-        pins.seed_northstar_sha256,
-        sha("contracts/fixtures/impl-2026-10-28.1/northstar.json")
-    );
-    assert_eq!(
-        pins.seed_spend_review_sha256,
-        sha("contracts/fixtures/impl-2026-10-28.1/spend-review.json")
-    );
+    let reported = serde_json::to_value(&pins).unwrap();
+    // SEED_INPUTS is the one path list: local_harness.py and check_image.py
+    // read the same table from this source.
+    for (field, path, declared) in SEED_INPUTS {
+        assert_eq!(sha(path), declared, "{path}");
+        assert_eq!(reported[field], declared, "{field}");
+    }
+    let fields: BTreeSet<&str> = SEED_INPUTS.iter().map(|(field, _, _)| *field).collect();
+    assert_eq!(fields.len(), SEED_INPUTS.len());
     assert_eq!(
         pins.catalog_query_sha256,
         sha("app/migrations/catalog-query.json")
@@ -927,9 +999,65 @@ fn seed_catalog_and_migration_pins_match_repository_files() {
         pins.catalog_sha256,
         sha(&format!("app/migrations/catalog-v{version}.json"))
     );
-    // The seed reads exactly these two contract fixtures.
+    // The seed reads exactly these two contract fixtures, from the pinned
+    // edition's folder; an edition switch in the seed fails here.
+    let editions: BTreeSet<&str> = SEED_INPUTS
+        .iter()
+        .filter_map(|(_, path, _)| path.strip_prefix("contracts/fixtures/"))
+        .map(|rest| rest.split('/').next().unwrap())
+        .collect();
+    assert_eq!(editions.len(), 1);
+    let edition = editions.into_iter().next().unwrap();
     let seed = fs::read_to_string(repo.join("app/runtime/tenant_seed.py")).unwrap();
+    assert!(seed.contains(&format!(
+        "CONTRACTS / \"fixtures\" / \"{edition}\" / (name + \".json\")"
+    )));
     assert!(seed.contains("((\"northstar\", ORGANIZATIONS[0]), (\"northstar\", ORGANIZATIONS[1]), (\"spend-review\", ORGANIZATIONS[1]))"));
+    for name in ["northstar", "spend-review"] {
+        assert!(SEED_INPUTS
+            .iter()
+            .any(|(_, path, _)| *path == format!("contracts/fixtures/{edition}/{name}.json")));
+    }
+}
+
+#[test]
+fn a_pass_requires_exactly_the_six_shared_checks() {
+    let cases = SOURCES
+        .iter()
+        .find(|(name, _)| *name == "app/src/storage/qualification_cases.rs")
+        .map(|(_, raw)| std::str::from_utf8(raw).unwrap())
+        .unwrap();
+    for name in CHECKS {
+        assert_eq!(cases.matches(&format!("\"{name}\"")).count(), 1, "{name}");
+    }
+    assert!(complete(&six()));
+    let mut variants = vec![
+        Vec::new(),
+        six()[..5].to_vec(),
+        [six(), six()[..1].to_vec()].concat(),
+    ];
+    let mut renamed = six();
+    renamed[2] = json!({"name":"synthetic","passed":true});
+    variants.push(renamed);
+    let mut failed = six();
+    failed[5]["passed"] = json!(false);
+    variants.push(failed);
+    let mut extra = six();
+    extra[0]["detail"] = json!("x");
+    variants.push(extra);
+    let mut reordered = six();
+    reordered.swap(0, 1);
+    variants.push(reordered);
+    for checks in variants {
+        assert!(!complete(&checks));
+        let value = report(None, Ok(checks.clone()), Cleanup::Confirmed);
+        assert_eq!(value["passed"], false);
+        assert_eq!(value["error"], "case_refused");
+        assert_eq!(value["checks"], json!([]));
+        assert_eq!(value["cleanup_confirmed"], true);
+        let value = report(None, Ok(checks), Cleanup::Unconfirmed);
+        assert_eq!(value["error"], "cleanup_unconfirmed");
+    }
 }
 
 #[test]
@@ -1035,7 +1163,8 @@ async fn cleanup_campaign() {
     )
     .await;
     let checks = result.expect("production cases pass on the local fixture");
-    assert_eq!(checks.len(), 6);
+    assert_eq!(checks, six());
+    assert!(complete(&checks));
     assert_eq!(cleanup, Cleanup::Confirmed);
     assert_eq!(pool::slots().0, 0);
     assert_eq!(server_sessions(&fixture), 0);

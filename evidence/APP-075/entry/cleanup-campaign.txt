@@ -1,5 +1,5 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
-     Running unittests src/lib.rs (target/debug/deps/genui-bad07dc2164afccd)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running unittests src/lib.rs (target/debug/deps/genui-f88bdb3ca2811e20)
 
 running 1 test
 APP008 check: aggregate fixed-role native readiness verifies identity, schema and blank scope
@@ -9,11 +9,11 @@ APP008 check: revocation, epoch, missing grants and registry/DB binding mismatch
 APP008 check: closed action matrix evaluates current scoped grants without granting business writes
 APP008 check: same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks
 
-thread 'tokio-rt-worker' (5223012) panicked at src/storage/managed_qualification/tests.rs:1055:13:
+thread 'tokio-rt-worker' (5485756) panicked at src/storage/managed_qualification/tests.rs:1184:13:
 synthetic case panic while holding transports
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-APP075_CLEANUP_RECEIPT {"cases":[{"case":"success","checks":6,"cleanup":"confirmed","server_sessions":0,"slots":0},{"case":"case_panic_holding_transaction_and_lease","cleanup":"confirmed","error":"case_refused","server_sessions":0,"slots":0},{"case":"timeout_with_begin_barrier_holding_transaction","cleanup":"confirmed","elapsed_ms":4003,"error":"original_deadline_reached","server_sessions":0,"slots":0}],"server_version":"16.13 (Debian 16.13-1.pgdg13+1)"}
+APP075_CLEANUP_RECEIPT {"cases":[{"case":"success","checks":6,"cleanup":"confirmed","server_sessions":0,"slots":0},{"case":"case_panic_holding_transaction_and_lease","cleanup":"confirmed","error":"case_refused","server_sessions":0,"slots":0},{"case":"timeout_with_begin_barrier_holding_transaction","cleanup":"confirmed","elapsed_ms":4001,"error":"original_deadline_reached","server_sessions":0,"slots":0}],"server_version":"16.13 (Debian 16.13-1.pgdg13+1)"}
 test storage::managed_qualification::tests::managed_cleanup_with_real_transports ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 53 filtered out; finished in 10.69s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 74 filtered out; finished in 9.37s
 

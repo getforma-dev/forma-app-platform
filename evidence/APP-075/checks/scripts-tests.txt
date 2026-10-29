@@ -1,3 +1,9 @@
+test_compose_binds_suite_and_fixture_runs_to_the_bytes (test_check_parser_record.ParserRecordTests.test_compose_binds_suite_and_fixture_runs_to_the_bytes) ... ok
+test_digest_argument_must_be_lowercase_sha256_hex (test_check_parser_record.ParserRecordTests.test_digest_argument_must_be_lowercase_sha256_hex) ... ok
+test_edited_records_are_refused (test_check_parser_record.ParserRecordTests.test_edited_records_are_refused) ... ok
+test_local_record_is_evidence_never_a_release_pass (test_check_parser_record.ParserRecordTests.test_local_record_is_evidence_never_a_release_pass) ... ok
+test_passing_ci_record_admits_exactly_its_digest (test_check_parser_record.ParserRecordTests.test_passing_ci_record_admits_exactly_its_digest) ... ok
+test_release_refuses_parser_digest_without_passing_record (test_check_parser_record.ParserRecordTests.test_release_refuses_parser_digest_without_passing_record) ... ok
 test_catalog_version_check_and_distinct_catalogs_are_required (test_check_schema_pins.SchemaPinTests.test_catalog_version_check_and_distinct_catalogs_are_required) ... ok
 test_current_tree_pins_agree (test_check_schema_pins.SchemaPinTests.test_current_tree_pins_agree) ... ok
 test_mismatched_catalog_bound_fails (test_check_schema_pins.SchemaPinTests.test_mismatched_catalog_bound_fails) ... ok
@@ -5,6 +11,6 @@ test_mismatched_pin_fails (test_check_schema_pins.SchemaPinTests.test_mismatched
 test_missing_or_duplicated_pin_refuses (test_check_schema_pins.SchemaPinTests.test_missing_or_duplicated_pin_refuses) ... ok
 
 ----------------------------------------------------------------------
-Ran 5 tests in 0.915s
+Ran 11 tests in 2.412s
 
 OK

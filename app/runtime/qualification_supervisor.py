@@ -7,8 +7,11 @@ service supervisor (``runtime.serve``) and never runs ``serve``, ``migrate``
 or any other mode.
 
 Before launching it refuses: any argument list other than ``["run"]``; a
-missing arming value; any ``PG*`` or ``*PASSWORD*`` variable (the migration
-task's operator password channel) or auth-rehearsal injection; a UID other than 65532; a
+missing arming value; any environment variable outside an explicit allowlist
+(the task's own variables, the two run-task overrides, the ECS/Fargate-injected
+names and the image's own; so no ``PG*`` or ``*PASSWORD*`` operator channel,
+auth-rehearsal injection, endpoint, CA-bundle, proxy, ``PYTHON*`` or ``LD_*``
+override) and AWS config files other than ``/dev/null``; a UID other than 65532; a
 manifest that is absent, oversized, not one closed JSON object, outside the
 original-deadline bounds or not pinned to the reviewed RDS CA; a CA file that
 differs from that pin; mounts over the CA, the image's program files or the
@@ -22,8 +25,14 @@ and refreshes them every 240 s until the executable exits. The child receives
 only the arming variable: no AWS, database or operator material. Both pipes
 are drained continuously (the entry's stdout-drain contract); the single
 ``APP008_MANAGED_RESULT`` line is retained and re-emitted verbatim, followed by
-one ``APP075_SUPERVISOR`` summary. At the manifest's original ``expires_at``
-the child is killed. Run files and credentials are removed on every path.
+one ``APP075_SUPERVISOR`` summary. A pass needs the entry's ``passed:true``,
+confirmed cleanup, this run's id, exit 0 and exactly six passed checks. At the
+manifest's original ``expires_at`` the child is killed. Run files and
+credentials are removed on every path the supervisor survives, including
+SIGTERM (ECS StopTask): as PID 1 it installs a handler, so the child is killed,
+the files removed, the summary printed and the status is 143. Only the SIGKILL
+that follows ``stopTimeout`` skips this; the files then go with the task's
+ephemeral volume, and the child with PID 1.
 
 No raw exception, environment, token or credential is printed.
 """
@@ -31,6 +40,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import signal
 import stat
 import subprocess
 import sys
@@ -69,10 +79,40 @@ MIN_REMAINING = 60
 # Mount points at or under these paths would let a launcher replace the CA,
 # the executable, its identity, Python or the supervisor itself.
 FORBIDDEN_MOUNTS = ("/etc/ssl", "/app", "/usr", "/bin", "/sbin", "/lib", "/opt")
+CHECK_COUNT = 6
+TERMINATED = 143
+# Every variable the supervisor may see. Anything else (a run-task override of
+# an endpoint, CA bundle, proxy, interpreter or loader setting, or any
+# credential) refuses the run before a file is written.
+ALLOWED_ENVIRONMENT = frozenset({
+    # The QualificationTask's environment (infra/src/stack.ts).
+    "GENUI_DATABASE_HOST", "GENUI_DATABASE_PORT", "GENUI_DATABASE_NAME", "GENUI_EVIDENCE_BUCKET",
+    "GENUI_DATABASE_ROLES_JSON", "GENUI_TENANTS_JSON", "AWS_REGION", "PYTHONDONTWRITEBYTECODE",
+    # The operator's two run-task overrides.
+    ARM, MANIFEST_ENV,
+    # Injected by ECS on Fargate (exact names; no AWS_CONTAINER_CREDENTIALS_FULL_URI).
+    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "AWS_DEFAULT_REGION", "AWS_EXECUTION_ENV",
+    "ECS_CONTAINER_METADATA_URI", "ECS_CONTAINER_METADATA_URI_V4", "ECS_AGENT_URI",
+    # Docker, the python base image and app/qualification/Dockerfile.
+    "PATH", "HOME", "HOSTNAME", "LANG", "GPG_KEY", "PYTHON_VERSION", "PYTHON_SHA256",
+    "PYTHONUNBUFFERED", "AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE",
+})
+FIXED_ENVIRONMENT = {"AWS_CONFIG_FILE": "/dev/null", "AWS_SHARED_CREDENTIALS_FILE": "/dev/null"}
 
 
 class Refused(ValueError):
     pass
+
+
+class Terminated(BaseException):
+    """SIGTERM in the main thread. A BaseException, so no refusal or refresh
+    handler can swallow it before the supervisor's cleanup."""
+
+
+def terminate(signum, frame):
+    # A second StopTask signal must not interrupt the cleanup this starts.
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    raise Terminated()
 
 
 def require(condition):
@@ -90,6 +130,9 @@ def registry_bytes(run_id):
 def check_invocation(argv, environ, euid, uid=UID):
     require(tuple(argv) == ARGV)
     require(environ.get(ARM) == ARM_VALUE)
+    require(set(environ) <= ALLOWED_ENVIRONMENT)
+    require(all(environ.get(name, value) == value for name, value in FIXED_ENVIRONMENT.items()))
+    # Implied by the allowlist; kept explicit for the operator-password channel.
     require(not any(name.startswith("PG") or "PASSWORD" in name.upper() for name in environ))
     require(runtime.QUALIFICATION_JSON_ENV not in environ and runtime.QUALIFICATION_FILE_ENV not in environ)
     require(euid == uid)
@@ -158,9 +201,12 @@ def check_run_directory(run_directory, euid):
     require(stat.S_ISDIR(metadata.st_mode) and metadata.st_uid == euid and stat.S_IMODE(metadata.st_mode) == 0o700)
 
 
-def write_new_private(path, payload):
-    """Create (never replace) one private 0600 file."""
+def write_new_private(path, payload, written):
+    """Create (never replace) one private 0600 file. The path is recorded for
+    removal as soon as O_EXCL has proved the file is the supervisor's own, so
+    a failed write or fsync cannot leave a partial file behind."""
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    written.append(path)
     with os.fdopen(fd, "wb") as stream:
         os.fchmod(stream.fileno(), 0o600)
         stream.write(payload)
@@ -203,6 +249,13 @@ class Drain(threading.Thread):
                 self.results.append(line)
 
 
+def complete_checks(checks):
+    """Exactly six checks, each an object with a name that passed."""
+    return (isinstance(checks, list) and len(checks) == CHECK_COUNT
+            and all(isinstance(check, dict) and isinstance(check.get("name"), str) and check.get("passed") is True
+                    for check in checks))
+
+
 def remove(path):
     try:
         if stat.S_ISREG(os.lstat(path).st_mode):
@@ -214,9 +267,13 @@ def remove(path):
 def supervise(argv, environ, *, refresh=runtime.refresh, load=runtime.load, reviewed_ca=REVIEWED_CA_SHA256,
               executable=EXECUTABLE, identity=IDENTITY, run_directory=RUN_DIRECTORY, ca=CA,
               mountinfo=Path("/proc/self/mountinfo"), euid=None, uid=UID, clock=time.time,
-              refresh_interval=REFRESH_INTERVAL, out=None):
-    """Returns the process exit status; 0 only for a passed, cleaned-up run."""
+              refresh_interval=REFRESH_INTERVAL, out=None, handle_sigterm=False):
+    """Returns the process exit status; 0 only for a passed, cleaned-up run.
+
+    With ``handle_sigterm`` (the image entry point) SIGTERM ends the run with
+    status 143 through the same cleanup; the previous handler is restored."""
     out = out or sys.stdout
+    previous_sigterm = signal.signal(signal.SIGTERM, terminate) if handle_sigterm else None
     euid = os.geteuid() if euid is None else euid
     run_directory = Path(run_directory)
     manifest_path = run_directory / MANIFEST_NAME
@@ -240,10 +297,8 @@ def supervise(argv, environ, *, refresh=runtime.refresh, load=runtime.load, revi
             check_run_directory(run_directory, euid)
             for path in (manifest_path, registry_path, credentials_path):
                 require(not os.path.lexists(path))
-            write_new_private(manifest_path, payload)
-            written.append(manifest_path)
-            write_new_private(registry_path, registry_bytes(manifest["run_id"]))
-            written.append(registry_path)
+            write_new_private(manifest_path, payload, written)
+            write_new_private(registry_path, registry_bytes(manifest["run_id"]), written)
         except (Refused, OSError, ValueError, KeyError, TypeError):
             summary["error"] = "configuration_refused"
             return 2
@@ -303,14 +358,22 @@ def supervise(argv, environ, *, refresh=runtime.refresh, load=runtime.load, revi
             return 4
         summary["result_retained"] = True
         out.write(line.decode("utf-8", errors="replace") + "\n")
-        passed = (isinstance(result, dict) and result.get("passed") is True and result.get("cleanup_confirmed") is True
-                  and result.get("run_id") == manifest["run_id"] and child.returncode == 0
-                  and not summary["deadline_kill"])
+        claimed = (isinstance(result, dict) and result.get("passed") is True and result.get("cleanup_confirmed") is True
+                   and result.get("run_id") == manifest["run_id"] and child.returncode == 0
+                   and not summary["deadline_kill"])
+        passed = claimed and complete_checks(result.get("checks"))
         summary["passed"] = passed
-        if not passed:
+        if claimed and not passed:
+            summary["error"] = "checks_incomplete"
+        elif not passed:
             summary["error"] = result.get("error") if isinstance(result, dict) and isinstance(result.get("error"), str) else "qualification_failed"
         return 0 if passed else 1
+    except Terminated:
+        summary["error"] = "terminated"
+        return TERMINATED
     finally:
+        if handle_sigterm:
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
         if child is not None:
             if child.poll() is None:
                 child.kill()
@@ -325,11 +388,14 @@ def supervise(argv, environ, *, refresh=runtime.refresh, load=runtime.load, revi
         summary["files_removed"] = not any(os.path.lexists(path) for path in written)
         out.write(SUMMARY_PREFIX + json.dumps(summary, sort_keys=True, separators=(",", ":")) + "\n")
         out.flush()
+        if handle_sigterm:
+            signal.signal(signal.SIGTERM, previous_sigterm)
 
 
 if __name__ == "__main__":
     try:
-        status = supervise(sys.argv[1:], os.environ)
+        # PID 1 in the task: without a handler the kernel ignores SIGTERM.
+        status = supervise(sys.argv[1:], os.environ, handle_sigterm=True)
     except Exception:
         print("qualification_supervisor_refused", file=sys.stderr, flush=True)
         status = 1
