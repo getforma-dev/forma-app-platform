@@ -907,11 +907,11 @@ fn seed_catalog_and_migration_pins_match_repository_files() {
     );
     assert_eq!(
         pins.seed_northstar_sha256,
-        sha("contracts/fixtures/northstar.json")
+        sha("contracts/fixtures/impl-2026-10-28.1/northstar.json")
     );
     assert_eq!(
         pins.seed_spend_review_sha256,
-        sha("contracts/fixtures/spend-review.json")
+        sha("contracts/fixtures/impl-2026-10-28.1/spend-review.json")
     );
     assert_eq!(
         pins.catalog_query_sha256,

@@ -108,7 +108,7 @@ const RESULT_LIMIT: usize = 8192;
 /// Every source compiled into the library test executable, in this order.
 /// Embedded catalog/migration resources are pinned separately below. This is
 /// a binding of compiled inputs, not a whole-image or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 27] = [
+const SOURCES: [(&str, &[u8]); 30] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -140,6 +140,14 @@ const SOURCES: [(&str, &[u8]); 27] = [
         include_bytes!("../auth_qualification/tests.rs"),
     ),
     ("app/src/config.rs", include_bytes!("../config.rs")),
+    (
+        "app/src/imports/mod.rs",
+        include_bytes!("../imports/mod.rs"),
+    ),
+    (
+        "app/src/imports/sandbox.rs",
+        include_bytes!("../imports/sandbox.rs"),
+    ),
     ("app/src/lib.rs", include_bytes!("../lib.rs")),
     ("app/src/readiness.rs", include_bytes!("../readiness.rs")),
     ("app/src/roles.rs", include_bytes!("../roles.rs")),
@@ -176,6 +184,7 @@ const SOURCES: [(&str, &[u8]); 27] = [
     ),
     ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
+    ("app/src/supervise.rs", include_bytes!("../supervise.rs")),
     (
         "spikes/APP-006/Cargo.toml",
         include_bytes!("../../../spikes/APP-006/Cargo.toml"),
