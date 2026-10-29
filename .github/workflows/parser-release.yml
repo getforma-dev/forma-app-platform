@@ -1,0 +1,96 @@
+name: Parser release qualification
+# ADR-009 D9.1: parser-host and its guest are built in the image from parser/
+# with its own lockfile; the guest bytes extracted from that image are the
+# bytes qualified, and a release refuses a guest digest without a passing
+# record (scripts/check-parser-record.py, run by the release preflight).
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  source:
+    name: parser/ sources, lint and hostile suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: '2'
+    defaults:
+      run:
+        working-directory: parser
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11.14'
+      - name: Install the recorded Rust toolchain
+        run: rustup toolchain install 1.93.1 --profile minimal --component clippy,rustfmt --target wasm32-unknown-unknown
+      - name: Verify source packaging and synthetic fixtures
+        run: |
+          python3 verify_vendor.py
+          python3 make_fixtures.py
+          git diff --exit-code -- fixtures
+          cargo fmt --all --check
+      - name: Compile the guest with no system interface
+        run: cargo build --locked -p parser-guest --target wasm32-unknown-unknown --release
+      - name: Lint, hostile suite and job mode
+        run: |
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo clippy --locked -p parser-guest --target wasm32-unknown-unknown -- -D warnings
+          cargo test --locked -p parser-host -- --test-threads=1 --nocapture
+
+  image-bytes:
+    name: qualify the parser bytes extracted from the built image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11.14'
+      - name: Install the recorded Rust toolchain
+        run: rustup toolchain install 1.93.1 --profile minimal --component clippy,rustfmt --target wasm32-unknown-unknown
+      - name: Build the runtime image
+        run: docker build --tag genui-parser-release --file app/Dockerfile .
+      - name: Extract the image's parser bytes and manifest
+        run: |
+          EXTRACTED="$RUNNER_TEMP/image-parser"
+          echo "EXTRACTED=$EXTRACTED" >> "$GITHUB_ENV"
+          mkdir -p "$EXTRACTED"
+          cid=$(docker create genui-parser-release)
+          docker cp "$cid:/app/parser/parser_guest.wasm" "$EXTRACTED/parser_guest.wasm"
+          docker cp "$cid:/app/parser/parser-host" "$EXTRACTED/parser-host"
+          docker cp "$cid:/app/parser-manifest.json" "$EXTRACTED/parser-manifest.json"
+          docker rm "$cid"
+          sha256sum "$EXTRACTED/parser_guest.wasm" "$EXTRACTED/parser-host" | tee "$EXTRACTED/sha256sums.txt"
+      - name: Run the APP-004 hostile suite and job mode against the image's bytes
+        working-directory: parser
+        run: |
+          PARSER_GUEST_WASM="$EXTRACTED/parser_guest.wasm" PARSER_HOST_BIN="$EXTRACTED/parser-host" \
+            cargo test --locked -p parser-host -- --test-threads=1 --nocapture 2>&1 | tee "$EXTRACTED/hostile-suite.log"
+      - name: Run fixture qualification against the image's bytes
+        run: |
+          python3 -m venv spikes/APP-005/.venv
+          spikes/APP-005/.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r contracts/requirements.lock -r spikes/APP-005/requirements.lock -r app/runtime/requirements.lock
+          spikes/APP-005/.venv/bin/python fixtures/qualify.py --output "$EXTRACTED/fixtures" \
+            --parser-host "$EXTRACTED/parser-host" --parser-wasm "$EXTRACTED/parser_guest.wasm" --parser-manifest "$EXTRACTED/parser-manifest.json"
+      - name: Exercise the image and its parser artifacts under runtime controls
+        run: python3 app/runtime/qualify_image.py --image genui-parser-release --output "$EXTRACTED/image-qualification.json"
+      - name: Record the qualified digest and check the release refusal
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_check_parser_record.py' -v
+          python3 scripts/check-parser-record.py compose --wasm "$EXTRACTED/parser_guest.wasm" --manifest "$EXTRACTED/parser-manifest.json" \
+            --suite-log "$EXTRACTED/hostile-suite.log" --qualify-summary "$EXTRACTED/fixtures/summary.json" \
+            --output-dir evidence/APP-017/parser-records \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" --commit "$GITHUB_SHA"
+          python3 scripts/check-parser-record.py --wasm-sha256 "$(sha256sum "$EXTRACTED/parser_guest.wasm" | cut -d' ' -f1)"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: app-017-parser-record
+          path: |
+            evidence/APP-017/parser-records
+            ${{ runner.temp }}/image-parser
+          retention-days: 90

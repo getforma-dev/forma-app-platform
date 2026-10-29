@@ -1,0 +1,21 @@
+$ python3 scripts/check-parser-record.py --wasm-sha256 a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774 --records evidence/APP-017/parser-packaging/local-record
+{"admitted": false, "wasm_sha256": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774", "record": "evidence/APP-017/parser-packaging/local-record/a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774.json", "reasons": ["origin_not_ci"]}
+exit 1
+
+$ python3 scripts/check-parser-record.py --wasm-sha256 a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774
+{"admitted": false, "wasm_sha256": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774", "record": "evidence/APP-017/parser-records/a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774.json", "reasons": ["no_record"]}
+exit 1
+
+$ python3 -m unittest discover -s scripts -p test_check_parser_record.py -v
+test_compose_binds_suite_and_fixture_runs_to_the_bytes (test_check_parser_record.ParserRecordTests.test_compose_binds_suite_and_fixture_runs_to_the_bytes) ... ok
+test_digest_argument_must_be_lowercase_sha256_hex (test_check_parser_record.ParserRecordTests.test_digest_argument_must_be_lowercase_sha256_hex) ... ok
+test_edited_records_are_refused (test_check_parser_record.ParserRecordTests.test_edited_records_are_refused) ... ok
+test_local_record_is_evidence_never_a_release_pass (test_check_parser_record.ParserRecordTests.test_local_record_is_evidence_never_a_release_pass) ... ok
+test_passing_ci_record_admits_exactly_its_digest (test_check_parser_record.ParserRecordTests.test_passing_ci_record_admits_exactly_its_digest) ... ok
+test_release_refuses_parser_digest_without_passing_record (test_check_parser_record.ParserRecordTests.test_release_refuses_parser_digest_without_passing_record) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.237s
+
+OK
+exit 0

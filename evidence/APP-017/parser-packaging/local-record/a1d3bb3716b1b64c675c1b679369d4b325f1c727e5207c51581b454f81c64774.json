@@ -1,0 +1,53 @@
+{
+  "failures": [],
+  "fixture_qualification": {
+    "parser_cases": 28,
+    "passed": true,
+    "summary_sha256": "4b93ea188316e463f54a0d97cc82cb83b03b47aa6ca5b6856b891fd11ea6a02f",
+    "wasm_sha256": "sha256:a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774"
+  },
+  "hostile_suite": {
+    "bound_to_bytes": true,
+    "log_sha256": "041fa4c28ebb1aa4e4ae44c20e12f253113a3452c1c8cededcfcff547fc6e0d5",
+    "passed": true,
+    "result_lines": 5,
+    "tests_failed": 0,
+    "tests_passed": 25
+  },
+  "manifest": {
+    "guest": {
+      "bytes": 855790,
+      "path": "/app/parser/parser_guest.wasm",
+      "sha256": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774"
+    },
+    "host": {
+      "bytes": 10795440,
+      "path": "/app/parser/parser-host",
+      "sha256": "44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934"
+    },
+    "schema": "genui-parser-manifest/1",
+    "source": {
+      "cargo_lock_sha256": "d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+      "rust_toolchain": "1.93.1",
+      "rustc": {
+        "LLVM version": "21.1.8",
+        "commit-hash": "01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf",
+        "host": "aarch64-unknown-linux-gnu",
+        "release": "1.93.1"
+      },
+      "source_files": 102,
+      "sources_sha256": "351a64b6aa8ed41c66ba770a73f8065f166a368215076c246b0cddb59c60c7f6",
+      "vendor_provenance_sha256": "5259d9a04cb06b892c19fa17a0c99b0951a40484ae1c25ea98332a12bcf20e1a"
+    }
+  },
+  "origin": {
+    "commit": null,
+    "kind": "local",
+    "run_url": null
+  },
+  "passed": true,
+  "recorded_at": "2026-10-29T21:07:53.112851+00:00",
+  "schema": "genui-parser-record/1",
+  "wasm_bytes": 855790,
+  "wasm_sha256": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774"
+}
