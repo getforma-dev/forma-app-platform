@@ -45,7 +45,10 @@
 //! was acknowledged), `Stores::close` succeeded and all eight transport
 //! permits are free. Refusals before store construction report
 //! `cleanup_applicable:false`. A non-case (entry) panic reports `entry_panic`
-//! with cleanup unconfirmed. `passed:true` requires confirmed cleanup.
+//! with cleanup unconfirmed; once the manifest has been validated the
+//! watchdog is re-armed at the original deadline until that line is written.
+//! `passed:true` requires confirmed cleanup and exactly the six named
+//! [`CHECKS`], in order, each passed.
 use super::{pool, qualification_cases as cases, valid_id, Settings, Stores, TrustedRequest};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -57,7 +60,7 @@ use std::{
     os::unix::fs::{MetadataExt, OpenOptionsExt},
     panic::{catch_unwind, AssertUnwindSafe},
     path::{Component, Path, PathBuf},
-    sync::{mpsc, Arc},
+    sync::{mpsc, Arc, OnceLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::time::{timeout_at, Instant};
@@ -81,14 +84,52 @@ const MANIFEST: &str = "/run/genui/app008-managed-run.json";
 const CREDENTIALS: &str = "/run/genui/credentials.json";
 const REGISTRY: &str = "/run/genui/app008-managed-registry.json";
 const CA: &str = "/etc/ssl/certs/rds-global-bundle.pem";
-// Seed provenance: fixtures/phase-one/v1/setup.json plus the two contract
-// fixtures tenant_seed.make_bundles actually reads. A unit test compares these
-// with the repository bytes; the executable cannot prove which bytes seeded
-// the target, so they are declared pins the operator must match.
-const FIXTURE_SETUP_SHA: &str = "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459";
-const SEED_NORTHSTAR_SHA: &str = "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592";
-const SEED_SPEND_REVIEW_SHA: &str =
-    "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650";
+/// Seed provenance as (pin field, repository path, declared SHA-256), in pin
+/// order: the fixture setup, the two contract fixtures of edition
+/// `impl-2026-10-28.1` that `tenant_seed.make_bundles` reads, the seed program
+/// itself and the contract validator whose `digest` it runs. This is the one
+/// path list: unit tests compare each declared hash with the repository file
+/// and the edition with `tenant_seed.py`, and `local_harness.py` (and through
+/// it `check_image.py`) reads this table. The executable cannot prove which
+/// bytes seeded the target, so these are declared pins the operator must
+/// match; the rest of the operator's seed environment is bound by APP-077's
+/// operator-image digest.
+const SEED_INPUTS: [(&str, &str, &str); 5] = [
+    (
+        "fixture_setup_sha256",
+        "fixtures/phase-one/v1/setup.json",
+        "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
+    ),
+    (
+        "seed_northstar_sha256",
+        "contracts/fixtures/impl-2026-10-28.1/northstar.json",
+        "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+    ),
+    (
+        "seed_spend_review_sha256",
+        "contracts/fixtures/impl-2026-10-28.1/spend-review.json",
+        "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+    ),
+    (
+        "seed_program_sha256",
+        "app/runtime/tenant_seed.py",
+        "ee307fb23c2ee0180f27510efa946fdba6269eee104ddb5e08feee56b174fd6b",
+    ),
+    (
+        "seed_validator_sha256",
+        "contracts/validate.py",
+        "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
+    ),
+];
+/// The shared cases' checks a pass requires, in order (`qualification_cases`).
+const CHECKS: [&str; 6] = [
+    "aggregate fixed-role native readiness verifies identity, schema and blank scope",
+    "TLS role identity and scoped two-organization publication/record reads",
+    "all four fixed roles enforce RLS, blank scope and direct write refusal",
+    "revocation, epoch, missing grants and registry/DB binding mismatches deny",
+    "closed action matrix evaluates current scoped grants without granting business writes",
+    "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
+];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
 const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v4.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
@@ -105,12 +146,19 @@ const CLOSE_RESERVE: Duration = Duration::from_secs(1);
 const RESULT_PREFIX: &str = "APP008_MANAGED_RESULT";
 const RESULT_LIMIT: usize = 8192;
 
-/// Every source compiled into the library test executable, in this order.
-/// Embedded catalog/migration resources are pinned separately below. This is
-/// a binding of compiled inputs, not a whole-image or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 30] = [
+/// Every compile-time input of the library test executable, in this order:
+/// the Rust sources and Cargo files, plus every file a source embeds with
+/// `include_str!`/`include_bytes!` (the RDS CA and the contract files the
+/// tests embed). Only the embedded catalog/migration resources are pinned
+/// separately below. This is a binding of compiled inputs, not a whole-image
+/// or Git-revision attestation.
+const SOURCES: [(&str, &[u8]); 40] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
+    (
+        "app/certs/rds-global-bundle.pem",
+        include_bytes!("../../certs/rds-global-bundle.pem"),
+    ),
     (
         "app/src/admission/canonical.rs",
         include_bytes!("../admission/canonical.rs"),
@@ -186,6 +234,42 @@ const SOURCES: [(&str, &[u8]); 30] = [
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
     ("app/src/supervise.rs", include_bytes!("../supervise.rs")),
     (
+        "contracts/fixtures/canonical-vectors.json",
+        include_bytes!("../../../contracts/fixtures/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-28.1/negative-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-28.1/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-28.1/northstar.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-28.1/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-28.1/spend-review.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-28.1/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/negative-vectors.json",
+        include_bytes!("../../../contracts/fixtures/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/northstar.json",
+        include_bytes!("../../../contracts/fixtures/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/spend-review.json",
+        include_bytes!("../../../contracts/fixtures/spend-review.json"),
+    ),
+    (
+        "contracts/implementation-lock.json",
+        include_bytes!("../../../contracts/implementation-lock.json"),
+    ),
+    (
         "spikes/APP-006/Cargo.toml",
         include_bytes!("../../../spikes/APP-006/Cargo.toml"),
     ),
@@ -202,6 +286,8 @@ struct Pins {
     fixture_setup_sha256: String,
     seed_northstar_sha256: String,
     seed_spend_review_sha256: String,
+    seed_program_sha256: String,
+    seed_validator_sha256: String,
     catalog_query_sha256: String,
     database_version: u32,
     catalog_sha256: String,
@@ -330,9 +416,11 @@ fn database_version() -> u32 {
 fn expected_pins() -> Pins {
     Pins {
         source_bundle_sha256: source_bundle_sha256(),
-        fixture_setup_sha256: FIXTURE_SETUP_SHA.into(),
-        seed_northstar_sha256: SEED_NORTHSTAR_SHA.into(),
-        seed_spend_review_sha256: SEED_SPEND_REVIEW_SHA.into(),
+        fixture_setup_sha256: SEED_INPUTS[0].2.into(),
+        seed_northstar_sha256: SEED_INPUTS[1].2.into(),
+        seed_spend_review_sha256: SEED_INPUTS[2].2.into(),
+        seed_program_sha256: SEED_INPUTS[3].2.into(),
+        seed_validator_sha256: SEED_INPUTS[4].2.into(),
         catalog_query_sha256: digest(QUERY),
         database_version: database_version(),
         catalog_sha256: digest(CATALOG),
@@ -579,10 +667,22 @@ async fn production_cases(stores: Arc<Stores>) -> Vec<Value> {
     checks
 }
 
+/// Exactly the six named checks, in order, each `{"name":..,"passed":true}`.
+fn complete(checks: &[Value]) -> bool {
+    checks.len() == CHECKS.len()
+        && checks
+            .iter()
+            .zip(CHECKS)
+            .all(|(check, name)| *check == json!({"name":name,"passed":true}))
+}
+
 fn report(validated: Option<&Validated>, result: Result<Vec<Value>>, cleanup: Cleanup) -> Value {
     let (passed, checks, error) = match result {
-        Ok(checks) if cleanup == Cleanup::Confirmed => (true, checks, None),
-        Ok(_) => (false, Vec::new(), Some(Failure::Cleanup.code())),
+        Ok(_) if cleanup != Cleanup::Confirmed => {
+            (false, Vec::new(), Some(Failure::Cleanup.code()))
+        }
+        Ok(checks) if complete(&checks) => (true, checks, None),
+        Ok(_) => (false, Vec::new(), Some(Failure::Case.code())),
         Err(error) => (false, Vec::new(), Some(error.code())),
     };
     json!({"schema_version":1,"scope":SCOPE,"passed":passed,"error":error,"checks":checks,
@@ -599,8 +699,9 @@ fn report(validated: Option<&Validated>, result: Result<Vec<Value>>, cleanup: Cl
 }
 
 /// The whole entry after argument capture: selector, arming, inputs,
-/// watchdog, runtime, cases, cleanup and the bounded report.
-fn run(environment: Environment) -> (Value, Option<Watchdog>) {
+/// watchdog, runtime, cases, cleanup and the bounded report. The validated
+/// original deadline is recorded in `deadline` for the panic fallback.
+fn run(environment: Environment, deadline: &OnceLock<Instant>) -> (Value, Option<Watchdog>) {
     if environment.args != ARGUMENTS {
         return (
             report(None, Err(Failure::Configuration), Cleanup::NotApplicable),
@@ -611,6 +712,7 @@ fn run(environment: Environment) -> (Value, Option<Watchdog>) {
         Ok(validated) => validated,
         Err(error) => return (report(None, Err(error), Cleanup::NotApplicable), None),
     };
+    let _ = deadline.set(validated.deadline);
     let watchdog = match Watchdog::start(validated.deadline) {
         Ok(watchdog) => watchdog,
         Err(error) => {
@@ -650,13 +752,21 @@ fn run(environment: Environment) -> (Value, Option<Watchdog>) {
 
 /// Installs the silent panic hook, then runs `body`. A panic escaping `body`
 /// (outside the case task) becomes `entry_panic` with cleanup unconfirmed.
-fn guarded(body: impl FnOnce() -> (Value, Option<Watchdog>)) -> (Value, Option<Watchdog>) {
+/// Unwinding drops the body's watchdog, so when `body` had recorded the
+/// original deadline a new watchdog is armed at it before returning; it
+/// stays armed until the result line is written.
+fn guarded(
+    body: impl FnOnce(&OnceLock<Instant>) -> (Value, Option<Watchdog>),
+) -> (Value, Option<Watchdog>) {
     // No assertion or driver panic payload may reach the harness output.
     std::panic::set_hook(Box::new(|_| {}));
-    catch_unwind(AssertUnwindSafe(body)).unwrap_or_else(|_| {
+    let deadline = OnceLock::new();
+    catch_unwind(AssertUnwindSafe(|| body(&deadline))).unwrap_or_else(|_| {
         (
             report(None, Err(Failure::EntryPanic), Cleanup::Unconfirmed),
-            None,
+            deadline
+                .get()
+                .and_then(|deadline| Watchdog::start(*deadline).ok()),
         )
     })
 }
@@ -665,10 +775,13 @@ fn guarded(body: impl FnOnce() -> (Value, Option<Watchdog>)) -> (Value, Option<W
 fn emit(result: Value, watchdog: Option<Watchdog>, out: &mut impl Write) -> bool {
     let (passed, encoded) = match serde_json::to_string(&result) {
         Ok(encoded) if encoded.len() <= RESULT_LIMIT => (result["passed"] == true, encoded),
+        // Only the report's own boolean cleanup state survives; anything
+        // else falls back to applicable and unconfirmed.
         _ => (
             false,
             json!({"schema_version":1,"scope":SCOPE,"passed":false,"error":"report_refused",
-                "checks":[],"cleanup_applicable":true,"cleanup_confirmed":false})
+                "checks":[],"cleanup_applicable":result["cleanup_applicable"].as_bool().unwrap_or(true),
+                "cleanup_confirmed":result["cleanup_confirmed"].as_bool().unwrap_or(false)})
             .to_string(),
         ),
     };
@@ -691,7 +804,7 @@ fn managed_readonly_entry() -> std::result::Result<(), &'static str> {
         now: SystemTime::now(),
         monotonic: Instant::now(),
     };
-    let (result, watchdog) = guarded(|| run(environment));
+    let (result, watchdog) = guarded(|deadline| run(environment, deadline));
     if emit(result, watchdog, &mut std::io::stdout().lock()) {
         Ok(())
     } else {

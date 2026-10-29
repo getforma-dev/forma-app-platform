@@ -12,7 +12,9 @@ identity, the source-bundle pin the executable reports against an
 independent recomputation from the exported context, the reviewed RDS CA at
 the fixed path, and the supervisor's refusals in the real image: `serve` and
 other argument lists, unarmed runs, an operator password, mounts over the CA
-or program files, and a run with no reachable credential source.
+or program files, and a run with no reachable credential source, both on a
+tmpfs /run/genui and, like the CDK task, on the image's own /run/genui
+volume with no /tmp mount.
 
 Usage: python3 app/qualification/check_image.py --image IMAGE --output REPORT [--base-revision REV]
 """
@@ -32,10 +34,14 @@ import local_harness as harness  # noqa: E402
 REPOSITORY = harness.REPOSITORY
 REVIEWED_CA_SHA256 = "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
 SUPERVISOR = ["python3", "/app/qualification_supervisor.py"]
-NO_NETWORK = ["--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=64",
-              "--memory=512m", "--memory-swap=512m", "--cpus=1",
-              "--tmpfs=/run/genui:rw,noexec,nosuid,size=1m,uid=65532,gid=65532,mode=0700",
-              "--tmpfs=/tmp:rw,noexec,nosuid,size=16m"]
+CONFINED = ["--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=64",
+            "--memory=512m", "--memory-swap=512m", "--cpus=1"]
+# Most runs use a fresh tmpfs /run/genui and /tmp. The CDK task instead has a
+# read-only root, no /tmp and a task volume initialized from the image's
+# VOLUME; the image-volume supervisor case mirrors that (Fargate itself is
+# APP-078's to observe).
+TMPFS = ["--tmpfs=/run/genui:rw,noexec,nosuid,size=1m,uid=65532,gid=65532,mode=0700",
+         "--tmpfs=/tmp:rw,noexec,nosuid,size=16m"]
 PROBE = r"""
 import hashlib, json, os, stat
 from pathlib import Path
@@ -86,9 +92,19 @@ def export_service_context(destination, scratch):
     return files_under(destination)
 
 
-def allowlist():
-    lines = (REPOSITORY / "app/qualification/Dockerfile.dockerignore").read_text().splitlines()
-    return sorted(line[1:] for line in lines if line.startswith("!"))
+def allowlist(text=None):
+    """The files the qualification ignore file admits. A directory re-include
+    (`!dir/`, needed so a nested file can be re-included) names no file, and
+    must be followed at once by its `dir/**` exclusion so the idiom can never
+    admit a whole directory."""
+    if text is None:
+        text = (REPOSITORY / "app/qualification/Dockerfile.dockerignore").read_text()
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if line.startswith("!") and line.endswith("/"):
+            if lines[index + 1:index + 2] != [line[1:] + "**"]:
+                raise ValueError("directory re-include without its exclusion: " + line)
+    return sorted(line[1:] for line in lines if line.startswith("!") and not line.endswith("/"))
 
 
 def bundle_from(context_root):
@@ -111,16 +127,17 @@ class Checks:
             entry["detail"] = detail
         self.expectations.append(entry)
 
-    def container(self, name, *args, entrypoint=None, input=None):
+    def container(self, name, *args, entrypoint=None, tmpfs=True, remove=True):
         container = "%s-%s" % (self.label, name)
         self.containers.append(container)
-        command = ["docker", "run", "--rm", "-i", "--name", container, *NO_NETWORK, *args]
+        command = ["docker", "run", *(["--rm"] if remove else []), "-i", "--name", container, *CONFINED,
+                   *(TMPFS if tmpfs else []), *args]
         if entrypoint:
             command += ["--entrypoint", entrypoint[0]]
         return command, entrypoint[1:] if entrypoint else []
 
-    def docker_run(self, name, *args, entrypoint=None, command=(), input=None, timeout=120):
-        prefix, extra = self.container(name, *args, entrypoint=entrypoint)
+    def docker_run(self, name, *args, entrypoint=None, command=(), input=None, timeout=120, tmpfs=True, remove=True):
+        prefix, extra = self.container(name, *args, entrypoint=entrypoint, tmpfs=tmpfs, remove=remove)
         completed = run([*prefix, self.image, *extra, *command], input=input, timeout=timeout)
         text = completed.stdout.decode("utf-8", errors="replace")
         lines = text.splitlines()
@@ -134,9 +151,13 @@ class Checks:
         self.expect("qualification context is exactly the explicit allowlist", sorted(qualification) == allowlist(),
                     {"missing": sorted(set(allowlist()) - set(qualification)), "extra": sorted(set(qualification) - set(allowlist()))})
         rust = sorted(name for name in qualification if name.endswith(".rs"))
+        names = harness.source_names()
+        self.expect("every compile-time input the entry binds is in the exported context",
+                    set(names) <= set(qualification), {"missing": sorted(set(names) - set(qualification))})
         bundle, names = bundle_from(Path(scratch) / "qualification-context")
         self.expect("every compiled Rust source is in the context and in the entry's source bundle",
                     rust == sorted(name for name in names if name.endswith(".rs")))
+        self.report["context_source_count"] = len(names)
         self.report["context_source_bundle_sha256"] = bundle
         for name in ("app/certs/rds-global-bundle.pem",):
             self.expect("context carries the reviewed RDS CA bundle", qualification.get(name) == REVIEWED_CA_SHA256)
@@ -223,8 +244,15 @@ class Checks:
             ("no-credential-source", armed, [], 3, "credential_refresh_unavailable"),
         ]
         observed = self.report["supervisor_cases"] = []
-        for name, args, command, status, error in cases:
-            result = self.docker_run("supervisor-" + name, *args, command=command)
+        for name, args, command, status, error in cases + [("image-volume-no-tmp", armed, [], 3, "credential_refresh_unavailable")]:
+            image_volume = name == "image-volume-no-tmp"
+            result = self.docker_run("supervisor-" + name, *args, command=command, tmpfs=not image_volume, remove=not image_volume)
+            if image_volume:
+                mounts = json.loads(run(["docker", "container", "inspect", "%s-supervisor-%s" % (self.label, name)]).stdout)[0]["Mounts"]
+                self.volumes.extend(mount["Name"] for mount in mounts if mount.get("Type") == "volume")
+                self.report["image_volume_mounts"] = [{key: mount.get(key) for key in ("Type", "Destination", "RW")} for mount in mounts]
+                self.expect("image-volume case: the only mount is the image's anonymous /run/genui volume (no tmpfs, no /tmp)",
+                            [(mount.get("Type"), mount.get("Destination")) for mount in mounts] == [("volume", "/run/genui")])
             summary = result["summaries"][-1] if result["summaries"] else {}
             observed.append({"case": name, "exit_code": result["exit_code"], "summary": summary,
                              "stderr": result["stderr"].strip().splitlines()[-1:] if result["stderr"].strip() else []})

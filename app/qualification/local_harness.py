@@ -91,11 +91,22 @@ def registry_bytes(run_id):
                       sort_keys=True, separators=(",", ":")).encode()
 
 
+def entry_table(name):
+    """The body of one `const NAME: [...] = [...];` table of the entry source."""
+    text = (APP / "src/storage/managed_qualification.rs").read_text()
+    start = text.index("const %s:" % name)
+    return text[start:text.index("];", start)]
+
+
 def source_names():
     """The ordered SOURCES list of the entry, read from its source."""
-    text = (APP / "src/storage/managed_qualification.rs").read_text()
-    block = text[text.index("const SOURCES:"):text.index("];", text.index("const SOURCES:"))]
-    return re.findall(r'"((?:app|spikes)/[^"]+)"', block)
+    return re.findall(r'"((?:app|contracts|spikes)/[^"]+)"', entry_table("SOURCES"))
+
+
+def seed_inputs():
+    """(pin field, repository path) pairs of the entry's SEED_INPUTS table:
+    the one path list shared by the entry, its unit test and these tools."""
+    return re.findall(r'\(\s*"(\w+)",\s*"([^"]+)",\s*"[0-9a-f]{64}",?\s*\)', entry_table("SEED_INPUTS"))
 
 
 def expected_pins():
@@ -104,12 +115,11 @@ def expected_pins():
     manifest = json.loads((APP / "migrations/manifest.json").read_text())
     version = manifest["database_version"]
     read = lambda path: sha256((REPOSITORY / path).read_bytes())
-    return {"source_bundle_sha256": sha256(binding), "fixture_setup_sha256": read("fixtures/phase-one/v1/setup.json"),
-            "seed_northstar_sha256": read("contracts/fixtures/northstar.json"),
-            "seed_spend_review_sha256": read("contracts/fixtures/spend-review.json"),
-            "catalog_query_sha256": read("app/migrations/catalog-query.json"), "database_version": version,
-            "catalog_sha256": read("app/migrations/catalog-v%d.json" % version),
+    pins = {"source_bundle_sha256": sha256(binding), "catalog_query_sha256": read("app/migrations/catalog-query.json"),
+            "database_version": version, "catalog_sha256": read("app/migrations/catalog-v%d.json" % version),
             "migrations_manifest_sha256": read("app/migrations/manifest.json")}
+    pins.update((field, read(path)) for field, path in seed_inputs())
+    return pins
 
 
 def manifest_bytes(run_id, ca_sha, pins, lifetime=600):

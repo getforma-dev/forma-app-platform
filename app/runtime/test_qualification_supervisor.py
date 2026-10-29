@@ -5,12 +5,15 @@ import io
 import json
 import os
 from pathlib import Path
+import signal
 import stat
 import sys
 import tempfile
 import textwrap
+import threading
 import time
 import unittest
+from unittest import mock
 import uuid
 
 import qualification_supervisor as supervisor
@@ -80,6 +83,9 @@ class Harness:
                   "cleanup_applicable": True, "cleanup_confirmed": True}
         bodies = {
             "pass": "emit(%r)\nsys.exit(0)" % json.dumps(result),
+            "five": "emit(%r)\nsys.exit(0)" % json.dumps({**result, "checks": result["checks"][:5]}),
+            "unpassed": "emit(%r)\nsys.exit(0)" % json.dumps({**result, "checks": result["checks"][:5] + [{"name": "x", "passed": False}]}),
+            "none": "emit(%r)\nsys.exit(0)" % json.dumps({k: v for k, v in result.items() if k != "checks"}),
             "fail": "emit(%r)\nsys.exit(101)" % json.dumps({**result, "passed": False, "error": "case_refused", "checks": []}),
             "missing": "sys.exit(101)",
             "double": "emit(%r)\nemit(%r)\nsys.exit(0)" % (json.dumps(result), json.dumps(result)),
@@ -181,6 +187,37 @@ class SupervisorTests(unittest.TestCase):
                 self.refused(harness, environ=harness.environ(**{name: SECRET}))
                 self.assertNotIn(SECRET, harness.out.getvalue())
 
+    def test_refuses_every_variable_outside_the_allowlist(self):
+        for name in ("AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_STS", "AWS_CA_BUNDLE", "SSL_CERT_FILE", "SSL_CERT_DIR",
+                     "REQUESTS_CA_BUNDLE", "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "LD_PRELOAD", "LD_LIBRARY_PATH",
+                     "AWS_CONTAINER_CREDENTIALS_FULL_URI", "AWS_CONTAINER_AUTHORIZATION_TOKEN", "AWS_PROFILE",
+                     "AWS_ACCESS_KEY_ID", "HTTPS_PROXY", "GENUI_RDS_CA_FILE", "GENUI_RUNTIME_CONFIG_FILE"):
+            with self.subTest(name=name):
+                harness = Harness()
+                self.addCleanup(harness.close)
+                self.refused(harness, environ=harness.environ(**{name: "/run/genui/" + SECRET}))
+                self.assertNotIn(SECRET, harness.out.getvalue())
+        for name in ("AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE"):
+            with self.subTest(name=name):
+                harness = Harness()
+                self.addCleanup(harness.close)
+                self.refused(harness, environ=harness.environ(**{name: "/run/genui/aws"}))
+
+    def test_accepts_the_task_platform_and_image_environment(self):
+        environ = self.harness.environ(
+            GENUI_DATABASE_PORT="5432", GENUI_DATABASE_NAME="genui", GENUI_EVIDENCE_BUCKET="synthetic-bucket",
+            GENUI_DATABASE_ROLES_JSON="{}", GENUI_TENANTS_JSON="[]", PYTHONDONTWRITEBYTECODE="1", PYTHONUNBUFFERED="1",
+            AWS_CONTAINER_CREDENTIALS_RELATIVE_URI="/v2/credentials/x", AWS_DEFAULT_REGION="us-east-1",
+            AWS_EXECUTION_ENV="AWS_ECS_FARGATE", ECS_CONTAINER_METADATA_URI="http://169.254.170.2/v3/x",
+            ECS_CONTAINER_METADATA_URI_V4="http://169.254.170.2/v4/x", ECS_AGENT_URI="http://169.254.170.2/api/x",
+            PATH="/usr/local/bin:/usr/bin:/bin", HOME="/", HOSTNAME="ip-10-0-0-1", LANG="C.UTF-8", GPG_KEY="synthetic",
+            PYTHON_VERSION="3.11.14", PYTHON_SHA256="synthetic", AWS_CONFIG_FILE="/dev/null",
+            AWS_SHARED_CREDENTIALS_FILE="/dev/null")
+        self.assertEqual(self.harness.supervise(environ=environ), 0, self.harness.out.getvalue())
+        record = json.loads(self.harness.record.read_text())
+        environment = {k: v for k, v in record["env"].items() if k not in ("__CF_USER_TEXT_ENCODING", "LC_CTYPE")}
+        self.assertEqual(environment, {supervisor.ARM: "APP-008"})
+
     def test_refuses_unarmed_injected_auth_and_wrong_uid(self):
         for changes in ({supervisor.ARM: None}, {supervisor.ARM: "app-008"}, {supervisor.ARM: "APP-075"},
                         {runtime.QUALIFICATION_JSON_ENV: "{}"}, {runtime.QUALIFICATION_FILE_ENV: "/run/genui/x"},
@@ -272,6 +309,48 @@ class SupervisorTests(unittest.TestCase):
         self.assertEqual(self.harness.run_files(), [])
         self.assertNotIn("synthetic-workspace", self.harness.out.getvalue())
 
+    def test_a_partly_written_run_file_is_removed(self):
+        real = os.fsync
+        for failing in (1, 2):
+            with self.subTest(failing=failing):
+                harness = Harness()
+                self.addCleanup(harness.close)
+                calls = []
+                def fsync(fd):
+                    calls.append(fd)
+                    if len(calls) == failing:
+                        raise OSError("synthetic fsync failure")
+                    return real(fd)
+                with mock.patch("os.fsync", fsync):
+                    self.refused(harness)
+
+    def test_sigterm_kills_the_child_removes_files_and_reports(self):
+        harness = Harness("hang")
+        self.addCleanup(harness.close)
+        previous = signal.getsignal(signal.SIGTERM)
+        self.addCleanup(signal.signal, signal.SIGTERM, previous)
+        def stop_task():
+            deadline = time.time() + 10
+            while not harness.launched() and time.time() < deadline:
+                time.sleep(0.05)
+            os.kill(os.getpid(), signal.SIGTERM)
+        sender = threading.Thread(target=stop_task)
+        sender.start()
+        started = time.time()
+        status = harness.supervise(handle_sigterm=True)
+        sender.join()
+        self.assertEqual(status, 143)
+        self.assertLess(time.time() - started, 10)
+        self.assertEqual(harness.summary["error"], "terminated")
+        self.assertTrue(harness.summary["launched"])
+        self.assertFalse(harness.summary["passed"])
+        self.assertTrue(harness.summary["files_removed"])
+        self.assertEqual(harness.run_files(), [])
+        self.assertEqual(harness.results, [])
+        # The handler is restored for the caller; a second signal during
+        # cleanup was ignored rather than interrupting it.
+        self.assertIs(signal.getsignal(signal.SIGTERM), previous)
+
     def test_refreshes_until_the_executable_exits(self):
         harness = Harness("slow")
         self.addCleanup(harness.close)
@@ -304,6 +383,16 @@ class SupervisorTests(unittest.TestCase):
                 self.assertFalse(harness.summary["passed"])
                 self.assertEqual(harness.run_files(), [])
         self.assertEqual(harness.summary["error"], "case_refused")
+
+    def test_a_pass_requires_six_passed_checks(self):
+        for body in ("five", "unpassed", "none"):
+            with self.subTest(body=body):
+                harness = Harness(body)
+                self.addCleanup(harness.close)
+                self.assertEqual(harness.supervise(), 1)
+                self.assertFalse(harness.summary["passed"])
+                self.assertEqual(harness.summary["error"], "checks_incomplete")
+                self.assertEqual(harness.run_files(), [])
 
     def test_kills_the_child_at_the_original_deadline(self):
         harness = Harness("hang")
