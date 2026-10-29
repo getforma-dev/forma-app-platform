@@ -20,6 +20,10 @@ Before activation, root must verify that the observed version1 baseline has rema
 
 Safari capability confirmation and both teams' readiness remain required. No additional budget decision is requested. The actual interval starts only after the agreed coordinated signal, with the approved six-hour maximum and scoped cleanup.
 
+The [callback activation runbook](activation-runbook.md) now has [independent operational review](activation-independent-review.md), with no blocking finding in the prepared manual procedure. It fixes two deliberate process segments: three serial existing-Maya browser logins, then one separate fresh invited signup, with all old tasks observed stopped before changing the secret version. Private version/configuration binding is operator evidence, not runtime attestation. Unexpected process replacement aborts the campaign; the original deadline is never renewed. Actual provider confirmation, Safari capability and concrete inside-window requests remain required before execution.
+
+[Fresh no-lookups synthesis](fresh-synthesis.json) passes using infrastructure source identical to the already accepted revision. Its 84,297-byte template (52,793 compact) requires a reviewed TemplateURL upload rather than TemplateBody. No upload, new reservation, secret creation, count-zero stack update or activation occurred. The actual artifact destination, upload hash and change-set review belong to the concrete provisioning sequence.
+
 ## Exclusion and shutdown boundary
 
 Keep every APP-008 managed migration, seed, drift test, operator mutation and restore action outside the auth window. Its local source, review, image and CI work may continue in parallel. Preserve the approved version1 database and prevent concurrent operator/schema changes throughout identity qualification; the old callback is not claimed to have the later catalog protections or to pass APP-008.
