@@ -20,6 +20,8 @@ const IMAGE_DIGEST_BODY = '[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/
 export const IMAGE_DIGEST_PATTERN = `^${IMAGE_DIGEST_BODY}(?![\\s\\S])`;
 // Empty, or a reviewed digest of the separate APP-075 qualification image.
 export const QUALIFICATION_IMAGE_PATTERN = `^(?:|${IMAGE_DIGEST_BODY})(?![\\s\\S])`;
+// Empty, or a reviewed digest of the separate APP-077 operator image.
+export const OPERATOR_IMAGE_PATTERN = `^(?:|${IMAGE_DIGEST_BODY})(?![\\s\\S])`;
 export const QUALIFICATION_SECRET_ARN_PATTERN = '^(?:|arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-[a-z0-9][a-z0-9-]{0,79}-[A-Za-z0-9]{6})(?![\\s\\S])';
 
 /** Reviewable deployment model. Synth/tests never create cloud resources. */
@@ -240,6 +242,52 @@ export class GenuiFoundation extends Stack {
       if (construct) (construct as iam.CfnRole).cfnOptions.condition = qualificationTaskEnabled;
     }
     new CfnOutput(this, 'QualificationTaskDefinition', { value: qualification.taskDefinitionArn, condition: qualificationTaskEnabled });
+    // APP-077: optional standalone operator task (ADR-007 D7.19). Count zero: no
+    // service, schedule or target references it; an operator runs one documented
+    // command override (app/operator/overrides.json) at a time. It uses the
+    // migration execution role, which injects the existing secret as PGPASSWORD,
+    // and its own task role, which holds no sts:AssumeRole (no application
+    // database or tenant role) and reaches only the ADR-009 B1 source objects
+    // o/<tenant>/s/* under each tenant's key, for upload-sources.
+    const operatorImage = new CfnParameter(this, 'OperatorImageDigest', {
+      type: 'String', default: '', allowedPattern: OPERATOR_IMAGE_PATTERN,
+      description: 'Optional reviewed ECR digest of the separate APP-077 operator image (never the service image). Empty creates no operator task definition, task role or image pull grant.',
+    });
+    const operatorTaskEnabled = new CfnCondition(this, 'OperatorTaskEnabled', {
+      expression: Fn.conditionNot(Fn.conditionEquals(operatorImage.valueAsString, '')),
+    });
+    const operatorImagePull = new iam.CfnPolicy(this, 'OperatorImagePull', {
+      policyName: 'genui-operator-image-pull', roles: [migrationExecutionRole.roleName],
+      policyDocument: { Version: '2012-10-17', Statement: [{ Effect: 'Allow', Action: ['ecr:BatchCheckLayerAvailability', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchGetImage'], Resource: repositoryOf(operatorImage.valueAsString) }] },
+    });
+    operatorImagePull.cfnOptions.condition = operatorTaskEnabled;
+    const operatorRole = new iam.Role(this, 'OperatorRole', { assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com') });
+    const operatorTenants: Array<{ organization_id: string; kms_key_arn: string; prefix: string }> = [];
+    for (const [i, tenant] of tenantIds.entries()) {
+      // PutObject is conditional (If-None-Match) and an existing object is read
+      // back by HeadObject (s3:GetObject); no ListBucket, no delete.
+      operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['s3:GetObject', 's3:PutObject'], resources: [bucket.arnForObjects(`o/${tenant}/s/*`)] }));
+      operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['kms:GenerateDataKey'], resources: [keys[i].keyArn] }));
+      operatorTenants.push({ organization_id: tenant, kms_key_arn: keys[i].keyArn, prefix: `o/${tenant}/` });
+    }
+    const operatorTask = new ecs.FargateTaskDefinition(this, 'OperatorTask', { cpu: 1024, memoryLimitMiB: 2048, taskRole: operatorRole, executionRole: migrationExecutionRole, runtimePlatform });
+    operatorTask.addVolume({ name: 'operator-scratch' });
+    const operatorContainer = operatorTask.addContainer('operator', {
+      image: ecs.ContainerImage.fromRegistry(operatorImage.valueAsString), readonlyRootFilesystem: true, user: '65532:65532',
+      entryPoint: ['python3', '-I', '/operator/app/operator/operator.py'], command: ['verify-catalog'],
+      logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'genui-operator', logGroup: log }),
+      environment: {
+        PGHOST: database.instanceEndpoint.hostname, PGPORT: '5432', PGDATABASE: 'genui', PGUSER: 'genui_migration', PGSSLROOTCERT: '/etc/ssl/certs/rds-global-bundle.pem', PGSSLMODE: 'verify-full',
+        GENUI_EVIDENCE_BUCKET: bucket.bucketName, GENUI_OPERATOR_TENANTS_JSON: this.toJsonString(operatorTenants), AWS_REGION: this.region,
+      },
+      secrets: { PGPASSWORD: ecs.Secret.fromSecretsManager(database.secret!, 'password') },
+    });
+    operatorContainer.addMountPoints({ sourceVolume: 'operator-scratch', containerPath: '/run/operator', readOnly: false });
+    for (const construct of [operatorTask.node.defaultChild, operatorRole.node.defaultChild, operatorRole.node.tryFindChild('DefaultPolicy')?.node.defaultChild]) {
+      if (construct) (construct as iam.CfnRole).cfnOptions.condition = operatorTaskEnabled;
+    }
+    new CfnOutput(this, 'OperatorTaskDefinition', { value: operatorTask.taskDefinitionArn, condition: operatorTaskEnabled });
+    new CfnOutput(this, 'OperatorTaskRoleArn', { value: operatorRole.roleArn, condition: operatorTaskEnabled });
     new CfnOutput(this, 'DatabaseEndpoint', { value: database.instanceEndpoint.hostname });
     new CfnOutput(this, 'EvidenceBucket', { value: bucket.bucketName });
     new CfnOutput(this, 'ClusterName', { value: cluster.clusterName });

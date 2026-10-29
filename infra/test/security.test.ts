@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
-import { GenuiFoundation, IMAGE_DIGEST_PATTERN, OPERATOR_CIDR_PATTERN, QUALIFICATION_IMAGE_PATTERN, QUALIFICATION_SECRET_ARN_PATTERN } from '../src/stack.js';
+import { readFileSync } from 'node:fs';
+import { GenuiFoundation, IMAGE_DIGEST_PATTERN, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, QUALIFICATION_IMAGE_PATTERN, QUALIFICATION_SECRET_ARN_PATTERN } from '../src/stack.js';
 
 const template = Template.fromStack(new GenuiFoundation(new App(), 'SecurityQualification'));
 const document = template.toJSON();
@@ -130,12 +131,13 @@ test('digest-pinned Fargate service has HTTPS and no default live task, exec, NA
   for (const invalid of ['123456789012.dkr.ecr.us-east-1.amazonaws.com/team/genui:latest', ...['/genui', 'team//genui', 'team/../genui', 'genui/'].map(repo => `123456789012.dkr.ecr.us-east-1.amazonaws.com/${repo}@sha256:${'a'.repeat(64)}`), `123456789012.dkr.ecr.us-east-1.amazonaws.com/genui@sha256:${'a'.repeat(64)}\n`]) assert.equal(imagePattern.test(invalid), false, invalid);
   assert.equal(document.Parameters.ImageDigest.AllowedPattern, IMAGE_DIGEST_PATTERN);
   for (const [id, task] of entries('AWS::ECS::TaskDefinition')) {
-    // The optional APP-075 qualification task is smaller and runs its own image.
-    const qualification = id.startsWith('QualificationTask');
-    assert.equal(task.Properties.Cpu, qualification ? '1024' : '2048'); assert.equal(task.Properties.Memory, qualification ? '2048' : '8192');
+    // The optional APP-075 qualification and APP-077 operator tasks are smaller and run their own images.
+    const qualification = id.startsWith('QualificationTask'), operatorTask = id.startsWith('OperatorTask');
+    const small = qualification || operatorTask;
+    assert.equal(task.Properties.Cpu, small ? '1024' : '2048'); assert.equal(task.Properties.Memory, small ? '2048' : '8192');
     assert.deepEqual(task.Properties.RuntimePlatform, { CpuArchitecture: { Ref: 'ImageArchitecture' }, OperatingSystemFamily: 'LINUX' });
     for (const container of task.Properties.ContainerDefinitions) {
-      assert.deepEqual(container.Image, { Ref: qualification ? 'QualificationImageDigest' : 'ImageDigest' }); assert.equal(container.ReadonlyRootFilesystem, true); assert.equal(container.User, '65532:65532');
+      assert.deepEqual(container.Image, { Ref: qualification ? 'QualificationImageDigest' : operatorTask ? 'OperatorImageDigest' : 'ImageDigest' }); assert.equal(container.ReadonlyRootFilesystem, true); assert.equal(container.User, '65532:65532');
     }
   }
 });
@@ -191,6 +193,14 @@ test('execution roles pull exactly the selected ECR repository; no exec, pass-ro
     assert.deepEqual(actions(pull).sort(), ['ecr:BatchCheckLayerAvailability', 'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer']);
     for (const repo of ['genui', 'team/nested/genui']) assert.equal(resolve(pull.Resource, { 'AWS::Partition': 'aws', [parameter]: `123456789012.dkr.ecr.us-east-1.amazonaws.com/${repo}@sha256:${'b'.repeat(64)}` }), `arn:aws:ecr:us-east-1:123456789012:repository/${repo}`);
   }
+  // APP-077: the migration execution role also pulls exactly the operator image's repository, only when that task exists.
+  const [, operatorPull] = one('AWS::IAM::Policy', 'OperatorImagePull');
+  assert.equal(operatorPull.Condition, 'OperatorTaskEnabled');
+  assert.deepEqual(operatorPull.Properties.Roles, [{ Ref: role('MigrationExecutionRole') }]);
+  const [operatorStatement] = operatorPull.Properties.PolicyDocument.Statement;
+  assert.equal(operatorPull.Properties.PolicyDocument.Statement.length, 1);
+  assert.deepEqual(actions(operatorStatement).sort(), ['ecr:BatchCheckLayerAvailability', 'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer']);
+  for (const repo of ['genui-operator', 'team/nested/genui-operator']) assert.equal(resolve(operatorStatement.Resource, { 'AWS::Partition': 'aws', OperatorImageDigest: `123456789012.dkr.ecr.us-east-1.amazonaws.com/${repo}@sha256:${'e'.repeat(64)}` }), `arn:aws:ecr:us-east-1:123456789012:repository/${repo}`);
   for (const [, item] of entries('AWS::IAM::Policy')) for (const statement of item.Properties.PolicyDocument.Statement) {
     assert.equal(actions(statement).some(action => action.startsWith('ssmmessages:') || action === 'ecs:ExecuteCommand' || action === 'iam:PassRole' || action === '*'), false);
     if (statement.Resource === '*') assert.equal(statement.Action, 'ecr:GetAuthorizationToken');
@@ -336,4 +346,109 @@ test('qualification task is absent by default; when supplied it is a count-zero 
       assert.equal(item.Properties.Roles.some((value: any) => value.Ref === executionId), false);
     }
   }
+});
+
+// APP-077: the operator package's optional task. Its entry point and documented
+// command overrides come from app/operator/overrides.json, which the operator's
+// own tests and the image check bind to operator.py and the image.
+const overrides = JSON.parse(readFileSync(new URL('../../app/operator/overrides.json', import.meta.url), 'utf8'));
+
+test('operator image parameter accepts only empty or a reviewed digest', () => {
+  const parameter = document.Parameters.OperatorImageDigest;
+  assert.equal(parameter.Default, ''); assert.equal(parameter.AllowedPattern, OPERATOR_IMAGE_PATTERN);
+  const pattern = new RegExp(parameter.AllowedPattern);
+  const digest = `877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-operator@sha256:${'f'.repeat(64)}`;
+  for (const valid of ['', digest]) assert.equal(pattern.test(valid), true, valid);
+  for (const invalid of [' ', '\n', digest + '\n', digest.replace(/@sha256:.*/, ':operator'), digest.replace('f'.repeat(64), 'F'.repeat(64)), digest.replace('f'.repeat(64), 'f'.repeat(63))]) assert.equal(pattern.test(invalid), false, invalid);
+});
+
+test('operator task is absent by default; when supplied it is a count-zero standalone task with the migration channel only', () => {
+  const [taskId, task] = one('AWS::ECS::TaskDefinition', 'OperatorTask');
+  const operatorRole = role('OperatorRole');
+  const [policyId, operatorPolicy] = one('AWS::IAM::Policy', 'OperatorRoleDefaultPolicy');
+  const [pullId] = one('AWS::IAM::Policy', 'OperatorImagePull');
+  const owned = [taskId, operatorRole, policyId, pullId];
+  for (const resource of [task, document.Resources[operatorRole], operatorPolicy, document.Resources[pullId]]) assert.equal(resource.Condition, 'OperatorTaskEnabled');
+  for (const output of ['OperatorTaskDefinition', 'OperatorTaskRoleArn']) assert.equal(document.Outputs[output].Condition, 'OperatorTaskEnabled');
+  const condition = document.Conditions.OperatorTaskEnabled;
+  assert.equal(resolve(condition, { OperatorImageDigest: '' }), false);
+  assert.equal(resolve(condition, { OperatorImageDigest: `877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-operator@sha256:${'d'.repeat(64)}` }), true);
+  for (const [id, resource] of Object.entries(document.Resources) as Array<[string, any]>) {
+    const body = JSON.stringify(resource.Properties ?? {});
+    if (owned.some(name => body.includes(`"${name}"`)) || body.includes('OperatorImageDigest')) assert.equal(resource.Condition, 'OperatorTaskEnabled', id);
+    assert.equal(array(resource.DependsOn ?? []).some((name: string) => owned.includes(name)), false, id);
+  }
+  // Count zero: no service, schedule or target references it.
+  for (const [, service] of entries('AWS::ECS::Service')) assert.deepEqual(service.Properties.TaskDefinition, { Ref: one('AWS::ECS::TaskDefinition', 'Task')[0] });
+  assert.equal(JSON.stringify(document.Resources).split(`"${taskId}"`).length - 1, 1);
+  // The migration execution role (its PGPASSWORD secret) and the operator's own task role.
+  assert.deepEqual(task.Properties.ExecutionRoleArn, { 'Fn::GetAtt': [role('MigrationExecutionRole'), 'Arn'] });
+  assert.deepEqual(task.Properties.TaskRoleArn, { 'Fn::GetAtt': [operatorRole, 'Arn'] });
+  assert.deepEqual(document.Resources[operatorRole].Properties.AssumeRolePolicyDocument.Statement, [{ Action: 'sts:AssumeRole', Effect: 'Allow', Principal: { Service: 'ecs-tasks.amazonaws.com' } }]);
+  const [container] = task.Properties.ContainerDefinitions;
+  assert.equal(task.Properties.ContainerDefinitions.length, 1);
+  assert.equal(container.Name, overrides.container);
+  assert.deepEqual(container.EntryPoint, overrides.entryPoint); assert.deepEqual(container.Command, overrides.default_command);
+  assert.deepEqual(container.Secrets, [{ Name: 'PGPASSWORD', ValueFrom: { 'Fn::Join': ['', [{ Ref: one('AWS::SecretsManager::SecretTargetAttachment')[0] }, ':password::']] } }]);
+  assert.equal(container.PortMappings, undefined); assert.equal(container.HealthCheck, undefined);
+  assert.deepEqual(container.MountPoints, [{ ContainerPath: '/run/operator', ReadOnly: false, SourceVolume: 'operator-scratch' }]);
+  assert.deepEqual(task.Properties.Volumes, [{ Name: 'operator-scratch' }]);
+  assert.equal(container.LogConfiguration.Options['awslogs-stream-prefix'], 'genui-operator');
+  const environment = Object.fromEntries(container.Environment.map((value: any) => [value.Name, value.Value]));
+  assert.deepEqual(Object.keys(environment).sort(), ['AWS_REGION', 'GENUI_EVIDENCE_BUCKET', 'GENUI_OPERATOR_TENANTS_JSON', 'PGDATABASE', 'PGHOST', 'PGPORT', 'PGSSLMODE', 'PGSSLROOTCERT', 'PGUSER']);
+  assert.equal(environment.PGUSER, 'genui_migration'); assert.equal(environment.PGDATABASE, 'genui'); assert.equal(environment.PGSSLMODE, 'verify-full'); assert.equal(environment.PGSSLROOTCERT, '/etc/ssl/certs/rds-global-bundle.pem');
+  assert.deepEqual(environment.PGHOST, { 'Fn::GetAtt': [one('AWS::RDS::DBInstance')[0], 'Endpoint.Address'] });
+  // Tenant keys and prefixes only: no role ARN to assume, no application database identity.
+  const tenants = JSON.parse(resolve(environment.GENUI_OPERATOR_TENANTS_JSON, {}));
+  assert.deepEqual(tenants.map((tenant: any) => Object.keys(tenant).sort()), [['kms_key_arn', 'organization_id', 'prefix'], ['kms_key_arn', 'organization_id', 'prefix']]);
+  for (const [index, tenant] of tenants.entries()) {
+    assert.equal(tenant.prefix, `o/${tenant.organization_id}/`);
+    assert.equal(tenant.kms_key_arn, `arn:fixture:${one('AWS::KMS::Key', ['northstarKey', 'canaryKey'][index])[0]}:Arn`);
+  }
+  assert.equal(/DatabaseAccess|TenantAccess|GENUI_DATABASE_ROLES_JSON|GENUI_TENANTS_JSON/.test(JSON.stringify(container)), false);
+});
+
+test('operator task role holds no role assumption and reaches only B1 source objects under each tenant key', () => {
+  const statements = policy(role('OperatorRole'));
+  assert.equal(statements.some(statement => actions(statement).some(action => action.startsWith('sts:') || action.startsWith('rds-db:') || action.startsWith('secretsmanager:') || action === 's3:DeleteObject' || action === 's3:ListBucket')), false);
+  const bucket = one('AWS::S3::Bucket')[0];
+  assert.equal(statements.length, 4);
+  for (const [index, keyPrefix] of ['northstarKey', 'canaryKey'].entries()) {
+    const prefix = `o/00000000-0000-4000-8000-00000000000${index + 1}/s/*`;
+    const objects = statements.filter(statement => JSON.stringify(statement.Resource).includes(prefix));
+    assert.equal(objects.length, 1); assert.deepEqual(actions(objects[0]).sort(), ['s3:GetObject', 's3:PutObject']);
+    assert.deepEqual(objects[0].Resource, { 'Fn::Join': ['', [{ 'Fn::GetAtt': [bucket, 'Arn'] }, `/${prefix}`]] });
+    const key = statements.filter(statement => JSON.stringify(statement.Resource) === JSON.stringify({ 'Fn::GetAtt': [one('AWS::KMS::Key', keyPrefix)[0], 'Arn'] }));
+    assert.equal(key.length, 1); assert.deepEqual(actions(key[0]), ['kms:GenerateDataKey']);
+  }
+  // The task role is the operator's own: not the runtime task role, not the migration task role.
+  assert.notEqual(role('OperatorRole'), role('TaskRole')); assert.equal(policy(role('MigrationRole')).length, 0);
+  // The bucket policy still denies any PutObject without SSE-KMS under that prefix's tenant key.
+  const bucketPolicy = one('AWS::S3::BucketPolicy')[1].Properties.PolicyDocument.Statement;
+  for (const index of [0, 1]) {
+    const prefix = `/o/00000000-0000-4000-8000-00000000000${index + 1}/*`;
+    assert.equal(bucketPolicy.filter((statement: any) => statement.Effect === 'Deny' && statement.Action === 's3:PutObject' && JSON.stringify(statement.Resource).includes(prefix)).length, 2);
+  }
+});
+
+test('documented operator overrides fit the 8,192-byte ECS limit and match the task entry point', () => {
+  assert.equal(overrides.max_override_bytes, 8192);
+  const container = one('AWS::ECS::TaskDefinition', 'OperatorTask')[1].Properties.ContainerDefinitions[0];
+  assert.deepEqual(container.EntryPoint, overrides.entryPoint);
+  assert.ok(overrides.overrides.length >= 5);
+  for (const item of overrides.overrides) {
+    assert.ok(Buffer.byteLength(JSON.stringify(item.overrides)) <= 8192, item.name);
+    assert.deepEqual(Object.keys(item.overrides), ['containerOverrides']);
+    assert.equal(item.overrides.containerOverrides.length, 1);
+    assert.deepEqual(Object.keys(item.overrides.containerOverrides[0]).sort(), ['command', 'name']);
+    assert.equal(item.overrides.containerOverrides[0].name, container.Name);
+  }
+});
+
+test('the service, migration and qualification task definitions do not reference the operator', () => {
+  for (const prefix of ['Task', 'MigrationTask', 'QualificationTask']) {
+    const body = JSON.stringify(one('AWS::ECS::TaskDefinition', prefix)[1]);
+    assert.equal(/Operator(Image|Role|Task)|GENUI_OPERATOR_/.test(body), false, prefix);
+  }
+  assert.deepEqual(one('AWS::ECS::TaskDefinition', 'MigrationTask')[1].Properties.ContainerDefinitions[0].EntryPoint, ['python3', '/app/runtime.py']);
 });
