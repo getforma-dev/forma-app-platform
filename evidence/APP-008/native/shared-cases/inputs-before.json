@@ -1,0 +1,22 @@
+{
+  "app/src/storage/qualification.rs": "14f8042623a529b8643106dc9e122b0d10b47b596651f2457eea0e4b4c9b9582",
+  "app/src/storage/mod.rs": "2c642fec59cc879435830142140e0ce0fb9a18cd4c04d9ec2da03bbff867c481",
+  "app/src/storage/pool.rs": "4a8eae301412ed8ce48ef2b84e08919380747e17179ae314b61c15d1d429a0d5",
+  "app/src/storage/authorization.rs": "c53609ef588351a322acf47ff249fd7423d49eef01848d8a4213bea4f0c05a32",
+  "app/src/storage/catalog.rs": "8c0462983afb7e7d877f661d3c49b63eae71de0b0b95c5e61f7c291c1f2cf35a",
+  "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+  "app/src/storage/tests.rs": "6e2a1747c398f0a064a25e945ba3b2a9ce65bdedd17e6750a1f8ae66b4d63232",
+  "app/src/lib.rs": "381db89b74187d80ebd7300b1e1a9823596a3c3a422a55632f5552a7ab2b305f",
+  "app/src/main.rs": "6d0a1e5cd599605cfdf21335e1cf545e260961aa2b60c00739879456746f8451",
+  "app/runtime/runtime.py": "dfef99b5f60fe225b480563a8b54977cfdc45f99887b9a05a9904b4a3f918beb",
+  "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+  "app/runtime/qualify_tenant_schema.py": "84ac10d54a201de496f547afe05f181a441b263be1b07063170e0a8b2cae6be0",
+  "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+  "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+  "app/migrations/catalog-query.json": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963",
+  "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+  "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+  "app/migrations/manifest.json": "13976faa01ee527a81524d969e2aee864ef42e78368b69e8bee67895b8287bd5",
+  "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+  "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5"
+}

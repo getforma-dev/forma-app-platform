@@ -27,6 +27,7 @@ app/src/storage/**
 !app/src/storage/catalog.rs
 !app/src/storage/tests.rs
 !app/src/storage/qualification.rs
+!app/src/storage/qualification_cases.rs
 !app/admin/
 app/admin/**
 !app/admin/package.json

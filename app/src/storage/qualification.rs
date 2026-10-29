@@ -3,6 +3,10 @@
 use super::{
     authorization::{Resource, Transaction},
     pool::{self, Lease, Settings},
+    qualification_cases::{
+        self as cases, check, pid, APP, COLLECTION, ORG, OTHER, PRINCIPAL, PUBLICATION, RECORD,
+        WORK,
+    },
     *,
 };
 use serde_json::{json, Value};
@@ -19,15 +23,6 @@ use tokio::time::{timeout, Instant};
 
 const IMAGE: &str =
     "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59";
-const ORG: &str = "00000000-0000-4000-8000-000000000001";
-const OTHER: &str = "00000000-0000-4000-8000-000000000002";
-const PRINCIPAL: &str = "00000000-0000-4000-8000-000000000066";
-const REVIEWER: &str = "00000000-0000-4000-8000-00000000006d";
-const APP: &str = "00000000-0000-4000-8000-000000000065";
-const WORK: &str = "00000000-0000-4000-8000-000000000069";
-const PUBLICATION: &str = "00000000-0000-4000-8000-000000000068";
-const COLLECTION: &str = "00000000-0000-4000-8000-00000000006a";
-const RECORD: &str = "00000000-0000-4000-8000-00000000008c";
 
 fn command(mut command: Command, input: &[u8], label: &str) -> String {
     let mut child = command
@@ -425,14 +420,6 @@ impl Fixture {
     }
 }
 
-async fn pid(lease: &Lease) -> i32 {
-    lease
-        .client()
-        .query_one("SELECT pg_backend_pid()", &[])
-        .await
-        .unwrap()
-        .get(0)
-}
 async fn empty_slots() {
     timeout(Duration::from_secs(2), async {
         while pool::slots().0 != 0 {
@@ -442,11 +429,6 @@ async fn empty_slots() {
     .await
     .unwrap();
 }
-fn check(checks: &mut Vec<Value>, name: &str) {
-    checks.push(json!({"name":name,"passed":true}));
-    println!("APP008 check: {name}");
-}
-
 async fn refuse_all_roles(stores: &Stores) {
     for pool in [
         &stores.workspace.inner,
@@ -485,14 +467,8 @@ async fn campaign() {
     let hooks = settings.hooks.clone();
     let stores = Arc::new(Stores::new(settings).unwrap());
     let request = fixture.request(&stores, ORG, PRINCIPAL, 1);
-    let other = fixture.request(&stores, OTHER, PRINCIPAL, 1);
-    let reviewer = fixture.request(&stores, ORG, REVIEWER, 1);
     let mut checks = Vec::new();
-    stores.readiness().await.unwrap();
-    check(
-        &mut checks,
-        "aggregate fixed-role native readiness verifies identity, schema and blank scope",
-    );
+    cases::readiness(&stores, &mut checks).await;
     let positive = fixture.directory.0.join("synthetic-positive-helper.py");
     let negative = fixture.directory.0.join("synthetic-negative-helper.py");
     private_write(&positive,b"import hashlib,json,os,pathlib,time\nb=pathlib.Path(os.environ['GENUI_RUNTIME_CONFIG_FILE']).read_bytes()\nd=json.loads(b)\nprint(json.dumps({'generation':d['generation'],'file_sha256':hashlib.sha256(b).hexdigest(),'expires_at':d['expires_at'],'checked_at':int(time.time())}))\n");
@@ -509,218 +485,12 @@ async fn campaign() {
     assert!(!composed.ready());
     assert!(composed.qualify_once(&positive, "python3").await);
     check(&mut checks,"composed readiness requires actual native success plus synthetic helper success and invalidates cache on generation change");
-    assert!(stores
-        .workspace
-        .read_publication(&request, APP, PUBLICATION)
-        .await
-        .is_ok());
-    assert!(stores
-        .workspace
-        .read_publication(&other, APP, PUBLICATION)
-        .await
-        .is_ok());
-    assert!(stores
-        .control
-        .read_publication(&reviewer, APP, PUBLICATION)
-        .await
-        .is_ok());
-    assert!(stores
-        .data
-        .read_record(&request, APP, WORK, COLLECTION, RECORD)
-        .await
-        .is_ok());
-    assert!(stores
-        .data
-        .read_record(&other, APP, WORK, COLLECTION, RECORD)
-        .await
-        .is_ok());
-    check(
+    cases::read_only_and_reuse(
+        &stores,
+        |organization, principal, epoch| fixture.request(&stores, organization, principal, epoch),
         &mut checks,
-        "TLS role identity and scoped two-organization publication/record reads",
-    );
-    for pool in [
-        &stores.workspace.inner,
-        &stores.control.inner,
-        &stores.data.inner,
-        &stores.worker.inner,
-    ] {
-        let tx = Transaction::begin(pool, &request).await.unwrap();
-        let rows = tx
-            .query("SELECT organization_id::text FROM genui.organizations", &[])
-            .await
-            .unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].get::<_, String>(0), ORG);
-        assert!(tx
-            .batch("UPDATE genui.organizations SET status='suspended'")
-            .await
-            .is_err());
-        tx.finish(false).await.unwrap();
-        let lease = Lease::acquire(pool).await.unwrap();
-        assert_eq!(
-            lease
-                .client()
-                .query_one("SELECT count(*) FROM genui.organizations", &[])
-                .await
-                .unwrap()
-                .get::<_, i64>(0),
-            0
-        );
-        lease
-            .finish(false, Instant::now() + Duration::from_secs(3))
-            .await
-            .unwrap();
-    }
-    check(
-        &mut checks,
-        "all four fixed roles enforce RLS, blank scope and direct write refusal",
-    );
-    for (principal, epoch) in [
-        ("00000000-0000-4000-8000-00000000006e", 2),
-        ("00000000-0000-4000-8000-00000000006f", 1),
-        (PRINCIPAL, 2),
-    ] {
-        let invalid = fixture.request(&stores, ORG, principal, epoch);
-        assert_eq!(
-            stores
-                .workspace
-                .read_publication(&invalid, APP, PUBLICATION)
-                .await,
-            Err(Error::Denied)
-        );
-        assert_eq!(
-            stores
-                .data
-                .read_record(&invalid, APP, WORK, COLLECTION, RECORD)
-                .await,
-            Err(Error::Denied)
-        );
-    }
-    let mut invalid = fixture.request(&stores, ORG, PRINCIPAL, 1);
-    invalid.provider_tenant = format!("ten_{OTHER}");
-    assert_eq!(
-        stores
-            .workspace
-            .read_publication(&invalid, APP, PUBLICATION)
-            .await,
-        Err(Error::Denied)
-    );
-    invalid = fixture.request(&stores, ORG, PRINCIPAL, 1);
-    invalid.provider_subject = "usr_unmapped".into();
-    assert_eq!(
-        stores
-            .workspace
-            .read_publication(&invalid, APP, PUBLICATION)
-            .await,
-        Err(Error::Denied)
-    );
-    assert_eq!(
-        stores
-            .control
-            .read_publication(&request, APP, PUBLICATION)
-            .await,
-        Err(Error::Denied)
-    );
-    check(
-        &mut checks,
-        "revocation, epoch, missing grants and registry/DB binding mismatches deny",
-    );
-    for action in [Action::Discover, Action::Run, Action::EditDefinition] {
-        let mut tx = Transaction::begin(&stores.workspace.inner, &request)
-            .await
-            .unwrap();
-        let pre = tx.precheck(action, Resource::App(APP)).await.unwrap();
-        let _permit = tx.fence(pre).await.unwrap();
-        tx.finish(true).await.unwrap();
-    }
-    for action in [Action::RecordRead, Action::RecordWrite, Action::ShareWork] {
-        let mut tx = Transaction::begin(&stores.workspace.inner, &request)
-            .await
-            .unwrap();
-        let pre = tx
-            .precheck(
-                action,
-                Resource::Work {
-                    app: APP,
-                    work: WORK,
-                },
-            )
-            .await
-            .unwrap();
-        let _permit = tx.fence(pre).await.unwrap();
-        tx.finish(true).await.unwrap();
-    }
-    let mut tx = Transaction::begin(&stores.workspace.inner, &request)
-        .await
-        .unwrap();
-    let pre = tx
-        .precheck(
-            Action::SourceRead,
-            Resource::Source("00000000-0000-4000-8000-00000000006e"),
-        )
-        .await
-        .unwrap();
-    let _permit = tx.fence(pre).await.unwrap();
-    tx.finish(true).await.unwrap();
-    let admin = fixture.request(&stores, ORG, "00000000-0000-4000-8000-000000000f00", 1);
-    let mut tx = Transaction::begin(&stores.workspace.inner, &admin)
-        .await
-        .unwrap();
-    let pre = tx
-        .precheck(Action::AdminPolicy, Resource::Organization)
-        .await
-        .unwrap();
-    let _permit = tx.fence(pre).await.unwrap();
-    tx.finish(true).await.unwrap();
-    let tx = Transaction::begin(&stores.workspace.inner, &request)
-        .await
-        .unwrap();
-    assert!(matches!(
-        tx.precheck(
-            Action::Export,
-            Resource::Work {
-                app: APP,
-                work: WORK
-            }
-        )
-        .await,
-        Err(Error::Denied)
-    ));
-    assert!(matches!(
-        tx.precheck(Action::AdminPolicy, Resource::Organization)
-            .await,
-        Err(Error::Denied)
-    ));
-    tx.finish(false).await.unwrap();
-    check(
-        &mut checks,
-        "closed action matrix evaluates current scoped grants without granting business writes",
-    );
-    // Same physical backend is demonstrated, rather than inferred from a pool count.
-    let tx = Transaction::begin(&stores.data.inner, &request)
-        .await
-        .unwrap();
-    let first = pid(&tx.lease).await;
-    tx.batch("SELECT pg_advisory_lock(888008); LISTEN app008_fixture; SET SESSION row_security=off; SET SESSION search_path=public; SELECT set_config('genui.organization_id','poison',false); SET ROLE rds_iam").await.unwrap();
-    tx.finish(true).await.unwrap();
-    let tx = Transaction::begin(&stores.data.inner, &other)
-        .await
-        .unwrap();
-    assert_eq!(pid(&tx.lease).await, first);
-    let facts=tx.query("SELECT current_setting('row_security'),current_setting('search_path'),(SELECT count(*) FROM pg_listening_channels()),(SELECT count(*) FROM pg_locks WHERE pid=pg_backend_pid() AND locktype='advisory'),current_setting('genui.organization_id')",&[]).await.unwrap();
-    assert_eq!(facts[0].get::<_, String>(0), "on");
-    assert_eq!(facts[0].get::<_, String>(1), "pg_catalog, pg_temp");
-    assert_eq!(facts[0].get::<_, i64>(2), 0);
-    assert_eq!(facts[0].get::<_, i64>(3), 0);
-    assert_eq!(facts[0].get::<_, String>(4), OTHER);
-    assert!(tx.query("SELECT 1/0", &[]).await.is_err());
-    tx.finish(false).await.unwrap();
-    let tx = Transaction::begin(&stores.data.inner, &request)
-        .await
-        .unwrap();
-    assert_eq!(pid(&tx.lease).await, first);
-    tx.finish(true).await.unwrap();
-    check(&mut checks,"same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks");
+    )
+    .await;
     for phase in ["recycle", "begin", "finish", "reset"] {
         let lease = Lease::acquire(&stores.data.inner).await.unwrap();
         let before = pid(&lease).await;

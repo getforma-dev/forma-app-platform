@@ -1,0 +1,5 @@
+{
+  "scope": "Reviewer lexical comparison precheck; no application test failure",
+  "passed": false,
+  "reason": "Naive concatenation of two Rust source files carried the generic quoted-string matcher across the file boundary. No source was changed; full source inspection and corrected per-file comparison are separate."
+}
