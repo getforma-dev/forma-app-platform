@@ -1,6 +1,6 @@
 # Synthetic environment and operating record — APP-007
 
-The delivered demo's D2 and D10 control this isolated synthetic environment. It has now been deployed and exercised; the [managed evidence index](../../evidence/APP-007/managed/README.md) distinguishes actual results from later application gates. The [final operating receipt](../../evidence/APP-007/managed/final-operating-state.json) records all ten observed tasks stopped at 2026-10-29 01:04 UTC, with the source database and supporting infrastructure retained. Final APP-007 acceptance, landing and exact-source CI remain pending. This is not permission to reuse a production database or activate an unreviewed workload.
+The delivered demo's D2 and D10 control this isolated synthetic environment. It has now been deployed and exercised; the [managed evidence index](../../evidence/APP-007/managed/README.md) distinguishes actual results from later application gates. The [final operating receipt](../../evidence/APP-007/managed/final-operating-state.json) records all ten observed tasks stopped at 2026-10-29 01:04 UTC, with the source database and supporting infrastructure retained. APP-007 is accepted with independent review and all eight exact-source checks at `b925600`. This is not permission to reuse a production database or activate an unreviewed workload.
 
 ## Current operator decision
 
@@ -46,7 +46,7 @@ GenUI owns application infrastructure configuration, migrations and consumer che
 
 FormaStack has supplied a [separate auth rehearsal proposal](../../evidence/APP-006/upstream-auth-source/hosted-rehearsal-proposal.txt): six hours of synthetic staging and cleanup. Its chat subsequently reports Victor approved that rehearsal with **$5 included inside the $100 monthly limit**, the exact origin/callback above, and an explicit readiness condition: begin only when GenUI's callback and test environment are ready for joint integration. The start signal remains pending; source preparation can continue. This is not a hard AWS billing cap or permission to recreate the deleted production environment. The received older proposal remains a historical snapshot; these later inputs control execution.
 
-APP-007's actual managed proof is retained; final independent acceptance, landing and exact-source CI remain pending. Keep the service stopped until a reviewed activation within a reconciled reservation. Hosted-auth, tenant-row authorization and invitation/admission evidence remain separate requirements; the user's choices and this foundation do not claim those implementations exist.
+APP-007's managed proof and independent acceptance are retained; all eight [final source CI checks](../../evidence/APP-007/managed/ci.json) pass at `b925600`, landed on main. Keep the service stopped until a reviewed activation within a reconciled reservation. Hosted-auth, tenant-row authorization and invitation/admission evidence remain separate requirements; the user's choices and this foundation do not claim those implementations exist.
 
 ## Infrastructure implementation choice
 

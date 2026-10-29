@@ -1,0 +1,76 @@
+{
+  "recorded_at_utc": "2026-10-29T01:22:09.661972+00:00",
+  "source_revision": "b925600cbe19382ba78ae375a73e6bd44d65f9aa",
+  "checks": [
+    {
+      "conclusion": "success",
+      "databaseId": 40799075536,
+      "headSha": "b925600cbe19382ba78ae375a73e6bd44d65f9aa",
+      "name": "Contract qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40799075536"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40799075673,
+      "headSha": "b925600cbe19382ba78ae375a73e6bd44d65f9aa",
+      "name": "Bounded query qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40799075673"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40799075552,
+      "headSha": "b925600cbe19382ba78ae375a73e6bd44d65f9aa",
+      "name": "Auth consumer qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40799075552"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40799075567,
+      "headSha": "b925600cbe19382ba78ae375a73e6bd44d65f9aa",
+      "name": "Planning integrity",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40799075567"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40799075732,
+      "headSha": "b925600cbe19382ba78ae375a73e6bd44d65f9aa",
+      "name": "Released baseline",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40799075732"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40799075649,
+      "headSha": "b925600cbe19382ba78ae375a73e6bd44d65f9aa",
+      "name": "Parser qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40799075649"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40799075505,
+      "headSha": "b925600cbe19382ba78ae375a73e6bd44d65f9aa",
+      "name": "Published canvas consumer",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40799075505"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40799075794,
+      "headSha": "b925600cbe19382ba78ae375a73e6bd44d65f9aa",
+      "name": "Foundation preparation",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40799075794"
+    }
+  ],
+  "all_eight_passed": true,
+  "landed_main_and_phase_one_spikes": true,
+  "limits": [
+    "CI and independent managed evidence cover their named revisions/artifacts; optional APP006 published callback image is not the deployed foundation.",
+    "This closes APP007 delivery gates, not PH01 or external beta admission."
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "observed_at_utc": "2026-10-29T01:18:18.203057+00:00",
+  "registry_index_digest": "sha256:a4a47707e1e4028221cba7f5f0dfdf03ef663c6f46d0686a27632c4fd5fc5d08",
+  "index_media_type": "application/vnd.oci.image.index.v1+json",
+  "selected_platform": {
+    "architecture": "arm64",
+    "os": "linux"
+  },
+  "unique_platform_child_digest": "sha256:08d350fd186f72886823c9b33be21b1df1a70d4f96b1a35e63d639fb7c775ac9",
+  "child_media_type": "application/vnd.oci.image.manifest.v1+json",
+  "child_config_digest": "sha256:d306df2f340a77a2c4cb95847fc7f8237eea29e16118780a7ee056739b817103",
+  "both_manifest_body_digests_verified": true,
+  "source_image_receipt": "registry-image-receipt.json",
+  "limits": [
+    "Read-only registry binding; no ECS deployment or observed task imageDigest yet.",
+    "Deployment receipt must retain configured index and observed task digest explicitly, resolving a returned leaf through this verified index."
+  ]
+}

@@ -33,7 +33,7 @@
         "APP-014"
       ],
       "ticket_count": 16,
-      "done_count": 5,
+      "done_count": 6,
       "blocked_count": 1
     },
     {
@@ -195,7 +195,9 @@
       "blocked_count": 0
     }
   ],
-  "ready_by_local_dependencies": [],
+  "ready_by_local_dependencies": [
+    "APP-011"
+  ],
   "tickets": [
     {
       "id": "APP-001",
@@ -366,11 +368,11 @@
     {
       "id": "APP-007",
       "title": "Scaffold reproducible browser/Rust workspace and one binary's role interfaces",
-      "path": "3-in-review/APP-007.md",
+      "path": "4-done/APP-007.md",
       "Field": "Value",
       "---": "---",
       "Epic": "FND",
-      "Status": "In review",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S02",
@@ -385,7 +387,7 @@
       "Assignee": "GenUI \u2014 Codex scaffold lead",
       "Branch / PR": "phase-one-spikes; independently owned ticket paths",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 managed foundation accepted by independent review; final committed-source CI and landing are pending.",
+      "Blocked by": "None \u2014 accepted foundation source/evidence landed with final CI.",
       "Unblock evidence": "Qualify the full-size bounded Fargate trial within the approved $100/month allowance at beta.getforma.dev, with public HTTPS, real role/tenant denials, TLS/readiness/refresh and scoped cleanup/rollback evidence. Local checks alone do not clear this gate.",
       "dependencies": [
         "APP-001",
@@ -395,11 +397,11 @@
     {
       "id": "APP-008",
       "title": "Establish tenant-bearing schema, database roles and deny-by-default authorization",
-      "path": "0-backlog/APP-008.md",
+      "path": "1-selected/APP-008.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "Backlog",
+      "Status": "Selected",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S02",
@@ -411,10 +413,10 @@
       "Requirements": "C01, C11, N7, P11, R15, S06, SR1, SR3",
       "Depends on": "APP-007",
       "External dependencies": "None beyond listed local predecessors",
-      "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Assignee": "GenUI \u2014 Codex tenant-foundation lead",
+      "Branch / PR": "phase-one-spikes; separate schema/pool/authorization review slices",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Blocked by": "None \u2014 APP-007 accepted; implementation planning review is being settled.",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-007"

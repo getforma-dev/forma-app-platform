@@ -12,8 +12,8 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 4 | [APP-004: Qualify the WASM CSV/XLSX parser boundary](4-done/APP-004.md) | [PH01](phases/PH01.md) | S01 | ING | P0 | M | Done | APP-002 |
 | 5 | [APP-005: Measure the cold million-row DuckDB path and confinement](4-done/APP-005.md) | [PH01](phases/PH01.md) | S01 | QRY | P0 | M | Done | APP-002 |
 | 6 | [APP-006: Revalidate fAuth contract and integration prerequisites](9-blocked/APP-006.md) | [PH01](phases/PH01.md) | S01 | IAM | P0 | M | Blocked | APP-001 |
-| 7 | [APP-007: Scaffold reproducible browser/Rust workspace and one binary's role interfaces](3-in-review/APP-007.md) | [PH01](phases/PH01.md) | S02 | FND | P0 | L | In review | APP-001, APP-002 |
-| 8 | [APP-008: Establish tenant-bearing schema, database roles and deny-by-default authorization](0-backlog/APP-008.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-007 |
+| 7 | [APP-007: Scaffold reproducible browser/Rust workspace and one binary's role interfaces](4-done/APP-007.md) | [PH01](phases/PH01.md) | S02 | FND | P0 | L | Done | APP-001, APP-002 |
+| 8 | [APP-008: Establish tenant-bearing schema, database roles and deny-by-default authorization](1-selected/APP-008.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Selected | APP-007 |
 | 9 | [APP-073: Establish bounded invite and trial admission with owner-issued codes](0-backlog/APP-073.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-008 |
 | 10 | [APP-009: Implement fAuth-backed session lifecycle](0-backlog/APP-009.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-006, APP-008, APP-073 |
 | 11 | [APP-074: Qualify invite-only signup and public beta access](0-backlog/APP-074.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-006, APP-009, APP-073 |
