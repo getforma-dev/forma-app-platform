@@ -16,6 +16,17 @@ What changed today:
 
 The dependency order below ("APP-009 needs APP-006/008/073…") is superseded by ADR-005; the board (`python3 Tickets/_tools/board.py next`) is authoritative.
 
+### Checkpoint 2026-10-29 ~21:30 UTC (before the session usage reset)
+
+Landed on `main`: PR 1 (`2172ad4`) — APP-006, APP-008, APP-011 Done. On `phase-one-spikes` (pushed, tip `7d566b2`): ADR-007 revised and amended after three reviews; ADR-009 revised and re-reviewed (no blockers); Phase 2 execution plan (`docs/planning/PHASE-2-EXECUTION-PLAN.md`) and the APP-027/APP-081 split; migrations 0003 (admission) and 0004 (entitlement reads) with the storage admission module and `admission_operator.py`, all review majors fixed; contract edition `impl-2026-10-29.2`; parser-host packaging (Phase 2 Task A4). fAuth is live at `https://auth-staging.getforma.dev` (FORMA-367 cleared; DNS A record by GenUI via the Porkbun API, key held privately in the session scratchpad, not in git); SES production access pending (FORMA-366).
+
+In flight when the checkpoint was written (each in its own worktree under `.claude/worktrees/`; nothing pushed from them yet):
+- APP-073 items 6–7 (provider invitations and reconciliation) — worktree `agent-a0fdb56e28a311db3`.
+- APP-075 managed entry (plan B1–B3) — worktree `agent-aafe83d78bac0d915`.
+- Independent review of the parser packaging → `evidence/APP-017/parser-packaging/independent-review.md`.
+
+Resume order: merge or finish those three (check each worktree's `git log`/`git status`); then APP-010's migration 0005 (definitions/work grants, plan Task 6), APP-009 sessions (0006, Task 7, needs the private fAuth identifiers file in the FormaStack journey folder), APP-077 operator package, Task 8 APP-074 local, Tasks 9–11. Victor still owes: the GenUI always-on figure.
+
 ### State at the Fable → Opus switch (2026-10-29, evening UTC)
 
 Planning is complete; execution continues in the same session on Opus 5.5 High with ultracode off. Landed on `phase-one-spikes` and pushed: ADR-008 and the restructure (`5551421`, `ebfb8fb`), ADR-007 revised after its independent review (`5fb4766`), the migration runner generalization (plan Task 3, merged `a1d072a`), and the fixtures-workflow binding fix (merged `4931aef`). Victor approved FORMA-367 (lean always-on fAuth, about $33/month, SES SMTP) to the FormaStack session, which deploys as soon as its image is qualified; GenUI's own always-on figure (about $150–170/month, ADR-008) is still his to approve.
