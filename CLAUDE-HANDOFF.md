@@ -15,6 +15,21 @@ What changed today:
 
 The dependency order below ("APP-009 needs APP-006/008/073…") is superseded by ADR-005; the board (`python3 Tickets/_tools/board.py next`) is authoritative.
 
+### State at the Fable → Opus switch (2026-10-29, evening UTC)
+
+Planning is complete; execution continues in the same session on Opus 5.5 High with ultracode off. Landed on `phase-one-spikes` and pushed: ADR-008 and the restructure (`5551421`, `ebfb8fb`), ADR-007 revised after its independent review (`5fb4766`), the migration runner generalization (plan Task 3, merged `a1d072a`), and the fixtures-workflow binding fix (merged `4931aef`). Victor approved FORMA-367 (lean always-on fAuth, about $33/month, SES SMTP) to the FormaStack session, which deploys as soon as its image is qualified; GenUI's own always-on figure (about $150–170/month, ADR-008) is still his to approve.
+
+Next steps, in order:
+
+1. Read `evidence/APP-006/adr-008-restructure-review.md` when the reviewer finishes; fix any finding; then move APP-006 to In review (its fifth acceptance item).
+2. Watch the CI runs on the pushed tip; when the fixtures workflow passes, record the run in APP-011, move APP-011 to In review, and open the PR `phase-one-spikes` → `main` that lands APP-008 and APP-011 (plan Task 1); after merge, move both to Done and set their Done revisions.
+3. Read the Task 3 runner review (`evidence/APP-073/runner-review.md`) when it arrives; fix findings before Task 4 consumes the runner.
+4. The admission encoder agent (plan Task 6 part 1) is still working in `.claude/worktrees/agent-a603496511c5518f9`; review and merge its commit when it reports.
+5. Task 4 (migration 0003) strictly per ADR-007 v2 (D7.1 six functions, D7.2 two indexes, D7.8 heads and policies, D7.12 cap move and A3 normalization).
+6. Phase 2: write ADR-009 (parser packaging vs the Rust 1.85 floor, the new contract edition, query execution model, APP-027 split) and `docs/planning/PHASE-2-EXECUTION-PLAN.md` from the session scratchpad file `ph02-map.md` (session df0e31da).
+7. FormaStack will send DNS records for App Runner, ACM validation and SES DKIM/SPF/DMARC: create them at Porkbun by API if the key is available, otherwise hand the exact records to Victor; send the APP-009 sign-in handles when they exist.
+
+
 
 Prepared October 29, 2026, at Victor's request to wind down because Codex usage is nearly exhausted. **Phase 1 is not complete.** This is the GenUI lane. A separate FormaStack/fAuth agent is preparing its own Claude handoff; keep the two ownership boundaries below.
 
