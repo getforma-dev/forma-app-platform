@@ -203,7 +203,6 @@
     }
   ],
   "ready_by_local_dependencies": [
-    "APP-073",
     "APP-010",
     "APP-075",
     "APP-077"
@@ -435,11 +434,11 @@
     {
       "id": "APP-073",
       "title": "Establish bounded invite and trial admission with owner-issued codes",
-      "path": "0-backlog/APP-073.md",
+      "path": "2-in-progress/APP-073.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "Backlog",
+      "Status": "In progress",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S02",
@@ -451,8 +450,8 @@
       "Requirements": "C01, C11, C15, R15, R16, SR1, SR2, SR12",
       "Depends on": "APP-008",
       "External dependencies": "None beyond listed local predecessors",
-      "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by subagents, independent review per slice)",
+      "Branch / PR": "phase-one-spikes: migration 0003 (merged `e39c1bb`, fixes in `581fd57` and the review-fix merge), 0004 entitlement reads, storage admission module and operator command (`581fd57`, `75bcd76`)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
