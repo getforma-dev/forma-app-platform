@@ -160,3 +160,7 @@ Final commands after the fixes (repository root unless noted; `PYC`/`PY` as abov
 | in `app/`: `cargo +1.93.1 fmt --check`; `CARGO_BUILD_JOBS=2 cargo +1.93.1 clippy --locked --all-targets -- -D warnings` | exit 0; exit 0 |
 | in `app/`: `CARGO_BUILD_JOBS=2 cargo +1.93.1 test --locked` | exit 0: lib 31 passed / 3 ignored; bin 1 passed; doctests 2 passed |
 | in `app/`: `CARGO_TARGET_DIR=target/msrv CARGO_BUILD_JOBS=2 cargo +1.85.0 check --locked --lib --tests` | exit 0 |
+
+## Provider slice (acceptance items 6 and 7), 2026-10-29
+
+For provider operations, the "Not covered here" paragraph above is superseded by [../provider/README.md](../provider/README.md): `issue` now sends the server-only create after COMMIT and records `confirmed`, `failed` or `unknown` with the remote id; `revoke` destroys the private capability and revokes remotely; the new `reconcile` subcommand settles unknown outcomes by inspection. All of it runs against a loopback fAuth stand-in (simulated transport). The admission campaign gained check 24 (item 7 through the storage path) and now has 27 checks; its report is [../provider/admission-campaign.json](../provider/admission-campaign.json). [admission-campaign.json](admission-campaign.json) in this directory remains slice 2's 26-check run.
