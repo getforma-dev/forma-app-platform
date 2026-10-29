@@ -25,7 +25,7 @@
           "collection_ids": [
             "00000000-0000-4000-8000-00000000006a"
           ],
-          "fixture": "contracts/fixtures/northstar.json",
+          "fixture": "contracts/fixtures/impl-2026-10-28.1/northstar.json",
           "fixture_digest": "sha256:45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
           "publication_id": "00000000-0000-4000-8000-000000000068",
           "record_id": "00000000-0000-4000-8000-00000000008c",
@@ -128,7 +128,7 @@
           "collection_ids": [
             "00000000-0000-4000-8000-00000000006a"
           ],
-          "fixture": "contracts/fixtures/northstar.json",
+          "fixture": "contracts/fixtures/impl-2026-10-28.1/northstar.json",
           "fixture_digest": "sha256:45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
           "publication_id": "00000000-0000-4000-8000-000000000068",
           "record_id": "00000000-0000-4000-8000-00000000008c",
@@ -177,7 +177,7 @@
           "collection_ids": [
             "00000000-0000-4000-8000-0000000000ce"
           ],
-          "fixture": "contracts/fixtures/spend-review.json",
+          "fixture": "contracts/fixtures/impl-2026-10-28.1/spend-review.json",
           "fixture_digest": "sha256:4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
           "publication_id": "00000000-0000-4000-8000-0000000000cc",
           "purpose": "foreign-only Finance app for cross-tenant FK denial",

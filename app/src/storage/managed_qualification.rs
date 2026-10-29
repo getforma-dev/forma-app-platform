@@ -85,7 +85,7 @@ const CA: &str = "/etc/ssl/certs/rds-global-bundle.pem";
 // fixtures tenant_seed.make_bundles actually reads. A unit test compares these
 // with the repository bytes; the executable cannot prove which bytes seeded
 // the target, so they are declared pins the operator must match.
-const FIXTURE_SETUP_SHA: &str = "29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459";
+const FIXTURE_SETUP_SHA: &str = "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c";
 const SEED_NORTHSTAR_SHA: &str = "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592";
 const SEED_SPEND_REVIEW_SHA: &str =
     "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650";

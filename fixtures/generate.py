@@ -87,7 +87,7 @@ def uid(number):
 
 
 def seed_shape(name):
-    relative = "contracts/fixtures/" + name + ".json"
+    relative = "contracts/fixtures/impl-2026-10-28.1/" + name + ".json"
     bundle = json.loads((ROOT / relative).read_text())
     definition, publication, work = bundle["definition"], bundle["publication"], bundle["work"]
     return {"fixture": relative, "fixture_digest": digest((ROOT / relative).read_bytes()),
@@ -186,7 +186,7 @@ def build_package():
     files["mappings.json"] = json_bytes(mapping)
     files["expected.json"] = json_bytes(expected)
     files["setup.json"] = json_bytes(setup_manifest())
-    provenance = [{"path": p, "digest": digest((ROOT / p).read_bytes())} for p in (SCENARIOS, "design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md", "contracts/implementation-lock.json", "contracts/fixtures/northstar.json", "contracts/fixtures/spend-review.json")]
+    provenance = [{"path": p, "digest": digest((ROOT / p).read_bytes())} for p in (SCENARIOS, "design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md", "contracts/fixtures/impl-2026-10-28.1/northstar.json", "contracts/fixtures/impl-2026-10-28.1/spend-review.json")]
     files["manifest.json"] = json_bytes({"edition": "app011-fixtures-v1", "synthetic": True, "source_documents": provenance,
                                          "sources": sources, "metadata": [{"path": p, "digest": digest(v), "bytes": len(v)} for p, v in files.items() if not p.startswith("sources/")],
                                          "encoding": "UTF-8; LF CSV; literal OOXML; sorted ZIP_STORED entries with fixed timestamp/permissions",
