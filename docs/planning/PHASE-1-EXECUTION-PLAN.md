@@ -6,7 +6,7 @@ Prepared 2026-10-29 by the GenUI owner (Claude) after reading every remaining PH
 
 **Goal:** Close PH01: all twenty tickets Done (APP-001–014, APP-073–078) and an accepted `evidence/phases/PH01/GATE.md`, proving invite → verified sign-in → current entitlement → authorized query → visible receipt → explicit command → atomic outcome/audit → restart/reopen on the managed synthetic environment.
 
-**Architecture:** One Rust business binary (axum 0.8, forma-server 3.2.0 SSR pages) over four fixed-role PostgreSQL pools with transaction-local tenant scope, FORCE RLS and definer fence functions (ADR-004); a Python support process for credentials, migrations and the bounded query worker; fAuth as the identity provider behind GenUI's own opaque sessions (ADR-003, ADR-006); operator-only admission ledger (APP-073); managed RDS/ECS on AWS for the two hosted trials (APP-075, APP-076). Local tickets prove behavior on real PostgreSQL 16.13 with TLS in Docker; hosted and managed acceptance live only in APP-006/074/075/076.
+**Architecture:** One Rust business binary (axum 0.8, forma-server 3.2.0 SSR pages) over four fixed-role PostgreSQL pools with transaction-local tenant scope, FORCE RLS and definer fence functions (ADR-004); a Python support process for credentials, migrations and the bounded query worker; fAuth as the identity provider behind GenUI's own opaque sessions (ADR-003, ADR-006); operator-only admission ledger (APP-073); managed RDS/ECS on AWS for the RDS window and the beta go-live trial (APP-078, APP-076). Local tickets prove behavior on real PostgreSQL 16.13 with TLS in Docker; hosted and managed acceptance live only in APP-076/078 in PH01, with APP-079/080 deferred (ADR-008).
 
 **Tech Stack:** Rust 1.93.1 toolchain with `rust-version = "1.85"`; `forma-ir`/`forma-server` `=3.2.0`; axum 0.8; tokio-postgres 0.7.18 (`features = ["runtime"]` only), deadpool 0.13.1, rustls 0.23.46; serde `=1.0.229`, serde_json `=1.0.154`, ring `=0.17.14`, reqwest `=0.12.28`; Python 3.11 with psycopg 3.3.6 and boto3 1.43.121 hash-locked; `@getforma/build` 3.2.0 strict SSR; PostgreSQL 16.13 (`postgres@sha256:5d143123…`); AWS CDK 2.275.0.
 
@@ -195,7 +195,7 @@ Done 2026-10-29 in the implementer's worktree and merged (`dc3900d`, `26c1622`):
 - [ ] **Step 2: Run**; expected: FAIL.
 - [ ] **Step 3: Implement** the pages, routes, limit buckets, proxy extraction, problem responses and fallback.
 - [ ] **Step 4: Run** all local checks and the image qualification; expected: pass.
-- [ ] **Step 5: Independent review** → `evidence/APP-074/local/independent-review.md`; APP-074 stays Backlog/Selected as the board allows (its hosted items wait on Track C); commit (`feat(http): public landing, invitation entry, limits and trusted proxy (APP-074 local)`).
+- [ ] **Step 5: Independent review** → `evidence/APP-074/local/independent-review.md`; APP-074 stays Backlog/Selected as the board allows (it has no hosted items: they are APP-076's and APP-079's by ADR-008); commit (`feat(http): public landing, invitation entry, limits and trusted proxy (APP-074 local)`).
 
 ### Task 9: APP-012 — authorized typed query with receipt
 
@@ -251,7 +251,7 @@ Done 2026-10-29 in the implementer's worktree and merged (`dc3900d`, `26c1622`):
 
 ## Track B — managed tenant qualification: APP-075, APP-077, APP-078 (parallel with Track A)
 
-B1–B3 belong to APP-075 and B4–B5 to APP-077; both depend only on APP-008 and may run as preparation evidence while APP-008 awaits landing (board status moves only when `board.py next` lists them). B6–B7 are APP-078, the single reserved window, which depends on both and on a Victor-approved slot outside any auth window.
+B1–B3 belong to APP-075, B4 to APP-077 and B5 to APP-080 (ADR-008); both depend only on APP-008 and may run as preparation evidence while APP-008 awaits landing (board status moves only when `board.py next` lists them). B6–B7 are APP-078, the single reserved window, which depends on both and on a Victor-approved slot outside any auth window.
 
 ### Task B1: Finish and test the managed-entry draft
 
@@ -291,7 +291,7 @@ B1–B3 belong to APP-075 and B4–B5 to APP-077; both depend only on APP-008 an
 
 Not a PH01 task since ADR-008: APP-080 (PH05) owns the coordinator and the RDS lock-observation rows before any real organization. The steps below stay as the implementation plan for that ticket.
 
-**Files:** Create `app/qualification/race_coordinator.py`, `app/src/storage/managed_races.rs` (cfg(test)); `evidence/APP-075/coordinator/README.md`.
+**Files:** Create `app/qualification/race_coordinator.py`, `app/src/storage/managed_races.rs` (cfg(test)); `evidence/APP-080/coordinator/README.md`.
 
 **Interfaces:** Run-scoped advisory-lock phase beacons (`pg_try_advisory_lock(hashtext(run_id||phase))`) and `pg_blocking_pids`/`pg_locks` observations per the managed plan; application actor reserves one workspace lease for coordination; operator actor uses two migration connections; both revocation orders, suspension and saved-work version change; monotonic epoch restoration; peer-loss cleanup; never extends the 3 s transaction.
 

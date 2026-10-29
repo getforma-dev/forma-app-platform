@@ -85,4 +85,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 77 | [APP-078: Qualify the tenant foundation on managed RDS in one reserved window](0-backlog/APP-078.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-075, APP-077 |
 | 78 | [APP-076: Run the beta go-live trial on the live deployment](9-blocked/APP-076.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | L | Blocked | APP-012, APP-013, APP-014, APP-074, APP-078 |
 | 79 | [APP-079: Hosted identity acceptance deferred from Phase 1](9-blocked/APP-079.md) | [PH06](phases/PH06.md) | S12 | IAM | P1 | L | Blocked | APP-076 |
-| 80 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](0-backlog/APP-080.md) | [PH05](phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-078 |
+| 80 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](0-backlog/APP-080.md) | [PH05](phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-077, APP-078 |
