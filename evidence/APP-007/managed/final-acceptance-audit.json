@@ -1,0 +1,646 @@
+{
+  "schema_version": 1,
+  "audit_status": "final independent managed-foundation reconciliation; delivery gates pending",
+  "reviewer": "app007_acceptance_audit, independent of implementation and cloud operator",
+  "recorded_at_utc": "2026-10-29T01:12:02.601534+00:00",
+  "audited_head": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+  "deployed_image_source": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+  "deployed_image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "checks": [
+    {
+      "name": "Deployed source hash app/Dockerfile",
+      "passed": true
+    },
+    {
+      "name": "Deployed source hash app/migrations/0001_role_foundation.sql",
+      "passed": true
+    },
+    {
+      "name": "Deployed source hash app/runtime/runtime.py",
+      "passed": true
+    },
+    {
+      "name": "Deployed source hash app/runtime/requirements.lock",
+      "passed": true
+    },
+    {
+      "name": "Deployed source hash app/Cargo.toml",
+      "passed": true
+    },
+    {
+      "name": "Deployed source hash app/Cargo.lock",
+      "passed": true
+    },
+    {
+      "name": "Two managed migrations complete on exact image",
+      "passed": true
+    },
+    {
+      "name": "All88 SQL checks pass on exact image",
+      "passed": true
+    },
+    {
+      "name": "Four role identities have actual forbidden writes rolled back",
+      "passed": true
+    },
+    {
+      "name": "All11 tenant storage checks pass and exact versions cleaned",
+      "passed": true
+    },
+    {
+      "name": "Complete restored manifest equals source before migration",
+      "passed": true
+    },
+    {
+      "name": "Recomputed source_report canonical SHA256",
+      "passed": true
+    },
+    {
+      "name": "source_report read-only TLS and UID assertions",
+      "passed": true
+    },
+    {
+      "name": "Recomputed restored_report canonical SHA256",
+      "passed": true
+    },
+    {
+      "name": "restored_report read-only TLS and UID assertions",
+      "passed": true
+    },
+    {
+      "name": "Temporary restore resources cleaned and source preserved",
+      "passed": true
+    },
+    {
+      "name": "Applied correction preserves exact restored-source DB identity",
+      "passed": true
+    },
+    {
+      "name": "Actual update guarded, complete and remains PostgreSQL16.13 protected backup7",
+      "passed": true
+    },
+    {
+      "name": "Applied stack policy equals reviewed file",
+      "passed": true
+    },
+    {
+      "name": "Observed exact runtime image and full design sizing",
+      "passed": true
+    },
+    {
+      "name": "Observed UID/read-only/Exec-off/auth-disabled",
+      "passed": true
+    },
+    {
+      "name": "Four distinct observed database role ARNs match configuration",
+      "passed": true
+    },
+    {
+      "name": "Two distinct enabled tenant keys and scoped role/prefix bindings",
+      "passed": true
+    },
+    {
+      "name": "Same task refresh exceeds published600s max",
+      "passed": true
+    },
+    {
+      "name": "Real /32 allowed/denied then public TLS from both networks",
+      "passed": true
+    },
+    {
+      "name": "Observed private direct task/DB configuration",
+      "passed": true
+    },
+    {
+      "name": "All13 public checks on exact same task/image and verified TLS",
+      "passed": true
+    },
+    {
+      "name": "Public allowed/denied method-path results match every expected case",
+      "passed": true
+    },
+    {
+      "name": "Live inert HTML security result preserved",
+      "passed": true
+    },
+    {
+      "name": "Chosen initial baseline recovery exact image, public task and later stop",
+      "passed": true
+    },
+    {
+      "name": "Negative helper review source infra/scripts/managed_runtime_negatives.py",
+      "passed": true
+    },
+    {
+      "name": "Negative helper review source infra/test/managed_runtime_negatives_test.py",
+      "passed": true
+    },
+    {
+      "name": "Exact actual helper and registered payload bind independent review",
+      "passed": true
+    },
+    {
+      "name": "Helper runtime pin matches deployed Git source",
+      "passed": true
+    },
+    {
+      "name": "Tested shared runtime function unchanged atomic_write",
+      "passed": true
+    },
+    {
+      "name": "Tested shared runtime function unchanged load",
+      "passed": true
+    },
+    {
+      "name": "Tested shared runtime function unchanged probe",
+      "passed": true
+    },
+    {
+      "name": "Tested shared runtime function unchanged refresh",
+      "passed": true
+    },
+    {
+      "name": "Tested shared runtime function unchanged scoped_session",
+      "passed": true
+    },
+    {
+      "name": "Tested shared runtime function unchanged sdk_config",
+      "passed": true
+    },
+    {
+      "name": "Five real managed negative report checks, all pass",
+      "passed": true
+    },
+    {
+      "name": "Each four real negative cases refuses then restores helper/native200",
+      "passed": true
+    },
+    {
+      "name": "Managed negative task stopped, cleaned and deregistered",
+      "passed": true
+    },
+    {
+      "name": "Selected local helper review reports14tests, wrapper source exact",
+      "passed": true
+    },
+    {
+      "name": "Real Scheduler role stop delivered, then allcounts0",
+      "passed": true
+    },
+    {
+      "name": "Original future stop identity/expiry consistent throughout records",
+      "passed": true
+    },
+    {
+      "name": "All10 observed tasks stopped and no active/pending cluster tasks",
+      "passed": true
+    },
+    {
+      "name": "Seven standalone task durations sum325.86 within7200reserved seconds",
+      "passed": true
+    },
+    {
+      "name": "Task duration agrees with timestamps 2d34953af2f5428a969627c8c28c3956",
+      "passed": true
+    },
+    {
+      "name": "Task duration agrees with timestamps 350f469ce8704bd5b24887998e3502a9",
+      "passed": true
+    },
+    {
+      "name": "Task duration agrees with timestamps 514ea59a988141aa8d1584eb38089cd2",
+      "passed": true
+    },
+    {
+      "name": "Task duration agrees with timestamps 522a644501364a6486e58fa10e16f6fd",
+      "passed": true
+    },
+    {
+      "name": "Task duration agrees with timestamps 68b22239f9bd44cf86b3ebb2c1dd552b",
+      "passed": true
+    },
+    {
+      "name": "Task duration agrees with timestamps 71973396209f42479582740a09d13280",
+      "passed": true
+    },
+    {
+      "name": "Task duration agrees with timestamps b4a7a4fa8f294721ac05de6c69e2e647",
+      "passed": true
+    },
+    {
+      "name": "Task duration agrees with timestamps b5aca40940f340c8ad0ccc2be9907c57",
+      "passed": true
+    },
+    {
+      "name": "Task duration agrees with timestamps bce553a8e62d4d00b2db29de8a9eebe2",
+      "passed": true
+    },
+    {
+      "name": "Task duration agrees with timestamps e4f7f2282c54463391c63d1ea72f02fd",
+      "passed": true
+    },
+    {
+      "name": "Final inventory includes all trial task identities",
+      "passed": true
+    },
+    {
+      "name": "Original cumulative reservation retained and arithmetic within allocations",
+      "passed": true
+    }
+  ],
+  "independent_local_wrapper_check": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 ./node_modules/.bin/tsx --test test/runtime-negatives.test.ts",
+    "cwd": "infra",
+    "exit_code": 0,
+    "wrapper_tests": 1,
+    "underlying_python_tests": 14,
+    "wrapper_duration_ms": 3975.336166,
+    "network_calls": 0,
+    "scope": "Independent audit rerun of local boundary tests; no managed acceptance inferred from this check."
+  },
+  "source_index": {
+    ".github/workflows/foundation.yml": {
+      "sha256": "d5d15563f4c57b16a23adecab94698d5b0f81e0e278c6302868588e094ed6aff"
+    },
+    "evidence/APP-006/hosted-callback/ci.json": {
+      "sha256": "f4a61032f00af01ba5c1333b2ab4d580b2c59da99b1010f389eab4ad58471c9e"
+    },
+    "evidence/APP-007/managed/acceptance-audit.json": {
+      "sha256": "3ee6506088b943e4c444ce11cefb8f192253f7b32c20cfc9564d76a1c8a222bb"
+    },
+    "evidence/APP-007/managed/acceptance-audit.md": {
+      "sha256": "8e6bf152ef3e65357e1339c5f8888fa6a813df172cf4d5fae09a9c518d92f9e8"
+    },
+    "evidence/APP-007/managed/auto-minor-applied.json": {
+      "sha256": "22eb668d9f1fc45437ffe08328ffed98ac28e3d51629ffcd2eb27b790d7c6e88"
+    },
+    "evidence/APP-007/managed/auto-minor-upgrade-repair-author.json": {
+      "sha256": "e85a87ec8312be60077cbd3779fd35878109451414fed459c2af2e70d0f1c723"
+    },
+    "evidence/APP-007/managed/auto-minor-upgrade-repair-review.json": {
+      "sha256": "b6c7403d0bc667d6ba5b2182888697cdb5eafa35c7f0dce835ba8a0ca6cbbd07"
+    },
+    "evidence/APP-007/managed/beta-dns.json": {
+      "sha256": "af1ae66e865c95c4f5780d2c8fd4b30fabe1fc4300fbd682def21c48415eb2a5"
+    },
+    "evidence/APP-007/managed/configuration-inventory.json": {
+      "sha256": "33b166c84be4d18775322185f7750b31de26aa19a86d274da3ead9085f911b84"
+    },
+    "evidence/APP-007/managed/creation-request.json": {
+      "sha256": "d0a81b5f04de5bdf01a123cf0d2bf8c92f2c315ec56d2f833bc66873306968ad"
+    },
+    "evidence/APP-007/managed/credential-refresh.json": {
+      "sha256": "3c7179916f5d8deba08d6870c6bab5443412d909c92983487165142dd345348e"
+    },
+    "evidence/APP-007/managed/final-operating-state.json": {
+      "sha256": "84d74fc74ff7b12f5f54a6638666a87cfbc51c653824d2b6dfbe59ee4b84ea9d"
+    },
+    "evidence/APP-007/managed/initial-attempt-cleanup.json": {
+      "sha256": "8b09b62cc6863525e23ac7830c50f0cac1e1156b83df96ad943d800c85f3649b"
+    },
+    "evidence/APP-007/managed/initial-baseline-recovery.json": {
+      "sha256": "1ec56fdc75e36174c2a6f5ca857be758b97681ed8f3d87a90d3d536d64fe0fed"
+    },
+    "evidence/APP-007/managed/initial-scheduler-lookup.json": {
+      "sha256": "40eed5c94b082ba640d25d1179a15c3cfe2dc4fc2e6e0b51f47c16c22a2d4c31"
+    },
+    "evidence/APP-007/managed/managed-migrations.json": {
+      "sha256": "ea99878333004e73fb21dd4d86546b50d1e4a7b24161af249958c4d994e8d7f3"
+    },
+    "evidence/APP-007/managed/managed-sql.json": {
+      "sha256": "8a6959d63dbe937f53559604ee8356bab1be4d5a658ffd2be5ca8bb60e1bec65"
+    },
+    "evidence/APP-007/managed/network-tls.json": {
+      "sha256": "37716813ecb436fdd6e29a64d75f5b5ab73a85cebc55ae6735ebac720177444f"
+    },
+    "evidence/APP-007/managed/public-surface.json": {
+      "sha256": "dcbfc74efb927d919ee5e39d2befb20be1fae9fd722ec6a0e59fb3d0943a547c"
+    },
+    "evidence/APP-007/managed/restore-cleanup.json": {
+      "sha256": "8b3bd62b5c540d75c4bf32e531dec68f693ef66c760e225e0361308c7b6306e7"
+    },
+    "evidence/APP-007/managed/restore-comparison.json": {
+      "sha256": "1654780d8ddf8386dc5246b4353b1d2359e9b929fd66d275c020bab3a53c4941"
+    },
+    "evidence/APP-007/managed/restore-manifest-independent-review.json": {
+      "sha256": "ba28bbf8c291fb32fb709bf1bc85ac14ca2bf0f8db420a4d80e3b6c5d515f1b7"
+    },
+    "evidence/APP-007/managed/restore-manifest-repair-review.json": {
+      "sha256": "1f20da14ef390c5f60efae9b046c0ff4f9752709c6b978f41960d13a476c9cea"
+    },
+    "evidence/APP-007/managed/restore-operation-review.json": {
+      "sha256": "2fe3a831e9cb3d9d719331188707001c497000d6b2a8bc57d3d3723a4a400c33"
+    },
+    "evidence/APP-007/managed/restore-sql-root-recheck.json": {
+      "sha256": "235c8087f8c56db45f23f76791a55e40393dfd0182ec2f8a542178abe36952dc"
+    },
+    "evidence/APP-007/managed/retry-creation-request.json": {
+      "sha256": "692bc1ec188ffc6f7bfed92f12b54f8d6bcce9e4429a55b5f0a124493ccb2d24"
+    },
+    "evidence/APP-007/managed/runtime-negatives-managed.json": {
+      "sha256": "b54c3ee0664b889da2addff05532daef1dd69aafee430899f05745d6b4b7fe03"
+    },
+    "evidence/APP-007/managed/runtime-negatives/author-checks.json": {
+      "sha256": "78321c1d5e2d2c11976b6dcb584549ec889e415fe938e9147d22e74442b9f5db"
+    },
+    "evidence/APP-007/managed/runtime-negatives/ci-wrapper-author-check.json": {
+      "sha256": "a6dfaa8348cff3e17654213d14ab30a9e61a0a6f8264910b82ed41cecdcd5337"
+    },
+    "evidence/APP-007/managed/runtime-negatives/independent-review.json": {
+      "sha256": "097112870e3ce8d0bc425f861863d74121ebdcafbf6ef5c12cf76ab721e438b1"
+    },
+    "evidence/APP-007/managed/runtime-negatives/independent-review.md": {
+      "sha256": "42f17ee237b5037a0e6950c946ac96e5a8e6a55e66e6aa87c4c2584a51e39e14"
+    },
+    "evidence/APP-007/managed/scheduled-stop.json": {
+      "sha256": "5f82bbddb1ff082cd5daa122954f6d537eaef6ca1ebd1c83763033a9575cf166"
+    },
+    "evidence/APP-007/managed/sql-trial-independent-review.json": {
+      "sha256": "301d9561edbbcaecc96c699558fa0a53f37f2353f242a749910995e67779234c"
+    },
+    "evidence/APP-007/managed/sql-trial-unarmed-refusal.json": {
+      "sha256": "48162311f5b5c33507692a56b0296b1e5559f22f26c9e1ef4278303c8f328597"
+    },
+    "evidence/APP-007/managed/stack-policy-independent-review.json": {
+      "sha256": "ba665367c52a3fcddea13f43ed761e3a96dc403eeeecab075a6c3dd9f6183ef1"
+    },
+    "evidence/APP-007/managed/stop-probe-v2-independent-review.json": {
+      "sha256": "9191bf8d68d91c89ec0772cdaae390e9f58c01d0acb91d2ee3467172475e6237"
+    },
+    "evidence/APP-007/managed/tenant-qualification.json": {
+      "sha256": "b332bd213133924f82dc230e64b4390a5fcc9f0d77b7c48d4fcd32a56aae34c7"
+    },
+    "evidence/APP-007/migration-repair/ci.json": {
+      "sha256": "8b3d75807359e88100be3bc0a9657723f7fad8f92f8bb8cdd1e64f05f8e92ef8"
+    },
+    "evidence/APP-007/migration-repair/image-qualification.json": {
+      "sha256": "fd4f588ff6fc1675e2e71ec29eaf632e031614fbff3e89dbbae8084d35054c03"
+    },
+    "evidence/APP-007/migration-repair/registry-image-receipt.json": {
+      "sha256": "0b62720116a59ade72c65176b127e7302d834c073aec75d79f964ab5e7bd83ff"
+    },
+    "infra/scripts/managed_runtime_negatives.py": {
+      "sha256": "26cc81d7eb0dfc3eb5ec75e5b25c6522d34b0e9c0e79cdd6423bfbbc057199df"
+    },
+    "infra/stack-policy.json": {
+      "sha256": "48ac65c6ee7ca63d40da59ee5be4f367493613cd26a828b3adeeca8c7b27c3b3"
+    },
+    "infra/test/managed_runtime_negatives_test.py": {
+      "sha256": "fb54e1115c068d11ab34ab57aca4f8b84ab81594282f861bca7b5a054d5cfb31"
+    },
+    "infra/test/runtime-negatives.test.ts": {
+      "sha256": "f085ca4276b77be3eb196972ec0151f4fa5d61dcf23562f233425b0e01634159"
+    },
+    "README.md": {
+      "sha256": "61c40e9460b24432a093c24a2bf12398790edfb73dad347b207929c0dd7a3fd4"
+    },
+    "evidence/APP-007/README.md": {
+      "sha256": "b2825edf72b602d7eb16d9060989e76e77f67e73869b75c32e7b46053c8da191"
+    },
+    "evidence/APP-007/managed/README.md": {
+      "sha256": "3fb9191928e56b1f878edee861f1bc96be3ec9112cb534b2d145bc9af62bc694"
+    },
+    "docs/planning/SYNTHETIC-ENVIRONMENT.md": {
+      "sha256": "3d9378eba88fb385476eb92be1a37619f6811c23aaf87f1177fe983261d35541"
+    },
+    "docs/planning/SYNTHETIC-ENVIRONMENT-COST.md": {
+      "sha256": "02e121ecb402ea704d7f3ad8d0b9384e4f4e0c699ceb3c1e54f5ff0275338700"
+    },
+    "app/README.md": {
+      "sha256": "e360ea56cf5172775fbf90c069a94931bca94cdba51f4852aae7aa359276ba7c"
+    },
+    "infra/README.md": {
+      "sha256": "0a091a69311c2a1e00454405fed870c23784a6a2b4b0f2b2f3a1d5040bc8d47f"
+    },
+    "Tickets/2-in-progress/APP-007.md": {
+      "sha256": "10cd2a3f6fbab2679462ab838925c1787e2cfe425846ae2cb31c037ee1515b81"
+    },
+    "docs/planning/QUALITY-GATES.md": {
+      "sha256": "5545dcaff7179d0de0341f7a05000083f1d733fbd2c774e42c3d398c6796db4f"
+    },
+    "docs/planning/SOURCE-GUIDE.md": {
+      "sha256": "baa324274372f2588807c198051b4df0ac387bba05df31c2a4202675c69c6cb1"
+    },
+    "docs/architecture/ADR-003-PUBLIC-BETA-ACCESS.md": {
+      "sha256": "47f2f1592e20bf65b4ca3cd31549432118bceca8d1b22badf4ddb6f28f3ab788"
+    },
+    "design/forma-generative-app-platform-v2/deliverables/v1/md/design.md": {
+      "sha256": "c339b8f6d1dbe522206a9c582bfc7d9a89e16e8c9d71f29936d53bb49a8b3d2e"
+    },
+    "design/forma-northstar-demo/deliverables/v1/md/design.md": {
+      "sha256": "0461bf56c10806e5b72361f1e3a6d0d6e4608bbb83ab5a4888a117a7f7eac13c"
+    },
+    "design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md": {
+      "sha256": "f209ccb05aa895080c6fd424fe979d65f276959536ee7d57b371428e1d049fd5"
+    },
+    "design/forma-generative-app-platform-v2/VALIDATION.md": {
+      "sha256": "db78a82ae9c5e05767b715fd81de088abf666f30a4b95a3c752a079cd3a27016"
+    },
+    "design/forma-northstar-demo/SCENARIOS.md": {
+      "sha256": "0adc2d6a83df03f555dcf52258a768039d0e59592ed56d12335e82f8123cbab1"
+    }
+  },
+  "verdict": "All six APP-007 foundation acceptance items are supported at the explicitly qualified source/image/configuration identities. No blocking managed-foundation finding remains. Exact final helper/wrapper/policy/evidence source CI and landing remain required before the owner marks the ticket Done.",
+  "cloud_calls_by_reviewer": 0,
+  "implementation_edits_by_reviewer": 0,
+  "ticket_status_changes_by_reviewer": 0,
+  "blocking_managed_foundation_findings": [],
+  "historical_draft_preserved": {
+    "markdown": "evidence/APP-007/managed/acceptance-audit.md",
+    "json": "evidence/APP-007/managed/acceptance-audit.json",
+    "interpretation": "The original five-gap checkpoint remains unchanged; this new audit closes its findings using subsequent actual observations."
+  },
+  "acceptance_items": [
+    {
+      "item": 1,
+      "disposition": "supported at qualified foundation",
+      "requirement": "Agreed reproducible managed environment; two-tenant access, migration, cleanup/rollback and actual identities",
+      "evidence": [
+        "configuration-inventory.json",
+        "managed-migrations.json",
+        "managed-sql.json",
+        "tenant-qualification.json",
+        "restore-comparison.json",
+        "restore-cleanup.json",
+        "initial-attempt-cleanup.json",
+        "initial-baseline-recovery.json",
+        "runtime-negatives-managed.json",
+        "final-operating-state.json"
+      ],
+      "assessment": "Actual four-role SQL and paired tenant storage/key access/denial, migration and idempotent repeat, exact-version cleanup, foundation snapshot restore and chosen initial-baseline recovery satisfy this slice. Two-tenant application row/RLS authorization remains APP-008; it is not claimed here."
+    },
+    {
+      "item": 2,
+      "disposition": "supported at named reproducible baseline; final added helper CI pending",
+      "requirement": "Clean clone pinned install, initial migrations, documented minimal role configuration without committed secrets",
+      "evidence": [
+        "../local-preparation.json",
+        "../migration-repair/ci.json",
+        "../migration-repair/image-qualification.json",
+        "../migration-repair/registry-image-receipt.json",
+        "managed-migrations.json",
+        "configuration-inventory.json",
+        "public-surface.json"
+      ],
+      "assessment": "Fresh-checkout locked CI and real image checks establish reproducible source; real initial/idempotent migrations and native ready200 establish the configured managed path. Example settings deliberately contain placeholders; reviewed nonsecret outputs and runtime/execution secret channels supply actual values. No runnable password is required or permitted in Git."
+    },
+    {
+      "item": 3,
+      "disposition": "supported for foundation interfaces",
+      "requirement": "One business binary with workspace/control/data/worker constrained credentials; no privileged HTTP role selector",
+      "evidence": [
+        "../review.md",
+        "managed-sql.json",
+        "configuration-inventory.json",
+        "runtime-negatives-managed.json",
+        "public-surface.json"
+      ],
+      "assessment": "Fixed typed role interfaces compile in one binary, use four distinct constrained SQL identities and reject privilege escalation in real write-enabled transactions. Actual public routes are inert/health/assets. Shared-process compromise remains the disclosed demo trust boundary; typed interfaces are not signed service tokens or full business grants."
+    },
+    {
+      "item": 4,
+      "disposition": "supported for qualified committed revisions; latest source delivery gate pending",
+      "requirement": "Focused format/build/type/security CI from pins and exact scripts; no premature app capability claims",
+      "evidence": [
+        "../migration-repair/ci.json",
+        "../scheduler-repair/ci.json",
+        "../../APP-006/hosted-callback/ci.json",
+        "runtime-negatives/independent-review.json",
+        "runtime-negatives/ci-wrapper-author-check.json"
+      ],
+      "assessment": "Released dependency lockfiles, SHA-pinned workflow actions and passing exact-revision CI establish the prior qualified source. The newly added negative runner/wrapper is independently reviewed and the wrapper passed again during this audit, but no exact final helper/wrapper/policy commit CI is invented. Full signed releases/SBOM and managed rollout trials remain APP-061."
+    },
+    {
+      "item": 5,
+      "disposition": "supported for bounded synthetic operation",
+      "requirement": "Bounded trial hours/cost/stop/cleanup within100USD;2vCPU/8GiB managed design; no LLM",
+      "evidence": [
+        "retry-creation-request.json",
+        "configuration-inventory.json",
+        "scheduled-stop.json",
+        "final-operating-state.json"
+      ],
+      "assessment": "Observed task is2048CPUunits/8192MiB. Actual Scheduler stop and final zero-count/ten-stopped-task inventory are retained. Seven standalone task intervals total325.86seconds against7200 reserved; the unchanged monthly project reservation is97.49USD including5USD auth and25USD unallocated. Estimates are not invoices/hard caps; retained infrastructure still bills. No model route or call is enabled."
+    },
+    {
+      "item": 6,
+      "disposition": "supported for disabled public foundation",
+      "requirement": "beta DNS/TLS/publicHTTPS; brief actual/32trial; private direct boundaries; allowed inert surfaces and protected-work denial",
+      "evidence": [
+        "beta-dns.json",
+        "network-tls.json",
+        "configuration-inventory.json",
+        "public-surface.json",
+        "initial-baseline-recovery.json"
+      ],
+      "assessment": "Actual hostname TLS succeeded from execution and OVH networks after temporary restriction was removed. Observed security groups confine task3000 to ALB and database5432 to task; RDS is private. Thirteen actual HTTP checks bind exact image/task: inert pages200 with no-store/freshCSP, missing protected/auth/admin/reset routes404 and rootPOST405. No live direct-task TCP probe is claimed. Future invite/session/business authorization still requires its own integration evidence."
+    }
+  ],
+  "prior_gap_closure": [
+    {
+      "id": "G1",
+      "status": "closed",
+      "evidence": [
+        "auto-minor-applied.json",
+        "configuration-inventory.json"
+      ],
+      "reason": "Guarded UPDATE_COMPLETE explicitly setsAutoMinor=false on availablePostgreSQL16.13, keeping exact identifier/resourceId/endpoint,backup7 and protection. Policy file hash matches applied receipt; no guard override."
+    },
+    {
+      "id": "G2",
+      "status": "closed at actual implemented refusal boundaries",
+      "evidence": [
+        "runtime-negatives-managed.json",
+        "runtime-negatives/independent-review.json",
+        "tenant-qualification.json",
+        "credential-refresh.json"
+      ],
+      "reason": "Actual isolated task used exact reviewed helper/source/payload and deployed8f image. Managed baseline200, four direct helper refusals/native503 and fresh helper restoration/native200 cover missing file, wrong region, expired file and unreachable DB; files/child cleaned, taskSTOPPEDexit0 and definitionINACTIVE. Wrong-key denials and positive refresh remain independently recorded. Wrong-region/expired-file refusal is deliberately before AWS; no remote natural token-expiry denial is claimed."
+    },
+    {
+      "id": "G3",
+      "status": "closed by documented and exercised initial-deployment fallback",
+      "evidence": [
+        "initial-baseline-recovery.json",
+        "public-surface.json",
+        "scheduled-stop.json",
+        "restore-comparison.json",
+        "restore-cleanup.json"
+      ],
+      "reason": "No prior successful release exists. Chosen fallback stops service, preserves proven restorable foundation and recovers same qualified image through preflight. New task had verifiedTLS/native200, then was observedSTOPPED with servicezero. This is not an unrun prior-image rollback or PH05 upgrade/downgrade campaign."
+    },
+    {
+      "id": "G4",
+      "status": "closed",
+      "evidence": [
+        "public-surface.json",
+        "network-tls.json"
+      ],
+      "reason": "Thirteen actual-hostname method/path checks now retain inert HTML/security headers, health and representative protected/auth/admin/reset denials on one exact running task/image."
+    },
+    {
+      "id": "G5",
+      "status": "closed",
+      "evidence": [
+        "configuration-inventory.json",
+        "final-operating-state.json"
+      ],
+      "reason": "Actual six IAM roles/two enabledKMSkeys/prefix map and fullsize/private runtime configuration are retained. Final observed ten tasks areSTOPPED with no active/pending tasks, retained resources, exact image/schedule, unchanged cumulative reservation and namedcleanupowner. Maintained documentation must point to these later results while retaining earlier history. Seven maintained current documents were subsequently read and reconciled against these later records; their exact hashes are in source_index."
+    }
+  ],
+  "completion_gates": [
+    {
+      "id": "DELIVERY-1",
+      "status": "pending root",
+      "requirement": "Commit and run exact-source CI for final APP-007 helper, Python tests, TypeScript wrapper, stack policy and evidence; retain result binding. Passing previous revisions and this local wrapper do not supply that final CI result."
+    },
+    {
+      "id": "DELIVERY-2",
+      "status": "pending root",
+      "requirement": "Land reviewed source/evidence and reconcile authoritative APP-007 ticket/checklist/log and generated board with current result. No status change is performed by this audit."
+    }
+  ],
+  "deferred_owning_work": {
+    "APP-006": "Accepted hosted fAuth/callback integration and optional secret delivery qualification; no cloud auth readiness inferred.",
+    "APP-008": "Tenant-leading relational keys, effective full grants,FORCE RLS and pool/reset boundary.",
+    "APP-009/073/074": "Admitted membership/entitlement session, invite-only registration/redemption, real browsers/directAPI abuse/race/revocation checks.",
+    "APP-012/013/014": "Managed query/receipt/command consistency and reopen/race journey for fullPH01.",
+    "APP-043": "Model/provider execution and enforceable spend admission.",
+    "APP-053/057": "Full application-data/audit recovery and demo canary/evidence packet.",
+    "APP-060/061": "Signed service tokens, signed release/SBOM and full managed rollout/compatibility trials."
+  },
+  "phase1_complete": false,
+  "phase2_handoff_authorized_by_this_audit": false,
+  "limitations": [
+    "Reviewer inspected retained root-captured observations and independently checked their cross-record/hash consistency; no independent live AWS lookup or repeated cloud trial.",
+    "Sixty consistency checks validate evidence, not sixty separately repeated managed operations.",
+    "Actual managed baseline is8f8c34b image; newer repository source/optional callback configuration is a separate artifact and must be separately qualified when deployed.",
+    "Foundation receipt proves configured direct-port security from observed inventory; no active direct-task-port TCP denial is invented.",
+    "Negative-file expiry/region refusals occur at the reviewed validation boundary; native200 restoration can reuse a valid cache while direct helper positives freshly establish managed connectivity.",
+    "Observed task intervals are not AWS billable usage. Retained RDS/ALB/addresses/keys/storage charge after compute stops.",
+    "Foundation acceptance neither certifies public signup nor completes full platformN9/SR3/SR8, the phase gate or any later ticket."
+  ],
+  "document_reconciliation": {
+    "status": "checked and reconciled",
+    "paths": [
+      "README.md",
+      "evidence/APP-007/README.md",
+      "evidence/APP-007/managed/README.md",
+      "docs/planning/SYNTHETIC-ENVIRONMENT.md",
+      "docs/planning/SYNTHETIC-ENVIRONMENT-COST.md",
+      "app/README.md",
+      "infra/README.md"
+    ],
+    "checks": [
+      "Read current narratives against later actual receipts; all distinguish observed managed foundation from remaining application/phase gates.",
+      "Docs identify all ten stopped tasks, exact separate image/source artifacts and retained billable resources.",
+      "Managed index preserves original draft audit as historical; later actual receipts close G1-G5.",
+      "Explicit initial-baseline recovery replaces an unproved prior-image rollback claim; PH05 remains deferred.",
+      "Final operating/cost record keeps the97.49USD cumulative reservation and named cleanup owner."
+    ]
+  },
+  "final_hash_recheck": {
+    "earlier_44_source_hashes_unchanged": true,
+    "historical_draft_unchanged": true
+  }
+}

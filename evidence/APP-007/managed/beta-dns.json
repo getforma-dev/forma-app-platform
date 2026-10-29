@@ -1,0 +1,13 @@
+{
+  "at_utc": "2026-10-28T23:59:17.645797+00:00",
+  "hostname": "beta.getforma.dev",
+  "type": "CNAME",
+  "target": "GenuiS-LoadB-DaSWApcUZWXa-161166425.us-east-1.elb.amazonaws.com",
+  "ttl": 600,
+  "record_id": "598862712",
+  "existing_records_unchanged": 24,
+  "proxy_setting_unchanged": true,
+  "certificate_validation_record_preserved": true,
+  "scope": "Only beta application CNAME created; no other DNS record modified",
+  "public_resolution_and_tls_acceptance_pending": true
+}

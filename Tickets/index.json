@@ -366,11 +366,11 @@
     {
       "id": "APP-007",
       "title": "Scaffold reproducible browser/Rust workspace and one binary's role interfaces",
-      "path": "2-in-progress/APP-007.md",
+      "path": "3-in-review/APP-007.md",
       "Field": "Value",
       "---": "---",
       "Epic": "FND",
-      "Status": "In progress",
+      "Status": "In review",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S02",
@@ -385,7 +385,7 @@
       "Assignee": "GenUI \u2014 Codex scaffold lead",
       "Branch / PR": "phase-one-spikes; independently owned ticket paths",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 operator inputs are supplied; revised infrastructure and managed trials are in progress.",
+      "Blocked by": "None \u2014 managed foundation accepted by independent review; final committed-source CI and landing are pending.",
       "Unblock evidence": "Qualify the full-size bounded Fargate trial within the approved $100/month allowance at beta.getforma.dev, with public HTTPS, real role/tenant denials, TLS/readiness/refresh and scoped cleanup/rollback evidence. Local checks alone do not clear this gate.",
       "dependencies": [
         "APP-001",

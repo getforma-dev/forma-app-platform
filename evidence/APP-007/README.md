@@ -1,14 +1,24 @@
-# APP-007 local preparation and managed gate
+# APP-007 preparation and managed evidence
 
-## Updated operator inputs — 2026-10-28
+## Current checkpoint — managed evidence retained, acceptance incomplete
 
-Victor supplied `beta.getforma.dev`, public HTTPS with invite-first signup, and a $100 monthly project limit. [The operator input receipt](operator-inputs-2026-10-28.json) records successful issuance of a dedicated non-exportable ACM certificate and preservation of all 23 existing DNS records when adding its validation. No application route, RDS, app task or managed qualification is established by that certificate. Infrastructure is being revised for a bounded trial, with $5 of the same limit reserved for the coordinated auth rehearsal. The [current environment plan](../../docs/planning/SYNTHETIC-ENVIRONMENT.md) supersedes earlier missing-input and permanent-IP-restriction assumptions below; the original source/image checks remain historical evidence for their exact revisions.
+APP-007 has progressed beyond local preparation. The [managed evidence index](managed/README.md) links actual migration/idempotent-repeat, 88 database role checks, 11 two-tenant storage checks with exact-version cleanup, DNS/TLS and public-surface results, credential refresh, real snapshot restore/comparison/cleanup and a delivered scheduled service stop. The [observed configuration](managed/configuration-inventory.json) records the deployed identities and sizing. The [guarded configuration repair](managed/auto-minor-applied.json) completed with PostgreSQL still at 16.13, automatic minor upgrades disabled and the same source database identity.
 
-**Local preparation is reviewable; APP-007 is not complete.** At the original local qualification below, no GenUI AWS resource had been created and operator inputs were pending. The later receipt above resolves those inputs and records certificate preparation only. No migration has been applied to GenUI RDS and no live readiness/two-tenant qualification has run.
+The [actual managed negative trial](managed/runtime-negatives-managed.json) now records four helper refusals/native 503 results, each followed by a fresh positive helper probe and restored readiness 200. The [final operating receipt](managed/final-operating-state.json) records all ten observed tasks stopped, no running/pending cluster tasks and retained infrastructure ownership. **Final APP-007 acceptance, landing and exact-source CI remain pending.** The [draft acceptance audit](managed/acceptance-audit.md) records its earlier checkpoint; later receipts close individual gaps without retroactively changing that audit. Hosted auth, APP-008's tenant-bearing schema/RLS/pool boundary, APP-009 sessions and APP-073/074 invite admission remain separate open work. No business workflow or PH01 completion follows from this foundation.
+
+The chosen initial-deployment fallback is scheduled service stop, a verified restorable foundation and [observed recovery of the same qualified immutable baseline](managed/initial-baseline-recovery.json), followed by another observed stop. No prior-image rollback or PH05 release campaign is claimed. Resource states below belong to their timestamps; the final operating receipt supersedes earlier stopped/running observations for this campaign's ending state. Seven standalone tasks accumulated 325.86 seconds from creation to stop against the reserved 7,200 seconds. The project reservation remains $97.49, not a billed total; stopping app tasks does not stop RDS/ALB/key/storage charges.
+
+These maintained documents are later evidence, not replacement image bytes. The managed campaign binds the `8f8c34b` foundation image. The separate [APP-006 registry receipt](../APP-006/hosted-callback/secret-wiring/registry-image-receipt.json) pins all 24 source objects at `18c33f5`; subsequent README edits do not change that image's source identity or prove it deployed.
+
+## Historical operator-input checkpoint — 2026-10-28
+
+Victor supplied `beta.getforma.dev`, public HTTPS with invite-first signup, and a $100 monthly project limit. [The operator input receipt](operator-inputs-2026-10-28.json) recorded successful issuance of a dedicated non-exportable ACM certificate and preservation of all 23 existing DNS records when adding its validation. That certificate alone established no application route, RDS, app task or managed qualification. At that checkpoint infrastructure was being revised for a bounded trial, with $5 of the same limit reserved for the coordinated auth rehearsal. The [environment plan](../../docs/planning/SYNTHETIC-ENVIRONMENT.md) supersedes the earlier missing-input and permanent-IP-restriction assumptions; the original source/image checks below remain historical evidence for their exact revisions.
+
+At the original local qualification below, no GenUI AWS resource had been created and operator inputs were pending. The certificate receipt resolved those inputs, but no GenUI RDS migration or live readiness/two-tenant qualification had run **at that time**. The later managed receipts above establish that subsequent work; the old files retain their original then-pending claims.
 
 The candidate supplies strict native Forma 3.2.0 browser/Rust source, fixed role interfaces with atomic credential-file reload, a pinned credential helper and actual dependency probes, initial SQL migration, separate mutating qualification/cleanup commands, and deployable CDK ECS/Fargate/RDS/S3/KMS/TLS configuration. One Rust business binary plus a local Python support process share the demo task's trust boundary; no per-process or application authorization claim follows from logical role credentials.
 
-## Checks actually run
+## Historical local checks actually run
 
 - `python3 scripts/check-foundation.py`: **14/14 steps passed**. The retained [local report](local-preparation.json) includes exact commands and output: hash-locked Python installation, ten Python unit failure-path tests, four Rust tests, native browser typecheck/build, Rust format/build, real local HTTP response checks, and ten CDK security template tests plus lookup-free synthesis.
 - `docker build --tag genui-app007-local:qualification --file app/Dockerfile app`: completed on Linux ARM64 from pinned Node/Rust/Python base digests and lockfiles. The runtime image is **`sha256:8d8e2f3905ec1764e14d4207915439022be6edff0791e743b502716c929f2afb`**. It was built locally, not pushed or deployed. The owned local image remains available for independent review.
@@ -19,13 +29,15 @@ The candidate supplies strict native Forma 3.2.0 browser/Rust source, fixed role
 
 Independent review also identified that `rolsuper=false` alone does not exclude the RDS `rds_superuser` group. The managed probe now refuses every catalog membership except the fixed login and `rds_iam`; a local control with ordinary flags false but `rds_superuser` membership is refused. This is tested locally, not a claim that real RDS grants have been observed. The final image/source identities include that repair; the runtime helper copied from the stopped image matches the candidate SHA-256 recorded in the image evidence.
 
-## Retained implementation failures
+## Historical local implementation failures — retained
 
 The initial release-image HTTP smoke assumed the listener marker would be the first stdout line. Forma's release build emits SSR-module load messages first. The harness now drains startup lines and waits for the explicit bound-listener marker under its existing deadline; the application did not change to conceal those logs. [Initial failure record](image-initial-failure.json). The final named-volume/image trial passed afterward.
 
 The first SHA-256 formatting attempt used a trait not implemented by the selected sha2 0.11 output; compilation refused it. Explicit byte-to-hex encoding fixed the build, with no dependency downgrade. An initial local metadata fetch used a Python environment missing its default CA installation; the retry used the system trust bundle, never disabled TLS verification. Hash-locked installation and the final image build subsequently passed.
 
-## Prepared, not exercised against AWS
+## Historical pre-deployment checkpoint — AWS trials then unrun
+
+This section describes the original prepared candidate and its then-open checks. See the managed index for subsequent executions and remaining acceptance; this is not the current deployment state.
 
 [App instructions](../../app/README.md) contain the secret-free startup contract, initial operator-only migration, mutating `qualify` task override, paired own-object/read and other-prefix/key denials, and exact-version cleanup. Readiness performs positive dependency checks without persistent S3 writes. Qualification is separate and must retain its run UUID and reconcile exact keys/versions after any transport-unknown write outcome before retrying or cleaning up.
 
@@ -35,14 +47,14 @@ The remaining acceptance includes real migration/SQL grants, two-tenant denials,
 
 The earlier [AWS discovery](aws-discovery.md), [temporary shutdown](gatewasm-shutdown.md) and [authorized GateWASM teardown](gatewasm-teardown.md) are historical records, not GenUI provisioning. GateWASM removal left account access available but no app database/network to reuse.
 
-## Infrastructure review correction
+## Historical infrastructure review correction
 
 Independent review found that an autoscaling maximum equal to the 20-GiB allocation would be rejected by AWS. The final template omits that setting, keeping storage fixed instead of raising the budget. A negative template assertion now requires its absence; infrastructure typecheck, all ten tests and synthesis pass in [follow-up evidence](storage-review-fix.json). The prior identity/template are retained alongside the refreshed current source identity. Application/image bytes are unchanged; live managed acceptance remains unrun. See [AWS autoscaling constraints](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PIOPS.Autoscaling.html).
 
-## Final local review and CI
+## Historical final local review and CI
 
-[Independent review](review.md) approves the local preparation at `8139067`, with all 39 source hashes checked, 24 focused tests repeated and the local immutable image independently exercised. All six [source CI checks](ci.json) pass. The retained [Linux/x86 preparation](ci-8139067/local-preparation.json) passes all fourteen steps; its separately built [image trial](ci-8139067/image-qualification.json) also passes. That source landed on `origin/main`. APP-007 remains Blocked for the inputs and managed acceptance above; CI ran no cloud deployment, migration or managed service trial.
+[Independent review](review.md) approved the local preparation at `8139067`, with all 39 source hashes checked, 24 focused tests repeated and the local immutable image independently exercised. All six [source CI checks](ci.json) passed. The retained [Linux/x86 preparation](ci-8139067/local-preparation.json) passed all fourteen steps; its separately built [image trial](ci-8139067/image-qualification.json) also passed. That source landed on `origin/main`. At that checkpoint APP-007 remained Blocked for inputs and managed acceptance; this CI ran no cloud deployment, migration or managed service trial. Current ticket status remains authoritative on the live board.
 
-## Public-access and bounded-window revision
+## Historical public-access and bounded-window preparation
 
-The [revised infrastructure campaign](public-beta-infra/qualification.json) and [independent review](public-beta-infra/review.md) qualify public/operator ingress, a narrowly scoped expiry stop, live activation checks and cumulative budget reservations. The app runtime itself is unchanged; [its registry receipt](registry-image-receipt.json) rechecks the original app hashes and binds the uploaded ARM64 image digest. Registry publication does not establish deployed availability, a vulnerability-scan pass or managed acceptance. The first managed trial will use a short window within the $100 monthly project plan.
+The [revised infrastructure campaign](public-beta-infra/qualification.json) and [independent review](public-beta-infra/review.md) qualified the prepared public/operator ingress, narrowly scoped expiry stop, activation checks and cumulative budget reservations. The app runtime itself was unchanged in that revision; [its registry receipt](registry-image-receipt.json) rechecked the original app hashes and bound the uploaded ARM64 image digest. Registry publication alone established no deployed availability, vulnerability-scan pass or managed acceptance. The subsequent managed campaign used the revised migration image and retained the original receipts rather than relabeling these earlier checks.

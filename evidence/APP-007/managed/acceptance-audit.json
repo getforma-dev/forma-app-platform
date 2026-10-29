@@ -1,0 +1,482 @@
+{
+  "schema_version": 1,
+  "audit_status": "draft; incomplete acceptance; no ticket status changes",
+  "reviewer": "app007_acceptance_audit, independent of implementation and cloud operator",
+  "recorded_at_utc": "2026-10-29T00:46:50.338322+00:00",
+  "audited_head": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+  "cloud_calls_by_reviewer": 0,
+  "source_edits_by_reviewer": 0,
+  "deployed_image_source": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+  "deployed_image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "method": "Read authoritative ticket/design/plans/source and retained managed receipts; independently recomputed selected source/manifest hashes and cross-record consistency. Did not independently repeat cloud operations.",
+  "checks": [
+    {
+      "name": "Registry source hash app/Dockerfile",
+      "passed": true
+    },
+    {
+      "name": "Registry source hash app/migrations/0001_role_foundation.sql",
+      "passed": true
+    },
+    {
+      "name": "Registry source hash app/runtime/runtime.py",
+      "passed": true
+    },
+    {
+      "name": "Registry source hash app/runtime/requirements.lock",
+      "passed": true
+    },
+    {
+      "name": "Registry source hash app/Cargo.toml",
+      "passed": true
+    },
+    {
+      "name": "Registry source hash app/Cargo.lock",
+      "passed": true
+    },
+    {
+      "name": "Two managed migration runs stopped successfully",
+      "passed": true
+    },
+    {
+      "name": "All88 managed SQL checks explicitly pass",
+      "passed": true
+    },
+    {
+      "name": "All11 storage checks explicitly pass or deny",
+      "passed": true
+    },
+    {
+      "name": "Exact two version cleanup and empty prefixes",
+      "passed": true
+    },
+    {
+      "name": "Full restored manifest equals source, distinct database identity",
+      "passed": true
+    },
+    {
+      "name": "source full manifest SHA256 recomputation",
+      "passed": true
+    },
+    {
+      "name": "source read-only verified-TLS manifest assertions",
+      "passed": true
+    },
+    {
+      "name": "restore full manifest SHA256 recomputation",
+      "passed": true
+    },
+    {
+      "name": "restore read-only verified-TLS manifest assertions",
+      "passed": true
+    },
+    {
+      "name": "Restore temporary resources removed; source preserved",
+      "passed": true
+    },
+    {
+      "name": "Same task ready beyond helper max expiry",
+      "passed": true
+    },
+    {
+      "name": "Recorded scheduler stop converged without destroying future stop",
+      "passed": true
+    },
+    {
+      "name": "Refresh and stopped task identities agree",
+      "passed": true
+    },
+    {
+      "name": "All eight exact-fe4ca0e CI checks passed",
+      "passed": true
+    }
+  ],
+  "acceptance_items": [
+    {
+      "item": 1,
+      "status": "partial",
+      "obligation": "Reproducible agreed managed environment, two-tenant access, migration, cleanup/rollback and actual identities",
+      "evidence": [
+        "M1",
+        "M2",
+        "M3",
+        "M4",
+        "M5",
+        "M10",
+        "M11",
+        "L5"
+      ],
+      "remaining": [
+        "G1",
+        "G2",
+        "G3",
+        "G5"
+      ],
+      "assessment": "Real managed foundation/store and recovery checks are substantiated. Tenant row/RLS authorization is APP-008; it is not fabricated here. Complete remaining negative behavior and final environment/configuration retention; reconcile fallback."
+    },
+    {
+      "item": 2,
+      "status": "substantially evidenced; final handoff reconciliation pending",
+      "obligation": "Clean clone pinned install, initial migration and documented minimal configuration without committed secrets",
+      "evidence": [
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "L7",
+        "L8",
+        "M1",
+        "M2",
+        "M7",
+        "S1",
+        "S8",
+        "S9",
+        "S10"
+      ],
+      "remaining": [
+        "G5"
+      ],
+      "assessment": "Fresh CI checkout runs locked installs/build/image and exact PostgreSQL migration; real migrations and deployed readiness use runtime secrets, not sample passwords. Example is deliberately incomplete: substitute reviewed nonsecret outputs and use documented secret channel. This item does not require valid credentials in Git."
+    },
+    {
+      "item": 3,
+      "status": "sufficient for foundation scope",
+      "obligation": "One business binary, four constrained role interfaces, no privileged role selector",
+      "evidence": [
+        "L1",
+        "L3",
+        "M2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S7"
+      ],
+      "remaining": [],
+      "assessment": "Typed fixed interfaces reload distinct SQL identities; managed write-enabled DDL/DML/SET ROLE denial covers effective foundation grants. Shared-process compromise boundary is explicit. Signed internal tokens, complete grants and tenant/RLS remain later owning work."
+    },
+    {
+      "item": 4,
+      "status": "sufficient at named committed revisions",
+      "obligation": "Locked focused build/type/format/security CI; no premature app capability claims",
+      "evidence": [
+        "L2",
+        "L4",
+        "L7",
+        "L8",
+        "S8",
+        "S10"
+      ],
+      "remaining": [],
+      "assessment": "SHA-pinned workflow actions, locked installs/builds and eight exact-source checks exist. fe4ca0e CI is not proof that uncommitted optional auth secret wiring is qualified or that its image is deployed. Full signed release/SBOM gate belongs APP-061."
+    },
+    {
+      "item": 5,
+      "status": "substantially evidenced; final inventory/operating record pending",
+      "obligation": "Bounded trial costs/stop/cleanup, $100 limit, 2vCPU/8GiB, no LLM",
+      "evidence": [
+        "M8",
+        "M10",
+        "M11",
+        "P4",
+        "S2",
+        "S13"
+      ],
+      "remaining": [
+        "G5"
+      ],
+      "assessment": "Retained reservation is $97.49 project total including $5 auth and $25 unallocated; actual stop-only Scheduler event and task convergence proved. It is an estimate/reservation, not final invoice or hard billing cap. Retained RDS/ALB/keys continue charging. Record final deployed sizing/identity and reconcile additional standalone work with reservation before a new window."
+    },
+    {
+      "item": 6,
+      "status": "partial",
+      "obligation": "beta DNS/TLS public HTTPS, brief real /32 trial, private direct boundaries, inert routes and protected-work denial",
+      "evidence": [
+        "M7",
+        "M9",
+        "L4",
+        "S7"
+      ],
+      "remaining": [
+        "G4",
+        "G5"
+      ],
+      "assessment": "Actual local/OVH TLS200 and /32 external timeout plus subsequent public443 inventory are retained. Actual SG inventory demonstrates ALB-only3000/private5432 and no extra listener; no independent direct-port TCP probe claimed. Deployed8f route source has inert pages/health/assets only, but retained live public protected-route response evidence is missing."
+    }
+  ],
+  "gaps": [
+    {
+      "id": "G1",
+      "kind": "actual configuration fix pending",
+      "source_ids": [
+        "M12",
+        "M5",
+        "S13"
+      ],
+      "requirement": "Reproducible pinned managed foundation",
+      "gap": "Source DB AutoMinorVersionUpgrade is recorded true. Reviewed explicit-false repair has exact-source CI but no actual update-complete/same-DB-identity receipt yet.",
+      "completion": "Retain completed guarded update and live false flag, unchanged source DB resource identity, engine16.13, image/stop/network and available healthy baseline; do not infer from template alone."
+    },
+    {
+      "id": "G2",
+      "kind": "required negative managed behavior evidence absent",
+      "source_ids": [
+        "P3",
+        "L1",
+        "S3",
+        "S4",
+        "S6",
+        "S11",
+        "M3",
+        "M6"
+      ],
+      "requirement": "Environment plan explicitly requires negative missing-credential, wrong-region/key, unreachable-service behavior; local review also calls for credential expiry failure.",
+      "gap": "Wrong tenant key/prefix denied in real managed trial; refresh beyond600s passes. Existing local expired-file/no-probe tests and source guards are useful, but missing-credential/wrong-region/unreachable-service and actual expiry-refusal managed-path receipts were not found.",
+      "completion": "Use isolated bounded negative invocations against the reviewed deployed foundation; retain expected refusal/sanitized error/no readiness or work success and task cleanup. No real credentials in evidence, no outage of shared services, no invalidating earlier positive results. If a case is rejected before networking by design, record actual invocation at that boundary instead of inventing a cloud denial."
+    },
+    {
+      "id": "G3",
+      "kind": "rollback disposition incomplete",
+      "source_ids": [
+        "T1",
+        "L1",
+        "S2",
+        "M4",
+        "M5",
+        "M8",
+        "M11",
+        "D2"
+      ],
+      "requirement": "Ticket cleanup/rollback and chosen fallback; maintained review promised image rollout/rollback.",
+      "gap": "Initial deployment, failed-attempt cleanup, foundation snapshot restore and service stop are observed. No prior task-definition/image rollback trial was located.",
+      "completion": "Retain a bounded actual chosen runtime rollback/recovery result, or explicitly reconcile initial-deployment fallback using observed stop/restored foundation and qualified baseline without claiming an unrun prior-image rollback. Full upgrade-downgrade-upgrade/canary waves remain APP-061/PH05, not added here."
+    },
+    {
+      "id": "G4",
+      "kind": "public surface runtime receipt absent",
+      "source_ids": [
+        "T1",
+        "M7",
+        "S7",
+        "L4"
+      ],
+      "requirement": "Public foundation exposes only inert/identity surfaces; protected work denied.",
+      "gap": "Live receipt proves ready200/TLS, not protected endpoint refusals or deployed HTML/security response. Deployed8f source has no business/identity routes and local image smoke proves CSP/no-store; no managed HTTP receipt currently binds these public-route results.",
+      "completion": "Retain a small exact-image actual-hostname HTTP check of allowed inert page and representative protected/query/command/import/auth/admin/reset paths and unsupported mutation methods returning denial, without exercising future unimplemented business flows. Direct-task-port TCP denial is additional confidence, not a separate invented mandatory test; current actual SG inventory already proves configured private boundary."
+    },
+    {
+      "id": "G5",
+      "kind": "reviewable final operating record incomplete",
+      "source_ids": [
+        "T1",
+        "P3",
+        "P4",
+        "L1",
+        "S1",
+        "S2",
+        "M1",
+        "M3",
+        "M7",
+        "M8",
+        "M9",
+        "M10"
+      ],
+      "requirement": "Actual configuration identities, resource ownership/cleanup/cost record and truthful handoff.",
+      "gap": "Retained records identify stack, DB, bucket, service/tasks, SGs, ALB/cert and image. Actual six role ARN/two key ARN/prefix map and deployed2vCPU/8GiB/UID/read-only settings were not retained in the audited public receipts. Current maintained docs still state no managed deployment/migration has run. Historical receipts retain legitimate then-pending flags.",
+      "completion": "Add sanitized observed configuration/role/key/sizing identities and final stopped/retained inventory with reservation/cleanup ownership. Update current-state narrative and ticket log, linking later proof while preserving earlier failures and historical pending receipts. Future image/config changes need fresh relevant checks and explicit new identities; optional APP006 secret wiring does not independently block APP007 disabled foundation."
+    }
+  ],
+  "deferred_owning_work": {
+    "APP-006": "Hosted provider/callback consumer integration; optional secret wiring and email evidence.",
+    "APP-008": "Tenant rows, SQL grants and RLS rather than just initial nonowner roles.",
+    "APP-009/073/074": "Identity-to-membership/entitlement session, invite-only signup/redemption and browser/directAPI admission.",
+    "APP-012/013/014": "Managed query/receipt/command and race/restart journey for fullPH01.",
+    "APP-043": "LLM spend admission and provider integration; currently disabled.",
+    "APP-053/057": "Full app-data/audit restore and demo canaries/packet.",
+    "APP-060/061": "Signed service tokens, signed release/SBOM and fullmanaged rollout/compatibility trials."
+  },
+  "source_index": {
+    "T1": {
+      "path": "Tickets/2-in-progress/APP-007.md",
+      "sha256": "10cd2a3f6fbab2679462ab838925c1787e2cfe425846ae2cb31c037ee1515b81"
+    },
+    "P1": {
+      "path": "docs/planning/QUALITY-GATES.md",
+      "sha256": "5545dcaff7179d0de0341f7a05000083f1d733fbd2c774e42c3d398c6796db4f"
+    },
+    "P2": {
+      "path": "docs/planning/SOURCE-GUIDE.md",
+      "sha256": "baa324274372f2588807c198051b4df0ac387bba05df31c2a4202675c69c6cb1"
+    },
+    "P3": {
+      "path": "docs/planning/SYNTHETIC-ENVIRONMENT.md",
+      "sha256": "83efd1b1158ebbc112c6544ab203fd9e96d6b9378af2377c662e85d0b8852f1c"
+    },
+    "P4": {
+      "path": "docs/planning/SYNTHETIC-ENVIRONMENT-COST.md",
+      "sha256": "b6545f4ccbf7bc441d8ad22a2c934e1e0c27b7c0a1c8efcb29d6b27a4b9a5a1a"
+    },
+    "P5": {
+      "path": "docs/architecture/ADR-003-PUBLIC-BETA-ACCESS.md",
+      "sha256": "47f2f1592e20bf65b4ca3cd31549432118bceca8d1b22badf4ddb6f28f3ab788"
+    },
+    "D1": {
+      "path": "design/forma-generative-app-platform-v2/deliverables/v1/md/design.md",
+      "sha256": "c339b8f6d1dbe522206a9c582bfc7d9a89e16e8c9d71f29936d53bb49a8b3d2e"
+    },
+    "D2": {
+      "path": "design/forma-northstar-demo/deliverables/v1/md/design.md",
+      "sha256": "0461bf56c10806e5b72361f1e3a6d0d6e4608bbb83ab5a4888a117a7f7eac13c"
+    },
+    "D3": {
+      "path": "design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md",
+      "sha256": "f209ccb05aa895080c6fd424fe979d65f276959536ee7d57b371428e1d049fd5"
+    },
+    "D4": {
+      "path": "design/forma-generative-app-platform-v2/VALIDATION.md",
+      "sha256": "db78a82ae9c5e05767b715fd81de088abf666f30a4b95a3c752a079cd3a27016"
+    },
+    "D5": {
+      "path": "design/forma-northstar-demo/SCENARIOS.md",
+      "sha256": "0adc2d6a83df03f555dcf52258a768039d0e59592ed56d12335e82f8123cbab1"
+    },
+    "L1": {
+      "path": "evidence/APP-007/review.md",
+      "sha256": "9268048d105f6e410d6afdbe23f0a280a34e59a76969227a933de34a4651cccb"
+    },
+    "L2": {
+      "path": "evidence/APP-007/local-preparation.json",
+      "sha256": "da923d68d231d28bba2e83692f20d59e6c3f43d3df9668ad9311750eff4fc90a"
+    },
+    "L3": {
+      "path": "evidence/APP-007/migration-repair/review.md",
+      "sha256": "c859a857a26bd1fedcaf9f0e6456a25005c8763facdcced60f07c665bca88128"
+    },
+    "L4": {
+      "path": "evidence/APP-007/migration-repair/image-qualification.json",
+      "sha256": "fd4f588ff6fc1675e2e71ec29eaf632e031614fbff3e89dbbae8084d35054c03"
+    },
+    "L5": {
+      "path": "evidence/APP-007/migration-repair/registry-image-receipt.json",
+      "sha256": "0b62720116a59ade72c65176b127e7302d834c073aec75d79f964ab5e7bd83ff"
+    },
+    "L6": {
+      "path": "evidence/APP-007/public-beta-infra/review.md",
+      "sha256": "c590b42d2122ffaf2e61b0cd90a9ee1fe643df4c90a5aa01a052e2d0414f035b"
+    },
+    "L7": {
+      "path": "evidence/APP-007/scheduler-repair/ci.json",
+      "sha256": "f4080b3a86d881bb4b2519f545e06c47b849902d88ff7df38a3f3fbdd29f7d2d"
+    },
+    "L8": {
+      "path": "evidence/APP-006/hosted-callback/ci.json",
+      "sha256": "f4a61032f00af01ba5c1333b2ab4d580b2c59da99b1010f389eab4ad58471c9e"
+    },
+    "M1": {
+      "path": "evidence/APP-007/managed/managed-migrations.json",
+      "sha256": "ea99878333004e73fb21dd4d86546b50d1e4a7b24161af249958c4d994e8d7f3"
+    },
+    "M2": {
+      "path": "evidence/APP-007/managed/managed-sql.json",
+      "sha256": "8a6959d63dbe937f53559604ee8356bab1be4d5a658ffd2be5ca8bb60e1bec65"
+    },
+    "M3": {
+      "path": "evidence/APP-007/managed/tenant-qualification.json",
+      "sha256": "b332bd213133924f82dc230e64b4390a5fcc9f0d77b7c48d4fcd32a56aae34c7"
+    },
+    "M4": {
+      "path": "evidence/APP-007/managed/restore-comparison.json",
+      "sha256": "1654780d8ddf8386dc5246b4353b1d2359e9b929fd66d275c020bab3a53c4941"
+    },
+    "M5": {
+      "path": "evidence/APP-007/managed/restore-cleanup.json",
+      "sha256": "8b3bd62b5c540d75c4bf32e531dec68f693ef66c760e225e0361308c7b6306e7"
+    },
+    "M6": {
+      "path": "evidence/APP-007/managed/credential-refresh.json",
+      "sha256": "3c7179916f5d8deba08d6870c6bab5443412d909c92983487165142dd345348e"
+    },
+    "M7": {
+      "path": "evidence/APP-007/managed/network-tls.json",
+      "sha256": "37716813ecb436fdd6e29a64d75f5b5ab73a85cebc55ae6735ebac720177444f"
+    },
+    "M8": {
+      "path": "evidence/APP-007/managed/scheduled-stop.json",
+      "sha256": "5f82bbddb1ff082cd5daa122954f6d537eaef6ca1ebd1c83763033a9575cf166"
+    },
+    "M9": {
+      "path": "evidence/APP-007/managed/beta-dns.json",
+      "sha256": "af1ae66e865c95c4f5780d2c8fd4b30fabe1fc4300fbd682def21c48415eb2a5"
+    },
+    "M10": {
+      "path": "evidence/APP-007/managed/retry-creation-request.json",
+      "sha256": "692bc1ec188ffc6f7bfed92f12b54f8d6bcce9e4429a55b5f0a124493ccb2d24"
+    },
+    "M11": {
+      "path": "evidence/APP-007/managed/initial-attempt-cleanup.json",
+      "sha256": "8b09b62cc6863525e23ac7830c50f0cac1e1156b83df96ad943d800c85f3649b"
+    },
+    "M12": {
+      "path": "evidence/APP-007/managed/auto-minor-upgrade-repair-review.json",
+      "sha256": "b6c7403d0bc667d6ba5b2182888697cdb5eafa35c7f0dce835ba8a0ca6cbbd07"
+    },
+    "S1": {
+      "path": "app/README.md",
+      "sha256": "4fdb97e50111a6a196b42b350d40527e34a159f3aba4e36a794f69b5ffb634f0"
+    },
+    "S2": {
+      "path": "infra/README.md",
+      "sha256": "4322f1bf172bc08c6a93633cc9287df19b89d5de100a80283d5c3b98f74fb96d"
+    },
+    "S3": {
+      "path": "app/runtime/runtime.py",
+      "sha256": "b0082c07c26ce9f2ed03e76620b237fee6fe0c07c03e0494d9899be3d9a8b75e"
+    },
+    "S4": {
+      "path": "app/src/config.rs",
+      "sha256": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7"
+    },
+    "S5": {
+      "path": "app/src/roles.rs",
+      "sha256": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216"
+    },
+    "S6": {
+      "path": "app/src/readiness.rs",
+      "sha256": "b0ffff33e9978aea8af1c8656da9d0e58f49d2976a60b5ef85188b8c8d71d8f5"
+    },
+    "S7": {
+      "path": "app/src/main.rs",
+      "sha256": "ee4ab55eb64570e6649dea3a50fb81d7a4e2906b5595136cf9756630bdbeddf3"
+    },
+    "S8": {
+      "path": ".github/workflows/foundation.yml",
+      "sha256": "d5d15563f4c57b16a23adecab94698d5b0f81e0e278c6302868588e094ed6aff"
+    },
+    "S9": {
+      "path": "app/.env.example",
+      "sha256": "3b183e0edd67cd623661f71a6740bcf8e8498301ec02fae862ded84a42439f0e"
+    },
+    "S10": {
+      "path": "scripts/check-foundation.py",
+      "sha256": "2aed1971ade8d4038100c2e40d7a60908a267b3a242293dbe3e0a8d8cd755738"
+    },
+    "S11": {
+      "path": "app/runtime/test_runtime.py",
+      "sha256": "96bf1c8d59220e1dceb5028ad5b3fb7541fec41a1b7d6f3de68c98eb02ac89a4"
+    },
+    "S12": {
+      "path": "infra/scripts/foundation_restore_manifest.py",
+      "sha256": "87d62d667e0a65235a9718bed6ec9f301db732aff974acc346e7a04c5c7fc70c"
+    },
+    "S13": {
+      "path": "infra/src/stack.ts",
+      "sha256": "8d3058943c36062724a6dfd21c1c78d57219dfad6359b7d3326ec663f95c3cfa"
+    }
+  },
+  "limits": [
+    "No AWS/credential/private-operation data read or cloud mutation by reviewer.",
+    "Working tree contains concurrent optional callback runtime/infra changes. Its current-file hashes are point-in-time; deployed8f source identity is separate.",
+    "Point-in-time audit does not mark APP007 Done, approve Phase1, certify hosted auth or imply current website availability after scheduled stop.",
+    "Source evidence and template assertions are not relabeled as actual managed negative/failure/rollback trials."
+  ]
+}

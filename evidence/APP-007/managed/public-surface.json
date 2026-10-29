@@ -1,0 +1,127 @@
+{
+  "observed_at_utc": "2026-10-29T00:55:11.944747+00:00",
+  "hostname": "beta.getforma.dev",
+  "source_revision": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+  "image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/71973396209f42479582740a09d13280",
+  "task_definition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationTaskE2459512:2",
+  "same_running_task_before_after": true,
+  "checks": [
+    {
+      "method": "GET",
+      "path": "/health/ready",
+      "status": 200,
+      "tls_verified": true,
+      "response_bytes": 0,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "status": 200,
+      "tls_verified": true,
+      "response_bytes": 1535,
+      "body_sha256": "1f6ca6dfa6403d02d58c1413c6ec299f6eb75a4f0744270c0761a805d9b2bb2d",
+      "no_store": true,
+      "nonce_csp": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "status": 200,
+      "tls_verified": true,
+      "response_bytes": 1535,
+      "body_sha256": "f54026ab33ccc36b82364409f92ddf8a26879995116940fa4b14c8d971039e37",
+      "no_store": true,
+      "nonce_csp": true
+    },
+    {
+      "method": "GET",
+      "path": "/about",
+      "status": 200,
+      "tls_verified": true,
+      "response_bytes": 593,
+      "body_sha256": "1e8580ab79737239db0f81f684a0bd00cd24cbf16dcfa7d7f351bf2a116ff065",
+      "no_store": true,
+      "nonce_csp": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/query",
+      "status": 404,
+      "tls_verified": true,
+      "response_bytes": 0,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "POST",
+      "path": "/api/query",
+      "status": 404,
+      "tls_verified": true,
+      "response_bytes": 0,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "POST",
+      "path": "/api/commands",
+      "status": 404,
+      "tls_verified": true,
+      "response_bytes": 0,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "POST",
+      "path": "/api/import",
+      "status": 404,
+      "tls_verified": true,
+      "response_bytes": 0,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/callback",
+      "status": 404,
+      "tls_verified": true,
+      "response_bytes": 0,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/qualification/start",
+      "status": 404,
+      "tls_verified": true,
+      "response_bytes": 0,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "GET",
+      "path": "/admin",
+      "status": 404,
+      "tls_verified": true,
+      "response_bytes": 0,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "POST",
+      "path": "/reset",
+      "status": 404,
+      "tls_verified": true,
+      "response_bytes": 0,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "POST",
+      "path": "/",
+      "status": 405,
+      "tls_verified": true,
+      "response_bytes": 0,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "fresh_html_csp_nonces": true,
+  "passed": true,
+  "limits": [
+    "Foundation disabled routes return404/405; this does not prove future account, invite, tenant or resource authorization.",
+    "No credentials or user data were sent. No provider or model request occurred."
+  ]
+}

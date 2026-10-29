@@ -1,0 +1,29 @@
+{
+  "assertions": {
+    "input_bytes_equal": true,
+    "inventory_only_original_schedule": true,
+    "no_extra_request_authority": true,
+    "only_stop_operation_fields": true,
+    "original_future_expiry_unchanged": true,
+    "same_bounded_retries": true,
+    "same_existing_group_and_role": true,
+    "target_exactly_equals_saved_original": true,
+    "utc_single_execution": true
+  },
+  "aws_calls_by_reviewer": 0,
+  "limitations": [
+    "Review uses root-supplied saved inventory and schedule; no independent live lookup.",
+    "This is request review, not delivery/CloudTrail or stopped-task evidence.",
+    "Root must observe exact service desired/running/pending zero and prior task STOPPED, then delete only the added probe schedule; preserve original expiry.",
+    "The old expired unexecuted request is retained unchanged."
+  ],
+  "reviewed_at_utc": "2026-10-29T00:24:46.367588+00:00",
+  "reviewer": "managed_trial_plan",
+  "source_files": {
+    ".cache/operations/beta/retry-1/schedule-live.json": "797ffeec1346f124991ec02d7aef62fc53c0fe900ffd66e2ac4db8a0a3ec9a64",
+    ".cache/operations/beta/retry-1/stop-probe-before-inventory.json": "59ca6be6f27550997f6240578de629bd51d3503af55182793a56e1a7c98f568b",
+    ".cache/operations/beta/retry-1/stop-probe-v2-create-request.json": "b5975db46c42640b333f9a68530ac41db13d0ea8a7e608b36da7d545acbf9129",
+    ".cache/operations/beta/retry-1/stop-probe-v2-intent.json": "a8ba4f7eb8f7d4f4ea235e3033f5bfb6e66c1f193173ef9bea758502f11c02b1"
+  },
+  "verdict": "no blocking finding in request shape"
+}

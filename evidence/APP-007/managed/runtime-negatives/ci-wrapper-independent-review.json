@@ -1,0 +1,50 @@
+{
+  "reviewer": "managed_trial_plan",
+  "recorded_at_utc": "2026-10-29T01:06:27.922Z",
+  "verdict": "No blocking finding in focused CI wrapper or documentation",
+  "source_sha256": {
+    "infra/README.md": "026681d7ee42ce806dc81e20c084f169bd88394c56fd2123de69479351ade6c4",
+    "infra/scripts/managed_runtime_negatives.py": "26cc81d7eb0dfc3eb5ec75e5b25c6522d34b0e9c0e79cdd6423bfbbc057199df",
+    "infra/test/managed_runtime_negatives_test.py": "fb54e1115c068d11ab34ab57aca4f8b84ab81594282f861bca7b5a054d5cfb31",
+    "infra/test/runtime-negatives.test.ts": "f085ca4276b77be3eb196972ec0151f4fa5d61dcf23562f233425b0e01634159"
+  },
+  "review": [
+    "Fixed execFileSync arguments run only managed_runtime_negatives_test.py via python3 -B unittest; no shell interpolation or managed runner invocation.",
+    "Module-relative working directory resolves to infra, matching discovery path test. Existing npm test glob includes this .test.ts wrapper.",
+    "Timeout 30000 ms and SIGKILL bound the direct Python test process; errors/nonzero status fail the Node test. Output remains piped.",
+    "README accurately states 14 synthetic boundary tests, direct command, 30-second process bound and no managed acceptance claim.",
+    "Helper and 14 Python test definitions retain their independently reviewed hashes."
+  ],
+  "isolated_check": {
+    "command": "./node_modules/.bin/tsx --test test/runtime-negatives.test.ts",
+    "cwd": "infra",
+    "exit_code": 0,
+    "node_tests": 1,
+    "python_test_count": 14,
+    "output": "TAP version 13\n# Subtest: runtime negative runner preserves isolation, refusal and cleanup boundaries locally\nok 1 - runtime negative runner preserves isolation, refusal and cleanup boundaries locally\n  ---\n  duration_ms: 4000.094959\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 4118.511917\n"
+  },
+  "managed_receipt_inspection": {
+    "path": "evidence/APP-007/managed/runtime-negatives-managed.json",
+    "sha256": "b54c3ee0664b889da2addff05532daef1dd69aafee430899f05745d6b4b7fe03",
+    "matches_reviewed_helper_payload_image": true,
+    "passed_checks": 5,
+    "refusal_recovery_pairs": 4,
+    "runner_elapsed_ms": 4712,
+    "task_elapsed_seconds": 29.063,
+    "stopped_exit_zero_and_exact_definition_inactive": true,
+    "private_cleanup_and_native_stop_flags": true,
+    "limit": "read-only review of root-supplied managed receipt; no independent live cloud lookup"
+  },
+  "limitations": [
+    "The wrapper bounds its direct Python process; it does not claim an independent descendant-process census.",
+    "The managed receipt retains the prior scope: local credential-copy refusals, reserved loopback failure, fresh direct-helper restoration and possibly cached native200 restoration.",
+    "No broad test suite, cloud lookup or managed trial was repeated."
+  ],
+  "actions": {
+    "cloud_calls": 0,
+    "credential_reads": 0,
+    "implementation_edits": 0,
+    "staging": false,
+    "commits": false
+  }
+}

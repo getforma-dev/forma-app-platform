@@ -1,0 +1,74 @@
+{
+  "source_revision": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+  "checks": [
+    {
+      "conclusion": "success",
+      "databaseId": 40797086778,
+      "headSha": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+      "name": "Contract qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40797086778"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40797086701,
+      "headSha": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+      "name": "Auth consumer qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40797086701"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40797086695,
+      "headSha": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+      "name": "Bounded query qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40797086695"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40797086587,
+      "headSha": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+      "name": "Released baseline",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40797086587"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40797086806,
+      "headSha": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+      "name": "Published canvas consumer",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40797086806"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40797086576,
+      "headSha": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+      "name": "Parser qualification",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40797086576"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40797086657,
+      "headSha": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+      "name": "Foundation preparation",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40797086657"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40797086699,
+      "headSha": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+      "name": "Planning integrity",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40797086699"
+    }
+  ],
+  "all_eight_passed": true,
+  "limits": [
+    "CI builds its own AMD64 artifact; the separately reviewed ARM64 localimage still needs registry/deployment binding.",
+    "No hosted authentication or managed secret delivery is proved."
+  ]
+}

@@ -1,0 +1,142 @@
+{
+  "reviewer": "managed_trial_plan",
+  "recorded_at_utc": "2026-10-29T01:00:37.268Z",
+  "verdict": "No blocking finding in the bounded helper and exact prepared registration payload",
+  "source_sha256": {
+    "infra/scripts/managed_runtime_negatives.py": "26cc81d7eb0dfc3eb5ec75e5b25c6522d34b0e9c0e79cdd6423bfbbc057199df",
+    "infra/test/managed_runtime_negatives_test.py": "fb54e1115c068d11ab34ab57aca4f8b84ab81594282f861bca7b5a054d5cfb31"
+  },
+  "deployed_runtime_sha256": "83df42285e43af81118b055a29a0b2f2e99aea1d37d6a7ead5fa7354c38a84d4",
+  "tested_shared_functions_identical_to_deployed_source": {
+    "atomic_write": true,
+    "load": true,
+    "probe": true,
+    "refresh": true,
+    "scoped_session": true,
+    "sdk_config": true
+  },
+  "registration_payload_review": {
+    "empty_placement_constraints_omission_only": true,
+    "helper_sha256": "26cc81d7eb0dfc3eb5ec75e5b25c6522d34b0e9c0e79cdd6423bfbbc057199df",
+    "image_suffix": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+    "no_secret_entries": true,
+    "only_changes": [
+      "family",
+      "container entryPoint",
+      "container command (complete exact reviewed source)",
+      "append GENUI_QUALIFY_SYNTHETIC=APP-007",
+      "remove service healthCheck for standalone trial"
+    ],
+    "passed": true,
+    "payload_sha256": "d19a98edc8c5b846fc7a55d06858847b2425e806bc8546c4f3eee1ed98d74732",
+    "retained_fields": [
+      "family",
+      "taskRoleArn",
+      "executionRoleArn",
+      "networkMode",
+      "containerDefinitions",
+      "volumes",
+      "requiresCompatibilities",
+      "cpu",
+      "memory",
+      "runtimePlatform"
+    ],
+    "same_roles_network_volume_cpu_memory_user_read_only": true,
+    "source_task_record_sha256": "47d9203f354ccc8feb9371999c4cdd486a0055a726bbafcfc7deaaed4bec1b01"
+  },
+  "independent_checks": [
+    {
+      "command": "python3 -m unittest discover -s infra/test -p managed_runtime_negatives_test.py -v",
+      "exit_code": 0,
+      "tests": 14,
+      "failed": 0,
+      "duration_seconds": 3.818,
+      "output": "test_actual_loopback_http_status_rejects_redirect_and_body (managed_runtime_negatives_test.RuntimeNegatives.test_actual_loopback_http_status_rejects_redirect_and_body) ... ok\ntest_child_forces_loopback_helper_and_refuses_optional_auth (managed_runtime_negatives_test.RuntimeNegatives.test_child_forces_loopback_helper_and_refuses_optional_auth) ... ok\ntest_each_mutation_only_changes_its_one_field_and_keeps_credentials (managed_runtime_negatives_test.RuntimeNegatives.test_each_mutation_only_changes_its_one_field_and_keeps_credentials) ... ok\ntest_existing_loopback_service_refuses_case_without_connecting_to_it (managed_runtime_negatives_test.RuntimeNegatives.test_existing_loopback_service_refuses_case_without_connecting_to_it) ... ok\ntest_failed_positive_restoration_never_advances_or_passes (managed_runtime_negatives_test.RuntimeNegatives.test_failed_positive_restoration_never_advances_or_passes) ... ok\ntest_full_local_sequence_preserves_original_and_never_exports_secrets (managed_runtime_negatives_test.RuntimeNegatives.test_full_local_sequence_preserves_original_and_never_exports_secrets) ... ok\ntest_interrupt_after_mutation_also_restores_and_stops (managed_runtime_negatives_test.RuntimeNegatives.test_interrupt_after_mutation_also_restores_and_stops) ... ok\ntest_loopback_port_is_reserved_without_listening (managed_runtime_negatives_test.RuntimeNegatives.test_loopback_port_is_reserved_without_listening) ... ok\ntest_main_cleans_real_temp_files_after_success_and_interrupt (managed_runtime_negatives_test.RuntimeNegatives.test_main_cleans_real_temp_files_after_success_and_interrupt) ... ok\ntest_main_refusal_is_fixed_and_performs_no_import_refresh_or_filesystem_write (managed_runtime_negatives_test.RuntimeNegatives.test_main_refusal_is_fixed_and_performs_no_import_refresh_or_filesystem_write) ... ok\ntest_native_close_kills_real_child_that_ignores_termination (managed_runtime_negatives_test.RuntimeNegatives.test_native_close_kills_real_child_that_ignores_termination) ... ok\ntest_private_permissions_refuse_links_and_public_modes (managed_runtime_negatives_test.RuntimeNegatives.test_private_permissions_refuse_links_and_public_modes) ... ok\ntest_refusal_types_are_specific_and_arbitrary_errors_never_pass (managed_runtime_negatives_test.RuntimeNegatives.test_refusal_types_are_specific_and_arbitrary_errors_never_pass) ... ok\ntest_unexpected_negative_success_fails_restores_and_stops_child (managed_runtime_negatives_test.RuntimeNegatives.test_unexpected_negative_success_fails_restores_and_stops_child) ... ok\n\n----------------------------------------------------------------------\nRan 14 tests in 3.818s\n\nOK\n"
+    },
+    {
+      "name": "Exact old image startup marker with RUST_LOG=off",
+      "captured_bytes": 39,
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "-i",
+        "--name",
+        "genui-app007-marker-review-27f45028407a",
+        "--network",
+        "none",
+        "--read-only",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "--memory",
+        "256m",
+        "--pids-limit",
+        "64",
+        "--tmpfs",
+        "/tmp:rw,noexec,nosuid,size=16777216,mode=1777",
+        "--tmpfs",
+        "/run/genui:rw,noexec,nosuid,size=1048576,mode=0700",
+        "--entrypoint",
+        "python3",
+        "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+        "-"
+      ],
+      "container_removed": true,
+      "first_line_is_marker": true,
+      "image_id": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+      "marker_found": true,
+      "native_stopped": true,
+      "preceding_line_count": 0,
+      "private_directory_removed": true,
+      "scope": "exact local 8f native startup marker only; synthetic private config and unavailable managed helper"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "source_review": [
+    "Requires explicit APP-007 opt-in, UID65532, existing private mode0700 /run/genui, no optional auth variables, and exact deployed runtime source hash before managed refresh.",
+    "One fresh private directory owns baseline and active copies. Only active copy is deliberately missing, wrong-region, expired or loopback-unreachable. Each case restores the original document, verifies baseline unchanged and reruns real pinned helper positives.",
+    "Pinned helper positives perform all four TLS database-role checks, two S3 prefix lists and two KMS encrypt/decrypt checks. SQL is read-only; no shared files, store objects, database state or grants are mutated.",
+    "Unreachable case reserves 127.0.0.1:5432 without listening and requires actual connection-refused OperationalError. An occupied port fails before mutation/connect; existing credentials cannot reach a different listener.",
+    "Actual native listener is forced to loopback/ephemeral port with fixed helper/binary, bounded startup 4096 bytes/5 seconds, HTTP 1 second, ready 27 seconds. Work alarm 110 seconds leaves 10 seconds for group TERM/KILL and private-directory cleanup.",
+    "Output contains fixed result fields and failure classes; no raw exception, credential, path, generation, native output or endpoint is exported. Logging is disabled and native stderr discarded.",
+    "Exact local 8f binary with RUST_LOG=off emitted the expected first marker line. No parser change was necessary for the reviewed deployed binary."
+  ],
+  "inspected_author_evidence": {
+    "path": "evidence/APP-007/managed/runtime-negatives/author-checks.json",
+    "host_tests": 14,
+    "image_tests": 14,
+    "image_network": "none",
+    "image_runtime_hash_matched": true,
+    "linux_reserved_port_refused": true,
+    "image_uid": 65532,
+    "temporary_files_and_container_removed": true,
+    "limits": "Author's local Linux fixture supports syscall/platform behavior only; no managed acceptance."
+  },
+  "operational_requirements": [
+    "Register/run only the reviewed complete source and prepared payload; source is larger than a RunTask command override.",
+    "Root binds the resulting task to the exact existing cluster/subnets/task security group and public ENI arrangement, without command overrides or service changes.",
+    "Root captures STOPPED/exit0, complete passed report and cleanup flags, then deregisters only the exact temporary task definition. Unknown or timed-out outcomes require root supervision.",
+    "No broader service, role, grant, bucket or key changes are authorized by this helper review."
+  ],
+  "limitations": [
+    "The 14 local boundary tests use synthetic helper/native fixtures. They do not establish managed database/storage/KMS or native managed readiness acceptance.",
+    "Native 503 proves the changed or missing file invalidates current readiness. Restored native 200 may reuse a still-valid baseline cache; fresh direct helper probes establish managed restoration separately.",
+    "native_process_stopped means leader reaped after process-group TERM/KILL, not an independent descendant census.",
+    "The 110+10 second signal envelope does not guarantee cleanup after external SIGKILL or host failure; task/ephemeral-volume cleanup and root supervision remain operational responsibilities.",
+    "Wrong-tenant/key rejection, TLS hostname mismatch, actual expired remote credentials and auth/LLM/application workflows are outside these four controlled cases.",
+    "No actual managed run was performed by the reviewer."
+  ],
+  "actions": {
+    "cloud_calls": 0,
+    "provider_calls": 0,
+    "credential_reads": 0,
+    "source_edits": 0,
+    "staging": false,
+    "commits": false
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "recorded_at": "2026-10-29T00:58:23.231542+00:00",
+  "scope": "Local synthetic boundary qualification only; no AWS or managed acceptance",
+  "managed_run": false,
+  "source_sha256": {
+    "infra/scripts/managed_runtime_negatives.py": "5ae59bfd05e20284637d5ae8c22a31957ee3e825126d664c69cd8e5ca8bf956b",
+    "infra/test/managed_runtime_negatives_test.py": "81c360dfa090ecbaea3e6839fe864690d741e4dec329d183303d24ff5d3e0274"
+  },
+  "host_tests": {
+    "command": [
+      "/usr/local/bin/python3",
+      "-B",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "infra/test",
+      "-p",
+      "managed_runtime_negatives_test.py",
+      "-v"
+    ],
+    "exit_code": 0,
+    "output": "test_actual_loopback_http_status_rejects_redirect_and_body (managed_runtime_negatives_test.RuntimeNegatives.test_actual_loopback_http_status_rejects_redirect_and_body) ... ok\ntest_child_forces_loopback_helper_and_refuses_optional_auth (managed_runtime_negatives_test.RuntimeNegatives.test_child_forces_loopback_helper_and_refuses_optional_auth) ... ok\ntest_each_mutation_only_changes_its_one_field_and_keeps_credentials (managed_runtime_negatives_test.RuntimeNegatives.test_each_mutation_only_changes_its_one_field_and_keeps_credentials) ... ok\ntest_existing_loopback_service_refuses_case_without_connecting_to_it (managed_runtime_negatives_test.RuntimeNegatives.test_existing_loopback_service_refuses_case_without_connecting_to_it) ... ok\ntest_failed_positive_restoration_never_advances_or_passes (managed_runtime_negatives_test.RuntimeNegatives.test_failed_positive_restoration_never_advances_or_passes) ... ok\ntest_full_local_sequence_preserves_original_and_never_exports_secrets (managed_runtime_negatives_test.RuntimeNegatives.test_full_local_sequence_preserves_original_and_never_exports_secrets) ... ok\ntest_interrupt_after_mutation_also_restores_and_stops (managed_runtime_negatives_test.RuntimeNegatives.test_interrupt_after_mutation_also_restores_and_stops) ... ok\ntest_listener_accepts_bounded_prelude_and_fragmented_exact_marker (managed_runtime_negatives_test.RuntimeNegatives.test_listener_accepts_bounded_prelude_and_fragmented_exact_marker) ... ok\ntest_listener_refuses_cumulative_excess_and_invalid_port (managed_runtime_negatives_test.RuntimeNegatives.test_listener_refuses_cumulative_excess_and_invalid_port) ... ok\ntest_loopback_port_is_reserved_without_listening (managed_runtime_negatives_test.RuntimeNegatives.test_loopback_port_is_reserved_without_listening) ... ok\ntest_main_cleans_real_temp_files_after_success_and_interrupt (managed_runtime_negatives_test.RuntimeNegatives.test_main_cleans_real_temp_files_after_success_and_interrupt) ... ok\ntest_main_refusal_is_fixed_and_performs_no_import_refresh_or_filesystem_write (managed_runtime_negatives_test.RuntimeNegatives.test_main_refusal_is_fixed_and_performs_no_import_refresh_or_filesystem_write) ... ok\ntest_native_close_kills_real_child_that_ignores_termination (managed_runtime_negatives_test.RuntimeNegatives.test_native_close_kills_real_child_that_ignores_termination) ... ok\ntest_private_permissions_refuse_links_and_public_modes (managed_runtime_negatives_test.RuntimeNegatives.test_private_permissions_refuse_links_and_public_modes) ... ok\ntest_refusal_types_are_specific_and_arbitrary_errors_never_pass (managed_runtime_negatives_test.RuntimeNegatives.test_refusal_types_are_specific_and_arbitrary_errors_never_pass) ... ok\ntest_unexpected_negative_success_fails_restores_and_stops_child (managed_runtime_negatives_test.RuntimeNegatives.test_unexpected_negative_success_fails_restores_and_stops_child) ... ok\n\n----------------------------------------------------------------------\nRan 16 tests in 3.927s\n\nOK\n"
+  },
+  "test_count_per_run": 16,
+  "image_tests": {
+    "image_id": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+    "architecture": "arm64",
+    "network": "none",
+    "read_only": true,
+    "exit_code": 0,
+    "stderr": "",
+    "report": {
+      "scope": "Local network-none8f image; unit fixtures only",
+      "unit_exit_code": 0,
+      "unit_output": "test_actual_loopback_http_status_rejects_redirect_and_body (managed_runtime_negatives_test.RuntimeNegatives.test_actual_loopback_http_status_rejects_redirect_and_body) ... ok\ntest_child_forces_loopback_helper_and_refuses_optional_auth (managed_runtime_negatives_test.RuntimeNegatives.test_child_forces_loopback_helper_and_refuses_optional_auth) ... ok\ntest_each_mutation_only_changes_its_one_field_and_keeps_credentials (managed_runtime_negatives_test.RuntimeNegatives.test_each_mutation_only_changes_its_one_field_and_keeps_credentials) ... ok\ntest_existing_loopback_service_refuses_case_without_connecting_to_it (managed_runtime_negatives_test.RuntimeNegatives.test_existing_loopback_service_refuses_case_without_connecting_to_it) ... ok\ntest_failed_positive_restoration_never_advances_or_passes (managed_runtime_negatives_test.RuntimeNegatives.test_failed_positive_restoration_never_advances_or_passes) ... ok\ntest_full_local_sequence_preserves_original_and_never_exports_secrets (managed_runtime_negatives_test.RuntimeNegatives.test_full_local_sequence_preserves_original_and_never_exports_secrets) ... ok\ntest_interrupt_after_mutation_also_restores_and_stops (managed_runtime_negatives_test.RuntimeNegatives.test_interrupt_after_mutation_also_restores_and_stops) ... ok\ntest_listener_accepts_bounded_prelude_and_fragmented_exact_marker (managed_runtime_negatives_test.RuntimeNegatives.test_listener_accepts_bounded_prelude_and_fragmented_exact_marker) ... ok\ntest_listener_refuses_cumulative_excess_and_invalid_port (managed_runtime_negatives_test.RuntimeNegatives.test_listener_refuses_cumulative_excess_and_invalid_port) ... ok\ntest_loopback_port_is_reserved_without_listening (managed_runtime_negatives_test.RuntimeNegatives.test_loopback_port_is_reserved_without_listening) ... ok\ntest_main_cleans_real_temp_files_after_success_and_interrupt (managed_runtime_negatives_test.RuntimeNegatives.test_main_cleans_real_temp_files_after_success_and_interrupt) ... ok\ntest_main_refusal_is_fixed_and_performs_no_import_refresh_or_filesystem_write (managed_runtime_negatives_test.RuntimeNegatives.test_main_refusal_is_fixed_and_performs_no_import_refresh_or_filesystem_write) ... ok\ntest_native_close_kills_real_child_that_ignores_termination (managed_runtime_negatives_test.RuntimeNegatives.test_native_close_kills_real_child_that_ignores_termination) ... ok\ntest_private_permissions_refuse_links_and_public_modes (managed_runtime_negatives_test.RuntimeNegatives.test_private_permissions_refuse_links_and_public_modes) ... ok\ntest_refusal_types_are_specific_and_arbitrary_errors_never_pass (managed_runtime_negatives_test.RuntimeNegatives.test_refusal_types_are_specific_and_arbitrary_errors_never_pass) ... ok\ntest_unexpected_negative_success_fails_restores_and_stops_child (managed_runtime_negatives_test.RuntimeNegatives.test_unexpected_negative_success_fails_restores_and_stops_child) ... ok\n\n----------------------------------------------------------------------\nRan 16 tests in 3.691s\n\nOK\n",
+      "linux_reserved_port_refused": true,
+      "runtime_source_hash_matched": true,
+      "uid": 65532,
+      "temporary_files_removed": true
+    }
+  },
+  "container_removed": true,
+  "source_unchanged": true,
+  "passed": true
+}

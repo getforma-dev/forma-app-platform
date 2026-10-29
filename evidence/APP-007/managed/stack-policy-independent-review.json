@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "reviewer": "managed_restore_ops_review",
+  "record_type": "Retained summary of the independent read-only pre-execution review; no cloud calls or broad test rerun by reviewer",
+  "policy_path": "infra/stack-policy.json",
+  "policy_sha256": "48ac65c6ee7ca63d40da59ee5be4f367493613cd26a828b3adeeca8c7b27c3b3",
+  "reviewed_source_revision": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+  "reviewed_frozen_template_sha256": "c122d897ffea58327b3e0d13b93b160011a7bca2f2ea12219c046953a71e02de",
+  "verdict": "No blocking finding for the reviewed automatic-minor-upgrade correction with the guard installed, verified and not overridden",
+  "checks": [
+    "The policy permits Update:* generally and explicitly denies Update:Replace and Update:Delete for AWS::RDS::DBInstance; explicit denial takes precedence.",
+    "The frozen assembly differs from the original deployed template solely in Database.AutoMinorVersionUpgrade=false.",
+    "The reviewed change set included the direct database property change and dependent dynamic references; no added or removed resource was identified.",
+    "A Conditional replacement indication does not justify bypassing the policy: an attempted database replacement must fail under the guard.",
+    "Execution conditions were set/read-back policy, no temporary override, and post-update confirmation of unchanged database identifier/resource ID/endpoint, engine16.13, flagfalse and preserved original expiry.",
+    "The subsequently retained auto-minor-applied.json records UPDATE_COMPLETE, the matching policy hash, no override, same database identity and the required false flag. This is operator execution evidence, not a second cloud observation by the reviewer."
+  ],
+  "scope_notes": [
+    "The optional QualificationConfigSecretArn empty parameter was absent from the older frozen template; disabled behavior was compatible, not a claim of literal equality with the newer parameter map.",
+    "If the guard refused execution, the prescribed action was to retain the failure and investigate rather than weaken the policy.",
+    "The stack policy guards CloudFormation updates only. It is not protection against direct RDS calls, IAM-authorized policy changes or deletion of the whole stack.",
+    "No runtime image, callback configuration, application authorization or general release readiness is certified by this review."
+  ],
+  "official_references": [
+    "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/protect-stack-resources.html",
+    "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html#cfn-rds-dbinstance-autominorversionupgrade"
+  ]
+}

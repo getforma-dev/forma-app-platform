@@ -1,0 +1,103 @@
+{
+  "observed_at_utc": "2026-10-29T00:53:30.069288+00:00",
+  "account": "877573132739",
+  "region": "us-east-1",
+  "operator": "Victor Villacis / GenUI Codex operator",
+  "stack_id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GenuiSyntheticFoundation/9158dbd0-d320-11f1-a006-0affc4587aaf",
+  "cluster": "GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN",
+  "service": "GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF",
+  "service_counts": {
+    "desiredCount": 0,
+    "runningCount": 0,
+    "pendingCount": 0
+  },
+  "service_task_definition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationTaskE2459512:2",
+  "task": {
+    "cpu_units": "2048",
+    "memory_mib": "8192",
+    "runtime_platform": {
+      "cpuArchitecture": "ARM64",
+      "operatingSystemFamily": "LINUX"
+    },
+    "task_role_arn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-TaskRole30FC0FBB-Kr5Cpo5fP27D",
+    "execution_role_arn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-ExecutionRole605A040B-v6FhaT3HrsLu",
+    "container_name": "workspace",
+    "image": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+    "user": "65532:65532",
+    "readonly_root": true,
+    "ecs_exec_enabled": false,
+    "qualification_secret_disabled": true
+  },
+  "database": {
+    "DBInstanceIdentifier": "genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg",
+    "DbiResourceId": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+    "DBInstanceClass": "db.t4g.small",
+    "Engine": "postgres",
+    "EngineVersion": "16.13",
+    "AllocatedStorage": 20,
+    "StorageType": "gp3",
+    "StorageEncrypted": true,
+    "PubliclyAccessible": false,
+    "IAMDatabaseAuthenticationEnabled": true,
+    "AutoMinorVersionUpgrade": false,
+    "BackupRetentionPeriod": 7,
+    "DeletionProtection": true
+  },
+  "database_role_map": {
+    "workspace": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccessworkspace80F-iHrQLtdolyJd",
+    "control": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccesscontrolEF42B-7x18OI7FGonb",
+    "data": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccessdata36378A0D-JiXYtZmk7cKD",
+    "worker": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccessworker767404-wzze9whxTsKh"
+  },
+  "observed_role_identities": {
+    "workspace": {
+      "arn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccessworkspace80F-iHrQLtdolyJd",
+      "role_id": "AROA4YU3PKHBYJBRAS5XU"
+    },
+    "control": {
+      "arn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccesscontrolEF42B-7x18OI7FGonb",
+      "role_id": "AROA4YU3PKHB3Q23Z4V7N"
+    },
+    "data": {
+      "arn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccessdata36378A0D-JiXYtZmk7cKD",
+      "role_id": "AROA4YU3PKHBXBBXAJO7H"
+    },
+    "worker": {
+      "arn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccessworker767404-wzze9whxTsKh",
+      "role_id": "AROA4YU3PKHB2WD5SQ3QC"
+    },
+    "00000000-0000-4000-8000-000000000001": {
+      "arn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-TenantAccess09CBCD5F8-10VyuoA9ZJ0Z",
+      "role_id": "AROA4YU3PKHBTLMFAZKKA"
+    },
+    "00000000-0000-4000-8000-000000000002": {
+      "arn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-TenantAccess1B93A8085-UXRCAMtDQ6bU",
+      "role_id": "AROA4YU3PKHBXLMLHNE42"
+    }
+  },
+  "tenants": [
+    {
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "role_arn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-TenantAccess09CBCD5F8-10VyuoA9ZJ0Z",
+      "kms_key_arn": "arn:aws:kms:us-east-1:877573132739:key/2d4528db-ca4b-4ee3-9565-169c4a75b1c7",
+      "prefix": "o/00000000-0000-4000-8000-000000000001/",
+      "observed_key_state": "Enabled"
+    },
+    {
+      "organization_id": "00000000-0000-4000-8000-000000000002",
+      "role_arn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-TenantAccess1B93A8085-UXRCAMtDQ6bU",
+      "kms_key_arn": "arn:aws:kms:us-east-1:877573132739:key/676056e3-dc52-4244-865d-8d55eea15af5",
+      "prefix": "o/00000000-0000-4000-8000-000000000002/",
+      "observed_key_state": "Enabled"
+    }
+  ],
+  "evidence_bucket": "genuisyntheticfoundation-evidence4cc26d68-p1jacwjbl56s",
+  "ingress_mode": "public",
+  "expiry_schedule_arn": "arn:aws:scheduler:us-east-1:877573132739:schedule/GenuiSyntheticFoundation-ExpiryScheduleGroup-1GXBT2YNEMFEK/GenuiSyntheticFoundation-DeploymentExpiry-P2FWIBRKKAC1",
+  "expiry_utc": "2026-10-29T04:39:50Z",
+  "expiry_state": "ENABLED",
+  "limits": [
+    "This is observed infrastructure configuration, not APP-008 row authorization or APP-009/073/074 admission.",
+    "RDS, ALB, addresses, keys and retained storage continue charging when service count is zero."
+  ]
+}

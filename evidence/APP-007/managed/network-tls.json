@@ -1,0 +1,41 @@
+{
+  "observed_at_utc": "2026-10-29T00:41:52.639480+00:00",
+  "hostname": "beta.getforma.dev",
+  "certificate_arn": "arn:aws:acm:us-east-1:877573132739:certificate/832cd214-1039-4d8d-abdd-1ae614caf9ed",
+  "ssl_policy": "ELBSecurityPolicy-TLS13-1-2-2021-06",
+  "operator_trial": {
+    "operator_ip_matches_reserved_private_input": true,
+    "operator_https_ready": 200,
+    "tls_verified": true,
+    "second_network_tcp_timeout": true,
+    "second_network_is_existing_ovh_host": true,
+    "ended_before_public_update": true
+  },
+  "public_trial": {
+    "execution_host_https_ready": 200,
+    "second_network_https_ready": 200,
+    "tls_verified_on_both": true,
+    "actual_dns_hostname_used": true,
+    "actual_alb_ingress": "0.0.0.0/0 TCP443 only",
+    "only_listener": "HTTPS443"
+  },
+  "private_boundaries": {
+    "task_ingress": {
+      "port": 3000,
+      "only_source_security_group": "sg-0b24119fe39e35f82",
+      "public_cidrs": []
+    },
+    "database_ingress": {
+      "port": 5432,
+      "only_source_security_group": "sg-00b28ce2a112f530b",
+      "public_cidrs": []
+    },
+    "database_publicly_accessible": false
+  },
+  "image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "limits": [
+    "Actual security-group/listener inventory verifies configured direct-port boundaries; this record does not contain a live direct-task-port TCP probe.",
+    "The foundation service has since been deliberately stopped by the scheduled trial; current availability is not inferred from these earlier200 responses.",
+    "No hosted callback, signup, membership or application admission is proved."
+  ]
+}

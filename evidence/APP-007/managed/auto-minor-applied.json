@@ -1,0 +1,28 @@
+{
+  "observed_at_utc": "2026-10-29T00:53:30.069288+00:00",
+  "stack_id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GenuiSyntheticFoundation/9158dbd0-d320-11f1-a006-0affc4587aaf",
+  "stack_status": "UPDATE_COMPLETE",
+  "change_set_arn": "arn:aws:cloudformation:us-east-1:877573132739:changeSet/genui-disable-auto-minor-fe4ca0e/64ae0266-3afd-484e-9963-2307c918033c",
+  "source_revision": "fe4ca0e0491e46e63c73c8358a75250bb8887f51",
+  "stack_policy_sha256": "48ac65c6ee7ca63d40da59ee5be4f367493613cd26a828b3adeeca8c7b27c3b3",
+  "rds_replacement_delete_update_guard_installed": true,
+  "guard_override_used": false,
+  "database_identifier": "genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg",
+  "database_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+  "same_identifier_resource_id_endpoint_as_before": true,
+  "status": "available",
+  "engine_version": "16.13",
+  "auto_minor_version_upgrade": false,
+  "deletion_protection": true,
+  "backup_retention_days": 7,
+  "service_counts": {
+    "desiredCount": 0,
+    "runningCount": 0,
+    "pendingCount": 0
+  },
+  "original_expiry_unchanged": "2026-10-29T04:39:50Z",
+  "limits": [
+    "Stack policy guards CloudFormation resource updates; it is not a direct-RDS/IAM/whole-stack-delete prohibition.",
+    "No runtime image or qualification secret deployment is implied."
+  ]
+}

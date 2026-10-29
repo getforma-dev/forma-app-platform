@@ -1,0 +1,32 @@
+{
+  "observed_at_utc": "2026-10-29T00:59:27.901187+00:00",
+  "scope": "APP007 initial-deployment recovery/fallback",
+  "chosen_fallback": "Stop the disabled foundation and recover the reviewed initial baseline; retain proven snapshot recovery for the foundation schema.",
+  "prior_image_rollback_performed": false,
+  "source_revision": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+  "image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "initial_scheduler_stop_receipt": "scheduled-stop.json",
+  "snapshot_restore_receipt": "restore-comparison.json",
+  "snapshot_cleanup_receipt": "restore-cleanup.json",
+  "post_configuration_recovery_task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/71973396209f42479582740a09d13280",
+  "task_definition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationTaskE2459512:2",
+  "started_at": "2026-10-28T20:54:44.587000-04:00",
+  "stopped_at": "2026-10-28T20:57:28.897000-04:00",
+  "last_status": "STOPPED",
+  "stop_code": "ServiceSchedulerInitiated",
+  "same_reviewed_initial_baseline_activated_by_preflight": true,
+  "public_tls_ready_and_surface_receipt": "public-surface.json",
+  "final_service_counts": {
+    "desiredCount": 0,
+    "runningCount": 0,
+    "pendingCount": 0
+  },
+  "no_running_service_tasks": true,
+  "window_id": "f84517f4-263b-4133-b5bc-c93cda64dd05",
+  "original_expiry_utc": "2026-10-29T04:39:50Z",
+  "limits": [
+    "There was no earlier successful application release to roll back to. This is initial-baseline recovery, not a prior-image rollback.",
+    "The foundation snapshot comparison covers initial schema/roles/grants before APP008 business records.",
+    "Full release upgrade/downgrade/canary qualification remains APP061/PH05."
+  ]
+}

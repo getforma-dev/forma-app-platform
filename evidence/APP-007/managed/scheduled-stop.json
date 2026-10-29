@@ -1,0 +1,28 @@
+{
+  "observed_at_utc": "2026-10-29T00:36:39.399523+00:00",
+  "probe_schedule_arn": "arn:aws:scheduler:us-east-1:877573132739:schedule/GenuiSyntheticFoundation-ExpiryScheduleGroup-1GXBT2YNEMFEK/genui-app007-stop-probe-20261029002323",
+  "probe_expression": "at(2026-10-29T00:30:23)",
+  "actual_stop_event": {
+    "event_id": "6316c364-6650-4cd4-aacb-f1f61e50da56",
+    "event_time": "2026-10-29T00:30:47Z",
+    "event_source": "ecs.amazonaws.com",
+    "event_name": "UpdateService",
+    "role_arn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-ExpiryRole0EF470AE-IxWa18xd7HiP",
+    "cluster": "arn:aws:ecs:us-east-1:877573132739:cluster/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN",
+    "service": "arn:aws:ecs:us-east-1:877573132739:service/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF",
+    "desired_count": 0
+  },
+  "service_counts": {
+    "desiredCount": 0,
+    "runningCount": 0,
+    "pendingCount": 0
+  },
+  "prior_active_task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/bce553a8e62d4d00b2db29de8a9eebe2",
+  "task_final_status": "STOPPED",
+  "task_stopped_at": "2026-10-28T20:32:27.600000-04:00",
+  "task_stop_code": "ServiceSchedulerInitiated",
+  "temporary_probe_deleted": true,
+  "original_expiry_schedule_preserved_enabled": "arn:aws:scheduler:us-east-1:877573132739:schedule/GenuiSyntheticFoundation-ExpiryScheduleGroup-1GXBT2YNEMFEK/GenuiSyntheticFoundation-DeploymentExpiry-P2FWIBRKKAC1",
+  "original_expiry_utc": "2026-10-29T04:39:50Z",
+  "limit": "This proves one actual stop-only delivery and convergence. It is not a billing hard cap or teardown of retained resources."
+}

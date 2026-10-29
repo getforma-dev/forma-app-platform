@@ -1,0 +1,18 @@
+{
+  "observed_at_utc": "2026-10-29T00:36:39.402075+00:00",
+  "trial_db_id": "genui-app007-restore-202610282344-ea1c70-trial",
+  "trial_db_absent": true,
+  "trial_automated_backups_absent": true,
+  "trial_snapshot_id": "genui-app007-restore-202610282344-ea1c70",
+  "trial_snapshot_absent": true,
+  "temporary_manifest_task_definition_inactive": true,
+  "source_db_id": "genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg",
+  "source_db_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+  "source_available": true,
+  "source_deletion_protection": true,
+  "source_backup_retention_days": 7,
+  "source_auto_minor_upgrade_before_separate_repair": true,
+  "completed_before_target_cleanup": true,
+  "reserved_restore_allowance_usd": 2,
+  "actual_invoice_not_claimed": true
+}

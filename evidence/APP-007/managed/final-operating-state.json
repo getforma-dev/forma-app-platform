@@ -1,0 +1,149 @@
+{
+  "observed_at_utc": "2026-10-29T01:04:10.156680+00:00",
+  "operator": "Victor Villacis / GenUI Codex operator",
+  "stack_id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GenuiSyntheticFoundation/9158dbd0-d320-11f1-a006-0affc4587aaf",
+  "service_counts": {
+    "desiredCount": 0,
+    "runningCount": 0,
+    "pendingCount": 0
+  },
+  "no_cluster_tasks_desired_running_or_pending": true,
+  "observed_tasks": [
+    {
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/2d34953af2f5428a969627c8c28c3956",
+      "group": "family:GenuiApp007RuntimeNegativeTrial",
+      "status": "STOPPED",
+      "created_at": "2026-10-28T20:59:47.580000-04:00",
+      "stopped_at": "2026-10-28T21:00:35.787000-04:00",
+      "created_to_stopped_seconds": 48.207
+    },
+    {
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/350f469ce8704bd5b24887998e3502a9",
+      "group": "family:GenuiApp007RestoreManifest",
+      "status": "STOPPED",
+      "created_at": "2026-10-28T19:43:13.441000-04:00",
+      "stopped_at": "2026-10-28T19:43:59.543000-04:00",
+      "created_to_stopped_seconds": 46.102
+    },
+    {
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/514ea59a988141aa8d1584eb38089cd2",
+      "group": "family:GenuiApp007ManagedSqlTrial",
+      "status": "STOPPED",
+      "created_at": "2026-10-28T19:39:36.620000-04:00",
+      "stopped_at": "2026-10-28T19:40:17.253000-04:00",
+      "created_to_stopped_seconds": 40.633
+    },
+    {
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/522a644501364a6486e58fa10e16f6fd",
+      "group": "family:GenuiSyntheticFoundationTaskE2459512",
+      "status": "STOPPED",
+      "created_at": "2026-10-28T19:39:34.781000-04:00",
+      "stopped_at": "2026-10-28T19:40:18.206000-04:00",
+      "created_to_stopped_seconds": 43.425
+    },
+    {
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/68b22239f9bd44cf86b3ebb2c1dd552b",
+      "group": "family:GenuiApp007RestoreManifest",
+      "status": "STOPPED",
+      "created_at": "2026-10-28T20:22:46.327000-04:00",
+      "stopped_at": "2026-10-28T20:23:36.623000-04:00",
+      "created_to_stopped_seconds": 50.296
+    },
+    {
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/71973396209f42479582740a09d13280",
+      "group": "service:GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF",
+      "status": "STOPPED",
+      "created_at": "2026-10-28T20:54:01.178000-04:00",
+      "stopped_at": "2026-10-28T20:57:28.897000-04:00",
+      "created_to_stopped_seconds": 207.719
+    },
+    {
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/b4a7a4fa8f294721ac05de6c69e2e647",
+      "group": "family:GenuiSyntheticFoundationMigrationTask99B85AB9",
+      "status": "STOPPED",
+      "created_at": "2026-10-28T19:32:02.427000-04:00",
+      "stopped_at": "2026-10-28T19:32:49.222000-04:00",
+      "created_to_stopped_seconds": 46.795
+    },
+    {
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/b5aca40940f340c8ad0ccc2be9907c57",
+      "group": "family:GenuiSyntheticFoundationMigrationTask99B85AB9",
+      "status": "STOPPED",
+      "created_at": "2026-10-28T19:37:33.929000-04:00",
+      "stopped_at": "2026-10-28T19:38:24.331000-04:00",
+      "created_to_stopped_seconds": 50.402
+    },
+    {
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/bce553a8e62d4d00b2db29de8a9eebe2",
+      "group": "service:GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF",
+      "status": "STOPPED",
+      "created_at": "2026-10-28T19:56:37.760000-04:00",
+      "stopped_at": "2026-10-28T20:32:27.600000-04:00",
+      "created_to_stopped_seconds": 2149.84
+    },
+    {
+      "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/e4f7f2282c54463391c63d1ea72f02fd",
+      "group": "service:GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF",
+      "status": "STOPPED",
+      "created_at": "2026-10-28T19:46:50.089000-04:00",
+      "stopped_at": "2026-10-28T19:52:04.491000-04:00",
+      "created_to_stopped_seconds": 314.402
+    }
+  ],
+  "seven_standalone_tasks_created_to_stopped_seconds": 325.86,
+  "standalone_reserved_seconds_this_window": 7200,
+  "service_image": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "source_database_available_protected_unchanged": true,
+  "configuration_inventory": "configuration-inventory.json",
+  "original_stop_schedule": {
+    "arn": "arn:aws:scheduler:us-east-1:877573132739:schedule/GenuiSyntheticFoundation-ExpiryScheduleGroup-1GXBT2YNEMFEK/GenuiSyntheticFoundation-DeploymentExpiry-P2FWIBRKKAC1",
+    "enabled": true,
+    "expires_at_utc": "2026-10-29T04:39:50Z",
+    "automatic_restart": false
+  },
+  "budget_reservation": {
+    "window_id": "f84517f4-263b-4133-b5bc-c93cda64dd05",
+    "input_sha256": "3288faf3e35d035727b405040a3a321926adff78d9f07a295eed7ec62092574f",
+    "reused_reservation": true,
+    "monthly_budget_cents": 10000,
+    "genui_allocation_cents": 7000,
+    "cost_by_month": {
+      "2026-10": {
+        "retained_core_full_month_cents": 5229,
+        "all_window_compute_reservations_cents": 219,
+        "prior_extra_spend_cents": 101,
+        "variable_reserve_cents": 1200,
+        "genui_total_cents": 6749,
+        "auth_spent_or_reserved_cents": 500,
+        "unallocated_cents": 2500,
+        "project_total_cents": 9749
+      }
+    }
+  },
+  "temporary_cleanup_receipts": [
+    "tenant-qualification.json",
+    "restore-cleanup.json",
+    "scheduled-stop.json",
+    "runtime-negatives-managed.json"
+  ],
+  "retained_for_next_phase1_work": [
+    "Source RDS and seven-day backups",
+    "VPC/subnets/security groups and HTTPS ALB/addresses",
+    "Private S3 bucket and two tenant KMS keys",
+    "Migration secret and role definitions",
+    "ECR images, ACM certificate, beta DNS and logs",
+    "Original stop-only schedule and stack update policy"
+  ],
+  "cleanup_owner": "GenUI operator; FormaStack team owns its separate auth rehearsal resources",
+  "operating_rules": [
+    "Keep app service stopped until a reviewed activation within its reserved window. No public signup/business/model capability is enabled.",
+    "Changing image/configuration/window requires observed stopped tasks and a fresh cumulative reservation; never reset prior/unknown reservations.",
+    "Retained RDS/ALB/addresses/keys/storage continue charging. Reconcile actual costs and retained resources before each new window and before the next calendar month.",
+    "Scoped final teardown/retention follows infra/README.md; evidence and private operational ledger identify exact owned resources."
+  ],
+  "limits": [
+    "Task created-to-stopped intervals conservatively bound observed task lifetimes; they are not an AWS invoice.",
+    "The budget ledger is an operating reservation and estimate, not a billing hard cap. No actual billing total or vulnerability scan pass is asserted.",
+    "No prior-image rollback, APP008 row authorization, real signup/session or model execution is passed by this foundation."
+  ]
+}

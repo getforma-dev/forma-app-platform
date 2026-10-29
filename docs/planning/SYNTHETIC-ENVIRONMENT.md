@@ -1,6 +1,6 @@
-# Synthetic environment preparation — APP-007
+# Synthetic environment and operating record — APP-007
 
-The delivered demo's D2 and D10 control this environment. This is a concrete setup brief, not an existing deployment or permission to reuse a production database. Local unit tests can proceed independently; managed integration acceptance needs the resource evidence below.
+The delivered demo's D2 and D10 control this isolated synthetic environment. It has now been deployed and exercised; the [managed evidence index](../../evidence/APP-007/managed/README.md) distinguishes actual results from later application gates. The [final operating receipt](../../evidence/APP-007/managed/final-operating-state.json) records all ten observed tasks stopped at 2026-10-29 01:04 UTC, with the source database and supporting infrastructure retained. Final APP-007 acceptance, landing and exact-source CI remain pending. This is not permission to reuse a production database or activate an unreviewed workload.
 
 ## Current operator decision
 
@@ -13,19 +13,19 @@ The coordinated app callback is `https://beta.getforma.dev/auth/callback`; GenUI
 | Input | State |
 |---|---|
 | Dedicated account or authorized access profile | User directed discovery of the existing GateWasm AWS setup; verified: existing account 877573132739 / us-east-1; GateWasm application resources subsequently removed |
-| Region | Existing configured account is us-east-1; proposed GenUI region in the current cost/setup record |
+| Region | GenUI was deployed and qualified in us-east-1; exact identities are in the [configuration inventory](../../evidence/APP-007/managed/configuration-inventory.json). |
 | Monthly spending cap and budget notifications owner | **$100/month approved by Victor**. The previous always-on Fargate estimate exceeds it. Use the [bounded Phase 1 operating plan](SYNTHETIC-ENVIRONMENT-COST.md); no always-on beta affordability is asserted. Victor owns the limit; the GenUI operator owns cost reconciliation and cleanup. |
 | Named operator and access/cleanup responsibility | Victor is resource owner; GenUI lead executes and records the reviewed synthetic setup and cleanup. |
-| Public app origin and registered fAuth callback | `https://beta.getforma.dev` and exact callback `https://beta.getforma.dev/auth/callback`. Porkbun DNS access works. The dedicated non-exportable ACM certificate is **ISSUED**, with successful DNS validation; deployed TLS still needs verification. The unrelated CDN certificate and all 23 pre-existing DNS records are unchanged. [Operator input/certificate receipt](../../evidence/APP-007/operator-inputs-2026-10-28.json). |
-| Operator ingress network | Temporary trial uses the host's current public IPv4 `/32`, discovered with IPv4 explicitly selected. Desired public operating mode is HTTPS `0.0.0.0/0`; application admission, not a permanent IP allowlist, restricts use. |
+| Public app origin and registered fAuth callback | `https://beta.getforma.dev` and selected callback `https://beta.getforma.dev/auth/callback`. The dedicated non-exportable ACM certificate is **ISSUED**; [actual hostname TLS checks](../../evidence/APP-007/managed/network-tls.json) passed. Certificate preparation preserved the unrelated CDN certificate and all 23 existing DNS records; later beta routing is recorded separately. The deployed foundation still refuses the callback; hosted integration is not established. |
+| Operator ingress network | The actual temporary operator `/32` trial allowed the execution host and denied the second network. Subsequent public HTTPS `0.0.0.0/0` passed from both networks. Private application/database boundaries stayed restricted. Application admission, not a permanent IP allowlist, must restrict future protected use. |
 
-The user asked us to find and assess the existing GateWasm AWS instance/account before requesting new access. Discovery used read-only AWS calls; the subsequently authorized GateWasm teardown is separately recorded. Independent Phase 1 work continues. Region, spending cap and operator will be reconciled against the actual existing setup. Never place access tokens, database passwords or signing keys in this file, tickets, fixtures or command evidence.
+The user asked us to find and assess the existing GateWasm AWS instance/account before requesting new access. Discovery used read-only AWS calls; the subsequently authorized GateWasm teardown is separately recorded. Account, region, spending cap and operator were reconciled for the actual GenUI campaign. Reconcile retained resources and cumulative allowance before each further window. Never place access tokens, database passwords or signing keys in this file, tickets, fixtures or command evidence.
 
 ## Design-shaped resource plan
 
 - One isolated synthetic PostgreSQL/RDS instance, initially single-AZ as the demo allows; migration owner distinct from non-owner workspace/control/data/worker login roles. No application role gets superuser or BYPASSRLS. APP-008 adds tenant schema, policies and tests.
 - Versioned private S3 storage with per-organization prefixes, explicit encryption/key context, denied public access and two synthetic organization keys. APP-007 proves tenant access separation; import/query tickets establish actual revision writes and reads.
-- The eventual single ECS task uses the design's 2 vCPU / 8 GiB envelope with distinct in-process role configuration; the VM alternative must be recorded explicitly. A local development server can exercise the same role interfaces against the selected managed stores without claiming deployment trials.
+- The qualified ECS task uses the design's 2 vCPU / 8 GiB envelope, ARM64 and distinct in-process role configuration. The service is stopped between reviewed windows. A VM alternative would require an explicit new decision and qualification.
 - Secrets supplied by the authorized runtime/operator channel. Separate database credentials per logical role even in one process; no credentials embedded in client assets or user/model inputs. This app does not own fAuth signing keys.
 - Public TLS ingress for the selected beta hostname, with an explicit temporary operator-only mode for the network denial test. Preserve ALB-only application-port access and private database connectivity. Public network reachability grants no signup, tenant, query, record, import or model authority.
 - Resource tags identify this app, synthetic environment, owner and cleanup date. Review a current cost estimate against the chosen cap before applying resource creation; see the linked current estimate and confirm the monthly budget before deployment.
@@ -34,7 +34,9 @@ The user asked us to find and assess the existing GateWasm AWS instance/account 
 
 Before applying provisioning, produce the exact resource plan for the selected account/region, IAM permissions, network rules, estimated recurring cost and cleanup steps. An unknown outcome must be reconciled by resource identity, not by creating duplicates.
 
-Retain sanitized account/resource identifiers, deployment/configuration revision, migration version, role connectivity results, and paired tenant tests: authorized own-object/own-row access and denied other-tenant access. Record negative missing-credential, wrong-region/key and unreachable-service behavior. A successful local fake or schema check cannot replace these results.
+Retain sanitized account/resource identifiers, deployment/configuration revision, migration version, role connectivity results and paired tenant tests. APP-007 now records own-object/foreign-prefix/key results; APP-008 owns actual tenant-row/RLS tests. The [managed negative trial](../../evidence/APP-007/managed/runtime-negatives-managed.json) records missing-file, wrong-region, expired-file and unreachable-database refusals, each followed by restored positive connectivity/readiness. Region/expiry checks refuse at validation, not through an AWS expired-session response. A successful local fake or schema check cannot replace actual managed results.
+
+The [initial-baseline recovery](../../evidence/APP-007/managed/initial-baseline-recovery.json) binds actual scheduled stop, same-qualified-image restart and another observed stop; the separate snapshot trial compared the full restored foundation before migration/reseed and removed its temporary resources. This is the selected first-deployment fallback, not a prior-image rollback or later full release campaign.
 
 Cleanup targets only the named synthetic resources. Preserve required evidence, snapshots, versioned-object/deletion records and audit anchors according to the design before cleanup; destruction or key deletion has its own explicit operational decision. Failed provisioning rolls back only resources owned by this setup, never shared auth or another team's environment.
 
@@ -44,7 +46,7 @@ GenUI owns application infrastructure configuration, migrations and consumer che
 
 FormaStack has supplied a [separate auth rehearsal proposal](../../evidence/APP-006/upstream-auth-source/hosted-rehearsal-proposal.txt): six hours of synthetic staging and cleanup. Its chat subsequently reports Victor approved that rehearsal with **$5 included inside the $100 monthly limit**, the exact origin/callback above, and an explicit readiness condition: begin only when GenUI's callback and test environment are ready for joint integration. The start signal remains pending; source preparation can continue. This is not a hard AWS billing cap or permission to recreate the deleted production environment. The received older proposal remains a historical snapshot; these later inputs control execution.
 
-APP-007 stays incomplete until revised infrastructure review, bounded-window preflight and the actual managed checks pass. Account, hostname, ingress policy, operator and monthly limit are now supplied. Hosted-auth and invitation/admission evidence remain separate requirements; the user's choices do not claim those implementations exist.
+APP-007's actual managed proof is retained; final independent acceptance, landing and exact-source CI remain pending. Keep the service stopped until a reviewed activation within a reconciled reservation. Hosted-auth, tenant-row authorization and invitation/admission evidence remain separate requirements; the user's choices and this foundation do not claim those implementations exist.
 
 ## Infrastructure implementation choice
 
@@ -54,4 +56,4 @@ GateWasm teardown completed 2026-10-28 19:29:59 UTC. Account access remains, but
 
 The user asked whether existing App Runner eligibility would make it easier. Existing customers can still create App Runner resources, but the selected baseline remains ECS/Fargate with CDK: the design includes background import/generation/query workers and explicit resource controls, while App Runner throttles idle request-processing CPU. This is a GenUI architecture choice, not a claim that existing App Runner customers have lost access. See [AWS availability notice](https://docs.aws.amazon.com/apprunner/latest/dg/apprunner-availability-change.html) and [App Runner FAQ](https://aws.amazon.com/apprunner/faqs/).
 
-2026-10-28 follow-up discovery: `acm list-certificates` (issued, us-east-1) and `route53 list-hosted-zones` were read-only. No certificate, hosted zone or DNS record was created. The CDK template remains parameterized so deployment cannot invent a hostname/certificate or unrestricted ingress.
+Historical 2026-10-28 follow-up discovery: `acm list-certificates` (issued, us-east-1) and `route53 list-hosted-zones` were read-only. **During that discovery step**, no certificate, hosted zone or DNS record was created. Later authorized certificate/DNS/deployment actions have their own linked receipts above. The CDK template remains parameterized so a subsequent deployment cannot invent a hostname/certificate or unreviewed ingress.

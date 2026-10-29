@@ -1,0 +1,78 @@
+{
+  "observed_at_utc": "2026-10-29T01:02:46.429568+00:00",
+  "source_revision": "8f8c34ba0b5e47a55990b273fc6d555d41369791",
+  "helper_sha256": "26cc81d7eb0dfc3eb5ec75e5b25c6522d34b0e9c0e79cdd6423bfbbc057199df",
+  "registration_payload_sha256": "d19a98edc8c5b846fc7a55d06858847b2425e806bc8546c4f3eee1ed98d74732",
+  "image_digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "task_arn": "arn:aws:ecs:us-east-1:877573132739:task/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/2d34953af2f5428a969627c8c28c3956",
+  "task_definition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiApp007RuntimeNegativeTrial:1",
+  "task_started_at": "2026-10-28T21:00:06.724000-04:00",
+  "task_stopped_at": "2026-10-28T21:00:35.787000-04:00",
+  "task_final_status": "STOPPED",
+  "exit_code": 0,
+  "temporary_task_definition_status": "INACTIVE",
+  "report": {
+    "schema_version": 1,
+    "scope": "APP-007 isolated managed runtime negatives",
+    "passed": true,
+    "service_changed": false,
+    "llm_requests": 0,
+    "auth_enabled": false,
+    "wrong_tenant_key_repeated": false,
+    "checks": [
+      {
+        "name": "initial_managed_baseline",
+        "passed": true,
+        "http_status": 200,
+        "database_roles": 4,
+        "storage_prefixes": 2,
+        "kms_keys": 2
+      },
+      {
+        "name": "missing_file",
+        "passed": true,
+        "helper_refused": true,
+        "http_status": 503,
+        "baseline_helper_passed": true,
+        "restored_http_status": 200,
+        "elapsed_ms": 610
+      },
+      {
+        "name": "wrong_storage_region",
+        "passed": true,
+        "helper_refused": true,
+        "http_status": 503,
+        "baseline_helper_passed": true,
+        "restored_http_status": 200,
+        "elapsed_ms": 602
+      },
+      {
+        "name": "expired_file",
+        "passed": true,
+        "helper_refused": true,
+        "http_status": 503,
+        "baseline_helper_passed": true,
+        "restored_http_status": 200,
+        "elapsed_ms": 539
+      },
+      {
+        "name": "unreachable_database",
+        "passed": true,
+        "helper_refused": true,
+        "http_status": 503,
+        "baseline_helper_passed": true,
+        "restored_http_status": 200,
+        "elapsed_ms": 631
+      }
+    ],
+    "private_files_removed": true,
+    "native_process_stopped": true,
+    "elapsed_ms": 4712
+  },
+  "limits": [
+    "Missing, malformed region and expired credential copies are refused at their reviewed validation boundary; no remote AWS expired-session denial is inferred.",
+    "Unreachable database used reserved non-listening loopback5432 and real connection refusal, without interrupting RDS.",
+    "Native503 invalidates changed config; native200 restoration may reuse still-valid prior baseline cache. Direct real helper probes succeeded freshly after every restoration.",
+    "No shared service credential file, grants or stored data changed; no app authorization, hosted identity or LLM acceptance is implied."
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "recorded_at": "2026-10-29T01:01:23.424392+00:00",
+  "scope": "Local CI wrapper only; no managed calls or acceptance",
+  "command": [
+    "./node_modules/.bin/tsx",
+    "--test",
+    "test/runtime-negatives.test.ts"
+  ],
+  "working_directory": "infra",
+  "exit_code": 0,
+  "elapsed_ms": 4149,
+  "output": "TAP version 13\n# Subtest: runtime negative runner preserves isolation, refusal and cleanup boundaries locally\nok 1 - runtime negative runner preserves isolation, refusal and cleanup boundaries locally\n  ---\n  duration_ms: 3893.072917\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 4046.51225\n",
+  "source_sha256": {
+    "infra/test/runtime-negatives.test.ts": "f085ca4276b77be3eb196972ec0151f4fa5d61dcf23562f233425b0e01634159",
+    "infra/README.md": "026681d7ee42ce806dc81e20c084f169bd88394c56fd2123de69479351ade6c4",
+    "infra/scripts/managed_runtime_negatives.py": "26cc81d7eb0dfc3eb5ec75e5b25c6522d34b0e9c0e79cdd6423bfbbc057199df",
+    "infra/test/managed_runtime_negatives_test.py": "fb54e1115c068d11ab34ab57aca4f8b84ab81594282f861bca7b5a054d5cfb31"
+  },
+  "sources_unchanged_during_check": true,
+  "reviewed_helper_unchanged": true,
+  "reviewed_python_tests_unchanged": true,
+  "python_process_timeout_ms": 30000,
+  "passed": true
+}

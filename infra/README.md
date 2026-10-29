@@ -2,6 +2,8 @@
 
 This is the APP-007 synthetic deployment model, revised 2026-10-28 for Victor's `beta.getforma.dev`, public HTTPS and $100/month decision. It preserves the full 2-vCPU/8-GiB Fargate envelope and private RDS/S3/KMS for a bounded Phase 1 window. **Local synthesis/tests establish no GenUI deployment or managed acceptance.** The old GateWasm CDK source stays in its owning repository. Always-on Fargate beta does not fit $100; this plan reserves retained resources and a short trial rather than promising continuous service at that price.
 
+Actual [managed foundation results](../evidence/APP-007/managed/README.md) are now retained separately. The [final operating receipt](../evidence/APP-007/managed/final-operating-state.json) records all ten observed tasks stopped, seven standalone tasks totaling 325.86 seconds against 7,200 reserved seconds, and the unchanged $97.49 project reservation. Retained resources remain billable. Final acceptance, landing and exact-source CI remain pending; current documentation does not relabel the older deployed image or the separate APP-006 registry artifact.
+
 ## Reproduce the local checks
 
 From `infra/`, using Node 22 or later:
@@ -13,7 +15,7 @@ npm test
 npm run synth -- --quiet
 ```
 
-Dependencies and CLI versions are exact and locked. Synthesis is account-agnostic and disables lookups; these commands do not create AWS resources. Fifteen template tests inspect both ingress modes, fixed private boundaries, exact scheduler authority, role grants, storage, runtime settings and optional qualification-secret isolation. A separate Node test invokes the 22 Python preflight tests, including concurrent budget reservations, selected-secret binding and activation refusal. Run those directly with `python3 -m unittest discover -s test -p preflight_test.py -v`. `cdk.out/` is disposable. Local checks cannot prove live AWS connectivity, scheduled delivery, SQL grants or tenant authorization.
+Dependencies and CLI versions are exact and locked. Synthesis is account-agnostic and disables lookups; these commands do not create AWS resources. Fifteen template tests inspect both ingress modes, fixed private boundaries, exact scheduler authority, role grants, storage, runtime settings and optional qualification-secret isolation. A separate Node test invokes the 22 Python preflight tests, including concurrent budget reservations, selected-secret binding and activation refusal. Run those directly with `python3 -m unittest discover -s test -p preflight_test.py -v`. Another Node wrapper runs the 14 local runtime-negative boundary tests with a 30-second process bound; their synthetic helper/native fixtures and local filesystem/process/HTTP checks make no managed calls. Run them directly with `python3 -B -m unittest discover -s test -p managed_runtime_negatives_test.py -v`. Both wrappers are included in `npm test`. `cdk.out/` is disposable. Local checks cannot prove live AWS connectivity, scheduled delivery, SQL grants or tenant authorization.
 
 ## Required deployment inputs
 
@@ -100,6 +102,10 @@ Activation checks the actual account, completed `GenuiSyntheticFoundation` stack
 
 The one-time EventBridge Scheduler target requests **only this ECS service's desired count zero**, with a dedicated role allowed `ecs:UpdateService` on the exact service ARN and cluster, trusted only by the exact schedule group in this account. IAM does not constrain the UpdateService request's desired-count field; the reviewed target supplies zero. No Lambda, RDS control, data permissions, PassRole or wildcard resource authority is granted. Delivery has minute precision, up to three retries and a 900-second event-age limit; it is not guaranteed execution at an exact second. The scheduler API does not validate target business behavior at creation. Managed acceptance must actually observe a short scheduled stop, its service/task outcome and sanitized CloudTrail/metrics, then retain any failure. The schedule remains for review/cleanup and never resumes the service. RDS/ALB/IPv4/storage/keys continue charging after service compute stops; reconcile them at the next month and execute the scoped cleanup/retention plan.
 
+### Database replacement guard for stack updates
+
+Before updating the exact reviewed `GenuiSyntheticFoundation` stack identity, inspect and retain its existing stack policy. Preserve any existing protections; never overwrite an unrelated or stronger policy blindly. The reviewed [stack-policy.json](stack-policy.json) permits ordinary updates while explicitly denying `Update:Replace` and `Update:Delete` for `AWS::RDS::DBInstance`. Install the reviewed policy only on that verified stack, read it back, and execute the reviewed change set without a temporary policy override. A refused replacement is a failure to investigate, not a reason to weaken the guard. Retain the policy and verify the source database identity after the update. The [actual applied correction](../evidence/APP-007/managed/auto-minor-applied.json) records the matching policy hash, no override, unchanged source DB identity and PostgreSQL 16.13 with automatic minor upgrades disabled. This policy guards CloudFormation updates; it does not replace IAM, block direct RDS deletion or protect a whole-stack delete operation.
+
 ### Optional operator qualification configuration
 
 The preflight input additionally accepts `qualification_config_secret_arn`. Omission or an empty string means disabled and preserves earlier disabled-window ledger hashes. Enabling, changing or removing a nonempty ARN changes an immutable window input; never overwrite a retained reservation to do that. The parameter report explicitly sets `QualificationConfigSecretArn`, including an empty value when disabled. Older deployed templates without this parameter are accepted for activation only as disabled.
@@ -133,7 +139,7 @@ The helper obtains ECS task identity, assumes database and tenant roles for 900 
 
 ## Initial migration and operator access
 
-This sequence is a handoff plan, not a record that deployment ran:
+This sequence is the reusable operating procedure. The [retained actual migration receipt](../evidence/APP-007/managed/managed-migrations.json) is the evidence of the completed campaign; following these instructions again requires a reviewed window and fresh results:
 
 1. Review the inputs, image/architecture, CDK diff, current estimate, cleanup plan and real certificate hostname. Reserve the short window with preflight and provision with `ServiceDesiredCount=0`; confirm the required stop schedule actually exists before activation.
 2. Use stack outputs `ClusterName`, `MigrationTaskDefinition`, `PublicTaskSubnets` and `TaskSecurityGroup` to run exactly one migration task on Fargate Linux platform `1.4.0`, in those subnets, with that security group and public IP enabled for ECR/logs/Secrets Manager HTTPS. No public database endpoint or inbound migration port is added.
@@ -149,7 +155,7 @@ Set desired count to zero to stop app compute. The service uses a deployment cir
 
 Database, generated migration secret, S3 objects/versions, KMS keys and logs are retained on stack removal. Deletion protection also prevents accidental database removal. Plan snapshots/restore checks, secret retention, version cleanup and eventual key deletion explicitly; deleting the stack or setting count zero does not terminate all charges. Do not destroy keys while retained objects or database backups still require them.
 
-Managed account connectivity, exact PostgreSQL grants, cross-tenant denials, readiness, snapshot/restore and cleanup/rollback are still required. Template assertions cannot establish these outcomes. No customer data or credentials belong in this synthetic environment's source or evidence.
+The managed index retains actual account connectivity, foundation PostgreSQL grants, tenant storage denials, readiness/negative paths, snapshot restore and cleanup. [Initial-baseline recovery](../evidence/APP-007/managed/initial-baseline-recovery.json) is the selected first-deployment fallback; no earlier-image rollback or PH05 release qualification is claimed. Final acceptance and exact-source CI remain pending. Future image/configuration changes require the applicable fresh checks; template assertions cannot establish managed outcomes. No customer data or credentials belong in this synthetic environment's source or evidence.
 
 References: [ECS execution-role separation and permissions](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html), [Fargate task networking](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-networking.html), [ECS bind mounts and ownership](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/bind-mounts.html).
 
