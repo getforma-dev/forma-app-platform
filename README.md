@@ -1,5 +1,7 @@
 # Forma app platform
 
+**License:** All rights reserved; see [LICENSE](LICENSE). This repository is temporarily public only so that GitHub Actions can run during deployment; no permission to use, copy or modify it is granted, and it returns to private afterwards.
+
 **October 29 transfer:** start with [the GenUI Claude handoff](CLAUDE-HANDOFF.md). Execution is being wound down at Victor's request; Phase1 is incomplete and the proposed hosted-auth window was withdrawn. The handoff identifies the separate FormaStack/fAuth owner and the unaccepted managed-entry draft.
 
 The company app platform built on Forma Stack: teams create, run, adapt and share their own apps. Northstar and Spend Review prove the same platform through two different workflows.
