@@ -418,7 +418,7 @@
       "Depends on": "APP-007",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Claude session (successor to the Codex tenant-foundation lead); independent reviewer named at review",
-      "Branch / PR": "phase-one-spikes; local acceptance source 20a480b (reviewed slices through acbde9b), unpushed at the move; no CI run exists for it. The last pushed source 677d7bd was refused before execution for organization billing (run 40812964992). Done revision recorded at landing.",
+      "Branch / PR": "phase-one-spikes; acceptance source 20a480b (reviewed slices through acbde9b) pushed inside `a0a75a8` on 2026-10-29 together with the kept cfg(test) managed-qualification draft; exact-source CI on `a0a75a8`: Tenant foundation qualification run 40931497549 and eight other workflows succeeded, Synthetic fixture qualification (APP-011's) failed on its parser-digest check. Landing on `main` pending (Task 1).",
       "Team": "GenUI",
       "Blocked by": "None \u2014 accepted ADR-004 directs parallel schema and native transaction implementation.",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -564,8 +564,8 @@
       "Assignee": "GenUI \u2014 synthetic fixture lead",
       "Branch / PR": "phase-one-spikes; fixture package paths owned independently",
       "Team": "GenUI",
-      "Blocked by": "GitHub account billing/spending limit refuses CI jobs before execution; organization billing administrator action is required. Local package acceptance and review have passed.",
-      "Unblock evidence": "Restore GitHub Actions availability, run the exact reviewed source checks successfully, record their results and land the reviewed change. Do not treat the account-level refusal as a test result.",
+      "Blocked by": "The Synthetic fixture qualification workflow has not yet passed on the exact source: its first run (40931497331 on `a0a75a8`, the repository now public) failed in `fixtures/qualify.py` because it required byte identity with APP-004's arm64 macOS WASM digest, which the wasm32 build cannot give across hosts; the binding fix is merged and runs on the next push. Local package acceptance and review have passed.",
+      "Unblock evidence": "The fixtures workflow succeeds on the exact pushed source with the new input binding recorded in its `summary.json`; record the run and land the reviewed change. Do not treat the earlier account-level refusal as a test result.",
       "dependencies": [
         "APP-002",
         "APP-007"
