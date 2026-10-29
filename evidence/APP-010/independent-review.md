@@ -5,7 +5,7 @@
 | Reviewer | Independent reviewer (Claude), not the implementer. Read-only apart from this file; nothing committed. |
 | Date | 2026-10-29 |
 | Revision reviewed | `phase-one-spikes` at `3f918fb`. The APP-010 commits are `d9940d1` and `0a62122`, merged in `6d877e6`. The fixture provenance fix `faf4b6c` is included. No APP-010 source, migration, catalog or runtime file changed between `6d877e6` and `3f918fb`. |
-| Controlling text | `Tickets/0-backlog/APP-010.md` acceptance. ADR-007 D7.3, D7.6 (A1), D7.8, D7.9 and D7.12. ADR-004. ADR-002. `docs/planning/PHASE-1-EXECUTION-PLAN.md` Task 6. Design §5.3 write path and C09. |
+| Controlling text | `Tickets/2-in-progress/APP-010.md` acceptance. ADR-007 D7.3, D7.6 (A1), D7.8, D7.9 and D7.12. ADR-004. ADR-002. `docs/planning/PHASE-1-EXECUTION-PLAN.md` Task 6. Design §5.3 write path and C09. |
 | Author evidence | `evidence/APP-010/README.md` and its JSON reports |
 | AWS | Not touched. |
 
