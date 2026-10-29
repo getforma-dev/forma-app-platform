@@ -1,0 +1,10 @@
+test_catalog_version_check_and_distinct_catalogs_are_required (test_check_schema_pins.SchemaPinTests.test_catalog_version_check_and_distinct_catalogs_are_required) ... ok
+test_current_tree_pins_agree (test_check_schema_pins.SchemaPinTests.test_current_tree_pins_agree) ... ok
+test_mismatched_catalog_bound_fails (test_check_schema_pins.SchemaPinTests.test_mismatched_catalog_bound_fails) ... ok
+test_mismatched_pin_fails (test_check_schema_pins.SchemaPinTests.test_mismatched_pin_fails) ... ok
+test_missing_or_duplicated_pin_refuses (test_check_schema_pins.SchemaPinTests.test_missing_or_duplicated_pin_refuses) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.915s
+
+OK

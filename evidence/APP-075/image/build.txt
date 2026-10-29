@@ -1,0 +1,90 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 5.14kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31
+#2 DONE 0.1s
+
+#3 [internal] load metadata for docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+#3 DONE 0.1s
+
+#4 [stage-2  1/10] FROM docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+#4 resolve docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d done
+#4 DONE 0.0s
+
+#5 [native  1/11] FROM docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31
+#5 resolve docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31 done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 233.85kB 0.0s done
+#6 DONE 0.0s
+
+#7 [stage-2  8/10] COPY --chmod=0444 app/runtime/qualification_supervisor.py /app/qualification_supervisor.py
+#7 CACHED
+
+#8 [native  3/11] COPY app/Cargo.toml app/Cargo.lock ./
+#8 CACHED
+
+#9 [stage-2  9/10] COPY --chmod=0444 app/certs/rds-global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
+#9 CACHED
+
+#10 [native  6/11] COPY app/certs/rds-global-bundle.pem ./certs/rds-global-bundle.pem
+#10 CACHED
+
+#11 [native  7/11] COPY contracts/implementation-lock.json /source/contracts/implementation-lock.json
+#11 CACHED
+
+#12 [native 10/11] COPY spikes/APP-006/src /source/spikes/APP-006/src
+#12 CACHED
+
+#13 [native  2/11] WORKDIR /source/app
+#13 CACHED
+
+#14 [native  5/11] COPY app/migrations ./migrations
+#14 CACHED
+
+#15 [native  9/11] COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml
+#15 CACHED
+
+#16 [stage-2  2/10] WORKDIR /app
+#16 CACHED
+
+#17 [native  8/11] COPY contracts/fixtures /source/contracts/fixtures
+#17 CACHED
+
+#18 [stage-2  7/10] COPY --chmod=0444 app/runtime/runtime.py /app/runtime.py
+#18 CACHED
+
+#19 [stage-2  5/10] COPY --from=native --chmod=0555 /source/genui-storage-tests /app/qualification/genui-storage-tests
+#19 CACHED
+
+#20 [stage-2  4/10] RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r requirements.lock
+#20 CACHED
+
+#21 [native 11/11] RUN --mount=type=cache,id=genui-qualification-cargo-registry,target=/usr/local/cargo/registry     --mount=type=cache,id=genui-qualification-target-arm64,target=/source/app/target     set -eu;     cargo test --no-run --locked --lib --message-format=json > /source/cargo-artifacts.jsonl;     grep '"reason":"compiler-artifact"' /source/cargo-artifacts.jsonl       | grep '"name":"genui"' | grep '"kind":\["lib"\]' | grep '"test":true'       | grep -o '"executable":"[^"]*"' | cut -d'"' -f4 > /source/executable-path;     test "$(wc -l < /source/executable-path)" -eq 1;     install -m 0555 "$(cat /source/executable-path)" /source/genui-storage-tests;     printf '{"schema_version":1,"executable":"/app/qualification/genui-storage-tests","executable_sha256":"%s","rustc":"%s","cargo_artifact":"%s"}\n'       "$(sha256sum /source/genui-storage-tests | cut -d' ' -f1)"       "$(rustc --version)"       "$(basename "$(cat /source/executable-path)")" > /source/build-identity.json
+#21 CACHED
+
+#22 [stage-2  3/10] COPY app/runtime/requirements.lock ./requirements.lock
+#22 CACHED
+
+#23 [stage-2  6/10] COPY --from=native --chmod=0444 /source/build-identity.json /app/qualification/build-identity.json
+#23 CACHED
+
+#24 [native  4/11] COPY app/src ./src
+#24 CACHED
+
+#25 [stage-2 10/10] RUN mkdir -p /run/genui && chown 65532:65532 /run/genui && chmod 0700 /run/genui
+#25 CACHED
+
+#26 exporting to image
+#26 exporting layers done
+#26 exporting manifest sha256:c24b84416328b1f168c515541bd386b54b013107ce3ae373945245c599a224f1 done
+#26 exporting config sha256:9ecf64f2734071e2791c2401b36c1e27d8e16d072557ff382b1974549088d640 done
+#26 exporting attestation manifest sha256:4df42c3eeaa9b5432e2034c9010174acae08af0cd4d37c8c96d0d1cc5489e56d done
+#26 exporting manifest list sha256:ff9f0fe0f55ed0cc115fe60e3e367a0b6b9e365d5824b44676897be70bf17e1d done
+#26 naming to docker.io/library/genui-app075-qualification:local done
+#26 unpacking to docker.io/library/genui-app075-qualification:local done
+#26 DONE 0.1s

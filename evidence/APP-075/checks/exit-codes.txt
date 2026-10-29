@@ -1,0 +1,16 @@
+fmt 0
+clippy 0
+storage-tests 0
+all-tests 0
+msrv-1.85 0
+schema-pins 0
+scripts-tests 0
+runtime-tests 0
+supervisor-tests 0
+infra-typecheck 0
+infra-tests 0
+cleanup-campaign 0
+native-campaign 0
+admission-campaign 0
+check-image 0
+local-harness 0

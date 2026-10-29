@@ -16,6 +16,10 @@ import { Construct } from 'constructs';
 const octet = '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])';
 export const OPERATOR_CIDR_PATTERN = `^(?!(?:0|10|127)\\.)(?!100\\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\\.)(?!169\\.254\\.)(?!172\\.(?:1[6-9]|2[0-9]|3[01])\\.)(?!192\\.168\\.)(?!192\\.0\\.[02]\\.)(?!192\\.88\\.99\\.)(?!198\\.(?:18|19)\\.)(?!198\\.51\\.100\\.)(?!203\\.0\\.113\\.)(?!2(?:2[4-9]|[3-5][0-9])\\.)${octet}(?:\\.${octet}){3}/32(?![\\s\\S])`;
 export const EXPIRY_UTC_PATTERN = '^20[0-9]{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z(?![\\s\\S])';
+const IMAGE_DIGEST_BODY = '[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}';
+export const IMAGE_DIGEST_PATTERN = `^${IMAGE_DIGEST_BODY}(?![\\s\\S])`;
+// Empty, or a reviewed digest of the separate APP-075 qualification image.
+export const QUALIFICATION_IMAGE_PATTERN = `^(?:|${IMAGE_DIGEST_BODY})(?![\\s\\S])`;
 export const QUALIFICATION_SECRET_ARN_PATTERN = '^(?:|arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-[a-z0-9][a-z0-9-]{0,79}-[A-Za-z0-9]{6})(?![\\s\\S])';
 
 /** Reviewable deployment model. Synth/tests never create cloud resources. */
@@ -108,19 +112,22 @@ export class GenuiFoundation extends Stack {
       tenants.push({ organization_id: tenant, role_arn: tenantRole.roleArn, kms_key_arn: keys[i].keyArn, prefix: `o/${tenant}/` });
     }
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc });
-    const image = new CfnParameter(this, 'ImageDigest', { type: 'String', allowedPattern: '^[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}(?![\\s\\S])', description: 'Reviewed ECR image digest, not a mutable tag' });
+    const image = new CfnParameter(this, 'ImageDigest', { type: 'String', allowedPattern: IMAGE_DIGEST_PATTERN, description: 'Reviewed ECR image digest, not a mutable tag' });
     const imageArchitecture = new CfnParameter(this, 'ImageArchitecture', {
       type: 'String', allowedValues: ['ARM64', 'X86_64'],
       description: 'Required architecture matching the supplied immutable image; ARM64 local and X86_64 CI images are distinct artifacts.',
     });
     const runtimePlatform = { cpuArchitecture: ecs.CpuArchitecture.of(imageArchitecture.valueAsString), operatingSystemFamily: ecs.OperatingSystemFamily.LINUX };
-    const imageUri = Fn.select(0, Fn.split('@sha256:', image.valueAsString));
-    const imageDomain = Fn.select(0, Fn.split('/', imageUri));
-    const repositoryArn = this.formatArn({ service: 'ecr', region: Fn.select(3, Fn.split('.', imageDomain)), account: Fn.select(0, Fn.split('.', imageDomain)), resource: 'repository', resourceName: Fn.select(1, Fn.split('.amazonaws.com/', imageUri)) });
-    const makeExecutionRole = (name: string) => {
+    const repositoryOf = (digest: string) => {
+      const imageUri = Fn.select(0, Fn.split('@sha256:', digest));
+      const imageDomain = Fn.select(0, Fn.split('/', imageUri));
+      return this.formatArn({ service: 'ecr', region: Fn.select(3, Fn.split('.', imageDomain)), account: Fn.select(0, Fn.split('.', imageDomain)), resource: 'repository', resourceName: Fn.select(1, Fn.split('.amazonaws.com/', imageUri)) });
+    };
+    const repositoryArn = repositoryOf(image.valueAsString);
+    const makeExecutionRole = (name: string, repository = repositoryArn) => {
       const role = new iam.Role(this, name, { assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com') });
       role.addToPolicy(new iam.PolicyStatement({ actions: ['ecr:GetAuthorizationToken'], resources: ['*'] }));
-      role.addToPolicy(new iam.PolicyStatement({ actions: ['ecr:BatchCheckLayerAvailability', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchGetImage'], resources: [repositoryArn] }));
+      role.addToPolicy(new iam.PolicyStatement({ actions: ['ecr:BatchCheckLayerAvailability', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchGetImage'], resources: [repository] }));
       return role;
     };
     const executionRole = makeExecutionRole('ExecutionRole');
@@ -203,6 +210,36 @@ export class GenuiFoundation extends Stack {
       environment: { PGHOST: database.instanceEndpoint.hostname, PGPORT: '5432', PGDATABASE: 'genui', PGUSER: 'genui_migration', PGSSLROOTCERT: '/etc/ssl/certs/rds-global-bundle.pem', PGSSLMODE: 'verify-full', PYTHONDONTWRITEBYTECODE: '1' },
       secrets: { PGPASSWORD: ecs.Secret.fromSecretsManager(database.secret!, 'password') },
     });
+    // APP-075: optional standalone qualification task. Count zero: no service,
+    // schedule or target references it; an operator runs it once per reviewed
+    // window with the arming value and run manifest as environment overrides.
+    // It uses the runtime task role (the four DB identities and two tenant
+    // roles only), never the migration secret, and has no port or listener.
+    const qualificationImage = new CfnParameter(this, 'QualificationImageDigest', {
+      type: 'String', default: '', allowedPattern: QUALIFICATION_IMAGE_PATTERN,
+      description: 'Optional reviewed ECR digest of the separate APP-075 qualification image (never the service image). Empty creates no qualification task definition or execution role.',
+    });
+    const qualificationTaskEnabled = new CfnCondition(this, 'QualificationTaskEnabled', {
+      expression: Fn.conditionNot(Fn.conditionEquals(qualificationImage.valueAsString, '')),
+    });
+    const qualificationExecutionRole = makeExecutionRole('QualificationExecutionRole', repositoryOf(qualificationImage.valueAsString));
+    const qualification = new ecs.FargateTaskDefinition(this, 'QualificationTask', { cpu: 1024, memoryLimitMiB: 2048, taskRole, executionRole: qualificationExecutionRole, runtimePlatform });
+    qualification.addVolume({ name: 'qualification-run' });
+    const qualificationContainer = qualification.addContainer('qualification', {
+      image: ecs.ContainerImage.fromRegistry(qualificationImage.valueAsString), readonlyRootFilesystem: true, user: '65532:65532',
+      entryPoint: ['python3', '/app/qualification_supervisor.py'], command: ['run'],
+      logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'genui-qualification', logGroup: log }),
+      environment: {
+        GENUI_DATABASE_HOST: database.instanceEndpoint.hostname, GENUI_DATABASE_PORT: '5432', GENUI_DATABASE_NAME: 'genui',
+        GENUI_EVIDENCE_BUCKET: bucket.bucketName, GENUI_DATABASE_ROLES_JSON: this.toJsonString(databaseRoles), GENUI_TENANTS_JSON: this.toJsonString(tenants),
+        AWS_REGION: this.region, PYTHONDONTWRITEBYTECODE: '1',
+      },
+    });
+    qualificationContainer.addMountPoints({ sourceVolume: 'qualification-run', containerPath: '/run/genui', readOnly: false });
+    for (const construct of [qualification.node.defaultChild, qualificationExecutionRole.node.defaultChild, qualificationExecutionRole.node.tryFindChild('DefaultPolicy')?.node.defaultChild]) {
+      if (construct) (construct as iam.CfnRole).cfnOptions.condition = qualificationTaskEnabled;
+    }
+    new CfnOutput(this, 'QualificationTaskDefinition', { value: qualification.taskDefinitionArn, condition: qualificationTaskEnabled });
     new CfnOutput(this, 'DatabaseEndpoint', { value: database.instanceEndpoint.hostname });
     new CfnOutput(this, 'EvidenceBucket', { value: bucket.bucketName });
     new CfnOutput(this, 'ClusterName', { value: cluster.clusterName });
