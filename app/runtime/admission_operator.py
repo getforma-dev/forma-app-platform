@@ -50,7 +50,11 @@ HANDLE_DOMAIN = b"forma:signin-handle:v1"
 EMAIL_DOMAIN = b"forma:intended-email:v1"
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 LABEL = re.compile(r"[a-z0-9][a-z0-9._@-]{0,63}")
-ROLE = re.compile(r"[a-z][a-z0-9_]{0,63}")
+# ADR-003:37 / APP-073 acceptance 6: the provider's least-privilege identity role only.
+# FormaStack server_only built-in roles are role_admin and role_user (gatewasm 1bf5d3b,
+# crates/server/src/handlers/management.rs:1694-1712); widen only by an APP-006-accepted
+# contract, never by operator input. Independent review M1.
+PROVIDER_ROLES = ("user",)
 APP_PERMISSIONS = ("discover", "run", "edit_definition")
 WORK_PERMISSIONS = ("record_read", "record_write", "share_work", "export")
 
@@ -214,7 +218,7 @@ def validate(args):
         if args.provider_email is not None:
             email = args.provider_email.strip()
             require(3 <= len(email) <= 320 and email.count("@") == 1 and email.isascii() and email.isprintable(), "malformed_email")
-            require(ROLE.fullmatch(args.provider_role) is not None and args.provider_role not in ("admin", "administrator", "owner"), "provider_role_refused")
+            require(args.provider_role in PROVIDER_ROLES, "provider_role_refused")
             require(1 <= len(args.provider_issuer) <= 512 and 1 <= len(args.provider_tenant) <= 256, "malformed_provider_tenant")
     if args.command == "extend":
         require(1 <= args.expires_days <= DEFAULTS["code_expiry_days_max"], "expiry_out_of_range")
@@ -225,9 +229,12 @@ def validate(args):
 
 def connect():
     import psycopg
+    # Always verify-full TLS: a Unix-socket host never uses TLS, and libpq would
+    # prefer GSSAPI encryption over TLS when Kerberos credentials exist.
+    require(not os.environ["PGHOST"].startswith("/"), "socket_host_refused")
     return psycopg.connect(host=os.environ["PGHOST"], port=int(os.environ.get("PGPORT", "5432")),
                            dbname=os.environ.get("PGDATABASE", "genui"), user=os.environ["PGUSER"],
-                           password=os.environ.get("PGPASSWORD"), sslmode="verify-full",
+                           password=os.environ.get("PGPASSWORD"), sslmode="verify-full", gssencmode="disable",
                            sslrootcert=os.environ["PGSSLROOTCERT"], connect_timeout=5,
                            options="-c search_path=pg_catalog,pg_temp -c statement_timeout=5000 -c lock_timeout=3000")
 
@@ -245,8 +252,9 @@ def begin(c, organization):
               "set_config('genui.membership_epoch','',true)", (organization,))
 
 
-def lock_organization(c, organization, active=False):
-    row = c.execute("SELECT status FROM genui.organizations WHERE organization_id=%s FOR SHARE", (organization,)).fetchone()
+def lock_organization(c, organization, active=False, lock=True):
+    row = c.execute("SELECT status FROM genui.organizations WHERE organization_id=%s" + (" FOR SHARE" if lock else ""),
+                    (organization,)).fetchone()
     require(row is not None, "organization_unknown")
     require(not active or row[0] == "active", "organization_inactive")
 
@@ -364,7 +372,14 @@ def list_codes(c, args):
             AND r.kind='pending' AND r.state='live' AND r.expires_at>now()),
           (SELECT count(*) FROM genui.code_reservations r WHERE r.organization_id=a.organization_id AND r.code_id=a.code_id
             AND r.kind='presignup' AND r.state='live' AND r.expires_at>now()),
-          a.issued_at,a.expires_at,a.revoked_at
+          a.issued_at,a.expires_at,a.revoked_at,
+          -- Review m3(b), ADR-006:43: this listing is the reconciliation record for
+          -- pending admissions that lapsed with no later sign-in (still 'live'
+          -- in storage, never counted) and for those already denied.
+          (SELECT count(*) FROM genui.code_reservations r WHERE r.organization_id=a.organization_id AND r.code_id=a.code_id
+            AND r.kind='pending' AND r.state='live' AND r.expires_at<=now()),
+          (SELECT count(*) FROM genui.code_reservations r WHERE r.organization_id=a.organization_id AND r.code_id=a.code_id
+            AND r.kind='pending' AND r.state='denied_for_reconciliation')
         FROM genui.access_codes a WHERE a.organization_id=%s ORDER BY a.issued_at DESC,a.code_id LIMIT %s""",
                      (org, DEFAULTS["list_rows_max"] + 1)).fetchall()
     invitations = {}
@@ -373,7 +388,8 @@ def list_codes(c, args):
         invitations.setdefault(code, []).append({"invitation_id": invitation, "operation": operation, "state": state})
     c.commit()
     codes = [{"code_id": r[0], "kind": r[1], "status": r[2], "max_redemptions": r[3], "redeemed_count": r[4],
-              "live_pending_admissions": r[5], "live_reservations": r[6], "issued_at": timestamp(r[7]),
+              "live_pending_admissions": r[5], "lapsed_pending_admissions": r[10], "denied_for_reconciliation": r[11],
+              "live_reservations": r[6], "issued_at": timestamp(r[7]),
               "expires_at": timestamp(r[8]), "revoked_at": timestamp(r[9]) if r[9] else None,
               "provider_invitations": invitations.get(r[0], [])} for r in rows[:DEFAULTS["list_rows_max"]]]
     return {"organization_id": org, "codes": codes, "truncated": len(rows) > DEFAULTS["list_rows_max"]}
@@ -414,8 +430,10 @@ def extend(c, args):
     # Only a live, active code is extended; an expired, revoked or exhausted
     # code is reissued instead, so expiry never resurrects a code.
     require(status == "active" and live, "code_not_extendable")
-    within = c.execute("""SELECT now()+make_interval(days=>%s)<=issued_at+interval '30 days' FROM genui.access_codes
-          WHERE organization_id=%s AND code_id=%s""", (args.expires_days, org, code_id)).fetchone()[0]
+    later, within = c.execute("""SELECT now()+make_interval(days=>%s)>expires_at,now()+make_interval(days=>%s)<=issued_at+interval '30 days'
+          FROM genui.access_codes WHERE organization_id=%s AND code_id=%s""", (args.expires_days, args.expires_days, org, code_id)).fetchone()
+    # Review m5: extension only ever moves the expiry later; shortening is revocation's job.
+    require(later, "expiry_not_extended")
     require(within, "expiry_beyond_issuance_maximum")
     c.execute("UPDATE genui.access_codes SET expires_at=now()+make_interval(days=>%s) WHERE organization_id=%s AND code_id=%s",
               (args.expires_days, org, code_id))
@@ -466,9 +484,15 @@ def revoke_membership(c, args):
 
 def verify(c, args):
     """SR10: recompute every chain of the organization in chain_sequence order; the tail equals the head."""
+    import psycopg
     org = args.organization
+    # Review m1: every head and event read shares one snapshot, so an admission
+    # appended concurrently is either wholly visible or wholly absent; verify
+    # writes and locks nothing.
+    c.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
+    c.read_only = True
     begin(c, org)
-    lock_organization(c, org)
+    lock_organization(c, org, lock=False)
     chains = {}
     for chain in CHAINS:
         head = c.execute("SELECT chain_sequence,head_hash FROM genui.audit_heads WHERE organization_id=%s AND writer_role=%s", (org, chain)).fetchone()

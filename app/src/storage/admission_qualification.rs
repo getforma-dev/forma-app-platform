@@ -123,6 +123,14 @@ fn refused(output: &Output) {
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
 }
+/// A refusal for the stated fixed reason code (never a value).
+fn refused_for(output: &Output, reason: &str) {
+    refused(output);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stderr).expect("refusal JSON"),
+        json!({ "refused": reason })
+    );
+}
 
 /// The whole database (or its data) as the local superuser sees it; read
 /// concurrently, since a dump outgrows a pipe buffer.
@@ -605,6 +613,16 @@ async fn campaign() {
     assert!(!reads(&stores, &x_member).await);
     assert!(!reads(&stores, &member(&stores, "x", &x_principal, 2)).await);
     check(&mut checks, "operation-first: the operator's entitlement revocation waits on the member fence until the operation commits; the next request (old or new epoch) is refused");
+    // Review m2: the identical retry still finds the stored redemption, but the
+    // revoked entitlement makes it Refused, never a late Admitted.
+    assert_eq!(
+        stores.workspace.admit(&x, ORG, &x_pending, &sha("x")).await,
+        Ok(Admission::Refused)
+    );
+    check(
+        &mut checks,
+        "an identical retry after the member's entitlement was revoked is refused, not replayed as admitted",
+    );
 
     // --- code revocation and entitlement revocation have distinct effects ---
     let b = issue(&fixture, "4", &grants);
@@ -646,7 +664,7 @@ async fn campaign() {
     {
         let fence = tx.fence(pre);
         tokio::pin!(fence);
-        tokio::select! {_=&mut fence=>panic!("fence bypassed the operator revocation"),_=tokio::time::sleep(Duration::from_millis(75))=>{}}
+        tokio::select! {_=&mut fence=>panic!("fence bypassed the operator revocation"),_=lock_wait(&fixture, 1)=>{}}
         writer.client.batch_execute("COMMIT").await.unwrap();
         assert!(matches!(fence.await, Err(Error::Denied)));
     }
@@ -802,10 +820,35 @@ async fn campaign() {
     hooks.release.notify_one();
     let first = first.await.unwrap().unwrap();
     let second = second.await.unwrap().unwrap();
-    assert!(matches!(first, Admission::Admitted { .. }));
+    let q_principal = match &first {
+        Admission::Admitted { principal, .. } => principal.clone(),
+        other => panic!("concurrent identical redemption did not admit: {other:?}"),
+    };
     assert_eq!(first, second);
     assert_eq!(listed(&fixture, &f.code_id)["redeemed_count"], 1);
     check(&mut checks, "two concurrent identical redemptions return one stored admission and consume exactly one slot");
+
+    // --- review m2: an identical retry racing a membership revocation --------
+    hooks.arm("admit");
+    let replay = spawn_admit(stores.clone(), q_pending.clone());
+    paused(&hooks).await;
+    // The definer has answered `replayed` from the stored redemption; the
+    // operator's membership revocation commits before the retry's recheck.
+    let out = operator(
+        &fixture,
+        &[
+            "revoke-membership",
+            "--organization",
+            ORG,
+            "--principal",
+            &q_principal,
+        ],
+    );
+    assert_eq!(out["changed"], true);
+    hooks.release.notify_one();
+    assert_eq!(replay.await.unwrap(), Ok(Admission::Refused));
+    assert_eq!(listed(&fixture, &f.code_id)["redeemed_count"], 1);
+    check(&mut checks, "a membership revocation that commits while an identical retry is in flight (after the stored redemption was found) makes the retry refused; no slot is consumed");
 
     // --- expiry and exhaustion refusals; bounded extension -------------------
     let g = issue(&fixture, "2", &grants);
@@ -969,33 +1012,42 @@ async fn campaign() {
         ("genui_worker", "synthetic-worker"),
     ] {
         let grant = grants[0].clone();
-        refused(&operator_as(
-            &fixture,
-            role,
-            password,
-            &[
-                "issue",
-                "--organization",
-                ORG,
-                "--issued-by",
-                "forged",
-                "--grant",
-                &grant,
-            ],
-        ));
-        refused(&operator_as(
-            &fixture,
-            role,
-            password,
-            &["revoke", "--organization", ORG, "--code-id", &g.code_id],
-        ));
+        refused_for(
+            &operator_as(
+                &fixture,
+                role,
+                password,
+                &[
+                    "issue",
+                    "--organization",
+                    ORG,
+                    "--issued-by",
+                    "forged",
+                    "--grant",
+                    &grant,
+                ],
+            ),
+            "operator_identity_refused",
+        );
+        refused_for(
+            &operator_as(
+                &fixture,
+                role,
+                password,
+                &["revoke", "--organization", ORG, "--code-id", &g.code_id],
+            ),
+            "operator_identity_refused",
+        );
     }
-    refused(&operator_as(
-        &fixture,
-        "genui_migration",
-        "wrong-password",
-        &["list", "--organization", ORG],
-    ));
+    refused_for(
+        &operator_as(
+            &fixture,
+            "genui_migration",
+            "wrong-password",
+            &["list", "--organization", ORG],
+        ),
+        "admission_operator_refused",
+    );
     for pool in [
         &stores.workspace.inner,
         &stores.control.inner,
@@ -1051,8 +1103,9 @@ async fn campaign() {
         assert_eq!(out["verified"], true);
     }
     let out = operator(&fixture, &["verify", "--organization", ORG]);
-    // Eight issuances, two revocations, one extension, one entitlement revocation.
-    assert_eq!(out["chains"]["operator"]["events"].as_i64(), Some(12));
+    // Eight issuances, two revocations, one extension, one entitlement revocation,
+    // one membership revocation (review m2 race).
+    assert_eq!(out["chains"]["operator"]["events"].as_i64(), Some(13));
     assert!(out["chains"]["admission"]["events"].as_i64().unwrap() >= 10);
     let dump = pg_dump(&fixture, false);
     for code in &codes {

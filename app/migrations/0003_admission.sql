@@ -96,11 +96,12 @@ CREATE TABLE genui.entitlements (
  CHECK (expires_at > starts_at),
  CHECK ((status = 'revoked') = (revoked_at IS NOT NULL))
 );
--- D7.8: one insert-only chain per organization and writer role.
+-- D7.8: one insert-only chain per organization and writer role; every hash is
+-- typed genui.digest, so previous_hash || canonical bytes has a fixed-length prefix.
 CREATE TABLE genui.audit_heads (
  organization_id uuid NOT NULL REFERENCES genui.organizations,
  writer_role text NOT NULL CHECK (writer_role IN ('workspace','control','data','admission','operator')),
- chain_sequence genui.safe_counter NOT NULL, head_hash text NOT NULL,
+ chain_sequence genui.safe_counter NOT NULL, head_hash genui.digest NOT NULL,
  PRIMARY KEY (organization_id,writer_role)
 );
 CREATE TABLE genui.audit_events (
@@ -109,7 +110,7 @@ CREATE TABLE genui.audit_events (
  chain_sequence genui.safe_counter NOT NULL, kind text NOT NULL,
  actor_principal_id uuid, app_id uuid, work_id uuid, record_id uuid, code_id uuid,
  outcome_digest genui.digest, occurred_at timestamptz NOT NULL,
- previous_hash text NOT NULL, hash text NOT NULL,
+ previous_hash genui.digest NOT NULL, hash genui.digest NOT NULL,
  PRIMARY KEY (organization_id,event_id),
  UNIQUE (organization_id,writer_role,chain_sequence),
  UNIQUE (organization_id,writer_role,previous_hash)
@@ -293,6 +294,17 @@ BEGIN
  IF EXISTS (SELECT 1 FROM genui.principals p WHERE p.organization_id=p_org AND p.issuer=p_issuer
    AND p.provider_tenant_id=p_provider_tenant AND p.provider_subject=p_provider_subject) THEN
   RETURN QUERY SELECT NULL::uuid,NULL::timestamptz,'already_member'::text; RETURN;
+ END IF;
+ -- One live pending admission per identity and code (APP-073 review m3): a
+ -- repeated callback consumes its presignup and answers the live row, with no
+ -- new slot hold and no event. The code row lock above serializes this check.
+ SELECT r.reservation_id,r.expires_at INTO v_id,v_expires FROM genui.code_reservations r
+  WHERE r.organization_id=p_org AND r.code_id=v_code_id AND r.kind='pending' AND r.state='live' AND r.expires_at>now()
+   AND r.issuer=p_issuer AND r.provider_tenant_id=p_provider_tenant AND r.provider_subject=p_provider_subject
+  ORDER BY r.expires_at DESC,r.reservation_id LIMIT 1;
+ IF FOUND THEN
+  UPDATE genui.code_reservations SET state='consumed',consumed_at=now() WHERE organization_id=p_org AND reservation_id=p_reservation;
+  RETURN QUERY SELECT v_id,v_expires,'pending'::text; RETURN;
  END IF;
  v_id:=gen_random_uuid(); v_expires:=now()+interval '24 hours';
  INSERT INTO genui.code_reservations(organization_id,reservation_id,code_id,kind,context_digest,issuer,provider_tenant_id,provider_subject,state,expires_at)

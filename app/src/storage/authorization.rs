@@ -129,6 +129,8 @@ impl<'a> Transaction<'a> {
     /// ADR-007 D7.1 private nonmember entry for the admission definer calls:
     /// workspace pool only, organization scope (or none, for the two pre-scope
     /// lookups) and no principal or epoch. It never issues a member `Permit`.
+    /// Call it only from `storage::admission`: the type system admits any
+    /// `storage` module, so that restriction is this convention (review nit).
     pub async fn begin_nonmember(pool: &Arc<RolePool>, organization: Option<&str>) -> Result<Self> {
         require(pool.role() == Role::Workspace && organization.is_none_or(valid_id))?;
         Self::open(pool, None, organization.unwrap_or(""), "", "").await

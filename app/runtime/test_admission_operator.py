@@ -80,9 +80,18 @@ class PureTests(unittest.TestCase):
         base = ["issue", "--organization", ORG, "--issued-by", "unit", "--grant", "source_read:" + str(uuid.uuid4())]
         for extra in (["--max-redemptions", "0"], ["--max-redemptions", "11"], ["--expires-days", "0"], ["--expires-days", "31"],
                       ["--kind", "admin"], ["--provider-email", "a@example.test"],
-                      ["--provider-email", "a@example.test", "--provider-role", "member"]):
+                      ["--provider-email", "a@example.test", "--provider-role", "user"]):
             with self.subTest(extra=extra), self.assertRaises(op.Refused):
                 op.validate(parser.parse_args(base + extra))
+        # Review M1: an allowlist of the provider's least-privilege role, never a denylist.
+        invitation = ["--provider-email", "a@example.test", "--provider-issuer", ISSUER, "--provider-tenant", TENANT, "--provider-role"]
+        for role in ("member", "tenant_admin", "superadmin", "org_owner", "admin", "administrator", "owner", "role_admin", "User", "user "):
+            with self.subTest(role=role):
+                with self.assertRaises(op.Refused) as refused:
+                    op.validate(parser.parse_args(base + invitation + [role]))
+                self.assertEqual(str(refused.exception), "provider_role_refused")
+        self.assertEqual(op.PROVIDER_ROLES, ("user",))
+        self.assertEqual(op.validate(parser.parse_args(base + invitation + ["user"])).provider_role, "user")
         args = op.validate(parser.parse_args(base))
         self.assertEqual((args.max_redemptions, args.expires_days, args.kind), (1, 14, "trial"))
         with self.assertRaises(op.Refused):
@@ -277,8 +286,10 @@ class DatabaseTests(unittest.TestCase):
         self.assertNotIn(digest, json.dumps(listed))
         entry = next(item for item in listed["codes"] if item["code_id"] == out["code_id"])
         self.assertEqual(set(entry), {"code_id", "kind", "status", "max_redemptions", "redeemed_count", "live_pending_admissions",
-                                      "live_reservations", "issued_at", "expires_at", "revoked_at", "provider_invitations"})
-        self.assertEqual((entry["status"], entry["redeemed_count"], entry["live_pending_admissions"]), ("active", 0, 0))
+                                      "lapsed_pending_admissions", "denied_for_reconciliation", "live_reservations", "issued_at",
+                                      "expires_at", "revoked_at", "provider_invitations"})
+        self.assertEqual((entry["status"], entry["redeemed_count"], entry["live_pending_admissions"], entry["lapsed_pending_admissions"],
+                          entry["denied_for_reconciliation"]), ("active", 0, 0, 0, 0))
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
 
     def test_issue_refusals_write_nothing(self):
@@ -296,14 +307,14 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(self.dump(), before)
 
     def test_provider_invitation_is_recorded_pending_without_the_address(self):
-        out = self.issue("--provider-email", "Invitee@Example.test", "--provider-role", "member", "--provider-issuer", ISSUER,
+        out = self.issue("--provider-email", "Invitee@Example.test", "--provider-role", "user", "--provider-issuer", ISSUER,
                          "--provider-tenant", TENANT)
         rows = self.query("""SELECT invitation_id::text,issuer,provider_tenant_id,remote_invitation_id,intended_email_digest,provider_role,
                              delivery_mode,operation,state FROM genui.provider_invitations WHERE organization_id=%s AND code_id=%s""", (ORG, out["code_id"]))
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][1:4], (ISSUER, TENANT, None))
         self.assertEqual(rows[0][4], op.email_digest("invitee@example.test"))
-        self.assertEqual(rows[0][5:], ("member", "server_only", "create", "pending"))
+        self.assertEqual(rows[0][5:], ("user", "server_only", "create", "pending"))
         self.assertNotIn("nvitee@", self.dump())
         listed = self.cli("list", "--organization", ORG)
         entry = next(item for item in listed["codes"] if item["code_id"] == out["code_id"])
@@ -315,8 +326,18 @@ class DatabaseTests(unittest.TestCase):
 
     def test_revoke_and_extend_are_audited_and_bounded(self):
         out = self.issue("--expires-days", "5")
+        events = len(self.operator_events())
+        expiry = self.query("SELECT expires_at FROM genui.access_codes WHERE code_id=%s", (out["code_id"],))
+        # Review m5: an extension that would not move the expiry later is refused and writes nothing.
+        for days in ("1", "4"):
+            with self.subTest(days=days):
+                refused = self.cli("extend", "--organization", ORG, "--code-id", out["code_id"], "--expires-days", days, expect=1)
+                self.assertIn("expiry_not_extended", refused.stderr)
+        self.assertEqual(len(self.operator_events()), events)
+        self.assertEqual(self.query("SELECT expires_at FROM genui.access_codes WHERE code_id=%s", (out["code_id"],)), expiry)
         extended = self.cli("extend", "--organization", ORG, "--code-id", out["code_id"], "--expires-days", "20")
         self.assertEqual(extended["changed"], True)
+        self.assertGreater(extended["expires_at"], out["expires_at"])
         self.assertEqual(self.operator_events()[-1], ("code.extended",))
         # Beyond issued_at + 30 days is refused, even though the argument itself is in range.
         with self.connect("postgres") as c:
@@ -364,14 +385,116 @@ class DatabaseTests(unittest.TestCase):
         before = self.dump()
         for role in ("genui_workspace", "genui_control", "genui_data", "genui_worker"):
             with self.subTest(role=role):
-                self.cli("issue", "--organization", ORG, "--issued-by", "forged", "--grant", "source_read:" + self.source, user=role, expect=1)
-                self.cli("list", "--organization", ORG, user=role, expect=1)
+                for args in (("issue", "--organization", ORG, "--issued-by", "forged", "--grant", "source_read:" + self.source),
+                             ("list", "--organization", ORG)):
+                    self.assertIn("operator_identity_refused", self.cli(*args, user=role, expect=1).stderr)
                 for statement in ("SET ROLE genui_owner", "INSERT INTO genui_private.code_index VALUES ('sha256:%s','%s')" % ("0" * 64, ORG),
                                   "UPDATE genui.access_codes SET status='revoked'", "UPDATE genui.entitlements SET status='revoked'"):
                     with self.connect(role) as c, self.assertRaises(self.psycopg.errors.InsufficientPrivilege):
                         c.execute("SELECT set_config('genui.organization_id',%s,true)", (ORG,))
                         c.execute(statement)
         self.assertEqual(self.dump(), before)
+
+    def workspace(self):
+        c = self.connect("genui_workspace")
+        c.execute("SELECT set_config('genui.organization_id',%s,true)", (ORG,))
+        return c
+
+    def pending_for(self, digest, subject, context):
+        """Reserve, then record a pending admission as genui_workspace: (outcome, pending id, expiry, presignup id)."""
+        with self.workspace() as c:
+            reservation, _, outcome = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)",
+                                                (ORG, digest, "sha256:" + context * 64)).fetchone()
+            self.assertEqual(outcome, "reserved")
+            pending, expires, outcome = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)",
+                                                  (ORG, reservation, ISSUER, TENANT, subject)).fetchone()
+            return outcome, (str(pending) if pending else None), expires, str(reservation)
+
+    def test_verify_reads_one_snapshot_while_an_admission_appends(self):
+        """Review m1: an append committed between verify's head and event reads is not a mismatch."""
+        out = self.issue("--max-redemptions", "3")
+        digest = op.code_digest(op.normalize_code(out["code"]))
+        seen = {}
+        test = self
+
+        class Interleaved:
+            """Connection proxy: right after verify reads the admission head, another session appends."""
+            def __init__(self, inner):
+                object.__setattr__(self, "inner", inner)
+                object.__setattr__(self, "fired", False)
+
+            def __getattr__(self, name):
+                return getattr(self.inner, name)
+
+            def __setattr__(self, name, value):
+                setattr(self.inner, name, value)
+
+            def execute(self, statement, params=None):
+                cursor = self.inner.execute(statement, params)
+                if not self.fired and "FROM genui.audit_heads" in statement and params and params[-1] == "admission":
+                    rows = cursor.fetchall()
+                    object.__setattr__(self, "fired", True)
+                    seen["isolation"] = self.inner.execute("SHOW transaction_isolation").fetchone()[0]
+                    seen["read_only"] = self.inner.execute("SHOW transaction_read_only").fetchone()[0]
+                    seen["append"] = test.pending_for(digest, "usr_m1_interleaved", "a")[0]
+
+                    class Rows:
+                        def fetchone(self):
+                            return rows[0] if rows else None
+                    return Rows()
+                return cursor
+
+        env = {"PGHOST": "localhost", "PGPORT": str(self.port), "PGUSER": "genui_migration", "PGDATABASE": "genui",
+               "PGSSLROOTCERT": str(Path(self.directory, "ca.pem"))}
+        saved = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
+        try:
+            with op.connect() as connection:
+                result = op.verify(Interleaved(connection), type("Args", (), {"organization": ORG})())
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        self.assertEqual(seen, {"isolation": "repeatable read", "read_only": "on", "append": "pending"})
+        self.assertEqual(result["verified"], True)
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+
+    def test_second_pending_admission_of_one_identity_reuses_the_live_one(self):
+        """Review m3(a): one identity holds at most one live pending admission per code."""
+        out = self.issue("--max-redemptions", "3")
+        digest = op.code_digest(op.normalize_code(out["code"]))
+        first = self.pending_for(digest, "usr_m3_repeat", "3")
+        self.assertEqual(first[0], "pending")
+        events = self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (ORG,))
+        again = self.pending_for(digest, "usr_m3_repeat", "4")
+        self.assertEqual(again[:3], first[:3])
+        self.assertEqual(self.query("SELECT state FROM genui.code_reservations WHERE reservation_id=%s", (again[3],)), [("consumed",)])
+        self.assertEqual(self.query("""SELECT count(*) FROM genui.code_reservations WHERE organization_id=%s AND code_id=%s
+                                       AND kind='pending'""", (ORG, out["code_id"])), [(1,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (ORG,)), events)
+        # The other two slots stay available to other identities.
+        self.assertEqual(self.pending_for(digest, "usr_m3_other", "5")[0], "pending")
+        entry = next(i for i in self.cli("list", "--organization", ORG)["codes"] if i["code_id"] == out["code_id"])
+        self.assertEqual(entry["live_pending_admissions"], 2)
+
+    def test_list_reports_lapsed_and_reconciliation_pending_admissions(self):
+        """Review m3(b): a lapsed pending admission is visible to the operator and never counted live."""
+        out = self.issue("--max-redemptions", "3")
+        digest = op.code_digest(op.normalize_code(out["code"]))
+        lapsed = self.pending_for(digest, "usr_m3_lapsed", "6")[1]
+        denied = self.pending_for(digest, "usr_m3_denied", "7")[1]
+        self.assertEqual(self.pending_for(digest, "usr_m3_live", "8")[0], "pending")
+        with self.connect("postgres") as c:
+            c.execute("UPDATE genui.code_reservations SET expires_at=now()-interval '1 minute' WHERE reservation_id IN (%s,%s)", (lapsed, denied))
+        with self.workspace() as c:
+            row = c.execute("SELECT outcome FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)",
+                            (ORG, denied, ISSUER, TENANT, "usr_m3_denied", "sha256:" + "9" * 64)).fetchone()
+        self.assertEqual(row, ("expired",))
+        entry = next(i for i in self.cli("list", "--organization", ORG)["codes"] if i["code_id"] == out["code_id"])
+        self.assertEqual((entry["live_pending_admissions"], entry["lapsed_pending_admissions"], entry["denied_for_reconciliation"]),
+                         (1, 1, 1))
 
     def test_verify_recomputes_sql_written_admission_chain_and_detects_tamper(self):
         out = self.issue("--max-redemptions", "1")

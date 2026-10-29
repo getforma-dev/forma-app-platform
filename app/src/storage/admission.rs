@@ -11,7 +11,7 @@ use super::{
     Workspace,
 };
 use sha2::{Digest, Sha256};
-use tokio_postgres::{error::SqlState, Row};
+use tokio_postgres::Row;
 
 /// A provider identity verified by the session adapter (APP-009) but not yet a
 /// member. Constructed only inside `storage`; it carries no organization: the
@@ -353,20 +353,40 @@ impl Workspace {
             #[cfg(test)]
             transaction.lease.checkpoint("admit").await;
             // 0003 answers a concurrent same-identity admission through another
-            // code with already_member; a residual unique violation is the same
-            // business fact and is never disclosed as an error (D7.9).
-            let rows = match rows {
-                Ok(rows) => rows,
-                Err(state) if state == SqlState::UNIQUE_VIOLATION => return Ok((false, Admission::AlreadyMember)),
-                Err(_) => return Err(Error::Unavailable),
-            };
+            // code with already_member and raises no unique violation, so any
+            // database refusal here (a future unique key included) is
+            // unavailability, never a business fact (D7.9; review nit). The
+            // transaction rolls back and no SQLSTATE leaves storage.
+            let rows = rows.map_err(|_| Error::Unavailable)?;
             let row = rows.first().ok_or(Error::Denied)?;
             let admission = match text(row, 3)?.as_str() {
-                "admitted" | "replayed" => Admission::Admitted {
+                "admitted" => Admission::Admitted {
                     principal: text(row, 0)?,
                     epoch: integer(row, 1)?,
                     entitlement: text(row, 2)?,
                 },
+                // A replay is the stored result only while it still holds: a
+                // late retry never revives a revoked membership or a revoked or
+                // expired entitlement (ADR-003:51; review m2). Same transaction,
+                // read through the 0002/0004 grants under the installed scope.
+                "replayed" => {
+                    let principal = text(row, 0)?;
+                    let current = transaction
+                        .query(
+                            "SELECT 1 FROM genui.memberships m WHERE m.organization_id=$1::text::uuid AND m.principal_id=$2::text::uuid AND m.status='active' AND EXISTS (SELECT 1 FROM genui.entitlements e WHERE e.organization_id=m.organization_id AND e.principal_id=m.principal_id AND e.status='active' AND e.expires_at>clock_timestamp())",
+                            &[&organization, &principal],
+                        )
+                        .await?;
+                    if current.is_empty() {
+                        Admission::Refused
+                    } else {
+                        Admission::Admitted {
+                            principal,
+                            epoch: integer(row, 1)?,
+                            entitlement: text(row, 2)?,
+                        }
+                    }
+                }
                 "already_member" => Admission::AlreadyMember,
                 "expired" | "revoked" | "exhausted" | "mismatch" => Admission::Refused,
                 _ => return Err(Error::Unavailable),

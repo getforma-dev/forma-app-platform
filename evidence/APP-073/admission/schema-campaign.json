@@ -858,6 +858,77 @@
       ]
     },
     {
+      "name": "audit_events.previous_hash, audit_events.hash and audit_heads.head_hash are typed genui.digest (D7.8)",
+      "passed": true,
+      "columns": [
+        [
+          "audit_events",
+          "hash",
+          "genui.digest"
+        ],
+        [
+          "audit_events",
+          "outcome_digest",
+          "genui.digest"
+        ],
+        [
+          "audit_events",
+          "previous_hash",
+          "genui.digest"
+        ],
+        [
+          "audit_heads",
+          "head_hash",
+          "genui.digest"
+        ]
+      ]
+    },
+    {
+      "name": "operator head write refuses a non-digest",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses a non-digest previous_hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses a non-digest hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator head write refuses upper-case hex",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses upper-case hex previous_hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses upper-case hex hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator head write refuses a short digest",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses a short digest previous_hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses a short digest hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
       "name": "operator issuance refuses max_redemptions above 10",
       "passed": true,
       "sqlstate": "23514"
@@ -1351,7 +1422,7 @@
       "passed": true
     },
     {
-      "name": "record_pending_admission: pending (24 h, identity-bound, reservation consumed, one audit event), reservation_expired, expired, revoked, exhausted by D7.17 arithmetic, already_member writes nothing; foreign scope refuses",
+      "name": "record_pending_admission: pending (24 h, identity-bound, reservation consumed, one audit event), reservation_expired, expired, revoked, exhausted by D7.17 arithmetic, already_member writes nothing; a repeated pending admission of one identity on one code returns the live one with no new row or event; foreign scope refuses",
       "passed": true
     },
     {
@@ -1374,7 +1445,7 @@
       "name": "audit chains verify per organization: every hash recomputed in chain_sequence order from the genesis head, tail equals head; a tampered event fails verification; every redemption resolves to its own admission.redeemed event",
       "passed": true,
       "admission_events": {
-        "00000000-0000-4000-8000-000000000001": 33,
+        "00000000-0000-4000-8000-000000000001": 34,
         "00000000-0000-4000-8000-000000000002": 2
       }
     },
@@ -1466,18 +1537,18 @@
   "fresh_container_removed": true,
   "source_sha256": {
     "app/runtime/runtime.py": "c3144e033b00adf774a41a26fb0fe274dae40354a290f9165d2fbbe17988a925",
-    "app/runtime/qualify_tenant_schema.py": "8fb0c8bc76370deca84942cca370856137ead19da4221e0519a6d7b11b5f7bc7",
+    "app/runtime/qualify_tenant_schema.py": "1a7f72f9d4e49f2a51ec3bc789681b453e7b6358cd0dc4630350970a576f4aca",
     "app/runtime/tenant_seed.py": "1290b5b18accdb34127504ebb560e96bb74fff9092cff1553be0aa038d4a64ef",
-    "app/migrations/manifest.json": "a76c830ba8de3e7947b3a9588bba0d8b734eff3625ee4e145efd1af6a2562867",
+    "app/migrations/manifest.json": "cc27fbac967824f78a83fa25d80ef6175e3baa616b086cbad181428cc894d74d",
     "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
     "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
-    "app/migrations/0003_admission.sql": "3317bed31f4ae29b9aef2cc9429ecc4d88fe560cfadac891d3beae9fd02ed903",
+    "app/migrations/0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
     "app/migrations/0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
     "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
     "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
     "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
-    "app/migrations/catalog-v3.json": "16fcd0edbfdea34bc6208cdef7cd2afa618babd7888ba49a282c1b8a62196245",
-    "app/migrations/catalog-v4.json": "8f8e280bc2f16192c649357ae3a56a97c9ac35dae66c485278dc92e85cd9f82e"
+    "app/migrations/catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
+    "app/migrations/catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6"
   },
   "container_removed": true
 }

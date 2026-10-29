@@ -246,6 +246,14 @@ def admission_checks(pg, passed, denied):
         assert holders('audit_events','UPDATE')==holders('audit_events','DELETE')==holders('audit_events','TRUNCATE')==set()
     passed('every INSERT holder on audit_events (genui_admit, genui_owner) has its RESTRICTIVE chain/kind policy and its own-chain head UPDATE policy',
            policies=[list(p[:5]) for p in policies])
+    # D7.8 (as amended, 0003 review m4 / APP-073 review M2): every chain hash is genui.digest.
+    with pg.connect('postgres') as c:
+        typed=c.execute("""SELECT c.relname,a.attname,format_type(a.atttypid,a.atttypmod) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND (c.relname,a.attname) IN
+          (('audit_events','previous_hash'),('audit_events','hash'),('audit_heads','head_hash'),('audit_events','outcome_digest')) ORDER BY 1,2""").fetchall()
+        assert typed==[('audit_events','hash','genui.digest'),('audit_events','outcome_digest','genui.digest'),
+                       ('audit_events','previous_hash','genui.digest'),('audit_heads','head_hash','genui.digest')],typed
+    passed('audit_events.previous_hash, audit_events.hash and audit_heads.head_hash are typed genui.digest (D7.8)',columns=[list(r) for r in typed])
 
     # --- Operator fixture (as the D7.19 operator channel would write it) ---
     with pg.connect() as c:
@@ -256,6 +264,17 @@ def admission_checks(pg, passed, denied):
         operator(c,org0)
         c.execute("INSERT INTO genui_private.handle_index VALUES (%s,%s,NULL),(%s,%s,now()-interval '1 hour'),(%s,%s,now()+interval '1 hour'),(%s,%s,NULL)",
                   (sha('handle-live-0'),org0,sha('handle-retired-0'),org0,sha('handle-rotating-0'),org0,sha('handle-live-1'),org1))
+    # APP-073 review M2: malformed chain hashes are refused by the column type even
+    # for the operator's own chain (the head row exists and its policy admits it).
+    for label,value in (('a non-digest','not-a-digest'),('upper-case hex','sha256:'+'A'*64),('a short digest','sha256:'+'0'*63)):
+        denied('operator head write refuses '+label,'genui_migration',
+               "UPDATE genui.audit_heads SET head_hash=%s WHERE organization_id=%s AND writer_role='operator'",(value,org0),expected='23514')
+        denied('operator event write refuses '+label+' previous_hash','genui_migration',
+               """INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,occurred_at,previous_hash,hash)
+               VALUES (%s,%s,'operator',2,'code.issued',now(),%s,%s)""",(org0,str(uuid.uuid4()),value,sha('m2-hash')),expected='23514')
+        denied('operator event write refuses '+label+' hash','genui_migration',
+               """INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,occurred_at,previous_hash,hash)
+               VALUES (%s,%s,'operator',2,'code.issued',now(),%s,%s)""",(org0,str(uuid.uuid4()),genesis(org0,'operator'),value),expected='23514')
     codes={}
     def code(org, label, max_redemptions=1, status='active', redeemed=0, issued='now()', expires="now()+interval '14 days'", templates=None):
         digest=sha('code-'+label); code_id=str(uuid.uuid4())
@@ -402,7 +421,21 @@ def admission_checks(pg, passed, denied):
                 ('',identity[org0][1],'usr_m3'),(identity[org0][0],'t'*257,'usr_m3')):
         assert call(org0,PENDING,(org0,r_m,*bad))==[]
     assert row_counts(org0)==before
-    passed('record_pending_admission: pending (24 h, identity-bound, reservation consumed, one audit event), reservation_expired, expired, revoked, exhausted by D7.17 arithmetic, already_member writes nothing; foreign scope refuses')
+    # APP-073 review m3(a): one identity holds at most one live pending admission per
+    # code; a repeated callback consumes its new presignup and answers the live one.
+    code(org0,'repeat',max_redemptions=3)
+    repeat=person(org0,'repeat')
+    r_r1=reserve(org0,codes['repeat'][1])[0][0]; r_r2=reserve(org0,codes['repeat'][1])[0][0]
+    first=call(org0,PENDING,(org0,r_r1,*repeat))
+    assert outcome(first)==['pending']
+    before=row_counts(org0)
+    assert call(org0,PENDING,(org0,r_r2,*repeat))==first
+    assert row_counts(org0)==before
+    with pg.connect('postgres') as c:
+        assert c.execute('SELECT state FROM genui.code_reservations WHERE organization_id=%s AND reservation_id=%s',(org0,r_r2)).fetchone()==('consumed',)
+        assert c.execute("""SELECT count(*) FROM genui.code_reservations WHERE organization_id=%s AND code_id=%s AND kind='pending' AND state='live'""",
+                         (org0,codes['repeat'][0])).fetchone()==(1,)
+    passed('record_pending_admission: pending (24 h, identity-bound, reservation consumed, one audit event), reservation_expired, expired, revoked, exhausted by D7.17 arithmetic, already_member writes nothing; a repeated pending admission of one identity on one code returns the live one with no new row or event; foreign scope refuses')
 
     # --- admit_redemption outcomes ---
     payload=sha('payload-a')
@@ -592,7 +625,8 @@ def admission_checks(pg, passed, denied):
         chains={org:verify_chain(c,org,'admission') for org in ORGANIZATIONS}
         assert verify_chain(c,org0,'operator')==[] and verify_chain(c,org1,'operator')==[]
         # Positive control: a tampered stored kind no longer verifies.
-        c.execute("UPDATE genui.audit_events SET kind='admission.pending' WHERE organization_id=%s AND writer_role='admission' AND chain_sequence=3",(org0,))
+        assert c.execute("""UPDATE genui.audit_events SET kind=CASE kind WHEN 'admission.pending' THEN 'admission.redeemed' ELSE 'admission.pending' END
+          WHERE organization_id=%s AND writer_role='admission' AND chain_sequence=3""",(org0,)).rowcount==1
         try: verify_chain(c,org0,'admission')
         except AssertionError: pass
         else: raise AssertionError('tampered audit chain verified')
