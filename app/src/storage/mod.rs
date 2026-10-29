@@ -1,10 +1,12 @@
-//! Tenant storage primitives and the APP-073 admission operations. No session
+//! Tenant storage primitives, the APP-073 admission operations and the APP-010
+//! definition, publication and saved-work operations. No session
 //! adapter is implemented here; APP-009 constructs `VerifiedNonmember` inside
 //! this module from a verified provider exchange.
 //! A caller cannot construct a trusted request from headers or verifier strings.
 mod admission;
 mod authorization;
 mod catalog;
+mod definitions;
 mod pool;
 mod registry;
 
@@ -13,6 +15,10 @@ pub use admission::{
     VerifiedNonmember,
 };
 pub use authorization::{Action, Publication, Record, TrustedRequest};
+pub use definitions::{
+    CurrentRevision, DefinitionDetail, DefinitionRevision, InputContract, PublicationDetail,
+    PublishResult, RecordSchema, SavedWork, SavedWorkDetail, WorkBinding, MAX_CANONICAL_BYTES,
+};
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use registry::RegistryIdentity;
 
@@ -67,6 +73,8 @@ fn valid_id(value: &str) -> bool {
 
 #[cfg(test)]
 mod admission_qualification;
+#[cfg(test)]
+mod definition_qualification;
 #[cfg(test)]
 mod managed_qualification;
 #[cfg(test)]

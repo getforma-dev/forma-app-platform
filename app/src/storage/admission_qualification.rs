@@ -118,7 +118,7 @@ fn accepted(output: Output, label: &str) -> Value {
     assert_eq!(text.matches('\n').count(), 1, "one JSON line: {label}");
     serde_json::from_str(&text).expect("operator JSON")
 }
-fn operator(fixture: &Fixture, args: &[&str]) -> Value {
+pub(super) fn operator(fixture: &Fixture, args: &[&str]) -> Value {
     accepted(
         operator_as(fixture, "genui_migration", "synthetic-migration", args),
         args[0],

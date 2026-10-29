@@ -2,7 +2,10 @@ use super::{
     pool::{Control, Data, Lease, Role, RolePool, Workspace},
     require, valid_id, Error, Result,
 };
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tokio::time::{timeout_at, Instant};
 use tokio_postgres::{error::SqlState, types::ToSql, Row};
 
@@ -101,9 +104,40 @@ pub(super) struct Transaction<'a> {
     pub lease: Lease,
     pub deadline: Instant,
     request: Option<&'a TrustedRequest>,
+    /// Set when any statement of this transaction failed with SQLSTATE 40001
+    /// (ADR-007 D7.6): PostgreSQL has then aborted the whole transaction.
+    serialization: AtomicBool,
 }
 impl<'a> Transaction<'a> {
     pub async fn begin(pool: &Arc<RolePool>, request: &'a TrustedRequest) -> Result<Self> {
+        Self::begin_with(
+            pool,
+            request,
+            "BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE",
+        )
+        .await
+    }
+    /// ADR-007 D7.6 (A1): the control role's publication transaction only.
+    /// Everything else stays READ COMMITTED. A 40001 at any statement or at
+    /// COMMIT is classified (`serialization_failed`, `commit_serializable`)
+    /// so that the caller can retry once in a new transaction.
+    pub async fn begin_serializable(
+        pool: &Arc<RolePool>,
+        request: &'a TrustedRequest,
+    ) -> Result<Self> {
+        require(pool.role() == Role::Control)?;
+        Self::begin_with(
+            pool,
+            request,
+            "BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE",
+        )
+        .await
+    }
+    async fn begin_with(
+        pool: &Arc<RolePool>,
+        request: &'a TrustedRequest,
+        isolation: &'static str,
+    ) -> Result<Self> {
         require(
             valid_id(&request.organization)
                 && valid_id(&request.principal)
@@ -123,6 +157,7 @@ impl<'a> Transaction<'a> {
             &request.organization,
             &request.principal,
             &request.epoch.to_string(),
+            isolation,
         )
         .await
     }
@@ -133,7 +168,15 @@ impl<'a> Transaction<'a> {
     /// `storage` module, so that restriction is this convention (review nit).
     pub async fn begin_nonmember(pool: &Arc<RolePool>, organization: Option<&str>) -> Result<Self> {
         require(pool.role() == Role::Workspace && organization.is_none_or(valid_id))?;
-        Self::open(pool, None, organization.unwrap_or(""), "", "").await
+        Self::open(
+            pool,
+            None,
+            organization.unwrap_or(""),
+            "",
+            "",
+            "BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE",
+        )
+        .await
     }
     async fn open(
         pool: &Arc<RolePool>,
@@ -141,6 +184,7 @@ impl<'a> Transaction<'a> {
         organization: &str,
         principal: &str,
         epoch: &str,
+        isolation: &'static str,
     ) -> Result<Self> {
         let lease = Lease::acquire(pool).await?;
         let deadline = lease.transaction_deadline()?;
@@ -148,10 +192,9 @@ impl<'a> Transaction<'a> {
             lease,
             deadline,
             request,
+            serialization: AtomicBool::new(false),
         };
-        transaction
-            .batch("BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE")
-            .await?;
+        transaction.batch(isolation).await?;
         #[cfg(test)]
         transaction.lease.checkpoint("begin").await;
         transaction.query("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch',$3,true)",
@@ -161,17 +204,34 @@ impl<'a> Transaction<'a> {
     fn member(&self) -> Result<&'a TrustedRequest> {
         self.request.ok_or(Error::Denied)
     }
+    /// Records a 40001 refusal; it never leaves storage (D7.9).
+    fn note(&self, error: &tokio_postgres::Error) {
+        if error.code() == Some(&SqlState::T_R_SERIALIZATION_FAILURE) {
+            self.serialization.store(true, Ordering::Relaxed);
+        }
+    }
+    /// Whether a statement of this transaction failed with SQLSTATE 40001, so
+    /// PostgreSQL has rolled the whole transaction back (D7.6).
+    pub fn serialization_failed(&self) -> bool {
+        self.serialization.load(Ordering::Relaxed)
+    }
     pub async fn batch(&self, sql: &str) -> Result<()> {
         timeout_at(self.deadline, self.lease.client().batch_execute(sql))
             .await
             .map_err(|_| Error::Deadline)?
-            .map_err(|_| Error::Unavailable)
+            .map_err(|error| {
+                self.note(&error);
+                Error::Unavailable
+            })
     }
     pub async fn query(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
         timeout_at(self.deadline, self.lease.client().query(sql, params))
             .await
             .map_err(|_| Error::Deadline)?
-            .map_err(|_| Error::Unavailable)
+            .map_err(|error| {
+                self.note(&error);
+                Error::Unavailable
+            })
     }
     /// As `query`, but a database refusal keeps its SQLSTATE so that the
     /// storage module can classify it (ADR-007 D7.9). Nothing leaves storage.
@@ -185,7 +245,10 @@ impl<'a> Transaction<'a> {
             .map_err(|_| Error::Deadline)?
         {
             Ok(rows) => Ok(Ok(rows)),
-            Err(error) => error.code().cloned().map(Err).ok_or(Error::Unavailable),
+            Err(error) => {
+                self.note(&error);
+                error.code().cloned().map(Err).ok_or(Error::Unavailable)
+            }
         }
     }
     pub async fn precheck(&self, action: Action, resource: Resource<'a>) -> Result<Precheck<'a>> {
@@ -252,6 +315,12 @@ impl<'a> Transaction<'a> {
     pub async fn finish(self, commit: bool) -> Result<()> {
         self.lease.finish(commit, self.deadline).await
     }
+    /// D7.6: `Ok(true)` committed; `Ok(false)` PostgreSQL refused the COMMIT
+    /// with 40001 and rolled the transaction back, so a retry is safe. Any other
+    /// COMMIT failure stays `Error::UnknownOutcome` and is never retried.
+    pub async fn commit_serializable(self) -> Result<bool> {
+        self.lease.commit_serializable(self.deadline).await
+    }
 }
 
 fn text(row: &Row, index: usize) -> Result<String> {
@@ -275,7 +344,19 @@ pub struct Record {
     pub version: i64,
 }
 
-impl Permit<'_, '_> {
+impl<'r> Permit<'_, 'r> {
+    /// The fenced transaction, for the storage operation that obtained this
+    /// permit; nothing outside `storage` ever sees it.
+    pub(super) fn transaction(&self) -> &Transaction<'r> {
+        self.transaction
+    }
+    /// A further permission of the same member, re-read after the fence (for
+    /// example `source_read` on each source a saved work binds).
+    pub(super) async fn also(&self, action: Action, resource: Resource<'_>) -> Result<()> {
+        self.transaction
+            .permissions(self.request, &Precheck { action, resource })
+            .await
+    }
     async fn publication(&self, publication: &str) -> Result<Publication> {
         require(valid_id(publication))?;
         let Resource::App(app) = self.precheck.resource else {

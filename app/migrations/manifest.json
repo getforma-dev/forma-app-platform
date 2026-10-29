@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 4,
+  "database_version": 5,
   "migrations": [
     {
       "version": 1,
@@ -21,6 +21,11 @@
       "version": 4,
       "file": "0004_entitlement_reads.sql",
       "sha256": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2"
+    },
+    {
+      "version": 5,
+      "file": "0005_definition_work_grants.sql",
+      "sha256": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893"
     }
   ],
   "catalog": [
@@ -43,6 +48,10 @@
     {
       "file": "catalog-v4.json",
       "sha256": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6"
+    },
+    {
+      "file": "catalog-v5.json",
+      "sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff"
     }
   ]
 }
