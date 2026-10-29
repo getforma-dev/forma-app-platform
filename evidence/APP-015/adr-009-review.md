@@ -445,3 +445,183 @@ Recorded by GenUI against the revised `docs/architecture/ADR-009-PHASE-2-DATA-PL
 | §5.3 #5 | Decided: filters in POST bodies only (D9.7). |
 | §5.3 #11 | Decided: the worker inserts revisions (B8, B10). |
 | §5.4 D9.7 | Supersede decided (D9.7); remaining cancellation semantics assigned to APP-024. |
+
+## Re-review (2026-10-29)
+
+**Verdict: changes requested.** No blocker remains. X1 is resolved and reproduced. X2 is resolved apart from one major: as written, lease reclaim can stall the whole queue (R-M1, a one-sentence fix). There are also six minors. Every other disposition holds in the text.
+
+- **Reviewed file:** `docs/architecture/ADR-009-PHASE-2-DATA-PLANE.md` at commit `2057fbc`, SHA-256 `e833e0ddcfb24a3d21987ac58d506c0036482ddffeb20b8f0c493612b8194f9d` (the working copy equals the committed blob). Read-only except this section; nothing committed.
+- **Probe:** a throwaway PostgreSQL **16.13** (Homebrew) cluster in the session scratchpad (`…/scratchpad/rr009`).
+  - The migration identity was non-superuser `genui_migration` (CREATEROLE, admin on `rds_iam`).
+  - `0001` and `0002` were applied unchanged (SHA-256 `f98f67b7…` and `7b163e78…`, as in `manifest.json`).
+  - Added on top: D7.7's `organization_sequences` with D7.3's data grants; fixture rows for two organizations; and a minimal sketch of D9.4 written from the ADR text. The sketch covers `genui.jobs` (FORCE RLS, `tenant_scope`), `genui_private.job_queue`/`job_cursor`, the unique partial running index, role `genui_jobs` created like `genui_lock`, its five definer functions with exactly the listed grants, B10's worker grants and the workspace additions.
+  - The cluster was stopped afterwards.
+
+### X1: holds
+
+ADR-009:124 keeps D7.6 (READ COMMITTED READ WRITE). It takes the member and work fences first, then reads S = `next_commit_sequence − 1` and the latest revision per record with `commit_sequence ≤ S` in one statement. Later statements filter by `≤ S`. B4 is withdrawn (:7, :29) and not reused.
+
+The probe had four concurrent `genui_data` writers. Each followed D7.9's lock order: fences, then `organization_sequences FOR UPDATE`, then the record row. Each inserted a revision, slept, advanced the sequence, slept and committed: 1,000 commands, 0 errors.
+
+| Probe | Result |
+| --- | --- |
+| Reader with the fences, then the X1 single statement, run as `genui_data` under FORCE RLS | **1,500 reads, 0 inconsistent.** In every read, the count of revisions `≤ S` equals S and no revision `> S` is visible. |
+| Negative control: S in one statement, rows in a later one | **243 of 300** reads saw revisions beyond S. With the `≤ S` filter, the same later reads matched S in all 300. |
+
+This confirms both halves of D9.8:
+- the one-statement read is consistent;
+- a later statement is stable only with the `commit_sequence ≤ S` filter.
+
+The fence (`lock_member_authority`, `lock_work_revision`) runs in READ COMMITTED READ WRITE with no 40001.
+
+### X2: holds, with R-M1
+
+Probe results (`genui_workspace`/`genui_worker` logins, functions owned by `genui_jobs`):
+
+| # | Claim (ADR-009 line) | Result |
+| --- | --- | --- |
+| T0 | `genui_jobs` grants as listed (:81) | **Fails.** `ERROR: permission denied for schema genui` inside `enqueue_job`. Passes after `GRANT USAGE ON SCHEMA genui, genui_private TO genui_jobs` (R-m1). |
+| T1 | `enqueue_job` 5-per-organization cap (:75) | queued ×5, then `full`. |
+| T2 | private relations reachable only through the functions (:69) | `permission denied for table job_queue` (worker) and `job_cursor` (workspace). |
+| T3 | scope check on `enqueue_job` (:71) | organization B scope naming organization A → `refused`. |
+| T4 | `request_job_cancel` on a queued job (:79) | queue row deleted. `genui.jobs` becomes `cancelled` with `cancel_requested_at` set, through `genui_jobs`' column UPDATE under the caller's RLS scope. |
+| T5 | cursor lock makes the cap exact (:75) | Two concurrent enqueues at 4/5 → one `queued`, one `full`; the second waited about 0.5 s on the cursor row. |
+| T6 | unscoped claim across organizations (:76) | The worker with no scope claims (`seq=1 attempts=1`). A second claim returns nothing while the lease is unexpired. |
+| T7 | `WorkerScope` (:92) and B9/B10 grants | Organization scope, then job principal and current epoch read under scope, then `lock_member_authority` → `true true 1`. The worker's column UPDATE of `genui.jobs` succeeds. |
+| T8 | result fencing (:78, :88) | `release_job` with a stale `claim_sequence` → `false`; under another organization's scope → `false`; with the current sequence → `true` and the row is deleted. |
+| T9 | running cancel, heartbeat and round-robin (:77, :79, :87) | `requested`; `renew_job` → `true cancel=true`; stale renew → `false`; release → `cancel=true`. Claims alternate A, B, A. |
+| T10 | concurrent claimers (:76) | The second claimer SKIP-LOCKs past the first's row, then waits on the running index. It gets **23505** when the first commits within 1 s, or **55P03** (`lock_timeout` 1000) when the first holds 1.5 s. |
+| T11 | lease reclaim (:76, :90) | **Fails as written** (R-M1). |
+| T12 | cancel racing an in-flight claim (:79) | The cancel waits on the claimer's row lock and re-reads the row as `running` → `requested`, with `cancel_requested=true` on the queue row. |
+
+Text checks of the X2 fix:
+- Enqueue, claim, start, heartbeat and result are separate transactions inside 3 s (:83–88; B7).
+- Dead letter on the fourth claim (:86).
+- `WorkerScope` is never a `TrustedRequest`, and the epoch is not compared with the enqueue value (:92).
+- B10 worker grants (:94).
+- B11 eight-role normalization with `catalog-query.json`/`qualify_tenant_schema.py` re-pinned (:81). Today's `catalog-query.json` lists six roles; 0003 adds `genui_admit` and APP-015 adds `genui_jobs`.
+- B12 cancellation chains by transition owner (:96).
+- `job.claimed` declined (:179).
+
+### Majors
+
+**R-M1 — Lease reclaim stalls the queue under the unique running index (D9.4, ADR-009:76 with :69).**
+
+*Evidence.*
+- `claim_next_job` "picks … the eligible row (queued and available, or running with an expired lease) of the organization with the oldest `last_claimed_at`".
+- The crashed job's organization was stamped when that job was claimed, so every other organization with queued work has an older cursor.
+- The claimer therefore picks another organization's queued row and sets it `running`. That collides with the still-`running` expired row.
+
+Probe T11: the organization B row was running with its lease expired, and organization A had three queued rows with an older cursor. Three successive claims each returned `ERROR: duplicate key value violates unique constraint "job_queue_one_running"`.
+- The cursor stamp rolls back with the claim, so the same choice repeats indefinitely.
+- No job runs until an operator intervenes.
+- This defeats APP-015's crash/reclaim requirement and B6's "never silent loss".
+
+A variant that treats a running row as the only candidate reclaimed the expired job on the first call (`seq=2 attempts=2`).
+
+*Fix.* Replace the `claim_next_job` behavior cell with:
+
+> If a `running` row exists, it is the only candidate: unexpired → return nothing; expired → lock it `FOR UPDATE SKIP LOCKED` and reclaim it (increment `claim_sequence` and `attempts`, new 120 s lease). Only when no `running` row exists, pick the oldest-cursor organization's queued, available row.
+
+Add a two-organization crash/reclaim case to APP-015's test.
+
+### Minors
+
+**R-m1 — `genui_jobs` grants are incomplete as written (ADR-009:81).**
+- **Schema USAGE.** Without `USAGE` on `genui` and `genui_private`, every function fails (T0). 0002 grants the same to `genui_lock` (`0002:223–224`).
+- **Kind check.** `SELECT(organization_id, job_id, state)` on `genui.jobs` does not let `enqueue_job` check that `p_kind` matches the scoped row's `kind`.
+- **Fence grant.** B9's EXECUTE on `lock_member_authority` must be issued as `genui_lock`. That role owns the function since `0002:280`; issuing it as `genui_owner` gives `permission denied for function lock_member_authority`.
+
+*Fix:*
+- add `USAGE ON SCHEMA genui, genui_private` and `SELECT(kind)` to the `genui_jobs` grant list;
+- state that APP-015's migration grants the fence to `genui_worker` under `SET LOCAL ROLE genui_lock`;
+- add these tuples to the B10 catalog assertion.
+
+**R-m2 — Ledger: a few changes to controlling records still carry no label (M13 residue).**
+1. **ADR-007 D7.14** "Handler deadline 5 s" (ADR-007:88) is set aside for the upload route at ADR-009:130. It appears neither in the table (:9–27) nor in "Not amended" (:29). (The body limit is a new route class, not an amendment.)
+2. **Design D11 / §6.4.** "One binary holds every component" (design:228, :238) and the parsers "run inside the worker" (design:319). They are departed from by D9.1's separate `parser-host` executable (ADR-009:35), the same kind of change that D7.10 labelled a "Named deviation" for DuckDB (ADR-007:72).
+3. **ADR-007 D7.8.** Its canonical event bytes are "every column except `hash`" (ADR-007:64). ADR-009:96 changes this to "a new column only when it is non-NULL", but B12's New column (:21) names only the added columns.
+4. **0002:85** `CHECK (renderer_version=1)`/`(operator_version=1)` broadened to `≥ 1` at ADR-009:108. B13 shows that 0002 CHECK changes are labelled.
+5. **ADR-004:20–21.** Every private transaction installs organization, principal and epoch, and "no unscoped membership lookup occurs". The unscoped claim/renew transactions (:85, :87) and `WorkerScope`'s staged installation (:92) are covered in substance by B2/B9, but B9's Old column cites only ADR-004:13.
+
+Nits:
+- B8's Where says D9.4, but D9.4's heading (:65) does not mark it.
+- D9.5's new operator kinds (:102, :104) are not marked B12.
+- "design A6 retention (D9.15 implements it)" (:29): the lifecycle is in D9.3 and the purge is B18, and the two fixture organizations are exempt (:63). State the fixture exemption.
+
+*Fix:*
+- add B19 (D7.14 deadline for `POST /v1/sources/uploads`) and B20 (`parser-host` deviation from D11/§6.4), or fold them into existing rows;
+- extend B12's New column with the canonical-bytes rule;
+- extend B13 or B10 with the 0002:85 CHECK;
+- extend B9's Old column with ADR-004:20–21;
+- mark B8/B12 at their points of change.
+
+**R-m3 — A failed authority recheck at start or result has no stated outcome, and the epoch can race the fence (ADR-009:86, :88, :92).**
+- If "recheck authority" fails (member revoked, entitlement expired, `import_source` withdrawn), the text does not say whether the worker fails the job or rolls back. A rollback leaves the queue row running until lease expiry, then reclaim, and finally a misleading `worker_lost` dead letter.
+- `WorkerScope` reads the current epoch in one statement and takes the fence in the next. A sign-out committed between them makes the fence return no row, though the member is still active. That is the exact case M2 says must not cancel a job.
+
+*Fix:*
+- A refused recheck ends the job `failed` with a named code (for example `forbidden` or `entitlement_expired`) and one `job.failed` on the `worker` chain, and releases the queue row in the same transaction.
+- On a fence miss where the membership is still active, `WorkerScope` re-reads the epoch and retakes the fence once. This is a read in the same transaction, not a mutation retry.
+
+**R-m4 — `queue_position` cannot be computed under the function set (ADR-009:39, :98, :108).**
+- The upload response and the poll carry a queue position and expected wait.
+- The workspace cannot read `job_queue`, and none of the five functions returns a position. Under round-robin, the position depends on other organizations' rows, which only a definer can see.
+
+*Fix:* either
+- define the position as organization-local (the organization's earlier `queued` `genui.jobs` rows, readable under RLS), labelled an estimate; or
+- have `enqueue_job` return the position and add a read-only `job_queue_position(p_org, p_job)`, updating "five functions", the Consequences and the campaign assertion.
+
+**R-m5 — Job read authorization is unstated (ADR-009:98).** `GET /v1/jobs/{job}` is guarded only by organization RLS on `genui.jobs`, and the payload carries upload metadata. *Fix:* a job is readable by its `principal_id`, or by a holder of `source_read` on its source; otherwise the uniform 404.
+
+**R-m6 — Claim classification and index scope (ADR-009:69, :76).**
+- A concurrent claimer ends in 23505, or in 55P03 when the first claim holds past `lock_timeout` (T10). The text names only 23505.
+- The unique running index is one per database, which is per task only under D7.18's single task.
+
+*Fix:*
+- classify both 23505 and 55P03 as "nothing claimed";
+- write "one job running per deployment (one task under D7.18)", so APP-061 revisits it.
+
+### Disposition check
+
+All other dispositions hold in the revised text:
+
+| Finding | Where it holds |
+| --- | --- |
+| M1 | :102 — real permission names; `created_by` composite FK and RESTRICTIVE check; creator authority narrowed; `run` and dependency clauses kept; `import_source`; `revoke-creator-authority` |
+| M2 | :92 |
+| M3 | :116, B3 :13 |
+| M4 | :120, :51 |
+| M5 | :41–51, :57 |
+| M6 | :61 |
+| M7 | :57, :63 |
+| M8 | :130, apart from the label in R-m2 |
+| M9 | :142, :146 |
+| M10 | :126 |
+| M11 | :118 |
+| M12 | :39, B5/B6 |
+| M13 | :5–29, apart from R-m2 |
+| M14 | :160–168 |
+| m1 | :35 |
+| m2 | :134 |
+| m3 | :108, :142 |
+| m4 | :126 |
+| m5 | :108, :154 |
+| m6 | :138 |
+| m7 | :154 |
+| m8 | :86, :98, :158 |
+| m9 | :114 |
+| m10 | :154 |
+| m11 | :39, apart from R-m4 |
+
+Map gaps: each is decided or assigned (:156–158 and the table at :205–218).
+
+**Labels.** B1–B18 are each defined in the table and marked at a point of change (B4 is withdrawn, with no other use). The Consequences (:172) mirror them.
+
+**Declined and modified items are reasonable:**
+- no `job.claimed` event: the claim sequence is carried in the result event;
+- the workspace cancels only through `request_job_cancel`: fewer grants;
+- `RLIMIT_AS` dropped for the RSS watch: address-space reservations are a poor proxy for memory;
+- `parser-host` exits before normalize: the slot holds one process;
+- the 90-day lifecycle is not applied to the fixture organizations: the demo needs that operator-seeded content;
+- `created_by` is nullable for pre-existing rows under the additive rule: the RESTRICTIVE `WITH CHECK` still refuses NULL on every new insert.
