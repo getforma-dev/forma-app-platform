@@ -62,7 +62,7 @@
       ],
       "kind": "required",
       "evidence": "",
-      "condition": "Qualified fAuth image carrying the merged mail provider slice (gatewasm PR20, 1bf5d3b) and the controlled-inbox trial receipt over the chosen transport (FormaStack prefers Amazon SES SMTP through fAuth's existing SMTP secret; GenUI creates the getforma.dev DKIM/SPF/DMARC records). FormaStack scoped the gate to image qualification and the inbox trial on 2026-10-29; the deployment itself is FORMA-367 (ADR-006, ADR-008)."
+      "condition": "Qualified fAuth image carrying the merged mail provider slice (gatewasm PR20, 1bf5d3b) and the controlled-inbox trial receipt over the chosen transport (FormaStack prefers Amazon SES SMTP through fAuth's existing SMTP secret; GenUI creates the getforma.dev DKIM/SPF/DMARC records). FormaStack scoped the gate to image qualification and the inbox trial on 2026-10-29; the deployment itself is FORMA-367 (ADR-006, ADR-008). SES sandbox accepted for the MVP on 2026-10-29: the controlled-inbox trial and APP-076 send only to recipients verified in SES ahead of time (currently victor@getforma.dev); production access is pending and not required."
     },
     {
       "id": "FORMA-367",

@@ -28,3 +28,9 @@ Date: 2026-10-29. Owner: GenUI. Status: founder direction (quoted in the [dispos
 ## Consequences
 
 The execution plan's Track C becomes the beta go-live path: FormaStack deploys fAuth lean under FORMA-367 (about 1–1.5 hours of its work; Victor approved it with SES SMTP on 2026-10-29) and qualifies the mail image under FORMA-366; GenUI deploys the final reviewed build with migrations applied (APP-078), provisions invite codes, and runs APP-076 against it in installed Chrome. The deferred ceremony is recorded in the PH01 gate record as a named limitation, not omitted. Until APP-080 exercises the restore, the pre-migration snapshot is retained but unproven; during the beta the only rollback for a committed migration is a reviewed forward fix. Phase 2 (imports, interpretation, canvas, forms) and Phases 3–4 (authoring, AI, publication, two-app proof) follow for the demo's acts 2–6.
+
+## Victor's decisions of 2026-10-29 (evening)
+
+- **GenUI always-on figure approved:** about $150–170/month (x86-priced; ARM64 is lower) for the advertised beta, on top of FormaStack's lean fAuth (FORMA-367, about $33/month), replacing ADR-003's bounded-window $100/month for that period. The ledger basis is rewritten to this figure before the next reservation.
+- **SES sandbox accepted for the MVP:** invitation mail goes to recipients verified in SES ahead of each trial (currently `victor@getforma.dev`), which satisfies FORMA-366's controlled-inbox trial; SES production access remains pending and is not required.
+- **Window length:** hosted runs for the MVP (APP-078, APP-076) are kept to minutes and the long campaigns stay in the backlog (APP-079, APP-080), matching the existing split.

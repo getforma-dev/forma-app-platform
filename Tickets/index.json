@@ -2434,11 +2434,11 @@
     {
       "id": "APP-075",
       "title": "Finish the managed qualification entry, image and supervisor",
-      "path": "2-in-progress/APP-075.md",
+      "path": "3-in-review/APP-075.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "In progress",
+      "Status": "In review",
       "Priority": "P0",
       "Type": "Verification",
       "Sprint": "S02",

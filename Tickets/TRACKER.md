@@ -81,7 +81,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 73 | [APP-070: Independent release security and accessibility review](0-backlog/APP-070.md) | [PH06](phases/PH06.md) | S12 | VAL | P0 | M | Backlog | APP-062, APP-063, APP-064, APP-065, APP-068, APP-069 |
 | 74 | [APP-071: Publish operator/run/release/rollback and incident runbooks](0-backlog/APP-071.md) | [PH06](phases/PH06.md) | S12 | OPS | P0 | M | Backlog | APP-066, APP-067, APP-068, APP-070 |
 | 75 | [APP-072: Evaluate one real recurring workflow and second-person reuse](0-backlog/APP-072.md) | [PH06](phases/PH06.md) | S12 | VAL | P1 | M | Backlog | APP-058, APP-070, APP-071 |
-| 76 | [APP-075: Finish the managed qualification entry, image and supervisor](2-in-progress/APP-075.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | In progress | APP-008 |
+| 76 | [APP-075: Finish the managed qualification entry, image and supervisor](3-in-review/APP-075.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | In review | APP-008 |
 | 77 | [APP-077: Package the operator image and tools](0-backlog/APP-077.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-008 |
 | 78 | [APP-078: Qualify the tenant foundation on managed RDS in one reserved window](0-backlog/APP-078.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-075, APP-077 |
 | 79 | [APP-076: Run the beta go-live trial on the live deployment](9-blocked/APP-076.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | L | Blocked | APP-012, APP-013, APP-014, APP-074, APP-078 |

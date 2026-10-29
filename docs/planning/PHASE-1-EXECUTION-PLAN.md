@@ -320,7 +320,7 @@ The joint six-hour identity rehearsal, its pre-start list and its in-window runb
 
 ### Task C1: Victor's two choices (the GenUI figure still blocks the hosted steps C3 and Track D; SES and FORMA-367 are approved)
 
-- [ ] The monthly figure for the always-on beta (ADR-008 default about $185–210/month including FormaStack's lean fAuth, or a scheduled daily window). Record it as a dated amendment in `docs/planning/SYNTHETIC-ENVIRONMENT-COST.md` and rewrite the ledger `basis` in `.cache/operations/beta/budget-ledger.json` from actual retained resources before any reservation.
+- [x] Approved 2026-10-29: about $150–170/month (ADR-008). The monthly figure for the always-on beta (ADR-008 default about $185–210/month including FormaStack's lean fAuth, or a scheduled daily window). Record it as a dated amendment in `docs/planning/SYNTHETIC-ENVIRONMENT-COST.md` and rewrite the ledger `basis` in `.cache/operations/beta/budget-ledger.json` from actual retained resources before any reservation.
 - [x] The mail transport: Victor approved SES SMTP with FORMA-367 on 2026-10-29 ("Approved: deploy the lean always-on fAuth (FORMA-367) at about $33/month using SES SMTP. Coordinate the timing with GenUI.", relayed by FormaStack). Default as planned: Amazon SES SMTP in account 877573132739 with a verified `getforma.dev` sender; alternative Resend). GenUI creates the DNS records at Porkbun and records the record ids privately; FormaStack configures fAuth's SMTP secret.
 
 ### Task C2: FormaStack deploys fAuth lean for the beta (FORMA-367 deployment, FORMA-366 mail qualification; FormaStack's work, GenUI receives)

@@ -5,7 +5,7 @@
 | Reviewer | Independent reviewer (Claude), not the implementer. Read-only apart from this file; nothing committed. |
 | Date | 2026-10-29 |
 | Revision reviewed | `phase-one-spikes` at `e195ebfdc605dbec9b7e5d895ecc4b2ebdf02819`. APP-075 commits `df109c3`, `faebc13`, `5023eb9`, `bde2667`, merged in `7e75d7c`, plus the pin follow-up `f44ce72`. |
-| Controlling text | `Tickets/2-in-progress/APP-075.md` acceptance; `docs/planning/PHASE-1-EXECUTION-PLAN.md` Track B1–B3; ADR-004 §Identity registry and qualification seam; ADR-005; ADR-008; `evidence/APP-008/managed-plan.md`; `evidence/APP-008/managed-harness-preparation.md` slice 2; the open items in `evidence/APP-008/native/managed-entry/independent-handoff-review.md` |
+| Controlling text | `Tickets/3-in-review/APP-075.md` acceptance; `docs/planning/PHASE-1-EXECUTION-PLAN.md` Track B1–B3; ADR-004 §Identity registry and qualification seam; ADR-005; ADR-008; `evidence/APP-008/managed-plan.md`; `evidence/APP-008/managed-harness-preparation.md` slice 2; the open items in `evidence/APP-008/native/managed-entry/independent-handoff-review.md` |
 | Author evidence | `evidence/APP-075/README.md` and its `entry/`, `image/`, `local-positive/` and `checks/` (all recorded at `5023eb9`) |
 | AWS | Not touched. No push, registry, STS, RDS or DNS. |
 
