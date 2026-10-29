@@ -4,7 +4,7 @@ Status: **planned, not implemented or accepted**. Prepared from repository sourc
 
 ## Entry and authority
 
-[APP-008](../../Tickets/3-in-review/APP-008.md) is PH01/S02 and depends on accepted APP-007. Its obligations are real tenant-leading keys, FORCE RLS, disjoint database grants, trusted authorization, connection-pool reset and two-organization route/role evidence. Its L estimate requires re-estimation/splitting before selection if the implementation exceeds five focused days.
+[APP-008](../../Tickets/4-done/APP-008.md) is PH01/S02 and depends on accepted APP-007. Its obligations are real tenant-leading keys, FORCE RLS, disjoint database grants, trusted authorization, connection-pool reset and two-organization route/role evidence. Its L estimate requires re-estimation/splitting before selection if the implementation exceeds five focused days.
 
 Sources: [platform design §§6, 8, 9, 10.5](../../design/forma-generative-app-platform-v2/design.md), [C01/C02/C11/C15/C16](../../design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md), [demo design §§8, 10.5](../../design/forma-northstar-demo/design.md), [S06](../../design/forma-northstar-demo/SCENARIOS.md), [ADR-003](../../docs/architecture/ADR-003-PUBLIC-BETA-ACCESS.md), and [phase gates](../../Tickets/plan.json). ADR-003's invite-first membership/entitlement boundary supersedes historical manual-provisioning and minimal-login fallback prose. Frozen designs remain unchanged.
 

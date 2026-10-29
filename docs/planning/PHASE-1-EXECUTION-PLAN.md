@@ -70,7 +70,7 @@ Track D:           APP-076 beta go-live trial in Chrome (needs T11, C3, FORMA-36
 ### Task 1: Land APP-008 and APP-011 once Actions run
 
 **Files:**
-- Modify: `Tickets/3-in-review/APP-008.md`, `Tickets/3-in-review/APP-011.md` (log, move to Done), `evidence/APP-008/ci/<sha>.json`, `evidence/APP-011/ci.json`
+- Modify: `Tickets/4-done/APP-008.md`, `Tickets/4-done/APP-011.md` (log, move to Done), `evidence/APP-008/ci/<sha>.json`, `evidence/APP-011/ci.json`
 
 **Interfaces:**
 - Consumes: Victor's billing fix (the refused annotation disappears from a planning-run retry).

@@ -1,6 +1,6 @@
 # APP-008 independent acceptance review (local acceptance under ADR-005)
 
-Reviewer: independent APP-008 acceptance reviewer, a Claude subagent session that did not author the APP-008 schema, native storage, campaigns, image glue or any earlier APP-008 evidence. Recorded 2026-10-29 UTC under [REVIEW.md](../../Tickets/_tools/REVIEW.md). Decision frame: [ADR-005](../../docs/architecture/ADR-005-PHASE-1-SEQUENCING.md) Decision 1 (APP-008 closes on local acceptance plus exact-source CI and landing; the managed RDS matrix is APP-075/077/078 and the public-HTTPS private-route matrix is APP-076), with [ADR-004](../../docs/architecture/ADR-004-TENANT-TRANSACTIONS.md) still controlling behavior. Ticket: [APP-008](../../Tickets/3-in-review/APP-008.md).
+Reviewer: independent APP-008 acceptance reviewer, a Claude subagent session that did not author the APP-008 schema, native storage, campaigns, image glue or any earlier APP-008 evidence. Recorded 2026-10-29 UTC under [REVIEW.md](../../Tickets/_tools/REVIEW.md). Decision frame: [ADR-005](../../docs/architecture/ADR-005-PHASE-1-SEQUENCING.md) Decision 1 (APP-008 closes on local acceptance plus exact-source CI and landing; the managed RDS matrix is APP-075/077/078 and the public-HTTPS private-route matrix is APP-076), with [ADR-004](../../docs/architecture/ADR-004-TENANT-TRANSACTIONS.md) still controlling behavior. Ticket: [APP-008](../../Tickets/4-done/APP-008.md).
 
 **Result: all three acceptance items are supported for local acceptance; item 3 carries a stated limit. No blocking findings.** This review checks no box and changes no ticket, status, source or other evidence file.
 
@@ -10,7 +10,7 @@ Reviewer: independent APP-008 acceptance reviewer, a Claude subagent session tha
 | --- | --- |
 | Reviewed revision | `a0a75a8af446d8552ed0fcd236f59cbea8269457` on `phase-one-spikes`; the remote-tracking ref `origin/phase-one-spikes` also points to it ("update by push", 2026-10-29T18:30:41Z, per its reflog) |
 | Acceptance source named by the ticket | `20a480b551eaa1876449122e193eb5bffa01761d`, reviewed slices through `acbde9bc862a2ccdfebbc6753d97325ea6b59627` |
-| Ticket text reviewed | `Tickets/3-in-review/APP-008.md`, SHA-256 `86c67cba…` (the same blob in a0a75a8 and in the working tree) |
+| Ticket text reviewed | `Tickets/4-done/APP-008.md`, SHA-256 `86c67cba…` (the same blob in a0a75a8 and in the working tree) |
 
 No git command was run. The branch ref, reflogs and loose commit/tree/blob objects under `.git/` were read with a read-only Python reader, and every reviewed path's blob id was compared across acbde9b, 20a480b, 4ac7639, 01c8b2d, a0a75a8 and the working tree:
 

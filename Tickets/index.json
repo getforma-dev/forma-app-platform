@@ -37,7 +37,7 @@
         "APP-076"
       ],
       "ticket_count": 20,
-      "done_count": 6,
+      "done_count": 9,
       "blocked_count": 1
     },
     {
@@ -202,7 +202,12 @@
       "blocked_count": 1
     }
   ],
-  "ready_by_local_dependencies": [],
+  "ready_by_local_dependencies": [
+    "APP-073",
+    "APP-010",
+    "APP-075",
+    "APP-077"
+  ],
   "tickets": [
     {
       "id": "APP-001",
@@ -345,11 +350,11 @@
     {
       "id": "APP-006",
       "title": "Revalidate fAuth contract and integration prerequisites",
-      "path": "3-in-review/APP-006.md",
+      "path": "4-done/APP-006.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "In review",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Spike",
       "Sprint": "S01",
@@ -362,7 +367,7 @@
       "Depends on": "APP-001",
       "External dependencies": "FORMA-247 (cleared by founder disposition 2026-10-29; the hosted proof is FORMA-365 / APP-079)",
       "Assignee": "Claude \u2014 GenUI owner",
-      "Branch / PR": "phase-one-spikes; consumer spikes landed on `main` at `49389c6`, `18c33f5`, `8fca35c`; merged-contract receipt awaiting landing",
+      "Branch / PR": "Landed on `main` by [PR 1](https://github.com/getforma-dev/forma-app-platform/pull/1), merge `2172ad4`, from `phase-one-spikes` at `f5fbf8e` (all ten workflows green).",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -402,11 +407,11 @@
     {
       "id": "APP-008",
       "title": "Establish tenant-bearing schema, database roles and deny-by-default authorization",
-      "path": "3-in-review/APP-008.md",
+      "path": "4-done/APP-008.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "In review",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S02",
@@ -419,7 +424,7 @@
       "Depends on": "APP-007",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Claude session (successor to the Codex tenant-foundation lead); independent reviewer named at review",
-      "Branch / PR": "phase-one-spikes; acceptance source 20a480b (reviewed slices through acbde9b) pushed inside `a0a75a8` on 2026-10-29 together with the kept cfg(test) managed-qualification draft; exact-source CI on `a0a75a8`: Tenant foundation qualification run 40931497549 and eight other workflows succeeded, Synthetic fixture qualification (APP-011's) failed on its parser-digest check. Landing on `main` pending (Task 1).",
+      "Branch / PR": "Landed on `main` by [PR 1](https://github.com/getforma-dev/forma-app-platform/pull/1), merge `2172ad4`, from `phase-one-spikes` at `f5fbf8e` (all ten workflows green).",
       "Team": "GenUI",
       "Blocked by": "None \u2014 accepted ADR-004 directs parallel schema and native transaction implementation.",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -546,11 +551,11 @@
     {
       "id": "APP-011",
       "title": "Package reproducible synthetic sources and expected outcomes",
-      "path": "3-in-review/APP-011.md",
+      "path": "4-done/APP-011.md",
       "Field": "Value",
       "---": "---",
       "Epic": "VAL",
-      "Status": "In review",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Verification",
       "Sprint": "S02",
@@ -563,7 +568,7 @@
       "Depends on": "APP-002, APP-007",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 synthetic fixture lead",
-      "Branch / PR": "phase-one-spikes; fixture package paths owned independently",
+      "Branch / PR": "Landed on `main` by [PR 1](https://github.com/getforma-dev/forma-app-platform/pull/1), merge `2172ad4`, from `phase-one-spikes` at `f5fbf8e` (all ten workflows green).",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
