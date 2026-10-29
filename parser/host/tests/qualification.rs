@@ -14,9 +14,17 @@ fn root() -> PathBuf {
         .unwrap()
         .to_path_buf()
 }
+/// The guest bytes under test: `PARSER_GUEST_WASM` names other bytes, such as
+/// the guest extracted from a built image (ADR-009 D9.1); by default the
+/// locally built guest.
+fn wasm_path() -> PathBuf {
+    std::env::var_os("PARSER_GUEST_WASM").map_or_else(
+        || root().join("target/wasm32-unknown-unknown/release/parser_guest.wasm"),
+        PathBuf::from,
+    )
+}
 fn wasm() -> Vec<u8> {
-    std::fs::read(root().join("target/wasm32-unknown-unknown/release/parser_guest.wasm"))
-        .expect("build actual guest before tests")
+    std::fs::read(wasm_path()).expect("build actual guest before tests")
 }
 fn sandbox() -> &'static Sandbox {
     static S: OnceLock<Sandbox> = OnceLock::new();
@@ -523,4 +531,22 @@ fn review_duplicate_cell_values_are_refused_before_literal_selection() {
         "cell_value_duplicate",
     );
     assert_eq!(run(&fixture("valid.xlsx"), &config())["status"], "parsed");
+}
+
+#[test]
+fn qualified_guest_bytes_are_named_in_the_log() {
+    let bytes = wasm();
+    println!(
+        "QUALIFIED_WASM {} bytes={} path={}",
+        parser_host::sha(&bytes),
+        bytes.len(),
+        wasm_path().display()
+    );
+    assert!(sandbox()
+        .run(
+            b"a\n",
+            &json!({"profile":"demo","format":"csv"}),
+            Limits::default()
+        )
+        .is_ok());
 }

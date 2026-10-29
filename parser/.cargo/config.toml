@@ -1,3 +1,13 @@
 # Read-only WASM parser has no entropy or JS interface. Scope only this target.
+#
+# The shipped guest is built only by app/Dockerfile's parser stage, from
+# /source/parser with CARGO_HOME=/usr/local/cargo. Remapping both prefixes
+# keeps build-host paths out of the image bytes (ADR-009 D9.1, m1). Builds
+# elsewhere keep their own paths: those bytes are never shipped or qualified
+# as the release guest.
 [target.wasm32-unknown-unknown]
-rustflags = ['--cfg', 'getrandom_backend="unsupported"']
+rustflags = [
+    '--cfg', 'getrandom_backend="unsupported"',
+    '--remap-path-prefix=/usr/local/cargo=/cargo',
+    '--remap-path-prefix=/source/parser=/parser',
+]

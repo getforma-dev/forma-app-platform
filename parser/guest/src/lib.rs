@@ -263,6 +263,8 @@ fn archive_directory(b: &[u8], l: &Limits) -> Result<()> {
 struct Preflight {
     raw_numbers: BTreeMap<String, BTreeMap<(u32, u32), String>>,
     sheets: BTreeMap<String, String>,
+    /// Sheet names in workbook order, for `sheet_selection_required`.
+    sheet_order: Vec<String>,
     rels: BTreeMap<String, String>,
     expanded: usize,
     cells: usize,
@@ -333,7 +335,11 @@ fn scan_xml(name: &str, bytes: &[u8], l: &Limits, p: &mut Preflight) -> Result<(
                     let title = attr(&e, "name")?.ok_or("sheet_name")?;
                     bounded_text(&title, l)?;
                     let id = attr(&e, "r:id")?.ok_or("sheet_relationship")?;
-                    ensure(p.sheets.insert(title, id).is_none(), "sheet_duplicate")?;
+                    ensure(
+                        p.sheets.insert(title.clone(), id).is_none(),
+                        "sheet_duplicate",
+                    )?;
+                    p.sheet_order.push(title);
                     ensure(p.sheets.len() <= l.sheets, "sheet_limit")?;
                 }
                 if tag == "sst" {
@@ -684,6 +690,14 @@ pub fn parse_bytes(input: &[u8], config: &[u8]) -> Value {
         let l = Limits::new(&c)?;
         ensure(input.len() <= l.input, "input_limit")?;
         let result = match c.format.as_str() {
+            // Only a workbook that passes the whole-workbook preflight lists
+            // its sheets; hostile content is refused for itself first.
+            "xlsx" if c.sheet.is_none() => {
+                let p = preflight(input, &l)?;
+                return Ok(
+                    json!({"status":"refused","reason":"sheet_selection_required","no_revision_created":true,"available_sheets":p.sheet_order}),
+                );
+            }
             "xlsx" => parse_xlsx(input, &c, &l)?,
             "csv" => {
                 ensure(c.sheet.is_none(), "csv_has_no_sheet")?;
