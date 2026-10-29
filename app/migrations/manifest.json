@@ -15,7 +15,7 @@
     {
       "version": 3,
       "file": "0003_admission.sql",
-      "sha256": "3317bed31f4ae29b9aef2cc9429ecc4d88fe560cfadac891d3beae9fd02ed903"
+      "sha256": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af"
     },
     {
       "version": 4,
@@ -38,11 +38,11 @@
     },
     {
       "file": "catalog-v3.json",
-      "sha256": "16fcd0edbfdea34bc6208cdef7cd2afa618babd7888ba49a282c1b8a62196245"
+      "sha256": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8"
     },
     {
       "file": "catalog-v4.json",
-      "sha256": "8f8e280bc2f16192c649357ae3a56a97c9ac35dae66c485278dc92e85cd9f82e"
+      "sha256": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6"
     }
   ]
 }
