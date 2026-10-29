@@ -25,7 +25,8 @@ def generate(destination):
     sources=runtime.migration_sources(MIGRATIONS)
     manifest=runtime.migration_manifest(MIGRATIONS)
     query=json.loads((MIGRATIONS/'catalog-query.json').read_text())
-    # Headroom below the native/runtime bound: 80 % of 262,144 is 209,715 bytes.
+    # Headroom below the native/runtime bound (ADR-007 D7.12): 80 % of
+    # 524,288 is 419,430 bytes, measured on the database's jsonb::text body.
     limit=query['max_output_bytes']*4//5
     snapshots={}
     pg=LocalPostgres()
@@ -54,9 +55,11 @@ def generate(destination):
     for version,(raw,value) in snapshots.items():
         if not value or any(len(rows)>=query['section_row_limit'] for rows in value.values()):
             raise ValueError('catalog candidate exceeds bounded projection')
-        # Both the native projection text and the readable file stay under it.
-        if max(len(raw.encode()),len(readable(value).encode()))>limit:
-            raise ValueError(f'catalog-v{version} candidate exceeds {limit} bytes, 80% of the {query["max_output_bytes"]}-byte catalog bound')
+        # Both the native projection text and the readable file stay under it;
+        # the refusal names the length that exceeded the guard.
+        for measure,length in (('body',len(raw.encode())),('file',len(readable(value).encode()))):
+            if length>limit:
+                raise ValueError(f'catalog-v{version} candidate {measure} length {length} exceeds {limit} bytes, 80% of the {query["max_output_bytes"]}-byte catalog bound')
     destination.mkdir(parents=True)
     for version,(_,value) in snapshots.items():
         (destination/f'catalog-v{version}.json').write_text(readable(value))
@@ -64,7 +67,11 @@ def generate(destination):
              'image':IMAGE,'server_version':'16.13','container_removed':pg.removed,
              'source_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in
                (*(MIGRATIONS/item['file'] for item in manifest['migrations']),MIGRATIONS/'catalog-query.json',Path(__file__),Path(__file__).with_name('qualify_tenant_schema.py'),Path(runtime.__file__))},
-             'candidate_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in destination.glob('catalog-v*.json')}}
+             'candidate_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in destination.glob('catalog-v*.json')},
+             # Both measures the guard applies (ADR-007 D7.12 bounds the body).
+             'body_bytes':{f'catalog-v{version}.json':len(raw.encode()) for version,(raw,_) in snapshots.items()},
+             'file_bytes':{f'catalog-v{version}.json':len(readable(value).encode()) for version,(_,value) in snapshots.items()},
+             'guard_bytes':limit}
     (destination/'generation.json').write_text(json.dumps(receipt,indent=2)+'\n')
     return receipt
 
