@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 3,
+  "database_version": 4,
   "migrations": [
     {
       "version": 1,
@@ -15,7 +15,12 @@
     {
       "version": 3,
       "file": "0003_admission.sql",
-      "sha256": "865ec1d5da6cec11da85b593e626fa6bad1361397e61a2aee9a8e60a62088d0b"
+      "sha256": "3317bed31f4ae29b9aef2cc9429ecc4d88fe560cfadac891d3beae9fd02ed903"
+    },
+    {
+      "version": 4,
+      "file": "0004_entitlement_reads.sql",
+      "sha256": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2"
     }
   ],
   "catalog": [
@@ -33,7 +38,11 @@
     },
     {
       "file": "catalog-v3.json",
-      "sha256": "aacabcfb668058f64b5065e55789cee93960c7af656884e6eec37d13aff51cb8"
+      "sha256": "16fcd0edbfdea34bc6208cdef7cd2afa618babd7888ba49a282c1b8a62196245"
+    },
+    {
+      "file": "catalog-v4.json",
+      "sha256": "8f8e280bc2f16192c649357ae3a56a97c9ac35dae66c485278dc92e85cd9f82e"
     }
   ]
 }

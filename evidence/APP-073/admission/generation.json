@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "scope": "local catalog review candidates; not automatic baseline adoption",
+  "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "server_version": "16.13",
+  "container_removed": true,
+  "source_sha256": {
+    "0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "0003_admission.sql": "3317bed31f4ae29b9aef2cc9429ecc4d88fe560cfadac891d3beae9fd02ed903",
+    "0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
+    "catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+    "generate_schema_catalog.py": "f6802d633a695202c28cb6d5b604ee4a14462fe57d50f48f647b3f8246783b24",
+    "qualify_tenant_schema.py": "8fb0c8bc76370deca84942cca370856137ead19da4221e0519a6d7b11b5f7bc7",
+    "runtime.py": "c3144e033b00adf774a41a26fb0fe274dae40354a290f9165d2fbbe17988a925"
+  },
+  "candidate_sha256": {
+    "catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "catalog-v3.json": "16fcd0edbfdea34bc6208cdef7cd2afa618babd7888ba49a282c1b8a62196245",
+    "catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+    "catalog-v4.json": "8f8e280bc2f16192c649357ae3a56a97c9ac35dae66c485278dc92e85cd9f82e"
+  },
+  "body_bytes": {
+    "catalog-v1.json": 3829,
+    "catalog-v2.json": 125966,
+    "catalog-v3.json": 204601,
+    "catalog-v4.json": 205742
+  },
+  "file_bytes": {
+    "catalog-v1.json": 3905,
+    "catalog-v2.json": 123415,
+    "catalog-v3.json": 200722,
+    "catalog-v4.json": 201848
+  },
+  "guard_bytes": 419430
+}

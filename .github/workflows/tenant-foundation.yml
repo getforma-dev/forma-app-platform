@@ -49,6 +49,9 @@ jobs:
       - name: Qualify real TLS pools, cancellation, tenant authorization and composed readiness
         working-directory: app
         run: GENUI_NATIVE_REPORT="$RUNNER_TEMP/tenant-foundation/native.json" cargo +1.93.1 test --locked --lib storage::qualification::native_postgres_campaign -- --ignored --exact --nocapture
+      - name: Qualify admission operations and the operator command over TLS (APP-073)
+        working-directory: app
+        run: GENUI_ADMISSION_REPORT="$RUNNER_TEMP/tenant-foundation/admission.json" cargo +1.93.1 test --locked --lib storage::admission_qualification::native_admission_campaign -- --ignored --exact --nocapture
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
