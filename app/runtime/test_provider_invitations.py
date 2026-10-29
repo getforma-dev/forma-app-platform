@@ -7,7 +7,9 @@ identity evidence (APP-074/076). The database tests reuse test_admission_operato
 disposable PostgreSQL 16.13 container with a throwaway TLS CA and drive the real
 command line as genui_migration over verify-full TLS.
 """
+import contextlib
 import datetime
+import io
 import json
 import os
 from pathlib import Path
@@ -15,6 +17,7 @@ import shutil
 import socket
 import stat
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -113,6 +116,24 @@ class ConfigTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.refused(self.env(**{pm.ENV_CAPABILITY_DIR: path}), "provider_capability_directory_refused")
 
+    def test_capability_directory_refuses_sync_folders_and_reports_its_path_class(self):
+        """Review M2 (interim, ADR-003 decision pending): never inside a folder a sync client copies off the host."""
+        for parts in (("Library", "Mobile Documents", "com~apple~CloudDocs"), ("Library", "CloudStorage", "Dropbox"),
+                      ("Dropbox",), ("Dropbox (Example)",), ("Google Drive", "My Drive"), ("OneDrive",), ("OneDrive - Example",)):
+            path = Path(self.tmp, *parts, "capabilities")
+            path.mkdir(parents=True)
+            os.chmod(path, 0o700)
+            with self.subTest(parts=parts):
+                self.refused(self.env(**{pm.ENV_CAPABILITY_DIR: str(path)}), "provider_capability_directory_synced")
+        # A private-looking path whose parent is a link into a sync folder is refused by its real path.
+        alias = Path(self.tmp, "looks-private")
+        alias.symlink_to(Path(self.tmp, "Dropbox"), target_is_directory=True)
+        self.refused(self.env(**{pm.ENV_CAPABILITY_DIR: str(Path(alias, "capabilities"))}), "provider_capability_directory_synced")
+        self.assertEqual(pm.directory_class(str(self.capabilities)), "temporary")
+        self.assertEqual(pm.directory_class(str(Path.home() / "genui-capabilities")), "home")
+        self.assertEqual(pm.directory_class(str(Path.home() / "Library" / "Mobile Documents" / "x")), "sync:icloud_drive")
+        self.assertEqual(pm.directory_class("/srv/genui/capabilities"), "other")
+
 
 class CapabilityTests(unittest.TestCase):
     def setUp(self):
@@ -146,6 +167,39 @@ class CapabilityTests(unittest.TestCase):
                 pm.write_capability(self.directory, bad[0], bad[1], remote, token, "2026-11-01T00:00:00Z")
         with self.assertRaises(pm.Refused):
             pm.write_capability(self.directory, self.org, self.invitation, remote, "not-a-token", "2026-11-01T00:00:00Z")
+
+    def test_a_capability_appears_complete_or_not_at_all(self):
+        """Review m6: the final name is linked to a fully written, fsynced file, so a sweep never reads a partial one."""
+        token, remote = "tinv_" + str(uuid.uuid4()), "tinv_" + str(uuid.uuid4())
+        final = pm.capability_path(self.directory, self.org, self.invitation)
+        real_write, seen = os.write, []
+
+        def write(fd, data):
+            seen.append(final.exists())
+            return real_write(fd, data)
+        with mock.patch.object(os, "write", side_effect=write):
+            pm.write_capability(self.directory, self.org, self.invitation, remote, token, "2026-11-01T00:00:00Z")
+        self.assertEqual(seen, [False])
+        self.assertEqual(os.listdir(self.directory), [final.name], "no partial file is left behind")
+        self.assertEqual(pm.capability_record(self.directory, self.org, self.invitation)["remote_invitation_id"], remote)
+        # An existing capability is never replaced, and the refused attempt leaves nothing behind.
+        with self.assertRaises(pm.Refused):
+            pm.write_capability(self.directory, self.org, self.invitation, "tinv_" + str(uuid.uuid4()), token, "2026-11-01T00:00:00Z")
+        self.assertEqual(os.listdir(self.directory), [final.name])
+        self.assertEqual(pm.capability_record(self.directory, self.org, self.invitation)["remote_invitation_id"], remote)
+
+    def test_only_stale_partial_writes_are_swept(self):
+        stale, fresh = (Path(self.directory, ".%s.%s.%s.partial" % (self.org, str(uuid.uuid4()), tag * 16)) for tag in ("a", "b"))
+        for path in (stale, fresh):
+            path.write_text("{")
+        old = time.time() - 3600
+        os.utime(stale, (old, old))
+        other = Path(self.directory, ".%s.%s.%s.partial" % (str(uuid.uuid4()), self.invitation, "c" * 16))
+        other.write_text("{")
+        os.utime(other, (old, old))
+        self.assertEqual(pm.remove_stale_partials(self.directory, self.org, 120), 1)
+        self.assertEqual((stale.exists(), fresh.exists(), other.exists()), (False, True, True))
+        self.assertEqual(pm.capability_invitations(self.directory, self.org), [])
 
 
 class ClientTests(unittest.TestCase):
@@ -347,11 +401,27 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         return self.query("""SELECT invitation_id::text,operation,state,remote_invitation_id FROM genui.provider_invitations
                              WHERE organization_id=%s AND code_id=%s ORDER BY operation""", (ORG, code_id))
 
-    def age(self, code_id, seconds=900):
-        """Move this code's provider operations past the reconcile grace (fixture SQL only)."""
+    def age(self, *code_ids, seconds=900):
+        """Move these codes' provider operations, and the stand-in's invitations for their addresses,
+        `seconds` into the past: past the reconcile grace, keeping each invitation inside its create's
+        window (fixture SQL and stand-in clock travel only)."""
+        digests = {r[0] for r in self.query("""SELECT intended_email_digest::text FROM genui.provider_invitations
+                                               WHERE organization_id=%s AND code_id=ANY(%s::uuid[])""", (ORG, list(code_ids)))}
         with self.connect("postgres") as c:
             c.execute("""UPDATE genui.provider_invitations SET created_at=created_at-make_interval(secs=>%s),
-                         updated_at=updated_at-make_interval(secs=>%s) WHERE organization_id=%s AND code_id=%s""", (seconds, seconds, ORG, code_id))
+                         updated_at=updated_at-make_interval(secs=>%s) WHERE organization_id=%s AND code_id=ANY(%s::uuid[])""",
+                      (seconds, seconds, ORG, list(code_ids)))
+        self.fake.shift(lambda invite: op.email_digest(invite["email"]) in digests, seconds)
+
+    def remote_ids(self, email):
+        return [i["id"] for i in self.fake.invites.values() if i["email"] == email.strip().lower()]
+
+    def entry(self, result, invitation_id):
+        return next(o for o in result["operations"] if o["invitation_id"] == invitation_id)
+
+    def pg_env(self):
+        return {"PGHOST": "localhost", "PGPORT": str(self.port), "PGUSER": "genui_migration", "PGDATABASE": "genui",
+                "PGSSLROOTCERT": str(Path(self.directory, "ca.pem"))}
 
     def reconcile(self, env=None):
         return self.run_cli("reconcile", "--organization", ORG, env=env)
@@ -475,8 +545,10 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
             entry = next(o for o in result["operations"] if o["invitation_id"] == row[0])
             self.assertEqual((entry["operation"], entry["state_before"], entry["state"]), ("create", "unknown", expected))
             if expected == "confirmed":
-                self.assertEqual(self.fake.status_of(row[3]), "pending")
                 self.assertEqual(entry["capability_stored"], False)  # the lost response's token is unrecoverable: reissue
+                # Review m2: an invitation nobody holds a token for is revoked at once, as create_remote does.
+                self.assertEqual(self.fake.status_of(row[3]), "revoked")
+                self.assertEqual([r[1:] for r in self.rows(issued[name]["code_id"])], [("create", "confirmed", row[3]), ("revoke", "confirmed", row[3])])
             else:
                 self.assertIsNone(row[3])
         own = {self.rows(out["code_id"])[0][0] for out in issued.values()}
@@ -612,6 +684,7 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         path.write_text(json.dumps(stored))
         events = len(self.operator_events())
         result = self.reconcile()
+        self.assertEqual(result["capability_directory_class"], "temporary")  # review M2: recorded for the evidence
         self.assertGreaterEqual(result["revocations_recorded"], 2)
         for out in (expired, exhausted):
             self.assertEqual([r[1:3] for r in self.rows(out["code_id"])], [("create", "confirmed"), ("revoke", "confirmed")])
@@ -651,3 +724,221 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
                     self.assertEqual(json.loads(p.stderr), {"refused": "operator_identity_refused"})
         # A forged operator reaches neither the database nor the provider.
         self.assertEqual((self.dump(), len(self.fake.requests)), (before, calls))
+
+    # --- review fixes (2026-10-29): M1, m1-m7 ------------------------------------------
+
+    def unknown_pair(self, email):
+        """Review H2's sequence: code 1's create is refused with 500 before any write (unknown, never
+        applied); the operator revokes code 1 and reissues; code 2's create is applied and its
+        response lost (unknown). One remote invitation exists, code 2's."""
+        self.fake.fault("create", "status", status=500)
+        first = self.invite(email)
+        self.assertEqual(first["provider_invitation"]["state"], "unknown")
+        self.run_cli("revoke", "--organization", ORG, "--code-id", first["code_id"])
+        self.fake.fault("create", "drop_after")
+        second = self.invite(email)
+        self.assertEqual(second["provider_invitation"]["state"], "unknown")
+        remote = self.remote_ids(email)
+        self.assertEqual(len(remote), 1)
+        return first, second, remote[0]
+
+    def test_reconcile_never_attributes_one_invitation_to_two_creates(self):
+        """Review M1/H2: the invitation lies in both unresolved creates' windows, so neither is judged."""
+        email = "h2-%s@example.test" % uuid.uuid4().hex[:6]
+        first, second, remote = self.unknown_pair(email)
+        self.age(first["code_id"], second["code_id"])
+        result = self.reconcile()
+        for out in (first, second):
+            create = self.rows(out["code_id"])[0]
+            self.assertEqual(create[1:], ("create", "unknown", None))
+            self.assertEqual(self.entry(result, create[0])["detail"], "ambiguous_remote_match")
+        self.assertEqual(self.fake.status_of(remote), "pending", "code 2's invitation is never revoked as code 1's")
+        self.assertEqual(self.code_status(second["code_id"]), "active")
+        self.assertEqual([r[1:3] for r in self.rows(first["code_id"])], [("create", "unknown"), ("revoke", "pending")])
+
+    def test_reconcile_windows_are_bounded_above_by_the_create_deadline(self):
+        """Review M1/H2 with separable windows: one-to-one attribution to the create whose window holds it."""
+        email = "h2w-%s@example.test" % uuid.uuid4().hex[:6]
+        first, second, remote = self.unknown_pair(email)
+        self.age(first["code_id"], second["code_id"])
+        with self.connect("postgres") as c:  # code 1's create ended an hour before code 2's (fixture SQL only)
+            c.execute("""UPDATE genui.provider_invitations SET created_at=created_at-interval '1 hour',updated_at=updated_at-interval '1 hour'
+                         WHERE organization_id=%s AND code_id=%s""", (ORG, first["code_id"]))
+        result = self.reconcile()
+        first_create, second_create = self.rows(first["code_id"])[0], self.rows(second["code_id"])[0]
+        self.assertEqual((first_create[2:], self.entry(result, first_create[0])["detail"]), (("failed", None), "not_found"))
+        self.assertEqual((second_create[2:], self.entry(result, second_create[0])["detail"]), (("confirmed", remote), "found"))
+        # Review m2: nobody holds that invitation's token, so it is revoked; code 1 had nothing to revoke.
+        self.assertEqual(self.fake.status_of(remote), "revoked")
+        self.assertEqual([r[1:] for r in self.rows(second["code_id"])], [("create", "confirmed", remote), ("revoke", "confirmed", remote)])
+        self.assertEqual([r[1:] for r in self.rows(first["code_id"])], [("create", "failed", None), ("revoke", "confirmed", None)])
+
+    def test_reconcile_takes_the_remote_id_from_a_stored_capability(self):
+        """Review M1/H2b: the crash between the capability file and the outcome UPDATE never costs the capability."""
+        email = "h2b-%s@example.test" % uuid.uuid4().hex[:6]
+        self.fake.fault("create", "status", status=500)
+        first = self.invite(email)
+        self.run_cli("revoke", "--organization", ORG, "--code-id", first["code_id"])
+        second = self.invite(email)
+        invitation = second["provider_invitation"]
+        self.assertEqual((invitation["state"], invitation["capability_stored"]), ("confirmed", True))
+        with self.connect("postgres") as c:  # the crash between the file and the UPDATE (fixture SQL only)
+            c.execute("UPDATE genui.provider_invitations SET state='pending',remote_invitation_id=NULL WHERE organization_id=%s AND invitation_id=%s",
+                      (ORG, invitation["invitation_id"]))
+        self.age(first["code_id"], second["code_id"])
+        result = self.reconcile()
+        entry = self.entry(result, invitation["invitation_id"])
+        self.assertEqual((entry["state"], entry["remote_invitation_id"], entry["detail"], entry["capability_stored"]),
+                         ("confirmed", invitation["remote_invitation_id"], "capability_record", True))
+        self.reconcile()
+        self.assertTrue(self.capability(invitation["invitation_id"]).exists())
+        self.assertEqual(self.fake.status_of(invitation["remote_invitation_id"]), "pending")
+        self.assertEqual([r[1:] for r in self.rows(second["code_id"])], [("create", "confirmed", invitation["remote_invitation_id"])])
+        self.assertEqual([r[1:] for r in self.rows(first["code_id"])], [("create", "failed", None), ("revoke", "confirmed", None)])
+        self.assertEqual(self.code_status(second["code_id"]), "active")
+
+    def test_invitations_created_by_a_signed_in_user_are_never_attributed(self):
+        """Review M1(c): management-key creates carry no inviter (gatewasm management.rs:1678,1744); console ones do."""
+        email = "console-%s@example.test" % uuid.uuid4().hex[:6]
+        self.fake.fault("create", "drop_after")
+        out = self.invite(email)
+        ours = self.remote_ids(email)
+        self.fake.create_direct(email, invited_by="usr_" + uuid.uuid4().hex)
+        self.age(out["code_id"])
+        result = self.reconcile()
+        create = self.rows(out["code_id"])[0]
+        self.assertEqual((create[2:], self.entry(result, create[0])["detail"]), (("confirmed", ours[0]), "found"))
+
+    def test_only_one_reconcile_runs_per_provider_tenant(self):
+        """Review M1(b): a second reconcile, and invitation-bearing issuance, refuse while one runs."""
+        self.ensure_backfill()
+        before, creates = self.dump(), self.fake.count("POST", "/manage/invites")
+        with self.connect("postgres") as holder:  # what a running reconcile holds
+            holder.execute("SELECT 1 FROM genui.provider_tenant_bindings WHERE organization_id=%s FOR NO KEY UPDATE", (ORG,))
+            refused = self.run_cli("reconcile", "--organization", ORG, expect=1)
+            self.assertEqual(json.loads(refused.stderr), {"refused": "reconcile_in_progress"})
+            refused = self.invite("busy-%s@example.test" % uuid.uuid4().hex[:6], expect=1)
+            self.assertEqual(json.loads(refused.stderr), {"refused": "provider_tenant_busy"})
+        self.assertEqual((self.dump(), self.fake.count("POST", "/manage/invites")), (before, creates))
+        # Two real processes: the second refuses while the first inspects the provider.
+        self.fake.fault("create", "drop_after")
+        out = self.invite("race-%s@example.test" % uuid.uuid4().hex[:6])
+        self.age(out["code_id"])
+        lists = self.fake.count("GET", "/manage/invites")
+        self.fake.fault("list", "delay_after", seconds=4)
+        box = {}
+        runner = threading.Thread(target=lambda: box.update(first=self.raw_cli("reconcile", "--organization", ORG)))
+        runner.start()
+        for _ in range(200):
+            if self.fake.count("GET", "/manage/invites") > lists:
+                break
+            time.sleep(0.05)
+        refused = self.run_cli("reconcile", "--organization", ORG, expect=1)
+        runner.join()
+        self.assertEqual(json.loads(refused.stderr), {"refused": "reconcile_in_progress"})
+        self.assertEqual(box["first"].returncode, 0, box["first"].stderr)
+        self.assertEqual(self.rows(out["code_id"])[0][2], "confirmed")
+
+    def test_revocation_during_an_in_flight_create_leaves_no_capability(self):
+        """Review m1/H1: the create lands after the code was revoked; its capability is never written and it is revoked."""
+        self.ensure_backfill()
+        email = "h1-%s@example.test" % uuid.uuid4().hex[:6]
+        self.fake.fault("create", "delay_after", seconds=4)
+        box = {}
+        runner = threading.Thread(target=lambda: box.update(p=self.raw_cli(
+            "issue", "--organization", ORG, "--issued-by", "unit-operator", "--grant", "source_read:" + self.source,
+            "--provider-email", email, "--provider-role", "user", "--provider-issuer", ISSUER, "--provider-tenant", TENANT)))
+        runner.start()
+        for _ in range(200):
+            if any(b["email"] == email for b in self.fake.create_bodies):
+                break
+            time.sleep(0.05)
+        code_id, armed = self.query("""SELECT code_id::text,updated_at>clock_timestamp() FROM genui.provider_invitations
+                                       WHERE organization_id=%s AND intended_email_digest=%s AND operation='create'""", (ORG, op.email_digest(email)))[0]
+        self.assertTrue(armed, "the send deadline is recorded before the create is sent")
+        revoked = self.run_cli("revoke", "--organization", ORG, "--code-id", code_id)
+        self.assertEqual((revoked["capabilities_destroyed"], [r["detail"] for r in revoked["provider_revocations"]]),
+                         (0, ["awaiting_create_reconciliation"]))
+        runner.join()
+        self.assertEqual(box["p"].returncode, 0, box["p"].stderr)
+        issued = json.loads(box["p"].stdout)
+        invitation = issued["provider_invitation"]
+        self.assertEqual((invitation["state"], invitation["capability_stored"], invitation["detail"]), ("confirmed", False, "code_no_longer_usable"))
+        self.assertEqual(invitation["revocation"]["state"], "confirmed")
+        self.assertFalse(self.capability(invitation["invitation_id"]).exists())
+        self.assertEqual(self.fake.status_of(invitation["remote_invitation_id"]), "revoked")
+        self.assertEqual([r[1:] for r in self.rows(code_id)], [("create", "confirmed", invitation["remote_invitation_id"]),
+                                                               ("revoke", "confirmed", invitation["remote_invitation_id"])])
+        self.assertEqual(self.code_status(code_id), "revoked")
+
+    def test_an_unresolvable_create_closes_after_the_provider_expiry(self):
+        """Review m3: past the invitation's 72 h provider lifetime nothing it made can still be pending."""
+        email = "stuck-%s@example.test" % uuid.uuid4().hex[:6]
+        self.fake.fault("create", "drop_after")
+        out = self.invite(email)
+        self.fake.create_direct(email)  # another management-key tool: indistinguishable, so ambiguous
+        self.run_cli("revoke", "--organization", ORG, "--code-id", out["code_id"])
+        self.age(out["code_id"])
+        create = self.rows(out["code_id"])[0][0]
+        self.assertEqual(self.entry(self.reconcile(), create)["detail"], "ambiguous_remote_match")
+        self.assertEqual([r[1:3] for r in self.rows(out["code_id"])], [("create", "unknown"), ("revoke", "pending")])
+        self.age(out["code_id"], seconds=72 * 3600)
+        result = self.reconcile()
+        entry = self.entry(result, create)
+        self.assertEqual((entry["state_before"], entry["state"], entry["detail"]), ("unknown", "failed", "expired_unconfirmed"))
+        revoke = self.rows(out["code_id"])[1][0]
+        self.assertEqual((self.entry(result, revoke)["state"], self.entry(result, revoke)["detail"]), ("confirmed", "nothing_to_revoke"))
+        self.assertEqual([r[1:] for r in self.rows(out["code_id"])], [("create", "failed", None), ("revoke", "confirmed", None)])
+        self.assertEqual([o for o in self.reconcile()["operations"] if o["invitation_id"] in (create, revoke)], [])
+
+    def test_the_code_is_printed_even_if_the_provider_phase_fails_after_commit(self):
+        """Review m5: a database error in the revocation that follows a contract mismatch never hides the committed code."""
+        self.ensure_backfill()
+
+        def admin(body):
+            body = json.loads(json.dumps(body))
+            body["invite"]["role_name"] = "admin"
+            return body
+        self.fake.fault("create", "body_after", body=admin)
+        email = "m5-%s@example.test" % uuid.uuid4().hex[:6]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        env = dict(self.pg_env(), **self.provider_env())
+        with mock.patch.dict(os.environ, env), mock.patch.object(op, "process_revoke", side_effect=RuntimeError("connection lost")), \
+                contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            status = op.main(["issue", "--organization", ORG, "--issued-by", "unit-operator", "--grant", "source_read:" + self.source,
+                              "--provider-email", email, "--provider-role", "user", "--provider-issuer", ISSUER, "--provider-tenant", TENANT])
+        self.assertEqual((status, stderr.getvalue()), (0, ""))
+        out = json.loads(stdout.getvalue())
+        self.assertIsNotNone(op.normalize_code(out["code"]))
+        invitation = out["provider_invitation"]
+        self.assertEqual((invitation["state"], invitation["detail"], invitation["revocation"]["detail"]),
+                         ("confirmed", "contract_mismatch", "provider_phase_incomplete"))
+        self.assertEqual([r[1:3] for r in self.rows(out["code_id"])], [("create", "confirmed"), ("revoke", "pending")])
+        self.reconcile()
+        self.assertEqual(self.fake.status_of(invitation["remote_invitation_id"]), "revoked")
+
+    def test_reconcile_records_invitations_the_provider_already_ended(self):
+        """Review m7: drift upstream (another create, the sweeper, registration, the lifetime) is noticed."""
+        outs = {name: self.invite("%s-%s@example.test" % (name, uuid.uuid4().hex[:6])) for name in ("revoked", "expired", "accepted", "lifetime", "live")}
+        remote = {name: out["provider_invitation"]["remote_invitation_id"] for name, out in outs.items()}
+        capability = {name: self.capability(out["provider_invitation"]["invitation_id"]) for name, out in outs.items()}
+        self.fake.set_status(remote["revoked"], "revoked")
+        self.fake.set_status(remote["expired"], "expired")
+        token = json.loads(capability["accepted"].read_text())["invite_token"]
+        self.assertIsNotNone(self.fake.register(token, self.fake.invites[remote["accepted"]]["email"]))
+        self.age(outs["lifetime"]["code_id"], seconds=73 * 3600)
+        result = self.reconcile()
+        for name, detail in (("revoked", "remote_revoked"), ("expired", "remote_expired"), ("lifetime", "provider_lifetime_ended")):
+            with self.subTest(name=name):
+                rows = self.rows(outs[name]["code_id"])
+                self.assertEqual([r[1:] for r in rows], [("create", "confirmed", remote[name]), ("revoke", "confirmed", remote[name])])
+                self.assertEqual(self.entry(result, rows[1][0])["detail"], detail)
+                self.assertFalse(capability[name].exists())
+        # A registered invitee's token is spent: the capability ends, the ledger keeps the confirmed create.
+        self.assertFalse(capability["accepted"].exists())
+        self.assertEqual([r[1:3] for r in self.rows(outs["accepted"]["code_id"])], [("create", "confirmed")])
+        self.assertTrue(capability["live"].exists())
+        self.assertEqual([r[1:3] for r in self.rows(outs["live"]["code_id"])], [("create", "confirmed")])
+        self.assertEqual(self.fake.status_of(remote["live"]), "pending")
+        for name in outs:
+            self.assertEqual(self.code_status(outs[name]["code_id"]), "active")
