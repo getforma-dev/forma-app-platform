@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-29T03:46:51.375419+00:00",
+  "reviewer": "independent APP-008 schema reviewer reassigned to APP-006 operator preflight",
+  "verdict": "no blocking findings at pinned source",
+  "source_sha256": {
+    "infra/scripts/auth_schema_preflight.py": "c29ea7f8fcfc105e85c9e2dcd12a2b288365732aa461f62acb71b1ba8b352804",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/qualify.py": "cc37b32f3c0b083668fd347dff5c4392fde674a8ee7de31c14db71c4591dbe81",
+    "app/migrations/catalog-query.json": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963",
+    "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+    "app/migrations/manifest.json": "13976faa01ee527a81524d969e2aee864ef42e78368b69e8bee67895b8287bd5",
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/runtime/runtime.py": "dfef99b5f60fe225b480563a8b54977cfdc45f99887b9a05a9904b4a3f918beb",
+    "app/runtime/qualify_tenant_schema.py": "84ac10d54a201de496f547afe05f181a441b263be1b07063170e0a8b2cae6be0",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/README.md": "427d387e763d2ed7dd7273f7b7a8f532bfc59b0e55b1bfe51a5a76007c185392",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/qualify-image-entrypoint.py": "77d113c39ad081e2b9663ae374e4998843ce975dbf960112cd44eaa985153aa9"
+  },
+  "reviewed_source_unchanged_after_checks": true,
+  "scope": "Read-only schema1 operator preflight, exact emitted compressed payload and task entrypoint composition; not migration or hosted auth readiness",
+  "findings": [
+    {
+      "id": "ENTRYPOINT",
+      "status": "resolved before final frozen source",
+      "observation": "Initial command included python3 while the required replacement entryPoint also named python3. Existing runtime.py entryPoint was not compatible either.",
+      "resolution": "Final command is [-c, bootstrap]; temporary migration-derived task definition must use entryPoint [python3]. Exact composition passed a complete process trial in the pinned image.",
+      "historical_receipt": "initial-local-qualification.json"
+    }
+  ],
+  "checks": [
+    {
+      "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/qualify.py --output evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/independent-qualification.json",
+      "passed": true,
+      "cases": 20,
+      "receipt": "independent-qualification.json",
+      "owned_database_removed": true
+    },
+    {
+      "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/qualify-image-entrypoint.py --output evidence/APP-006/hosted-callback/schema-one-sequence/sql-preflight/independent-image-entrypoint.json",
+      "passed": true,
+      "receipt": "independent-image-entrypoint.json",
+      "full_process_success_in_cached_image": true,
+      "untrusted_CA_negative": true,
+      "internal_network_no_external_access": true,
+      "all_owned_resources_removed": true
+    }
+  ],
+  "override": {
+    "bytes": 7867,
+    "maximum_bytes": 8192,
+    "sha256": "c423cce86ea1b14f9f473795fad7520c9885c683b078058d69353708d4ee78da",
+    "entrypoint": [
+      "python3"
+    ],
+    "command_prefix": [
+      "-c"
+    ],
+    "container_name": "migration",
+    "existing_migration_task_directly_compatible": false
+  },
+  "deployment_requirements": [
+    "Register/review a separate temporary task definition derived from the approved migration definition; replace its entryPoint with [python3].",
+    "Preserve pinned image, UID, existing execution-secret channel, intended network, limits and approved logging. Verify the strict required nonsecret PG environment and absence of alternate PG channels.",
+    "Apply the emitted structured command override and verify size of the final whole override document if adding fields.",
+    "Verify actual retained RDS identity/version/TLS, run the preflight and retain its sanitized result; preserve schema/operator quiescence throughout the auth window.",
+    "Stop/deregister temporary task resources as appropriate under root coordination; no auth start signal is conveyed by this local review."
+  ],
+  "limits": [
+    "Local trust authentication plus valid synthetic TLS is not actual RDS credentials or IAM proof.",
+    "The full-process test aliases the fixed production hostname to an owned local database on a Docker INTERNAL network and mounts its synthetic CA; no AWS service is contacted.",
+    "The image is the existing accepted schema1 callback artifact; the newly emitted operator payload has local independent qualification, not a newly completed remote CI run.",
+    "Actual ECS registration, secret injection, managed SQL observation, hosted signup/mail/revocation/key qualification and broader app admission remain open."
+  ],
+  "mutations": {
+    "production_source_files": false,
+    "cloud": false,
+    "git": false,
+    "ticket_status": false,
+    "only_new_reviewer_evidence_and_owned_disposable_local_fixtures": true
+  },
+  "followups": [
+    {
+      "recorded_at": "2026-10-29T03:49:21.495832+00:00",
+      "scope": "Root-requested unchanged standalone helper on already-qualified retained foundation image",
+      "image": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+      "verdict": "No helper or runtime-image compatibility obstacle found",
+      "full_entrypoint_positive_and_untrusted_CA_refusal_passed": true,
+      "database_dump_unchanged": true,
+      "all_owned_resources_removed": true,
+      "production_source_unchanged": true,
+      "receipts": [
+        "independent-foundation-image-entrypoint.json",
+        "independent-foundation-source-compatibility.json",
+        "independent-image-runtime-compatibility.json"
+      ],
+      "source_compatibility": "8f8c34ba0b5e47a55990b273fc6d555d41369791 and18c33f538a19d06cb77f37d091c71b1a8d5e3c39 have identical runtime requirement/CA hashes and Python runtime base; actual cached image files and Python3.11.14/psycopg3.3.6 also match.",
+      "deployment_limits": "This does not verify current operating-window time, reservation/standalone allowance, task definition, live RDS state or authorize/start an auth rehearsal. Root must reobserve and bind those before a managed task."
+    }
+  ]
+}

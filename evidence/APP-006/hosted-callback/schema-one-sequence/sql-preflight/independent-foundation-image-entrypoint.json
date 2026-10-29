@@ -1,0 +1,57 @@
+{
+  "scope": "Independent complete process/bootstrap/UID/TLS trial on an owned INTERNAL local Docker network",
+  "managed_acceptance": false,
+  "production_hostname_is_only_a_local_container_alias": true,
+  "no_real_credentials": true,
+  "image": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "local_image_id": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+  "image_original_entrypoint": [
+    "python3",
+    "/app/runtime.py"
+  ],
+  "tested_replacement_entrypoint": [
+    "python3"
+  ],
+  "image_user": "65532:65532",
+  "source_sha256": "c29ea7f8fcfc105e85c9e2dcd12a2b288365732aa461f62acb71b1ba8b352804",
+  "passed": true,
+  "override_bytes": 7867,
+  "override_sha256": "c423cce86ea1b14f9f473795fad7520c9885c683b078058d69353708d4ee78da",
+  "local_process_success_receipt": {
+    "assertions": {
+      "catalog_before_metadata": true,
+      "fixed_operator_identity": true,
+      "origin": true,
+      "postgres_16_13": true,
+      "read_only": true,
+      "tls": true,
+      "tls_verify_full": true
+    },
+    "catalog_sha256": "e210fc43b054757525522fc628e63250b0c44c8da8d9c84e78a3282eab7c75c1",
+    "database_version": 1,
+    "expected_sha256": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "limits": [
+      "Point-in-time SQL proof; preserve operator/schema quiescence for the auth window.",
+      "No hosted identity, deployment, invitation, application access or schema-two acceptance."
+    ],
+    "passed": true,
+    "query_sha256": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963",
+    "scope": "APP-006 read-only schema-one auth preflight",
+    "source_sha256": "c29ea7f8fcfc105e85c9e2dcd12a2b288365732aa461f62acb71b1ba8b352804",
+    "target": {
+      "host": "genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg.cg58i06y2r4e.us-east-1.rds.amazonaws.com",
+      "resource_id_from_reviewed_control_plane": "db-KW4LRMTPI5YXHZXF4LELQZKTAU"
+    }
+  },
+  "untrusted_local_certificate_refused_without_details": true,
+  "database_logical_dump_unchanged": true,
+  "database_container_removed": true,
+  "internal_network_removed": true,
+  "preflight_container_removed": true,
+  "limits": [
+    "Local Docker DNS alias and synthetic CA deliberately model the fixed production endpoint; this is not an RDS observation.",
+    "Local PostgreSQL uses trust authentication; no real database secret or IAM credential was read.",
+    "Actual ECS task registration/secret wiring, deployed endpoint identity and managed SQL result remain root-owned gates."
+  ],
+  "review_fixture_selection": "Unchanged qualifier function with fixed older foundation IMAGE constant supplied by this independent review driver; production helper unchanged."
+}

@@ -1,0 +1,33 @@
+{
+  "scope": "Actual cached image Python, psycopg, CA and requirements equality; no network or credentials",
+  "images": {
+    "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22": {
+      "python": [
+        3,
+        11,
+        14
+      ],
+      "psycopg": "3.3.6",
+      "uid": 65532,
+      "files": {
+        "/app/requirements.lock": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+        "/etc/ssl/certs/rds-global-bundle.pem": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
+      }
+    },
+    "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:a4a47707e1e4028221cba7f5f0dfdf03ef663c6f46d0686a27632c4fd5fc5d08": {
+      "python": [
+        3,
+        11,
+        14
+      ],
+      "psycopg": "3.3.6",
+      "uid": 65532,
+      "files": {
+        "/app/requirements.lock": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+        "/etc/ssl/certs/rds-global-bundle.pem": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
+      }
+    }
+  },
+  "equal": true,
+  "all_owned_fact_containers_removed": true
+}
