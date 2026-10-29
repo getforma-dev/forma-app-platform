@@ -34,7 +34,7 @@
       ],
       "ticket_count": 16,
       "done_count": 6,
-      "blocked_count": 1
+      "blocked_count": 2
     },
     {
       "id": "PH02",
@@ -540,11 +540,11 @@
     {
       "id": "APP-011",
       "title": "Package reproducible synthetic sources and expected outcomes",
-      "path": "3-in-review/APP-011.md",
+      "path": "9-blocked/APP-011.md",
       "Field": "Value",
       "---": "---",
       "Epic": "VAL",
-      "Status": "In review",
+      "Status": "Blocked",
       "Priority": "P0",
       "Type": "Verification",
       "Sprint": "S02",
@@ -559,8 +559,8 @@
       "Assignee": "GenUI \u2014 synthetic fixture lead",
       "Branch / PR": "phase-one-spikes; fixture package paths owned independently",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 APP-002 and APP-007 are Done; package work proceeds alongside APP-008.",
-      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "Blocked by": "GitHub account billing/spending limit refuses CI jobs before execution; organization billing administrator action is required. Local package acceptance and review have passed.",
+      "Unblock evidence": "Restore GitHub Actions availability, run the exact reviewed source checks successfully, record their results and land the reviewed change. Do not treat the account-level refusal as a test result.",
       "dependencies": [
         "APP-002",
         "APP-007"

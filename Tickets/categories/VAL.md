@@ -4,7 +4,7 @@ Synthetic fixtures, both app journeys and reproducible release evidence.
 
 | Order | Ticket | Phase | Sprint | Category | Priority | Size | Status | Depends on |
 |---|---|---|---|---|---|---|---|---|
-| 13 | [APP-011: Package reproducible synthetic sources and expected outcomes](../3-in-review/APP-011.md) | [PH01](../phases/PH01.md) | S02 | VAL | P0 | M | In review | APP-002, APP-007 |
+| 13 | [APP-011: Package reproducible synthetic sources and expected outcomes](../9-blocked/APP-011.md) | [PH01](../phases/PH01.md) | S02 | VAL | P0 | M | Blocked | APP-002, APP-007 |
 | 38 | [APP-036: Prove authoring generality before AI polish](../0-backlog/APP-036.md) | [PH03](../phases/PH03.md) | S06 | VAL | P0 | M | Backlog | APP-033, APP-035 |
 | 49 | [APP-047: Freeze and run the 15-intent evaluation](../0-backlog/APP-047.md) | [PH03](../phases/PH03.md) | S08 | VAL | P0 | M | Backlog | APP-044, APP-045, APP-046 |
 | 54 | [APP-052: Exercise handoff, independent reuse and all data surfaces](../0-backlog/APP-052.md) | [PH04](../phases/PH04.md) | S09 | VAL | P0 | M | Backlog | APP-041, APP-050, APP-051 |

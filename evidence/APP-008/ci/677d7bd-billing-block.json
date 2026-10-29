@@ -1,0 +1,173 @@
+{
+  "observed_at": "2026-10-29T03:37:25.527624+00:00",
+  "source_revision": "677d7bdd7cf41e11a49e85491f50f82b886070e6",
+  "status": "blocked before job execution by GitHub account billing/spending limit",
+  "jobs_executed": false,
+  "runs": [
+    {
+      "conclusion": "failure",
+      "databaseId": 40812965169,
+      "headSha": "677d7bdd7cf41e11a49e85491f50f82b886070e6",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40812965169",
+      "workflowName": "Synthetic fixture qualification"
+    },
+    {
+      "conclusion": "failure",
+      "databaseId": 40812964992,
+      "headSha": "677d7bdd7cf41e11a49e85491f50f82b886070e6",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40812964992",
+      "workflowName": "Foundation preparation"
+    },
+    {
+      "conclusion": "failure",
+      "databaseId": 40812965026,
+      "headSha": "677d7bdd7cf41e11a49e85491f50f82b886070e6",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40812965026",
+      "workflowName": "Tenant foundation qualification"
+    },
+    {
+      "conclusion": "failure",
+      "databaseId": 40812964975,
+      "headSha": "677d7bdd7cf41e11a49e85491f50f82b886070e6",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40812964975",
+      "workflowName": "Planning integrity"
+    },
+    {
+      "conclusion": "failure",
+      "databaseId": 40812964987,
+      "headSha": "677d7bdd7cf41e11a49e85491f50f82b886070e6",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40812964987",
+      "workflowName": "Auth consumer qualification"
+    },
+    {
+      "conclusion": "failure",
+      "databaseId": 40812965015,
+      "headSha": "677d7bdd7cf41e11a49e85491f50f82b886070e6",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40812965015",
+      "workflowName": "Released baseline"
+    },
+    {
+      "conclusion": "failure",
+      "databaseId": 40812964980,
+      "headSha": "677d7bdd7cf41e11a49e85491f50f82b886070e6",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40812964980",
+      "workflowName": "Bounded query qualification"
+    },
+    {
+      "conclusion": "failure",
+      "databaseId": 40812964991,
+      "headSha": "677d7bdd7cf41e11a49e85491f50f82b886070e6",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40812964991",
+      "workflowName": "Contract qualification"
+    },
+    {
+      "conclusion": "failure",
+      "databaseId": 40812965102,
+      "headSha": "677d7bdd7cf41e11a49e85491f50f82b886070e6",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40812965102",
+      "workflowName": "Parser qualification"
+    },
+    {
+      "conclusion": "failure",
+      "databaseId": 40812965023,
+      "headSha": "677d7bdd7cf41e11a49e85491f50f82b886070e6",
+      "status": "completed",
+      "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/40812965023",
+      "workflowName": "Published canvas consumer"
+    }
+  ],
+  "checks": [
+    {
+      "id": 123247362645,
+      "name": "parser",
+      "conclusion": "failure",
+      "failure_annotations": [
+        "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+      ]
+    },
+    {
+      "id": 123247362310,
+      "name": "fixtures",
+      "conclusion": "failure",
+      "failure_annotations": [
+        "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+      ]
+    },
+    {
+      "id": 123247362283,
+      "name": "auth-contract",
+      "conclusion": "failure",
+      "failure_annotations": [
+        "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+      ]
+    },
+    {
+      "id": 123247362266,
+      "name": "contracts",
+      "conclusion": "failure",
+      "failure_annotations": [
+        "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+      ]
+    },
+    {
+      "id": 123247362205,
+      "name": "query",
+      "conclusion": "failure",
+      "failure_annotations": [
+        "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+      ]
+    },
+    {
+      "id": 123247362147,
+      "name": "app-003",
+      "conclusion": "failure",
+      "failure_annotations": [
+        "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+      ]
+    },
+    {
+      "id": 123247362110,
+      "name": "tenant-foundation",
+      "conclusion": "failure",
+      "failure_annotations": [
+        "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+      ]
+    },
+    {
+      "id": 123247362024,
+      "name": "planning",
+      "conclusion": "failure",
+      "failure_annotations": [
+        "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+      ]
+    },
+    {
+      "id": 123247361929,
+      "name": "app-001",
+      "conclusion": "failure",
+      "failure_annotations": [
+        "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+      ]
+    },
+    {
+      "id": 123247361921,
+      "name": "foundation",
+      "conclusion": "failure",
+      "failure_annotations": [
+        "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+      ]
+    }
+  ],
+  "user_notified": true,
+  "aws_allowance_unchanged": true,
+  "retry_policy": "rerun affected exact-source CI after account issue is resolved; no repeated empty reruns"
+}
