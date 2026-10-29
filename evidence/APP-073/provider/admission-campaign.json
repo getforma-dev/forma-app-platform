@@ -1,0 +1,148 @@
+{
+  "checks": [
+    {
+      "name": "operator defaults (D7.17) recorded before any code exists",
+      "passed": true
+    },
+    {
+      "name": "operator backfill creates the five genesis audit heads for both existing organizations once",
+      "passed": true
+    },
+    {
+      "name": "operator issues a 256-bit code shown once on stdout; storage, dump and list hold only its digest, identifiers, status and counts",
+      "passed": true
+    },
+    {
+      "name": "resolve_code before scope: known digest names its organization; unknown and malformed resolve to nothing",
+      "passed": true
+    },
+    {
+      "name": "three pre-signup reservations consume no redemption slot; a foreign or malformed organization refuses without disclosure",
+      "passed": true
+    },
+    {
+      "name": "pending admission requires the registry-bound verified identity; an unverified mailbox commits no slot, membership or entitlement",
+      "passed": true
+    },
+    {
+      "name": "a redemption cancelled before commit rolls back: no principal, slot or audit event",
+      "passed": true
+    },
+    {
+      "name": "verified redemption commits principal, epoch-1 membership, template grants, 30-day entitlement, redemption, audit and exhaustion atomically; the member reads",
+      "passed": true
+    },
+    {
+      "name": "identical retry returns the stored admission without a second slot; changed payload or another principal refuses; the exhausted code refuses new holds",
+      "passed": true
+    },
+    {
+      "name": "after a store restart the admission persists and its identical retry still replays",
+      "passed": true
+    },
+    {
+      "name": "an entitlement that expires after the precheck is refused by the fence's re-read, and an expired entitlement denies the next precheck",
+      "passed": true
+    },
+    {
+      "name": "operation-first: the operator's entitlement revocation waits on the member fence until the operation commits; the next request (old or new epoch) is refused",
+      "passed": true
+    },
+    {
+      "name": "an identical retry after the member's entitlement was revoked is refused, not replayed as admitted",
+      "passed": true
+    },
+    {
+      "name": "code revocation blocks unused pending admissions and new reservations while an already-admitted member's entitlement stays active",
+      "passed": true
+    },
+    {
+      "name": "revocation-first: the fence waits behind the operator's entitlement revocation and then refuses; entitlement revocation alone denies the member",
+      "passed": true
+    },
+    {
+      "name": "redemption-first: the operator's code revocation waits on the code row until the redemption commits; the admission stands and the code is then revoked",
+      "passed": true
+    },
+    {
+      "name": "revocation-first: the redemption waits on the code row behind the revocation and then refuses with no principal, membership or entitlement",
+      "passed": true
+    },
+    {
+      "name": "two principals racing for the last slot (observed lock wait): exactly one holds it and is admitted, the other is refused as exhausted",
+      "passed": true
+    },
+    {
+      "name": "two concurrent identical redemptions return one stored admission and consume exactly one slot",
+      "passed": true
+    },
+    {
+      "name": "a membership revocation that commits while an identical retry is in flight (after the stored redemption was found) makes the retry refused; no slot is consumed",
+      "passed": true
+    },
+    {
+      "name": "reservation expiry, pending-admission expiry (denied for reconciliation) and code expiry refuse; extension is audited and an expired code is never resurrected",
+      "passed": true
+    },
+    {
+      "name": "sign-out advances only the member's own current epoch; the stale request is refused afterwards; two concurrent sign-outs queue on the member row (one advances, one refuses) without deadlock",
+      "passed": true
+    },
+    {
+      "name": "an inactive provider binding refuses both the pending admission and the redemption before any definer call",
+      "passed": true
+    },
+    {
+      "name": "item 7 (loopback fAuth stand-in, simulated transport): identities created at the provider through confirmed server-only invitations gain no principal, membership or entitlement once the code is revoked, expired or exhausted; the failed remote revocation leaves the code revoked; reconcile confirms every remote revocation without a second create",
+      "passed": true
+    },
+    {
+      "name": "application roles as forged operators are refused by the command and by PostgreSQL (42501); a wrong operator password is refused; nothing was written",
+      "passed": true
+    },
+    {
+      "name": "operator and admission audit chains recompute from genesis to their heads in both organizations; no issued code and no provider invitation token appears in a full database dump",
+      "passed": true
+    },
+    {
+      "name": "local database and private fixture files removed",
+      "passed": true
+    }
+  ],
+  "codes_issued": 11,
+  "defaults": {
+    "code_expiry_days_default": 14,
+    "code_expiry_days_max": 30,
+    "code_secret_bytes": 32,
+    "handle_bytes": 16,
+    "list_rows_max": 100,
+    "max_redemptions_default": 1,
+    "max_redemptions_max": 10,
+    "pending_admission_hours": 24,
+    "presignup_reservation_minutes": 10,
+    "presignup_reservations_live_max": 10,
+    "provider": {
+      "connect_timeout_seconds": 5,
+      "list_page_size": 200,
+      "list_pages_max": 50,
+      "provider_invitation_hours_default": 72,
+      "reconcile_clock_skew_seconds": 300,
+      "reconcile_grace_seconds": 120,
+      "reconcile_operations_max": 100,
+      "request_deadline_seconds": 10,
+      "response_bytes_max": 1048576
+    },
+    "trial_entitlement_days": 30
+  },
+  "limits": [
+    "Synthetic local password authentication is not RDS IAM.",
+    "Identities are synthetic registry-bound fixtures; no session or browser flow is exercised (APP-009/074).",
+    "The provider is the loopback fAuth management stand-in app/runtime/fake_fauth.py (simulated transport), never the deployed fAuth; hosted invitation, mail suppression and PAR remain APP-074/076.",
+    "Raw codes and provider invitation tokens are never written to this report."
+  ],
+  "managed_acceptance": false,
+  "passed": true,
+  "schema_version": 1,
+  "scope": "APP-073 isolated native PostgreSQL TLS admission and operator-command qualification",
+  "server_version": "16.13 (Debian 16.13-1.pgdg13+1)"
+}
