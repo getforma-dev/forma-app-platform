@@ -1,11 +1,11 @@
 # Six-phase delivery roadmap
 
-The workspace preparation is complete. Application implementation is organized into six phases, with 80 tickets and 12 sprints. **GenUI** owns the application; **FormaStack** owns the four upstream handoff items. No phase has started or passed its implementation gate yet.
+The workspace preparation is complete. Application implementation is organized into six phases, with 81 tickets and 12 sprints. **GenUI** owns the application; **FormaStack** owns the four upstream handoff items. No phase has started or passed its implementation gate yet.
 
 | Phase | Sprints | Tickets | What we will have at the end |
 |---|---|---|---|
 | [1 — Foundations and first saved workflow](../../Tickets/phases/PH01.md) | S01–S02 | APP-001–014, APP-073–078 (20) | One authorized query, receipt and durable decision that survives retry, conflict and reopen |
-| [2 — Working data and workspace](../../Tickets/phases/PH02.md) | S03–S05 | APP-015–031 (17) | Real file imports, correct results, accessible canvas/forms and saved work |
+| [2 — Working data and workspace](../../Tickets/phases/PH02.md) | S03–S05 | APP-015–031, APP-081 (18) | Real file imports, correct results, accessible canvas/forms and saved work |
 | [3 — App creation, governance and AI](../../Tickets/phases/PH03.md) | S06–S08 | APP-032–047 (16) | General app authoring, preview, governed publication, version changes and bounded AI |
 | [4 — Complete two-app demonstration](../../Tickets/phases/PH04.md) | S09–S10 | APP-048–057 (10) | Northstar and Spend Review work through the same build, with sharing, reuse and recovery proven |
 | [5 — Managed pilot controls](../../Tickets/phases/PH05.md) | S11 | APP-058–066, APP-080 (10) | Hosted deployment, service identity, audit, support and deletion controls |

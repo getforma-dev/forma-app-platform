@@ -50,7 +50,7 @@ PH02's integrated entry requires accepted PH01. Its plan permits individual work
 | APP-017 import jobs, then APP-018 interpretation | APP-004, APP-015, APP-016; then APP-017 | Qualified parser/module/config identities and lower-only limits; real job/storage foundation. Preserve inspection before confirmation and original-to-normalized provenance. |
 | APP-020 typed query completion | APP-005, APP-012, APP-018 | Qualified subset/refusal ledger plus authenticated receipts and confirmed revisions. APP-021–025 then own exact units/windows/currencies, domain operators, record snapshots, admission/cache authority and filter epochs. |
 | APP-026 navigation | APP-009, APP-010 | Real sessions and current trial entitlement, admitted definitions and persisted work. |
-| APP-019 upload UI and APP-027 canvas | APP-003/017/018 for upload; APP-003/025 for canvas | Accepted native composition and real import/query states. APP-028–031 then own full renderer/state accessibility, general forms and distinct new/continued work. |
+| APP-019 upload UI, APP-027 canvas geometry and APP-081 linked views | APP-003/017/018 for upload; APP-003/010 for canvas geometry; APP-025/027 for linked views on the canvas (ADR-009 D9.14) | Accepted native composition and real import/query states. APP-028–031 then own full renderer/state accessibility, general forms and distinct new/continued work. |
 
 The [PH02 page](../../Tickets/phases/PH02.md) owns the complete ordering and exit checks. Requalify actual imports, calculations, keyboard/screen-reader states, reload and cross-context response refusal as these behaviors appear. A parser host measurement or isolated 3-GiB query container does not qualify the combined 2-vCPU/8-GiB app task or the managed client latency target.
 
