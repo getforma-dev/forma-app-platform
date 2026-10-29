@@ -1,0 +1,70 @@
+{
+  "buildx.build.provenance": {
+    "builder": {
+      "id": ""
+    },
+    "buildType": "https://mobyproject.org/buildkit@v1",
+    "materials": [
+      {
+        "uri": "pkg:docker/node@22.21.0-bookworm-slim?digest=sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b\u0026platform=linux%2Farm64",
+        "digest": {
+          "sha256": "f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b"
+        }
+      },
+      {
+        "uri": "pkg:docker/python@3.11.14-slim-bookworm?digest=sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d\u0026platform=linux%2Farm64",
+        "digest": {
+          "sha256": "65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d"
+        }
+      },
+      {
+        "uri": "pkg:docker/rust@1.93.1-bookworm?digest=sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31\u0026platform=linux%2Farm64",
+        "digest": {
+          "sha256": "7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31"
+        }
+      }
+    ],
+    "invocation": {
+      "configSource": {
+        "entryPoint": "Dockerfile"
+      },
+      "parameters": {
+        "frontend": "dockerfile.v0",
+        "locals": [
+          {
+            "name": "context"
+          },
+          {
+            "name": "dockerfile"
+          }
+        ],
+        "root": {
+          "configSource": {
+            "path": "Dockerfile"
+          },
+          "request": {
+            "args": {
+              "vcs:localdir:context": ".",
+              "vcs:localdir:dockerfile": "app",
+              "vcs:revision": "d39d2f911ad3e631e8ce4c2fb28defdd8e90234f",
+              "vcs:source": "https://github.com/getforma-dev/forma-app-platform.git"
+            }
+          }
+        },
+        "compatibilityVersion": 30
+      },
+      "environment": {
+        "dockerfileVersion": "1.27.0",
+        "platform": "linux/arm64"
+      }
+    }
+  },
+  "buildx.build.ref": "desktop-linux/desktop-linux/t87k4y5tnbgcz9nymwv1glex7",
+  "containerimage.descriptor": {
+    "mediaType": "application/vnd.oci.image.index.v1+json",
+    "digest": "sha256:160296acae0418f0ac46b71fe21e27c19f8635d4494bef785a806769c2e19e46",
+    "size": 856
+  },
+  "containerimage.digest": "sha256:160296acae0418f0ac46b71fe21e27c19f8635d4494bef785a806769c2e19e46",
+  "image.name": "docker.io/library/genui-app008:local-r5"
+}

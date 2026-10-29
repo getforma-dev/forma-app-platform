@@ -1,0 +1,256 @@
+{
+  "boundaries": {
+    "bytes_per_minute": "5",
+    "coverage": "complete",
+    "destinations": {
+      "198.51.100.7": "30",
+      "203.0.113.10": "20"
+    },
+    "included_ids": [
+      "B1",
+      "B2"
+    ],
+    "matched_bytes": "20",
+    "matches": {
+      "B1": "INV-EXACT",
+      "B2": null
+    },
+    "minute_bytes": [
+      "20",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "30"
+    ],
+    "total_bytes": "50",
+    "total_scope": "observed selected asset and half-open window",
+    "unmatched_bytes": "30",
+    "unmatched_bytes_per_minute": "3"
+  },
+  "canary": {
+    "bytes_per_minute": "4",
+    "coverage": "complete",
+    "destinations": {
+      "198.51.100.200": "17",
+      "203.0.113.200": "23"
+    },
+    "included_ids": [
+      "C1",
+      "C2"
+    ],
+    "matched_bytes": "17",
+    "matches": {
+      "C1": "CANARY-EXACT",
+      "C2": null
+    },
+    "minute_bytes": [
+      "17",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "23"
+    ],
+    "total_bytes": "40",
+    "total_scope": "observed selected asset and half-open window",
+    "unmatched_bytes": "23",
+    "unmatched_bytes_per_minute": "23/10"
+  },
+  "inventory-overlap": {
+    "bytes_per_minute": "114000",
+    "coverage": "complete",
+    "destinations": {
+      "198.51.100.7": "900000",
+      "203.0.113.10": "120000",
+      "203.0.113.20": "120000"
+    },
+    "included_ids": [
+      "E1",
+      "E2",
+      "E3",
+      "E4",
+      "E5"
+    ],
+    "matched_bytes": "240000",
+    "matches": {
+      "E1": "INV-EXACT",
+      "E2": "INV-NET25",
+      "E3": null,
+      "E4": null,
+      "E5": "INV-EXACT"
+    },
+    "minute_bytes": [
+      "60000",
+      "120000",
+      "300000",
+      "600000",
+      "0",
+      "60000",
+      "0",
+      "0",
+      "0",
+      "0"
+    ],
+    "total_bytes": "1140000",
+    "total_scope": "observed selected asset and half-open window",
+    "unmatched_bytes": "900000",
+    "unmatched_bytes_per_minute": "90000"
+  },
+  "northstar": {
+    "bytes_per_minute": "114000",
+    "coverage": "complete",
+    "destinations": {
+      "198.51.100.7": "900000",
+      "203.0.113.10": "120000",
+      "203.0.113.20": "120000"
+    },
+    "included_ids": [
+      "E1",
+      "E2",
+      "E3",
+      "E4",
+      "E5"
+    ],
+    "matched_bytes": "240000",
+    "matches": {
+      "E1": "INV-EXACT",
+      "E2": "INV-NET24",
+      "E3": null,
+      "E4": null,
+      "E5": "INV-EXACT"
+    },
+    "minute_bytes": [
+      "60000",
+      "120000",
+      "300000",
+      "600000",
+      "0",
+      "60000",
+      "0",
+      "0",
+      "0",
+      "0"
+    ],
+    "total_bytes": "1140000",
+    "total_scope": "observed selected asset and half-open window",
+    "unmatched_bytes": "900000",
+    "unmatched_bytes_per_minute": "90000"
+  },
+  "ops-runner": {
+    "bytes_per_minute": "21000",
+    "coverage": "complete",
+    "destinations": {
+      "198.51.100.8": "30000",
+      "203.0.113.10": "180000"
+    },
+    "included_ids": [
+      "O1",
+      "O2"
+    ],
+    "matched_bytes": "180000",
+    "matches": {
+      "O1": "INV-EXACT",
+      "O2": null
+    },
+    "minute_bytes": [
+      "180000",
+      "0",
+      "0",
+      "0",
+      "30000",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0"
+    ],
+    "total_bytes": "210000",
+    "total_scope": "observed selected asset and half-open window",
+    "unmatched_bytes": "30000",
+    "unmatched_bytes_per_minute": "3000"
+  },
+  "paired_csv_xlsx_datasets": [
+    "northstar-events",
+    "northstar-inventory",
+    "ops-runner-events",
+    "spend-review",
+    "canary-events",
+    "canary-inventory",
+    "window-boundaries",
+    "inventory-overlap",
+    "invalid-timestamp",
+    "ambiguous-timestamp",
+    "fractional-timestamp",
+    "mixed-currency",
+    "evidence-text"
+  ],
+  "partial-coverage": {
+    "bytes_per_minute": null,
+    "coverage": "partial",
+    "destinations": {
+      "198.51.100.7": "900000",
+      "203.0.113.10": "120000",
+      "203.0.113.20": "120000"
+    },
+    "included_ids": [
+      "E1",
+      "E2",
+      "E3",
+      "E4",
+      "E5"
+    ],
+    "matched_bytes": "240000",
+    "matches": {
+      "E1": "INV-EXACT",
+      "E2": "INV-NET24",
+      "E3": null,
+      "E4": null,
+      "E5": "INV-EXACT"
+    },
+    "minute_bytes": [
+      "60000",
+      "120000",
+      "300000",
+      "600000",
+      null,
+      "60000",
+      null,
+      null,
+      null,
+      null
+    ],
+    "total_bytes": "1140000",
+    "total_scope": "observed selected asset and half-open window",
+    "unmatched_bytes": "900000",
+    "unmatched_bytes_per_minute": null
+  },
+  "refusals": {
+    "ambiguous-timestamp": "timestamp_refused",
+    "cumulative-counter": "semantics_refused",
+    "fractional-timestamp": "timestamp_refused",
+    "invalid-timestamp": "timestamp_refused",
+    "mixed-currency": "currency_refused",
+    "undeclared-units": "unit_refused"
+  },
+  "scope": "independent fixture oracle; no application or unsupported query-operator acceptance",
+  "source_count": 28,
+  "spend-review": {
+    "currency": "USD",
+    "exponent": 2,
+    "initial_decisions": [],
+    "queue_cents": "45000",
+    "queue_ids": [
+      "EXP-002"
+    ],
+    "total_cents": "64000"
+  }
+}

@@ -19,8 +19,11 @@ import time
 import uuid
 
 ROLES = ("workspace", "control", "data", "worker")
+DATABASE_SCHEMA_VERSION = 2
+INITIAL_MIGRATION_SHA256 = "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963"
 QUALIFICATION_JSON_ENV = "GENUI_AUTH_QUALIFICATION_CONFIG_JSON"
 QUALIFICATION_FILE_ENV = "GENUI_AUTH_QUALIFICATION_CONFIG_FILE"
+IDENTITY_REGISTRY_FILE_ENV = "GENUI_IDENTITY_REGISTRY_FILE"
 
 
 class Refused(ValueError):
@@ -53,6 +56,7 @@ def take_qualification_json(mode):
 
 class QualificationFile:
     """One newly created secret file; never replace or clean someone else's file."""
+    PREFIX = ".auth-qualification-"
     def __init__(self, runtime_path, payload):
         self.directory_fd = None
         self.file_fd = None
@@ -68,7 +72,7 @@ class QualificationFile:
             self.directory_fd = os.open(self.directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
             self.directory_identity = os.fstat(self.directory_fd)
             self.check_directory()
-            self.name = ".auth-qualification-" + uuid.uuid4().hex + ".json"
+            self.name = self.PREFIX + uuid.uuid4().hex + ".json"
             descriptor = os.open(self.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
                                  0o600, dir_fd=self.directory_fd)
             # Record ownership immediately: even a later write/fsync failure
@@ -135,6 +139,16 @@ class QualificationFile:
             finally:
                 os.close(self.directory_fd)
                 self.directory_fd = None
+
+
+class EmptyIdentityRegistryFile(QualificationFile):
+    """Private deny-all registry using the same owned-inode file lifecycle."""
+    PREFIX = ".identity-registry-"
+
+    def __init__(self, runtime_path):
+        payload = json.dumps({"schema_version": 1, "registry_version": str(uuid.uuid4()), "bindings": []},
+                             separators=(",", ":")).encode("utf-8")
+        super().__init__(runtime_path, payload)
 
 
 def load(path, now=None):
@@ -251,6 +265,28 @@ def refresh(path):
     atomic_write(path, value)
 
 
+def migration_directory():
+    directory = Path(__file__).parent / "migrations"
+    return directory if directory.exists() else Path(__file__).parent.parent / "migrations"
+
+
+def probe_database(connection, username):
+    """Catalog proof precedes every application metadata/version read."""
+    require(username in tuple("genui_" + name for name in ROLES))
+    verify_schema_catalog(connection, migration_directory())
+    row = connection.execute("""SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_database(),
+      r.rolsuper,r.rolcreatedb,r.rolcreaterole,r.rolbypassrls,r.rolcanlogin,
+      pg_catalog.pg_has_role(current_user,'genui_owner','MEMBER'),pg_catalog.pg_has_role(current_user,'rds_iam','MEMBER'),
+      (SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid=pg_catalog.pg_backend_pid()),
+      (SELECT version FROM genui_meta.schema_version WHERE singleton=true)
+      FROM pg_catalog.pg_roles r WHERE r.rolname=current_user""").fetchone()
+    require(row == (username,username,"genui",False,False,False,False,True,False,True,True,DATABASE_SCHEMA_VERSION))
+    memberships = connection.execute("""SELECT r.rolname::pg_catalog.text FROM pg_catalog.pg_roles r
+      WHERE r.rolname NOT IN (current_user,'rds_iam')
+      AND pg_catalog.pg_has_role(current_user,r.oid,'MEMBER') ORDER BY r.rolname""").fetchall()
+    require(memberships == [])
+
+
 def probe(path, generation):
     import psycopg
     value = load(path)
@@ -260,21 +296,8 @@ def probe(path, generation):
         role = db["roles"][name]
         with psycopg.connect(host=db["host"], port=5432, dbname="genui", user=role["username"], password=role["token"],
                              sslmode="verify-full", sslrootcert=os.environ["GENUI_RDS_CA_FILE"], connect_timeout=3,
-                             options="-c default_transaction_read_only=on -c statement_timeout=3000") as connection:
-            row = connection.execute("""SELECT session_user::text, current_user::text, current_database(),
-              r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolbypassrls, r.rolcanlogin,
-              pg_has_role(current_user,'genui_owner','MEMBER'), pg_has_role(current_user,'rds_iam','MEMBER'),
-              (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),
-              (SELECT version FROM genui_meta.schema_version WHERE singleton=true)
-              FROM pg_roles r WHERE r.rolname=current_user""").fetchone()
-            require(row == (role["username"], role["username"], "genui", False, False, False, False, True, False, True, True, 1))
-            # Flags alone do not detect rds_superuser or predefined PostgreSQL
-            # roles. Admit no memberships beyond this login and rds_iam, using
-            # the live catalog so missing/version-specific role names are safe.
-            memberships = connection.execute("""SELECT r.rolname::text FROM pg_roles r
-              WHERE r.rolname NOT IN (current_user, 'rds_iam')
-              AND pg_has_role(current_user, r.oid, 'MEMBER') ORDER BY r.rolname""").fetchall()
-            require(memberships == [])
+                             options="-c search_path=pg_catalog,pg_temp -c default_transaction_read_only=on -c statement_timeout=3000") as connection:
+            probe_database(connection, role["username"])
     for tenant in value["storage"]["tenants"]:
         session = scoped_session({"AccessKeyId": tenant["access_key_id"], "SecretAccessKey": tenant["secret_access_key"], "SessionToken": tenant["session_token"]}, value["storage"]["region"])
         session.client("s3", config=sdk_config()).list_objects_v2(Bucket=value["storage"]["bucket"], Prefix=tenant["prefix"], MaxKeys=1)
@@ -288,17 +311,125 @@ def probe(path, generation):
     return {"generation": generation, "file_sha256": value["_file_sha256"], "expires_at": value["expires_at"], "checked_at": int(time.time())}
 
 
+def migration_sources(directory):
+    """Only the two reviewed image-local migrations; no caller SQL or downgrade."""
+    directory = Path(directory)
+    manifest = json.loads((directory / "manifest.json").read_text())
+    require(set(manifest) == {"schema_version", "database_version", "migrations", "catalog"})
+    require(manifest["schema_version"] == 1 and manifest["database_version"] == DATABASE_SCHEMA_VERSION)
+    require(len(manifest["migrations"]) == 2)
+    expected = ("0001_role_foundation.sql", "0002_tenant_foundation.sql")
+    result = []
+    for version, (item, name) in enumerate(zip(manifest["migrations"], expected), 1):
+        require(set(item) == {"version", "file", "sha256"} and item["version"] == version and item["file"] == name)
+        raw = (directory / name).read_bytes()
+        require(0 < len(raw) <= 262144 and hashlib.sha256(raw).hexdigest() == item["sha256"])
+        if version == 1: require(item["sha256"] == INITIAL_MIGRATION_SHA256)
+        result.append((version, item["sha256"], raw.decode("utf-8")))
+    require({p.name for p in directory.glob("*.sql")} == set(expected))
+    catalog_resources(directory)
+    return result
+
+
+def catalog_resources(directory):
+    """Image-pinned, readable logical catalogs; never learn expected state live."""
+    directory = Path(directory)
+    manifest = json.loads((directory / "manifest.json").read_text())
+    entries = manifest["catalog"]
+    names = ("catalog-query.json", "catalog-v1.json", "catalog-v2.json")
+    require(isinstance(entries, list) and len(entries) == len(names))
+    documents = []
+    for item, name in zip(entries, names):
+        require(set(item) == {"file", "sha256"} and item["file"] == name)
+        raw = (directory / name).read_bytes()
+        require(0 < len(raw) <= 262144 and hashlib.sha256(raw).hexdigest() == item["sha256"])
+        documents.append(json.loads(raw))
+    query = documents[0]
+    require(set(query) == {"schema_version", "search_path", "max_output_bytes", "section_row_limit", "sql"})
+    require(query["schema_version"] == 1 and query["search_path"] == "pg_catalog, pg_temp"
+            and query["max_output_bytes"] == 262144 and query["section_row_limit"] == 1025
+            and isinstance(query["sql"], str) and 0 < len(query["sql"].encode()) <= 65536)
+    for expected in documents[1:]:
+        require(isinstance(expected, dict) and expected and all(isinstance(rows, list) and len(rows) < 1025 for rows in expected.values()))
+    require(set(documents[1]) == set(documents[2]))
+    return query, {1: documents[1], 2: documents[2]}
+
+
+def verify_schema_catalog(connection, directory, version=DATABASE_SCHEMA_VERSION):
+    """Same app-readable projection is embedded by native admission/readiness.
+
+    Caller owns a transaction; catalog-first deparsing is transaction-local.
+    Compare exact logical facts before reading untrusted metadata relations.
+    """
+    require(not connection.autocommit)
+    require(connection.execute("SHOW session_replication_role").fetchone() == ("origin",))
+    query, expected = catalog_resources(directory)
+    require(version in expected)
+    # An omitted pg_temp is implicitly searched first for relations/types.
+    # List it explicitly last, including on operator connections with TEMP.
+    connection.execute("SET LOCAL search_path=pg_catalog, pg_temp")
+    rows = connection.execute(query["sql"]).fetchall()
+    require(len(rows) == 1 and isinstance(rows[0][0], str) and 0 < len(rows[0][0].encode()) <= query["max_output_bytes"])
+    require(json.loads(rows[0][0]) == expected[version])
+
+
+def initialize_migration_history(connection, initial_digest):
+    """Only after the verified legacy catalog, in the same upgrade transaction."""
+    connection.execute("""SET LOCAL ROLE genui_owner;
+      CREATE TABLE genui_meta.schema_migrations (
+        version integer PRIMARY KEY CHECK (version BETWEEN 1 AND 2),
+        sha256 text NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'), applied_at timestamptz NOT NULL DEFAULT clock_timestamp());
+      ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check;
+      ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK (version BETWEEN 1 AND 2);
+      RESET ROLE;""")
+    connection.execute("INSERT INTO genui_meta.schema_migrations(version,sha256) VALUES (1,%s)", (initial_digest,))
+
+
+def apply_migrations(connection, directory):
+    """Caller owns one transaction; errors roll it all back, including history."""
+    require(not connection.autocommit)
+    # Replica mode suppresses ordinary FK triggers even when their catalog
+    # enablement flags still look correct. Refuse before any migration writes.
+    require(connection.execute("SHOW session_replication_role").fetchone() == ("origin",))
+    # Database defaults may explicitly put an untrusted schema before pg_catalog.
+    # Fix this transaction's lookup path before identity/advisory/metadata reads.
+    connection.execute("SET LOCAL search_path=pg_catalog, pg_temp")
+    sources = migration_sources(directory)
+    require(connection.execute("SELECT session_user::text,current_user::text,current_database()").fetchone()
+            == ("genui_migration", "genui_migration", "genui"))
+    connection.execute("SELECT pg_advisory_xact_lock(1819409017, 2)")
+    exists = connection.execute("SELECT to_regclass('genui_meta.schema_version') IS NOT NULL").fetchone()[0]
+    if not exists:
+        require(connection.execute("SELECT count(*) FROM pg_namespace WHERE nspname IN ('genui_meta','genui','genui_private')").fetchone() == (0,))
+        connection.execute(sources[0][2])
+    has_history = connection.execute("SELECT to_regclass('genui_meta.schema_migrations') IS NOT NULL").fetchone()[0]
+    if has_history:
+        # A committed history1 cannot be produced by this atomic runner. Never
+        # treat a partial/forged ledger as permission to skip the legacy proof.
+        verify_schema_catalog(connection, directory, 2)
+        require(connection.execute("SELECT version,sha256 FROM genui_meta.schema_migrations ORDER BY version").fetchall()
+                == [(version, digest) for version, digest, _ in sources])
+        require(connection.execute("SELECT singleton,version FROM genui_meta.schema_version").fetchall() == [(True, 2)])
+        return
+    verify_schema_catalog(connection, directory, 1)
+    require(connection.execute("SELECT singleton,version FROM genui_meta.schema_version").fetchall() == [(True, 1)])
+    initialize_migration_history(connection, sources[0][1])
+    for version, digest, source in sources[1:]:
+        connection.execute(source)
+        connection.execute("INSERT INTO genui_meta.schema_migrations(version,sha256) VALUES (%s,%s)", (version, digest))
+        connection.execute("UPDATE genui_meta.schema_version SET version=%s WHERE singleton", (version,))
+    require(connection.execute("SELECT version FROM genui_meta.schema_version").fetchone() == (DATABASE_SCHEMA_VERSION,))
+    verify_schema_catalog(connection, directory, 2)
+
+
 def migrate():
     import psycopg
     require(os.environ["PGDATABASE"] == "genui" and os.environ["PGUSER"] == "genui_migration")
     with psycopg.connect(host=os.environ["PGHOST"], port=5432, dbname="genui", user="genui_migration", password=os.environ["PGPASSWORD"],
                          sslmode="verify-full", sslrootcert=os.environ["PGSSLROOTCERT"], connect_timeout=5,
                          options="-c statement_timeout=30000 -c lock_timeout=5000") as connection:
-        require(connection.execute("SELECT session_user::text,current_user::text,current_database()").fetchone() == ("genui_migration", "genui_migration", "genui"))
-        migration = Path(__file__).parent / "migrations/0001_role_foundation.sql"
-        if not migration.exists(): migration = Path(__file__).parent.parent / "migrations/0001_role_foundation.sql"
-        connection.execute(migration.read_text())
-    print("initial_role_migration_complete")
+        apply_migrations(connection, migration_directory())
+    print("tenant_foundation_migration_complete")
 
 
 def qualification(path):
@@ -378,6 +509,7 @@ def serve(path):
     for sig in (signal.SIGTERM, signal.SIGINT): signal.signal(sig, lambda *_: stop.set())
     child = None
     qualification_file = None
+    registry_file = None
     credentials_started = False
     try:
         if injected is not None:
@@ -385,6 +517,9 @@ def serve(path):
         injected = None
         Path(path).parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         child_environment = os.environ.copy()
+        if IDENTITY_REGISTRY_FILE_ENV not in child_environment:
+            registry_file = EmptyIdentityRegistryFile(path)
+            child_environment[IDENTITY_REGISTRY_FILE_ENV] = str(registry_file.path)
         # Always omit the raw injected value; the file path is the only handoff.
         child_environment.pop(QUALIFICATION_JSON_ENV, None)
         if qualification_file is not None:
@@ -402,6 +537,8 @@ def serve(path):
                     # a transient managed-dependency retry.
                     if qualification_file is not None:
                         qualification_file.check_file()
+                    if registry_file is not None:
+                        registry_file.check_file()
                     try:
                         child = subprocess.Popen([os.environ.get("GENUI_BINARY", "/app/genui")], env=child_environment)
                     except Exception:
@@ -420,8 +557,12 @@ def serve(path):
                 if qualification_file is not None:
                     qualification_file.close()
             finally:
-                if credentials_started:
-                    Path(path).unlink(missing_ok=True)
+                try:
+                    if registry_file is not None:
+                        registry_file.close()
+                finally:
+                    if credentials_started:
+                        Path(path).unlink(missing_ok=True)
     return 0
 
 

@@ -1,0 +1,1222 @@
+{
+  "datasets": {
+    "canary-events": {
+      "queries": {
+        "destinations": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "group_by": [
+                {
+                  "field_id": "destination",
+                  "input_id": "events"
+                }
+              ],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        },
+        "timeline_observed": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "field": {
+                "field_id": "time",
+                "input_id": "events"
+              },
+              "output_field": "time",
+              "seconds": 60,
+              "timezone": "UTC",
+              "type": "time_bucket"
+            },
+            {
+              "group_by": [
+                {
+                  "field_id": "time",
+                  "input_id": "events"
+                }
+              ],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        },
+        "total": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "group_by": [],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        }
+      },
+      "results": {
+        "destinations": {
+          "elapsed_seconds": 0.02015045799635118,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:f66e41bd597fc45c5d43243eea04c00f5314c817417ccc9bfbdde2671f445efe",
+            "digest": "sha256:800acdd6c91138033308a7e66161a700d88e4c2bccf3967fba94c518f1b864c7",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:3978a5e2f9263f6c2dc1adc60b365942a13844d607bb70b09904024012d1a2e5",
+              "query_digest": "sha256:3978a5e2f9263f6c2dc1adc60b365942a13844d607bb70b09904024012d1a2e5"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:3b97f980593591f0cfdf2fea9c337435f74ba4835cf12ca05e85f2557e64ba6c",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:0cee5432361c1014ff8f77f482004ce4831c4486f493cf18b8117be66928280c",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "0cee5432-361c-4014-bf8f-77f482004ce4"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "198.51.100.200",
+              "17"
+            ],
+            [
+              "203.0.113.200",
+              "23"
+            ]
+          ]
+        },
+        "timeline_observed": {
+          "elapsed_seconds": 0.02058962500450434,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:1696feb05075e159b1d460ea020a5b4b96e622f998644efbea6257b40fa11481",
+            "digest": "sha256:317a26186fc682e176178450d3e88ef8a3b88b57c4631e7e3df23bb595b65249",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:9111193b632cc6bfa0d56f0b8d912e61cee1d47248bc91c62a809e17ad2d89ef",
+              "query_digest": "sha256:9111193b632cc6bfa0d56f0b8d912e61cee1d47248bc91c62a809e17ad2d89ef"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:83a3cf9e39f8eb2aef76764835c8b74a5af14e615fd177eeb2d396af96b53267",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:0cee5432361c1014ff8f77f482004ce4831c4486f493cf18b8117be66928280c",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "0cee5432-361c-4014-bf8f-77f482004ce4"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "2026-10-22T10:00:00Z",
+              "17"
+            ],
+            [
+              "2026-10-22T10:09:00Z",
+              "23"
+            ]
+          ]
+        },
+        "total": {
+          "elapsed_seconds": 0.019905166001990438,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:71a4f8a919dac80e6c0abdb71299071703fe3656e48556597cefc1cd891a5b1a",
+            "digest": "sha256:b73588eac4566a18b2aad984373606b1c38c4572b1f40f3cc49f634f6e7648e4",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:384f65d165bb82cb37670f480982a17a313f19fdf71409d624e35654115f132a",
+              "query_digest": "sha256:384f65d165bb82cb37670f480982a17a313f19fdf71409d624e35654115f132a"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:64ec955d849d0eee0f200b244426a575daf47211d617a376a075474af931a1a5",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:0cee5432361c1014ff8f77f482004ce4831c4486f493cf18b8117be66928280c",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "0cee5432-361c-4014-bf8f-77f482004ce4"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "40"
+            ]
+          ]
+        }
+      },
+      "source_original_digest": "sha256:5e077aa8b4cd7e168b13af53f4d39e6e8cb2d5a0fd395e8a4986d2055eed3e0c",
+      "temporary_parquet_digest": "sha256:0cee5432361c1014ff8f77f482004ce4831c4486f493cf18b8117be66928280c",
+      "trusted_fixture_adapter": {
+        "not_application_import": true,
+        "numeric_event_id_to_original": {
+          "1": "C1",
+          "2": "C2"
+        },
+        "selected_asset": "canary-worker"
+      }
+    },
+    "northstar-events": {
+      "queries": {
+        "destination_filter": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "comparison": "eq",
+              "field": {
+                "field_id": "destination",
+                "input_id": "events"
+              },
+              "type": "filter",
+              "value": {
+                "type": "text",
+                "value": "198.51.100.7"
+              }
+            },
+            {
+              "group_by": [],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        },
+        "destinations": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "group_by": [
+                {
+                  "field_id": "destination",
+                  "input_id": "events"
+                }
+              ],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        },
+        "one_row_page": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "fields": [
+                {
+                  "direction": "asc",
+                  "field": {
+                    "field_id": "event_id",
+                    "input_id": "events"
+                  }
+                }
+              ],
+              "stable_tiebreak": {
+                "field_id": "event_id",
+                "input_id": "events"
+              },
+              "type": "sort"
+            },
+            {
+              "rows": 1,
+              "type": "limit"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        },
+        "timeline_observed": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "field": {
+                "field_id": "time",
+                "input_id": "events"
+              },
+              "output_field": "time",
+              "seconds": 60,
+              "timezone": "UTC",
+              "type": "time_bucket"
+            },
+            {
+              "group_by": [
+                {
+                  "field_id": "time",
+                  "input_id": "events"
+                }
+              ],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        },
+        "total": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "group_by": [],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        }
+      },
+      "results": {
+        "destination_filter": {
+          "elapsed_seconds": 0.0199012919983943,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:ad96de5faab2916d01371bcb1ca8735778ef01e7f203fd1049106be943b10a74",
+            "digest": "sha256:a39e0c85d1b72f9c5cc7ca0bf4c2af9a23f9a3a452fe10b1c53f34eebfa76290",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:de61460d6e69887f8dd32044776540e55f20a152317d997440559b37c71b1ca5",
+              "query_digest": "sha256:de61460d6e69887f8dd32044776540e55f20a152317d997440559b37c71b1ca5"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:3ae98befe7487a6998a491b19a17eb0b609da387673806b4f53b467aacc7d40c",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:275027a01a681ca8ca63ad59f22b03a3767c7e215455dfaa51d621764d6bdbe9",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "275027a0-1a68-4ca8-8a63-ad59f22b03a3"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "900000"
+            ]
+          ]
+        },
+        "destinations": {
+          "elapsed_seconds": 0.021815667001646943,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:f66e41bd597fc45c5d43243eea04c00f5314c817417ccc9bfbdde2671f445efe",
+            "digest": "sha256:9df8663d96311d4f6f6cf21dadfee9e2952d3961f277028c47cebaf68ca82237",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:3978a5e2f9263f6c2dc1adc60b365942a13844d607bb70b09904024012d1a2e5",
+              "query_digest": "sha256:3978a5e2f9263f6c2dc1adc60b365942a13844d607bb70b09904024012d1a2e5"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:97404ba3ad4972ba4f66097ade3fd762bea093b5a7044ee7f794b1955931af32",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:275027a01a681ca8ca63ad59f22b03a3767c7e215455dfaa51d621764d6bdbe9",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "275027a0-1a68-4ca8-8a63-ad59f22b03a3"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "198.51.100.7",
+              "900000"
+            ],
+            [
+              "203.0.113.10",
+              "120000"
+            ],
+            [
+              "203.0.113.20",
+              "120000"
+            ]
+          ]
+        },
+        "one_row_page": {
+          "elapsed_seconds": 0.0242149590048939,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:97be49fe32e79c88cc2f92224be72fe966814040b8f05872219b8b6e59d72de7",
+            "digest": "sha256:010a8ef60e260d3c88dfdc1a87daff99240a6c47856d791461c69fd01044b04a",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:375e336c406c5a9abcd81fd2e474e39c7c2545c81e0406a664edd2ac932666cd",
+              "query_digest": "sha256:375e336c406c5a9abcd81fd2e474e39c7c2545c81e0406a664edd2ac932666cd"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:0715fbbc231b9dabfb3e6c9714c74fb6a8a0018660c272eddda43730c2ad23e4",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:275027a01a681ca8ca63ad59f22b03a3767c7e215455dfaa51d621764d6bdbe9",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "275027a0-1a68-4ca8-8a63-ad59f22b03a3"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": true,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "1",
+              "2026-10-22T10:00:00Z",
+              "203.0.113.10",
+              "60000"
+            ]
+          ]
+        },
+        "timeline_observed": {
+          "elapsed_seconds": 0.02112479200150119,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:1696feb05075e159b1d460ea020a5b4b96e622f998644efbea6257b40fa11481",
+            "digest": "sha256:1a352974bb7ecea57d4855767a56a3ef3bf9dca5aa801dfdbd05ebf82fdefb1e",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:9111193b632cc6bfa0d56f0b8d912e61cee1d47248bc91c62a809e17ad2d89ef",
+              "query_digest": "sha256:9111193b632cc6bfa0d56f0b8d912e61cee1d47248bc91c62a809e17ad2d89ef"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:ee9c7b0a72f7e233aa7fd37b1c5b7519b06800df16891cf79d6b2744a9f8a4a8",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:275027a01a681ca8ca63ad59f22b03a3767c7e215455dfaa51d621764d6bdbe9",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "275027a0-1a68-4ca8-8a63-ad59f22b03a3"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "2026-10-22T10:00:00Z",
+              "60000"
+            ],
+            [
+              "2026-10-22T10:01:00Z",
+              "120000"
+            ],
+            [
+              "2026-10-22T10:02:00Z",
+              "300000"
+            ],
+            [
+              "2026-10-22T10:03:00Z",
+              "600000"
+            ],
+            [
+              "2026-10-22T10:05:00Z",
+              "60000"
+            ]
+          ]
+        },
+        "total": {
+          "elapsed_seconds": 0.026599915996484924,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:71a4f8a919dac80e6c0abdb71299071703fe3656e48556597cefc1cd891a5b1a",
+            "digest": "sha256:4ec0df3645d9cba69dbbbde7ff2426bc03084f76e2928bf31f54bfa284c1f606",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:384f65d165bb82cb37670f480982a17a313f19fdf71409d624e35654115f132a",
+              "query_digest": "sha256:384f65d165bb82cb37670f480982a17a313f19fdf71409d624e35654115f132a"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:6f3f0b37b87e02e4d26855cb808c36e5b4cfba05a70d8ed21a7a524c09d44410",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:275027a01a681ca8ca63ad59f22b03a3767c7e215455dfaa51d621764d6bdbe9",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "275027a0-1a68-4ca8-8a63-ad59f22b03a3"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "1140000"
+            ]
+          ]
+        }
+      },
+      "source_original_digest": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+      "temporary_parquet_digest": "sha256:275027a01a681ca8ca63ad59f22b03a3767c7e215455dfaa51d621764d6bdbe9",
+      "trusted_fixture_adapter": {
+        "not_application_import": true,
+        "numeric_event_id_to_original": {
+          "1": "E1",
+          "2": "E2",
+          "3": "E3",
+          "4": "E4",
+          "5": "E5",
+          "6": "E6"
+        },
+        "selected_asset": "build-worker-17"
+      }
+    },
+    "ops-runner-events": {
+      "queries": {
+        "destinations": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "group_by": [
+                {
+                  "field_id": "destination",
+                  "input_id": "events"
+                }
+              ],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        },
+        "timeline_observed": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "field": {
+                "field_id": "time",
+                "input_id": "events"
+              },
+              "output_field": "time",
+              "seconds": 60,
+              "timezone": "UTC",
+              "type": "time_bucket"
+            },
+            {
+              "group_by": [
+                {
+                  "field_id": "time",
+                  "input_id": "events"
+                }
+              ],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        },
+        "total": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "group_by": [],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        }
+      },
+      "results": {
+        "destinations": {
+          "elapsed_seconds": 0.019969333996414207,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:f66e41bd597fc45c5d43243eea04c00f5314c817417ccc9bfbdde2671f445efe",
+            "digest": "sha256:feef731334b00c57465e15e5b20668c7670c92f838b28f625f2c7e95b90df0cc",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:3978a5e2f9263f6c2dc1adc60b365942a13844d607bb70b09904024012d1a2e5",
+              "query_digest": "sha256:3978a5e2f9263f6c2dc1adc60b365942a13844d607bb70b09904024012d1a2e5"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:77f8d05a89950b3e205e36514dc0c9deea8d9792c8009703c3b4a28d001cfc0b",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:204daab6bfdf0fd4ae4d12dfdb80bd4b4e3f788ecee8bceb5330ec2dc8012ceb",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "204daab6-bfdf-4fd4-ae4d-12dfdb80bd4b"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "198.51.100.8",
+              "30000"
+            ],
+            [
+              "203.0.113.10",
+              "180000"
+            ]
+          ]
+        },
+        "timeline_observed": {
+          "elapsed_seconds": 0.020370208003441803,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:1696feb05075e159b1d460ea020a5b4b96e622f998644efbea6257b40fa11481",
+            "digest": "sha256:d7ed707c08e6678881c21c6886ba79f5df9d37665c28c13ab8c53587b04f3321",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:9111193b632cc6bfa0d56f0b8d912e61cee1d47248bc91c62a809e17ad2d89ef",
+              "query_digest": "sha256:9111193b632cc6bfa0d56f0b8d912e61cee1d47248bc91c62a809e17ad2d89ef"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:a3b8c5fff3ba8319af727a71c9129b80488cc2de4351888bf3803ef47576062d",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:204daab6bfdf0fd4ae4d12dfdb80bd4b4e3f788ecee8bceb5330ec2dc8012ceb",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "204daab6-bfdf-4fd4-ae4d-12dfdb80bd4b"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "2026-10-22T10:00:00Z",
+              "180000"
+            ],
+            [
+              "2026-10-22T10:04:00Z",
+              "30000"
+            ]
+          ]
+        },
+        "total": {
+          "elapsed_seconds": 0.019958374999987427,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:71a4f8a919dac80e6c0abdb71299071703fe3656e48556597cefc1cd891a5b1a",
+            "digest": "sha256:e7e05df946dc56590d543708cbc3b4fa1bfc51c5f88232ca27bd4a0054bdf16e",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:384f65d165bb82cb37670f480982a17a313f19fdf71409d624e35654115f132a",
+              "query_digest": "sha256:384f65d165bb82cb37670f480982a17a313f19fdf71409d624e35654115f132a"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:d919944bcd9a49e278be2af4c8ef59f59d606f990d59f7476bbbf65338023c6f",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:204daab6bfdf0fd4ae4d12dfdb80bd4b4e3f788ecee8bceb5330ec2dc8012ceb",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "204daab6-bfdf-4fd4-ae4d-12dfdb80bd4b"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "210000"
+            ]
+          ]
+        }
+      },
+      "source_original_digest": "sha256:1bba0d57fe3e6f235b6e7a5474d78358aeff33338d1af32ae026a0c5498a0610",
+      "temporary_parquet_digest": "sha256:204daab6bfdf0fd4ae4d12dfdb80bd4b4e3f788ecee8bceb5330ec2dc8012ceb",
+      "trusted_fixture_adapter": {
+        "not_application_import": true,
+        "numeric_event_id_to_original": {
+          "1": "O1",
+          "2": "O2"
+        },
+        "selected_asset": "ops-runner-04"
+      }
+    },
+    "window-boundaries": {
+      "queries": {
+        "destinations": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "group_by": [
+                {
+                  "field_id": "destination",
+                  "input_id": "events"
+                }
+              ],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        },
+        "timeline_observed": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "field": {
+                "field_id": "time",
+                "input_id": "events"
+              },
+              "output_field": "time",
+              "seconds": 60,
+              "timezone": "UTC",
+              "type": "time_bucket"
+            },
+            {
+              "group_by": [
+                {
+                  "field_id": "time",
+                  "input_id": "events"
+                }
+              ],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        },
+        "total": {
+          "inputs": [
+            "events"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "group_by": [],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "bytes",
+                    "input_id": "events"
+                  },
+                  "id": "value",
+                  "operation": "sum"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1,
+          "window": {
+            "bounds": "half_open",
+            "end": "2026-10-22T10:10:00Z",
+            "start": "2026-10-22T10:00:00Z"
+          }
+        }
+      },
+      "results": {
+        "destinations": {
+          "elapsed_seconds": 0.019944708998082206,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:f66e41bd597fc45c5d43243eea04c00f5314c817417ccc9bfbdde2671f445efe",
+            "digest": "sha256:e7ff4c460d56c59a34b9f60c9a601768298501ac9b313a54c413dbb60a5f49e9",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:3978a5e2f9263f6c2dc1adc60b365942a13844d607bb70b09904024012d1a2e5",
+              "query_digest": "sha256:3978a5e2f9263f6c2dc1adc60b365942a13844d607bb70b09904024012d1a2e5"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:2ad08af35fe358fa461c04ff8ead32a8dde3e5351a15c455ef5cc0e6f6aacf69",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:cc316a88b106bdd9a8175110b3e20f6b6d8ae7526b7699f45843843c729e5817",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "cc316a88-b106-4dd9-a817-5110b3e20f6b"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "198.51.100.7",
+              "30"
+            ],
+            [
+              "203.0.113.10",
+              "20"
+            ]
+          ]
+        },
+        "timeline_observed": {
+          "elapsed_seconds": 0.020366917000501417,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:1696feb05075e159b1d460ea020a5b4b96e622f998644efbea6257b40fa11481",
+            "digest": "sha256:bed0dbbfe22d2bcc322396034154432138b97474418a4201bb967237e47e83eb",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:9111193b632cc6bfa0d56f0b8d912e61cee1d47248bc91c62a809e17ad2d89ef",
+              "query_digest": "sha256:9111193b632cc6bfa0d56f0b8d912e61cee1d47248bc91c62a809e17ad2d89ef"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:566c4588d1113e00b6fd51027a6920a8e9136b9f0659b6637beb9a41f63dd55b",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:cc316a88b106bdd9a8175110b3e20f6b6d8ae7526b7699f45843843c729e5817",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "cc316a88-b106-4dd9-a817-5110b3e20f6b"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "2026-10-22T10:00:00Z",
+              "20"
+            ],
+            [
+              "2026-10-22T10:09:00Z",
+              "30"
+            ]
+          ]
+        },
+        "total": {
+          "elapsed_seconds": 0.02004579200001899,
+          "receipt": {
+            "app_id": "00000000-0000-4000-8000-000000000001",
+            "definition_digest": "sha256:71a4f8a919dac80e6c0abdb71299071703fe3656e48556597cefc1cd891a5b1a",
+            "digest": "sha256:d41e920d128a43817aa7caf88a35d6fc00d4f2c099c2794d63bc6bc4f9a83d30",
+            "filter_epoch": 1,
+            "kind": "query_receipt",
+            "membership_epoch": 1,
+            "mode": "synthetic_preview",
+            "operator_version": 1,
+            "organization_id": "00000000-0000-4000-8000-000000000001",
+            "parameters": [],
+            "partial": false,
+            "policy_epoch": 1,
+            "principal_id": "00000000-0000-4000-8000-000000000001",
+            "provenance": {
+              "predicate_digest": "sha256:384f65d165bb82cb37670f480982a17a313f19fdf71409d624e35654115f132a",
+              "query_digest": "sha256:384f65d165bb82cb37670f480982a17a313f19fdf71409d624e35654115f132a"
+            },
+            "record_snapshot_sequence": 0,
+            "result_digest": "sha256:d81cebe0e3eb0df7be15dfffb1c80d81b8ff0fc4e1a47befca905c20bb2eb491",
+            "schema_version": 1,
+            "source_revisions": [
+              {
+                "input_id": "events",
+                "source_digest": "sha256:cc316a88b106bdd9a8175110b3e20f6b6d8ae7526b7699f45843843c729e5817",
+                "source_id": "00000000-0000-4000-8000-000000000001",
+                "source_revision_id": "cc316a88-b106-4dd9-a817-5110b3e20f6b"
+              }
+            ],
+            "total_scope": "full_authorized_filtered_input",
+            "truncated_page": false,
+            "view_id": "result",
+            "work_id": "00000000-0000-4000-8000-000000000001"
+          },
+          "rows": [
+            [
+              "50"
+            ]
+          ]
+        }
+      },
+      "source_original_digest": "sha256:eb981fefb8ed7cf1796286c032245da20b13804b5ba90c812b53c32093423eeb",
+      "temporary_parquet_digest": "sha256:cc316a88b106bdd9a8175110b3e20f6b6d8ae7526b7699f45843843c729e5817",
+      "trusted_fixture_adapter": {
+        "not_application_import": true,
+        "numeric_event_id_to_original": {
+          "1": "B0",
+          "2": "B1",
+          "3": "B2",
+          "4": "B3"
+        },
+        "selected_asset": "build-worker-17"
+      }
+    }
+  },
+  "duckdb_version": "2.0.0",
+  "not_qualified_here": [
+    "OS process confinement/performance (APP-005 owns existing qualification)",
+    "tenant authorization (APP-008)",
+    "CIDR/inventory join operator",
+    "rate/coverage query operators",
+    "Spend Review input/money query operators",
+    "application mapping/import pipeline",
+    "full application receipts (these are synthetic_preview spike receipts)"
+  ],
+  "scope": "local APP-005 typed compiler/engine subset, fed from actual APP-004 parsed originals through explicit trusted fixture adapter"
+}

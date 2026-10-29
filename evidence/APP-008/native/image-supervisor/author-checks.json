@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-29T03:29:01.877312+00:00",
+  "scope": "Local confined image supervisor integration using only synthetic refresh fixture",
+  "managed_acceptance": false,
+  "provider_acceptance": false,
+  "passed": true,
+  "command": [
+    "python3",
+    "app/runtime/qualify_image.py",
+    "--image",
+    "genui-app008:local-r5",
+    "--output",
+    "evidence/APP-008/native/image-supervisor/attempt-1.json"
+  ],
+  "source_sha256": {
+    "app/runtime/smoke_supervisor.py": "382aad62d63bf040e0942a84d1b533b1900fa964d1c88952f80a68844eb3b99b",
+    "app/runtime/qualify_image.py": "0025aa3f041786296eb3d1452b9c1caa3b00b06a0c6bc744ea522455a491533f",
+    "app/runtime/smoke_http.py": "566401d6b9ac72d8322a81cef5cca03095ba83d8aa42f8a88c22ee1bdd17c8aa"
+  },
+  "image_id_before": "sha256:160296acae0418f0ac46b71fe21e27c19f8635d4494bef785a806769c2e19e46",
+  "image_id_after": "sha256:160296acae0418f0ac46b71fe21e27c19f8635d4494bef785a806769c2e19e46",
+  "image_architecture": "arm64",
+  "image_rebuilt": false,
+  "production_inputs_unchanged_from": "evidence/APP-008/native/r5/author-checks.json",
+  "production_inputs_unchanged": true,
+  "image_qualification_receipt": {
+    "path": "attempt-1.json",
+    "sha256": "8d895d21bea542f8a7ae50dcdbdc3402e0597b8a394863717201fba327014913"
+  },
+  "supervisor_modes": [
+    {
+      "mode": "disabled",
+      "callback_status": 404,
+      "refused_before_bind": false,
+      "native_environment_observed": true,
+      "raw_secret_in_child_environment": false,
+      "private_file_modes": "0600",
+      "empty_registry_observed": true,
+      "secret_output": false,
+      "owned_files_removed": true,
+      "native_child_removed": true,
+      "passed": true
+    },
+    {
+      "mode": "injected",
+      "callback_status": 303,
+      "refused_before_bind": false,
+      "native_environment_observed": true,
+      "raw_secret_in_child_environment": false,
+      "private_file_modes": "0600",
+      "empty_registry_observed": true,
+      "secret_output": false,
+      "owned_files_removed": true,
+      "native_child_removed": true,
+      "passed": true
+    },
+    {
+      "mode": "malformed",
+      "callback_status": null,
+      "refused_before_bind": true,
+      "native_environment_observed": true,
+      "raw_secret_in_child_environment": false,
+      "private_file_modes": "0600",
+      "empty_registry_observed": true,
+      "secret_output": false,
+      "owned_files_removed": true,
+      "native_child_removed": true,
+      "passed": true
+    }
+  ],
+  "temporary_volume_removed": true,
+  "independent_review_pending": true
+}

@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "reviewer": "/root/auth_readiness_answer",
+  "recorded_at": "2026-10-29T03:14:45.049763+00:00",
+  "scope": "Independent review of root-owned APP-008 startup/readiness/container/CI glue only; reviewer-authored storage implementation excluded",
+  "disposition": "No open actionable finding in reviewed root-owned glue/CI/container source. Both findings repaired in source; final execution and separate native/Python proofs remain required.",
+  "reviewed_files": {
+    "app/src/main.rs": "6d0a1e5cd599605cfdf21335e1cf545e260961aa2b60c00739879456746f8451",
+    "app/src/readiness.rs": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513",
+    "app/runtime/smoke_http.py": "566401d6b9ac72d8322a81cef5cca03095ba83d8aa42f8a88c22ee1bdd17c8aa",
+    ".dockerignore": "eb1ba4a70dfe680f8284d46c29da7b075d31d36710568c220650b1146857a24f",
+    "app/Dockerfile": "afed8202d419597a83e9c26989842e5dcd480fe23785751a1eb5db78fe64cba3",
+    ".github/workflows/tenant-foundation.yml": "98724583dfedda2a813bc2ed4035f6e2092a7797ff2d0be69ac598397c514697",
+    ".github/workflows/fixtures.yml": "ffde2cef6664ff18c4d5afc4811040def4e8438b85279e2a4134aee6439990b7"
+  },
+  "reference_files": {
+    "docs/architecture/ADR-004-TENANT-TRANSACTIONS.md": "684aa2454380939b106ceb9609690b374e87af5c6b17f06937ea2d1ad545e1db",
+    ".github/workflows/foundation.yml": "d5d15563f4c57b16a23adecab94698d5b0f81e0e278c6302868588e094ed6aff",
+    "scripts/check-foundation.py": "2aed1971ade8d4038100c2e40d7a60908a267b3a242293dbe3e0a8d8cd755738",
+    "app/runtime/requirements.lock": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+    "contracts/requirements.lock": "8254cb9a13753eafff6514939b2f687b33fc40c1a9ea5e329219f3265ae5ed12",
+    "app/runtime/qualify_image.py": "2a149b298747d26e73d8742ea2b8582b0e6002cbe05dda02c07c8ee862f957f7",
+    "app/runtime/qualify_tenant_schema.py": "22dd44b557233f66695111cdda3b605fbd51444890570cc1adf38346dc3cccc1",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+    "fixtures/qualify.py": "d325fbb2f8d6eab7b028da4efc0fecc364cea39b50cf5e68cc0494b16555e848",
+    "fixtures/reset_trial.py": "7ecec7084546019e2afe65166e1fe78b941ce0b2a6ae2472a31a7b623fd4fe48",
+    "spikes/APP-004/Cargo.toml": "89673e4355f17b77978ab9e803fa56411792a56cf571608162126045673d5633",
+    "spikes/APP-004/.cargo/config.toml": "7b2c0ba24a3a18d0e8f115e1c99daa09e35b82c28da9810b1a9f80804177c2ad",
+    "spikes/APP-005/requirements.lock": "06295e1e9bf322670a74bff06616b94ec32b7a912cc4d43afb90d25a25118ca3",
+    "app/runtime/runtime.py": "dfef99b5f60fe225b480563a8b54977cfdc45f99887b9a05a9904b4a3f918beb",
+    "app/runtime/test_runtime.py": "3fe4bbcfaa6513f4ff4b3b6bcf5797f8bfc997c2494a37827ae28eab81776f0a"
+  },
+  "findings": [
+    {
+      "id": "APP008-INTEGRATION-01",
+      "severity": "P2",
+      "status": "resolved in source; new execution pending",
+      "file": "app/runtime/smoke_http.py",
+      "line": 72,
+      "summary": "Missing-registry startup smoke is masked by a hostname constructor failure",
+      "evidence": "The reused synthetic document retains database.host=synthetic.invalid. Main calls Settings::new before Stores::new; that hostname fails the accepted RDS suffix check, so no registry read is reached. The fixed generic error and no-listener assertions therefore cannot distinguish this branch from invalid registry refusal.",
+      "requested_fix": "For the final explicit missing-registry case, first write an otherwise valid document with an accepted synthetic RDS hostname. Missing registry validation occurs before CA loading or any network connection.",
+      "resolution": "Root rewrites only the final refusal specimen host to synthetic-test.us-east-1.rds.amazonaws.com and retains0600 file mode. Settings::new now succeeds, so the absent registry is the failing constructor input before CA loading/network. Fixed script was read and AST parsed; reviewer did not execute it."
+    },
+    {
+      "id": "APP008-INTEGRATION-02",
+      "severity": "P2",
+      "status": "resolved in source; separate Python qualification/review pending",
+      "file": "app/src/readiness.rs",
+      "line": 82,
+      "summary": "Concurrent Python helper independently reads metadata before its own catalog validation",
+      "evidence": "tokio::join! launches runtime.probe in parallel with native admission. The current helper SQL reads genui_meta.schema_version and unqualified catalogs without a safe startup path or prior catalog comparison. Native rejection therefore cannot prevent helper-side evaluation of a drifted relation. This is the R4 premise in another caller, not a claim that normal application roles can alter the schema.",
+      "requested_fix": "Python owner must give probe its own exact safe startup path and catalog-before-metadata ordering, preserving the current four-role plus S3/KMS readiness contract. Independently qualify the helper boundary.",
+      "resolution": "probe now supplies startup pg_catalog,pg_temp, delegates each fixed role to probe_database, and verifies origin/canonical catalog with explicit pg_catalog, pg_temp before reading metadata/version or memberships. Relation/function references in the following identity SQL are qualified. Image-local migration_directory selects /app/migrations in the container and app/migrations for source trials. No redundant DB check was removed; helper still requires all four DB roles and tenant S3/KMS."
+    }
+  ],
+  "checks": [
+    {
+      "name": "Startup constructor failure policy",
+      "method": "source inspection",
+      "result": "Missing registry yields None and inert/unready shell; explicit invalid/undecodable registry and constructor errors exit before bind; no fixture TrustedRequest creation."
+    },
+    {
+      "name": "Native plus managed readiness and generation coherence",
+      "method": "source inspection plus separate native composed-test receipts",
+      "result": "Native is required before helper launch; native and 25s helper output must both succeed; before/after configuration and helper generation/hash/expiry must agree, checked_at is bounded, ready() rereads current file and expires cached success after45s. The helper now independently verifies safe catalog ordering before metadata; native failure is not relied on as an execution guard."
+    },
+    {
+      "name": "HTTP smoke claims",
+      "method": "source and prior root receipt inspection; Python AST parsed",
+      "result": "Root fixed the explicit missing-registry precondition in source; source flow and AST pass. Actual final HTTP execution remains pending."
+    },
+    {
+      "name": "Docker input closure",
+      "method": "static ordered rule/COPY/include/import inspection and exact explicit-path inventory",
+      "result": "36 regular explicit files exist with no symlink; required native/migration/catalog/CA and verifier sources included; generated browser assets rebuilt in image; private/evidence/cache/dependency trees remain excluded by ordered parent re-exclusions. No actual COPY-context export was run for this review."
+    },
+    {
+      "name": "Linux CI setup and actual selected checks",
+      "method": "source path and command inspection",
+      "result": "Python3.11.14 venv at app/runtime/.venv installs both hashed runtime and contract validators; fixture selects that interpreter. Node22.21/npm11.6.2 build native assets first. Rust1.93.1 runs lint/primitives/full ignored TLS campaign; Rust1.85 checks lib/tests. Schema and native reports upload from RUNNER_TEMP. Existing foundation workflow separately runs full app tests/doc, HTTP smoke and root-context image qualification."
+    },
+    {
+      "name": "PostgreSQL fixture architecture",
+      "method": "independent public registry raw manifest inspection; no pull/build/run",
+      "result": "Exact5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59 is an OCI multiarch index including linux/amd64 leaf3102b2114b39383b61fa194e5929734c72a56ce366dbb391509b1f07aef10f9f. Local arm64 image inspection does not prove an arm64-only pin. No change required."
+    },
+    {
+      "name": "Fixture workflow setup and non-skipped artifact identity gate",
+      "method": "source command/path inspection",
+      "result": "New fixtures workflow installs Rust1.93.1 wasm target and combined locked validators/query/runtime wheels, verifies vendored parser inputs, builds actual parser guest/host at paths consumed by qualify.py, runs all fixture unit/regeneration/oracle/parser/query checks and disposable reset. Existing exact APP004 WASM digest comparison remains mandatory; successful cross-host byte reproducibility awaits real Linux CI."
+    }
+  ],
+  "image_context": {
+    "inspection": "static only",
+    "explicit_regular_files": [
+      {
+        "path": ".dockerignore",
+        "sha256": "eb1ba4a70dfe680f8284d46c29da7b075d31d36710568c220650b1146857a24f"
+      },
+      {
+        "path": "app/Dockerfile",
+        "sha256": "afed8202d419597a83e9c26989842e5dcd480fe23785751a1eb5db78fe64cba3"
+      },
+      {
+        "path": "app/Cargo.toml",
+        "sha256": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55"
+      },
+      {
+        "path": "app/Cargo.lock",
+        "sha256": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293"
+      },
+      {
+        "path": "app/src/lib.rs",
+        "sha256": "381db89b74187d80ebd7300b1e1a9823596a3c3a422a55632f5552a7ab2b305f"
+      },
+      {
+        "path": "app/src/main.rs",
+        "sha256": "6d0a1e5cd599605cfdf21335e1cf545e260961aa2b60c00739879456746f8451"
+      },
+      {
+        "path": "app/src/config.rs",
+        "sha256": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7"
+      },
+      {
+        "path": "app/src/readiness.rs",
+        "sha256": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513"
+      },
+      {
+        "path": "app/src/roles.rs",
+        "sha256": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216"
+      },
+      {
+        "path": "app/src/auth_qualification.rs",
+        "sha256": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70"
+      },
+      {
+        "path": "app/src/auth_qualification/tests.rs",
+        "sha256": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da"
+      },
+      {
+        "path": "app/src/storage/mod.rs",
+        "sha256": "2c642fec59cc879435830142140e0ce0fb9a18cd4c04d9ec2da03bbff867c481"
+      },
+      {
+        "path": "app/src/storage/pool.rs",
+        "sha256": "4a8eae301412ed8ce48ef2b84e08919380747e17179ae314b61c15d1d429a0d5"
+      },
+      {
+        "path": "app/src/storage/registry.rs",
+        "sha256": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75"
+      },
+      {
+        "path": "app/src/storage/authorization.rs",
+        "sha256": "c53609ef588351a322acf47ff249fd7423d49eef01848d8a4213bea4f0c05a32"
+      },
+      {
+        "path": "app/src/storage/catalog.rs",
+        "sha256": "8c0462983afb7e7d877f661d3c49b63eae71de0b0b95c5e61f7c291c1f2cf35a"
+      },
+      {
+        "path": "app/src/storage/tests.rs",
+        "sha256": "6e2a1747c398f0a064a25e945ba3b2a9ce65bdedd17e6750a1f8ae66b4d63232"
+      },
+      {
+        "path": "app/src/storage/qualification.rs",
+        "sha256": "14f8042623a529b8643106dc9e122b0d10b47b596651f2457eea0e4b4c9b9582"
+      },
+      {
+        "path": "app/admin/package.json",
+        "sha256": "ee3e1d528fd3a9c5776a44d11300de92c6d4fbd8c831dcd19cefa3308eaef70f"
+      },
+      {
+        "path": "app/admin/package-lock.json",
+        "sha256": "a5850cd7fed748d29a1270bc05f41912c3ae9fa2058e6941d6af36c440e7acfd"
+      },
+      {
+        "path": "app/admin/build.ts",
+        "sha256": "e10c5974fa648f2223a06470c6cf4ed5edbeb80636874aa69ef06f092188d7d4"
+      },
+      {
+        "path": "app/admin/tsconfig.json",
+        "sha256": "8f54953b133871cc1c728d72bf59b8e03eb929a85a60da177368619f5a2049a4"
+      },
+      {
+        "path": "app/admin/src/home/app.tsx",
+        "sha256": "70d76cc4226e22523c321884f884100928b5241acc5a14b5bb49a69c16bbc804"
+      },
+      {
+        "path": "app/admin/src/about/app.tsx",
+        "sha256": "7bd3e6488d907b74e19b579a6cd6f77e47802ce02013c340923edf70611381b3"
+      },
+      {
+        "path": "app/admin/src/styles/app.css",
+        "sha256": "8098e2c0b9b4368f0dd8bbdda48d30b1fabf8585a7c916adc9e6e98f21947a83"
+      },
+      {
+        "path": "app/runtime/runtime.py",
+        "sha256": "dfef99b5f60fe225b480563a8b54977cfdc45f99887b9a05a9904b4a3f918beb"
+      },
+      {
+        "path": "app/runtime/requirements.lock",
+        "sha256": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b"
+      },
+      {
+        "path": "app/migrations/0001_role_foundation.sql",
+        "sha256": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963"
+      },
+      {
+        "path": "app/migrations/0002_tenant_foundation.sql",
+        "sha256": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5"
+      },
+      {
+        "path": "app/migrations/manifest.json",
+        "sha256": "13976faa01ee527a81524d969e2aee864ef42e78368b69e8bee67895b8287bd5"
+      },
+      {
+        "path": "app/migrations/catalog-query.json",
+        "sha256": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963"
+      },
+      {
+        "path": "app/migrations/catalog-v1.json",
+        "sha256": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9"
+      },
+      {
+        "path": "app/migrations/catalog-v2.json",
+        "sha256": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954"
+      },
+      {
+        "path": "app/certs/rds-global-bundle.pem",
+        "sha256": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
+      },
+      {
+        "path": "spikes/APP-006/Cargo.toml",
+        "sha256": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b"
+      },
+      {
+        "path": "spikes/APP-006/src/lib.rs",
+        "sha256": "4fbfa5be174bde8f1a5410f66e4b5d53abae03d8860f7b02921b1eb99e68e39e"
+      }
+    ]
+  },
+  "limits": [
+    "No review approval of reviewer-authored storage internals; separate native reviewer owns that boundary.",
+    "No build, actual new context export, Linux GitHub Actions execution, new HTTP run or managed call was performed by this reviewer.",
+    "Root must retain exact source/image build, HTTP/image qualification and passing Linux CI; source review alone is not deployment acceptance.",
+    "Readiness is a bounded health cache, not user authorization; hosted identity/session/admission/entitlement and managed RDS remain separate gates."
+  ],
+  "initial_smoke_sha256": "2a4719821c2920839c9e5a592a7c2e3b11744d331724172a223b0342ab269cf6",
+  "source_review_passed": true,
+  "runtime_acceptance": false,
+  "managed_acceptance": false
+}

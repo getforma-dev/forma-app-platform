@@ -1,0 +1,48 @@
+{
+  "scope": "root binary and real local HTTP composition smoke; no managed stores or hosted authentication",
+  "passed": true,
+  "recorded_at": "2026-10-29T02:38:28.151311+00:00",
+  "checks": [
+    {
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "build",
+        "--manifest-path",
+        "app/Cargo.toml",
+        "--locked"
+      ],
+      "cargo_build_jobs": 1,
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "app/runtime/.venv/bin/python",
+        "app/runtime/smoke_http.py",
+        "--binary",
+        "app/target/debug/forma-app-platform"
+      ],
+      "exit_code": 0,
+      "live": 200,
+      "ready_without_native_registry": 503,
+      "positive_mock_helper_not_launched": true,
+      "native_html_count": 7,
+      "fresh_csp_nonces": true,
+      "no_store": true,
+      "credential_permission_startup_refusal": true,
+      "explicit_invalid_storage_no_listener": true
+    }
+  ],
+  "source_sha256": {
+    "app/src/main.rs": "6d0a1e5cd599605cfdf21335e1cf545e260961aa2b60c00739879456746f8451",
+    "app/src/readiness.rs": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513",
+    "app/runtime/smoke_http.py": "2a4719821c2920839c9e5a592a7c2e3b11744d331724172a223b0342ab269cf6",
+    "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+    "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293"
+  },
+  "binary_sha256": "f0d446657e695e348da1823bf85d6da5e0b22873abade14c6753d1d14d3d78e7",
+  "limits": [
+    "Composed positive native database cases are in separate independent local TLS evidence.",
+    "Managed RDS IAM, deployed HTTP, private runtime delivery and schema compatibility still need managed evidence."
+  ]
+}

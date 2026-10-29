@@ -22,12 +22,36 @@ struct Success {
 }
 pub struct Readiness {
     path: PathBuf,
+    stores: Option<Arc<crate::storage::Stores>>,
     success: Mutex<Option<Success>>,
 }
 impl Readiness {
-    pub fn start(path: PathBuf, helper: PathBuf, python: String) -> Arc<Self> {
+    /// Isolated real-database qualification only; absent from production builds.
+    #[cfg(test)]
+    pub(crate) fn isolated(path: PathBuf, stores: Arc<crate::storage::Stores>) -> Self {
+        Self {
+            path,
+            stores: Some(stores),
+            success: Mutex::new(None),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn qualify_once(&self, helper: &PathBuf, python: &str) -> bool {
+        let success = self.check(helper, python).await;
+        *self.success.lock().unwrap() = success;
+        self.ready()
+    }
+
+    pub fn start(
+        path: PathBuf,
+        helper: PathBuf,
+        python: String,
+        stores: Option<Arc<crate::storage::Stores>>,
+    ) -> Arc<Self> {
         let state = Arc::new(Self {
             path,
+            stores,
             success: Mutex::new(None),
         });
         let background = state.clone();
@@ -41,6 +65,7 @@ impl Readiness {
         state
     }
     async fn check(&self, helper: &PathBuf, python: &str) -> Option<Success> {
+        let stores = self.stores.as_ref()?;
         let before = Config::load(&self.path).ok()?;
         let started = now();
         let mut command = tokio::process::Command::new(python);
@@ -49,10 +74,15 @@ impl Readiness {
             .args(["probe", "--generation", &before.generation])
             .env("GENUI_RUNTIME_CONFIG_FILE", &self.path)
             .kill_on_drop(true);
-        let output = tokio::time::timeout(Duration::from_secs(25), command.output())
-            .await
-            .ok()?
-            .ok()?;
+        // Both real native database pools and the managed S3/KMS probe must
+        // succeed for the same credential generation. Missing native storage
+        // cannot inherit the older helper-only readiness result.
+        let (native, managed) = tokio::join!(
+            stores.readiness(),
+            tokio::time::timeout(Duration::from_secs(25), command.output())
+        );
+        native.ok()?;
+        let output = managed.ok()?.ok()?;
         if !output.status.success() || output.stdout.len() > 4096 {
             return None;
         }

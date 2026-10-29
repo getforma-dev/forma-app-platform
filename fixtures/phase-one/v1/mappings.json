@@ -1,0 +1,67 @@
+{
+  "confirmation": "Authored fixture interpretation only; application mapping confirmation has not run.",
+  "events": {
+    "columns": [
+      "event_id",
+      "asset",
+      "time",
+      "destination",
+      "bytes"
+    ],
+    "coverage": "complete",
+    "timestamp_format": "UTC whole seconds",
+    "timestamp_semantics": "event_attributed_count",
+    "unit": "byte",
+    "window": {
+      "bounds": "half_open",
+      "end": "2026-10-22T10:10:00Z",
+      "start": "2026-10-22T10:00:00Z"
+    }
+  },
+  "interpretation_variants": [
+    {
+      "events_override": {
+        "unit": null
+      },
+      "expect": "unit_refused",
+      "id": "undeclared-units"
+    },
+    {
+      "events_override": {
+        "timestamp_semantics": "cumulative_counter"
+      },
+      "expect": "semantics_refused",
+      "id": "cumulative-counter"
+    },
+    {
+      "events_override": {
+        "coverage": "partial"
+      },
+      "expect": "observed totals only; empty buckets and full-window rate unknown",
+      "id": "partial-coverage"
+    }
+  ],
+  "inventory": {
+    "columns": [
+      "inventory_id",
+      "kind",
+      "address"
+    ],
+    "duplicate_equal_match": "refuse ambiguous inventory",
+    "precedence": "exact_then_longest_network",
+    "supported_family": "IPv4",
+    "unmatched_meaning": "not found in supplied inventory; ownership/activity unverified"
+  },
+  "spend": {
+    "columns": [
+      "expense_id",
+      "description",
+      "amount_cents",
+      "currency"
+    ],
+    "currency": "USD",
+    "exponent": 2,
+    "threshold_cents": "20000",
+    "unit": "minor_unit"
+  }
+}

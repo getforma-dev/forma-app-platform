@@ -195,9 +195,7 @@
       "blocked_count": 0
     }
   ],
-  "ready_by_local_dependencies": [
-    "APP-011"
-  ],
+  "ready_by_local_dependencies": [],
   "tickets": [
     {
       "id": "APP-001",
@@ -397,11 +395,11 @@
     {
       "id": "APP-008",
       "title": "Establish tenant-bearing schema, database roles and deny-by-default authorization",
-      "path": "1-selected/APP-008.md",
+      "path": "2-in-progress/APP-008.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "Selected",
+      "Status": "In progress",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S02",
@@ -416,7 +414,7 @@
       "Assignee": "GenUI \u2014 Codex tenant-foundation lead",
       "Branch / PR": "phase-one-spikes; separate schema/pool/authorization review slices",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 APP-007 accepted; implementation planning review is being settled.",
+      "Blocked by": "None \u2014 accepted ADR-004 directs parallel schema and native transaction implementation.",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-007"
@@ -542,11 +540,11 @@
     {
       "id": "APP-011",
       "title": "Package reproducible synthetic sources and expected outcomes",
-      "path": "0-backlog/APP-011.md",
+      "path": "3-in-review/APP-011.md",
       "Field": "Value",
       "---": "---",
       "Epic": "VAL",
-      "Status": "Backlog",
+      "Status": "In review",
       "Priority": "P0",
       "Type": "Verification",
       "Sprint": "S02",
@@ -558,10 +556,10 @@
       "Requirements": "C01, C05, C13, C16, N6, N9, P01, P06, P15, R14, S01, S02, S05, S06, S07",
       "Depends on": "APP-002, APP-007",
       "External dependencies": "None beyond listed local predecessors",
-      "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Assignee": "GenUI \u2014 synthetic fixture lead",
+      "Branch / PR": "phase-one-spikes; fixture package paths owned independently",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Blocked by": "None \u2014 APP-002 and APP-007 are Done; package work proceeds alongside APP-008.",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-002",

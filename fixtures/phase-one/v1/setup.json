@@ -1,0 +1,310 @@
+{
+  "authored_journey": {
+    "ops_runner_reserved_principal_id": "00000000-0000-4000-8000-000000000070",
+    "ops_runner_reserved_work_id": "00000000-0000-4000-8000-000000000071",
+    "required": [
+      "Northstar Security and Finance created by permitted users",
+      "independent Jordan work and empty findings",
+      "two apps through identical creation and admission path",
+      "actual account invite, membership and grant establishment",
+      "actual imports, mapping confirmation and immutable normalized revisions",
+      "record commands, replay and audit"
+    ],
+    "reserved_ids_are_seeded": false,
+    "status": "not executed"
+  },
+  "classification": "synthetic-only",
+  "contains_credentials": false,
+  "edition": "app011-fixtures-v1",
+  "organizations": [
+    {
+      "contract_shape_seeds": [
+        {
+          "app_id": "00000000-0000-4000-8000-000000000065",
+          "author_principal_id": "00000000-0000-4000-8000-000000000066",
+          "collection_ids": [
+            "00000000-0000-4000-8000-00000000006a"
+          ],
+          "fixture": "contracts/fixtures/northstar.json",
+          "fixture_digest": "sha256:45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "publication_id": "00000000-0000-4000-8000-000000000068",
+          "record_id": "00000000-0000-4000-8000-00000000008c",
+          "record_version": 1,
+          "reviewer_principal_id": "00000000-0000-4000-8000-00000000006d",
+          "revision_id": "00000000-0000-4000-8000-000000000067",
+          "seeded_grants": {
+            "author_app": [
+              "discover",
+              "run",
+              "edit_definition"
+            ],
+            "author_sources": [
+              "source_read"
+            ],
+            "author_work": [
+              "record_read",
+              "record_write",
+              "share_work"
+            ],
+            "reviewer_app": [
+              "review_publish"
+            ]
+          },
+          "source_dependencies": [
+            {
+              "input_id": "events",
+              "source_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+              "source_id": "00000000-0000-4000-8000-00000000006e",
+              "source_revision_id": "00000000-0000-4000-8000-00000000006f"
+            },
+            {
+              "input_id": "inventory",
+              "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+              "source_id": "00000000-0000-4000-8000-000000000070",
+              "source_revision_id": "00000000-0000-4000-8000-000000000071"
+            }
+          ],
+          "state": "seeded contract-shape example; source digests, admission, records and receipt are synthetic placeholders",
+          "work_id": "00000000-0000-4000-8000-000000000069",
+          "work_version": 1
+        }
+      ],
+      "label": "Northstar",
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "principals": [
+        {
+          "membership_epoch": 1,
+          "principal_id": "00000000-0000-4000-8000-000000000066",
+          "provider_subject": "usr_00000000-0000-4000-8000-000000000066",
+          "purpose": "Northstar shape author",
+          "status": "active"
+        },
+        {
+          "membership_epoch": 1,
+          "principal_id": "00000000-0000-4000-8000-00000000006d",
+          "provider_subject": "usr_00000000-0000-4000-8000-00000000006d",
+          "purpose": "independent reviewer",
+          "status": "active"
+        },
+        {
+          "membership_epoch": 2,
+          "principal_id": "00000000-0000-4000-8000-00000000006e",
+          "provider_subject": "usr_00000000-0000-4000-8000-00000000006e",
+          "purpose": "revoked negative control",
+          "status": "revoked"
+        },
+        {
+          "membership_epoch": 1,
+          "principal_id": "00000000-0000-4000-8000-00000000006f",
+          "provider_subject": "usr_00000000-0000-4000-8000-00000000006f",
+          "purpose": "active without grants negative control",
+          "status": "active"
+        },
+        {
+          "membership_epoch": 1,
+          "principal_id": "00000000-0000-4000-8000-0000000000ca",
+          "provider_subject": "usr_00000000-0000-4000-8000-0000000000ca",
+          "purpose": "Finance author (grants only in canary shape)",
+          "status": "active"
+        },
+        {
+          "membership_epoch": 1,
+          "principal_id": "00000000-0000-4000-8000-000000000f00",
+          "provider_subject": "usr_00000000-0000-4000-8000-000000000f00",
+          "purpose": "synthetic organization operator; admin_policy only, no app grants",
+          "status": "active"
+        }
+      ],
+      "provider_binding": {
+        "issuer": "app008-fixture-only",
+        "provider_tenant_id": "ten_00000000-0000-4000-8000-000000000001"
+      }
+    },
+    {
+      "contract_shape_seeds": [
+        {
+          "app_id": "00000000-0000-4000-8000-000000000065",
+          "author_principal_id": "00000000-0000-4000-8000-000000000066",
+          "collection_ids": [
+            "00000000-0000-4000-8000-00000000006a"
+          ],
+          "fixture": "contracts/fixtures/northstar.json",
+          "fixture_digest": "sha256:45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "publication_id": "00000000-0000-4000-8000-000000000068",
+          "record_id": "00000000-0000-4000-8000-00000000008c",
+          "record_version": 1,
+          "reviewer_principal_id": "00000000-0000-4000-8000-00000000006d",
+          "revision_id": "00000000-0000-4000-8000-000000000067",
+          "seeded_grants": {
+            "author_app": [
+              "discover",
+              "run",
+              "edit_definition"
+            ],
+            "author_sources": [
+              "source_read"
+            ],
+            "author_work": [
+              "record_read",
+              "record_write",
+              "share_work"
+            ],
+            "reviewer_app": [
+              "review_publish"
+            ]
+          },
+          "source_dependencies": [
+            {
+              "input_id": "events",
+              "source_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+              "source_id": "00000000-0000-4000-8000-00000000006e",
+              "source_revision_id": "00000000-0000-4000-8000-00000000006f"
+            },
+            {
+              "input_id": "inventory",
+              "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+              "source_id": "00000000-0000-4000-8000-000000000070",
+              "source_revision_id": "00000000-0000-4000-8000-000000000071"
+            }
+          ],
+          "state": "seeded contract-shape example; source digests, admission, records and receipt are synthetic placeholders",
+          "work_id": "00000000-0000-4000-8000-000000000069",
+          "work_version": 1
+        },
+        {
+          "app_id": "00000000-0000-4000-8000-0000000000c9",
+          "author_principal_id": "00000000-0000-4000-8000-0000000000ca",
+          "collection_ids": [
+            "00000000-0000-4000-8000-0000000000ce"
+          ],
+          "fixture": "contracts/fixtures/spend-review.json",
+          "fixture_digest": "sha256:4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "publication_id": "00000000-0000-4000-8000-0000000000cc",
+          "purpose": "foreign-only Finance app for cross-tenant FK denial",
+          "record_id": "00000000-0000-4000-8000-0000000000f0",
+          "record_version": 1,
+          "reviewer_principal_id": "00000000-0000-4000-8000-0000000000d1",
+          "revision_id": "00000000-0000-4000-8000-0000000000cb",
+          "seeded_grants": {
+            "author_app": [
+              "discover",
+              "run",
+              "edit_definition"
+            ],
+            "author_sources": [
+              "source_read"
+            ],
+            "author_work": [
+              "record_read",
+              "record_write",
+              "share_work"
+            ],
+            "reviewer_app": [
+              "review_publish"
+            ]
+          },
+          "source_dependencies": [
+            {
+              "input_id": "expenses",
+              "source_digest": "sha256:8bb3fac8a6c29cb3ba4f8b4b324ea4e65726f1d08c8c254b83dd30a58e659cc1",
+              "source_id": "00000000-0000-4000-8000-0000000000d2",
+              "source_revision_id": "00000000-0000-4000-8000-0000000000d3"
+            }
+          ],
+          "state": "seeded contract-shape example; source digests, admission, records and receipt are synthetic placeholders",
+          "work_id": "00000000-0000-4000-8000-0000000000cd",
+          "work_version": 1
+        }
+      ],
+      "label": "Isolation canary",
+      "organization_id": "00000000-0000-4000-8000-000000000002",
+      "principals": [
+        {
+          "membership_epoch": 1,
+          "principal_id": "00000000-0000-4000-8000-000000000066",
+          "provider_subject": "usr_00000000-0000-4000-8000-000000000066",
+          "purpose": "Northstar shape author",
+          "status": "active"
+        },
+        {
+          "membership_epoch": 1,
+          "principal_id": "00000000-0000-4000-8000-00000000006d",
+          "provider_subject": "usr_00000000-0000-4000-8000-00000000006d",
+          "purpose": "independent reviewer",
+          "status": "active"
+        },
+        {
+          "membership_epoch": 2,
+          "principal_id": "00000000-0000-4000-8000-00000000006e",
+          "provider_subject": "usr_00000000-0000-4000-8000-00000000006e",
+          "purpose": "revoked negative control",
+          "status": "revoked"
+        },
+        {
+          "membership_epoch": 1,
+          "principal_id": "00000000-0000-4000-8000-00000000006f",
+          "provider_subject": "usr_00000000-0000-4000-8000-00000000006f",
+          "purpose": "active without grants negative control",
+          "status": "active"
+        },
+        {
+          "membership_epoch": 1,
+          "principal_id": "00000000-0000-4000-8000-0000000000ca",
+          "provider_subject": "usr_00000000-0000-4000-8000-0000000000ca",
+          "purpose": "Finance author (grants only in canary shape)",
+          "status": "active"
+        },
+        {
+          "membership_epoch": 1,
+          "principal_id": "00000000-0000-4000-8000-000000000f00",
+          "provider_subject": "usr_00000000-0000-4000-8000-000000000f00",
+          "purpose": "synthetic organization operator; admin_policy only, no app grants",
+          "status": "active"
+        },
+        {
+          "membership_epoch": 1,
+          "principal_id": "00000000-0000-4000-8000-0000000000d1",
+          "provider_subject": "usr_00000000-0000-4000-8000-0000000000d1",
+          "purpose": "Finance independent reviewer",
+          "status": "active"
+        }
+      ],
+      "provider_binding": {
+        "issuer": "app008-fixture-only",
+        "provider_tenant_id": "ten_00000000-0000-4000-8000-000000000002"
+      }
+    }
+  ],
+  "provider_fixture_only": true,
+  "reset_contract": {
+    "allowed_organizations": [
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002"
+    ],
+    "backup_restore": "Fixture reseeding never proves backup recovery.",
+    "disposable_boundary": "Destroy only containers created with unique names by this invocation; no external database URL, profile, image or container selector. Retain full logical snapshots and receipts outside the disposable database before removal.",
+    "preserve": [
+      "failed results",
+      "receipts",
+      "audit",
+      "rehearsal evidence"
+    ],
+    "required": [
+      "explicit isolated synthetic target and operator identity",
+      "single transaction",
+      "exact fixture ownership inventory",
+      "deny outside-org or unknown records",
+      "archive evidence before scoped reset",
+      "validate every envelope before write",
+      "rerun negative controls after setup"
+    ]
+  },
+  "seed_interface": "app/runtime/tenant_seed.py:make_bundles,seed(connection,bundles)",
+  "seed_semantics": "APP-002 contract specimens remapped and revalidated; placeholder normalized/source digests, admissions, records and query receipts are seeded, not imported, authored or executed outcomes.",
+  "setup": {
+    "database_reset_status": "APP-011 owns only fresh disposable local container setup/reset; APP-057 shared managed/authored rehearsal reset remains pending",
+    "db_seed_owner": "APP-008 canonical operator seed",
+    "disposable_reset_command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python fixtures/reset_trial.py --output evidence/APP-011/a-new-reset-run",
+    "local_files": "python3 fixtures/generate.py --check"
+  }
+}

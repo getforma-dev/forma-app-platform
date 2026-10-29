@@ -1,0 +1,19 @@
+test_changed_original_bytes_and_unlisted_files_fail (test_fixtures.Fixtures.test_changed_original_bytes_and_unlisted_files_fail) ... ok
+test_duplicate_inventory_and_events_not_double_counted (test_fixtures.Fixtures.test_duplicate_inventory_and_events_not_double_counted) ... ok
+test_inventory_order_cannot_change_precedence (test_fixtures.Fixtures.test_inventory_order_cannot_change_precedence) ... ok
+test_manifest_duplicate_and_escape_refused (test_fixtures.Fixtures.test_manifest_duplicate_and_escape_refused) ... ok
+test_scenario_arithmetic_from_original_bytes (test_fixtures.Fixtures.test_scenario_arithmetic_from_original_bytes) ... ok
+test_symlink_within_selected_root_is_refused (test_fixtures.Fixtures.test_symlink_within_selected_root_is_refused) ... ok
+test_threshold_and_exact_large_integer_arithmetic (test_fixtures.Fixtures.test_threshold_and_exact_large_integer_arithmetic) ... ok
+test_timestamp_and_integer_contract_boundaries (test_fixtures.Fixtures.test_timestamp_and_integer_contract_boundaries) ... ok
+test_two_separate_generations_are_byte_exact (test_fixtures.Fixtures.test_two_separate_generations_are_byte_exact) ... ok
+test_ambient_database_and_docker_targets_are_refused_before_docker (test_reset_trial.ResetGuards.test_ambient_database_and_docker_targets_are_refused_before_docker) ... ok
+test_early_failure_retains_receipt_without_loading_database_code (test_reset_trial.ResetGuards.test_early_failure_retains_receipt_without_loading_database_code) ... ok
+test_existing_evidence_is_never_overwritten (test_reset_trial.ResetGuards.test_existing_evidence_is_never_overwritten) ... ok
+test_no_target_selector_is_exposed_by_cli (test_reset_trial.ResetGuards.test_no_target_selector_is_exposed_by_cli) ... ok
+test_remote_docker_context_is_refused (test_reset_trial.ResetGuards.test_remote_docker_context_is_refused) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.241s
+
+OK

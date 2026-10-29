@@ -1,0 +1,121 @@
+{
+  "config_sha256": "sha256:27dbe0880d995f2a75cae9aa1cc603264dc9d62e575dca5118c393c661a0d3d5",
+  "elapsed_ms": 0,
+  "fuel_consumed": 946848,
+  "input_sha256": "sha256:41ab57bfbce4096d10c75fcb29f5387324590c42dcf765ab7be538d73d6b906a",
+  "interface_imports": [],
+  "memory_bytes": 1376256,
+  "resource_limits": {
+    "fuel": 5000000000,
+    "guest_linear_memory_bytes": 2147483648,
+    "input_bytes": 10485760,
+    "output_bytes": 134217728,
+    "wall_clock_ms": 120000
+  },
+  "result": {
+    "contract_edition": "impl-2026-10-28.1",
+    "parser_version": 1,
+    "profile": "demo",
+    "result": {
+      "cells": [
+        {
+          "column": 1,
+          "coordinate": {
+            "logical_record": 1,
+            "physical_line_end": 1,
+            "physical_line_start": 1,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "inventory_id",
+          "value": {
+            "type": "text",
+            "value": "inventory_id"
+          }
+        },
+        {
+          "column": 2,
+          "coordinate": {
+            "logical_record": 1,
+            "physical_line_end": 1,
+            "physical_line_start": 1,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "kind",
+          "value": {
+            "type": "text",
+            "value": "kind"
+          }
+        },
+        {
+          "column": 3,
+          "coordinate": {
+            "logical_record": 1,
+            "physical_line_end": 1,
+            "physical_line_start": 1,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "address",
+          "value": {
+            "type": "text",
+            "value": "address"
+          }
+        },
+        {
+          "column": 1,
+          "coordinate": {
+            "logical_record": 2,
+            "physical_line_end": 2,
+            "physical_line_start": 2,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "CANARY-EXACT",
+          "value": {
+            "type": "text",
+            "value": "CANARY-EXACT"
+          }
+        },
+        {
+          "column": 2,
+          "coordinate": {
+            "logical_record": 2,
+            "physical_line_end": 2,
+            "physical_line_start": 2,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "exact",
+          "value": {
+            "type": "text",
+            "value": "exact"
+          }
+        },
+        {
+          "column": 3,
+          "coordinate": {
+            "logical_record": 2,
+            "physical_line_end": 2,
+            "physical_line_start": 2,
+            "type": "csv"
+          },
+          "interpretation": "mapping_unconfirmed",
+          "original": "198.51.100.200",
+          "value": {
+            "type": "text",
+            "value": "198.51.100.200"
+          }
+        }
+      ],
+      "csv_dialect": "csv-core-0.1.13-permissive-utf8",
+      "format": "csv",
+      "formula_policy": "reject",
+      "mapping_status": "inspection_required",
+      "rows": 2
+    },
+    "status": "parsed"
+  },
+  "wasm_sha256": "sha256:aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba"
+}

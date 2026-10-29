@@ -1,0 +1,80 @@
+{
+  "recorded_at": "2026-10-29T03:09:46.301572+00:00",
+  "reviewer": "GenUI root; not fixture author",
+  "checks": [
+    {
+      "name": "regeneration",
+      "command": [
+        "python3",
+        "fixtures/generate.py",
+        "--check"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "unit",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "fixtures",
+        "-v"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "oracle",
+      "command": [
+        "python3",
+        "fixtures/verify.py"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "focused_tests": 14,
+  "unchanged_original_parser_inputs_bound": 28,
+  "source_pins": {
+    "fixtures/generate.py": "sha256:1cb418312d7678c461cada07259bcfa978074afc45b8ef7abf9cde91b753f6b6",
+    "fixtures/qualify.py": "sha256:d325fbb2f8d6eab7b028da4efc0fecc364cea39b50cf5e68cc0494b16555e848",
+    "fixtures/reset_trial.py": "sha256:7ecec7084546019e2afe65166e1fe78b941ce0b2a6ae2472a31a7b623fd4fe48",
+    "fixtures/test_fixtures.py": "sha256:0b1ca40b37fb32a4a462d2f35e855fe2e0e32743b218a4c3eef25636530917d0",
+    "fixtures/test_reset_trial.py": "sha256:5c50bdfefa2fcf4990992b33ed6514b0c22301260f210d8cde347712264e33a7",
+    "fixtures/verify.py": "sha256:28badd0d7c77ae0db3a33ec0ee0443989c8683f8f8cf921e33a454fabdc49ee2",
+    "fixtures/phase-one/v1/expected.json": "sha256:8471f0d68e5606bc5656b74eb4e199f4d0f8f49440f437647002cc979b62c66d",
+    "fixtures/phase-one/v1/manifest.json": "sha256:247f009c132c4e5a6185851f086a30ec8d4e583eb51fe204f2378ca7bc1cf4cd",
+    "fixtures/phase-one/v1/mappings.json": "sha256:c2ca316d6d6abbcd65515369e9759cd2204b5484b1f67fbf6cca052d5f6abbbe",
+    "fixtures/phase-one/v1/setup.json": "sha256:29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
+    "fixtures/phase-one/v1/sources/ambiguous-timestamp.csv": "sha256:ee3e0aba1b9de489b82355876b78708631235878bb22ea5ea476976bc42e532e",
+    "fixtures/phase-one/v1/sources/ambiguous-timestamp.xlsx": "sha256:03fbbba39d80aa962f10e98017a9425dd494e69074dd27ddd1b7734ad525ce05",
+    "fixtures/phase-one/v1/sources/canary-events.csv": "sha256:5e077aa8b4cd7e168b13af53f4d39e6e8cb2d5a0fd395e8a4986d2055eed3e0c",
+    "fixtures/phase-one/v1/sources/canary-events.xlsx": "sha256:46982afa6e53b732016478d04f0b96c09c0605c3ba759a1e4150670b7acfb8c3",
+    "fixtures/phase-one/v1/sources/canary-inventory.csv": "sha256:41ab57bfbce4096d10c75fcb29f5387324590c42dcf765ab7be538d73d6b906a",
+    "fixtures/phase-one/v1/sources/canary-inventory.xlsx": "sha256:b603721baa7c3cec0954c418baa9f90100ce480ffceb0ab562934e49caf304dc",
+    "fixtures/phase-one/v1/sources/evidence-text.csv": "sha256:b2410c8248faeafd9898eebb4678b5ab0f16c64a6c9d4fe875f3d533c9a92ce4",
+    "fixtures/phase-one/v1/sources/evidence-text.xlsx": "sha256:930f6c8fcc1dc3921163140de8eb2fc9ea1b9d26504938dfd8639d3211a60d4e",
+    "fixtures/phase-one/v1/sources/formula-cache.xlsx": "sha256:b6355b174c6451b14f4c528e44d021c7fec4a0a9a33a0debb19484eff911eb1d",
+    "fixtures/phase-one/v1/sources/fractional-timestamp.csv": "sha256:785d42ecebe00a1c15df2bf553f5a08766800c58921c87442d61d5b84f7c84cb",
+    "fixtures/phase-one/v1/sources/fractional-timestamp.xlsx": "sha256:a96f75d61e38c6146569a145c11698c7c2bd881b0d231c777f9644446adf4603",
+    "fixtures/phase-one/v1/sources/invalid-timestamp.csv": "sha256:0bec7811c18b6f6251bce3176e82a1ccc75f472e21dca902885b8dd3cabbfcfa",
+    "fixtures/phase-one/v1/sources/invalid-timestamp.xlsx": "sha256:c38529ab928a53f4c58e2fe97326425df11a2743597f81df236941e4e3357472",
+    "fixtures/phase-one/v1/sources/inventory-overlap.csv": "sha256:07e2375aa049321e00ade4ba39baa3f92c1ee77584237d24bbe4aab284cf286a",
+    "fixtures/phase-one/v1/sources/inventory-overlap.xlsx": "sha256:b3bf50e743a7a0ae6c54d19da2d726cb4e81dc38ca114bbe46262134338ad8a2",
+    "fixtures/phase-one/v1/sources/mixed-currency.csv": "sha256:f758769b8f33952ec7bfd452f3d3ed4346eca01bcd2fe74c07c34aaa7f58ae50",
+    "fixtures/phase-one/v1/sources/mixed-currency.xlsx": "sha256:031b349e38c11d69e5817d7688910e871e82822daa88047fb0893fe8c7f02aad",
+    "fixtures/phase-one/v1/sources/northstar-events.csv": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+    "fixtures/phase-one/v1/sources/northstar-events.xlsx": "sha256:a3a1a0ce0471641f44c57c51de0cd5b4fea90320463b17ee337f73de9d68b846",
+    "fixtures/phase-one/v1/sources/northstar-inventory.csv": "sha256:0b3b5110d898f2e0d9cc61c095a057e48ec688b68a18a862addfc0f514c883f8",
+    "fixtures/phase-one/v1/sources/northstar-inventory.xlsx": "sha256:a7a3f091b5a625cd0c47e4faea131b236300fee610a10bdf1dc3f13beb97bba2",
+    "fixtures/phase-one/v1/sources/ops-runner-events.csv": "sha256:1bba0d57fe3e6f235b6e7a5474d78358aeff33338d1af32ae026a0c5498a0610",
+    "fixtures/phase-one/v1/sources/ops-runner-events.xlsx": "sha256:04dc5d28721f416fad049ced0c6149cadba30637bd06e268ce9b59dd848e3676",
+    "fixtures/phase-one/v1/sources/oversize-dimension.xlsx": "sha256:a084e48252b9d3e5a500ad5ce7b79dd09e1409eb496848e3a1a3e61da2e8ccb9",
+    "fixtures/phase-one/v1/sources/spend-review.csv": "sha256:7cd65c562971535ce783b66dec03342aad1314ad8564a7f0ac3f879a5c9306e0",
+    "fixtures/phase-one/v1/sources/spend-review.xlsx": "sha256:bae062927ef4d72b962b6f0d6c7274cb480a666a5e0d9b3a6febfed556a9a265",
+    "fixtures/phase-one/v1/sources/window-boundaries.csv": "sha256:eb981fefb8ed7cf1796286c032245da20b13804b5ba90c812b53c32093423eeb",
+    "fixtures/phase-one/v1/sources/window-boundaries.xlsx": "sha256:686a30cf42defb96aedff250ddb2ded5f114b23660a090338829037f441615cf"
+  },
+  "passed": true,
+  "scope": "source package and guard tests only; actual reset and parser/query results have their own receipts"
+}

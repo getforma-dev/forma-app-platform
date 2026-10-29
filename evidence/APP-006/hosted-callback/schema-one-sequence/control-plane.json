@@ -1,0 +1,38 @@
+{
+  "service": {
+    "service": "GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF",
+    "counts": {
+      "desiredCount": 0,
+      "runningCount": 0,
+      "pendingCount": 0
+    },
+    "task_definition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationTaskE2459512:2",
+    "desired_running_tasks": [],
+    "desired_pending_tasks": []
+  },
+  "database": {
+    "DBInstanceIdentifier": "genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg",
+    "DbiResourceId": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+    "DBInstanceStatus": "available",
+    "EngineVersion": "16.13",
+    "AutoMinorVersionUpgrade": false,
+    "PubliclyAccessible": false,
+    "StorageEncrypted": true,
+    "DeletionProtection": true,
+    "BackupRetentionPeriod": 7
+  },
+  "callback_registry": {
+    "index_digest": "sha256:a4a47707e1e4028221cba7f5f0dfdf03ef663c6f46d0686a27632c4fd5fc5d08",
+    "arm64_leaf_digest": "sha256:08d350fd186f72886823c9b33be21b1df1a70d4f96b1a35e63d639fb7c775ac9",
+    "config_digest": "sha256:d306df2f340a77a2c4cb95847fc7f8237eea29e16118780a7ee056739b817103",
+    "manifest_body_hashes_verified": true
+  },
+  "observed_at": "2026-10-29T03:18:05.281170+00:00",
+  "account": "877573132739",
+  "region": "us-east-1",
+  "scope": "read-only callback schema1 sequencing preflight; no deployment, secret retrieval, reservation or auth clock",
+  "schema_state": "not queried in this AWS control-plane inspection; fresh SQL baseline is still required",
+  "callback_source_revision": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+  "managed_schema2_operations_excluded_from_auth_window": true,
+  "start_signal": false
+}

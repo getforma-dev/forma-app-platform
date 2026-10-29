@@ -1,0 +1,103 @@
+{
+  "boundaries": {
+    "bytes_per_minute": "5",
+    "included_ids": [
+      "B1",
+      "B2"
+    ],
+    "matched_bytes": "20",
+    "total_bytes": "50",
+    "unmatched_bytes": "30"
+  },
+  "canary": {
+    "bytes_per_minute": "4",
+    "matched_bytes": "17",
+    "total_bytes": "40",
+    "unmatched_bytes": "23"
+  },
+  "future_record_commands": {
+    "executed": false,
+    "initial_record": "absent",
+    "sequence": [
+      "K1 expected0 needs_context -> version1",
+      "identical K1 -> same outcome, one mutation",
+      "K1 changed payload -> conflict",
+      "new key expected0 -> conflict",
+      "K2 expected1 reviewed -> version2",
+      "revoked replay -> deny before outcome visibility"
+    ],
+    "source": "design/forma-northstar-demo/SCENARIOS.md#s05"
+  },
+  "invalid_mapping": {
+    "ambiguous-timestamp": "timestamp_refused",
+    "fractional-timestamp": "timestamp_refused",
+    "invalid-timestamp": "timestamp_refused",
+    "mixed-currency": "currency_refused"
+  },
+  "inventory-overlap": {
+    "E1": "INV-EXACT",
+    "E2": "INV-NET25",
+    "E3": null,
+    "E4": null,
+    "E5": "INV-EXACT"
+  },
+  "northstar": {
+    "bytes_per_minute": "114000",
+    "destinations": {
+      "198.51.100.7": "900000",
+      "203.0.113.10": "120000",
+      "203.0.113.20": "120000"
+    },
+    "included_ids": [
+      "E1",
+      "E2",
+      "E3",
+      "E4",
+      "E5"
+    ],
+    "matched_bytes": "240000",
+    "matches": {
+      "E1": "INV-EXACT",
+      "E2": "INV-NET24",
+      "E3": null,
+      "E4": null,
+      "E5": "INV-EXACT"
+    },
+    "minute_bytes": [
+      "60000",
+      "120000",
+      "300000",
+      "600000",
+      "0",
+      "60000",
+      "0",
+      "0",
+      "0",
+      "0"
+    ],
+    "total_bytes": "1140000",
+    "unmatched_bytes": "900000",
+    "unmatched_bytes_per_minute": "90000"
+  },
+  "ops-runner": {
+    "bytes_per_minute": "21000",
+    "included_ids": [
+      "O1",
+      "O2"
+    ],
+    "matched_bytes": "180000",
+    "total_bytes": "210000",
+    "unmatched_bytes": "30000",
+    "unmatched_bytes_per_minute": "3000"
+  },
+  "spend-review": {
+    "currency": "USD",
+    "exponent": 2,
+    "initial_decisions": [],
+    "queue_cents": "45000",
+    "queue_ids": [
+      "EXP-002"
+    ],
+    "total_cents": "64000"
+  }
+}

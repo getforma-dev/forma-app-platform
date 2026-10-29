@@ -1,0 +1,56 @@
+{
+  "recorded_at": "2026-10-29T01:39:26.919323+00:00",
+  "scope": "Exact published dependency metadata/archive verification; not a build",
+  "crates": [
+    {
+      "name": "tokio-postgres",
+      "version": "0.7.18",
+      "declared_rust_version": "1.85",
+      "yanked": false,
+      "registry_checksum": "a528f7d280f6d5b9cd149635c8705b0dd049754bc67d81d31fa25169a93809d3",
+      "downloaded_archive_sha256": "a528f7d280f6d5b9cd149635c8705b0dd049754bc67d81d31fa25169a93809d3",
+      "metadata": "tokio-postgres #database #postgres #postgresql #sql #async\nA native, asynchronous PostgreSQL client\nversion: 0.7.18\nlicense: MIT OR Apache-2.0\nrust-version: 1.85\ndocumentation: https://docs.rs/tokio-postgres/0.7.18\nrepository: https://github.com/rust-postgres/rust-postgres\ncrates.io: https://crates.io/crates/tokio-postgres/0.7.18\nfeatures:\n +default            = [runtime]\n  runtime            = [tokio/net, tokio/time]\n  array-impls        = [postgres-types/array-impls]\n  js                 = [postgres-protocol/js, postgres-types/js]\n  with-bit-vec-0_6   = [postgres-types/with-bit-vec-0_6]\n  with-bit-vec-0_7   = [postgres-types/with-bit-vec-0_7]\n  with-bit-vec-0_8   = [postgres-types/with-bit-vec-0_8]\n  with-bit-vec-0_9   = [postgres-types/with-bit-vec-0_9]\n  with-chrono-0_4    = [postgres-types/with-chrono-0_4]\n  with-cidr-0_2      = [postgres-types/with-cidr-0_2]\n  with-cidr-0_3      = [postgres-types/with-cidr-0_3]\n  with-eui48-0_4     = [postgres-types/with-eui48-0_4]\n  with-eui48-1       = [postgres-types/with-eui48-1]\n  with-geo-types-0_6 = [postgres-types/with-geo-types-0_6]\n  with-geo-types-0_7 = [postgres-types/with-geo-types-0_7]\n  with-jiff-0_1      = [postgres-types/with-jiff-0_1]\n  with-jiff-0_2      = [postgres-types/with-jiff-0_2]\n  with-serde_json-1  = [postgres-types/with-serde_json-1]\n  with-smol_str-01   = [postgres-types/with-smol_str-01]\n  with-time-0_2      = [postgres-types/with-time-0_2]\n  with-time-0_3      = [postgres-types/with-time-0_3]\n  with-uuid-0_8      = [postgres-types/with-uuid-0_8]\n  with-uuid-1        = [postgres-types/with-uuid-1]\n",
+      "index_refresh": "    Updating crates.io index\n Downloading crates ...\n  Downloaded tokio-postgres v0.7.18\n"
+    },
+    {
+      "name": "deadpool",
+      "version": "0.13.1",
+      "declared_rust_version": "1.85",
+      "yanked": false,
+      "registry_checksum": "3e98a7e119cd347f4201e1159b19831029e203e2d8b790547708e8157b4acf1e",
+      "downloaded_archive_sha256": "3e98a7e119cd347f4201e1159b19831029e203e2d8b790547708e8157b4acf1e",
+      "metadata": "deadpool #async #database #pool\nDead simple async pool\nversion: 0.13.1\nlicense: MIT OR Apache-2.0\nrust-version: 1.85\ndocumentation: https://docs.rs/deadpool/0.13.1\nrepository: https://github.com/deadpool-rs/deadpool\ncrates.io: https://crates.io/crates/deadpool/0.13.1\nfeatures:\n +default        = [managed, unmanaged]\n  managed        = []\n  unmanaged      = []\n  rt_async-std_1 = [deadpool-runtime/async-std_1]\n  rt_smol_2      = [deadpool-runtime/smol_2]\n  rt_tokio_1     = [deadpool-runtime/tokio_1]\n  serde          = [dep:serde]\n",
+      "index_refresh": "    Updating crates.io index\n Downloading crates ...\n  Downloaded deadpool v0.13.1\n"
+    },
+    {
+      "name": "tokio-postgres-rustls",
+      "version": "0.14.0",
+      "declared_rust_version": null,
+      "yanked": false,
+      "registry_checksum": "4c2ad44aa0ae96db89c4742212ed41645b2f597311ff6e1945542a4d9fadc2fb",
+      "downloaded_archive_sha256": "4c2ad44aa0ae96db89c4742212ed41645b2f597311ff6e1945542a4d9fadc2fb",
+      "metadata": "tokio-postgres-rustls\nRustls integration for tokio-postgres\nversion: 0.14.0\nlicense: MIT\nrust-version: unknown\ndocumentation: https://docs.rs/tokio-postgres-rustls/0.14.0\nrepository: https://github.com/jbg/tokio-postgres-rustls\ncrates.io: https://crates.io/crates/tokio-postgres-rustls/0.14.0\nfeatures:\n +default      = []\n  aws-lc-rs    = [rustls/aws_lc_rs, tokio-rustls/aws_lc_rs]\n  native-certs = [dep:rustls-native-certs]\n  ring         = [rustls/ring, tokio-rustls/ring]\n  webpki-roots = [dep:webpki-roots]\n",
+      "index_refresh": "    Updating crates.io index\n"
+    },
+    {
+      "name": "rustls",
+      "version": "0.23.46",
+      "declared_rust_version": "1.71",
+      "yanked": false,
+      "registry_checksum": "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf",
+      "downloaded_archive_sha256": "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf",
+      "metadata": "rustls\nRustls is a modern TLS library written in Rust.\nversion: 0.23.46 (latest 0.24.0-dev.2)\nlicense: Apache-2.0 OR ISC OR MIT\nrust-version: 1.71\ndocumentation: https://docs.rs/rustls/0.23.46\nhomepage: https://github.com/rustls/rustls\nrepository: https://github.com/rustls/rustls\ncrates.io: https://crates.io/crates/rustls/0.23.46\nfeatures:\n +default             = [aws_lc_rs, logging, prefer-post-quantum, std, tls12]\n  aws_lc_rs           = [dep:aws-lc-rs, webpki/aws-lc-rs, aws-lc-rs/aws-lc-sys, aws-lc-rs/prebuilt-nasm]\n  log                 = [dep:log]\n  logging             = [log]\n  prefer-post-quantum = [aws_lc_rs]\n  std                 = [webpki/std, pki-types/std, once_cell/std]\n  tls12               = []\n  aws-lc-rs           = [aws_lc_rs]\n  brotli              = [dep:brotli, dep:brotli-decompressor, std]\n  custom-provider     = []\n  fips                = [aws_lc_rs, aws-lc-rs?/fips, webpki/aws-lc-rs-fips]\n  hashbrown           = [dep:hashbrown]\n  read_buf            = [rustversion, std]\n  ring                = [dep:ring, webpki/ring]\n  rustversion         = [dep:rustversion]\n  zlib                = [dep:zlib-rs]\n",
+      "index_refresh": "note: to see how you depend on rustls, run `cargo tree --invert rustls@0.23.46`\n"
+    },
+    {
+      "name": "rustls-pki-types",
+      "version": "1.15.1",
+      "declared_rust_version": "1.60",
+      "yanked": false,
+      "registry_checksum": "2f4925028c7eb5d1fcdaf196971378ed9d2c1c4efc7dc5d011256f76c99c0a96",
+      "downloaded_archive_sha256": "2f4925028c7eb5d1fcdaf196971378ed9d2c1c4efc7dc5d011256f76c99c0a96",
+      "metadata": "rustls-pki-types\nShared types for the rustls PKI ecosystem\nversion: 1.15.1\nlicense: MIT OR Apache-2.0\nrust-version: 1.60\ndocumentation: https://docs.rs/rustls-pki-types\nhomepage: https://github.com/rustls/pki-types\nrepository: https://github.com/rustls/pki-types\ncrates.io: https://crates.io/crates/rustls-pki-types/1.15.1\nfeatures:\n +default  = [alloc]\n  alloc    = [dep:zeroize]\n  std      = [alloc]\n  web      = [web-time]\n  web-time = [dep:web-time]\n",
+      "index_refresh": "note: to see how you depend on rustls-pki-types, run `cargo tree --invert rustls-pki-types@1.15.1`\n"
+    }
+  ]
+}

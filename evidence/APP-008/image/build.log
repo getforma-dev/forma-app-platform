@@ -1,0 +1,235 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.96kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31
+#3 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b
+#4 ...
+
+#5 [auth] library/node:pull token for registry-1.docker.io
+#5 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b
+#4 DONE 0.4s
+
+#6 [internal] load .dockerignore
+#6 transferring context: 1.66kB done
+#6 DONE 0.0s
+
+#7 [browser 1/8] FROM docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b
+#7 resolve docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b 0.0s done
+#7 DONE 0.0s
+
+#8 [stage-2 1/9] FROM docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+#8 resolve docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d 0.0s done
+#8 DONE 0.0s
+
+#9 [native 1/9] FROM docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31
+#9 resolve docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31 0.0s done
+#9 DONE 0.0s
+
+#10 [internal] load build context
+#10 transferring context: 2.06kB done
+#10 DONE 0.0s
+
+#11 [native 2/9] WORKDIR /source/app
+#11 CACHED
+
+#12 [browser 5/8] RUN npm ci
+#12 CACHED
+
+#13 [browser 3/8] RUN npm install --global npm@11.6.2
+#13 CACHED
+
+#14 [browser 7/8] COPY app/admin/src ./src
+#14 CACHED
+
+#15 [browser 2/8] WORKDIR /source/admin
+#15 CACHED
+
+#16 [browser 6/8] COPY app/admin/build.ts app/admin/tsconfig.json ./
+#16 CACHED
+
+#17 [browser 4/8] COPY app/admin/package.json app/admin/package-lock.json ./
+#17 CACHED
+
+#18 [browser 8/8] RUN npm run typecheck && npm run build
+#18 CACHED
+
+#19 [native 3/9] COPY app/Cargo.toml app/Cargo.lock ./
+#19 DONE 0.0s
+
+#20 [native 4/9] COPY app/src ./src
+#20 DONE 0.0s
+
+#21 [native 5/9] COPY app/migrations ./migrations
+#21 DONE 0.0s
+
+#22 [native 6/9] COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml
+#22 DONE 0.0s
+
+#23 [native 7/9] COPY spikes/APP-006/src /source/spikes/APP-006/src
+#23 DONE 0.0s
+
+#24 [native 8/9] COPY --from=browser /source/admin/dist ./admin/dist
+#24 DONE 0.0s
+
+#25 [native 9/9] RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=genui-cargo-target-arm64,target=/source/app/target cargo build --release --locked && cp /source/app/target/release/forma-app-platform /source/genui
+#25 0.196     Updating crates.io index
+#25 0.660  Downloading crates ...
+#25 0.812   Downloaded async-trait v0.1.92
+#25 0.824   Downloaded base64ct v1.8.3
+#25 0.829   Downloaded siphasher v1.0.4
+#25 0.831   Downloaded md-5 v0.11.0
+#25 0.842   Downloaded futures-sink v0.3.34
+#25 0.844   Downloaded ctutils v0.4.2
+#25 0.861   Downloaded phf_shared v0.13.1
+#25 0.865   Downloaded tls_codec_derive v0.4.2
+#25 0.868   Downloaded zeroize_derive v1.5.0
+#25 0.869   Downloaded postgres-protocol v0.6.12
+#25 0.873   Downloaded phf v0.13.1
+#25 0.875   Downloaded hmac v0.13.0
+#25 0.878   Downloaded postgres-types v0.2.14
+#25 0.881   Downloaded tls_codec v0.4.2
+#25 0.885   Downloaded whoami v2.1.3
+#25 0.887   Downloaded unicode-bidi v0.3.18
+#25 0.890   Downloaded deadpool v0.13.1
+#25 0.894   Downloaded der v0.7.10
+#25 0.900   Downloaded tokio-postgres v0.7.18
+#25 0.905   Downloaded unicode-normalization v0.1.26
+#25 0.910   Downloaded x509-cert v0.2.5
+#25 0.919   Downloaded tokio-util v0.7.20
+#25 0.928   Downloaded unicode-properties v0.1.4
+#25 0.931   Downloaded tokio-postgres-rustls v0.14.0
+#25 0.933   Downloaded fallible-iterator v0.2.0
+#25 0.934   Downloaded der_derive v0.7.3
+#25 0.936   Downloaded const-oid v0.9.6
+#25 0.938   Downloaded stringprep v0.1.5
+#25 0.941   Downloaded spki v0.7.3
+#25 0.943   Downloaded deadpool-runtime v0.3.1
+#25 0.944   Downloaded cmov v0.5.4
+#25 0.946   Downloaded byteorder v1.5.0
+#25 0.948   Downloaded flagset v0.4.7
+#25 0.997    Compiling syn v3.0.9
+#25 0.999    Compiling futures-sink v0.3.34
+#25 1.088    Compiling cmov v0.5.4
+#25 1.204    Compiling ctutils v0.4.2
+#25 1.321    Compiling digest v0.11.3
+#25 1.407    Compiling futures-util v0.3.34
+#25 2.562    Compiling futures-channel v0.3.34
+#25 2.678    Compiling sha2 v0.11.0
+#25 3.574    Compiling synstructure v0.14.0
+#25 3.699    Compiling tokio-macros v2.7.2
+#25 3.840    Compiling zerofrom-derive v0.1.8
+#25 4.104    Compiling yoke-derive v0.8.4
+#25 4.525    Compiling zerofrom v0.1.8
+#25 4.571    Compiling tokio v1.53.3
+#25 4.710    Compiling yoke v0.8.4
+#25 4.784    Compiling zerovec-derive v0.11.7
+#25 5.370    Compiling zerovec v0.11.9
+#25 5.660    Compiling displaydoc v0.2.7
+#25 6.048    Compiling tinystr v0.8.5
+#25 6.126    Compiling icu_locale_core v2.1.1
+#25 7.501    Compiling zerotrie v0.2.5
+#25 7.701    Compiling potential_utf v0.1.6
+#25 7.756    Compiling icu_collections v2.1.1
+#25 8.092    Compiling icu_provider v2.1.1
+#25 8.268    Compiling rand_core v0.10.1
+#25 8.317    Compiling getrandom v0.4.3
+#25 8.396    Compiling hyper v1.12.0
+#25 10.50    Compiling icu_normalizer v2.1.1
+#25 11.18    Compiling icu_properties v2.1.2
+#25 11.45    Compiling serde_derive v1.0.229
+#25 11.99    Compiling tinyvec v1.13.3
+#25 12.23    Compiling unicode-normalization v0.1.26
+#25 12.53    Compiling hyper-util v0.1.21
+#25 13.06    Compiling serde v1.0.229
+#25 13.37    Compiling idna_adapter v1.2.1
+#25 13.49    Compiling tower v0.5.3
+#25 13.75    Compiling chacha20 v0.10.2
+#25 13.85    Compiling unicode-bidi v0.3.18
+#25 14.21    Compiling unicode-properties v0.1.4
+#25 14.31    Compiling stringprep v0.1.5
+#25 14.54    Compiling serde_urlencoded v0.7.1
+#25 14.65    Compiling idna v1.1.0
+#25 15.53    Compiling rand v0.10.3
+#25 15.89    Compiling tokio-rustls v0.26.6
+#25 15.91    Compiling hmac v0.13.0
+#25 15.96    Compiling md-5 v0.11.0
+#25 16.03    Compiling der_derive v0.7.3
+#25 16.07    Compiling const-oid v0.9.6
+#25 16.55    Compiling byteorder v1.5.0
+#25 16.63    Compiling fallible-iterator v0.2.0
+#25 16.65    Compiling siphasher v1.0.4
+#25 16.73    Compiling flagset v0.4.7
+#25 16.77    Compiling der v0.7.10
+#25 16.80    Compiling postgres-protocol v0.6.12
+#25 17.53    Compiling phf_shared v0.13.1
+#25 17.67    Compiling url v2.5.8
+#25 18.21    Compiling tower-http v0.6.11
+#25 18.51    Compiling hyper-rustls v0.27.10
+#25 18.82    Compiling rust-embed-utils v8.13.0
+#25 18.92    Compiling phf v0.13.1
+#25 18.97    Compiling spki v0.7.3
+#25 19.01    Compiling postgres-types v0.2.14
+#25 19.08    Compiling tokio-util v0.7.20
+#25 19.47    Compiling async-trait v0.1.92
+#25 19.59    Compiling whoami v2.1.3
+#25 20.08    Compiling axum v0.8.9
+#25 20.10    Compiling tokio-postgres v0.7.18
+#25 23.96    Compiling x509-cert v0.2.5
+#25 24.92    Compiling rust-embed v8.13.0
+#25 24.97    Compiling reqwest v0.12.28
+#25 26.90    Compiling deadpool-runtime v0.3.1
+#25 26.95    Compiling deadpool v0.13.1
+#25 27.08    Compiling genui-auth-verifier v0.1.0 (/source/spikes/APP-006)
+#25 28.73    Compiling forma-server v3.2.0
+#25 33.03    Compiling tokio-postgres-rustls v0.14.0
+#25 33.21    Compiling forma-app-platform v0.1.0 (/source/app)
+#25 43.19     Finished `release` profile [optimized] target(s) in 43.01s
+#25 DONE 43.4s
+
+#26 [stage-2 3/9] COPY app/runtime/requirements.lock ./requirements.lock
+#26 CACHED
+
+#27 [stage-2 2/9] WORKDIR /app
+#27 CACHED
+
+#28 [stage-2 4/9] RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r requirements.lock
+#28 CACHED
+
+#29 [stage-2 5/9] COPY --from=native /source/genui /app/genui
+#29 DONE 0.0s
+
+#30 [stage-2 6/9] COPY app/runtime/runtime.py /app/runtime.py
+#30 DONE 0.0s
+
+#31 [stage-2 7/9] COPY app/migrations /app/migrations
+#31 DONE 0.0s
+
+#32 [stage-2 8/9] COPY app/certs/rds-global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
+#32 DONE 0.0s
+
+#33 [stage-2 9/9] RUN mkdir -p /run/genui && chown 65532:65532 /run/genui && chmod 0700 /run/genui
+#33 DONE 0.1s
+
+#34 exporting to image
+#34 exporting layers
+#34 exporting layers 0.2s done
+#34 exporting manifest sha256:806ee69f9690065f46082f966fc06a7ea6c8bc037af6b702e953a6512d3d45f3 done
+#34 exporting config sha256:62e791e940c1351e958da09eaddfbe1e7f4944e62e41e3c2d044c74c8800a10e done
+#34 exporting attestation manifest sha256:6e7873fd46520eac02320ae0752a73ad81528cc4443fc4fa1e52b679e1eec89f done
+#34 exporting manifest list sha256:70529ada4727ccab882c68857100b4d47952cd43054c80dbf5ee13edd6620540 done
+#34 naming to docker.io/library/genui-app008:local-r4 done
+#34 unpacking to docker.io/library/genui-app008:local-r4 0.1s done
+#34 DONE 0.4s
+
+#35 resolving provenance for metadata file
+#35 DONE 0.0s

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import tempfile
 import signal
+import shutil
 import stat
 import subprocess
 import sys
@@ -107,10 +108,11 @@ class RuntimeTests(unittest.TestCase):
             def __exit__(self, *args): pass
             def execute(self, *args): return self
             def fetchone(self): return ("genui_migration",) * 12
-        with patch.dict(os.environ, {"GENUI_RDS_CA_FILE": "/unit-only/ca.pem"}), patch('psycopg.connect', return_value=Connection()) as connect, patch.object(runtime, 'scoped_session') as storage:
+        with patch.dict(os.environ, {"GENUI_RDS_CA_FILE": "/unit-only/ca.pem"}), patch('psycopg.connect', return_value=Connection()) as connect, patch.object(runtime, 'scoped_session') as storage, patch.object(runtime, 'verify_schema_catalog'):
             with self.assertRaises(runtime.Refused): runtime.probe(self.path, self.value["generation"])
             self.assertEqual(connect.call_args.kwargs['sslmode'], 'verify-full')
             self.assertEqual(connect.call_args.kwargs['user'], 'genui_workspace')
+            self.assertIn('-c search_path=pg_catalog,pg_temp',connect.call_args.kwargs['options'])
             storage.assert_not_called()
 
     def test_rds_superuser_membership_refused_even_with_false_superuser_flags(self):
@@ -119,16 +121,168 @@ class RuntimeTests(unittest.TestCase):
             def __exit__(self, *args): pass
             def execute(self, *args): return self
             def fetchone(self):
-                return ('genui_workspace','genui_workspace','genui',False,False,False,False,True,False,True,True,1)
+                return ('genui_workspace','genui_workspace','genui',False,False,False,False,True,False,True,True,runtime.DATABASE_SCHEMA_VERSION)
             def fetchall(self): return [('rds_superuser',)]
-        with patch.dict(os.environ, {'GENUI_RDS_CA_FILE':'/unit-only/ca.pem'}), patch('psycopg.connect',return_value=Connection()), patch.object(runtime,'scoped_session') as storage:
+        with patch.dict(os.environ, {'GENUI_RDS_CA_FILE':'/unit-only/ca.pem'}), patch('psycopg.connect',return_value=Connection()), patch.object(runtime,'scoped_session') as storage, patch.object(runtime,'verify_schema_catalog'):
             with self.assertRaises(runtime.Refused): runtime.probe(self.path,self.value['generation'])
             storage.assert_not_called()
+
+    def test_real_probe_requires_exact_schema_two_before_storage(self):
+        class Connection:
+            def __init__(self, user, version): self.user, self.version = user, version
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def execute(self, *args): return self
+            def fetchone(self): return (self.user,self.user,'genui',False,False,False,False,True,False,True,True,self.version)
+            def fetchall(self): return []
+        class Session:
+            def client(self, *args, **kwargs): return self
+            def list_objects_v2(self, **kwargs): return {}
+            def encrypt(self, **kwargs): return {'CiphertextBlob':b'unit-only'}
+            def decrypt(self, **kwargs): return {'Plaintext':b'genui-foundation-readiness-v1'}
+        for version in (1,2,3):
+            with self.subTest(version=version), patch.dict(os.environ, {'GENUI_RDS_CA_FILE':'/unit-only/ca.pem'}), \
+                 patch('psycopg.connect',side_effect=lambda **kw: Connection(kw['user'],version)), \
+                 patch.object(runtime,'verify_schema_catalog'), \
+                 patch.object(runtime,'scoped_session',return_value=Session()) as storage:
+                if version==2:
+                    result=runtime.probe(self.path,self.value['generation'])
+                    self.assertEqual(result['generation'],self.value['generation'])
+                    self.assertEqual(storage.call_count,2)
+                else:
+                    with self.assertRaises(runtime.Refused): runtime.probe(self.path,self.value['generation'])
+                    storage.assert_not_called()
+
+    def test_probe_catalog_refusal_precedes_identity_and_storage(self):
+        class Connection:
+            def __enter__(self): return self
+            def __exit__(self,*args): pass
+            def execute(self,*args): raise AssertionError('metadata read before catalog proof')
+        with patch.dict(os.environ,{'GENUI_RDS_CA_FILE':'/unit-only/ca.pem'}), \
+             patch('psycopg.connect',return_value=Connection()), \
+             patch.object(runtime,'verify_schema_catalog',side_effect=runtime.Refused()) as catalog, \
+             patch.object(runtime,'scoped_session') as storage:
+            with self.assertRaises(runtime.Refused): runtime.probe(self.path,self.value['generation'])
+            catalog.assert_called_once();storage.assert_not_called()
 
     def test_generation_change_refused_before_network(self):
         with patch('psycopg.connect') as connect:
             with self.assertRaises(runtime.Refused): runtime.probe(self.path, str(uuid.uuid4()))
             connect.assert_not_called()
+
+
+class MigrationSourceTests(unittest.TestCase):
+    def test_exact_two_migrations_and_original_bytes_are_required(self):
+        source=Path(runtime.__file__).resolve().parent.parent/'migrations'
+        self.assertEqual([row[0] for row in runtime.migration_sources(source)],[1,2])
+        for case in ('unknown_version','reorder','extra_sql','changed_second','changed_catalog','changed_query','changed_original_even_with_new_hash'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                target=Path(tmp)
+                for p in source.iterdir():
+                    if p.is_file(): shutil.copyfile(p,target/p.name)
+                manifest=json.loads((target/'manifest.json').read_text())
+                if case=='unknown_version': manifest['database_version']=3
+                elif case=='reorder': manifest['migrations'].reverse()
+                elif case=='extra_sql': (target/'0003_unreviewed.sql').write_text('SELECT 1;')
+                elif case=='changed_second': (target/'0002_tenant_foundation.sql').write_text('SELECT 1;')
+                elif case=='changed_catalog': (target/'catalog-v2.json').write_text('{}')
+                elif case=='changed_query': (target/'catalog-query.json').write_text('{"sql":"SELECT 1"}')
+                else:
+                    p=target/'0001_role_foundation.sql';p.write_text(p.read_text()+'\n')
+                    manifest['migrations'][0]['sha256']=runtime.hashlib.sha256(p.read_bytes()).hexdigest()
+                (target/'manifest.json').write_text(json.dumps(manifest))
+                with self.assertRaises(runtime.Refused): runtime.migration_sources(target)
+
+
+class IdentityRegistryFileTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(prefix='genui-empty-registry-unit-')
+        self.directory=Path(self.tmp.name);self.directory.chmod(0o700)
+        self.path=self.directory/'credentials.json'
+
+    def tearDown(self):
+        self.directory.chmod(0o700);self.tmp.cleanup()
+
+    def files(self): return list(self.directory.glob('.identity-registry-*.json'))
+
+    def test_new_owned_empty_registry_has_closed_shape_and_cleanup(self):
+        owned=runtime.EmptyIdentityRegistryFile(self.path)
+        value=json.loads(owned.path.read_text())
+        self.assertEqual(set(value),{'schema_version','registry_version','bindings'})
+        self.assertEqual(value['schema_version'],1);self.assertEqual(value['bindings'],[])
+        self.assertEqual(str(uuid.UUID(value['registry_version'])),value['registry_version'])
+        self.assertEqual(stat.S_IMODE(owned.path.stat().st_mode),0o600)
+        self.assertEqual(owned.path.stat().st_uid,os.geteuid())
+        self.assertFalse(os.get_inheritable(owned.file_fd))
+        owned.check_file();owned.close();owned.close()
+        self.assertEqual(self.files(),[])
+
+    def test_real_children_receive_private_empty_or_exact_explicit_registry(self):
+        report=self.directory/'report.json';script=self.directory/'child.py'
+        script.write_text(f'''#!{sys.executable}
+import json,os,stat
+from pathlib import Path
+p=Path(os.environ[{runtime.IDENTITY_REGISTRY_FILE_ENV!r}])
+Path({str(report)!r}).write_text(json.dumps({{'path':str(p),'value':json.loads(p.read_text()),'mode':stat.S_IMODE(p.stat().st_mode),'raw_auth_absent':{runtime.QUALIFICATION_JSON_ENV!r} not in os.environ}}))
+''');script.chmod(0o700)
+        explicit=self.directory/'operator-registry.json'
+        explicit_payload=json.dumps({'schema_version':1,'registry_version':str(uuid.uuid4()),'bindings':[]})
+        explicit.write_text(explicit_payload);explicit.chmod(0o600)
+        for supplied in (False,True):
+            with self.subTest(supplied=supplied):
+                env={'GENUI_BINARY':str(script)}
+                if supplied: env[runtime.IDENTITY_REGISTRY_FILE_ENV]=str(explicit)
+                with patch.dict(os.environ,env,clear=True),patch.object(runtime.signal,'signal'), \
+                     patch.object(runtime,'refresh',side_effect=lambda p:runtime.atomic_write(p,fixture())):
+                    self.assertEqual(runtime.serve(self.path),0)
+                    self.assertEqual(runtime.IDENTITY_REGISTRY_FILE_ENV in os.environ,supplied)
+                value=json.loads(report.read_text())
+                self.assertEqual(value['mode'],0o600);self.assertTrue(value['raw_auth_absent'])
+                self.assertEqual(value['value']['bindings'],[])
+                if supplied:
+                    self.assertEqual(value['path'],str(explicit))
+                    self.assertEqual(value['value'],json.loads(explicit_payload))
+                else: self.assertTrue(Path(value['path']).name.startswith('.identity-registry-'))
+                self.assertEqual(explicit.read_text(),explicit_payload)
+                self.assertEqual(self.files(),[]);self.assertFalse(self.path.exists())
+
+    def test_explicit_empty_path_is_preserved_for_native_refusal(self):
+        with patch.dict(os.environ,{runtime.IDENTITY_REGISTRY_FILE_ENV:''},clear=True), \
+             patch.object(runtime.signal,'signal'),patch.object(runtime,'refresh'), \
+             patch.object(runtime.subprocess,'Popen') as launch:
+            launch.return_value.poll.return_value=7;launch.return_value.returncode=7
+            self.assertEqual(runtime.serve(self.path),7)
+            self.assertEqual(launch.call_args.kwargs['env'][runtime.IDENTITY_REGISTRY_FILE_ENV],'')
+        self.assertEqual(self.files(),[])
+
+    def test_replaced_registry_is_refused_before_launch_and_preserved(self):
+        def refresh(_):
+            path,=self.files();path.unlink();path.write_text('unrelated replacement')
+        with patch.dict(os.environ,{},clear=True),patch.object(runtime.signal,'signal'), \
+             patch.object(runtime,'refresh',side_effect=refresh),patch.object(runtime.subprocess,'Popen') as launch:
+            with self.assertRaises(runtime.Refused): runtime.serve(self.path)
+            launch.assert_not_called()
+        path,=self.files();self.assertEqual(path.read_text(),'unrelated replacement')
+
+    def test_existing_collision_and_unsafe_directory_are_never_replaced(self):
+        fixed=uuid.UUID('00000000-0000-4000-8000-000000000001')
+        collision=self.directory/('.identity-registry-'+fixed.hex+'.json')
+        collision.write_text('existing operator data')
+        with patch.object(runtime.uuid,'uuid4',return_value=fixed):
+            with self.assertRaises(FileExistsError): runtime.EmptyIdentityRegistryFile(self.path)
+        self.assertEqual(collision.read_text(),'existing operator data')
+        self.directory.chmod(0o755)
+        with self.assertRaises(runtime.Refused): runtime.EmptyIdentityRegistryFile(self.path)
+
+    def test_refresh_failure_cleans_owned_registry(self):
+        stop=threading.Event()
+        def refresh(_):
+            self.assertEqual(len(self.files()),1);stop.set();raise OSError('synthetic')
+        with patch.dict(os.environ,{},clear=True),patch.object(runtime.signal,'signal'), \
+             patch.object(runtime.threading,'Event',return_value=stop),patch.object(runtime,'refresh',side_effect=refresh), \
+             contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(runtime.serve(self.path),0)
+        self.assertEqual(self.files(),[])
 
 
 class QualificationSecretTests(unittest.TestCase):

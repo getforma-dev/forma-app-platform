@@ -1,0 +1,162 @@
+{
+  "config_sha256": "sha256:db577f075efa896639eb03c6d9d3854848d931ac129e76108f49382b7a3f3110",
+  "elapsed_ms": 1,
+  "fuel_consumed": 1234134,
+  "input_sha256": "sha256:a7a3f091b5a625cd0c47e4faea131b236300fee610a10bdf1dc3f13beb97bba2",
+  "interface_imports": [],
+  "memory_bytes": 1441792,
+  "resource_limits": {
+    "fuel": 5000000000,
+    "guest_linear_memory_bytes": 2147483648,
+    "input_bytes": 5242880,
+    "output_bytes": 134217728,
+    "wall_clock_ms": 120000
+  },
+  "result": {
+    "contract_edition": "impl-2026-10-28.1",
+    "parser_version": 1,
+    "profile": "demo",
+    "result": {
+      "available_sheets": [
+        "Inventory"
+      ],
+      "cells": [
+        {
+          "coordinate": {
+            "column": 1,
+            "row": 1,
+            "sheet": "Inventory",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "inventory_id",
+          "value": {
+            "type": "text",
+            "value": "inventory_id"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 2,
+            "row": 1,
+            "sheet": "Inventory",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "kind",
+          "value": {
+            "type": "text",
+            "value": "kind"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 3,
+            "row": 1,
+            "sheet": "Inventory",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "address",
+          "value": {
+            "type": "text",
+            "value": "address"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 1,
+            "row": 2,
+            "sheet": "Inventory",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "INV-EXACT",
+          "value": {
+            "type": "text",
+            "value": "INV-EXACT"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 2,
+            "row": 2,
+            "sheet": "Inventory",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "exact",
+          "value": {
+            "type": "text",
+            "value": "exact"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 3,
+            "row": 2,
+            "sheet": "Inventory",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "203.0.113.10",
+          "value": {
+            "type": "text",
+            "value": "203.0.113.10"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 1,
+            "row": 3,
+            "sheet": "Inventory",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "INV-NET24",
+          "value": {
+            "type": "text",
+            "value": "INV-NET24"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 2,
+            "row": 3,
+            "sheet": "Inventory",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "network",
+          "value": {
+            "type": "text",
+            "value": "network"
+          }
+        },
+        {
+          "coordinate": {
+            "column": 3,
+            "row": 3,
+            "sheet": "Inventory",
+            "type": "xlsx"
+          },
+          "interpretation": "literal",
+          "original": "203.0.113.0/24",
+          "value": {
+            "type": "text",
+            "value": "203.0.113.0/24"
+          }
+        }
+      ],
+      "date_epoch_1904": false,
+      "expanded_bytes": 2065,
+      "format": "xlsx",
+      "formula_policy": "reject",
+      "mapping_status": "inspection_required",
+      "rows": 3,
+      "selected_sheet": "Inventory"
+    },
+    "status": "parsed"
+  },
+  "wasm_sha256": "sha256:aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba"
+}

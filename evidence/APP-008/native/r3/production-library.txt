@@ -1,0 +1,2 @@
+   Compiling forma-app-platform v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.96s

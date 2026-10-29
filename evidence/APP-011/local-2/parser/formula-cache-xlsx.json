@@ -1,0 +1,21 @@
+{
+  "config_sha256": "sha256:12cfa179f58e98619ffbe43b4bf849d0bd149a6f5f4df848f14f4726b058cb65",
+  "elapsed_ms": 0,
+  "fuel_consumed": 398341,
+  "input_sha256": "sha256:b6355b174c6451b14f4c528e44d021c7fec4a0a9a33a0debb19484eff911eb1d",
+  "interface_imports": [],
+  "memory_bytes": 1376256,
+  "resource_limits": {
+    "fuel": 5000000000,
+    "guest_linear_memory_bytes": 2147483648,
+    "input_bytes": 5242880,
+    "output_bytes": 134217728,
+    "wall_clock_ms": 120000
+  },
+  "result": {
+    "no_revision_created": true,
+    "reason": "formula_refused",
+    "status": "refused"
+  },
+  "wasm_sha256": "sha256:aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba"
+}

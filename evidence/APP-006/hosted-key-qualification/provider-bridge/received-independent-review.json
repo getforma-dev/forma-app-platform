@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-10-29T03:02:50.972767+00:00",
+  "reviewer": "FormaStack /root/auth",
+  "disposition": "approved local operator preparation; no remaining actionable source finding",
+  "bridge_sha256": "0ce4bdf1288c8c81f90094a61492ede7732134cf8a177229a82a51a133017277",
+  "issuer_driver_sha256": "78b5c0d618418fbcc8b095378061e81a450cac7b9dd4511bc0986c143756a8f6",
+  "session_controller_sha256": "c149865151693334d42290958a618e974c586ced3261bd1ded871afd3501c8ad",
+  "consumer_source": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+  "provider_source": "dfba787295b880816fd95295b507a4527c51e62f",
+  "finding": {
+    "id": "R1",
+    "severity": "P2",
+    "summary": "Outer bridge and dedicated seam originally pinned rehearsal windows independently, allowing acquisition after a changed tuple before eventual refusal.",
+    "initial_result": {
+      "overall_passed": false,
+      "issuer_requests": 13,
+      "token_endpoint_calls": 3,
+      "container_runs": 0
+    },
+    "resolution": "The bridge supplies its readBoundReadiness to the seam/controller. Each raw snapshot is checked against the initially pinned tuple and the same snapshot is returned; no second read. Existing full readiness/deadline/signal checks remain in their original owners.",
+    "final_independent_regression": {
+      "passed": true,
+      "issuer_requests": 0,
+      "token_endpoint_calls": 0,
+      "container_runs": 0
+    },
+    "initial_source_preserved": "canonical-key-history-dd52fbed",
+    "initial_failure_receipt": "canonical-key-bridge-independent-window-initial.json"
+  },
+  "reviewed_boundaries": [
+    "Exact pinned ARM64 leaf/config/Linux image inspection and unused owned container name before acquisition; fixed local Docker socket; no pull or host/TLS override.",
+    "Dedicated canary tenant/subject, subject distinct from declared continuity subjects; original protected fixture/mapping validation and hosted PAR/nonce/state/PKCE acquisition reused.",
+    "Only original cryptographically verified access JWT reaches the private callback after baseline refresh. Callback output ignored. Separate controller retains replacement refresh; continuity sessions and public CLI token export are absent.",
+    "Closed\u226416KiB stdin buffer,2s delivery bound,\u22648192byte JWT,120s remaining-life/envelope headroom; fixed95s outer child bound for90s qualifier; no bearer in argv/env/file/hash or child logs.",
+    "Exact5ordered cases, counters/refusals, compiled hashes, source declarations, ARM64/Linux, elapsed-time bounds and exit0+complete output required. No retry to pass.",
+    "Bounded stdout/stderr, fixed sanitized failure output; signal cancels trial but existing cleanup can proceed under original valid readiness/window.",
+    "Bounded owned-container removal and absence check even after readiness/cutoff loss; session logout+401 proof only while admissible, explicit revocation obligation on ambiguity/failure.",
+    "Initial360s admission reserve,170/165s pre-handoff reserves and65s post-child reserve leave cleanup headroom; immutable tuple shared through acquisition and cleanup.",
+    "Guarded transport extraction mechanical; controller and preexisting driver tests unchanged; old driver/reviews preserved."
+  ],
+  "qualification": {
+    "owner_recorded_bridge_seam_tests": 19,
+    "owner_recorded_existing_driver_tests": 14,
+    "owner_recorded_adapted_independent_jwks_controls": 4,
+    "reviewer_rerun_scope": "One concrete window-handoff regression only; no broad rerun.",
+    "all14_preparation_hashes_match": true,
+    "original_driver_snapshot_sha256": "cae3c125c79d1159cf5e2ea84d383e953d06c192977d4ec501e7cf7bf7e5db1e",
+    "initial_failures_retained": true
+  },
+  "files_sha256": {
+    "canonical-key-bridge.cjs": "0ce4bdf1288c8c81f90094a61492ede7732134cf8a177229a82a51a133017277",
+    "canonical-key-bridge.test.cjs": "2d3f49087461cb2650c80b97d10ee9370ec47f3e3aa9c914471b1ddad9745917",
+    "canonical-key-binding.pending.json": "c5dddc53bb1c7d3397560749d06db67a5ecc4d96e959bdf71c651fa3cb3b4941",
+    "CANONICAL-KEY-BRIDGE.md": "43dbbeb436d66e0f32af082a1c8cf4967647fade4b791857098c6003543a3c2f",
+    "canonical-key-bridge-tests.log": "6a7b2233ac1cc0580acf3d0e0d4368e7079059166b4c4c0a034645abf79fc2b8",
+    "canonical-key-bridge-tests.initial.log": "c51c2d2526b9e16d2639f5a63de43ff743a602b846e93bdfcaa584c18edc963a",
+    "issuer-session-driver.cjs": "78b5c0d618418fbcc8b095378061e81a450cac7b9dd4511bc0986c143756a8f6",
+    "issuer-session-driver.test.cjs": "fb5b74da1287135c2e367b2eb1f20b213fb52cbaf1272b94b7d9f3896f5674f8",
+    "session-controller.cjs": "c149865151693334d42290958a618e974c586ced3261bd1ded871afd3501c8ad",
+    "issuer-session-driver-key-seam-independent-controls.cjs": "088f5eaa8c59d7c4dbc782b97360d320b6067e7d4dacd8510216b057a49a030f",
+    "issuer-session-driver-independent-key-seam.json": "b6729ac79769bb4727ebe5fe77dcd3eb37d881b333d6f05c19244ea67c48c28d",
+    "issuer-session-driver-key-seam-independent.log": "1fcd6bbe6d4d28b9b9b939a8ad1b0ff24bf117fab52ce4e9d1b945e9ef6b7711",
+    "issuer-session-driver-key-seam-existing-tests.log": "63039094cfc6b02ee7ac22a467c85784ac426b74a6e82dbf0a7b6bc059806444",
+    "canonical-key-bridge-tests.window-fix.log": "69efe88ec27dfdaf997383bed21fed539404bb1b642695551fa5df96c7ce32c3",
+    "canonical-key-bridge-preparation.json": "7d4dbbe364fb903a5ae056776523a6d5d55c2c38b39ef9eb24ca395919225dab",
+    "canonical-key-bridge-independent-window-control.cjs": "ee70e31a42202cde42559c836c57c46c27d5f2f53bbb4fdef60fd1e1e4104c41",
+    "canonical-key-bridge-independent-window-initial.json": "04cfa5abb0ab698827aabe4fd4e24cada691ea6e67c34c5af7026e1f5a7a8be2",
+    "canonical-key-bridge-independent-window-final.json": "2ffc6c10feeac2ab81ddc4d987d273cb10d861bf29660ab410eeb8a19c2e5492",
+    "GENUI-UNKNOWN-KID-HANDOFF-REVIEW.md": "727eb047dd31d93e98f246e0a73aade4d471084501dc0a954991c3a973d2b5bf",
+    "genui-unknown-kid-handoff-review.json": "a0d578c0f9dbb8605cf55a75c228c070dee7e66d167b0d350b0f28d5650cc2fc"
+  },
+  "limits": [
+    "No real token, Docker execution/pull, issuer request, cloud call, browser or shared interval in this review.",
+    "Pending binding is still unconfigured. Root must review actual dedicated fixture, source/image availability, mapping, baseline, source/readiness flags and time admission.",
+    "Source/image declarations and disk executable hash are not independent process attestations; local image check and external operator receipt provide separate binding.",
+    "Counters prove verifier reserved attempts/accepted keysets, not external issuer request-log totals.",
+    "Canonical hosted acceptance, callback/browser, app-resource authorization, KMS custody/rotation and managed-secret acceptance remain distinct.",
+    "SIGKILL/host loss and failed session cleanup require operator reconciliation; no automatic repair.",
+    "Original248 hosted gate and Safari/shared-interval blocker remain open."
+  ],
+  "source_or_readiness_edits_by_reviewer": false,
+  "external_actions_by_reviewer": false
+}

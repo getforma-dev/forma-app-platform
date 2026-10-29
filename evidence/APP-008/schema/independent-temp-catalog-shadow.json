@@ -1,0 +1,26 @@
+{
+  "scope": "Independent session-local pg_temp relation-shadow probe; not an exposed application exploit",
+  "production_preconditions": "Requires a caller-supplied operator connection already containing temporary relations; normal migrate() opens a fresh connection and app roles have no TEMP",
+  "source_sha256": {
+    "app/runtime/runtime.py": "c6bc3ca14dd898597cd78651d7baecf3a79676dd8d8d7d79369b5c6d2732ca09",
+    "app/migrations/catalog-query.json": "dd86a4be87895fe4ddb8ccd24e31da50f6705754ffc2dc51709c1b7171f24422",
+    "evidence/APP-008/schema/reproduce-temp-catalog-shadow.py": "a96cd1b79ec5eb345ebd0b23d1a3de428e26833d1dc03f537a880caa399ce063"
+  },
+  "observations": [
+    {
+      "operation": "verify_schema_catalog",
+      "accepted": true,
+      "shadow_marker_called": true,
+      "marker_value": 503,
+      "search_path": "pg_catalog"
+    },
+    {
+      "operation": "apply_migrations",
+      "accepted": true,
+      "shadow_marker_called": true,
+      "marker_value": 503,
+      "search_path": "pg_catalog"
+    }
+  ],
+  "owned_container_removed": true
+}

@@ -1,0 +1,19 @@
+{
+  "after": {
+    "context": "Contract-shape validation only | APP-011 disposable operator mutation",
+    "version": 2
+  },
+  "app_id": "00000000-0000-4000-8000-000000000065",
+  "application_command": false,
+  "before": {
+    "context": "Contract-shape validation only",
+    "version": 1
+  },
+  "lock_order": [
+    "organization SHARE",
+    "member SHARE",
+    "work UPDATE"
+  ],
+  "organization_id": "00000000-0000-4000-8000-000000000001",
+  "work_id": "00000000-0000-4000-8000-000000000069"
+}

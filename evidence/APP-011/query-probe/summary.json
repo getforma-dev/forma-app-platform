@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "results": {
+    "datasets": 4,
+    "duckdb_version": "2.0.0",
+    "queries": 14,
+    "seed_alignment": {
+      "bundles_revalidated": 3,
+      "database_actions": "none",
+      "guarded_reset": "pending APP-008 integration",
+      "scope": "read-only contract/setup alignment, not provider provisioning or live tenant qualification",
+      "seed_source_digest": "sha256:ef24eb18cc91524ac1e2af828b9b111a80611bd93f41ff6b9dc699d79175d6c3",
+      "setup_digest": "sha256:9836f82337ef24bb522242b9b98eb6a8cdca347561f0f72466388638156d2130"
+    }
+  },
+  "scope": "probe using local-1 actual parser reports; final run follows"
+}

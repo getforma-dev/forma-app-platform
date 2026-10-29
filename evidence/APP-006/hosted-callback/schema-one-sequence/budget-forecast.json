@@ -1,0 +1,29 @@
+{
+  "observed_at_utc": "2026-10-29T03:18:43Z",
+  "reused_reservation": false,
+  "monthly_budget_cents": 10000,
+  "genui_allocation_cents": 7000,
+  "cost_by_month": {
+    "2026-10": {
+      "retained_core_full_month_cents": 5229,
+      "all_window_compute_reservations_cents": 329,
+      "prior_extra_spend_cents": 101,
+      "variable_reserve_cents": 1200,
+      "genui_total_cents": 6859,
+      "auth_spent_or_reserved_cents": 500,
+      "unallocated_cents": 2500,
+      "project_total_cents": 9859
+    }
+  },
+  "limits": [
+    "No AWS resource, certificate, image, account state or billing feed was queried.",
+    "Scheduler requests ECS desiredCount zero; it is not a billing cap, teardown or a guarantee of timely delivery.",
+    "RDS, ALB, two ALB IPv4 addresses, storage and keys remain charged after ECS stops.",
+    "Retain this ledger across failed deployments, retries and renewed windows; never reset known spending to zero.",
+    "Renewals, standalone tasks, actual charges above reserves and every later month need reconciliation; model spending remains zero."
+  ],
+  "scope": "six-hour cost feasibility only; no reservation persisted, interval selected, secret selected, deployment or start signal",
+  "status": "forecast_only",
+  "ledger_sha256": "sha256:bf5ff561052c334e17e936ffce444a90df44660cc30af8fc9689bc6a3d65f616",
+  "future_actual_window_must_recheck_and_reserve": true
+}

@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "scope": "APP-008 R4 catalog-before-metadata follow-up, local only",
+  "managed_acceptance": false,
+  "recorded_at": "2026-10-29T02:58:36.385899+00:00",
+  "inputs_before": {
+    "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+    "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+    "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+    "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+    "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+    "app/src/lib.rs": "381db89b74187d80ebd7300b1e1a9823596a3c3a422a55632f5552a7ab2b305f",
+    "app/src/main.rs": "6d0a1e5cd599605cfdf21335e1cf545e260961aa2b60c00739879456746f8451",
+    "app/src/readiness.rs": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513",
+    "app/src/roles.rs": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216",
+    "app/src/storage/authorization.rs": "c53609ef588351a322acf47ff249fd7423d49eef01848d8a4213bea4f0c05a32",
+    "app/src/storage/catalog.rs": "585f39f389d1173bbbb7b5b6b23a70283a155da0e1023bdc8ab9879cb0705055",
+    "app/src/storage/mod.rs": "2c642fec59cc879435830142140e0ce0fb9a18cd4c04d9ec2da03bbff867c481",
+    "app/src/storage/pool.rs": "56d44535b2ea0d1e4f1f78764b1a700fc8eb1e6c9a6ee9d4f83f56af100d0f99",
+    "app/src/storage/qualification.rs": "7680e0e80c43531f855fe7dd1168d988c17ce779afdcbe8147108a9f14e2c3c9",
+    "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+    "app/src/storage/tests.rs": "6e2a1747c398f0a064a25e945ba3b2a9ce65bdedd17e6750a1f8ae66b4d63232",
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/catalog-query.json": "dd86a4be87895fe4ddb8ccd24e31da50f6705754ffc2dc51709c1b7171f24422",
+    "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+    "app/migrations/manifest.json": "d9384be1ea8a999d2113a5afcb47902df4e18c6bb7bf0336ea90f1ce3e1b9388",
+    "app/runtime/runtime.py": "c6bc3ca14dd898597cd78651d7baecf3a79676dd8d8d7d79369b5c6d2732ca09",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd"
+  },
+  "checks": [
+    {
+      "name": "lint",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "clippy",
+        "--locked",
+        "--lib",
+        "--tests",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.686,
+      "log": "lint.txt"
+    },
+    {
+      "name": "production-library",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "build",
+        "--locked",
+        "--lib"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.936,
+      "log": "production-library.txt"
+    },
+    {
+      "name": "native-campaign",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "test",
+        "--locked",
+        "--lib",
+        "storage::qualification::native_postgres_campaign",
+        "--",
+        "--ignored",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 41.694,
+      "log": "native-campaign.txt"
+    },
+    {
+      "name": "unit",
+      "command": [
+        "cargo",
+        "+1.93.1",
+        "test",
+        "--locked",
+        "--lib"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 6.334,
+      "log": "unit.txt"
+    },
+    {
+      "name": "floor-native-unit",
+      "command": [
+        "cargo",
+        "+1.85.0",
+        "test",
+        "--locked",
+        "--lib",
+        "storage",
+        "--target-dir",
+        "target/app008-msrv",
+        "--",
+        "--skip",
+        "native_postgres_campaign"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 4.282,
+      "log": "floor-native-unit.txt"
+    },
+    {
+      "name": "floor-public-boundary",
+      "command": [
+        "cargo",
+        "+1.85.0",
+        "test",
+        "--locked",
+        "--doc",
+        "--target-dir",
+        "target/app008-msrv"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.905,
+      "log": "floor-public-boundary.txt"
+    }
+  ],
+  "inputs_after": {
+    "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+    "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+    "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+    "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+    "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+    "app/src/lib.rs": "381db89b74187d80ebd7300b1e1a9823596a3c3a422a55632f5552a7ab2b305f",
+    "app/src/main.rs": "6d0a1e5cd599605cfdf21335e1cf545e260961aa2b60c00739879456746f8451",
+    "app/src/readiness.rs": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513",
+    "app/src/roles.rs": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216",
+    "app/src/storage/authorization.rs": "c53609ef588351a322acf47ff249fd7423d49eef01848d8a4213bea4f0c05a32",
+    "app/src/storage/catalog.rs": "585f39f389d1173bbbb7b5b6b23a70283a155da0e1023bdc8ab9879cb0705055",
+    "app/src/storage/mod.rs": "2c642fec59cc879435830142140e0ce0fb9a18cd4c04d9ec2da03bbff867c481",
+    "app/src/storage/pool.rs": "56d44535b2ea0d1e4f1f78764b1a700fc8eb1e6c9a6ee9d4f83f56af100d0f99",
+    "app/src/storage/qualification.rs": "7680e0e80c43531f855fe7dd1168d988c17ce779afdcbe8147108a9f14e2c3c9",
+    "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+    "app/src/storage/tests.rs": "6e2a1747c398f0a064a25e945ba3b2a9ce65bdedd17e6750a1f8ae66b4d63232",
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/catalog-query.json": "dd86a4be87895fe4ddb8ccd24e31da50f6705754ffc2dc51709c1b7171f24422",
+    "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+    "app/migrations/manifest.json": "d9384be1ea8a999d2113a5afcb47902df4e18c6bb7bf0336ea90f1ce3e1b9388",
+    "app/runtime/runtime.py": "c6bc3ca14dd898597cd78651d7baecf3a79676dd8d8d7d79369b5c6d2732ca09",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd"
+  },
+  "inputs_unchanged": true,
+  "toolchains": {
+    "1.93.1": "rustc 1.93.1 (01f6ddf75 2026-02-11)\nbinary: rustc\ncommit-hash: 01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf\ncommit-date: 2026-02-11\nhost: aarch64-apple-darwin\nrelease: 1.93.1\nLLVM version: 21.1.8\n",
+    "1.85.0": "rustc 1.85.0 (4d91de4e4 2025-02-17)\nbinary: rustc\ncommit-hash: 4d91de4e48198da2e33413efdcd9cd2cc0c46688\ncommit-date: 2025-02-17\nhost: aarch64-apple-darwin\nrelease: 1.85.0\nLLVM version: 19.1.7\n"
+  },
+  "native_campaign": {
+    "report": "local-postgres-tls.json",
+    "sha256": "2825b983191335eb9415d9c45c39ca30ebd21290d2b7f34c00b9d0c7c956a2f2",
+    "passed_checks": 35
+  },
+  "passed": true
+}

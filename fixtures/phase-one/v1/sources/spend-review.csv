@@ -1,0 +1,4 @@
+expense_id,description,amount_cents,currency
+EXP-001,Equipment supplies,12000,USD
+EXP-002,Hosted service,45000,USD
+EXP-003,Team transport,7000,USD

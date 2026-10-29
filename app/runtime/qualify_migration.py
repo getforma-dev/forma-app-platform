@@ -1,4 +1,8 @@
-"""Local PostgreSQL 16 regression only; simulated rds_iam is not managed evidence."""
+"""Preserved migration0001 regression on local PostgreSQL16.13.
+
+The complete checksummed version2 transition is qualify_tenant_schema.py.
+Simulated rds_iam and local trust authentication are not managed evidence.
+"""
 import argparse
 import hashlib
 import json
@@ -61,7 +65,7 @@ def qualify(image):
         else:
             raise RuntimeError("Local PostgreSQL startup timeout")
         report["server_version"] = sql("SHOW server_version;", user="postgres", database="postgres").stdout.strip()
-        assert report["server_version"].startswith("16."), report["server_version"]
+        assert report["server_version"].split()[0] == "16.13", report["server_version"]
         sql("""CREATE ROLE genui_migration LOGIN INHERIT CREATEDB CREATEROLE NOSUPERUSER NOBYPASSRLS;
           CREATE ROLE rds_iam NOLOGIN;
           GRANT rds_iam TO genui_migration WITH ADMIN TRUE;

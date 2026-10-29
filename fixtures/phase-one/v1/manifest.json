@@ -1,0 +1,732 @@
+{
+  "edition": "app011-fixtures-v1",
+  "encoding": "UTF-8; LF CSV; literal OOXML; sorted ZIP_STORED entries with fixed timestamp/permissions",
+  "metadata": [
+    {
+      "bytes": 1586,
+      "digest": "sha256:c2ca316d6d6abbcd65515369e9759cd2204b5484b1f67fbf6cca052d5f6abbbe",
+      "path": "mappings.json"
+    },
+    {
+      "bytes": 2245,
+      "digest": "sha256:8471f0d68e5606bc5656b74eb4e199f4d0f8f49440f437647002cc979b62c66d",
+      "path": "expected.json"
+    },
+    {
+      "bytes": 12773,
+      "digest": "sha256:29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
+      "path": "setup.json"
+    }
+  ],
+  "scope": "Original source packaging and independent oracle. No live import, model generation, publication, identity provisioning or authenticated scenario acceptance.",
+  "source_documents": [
+    {
+      "digest": "sha256:0adc2d6a83df03f555dcf52258a768039d0e59592ed56d12335e82f8123cbab1",
+      "path": "design/forma-northstar-demo/SCENARIOS.md"
+    },
+    {
+      "digest": "sha256:f209ccb05aa895080c6fd424fe979d65f276959536ee7d57b371428e1d049fd5",
+      "path": "design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md"
+    },
+    {
+      "digest": "sha256:9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45",
+      "path": "contracts/implementation-lock.json"
+    },
+    {
+      "digest": "sha256:45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+      "path": "contracts/fixtures/northstar.json"
+    },
+    {
+      "digest": "sha256:4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+      "path": "contracts/fixtures/spend-review.json"
+    }
+  ],
+  "sources": [
+    {
+      "bytes": 397,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 6,
+      "dataset": "northstar-events",
+      "format": "csv",
+      "id": "northstar-events-csv",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02",
+        "synthetic_additions": "Asset column made explicit; timestamps include design's UTC date."
+      },
+      "original_digest": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+      "parser_expect": "accepted",
+      "path": "sources/northstar-events.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 4431,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 6,
+      "dataset": "northstar-events",
+      "format": "xlsx",
+      "id": "northstar-events-xlsx",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02",
+        "synthetic_additions": "Asset column made explicit; timestamps include design's UTC date."
+      },
+      "original_digest": "sha256:a3a1a0ce0471641f44c57c51de0cd5b4fea90320463b17ee337f73de9d68b846",
+      "parser_expect": "accepted",
+      "path": "sources/northstar-events.xlsx",
+      "sheet": "Events",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 88,
+      "columns": [
+        "inventory_id",
+        "kind",
+        "address"
+      ],
+      "data_rows": 2,
+      "dataset": "northstar-inventory",
+      "format": "csv",
+      "id": "northstar-inventory-csv",
+      "kind": "inventory",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02",
+        "synthetic_additions": "Stable inventory row IDs added."
+      },
+      "original_digest": "sha256:0b3b5110d898f2e0d9cc61c095a057e48ec688b68a18a862addfc0f514c883f8",
+      "parser_expect": "accepted",
+      "path": "sources/northstar-inventory.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 2657,
+      "columns": [
+        "inventory_id",
+        "kind",
+        "address"
+      ],
+      "data_rows": 2,
+      "dataset": "northstar-inventory",
+      "format": "xlsx",
+      "id": "northstar-inventory-xlsx",
+      "kind": "inventory",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02",
+        "synthetic_additions": "Stable inventory row IDs added."
+      },
+      "original_digest": "sha256:a7a3f091b5a625cd0c47e4faea131b236300fee610a10bdf1dc3f13beb97bba2",
+      "parser_expect": "accepted",
+      "path": "sources/northstar-inventory.xlsx",
+      "sheet": "Inventory",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 153,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 2,
+      "dataset": "ops-runner-events",
+      "format": "csv",
+      "id": "ops-runner-events-csv",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S04",
+        "synthetic_additions": "Event IDs and exact within-window timestamps chosen for repeatability; amounts, destinations, asset and full window from S04."
+      },
+      "original_digest": "sha256:1bba0d57fe3e6f235b6e7a5474d78358aeff33338d1af32ae026a0c5498a0610",
+      "parser_expect": "accepted",
+      "path": "sources/ops-runner-events.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 3015,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 2,
+      "dataset": "ops-runner-events",
+      "format": "xlsx",
+      "id": "ops-runner-events-xlsx",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S04",
+        "synthetic_additions": "Event IDs and exact within-window timestamps chosen for repeatability; amounts, destinations, asset and full window from S04."
+      },
+      "original_digest": "sha256:04dc5d28721f416fad049ced0c6149cadba30637bd06e268ce9b59dd848e3676",
+      "parser_expect": "accepted",
+      "path": "sources/ops-runner-events.xlsx",
+      "sheet": "Events",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 147,
+      "columns": [
+        "expense_id",
+        "description",
+        "amount_cents",
+        "currency"
+      ],
+      "data_rows": 3,
+      "dataset": "spend-review",
+      "format": "csv",
+      "id": "spend-review-csv",
+      "kind": "spend",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S05",
+        "synthetic_additions": ""
+      },
+      "original_digest": "sha256:7cd65c562971535ce783b66dec03342aad1314ad8564a7f0ac3f879a5c9306e0",
+      "parser_expect": "accepted",
+      "path": "sources/spend-review.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 3048,
+      "columns": [
+        "expense_id",
+        "description",
+        "amount_cents",
+        "currency"
+      ],
+      "data_rows": 3,
+      "dataset": "spend-review",
+      "format": "xlsx",
+      "id": "spend-review-xlsx",
+      "kind": "spend",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S05",
+        "synthetic_additions": ""
+      },
+      "original_digest": "sha256:bae062927ef4d72b962b6f0d6c7274cb480a666a5e0d9b3a6febfed556a9a265",
+      "parser_expect": "accepted",
+      "path": "sources/spend-review.xlsx",
+      "sheet": "Expenses",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 149,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 2,
+      "dataset": "canary-events",
+      "format": "csv",
+      "id": "canary-events-csv",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S01,S06",
+        "synthetic_additions": "Entire 40-byte dataset is a distinct isolation sentinel invented for this package, not a design business example."
+      },
+      "original_digest": "sha256:5e077aa8b4cd7e168b13af53f4d39e6e8cb2d5a0fd395e8a4986d2055eed3e0c",
+      "parser_expect": "accepted",
+      "path": "sources/canary-events.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 3011,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 2,
+      "dataset": "canary-events",
+      "format": "xlsx",
+      "id": "canary-events-xlsx",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S01,S06",
+        "synthetic_additions": "Entire 40-byte dataset is a distinct isolation sentinel invented for this package, not a design business example."
+      },
+      "original_digest": "sha256:46982afa6e53b732016478d04f0b96c09c0605c3ba759a1e4150670b7acfb8c3",
+      "parser_expect": "accepted",
+      "path": "sources/canary-events.xlsx",
+      "sheet": "Events",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 60,
+      "columns": [
+        "inventory_id",
+        "kind",
+        "address"
+      ],
+      "data_rows": 1,
+      "dataset": "canary-inventory",
+      "format": "csv",
+      "id": "canary-inventory-csv",
+      "kind": "inventory",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S01,S06",
+        "synthetic_additions": "Invented sentinel inventory, intentionally unlike Northstar."
+      },
+      "original_digest": "sha256:41ab57bfbce4096d10c75fcb29f5387324590c42dcf765ab7be538d73d6b906a",
+      "parser_expect": "accepted",
+      "path": "sources/canary-inventory.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 2420,
+      "columns": [
+        "inventory_id",
+        "kind",
+        "address"
+      ],
+      "data_rows": 1,
+      "dataset": "canary-inventory",
+      "format": "xlsx",
+      "id": "canary-inventory-xlsx",
+      "kind": "inventory",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S01,S06",
+        "synthetic_additions": "Invented sentinel inventory, intentionally unlike Northstar."
+      },
+      "original_digest": "sha256:b603721baa7c3cec0954c418baa9f90100ce480ffceb0ab562934e49caf304dc",
+      "parser_expect": "accepted",
+      "path": "sources/canary-inventory.xlsx",
+      "sheet": "Inventory",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 320,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 5,
+      "dataset": "window-boundaries",
+      "format": "csv",
+      "id": "window-boundaries-csv",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02",
+        "synthetic_additions": "Invented rows independently exercise both boundaries and asset selection."
+      },
+      "original_digest": "sha256:eb981fefb8ed7cf1796286c032245da20b13804b5ba90c812b53c32093423eeb",
+      "parser_expect": "accepted",
+      "path": "sources/window-boundaries.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 4061,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 5,
+      "dataset": "window-boundaries",
+      "format": "xlsx",
+      "id": "window-boundaries-xlsx",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02",
+        "synthetic_additions": "Invented rows independently exercise both boundaries and asset selection."
+      },
+      "original_digest": "sha256:686a30cf42defb96aedff250ddb2ded5f114b23660a090338829037f441615cf",
+      "parser_expect": "accepted",
+      "path": "sources/window-boundaries.xlsx",
+      "sheet": "Events",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 121,
+      "columns": [
+        "inventory_id",
+        "kind",
+        "address"
+      ],
+      "data_rows": 3,
+      "dataset": "inventory-overlap",
+      "format": "csv",
+      "id": "inventory-overlap-csv",
+      "kind": "inventory",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02",
+        "synthetic_additions": "Extra narrower network exercises exact-then-longest precedence."
+      },
+      "original_digest": "sha256:07e2375aa049321e00ade4ba39baa3f92c1ee77584237d24bbe4aab284cf286a",
+      "parser_expect": "accepted",
+      "path": "sources/inventory-overlap.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 2899,
+      "columns": [
+        "inventory_id",
+        "kind",
+        "address"
+      ],
+      "data_rows": 3,
+      "dataset": "inventory-overlap",
+      "format": "xlsx",
+      "id": "inventory-overlap-xlsx",
+      "kind": "inventory",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02",
+        "synthetic_additions": "Extra narrower network exercises exact-then-longest precedence."
+      },
+      "original_digest": "sha256:b3bf50e743a7a0ae6c54d19da2d726cb4e81dc38ca114bbe46262134338ad8a2",
+      "parser_expect": "accepted",
+      "path": "sources/inventory-overlap.xlsx",
+      "sheet": "Inventory",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 97,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 1,
+      "dataset": "invalid-timestamp",
+      "format": "csv",
+      "id": "invalid-timestamp-csv",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02,S06",
+        "synthetic_additions": "Invalid mapping control; parser inspection must not confer timestamp validity."
+      },
+      "original_digest": "sha256:0bec7811c18b6f6251bce3176e82a1ccc75f472e21dca902885b8dd3cabbfcfa",
+      "parser_expect": "accepted",
+      "path": "sources/invalid-timestamp.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 2666,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 1,
+      "dataset": "invalid-timestamp",
+      "format": "xlsx",
+      "id": "invalid-timestamp-xlsx",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02,S06",
+        "synthetic_additions": "Invalid mapping control; parser inspection must not confer timestamp validity."
+      },
+      "original_digest": "sha256:c38529ab928a53f4c58e2fe97326425df11a2743597f81df236941e4e3357472",
+      "parser_expect": "accepted",
+      "path": "sources/invalid-timestamp.xlsx",
+      "sheet": "Events",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 93,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 1,
+      "dataset": "ambiguous-timestamp",
+      "format": "csv",
+      "id": "ambiguous-timestamp-csv",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02,S06",
+        "synthetic_additions": "Invalid mapping control; parser inspection must not confer timestamp validity."
+      },
+      "original_digest": "sha256:ee3e0aba1b9de489b82355876b78708631235878bb22ea5ea476976bc42e532e",
+      "parser_expect": "accepted",
+      "path": "sources/ambiguous-timestamp.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 2662,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 1,
+      "dataset": "ambiguous-timestamp",
+      "format": "xlsx",
+      "id": "ambiguous-timestamp-xlsx",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02,S06",
+        "synthetic_additions": "Invalid mapping control; parser inspection must not confer timestamp validity."
+      },
+      "original_digest": "sha256:03fbbba39d80aa962f10e98017a9425dd494e69074dd27ddd1b7734ad525ce05",
+      "parser_expect": "accepted",
+      "path": "sources/ambiguous-timestamp.xlsx",
+      "sheet": "Events",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 101,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 1,
+      "dataset": "fractional-timestamp",
+      "format": "csv",
+      "id": "fractional-timestamp-csv",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02,S06",
+        "synthetic_additions": "Invalid mapping control; parser inspection must not confer timestamp validity."
+      },
+      "original_digest": "sha256:785d42ecebe00a1c15df2bf553f5a08766800c58921c87442d61d5b84f7c84cb",
+      "parser_expect": "accepted",
+      "path": "sources/fractional-timestamp.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 2670,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 1,
+      "dataset": "fractional-timestamp",
+      "format": "xlsx",
+      "id": "fractional-timestamp-xlsx",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S02,S06",
+        "synthetic_additions": "Invalid mapping control; parser inspection must not confer timestamp validity."
+      },
+      "original_digest": "sha256:a96f75d61e38c6146569a145c11698c7c2bd881b0d231c777f9644446adf4603",
+      "parser_expect": "accepted",
+      "path": "sources/fractional-timestamp.xlsx",
+      "sheet": "Events",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 122,
+      "columns": [
+        "expense_id",
+        "description",
+        "amount_cents",
+        "currency"
+      ],
+      "data_rows": 2,
+      "dataset": "mixed-currency",
+      "format": "csv",
+      "id": "mixed-currency-csv",
+      "kind": "spend",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S05",
+        "synthetic_additions": "Cross-currency refusal control."
+      },
+      "original_digest": "sha256:f758769b8f33952ec7bfd452f3d3ed4346eca01bcd2fe74c07c34aaa7f58ae50",
+      "parser_expect": "accepted",
+      "path": "sources/mixed-currency.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 2794,
+      "columns": [
+        "expense_id",
+        "description",
+        "amount_cents",
+        "currency"
+      ],
+      "data_rows": 2,
+      "dataset": "mixed-currency",
+      "format": "xlsx",
+      "id": "mixed-currency-xlsx",
+      "kind": "spend",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S05",
+        "synthetic_additions": "Cross-currency refusal control."
+      },
+      "original_digest": "sha256:031b349e38c11d69e5817d7688910e871e82822daa88047fb0893fe8c7f02aad",
+      "parser_expect": "accepted",
+      "path": "sources/mixed-currency.xlsx",
+      "sheet": "Expenses",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 203,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes",
+        "log_text"
+      ],
+      "data_rows": 1,
+      "dataset": "evidence-text",
+      "format": "csv",
+      "id": "evidence-text-csv",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S06",
+        "synthetic_additions": "Adversarial-looking text is inert evidence, never a command or formula."
+      },
+      "original_digest": "sha256:b2410c8248faeafd9898eebb4678b5ab0f16c64a6c9d4fe875f3d533c9a92ce4",
+      "parser_expect": "accepted",
+      "path": "sources/evidence-text.csv",
+      "sheet": null,
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 2898,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes",
+        "log_text"
+      ],
+      "data_rows": 1,
+      "dataset": "evidence-text",
+      "format": "xlsx",
+      "id": "evidence-text-xlsx",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S06",
+        "synthetic_additions": "Adversarial-looking text is inert evidence, never a command or formula."
+      },
+      "original_digest": "sha256:930f6c8fcc1dc3921163140de8eb2fc9ea1b9d26504938dfd8639d3211a60d4e",
+      "parser_expect": "accepted",
+      "path": "sources/evidence-text.xlsx",
+      "sheet": "Events",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 2494,
+      "columns": [
+        "expense_id",
+        "description",
+        "amount_cents",
+        "currency"
+      ],
+      "data_rows": 1,
+      "dataset": "formula-cache",
+      "format": "xlsx",
+      "id": "formula-cache-xlsx",
+      "kind": "spend",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S06",
+        "synthetic_additions": "Cached formula deliberately rejected by actual parser."
+      },
+      "original_digest": "sha256:b6355b174c6451b14f4c528e44d021c7fec4a0a9a33a0debb19484eff911eb1d",
+      "parser_expect": "formula_refused",
+      "path": "sources/formula-cache.xlsx",
+      "sheet": "Expenses",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    },
+    {
+      "bytes": 2670,
+      "columns": [
+        "event_id",
+        "asset",
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "data_rows": 1,
+      "dataset": "oversize-dimension",
+      "format": "xlsx",
+      "id": "oversize-dimension-xlsx",
+      "kind": "events",
+      "origin": {
+        "document": "design/forma-northstar-demo/SCENARIOS.md",
+        "scenario": "S06",
+        "synthetic_additions": "Small archive declares forbidden row 10001; must reject before materialization."
+      },
+      "original_digest": "sha256:a084e48252b9d3e5a500ad5ce7b79dd09e1409eb496848e3a1a3e61da2e8ccb9",
+      "parser_expect": "dimension_limit",
+      "path": "sources/oversize-dimension.xlsx",
+      "sheet": "Events",
+      "state": "original fixture bytes; no normalized source revision or app import receipt"
+    }
+  ],
+  "synthetic": true
+}

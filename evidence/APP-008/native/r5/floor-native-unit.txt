@@ -1,0 +1,12 @@
+   Compiling forma-app-platform v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.81s
+     Running unittests src/lib.rs (target/app008-msrv/debug/deps/genui-1fa14c6c19290270)
+
+running 4 tests
+test storage::tests::unknown_permissions_and_noncanonical_ids_deny ... ok
+test storage::tests::production_settings_allow_only_fixed_rds_endpoint ... ok
+test storage::pool::lifecycle_tests::abort_request_retains_permits_until_transport_drop ... ok
+test storage::tests::private_registry_rejects_links_modes_duplicates_unknowns_and_large_documents ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.01s
+

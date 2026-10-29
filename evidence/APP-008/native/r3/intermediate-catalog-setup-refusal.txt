@@ -1,0 +1,22 @@
+   Compiling forma-app-platform v0.1.0 (/Users/victorvillacis/dev/FormaBuiltApps/forma-app-platform/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.73s
+     Running unittests src/lib.rs (target/debug/deps/genui-eff302464415cc1d)
+
+running 1 test
+
+thread 'app008-native-campaign' (2569461) panicked at src/storage/qualification.rs:55:5:
+fixture command refused: canonical migration and validated seed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'storage::qualification::native_postgres_campaign' (2569460) panicked at src/storage/qualification.rs:468:10:
+called `Result::unwrap()` on an `Err` value: Any { .. }
+test storage::qualification::native_postgres_campaign ... FAILED
+
+failures:
+
+failures:
+    storage::qualification::native_postgres_campaign
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 18 filtered out; finished in 2.25s
+
+error: test failed, to rerun pass `--lib`

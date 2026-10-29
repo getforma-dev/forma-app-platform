@@ -1,0 +1,125 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.96kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+#3 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b
+#4 ...
+
+#5 [auth] library/node:pull token for registry-1.docker.io
+#5 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b
+#4 DONE 0.5s
+
+#6 [internal] load .dockerignore
+#6 transferring context: 1.66kB done
+#6 DONE 0.0s
+
+#7 [stage-2 1/9] FROM docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+#7 resolve docker.io/library/python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d 0.0s done
+#7 DONE 0.0s
+
+#8 [browser 1/8] FROM docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b
+#8 resolve docker.io/library/node:22.21.0-bookworm-slim@sha256:f9f7f95dcf1f007b007c4dcd44ea8f7773f931b71dc79d57c216e731c87a090b 0.0s done
+#8 DONE 0.0s
+
+#9 [native 1/9] FROM docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31
+#9 resolve docker.io/library/rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31 0.0s done
+#9 DONE 0.0s
+
+#10 [internal] load build context
+#10 transferring context: 2.06kB done
+#10 DONE 0.0s
+
+#11 [native 2/9] WORKDIR /source/app
+#11 CACHED
+
+#12 [native 3/9] COPY app/Cargo.toml app/Cargo.lock ./
+#12 CACHED
+
+#13 [browser 4/8] COPY app/admin/package.json app/admin/package-lock.json ./
+#13 CACHED
+
+#14 [browser 5/8] RUN npm ci
+#14 CACHED
+
+#15 [browser 6/8] COPY app/admin/build.ts app/admin/tsconfig.json ./
+#15 CACHED
+
+#16 [browser 7/8] COPY app/admin/src ./src
+#16 CACHED
+
+#17 [browser 3/8] RUN npm install --global npm@11.6.2
+#17 CACHED
+
+#18 [browser 2/8] WORKDIR /source/admin
+#18 CACHED
+
+#19 [browser 8/8] RUN npm run typecheck && npm run build
+#19 CACHED
+
+#20 [native 4/9] COPY app/src ./src
+#20 DONE 0.0s
+
+#21 [native 5/9] COPY app/migrations ./migrations
+#21 DONE 0.0s
+
+#22 [native 6/9] COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml
+#22 DONE 0.0s
+
+#23 [native 7/9] COPY spikes/APP-006/src /source/spikes/APP-006/src
+#23 DONE 0.0s
+
+#24 [native 8/9] COPY --from=browser /source/admin/dist ./admin/dist
+#24 DONE 0.0s
+
+#25 [native 9/9] RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=genui-cargo-target-arm64,target=/source/app/target cargo build --release --locked && cp /source/app/target/release/forma-app-platform /source/genui
+#25 0.504    Compiling forma-app-platform v0.1.0 (/source/app)
+#25 11.81     Finished `release` profile [optimized] target(s) in 11.61s
+#25 DONE 11.9s
+
+#26 [stage-2 2/9] WORKDIR /app
+#26 CACHED
+
+#27 [stage-2 3/9] COPY app/runtime/requirements.lock ./requirements.lock
+#27 CACHED
+
+#28 [stage-2 4/9] RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r requirements.lock
+#28 CACHED
+
+#29 [stage-2 5/9] COPY --from=native /source/genui /app/genui
+#29 DONE 0.0s
+
+#30 [stage-2 6/9] COPY app/runtime/runtime.py /app/runtime.py
+#30 DONE 0.0s
+
+#31 [stage-2 7/9] COPY app/migrations /app/migrations
+#31 DONE 0.0s
+
+#32 [stage-2 8/9] COPY app/certs/rds-global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
+#32 DONE 0.0s
+
+#33 [stage-2 9/9] RUN mkdir -p /run/genui && chown 65532:65532 /run/genui && chmod 0700 /run/genui
+#33 DONE 0.1s
+
+#34 exporting to image
+#34 exporting layers
+#34 exporting layers 0.3s done
+#34 exporting manifest sha256:5fc3136e04bfbad734ca03c38e7481381363ef00a34792c195292c65a7fff216 done
+#34 exporting config sha256:ab49f295c22aa6939c3367e27e90c986d916115ab0a8997e250970a06eb2857f done
+#34 exporting attestation manifest sha256:c56debda72596855852bbc38bdcc034603eff80db69a1925b079b468f4178556 done
+#34 exporting manifest list sha256:160296acae0418f0ac46b71fe21e27c19f8635d4494bef785a806769c2e19e46 done
+#34 naming to docker.io/library/genui-app008:local-r5 done
+#34 unpacking to docker.io/library/genui-app008:local-r5 0.1s done
+#34 DONE 0.4s
+
+#35 resolving provenance for metadata file
+#35 DONE 0.0s

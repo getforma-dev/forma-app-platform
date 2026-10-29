@@ -13,6 +13,7 @@ ENV CARGO_BUILD_JOBS=2
 ARG TARGETARCH
 COPY app/Cargo.toml app/Cargo.lock ./
 COPY app/src ./src
+COPY app/migrations ./migrations
 COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml
 COPY spikes/APP-006/src /source/spikes/APP-006/src
 COPY --from=browser /source/admin/dist ./admin/dist

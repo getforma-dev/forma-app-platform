@@ -1,0 +1,91 @@
+{
+  "reviewer": "managed_restore_ops_review",
+  "recorded_at_utc": "2026-10-29T03:29:18.859013+00:00",
+  "scope": "Independent static plan/evidence review only; no qualification rerun or live observation by this reviewer.",
+  "verdict": "No blocking finding in the proposed schema-one identity rehearsal sequence.",
+  "plan_ready": true,
+  "start_ready": false,
+  "findings": [],
+  "reviewed_files_sha256": {
+    "evidence/APP-006/hosted-callback/schema-one-sequence/README.md": "8c7d4c362d31ae3fbb0a66577c8bf0cb876bee9782fd55dcc5f6b728e8d346ef",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/control-plane.json": "66bef0bfe4837510cb42c6da07443ae8a03d8339142ec82da4a99ab1ed7bea59",
+    "evidence/APP-006/hosted-callback/schema-one-sequence/budget-forecast.json": "70303e5f7b0e39d5c114e61f6b526df141ceebd223b37b4f940096a27fc0c2a4",
+    "evidence/APP-006/hosted-callback/secret-wiring/registry-image-receipt.json": "56732d482ee9cbe58a4e34e3f2140aa4ed6d1365f15b7d6a6241be59ba67f687",
+    "evidence/APP-006/hosted-callback/secret-wiring/registry-platform-binding.json": "ae1edcb3c7e6515284d40c6ba3553a809e02d1c237dca059a1eb502513b59c8a",
+    "evidence/APP-006/hosted-callback/secret-wiring/ci.json": "c54c8da0d2cbf4f313f93a72595403dd871bad15c90b49baf1508a6fe8b724ac",
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/independent-review.json": "fbb8cf49b099eb42a439e36a1f0f3304ab5e20c3089b98bf0d3a0469c07271cf",
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/foundation-image.json": "a7fbc446d78d55e19dccffc3d68cfc0c1f5c9b2ed48c500325310f9a98d34de9",
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/callback-http.json": "216982c6f87bb902c0a997b446569ab76904516b2e9cf80cbef27603700815fd",
+    "evidence/APP-006/hosted-callback/secret-wiring/new-image/supervisor-http.json": "c7280ad49541f4aaf4fa20bf47f0c6ad1b43cd1cc09abe87610e73372f021ede",
+    "evidence/APP-006/hosted-key-qualification/registry-binding.json": "156287ddb50ed5d68e966c5dbf8faadc91206f9beedd217c25aa5869b8869e7b",
+    "evidence/APP-006/hosted-key-qualification/image-source-binding.json": "7e73c36dc568ee044d862768122ac9c3a839eff429e52c2e0b4f40174d32c8a5"
+  },
+  "callback": {
+    "source_revision": "18c33f538a19d06cb77f37d091c71b1a8d5e3c39",
+    "index_digest": "sha256:a4a47707e1e4028221cba7f5f0dfdf03ef663c6f46d0686a27632c4fd5fc5d08",
+    "arm64_leaf_digest": "sha256:08d350fd186f72886823c9b33be21b1df1a70d4f96b1a35e63d639fb7c775ac9",
+    "config_digest": "sha256:d306df2f340a77a2c4cb95847fc7f8237eea29e16118780a7ee056739b817103",
+    "git_object_count": 24,
+    "all_git_objects_match_retained_registry_and_local_review": true,
+    "retained_exact_revision_ci_checks_successful": 8,
+    "committed_runtime_requires_schema_version": 1,
+    "new_native_pool_or_canonical_catalog_guard_claimed": false
+  },
+  "key_qualifier": {
+    "source_revision": "8fca35c35b80828d4effb17e59f9bbd80ae237ea",
+    "index_digest": "sha256:5ee5ad165bca1e37bc2efe13f2fb727912c008cbe721b18f452a98482404cedc",
+    "separate_one_shot_tool_not_service": true
+  },
+  "control_plane_evidence": {
+    "observed_at": "2026-10-29T03:18:05.281170+00:00",
+    "service_counts": {
+      "desiredCount": 0,
+      "runningCount": 0,
+      "pendingCount": 0
+    },
+    "database_engine": "16.13",
+    "fresh_sql_schema_state_observed": false,
+    "start_signal": false
+  },
+  "forecast": {
+    "status": "forecast_only",
+    "project_total_cents": 9859,
+    "auth_allowance_cents_counted_once": 500,
+    "reservation_written": false,
+    "selected_interval": false,
+    "ledger_sha256": "sha256:bf5ff561052c334e17e936ffce444a90df44660cc30af8fc9689bc6a3d65f616"
+  },
+  "sequence_assessment": [
+    "Identity-only callback can retain the approved version-one foundation while APP-008 local work continues; no version-two managed mutation may overlap the auth window.",
+    "The plan requires a fresh quiescent version-one SQL, role and canonical catalog baseline before unverified application metadata; this remains unexecuted and does not attribute newer catalog protection to the old helper.",
+    "Actual provider IDs and bounded private configuration follow the agreed provisioning sequence inside the coordinated window; configuration is validated before the callback listens.",
+    "The plan requires zero callback and owned one-off consumers before any schema-two migration, and explicitly disallows treating a version-one image on schema two as rollback.",
+    "Successful callback evidence supplies external identity only, with no membership, entitlement, application session, data access or verified-mailbox activation inferred."
+  ],
+  "existing_pending_launch_work": [
+    "Fresh read-only version-one SQL/role/catalog observation in safe lookup order.",
+    "Bounded provider/private configuration and exact secret handoff review.",
+    "Actual immutable cumulative preflight/reservation with selected interval and future stop schedule.",
+    "Count-zero deployment and actual task-definition, exact execution-role secret policy, ingress and TLS verification.",
+    "Safari capability confirmation, both teams ready and coordinated start signal."
+  ],
+  "limitations": [
+    "No hosted identity result, live SQL baseline, secret delivery, deployment, billing cap or APP-008 acceptance is established by this plan review.",
+    "The source/image/CI facts above are checked against retained artifacts and immutable Git objects; cloud control-plane and registry observations are root-authored evidence, not repeated here."
+  ],
+  "actions": {
+    "test_reruns": 0,
+    "cloud_calls": 0,
+    "database_calls": 0,
+    "credential_reads": 0,
+    "browser_actions": 0,
+    "source_edits": 0,
+    "deployment": false,
+    "staging": false,
+    "commits": false,
+    "written_files": [
+      "independent-review.md",
+      "independent-review.json"
+    ]
+  }
+}

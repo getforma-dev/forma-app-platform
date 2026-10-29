@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-29T03:10:31.952043+00:00",
+  "reviewer": "independent APP-008 final schema reviewer",
+  "status": "no blocking findings at final follow-up source",
+  "review_scope": "Exact optional creator-role membership normalization, early migration lookup path, canonical reproduction; source on top of preserved R1-R3 review",
+  "source_sha256": {
+    "app/runtime/runtime.py": "c6bc3ca14dd898597cd78651d7baecf3a79676dd8d8d7d79369b5c6d2732ca09",
+    "app/runtime/qualify_tenant_schema.py": "22dd44b557233f66695111cdda3b605fbd51444890570cc1adf38346dc3cccc1",
+    "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+    "app/migrations/manifest.json": "d9384be1ea8a999d2113a5afcb47902df4e18c6bb7bf0336ea90f1ce3e1b9388",
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/catalog-query.json": "dd86a4be87895fe4ddb8ccd24e31da50f6705754ffc2dc51709c1b7171f24422",
+    "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954"
+  },
+  "source_capture_note": "Pins bind the completed independent154 campaign and failed temporary-shadow reproduction. Author began the repair before this review document was saved; these are not asserted to be current-source pins.",
+  "checks": [
+    {
+      "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python app/runtime/qualify_tenant_schema.py --output evidence/APP-008/schema/independent-postgres-compatibility.json",
+      "passed": true,
+      "cases": 154,
+      "receipt": "independent-postgres-compatibility.json",
+      "all_nine_owned_containers_removed": true
+    },
+    {
+      "command": "PYTHONPATH=contracts/.venv/lib/python3.11/site-packages app/runtime/.venv/bin/python app/runtime/generate_schema_catalog.py --output-dir .cache/app008-schema-final-review/catalog-generation",
+      "passed": true,
+      "both_candidates_byte_equal_authoritative": true,
+      "container_removed": true,
+      "receipt": "independent-catalog-reproduction-compatibility.json"
+    },
+    {
+      "command": "app/runtime/.venv/bin/python -m unittest discover -s app/runtime -p test_runtime.py -v",
+      "passed": true,
+      "cases": 30,
+      "seconds": 11.599
+    }
+  ],
+  "findings": [
+    {
+      "id": "R4-SCHEMA",
+      "priority": "P2",
+      "status": "resolved in final follow-up; original reproduction retained",
+      "file": "app/runtime/runtime.py",
+      "lines": [
+        359,
+        385
+      ],
+      "problem": "pg_temp remains implicitly ahead of explicitly selected pg_catalog for relation lookup. A caller-supplied operator connection with a temp pg_namespace view executes the view marker during canonical verification and repeated migration.",
+      "receipt": "independent-temp-catalog-shadow.json",
+      "reproducer": "reproduce-temp-catalog-shadow.py",
+      "actual": "Both verify_schema_catalog and apply_migrations accept canonical state while marker runs 503 times per call.",
+      "limits": "No application role TEMP privilege or public exploit demonstrated. Normal migrate opens a fresh connection; reproduction supplies a preexisting temporary view as operator.",
+      "requested": "Explicitly place pg_temp after pg_catalog or fully qualify catalog relations; retain positive-control marker then verify and migrate with zero marker execution."
+    }
+  ],
+  "not_exercised": [
+    "Managed RDS catalog compatibility on actual current target",
+    "RDS IAM/TLS and managed recovery",
+    "Native pool integration separately reviewed",
+    "Image and CI qualification",
+    "Hosted provider/session/invite acceptance"
+  ],
+  "initial_status": "changes requested: session-local temporary relation lookup",
+  "followups": [
+    {
+      "recorded_at": "2026-10-29T03:18:36.278374+00:00",
+      "status": "no blocking findings",
+      "source_sha256": {
+        "app/runtime/runtime.py": "dfef99b5f60fe225b480563a8b54977cfdc45f99887b9a05a9904b4a3f918beb",
+        "app/runtime/qualify_tenant_schema.py": "84ac10d54a201de496f547afe05f181a441b263be1b07063170e0a8b2cae6be0",
+        "app/runtime/test_runtime.py": "3fe4bbcfaa6513f4ff4b3b6bcf5797f8bfc997c2494a37827ae28eab81776f0a",
+        "app/runtime/generate_schema_catalog.py": "94241630856aa1c5117b20bf535ca1ab28295deb34db38eefc4653c16d270b68",
+        "app/runtime/tenant_seed.py": "66dca95fcb22df5f7c2ef8c6dc555e788ee11094dcb20f9062c14db8330746dd",
+        "app/runtime/qualify_migration.py": "9cd5ad523c38d91b93e087f10e3d2534c5dd216d9adc6f847648a0ed666c11ec",
+        "app/migrations/catalog-query.json": "e17ceb5e62dc6f03dfb9dc26f34018d3f2977e1b93ee5910ed16f03364a63963",
+        "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+        "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+        "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+        "app/migrations/manifest.json": "13976faa01ee527a81524d969e2aee864ef42e78368b69e8bee67895b8287bd5",
+        "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+        "docs/architecture/ADR-004-TENANT-TRANSACTIONS.md": "684aa2454380939b106ceb9609690b374e87af5c6b17f06937ea2d1ad545e1db"
+      },
+      "all_reviewed_inputs_unchanged_before_after": true,
+      "resolved": [
+        "R4-SCHEMA: explicit pg_catalog, pg_temp ordering prevents temporary relation precedence in catalog verifier and migration entry",
+        "Python readiness helper now applies the same canonical catalog/origin check before fixed-role and schema-version reads; startup path is fixed and catalog references in its identity check are qualified"
+      ],
+      "checks": [
+        {
+          "kind": "actual PostgreSQL16.13 campaign",
+          "cases": 156,
+          "passed": true,
+          "receipt": "independent-postgres-final-lookup.json",
+          "all_nine_containers_removed": true
+        },
+        {
+          "kind": "runtime unit checks",
+          "cases": 31,
+          "seconds": 11.6,
+          "passed": true,
+          "receipt": "independent-runtime-final-lookup.txt"
+        },
+        {
+          "kind": "fresh local catalog generator",
+          "both_candidates_equal_authoritative": true,
+          "container_removed": true,
+          "receipt": "independent-catalog-reproduction-final-lookup.json"
+        },
+        {
+          "kind": "independent original temporary-view reproduction rerun",
+          "both_operations_accepted_valid_catalog_without_evaluating_temp_marker": true,
+          "container_removed": true,
+          "receipt": "independent-temp-catalog-shadow-repair.json"
+        }
+      ],
+      "controlled_limit": "The helper negative uses a real read-only workspace SQL connection and compares Refused before expression evaluation against a SQLSTATE25006 positive control. It is not a complete successful RDS IAM/TLS/S3/KMS readiness trial."
+    }
+  ]
+}

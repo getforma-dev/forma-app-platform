@@ -4,3 +4,4 @@ pub mod auth_qualification;
 pub mod config;
 pub mod readiness;
 pub mod roles;
+pub mod storage;

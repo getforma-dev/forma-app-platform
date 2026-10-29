@@ -1,0 +1,45 @@
+{
+  "command": "spikes/APP-005/.venv/bin/python fixtures/qualify.py --output evidence/APP-011/local-2",
+  "finished_at": "2026-10-29T01:59:37.413845+00:00",
+  "limits": [
+    "No real app journeys, account provisioning, database reset, publication, model generation, record mutation or restore acceptance",
+    "CIDR/rate/currency are independent oracle checks; unsupported APP-005 operators remain unsupported",
+    "Actual APP-004 accepted files require mapping; acceptance is not source admission",
+    "APP-008 shape seeds intentionally retain placeholder source/admission/receipt data"
+  ],
+  "parser_artifacts": {
+    "spikes/APP-004/target/debug/parser-host": "sha256:24de875f55b1cb7439eacb9ca6989bf8ba316c354e8c9342ed3d0f5ccadc0c86",
+    "spikes/APP-004/target/wasm32-unknown-unknown/release/parser_guest.wasm": "sha256:aed4238c91d89fdd8face76face5f2d1e4c414c272c53fdb8f22f4f3fc1be1ba"
+  },
+  "parser_cases": 28,
+  "passed": true,
+  "platform": "macOS-26.1-arm64-arm-64bit",
+  "python": "3.11.0",
+  "query_subset": {
+    "datasets": 4,
+    "duckdb_version": "2.0.0",
+    "queries": 14
+  },
+  "seed_alignment": {
+    "bundles_revalidated": 3,
+    "database_actions": "none",
+    "guarded_reset": "pending APP-008 integration",
+    "scope": "read-only contract/setup alignment, not provider provisioning or live tenant qualification",
+    "seed_source_digest": "sha256:ef24eb18cc91524ac1e2af828b9b111a80611bd93f41ff6b9dc699d79175d6c3",
+    "setup_digest": "sha256:9836f82337ef24bb522242b9b98eb6a8cdca347561f0f72466388638156d2130"
+  },
+  "source_pins": {
+    "contracts/implementation-lock.json": "sha256:9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45",
+    "fixtures/generate.py": "sha256:cd205ce4dd291162af6f409e081e9f5db9a14336504435796b05d5461d8d4b5b",
+    "fixtures/phase-one/v1/manifest.json": "sha256:32e1d5bedd0f1bb857b130b44fd7fb66afcb117390987758c26cfce642ca53e9",
+    "fixtures/qualify.py": "sha256:ba06d4969f43f2670cdc0b2a4319e0e9beed7f3d6b8e0cf89bdfec8aa25a0ea3",
+    "fixtures/test_fixtures.py": "sha256:0b1ca40b37fb32a4a462d2f35e855fe2e0e32743b218a4c3eef25636530917d0",
+    "fixtures/verify.py": "sha256:28badd0d7c77ae0db3a33ec0ee0443989c8683f8f8cf921e33a454fabdc49ee2",
+    "spikes/APP-004/Cargo.lock": "sha256:d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+    "spikes/APP-004/guest/src/lib.rs": "sha256:76b510d6d21ae7c5f99f36ffbf7c3ebee13f738a52374258e0a45b8fe57c9009",
+    "spikes/APP-004/host/src/lib.rs": "sha256:bdb98c9a45c1ec081afd12081e4f40675518531474c20e2ab2becfe15c85f667",
+    "spikes/APP-005/query.py": "sha256:d7d724b9e34c3bdb73316eb9f3017c082dfedc3a7b79503cea584d67e06cf187",
+    "spikes/APP-005/requirements.lock": "sha256:06295e1e9bf322670a74bff06616b94ec32b7a912cc4d43afb90d25a25118ca3"
+  },
+  "started_at": "2026-10-29T01:57:10.973302+00:00"
+}
