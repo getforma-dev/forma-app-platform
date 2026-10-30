@@ -4,13 +4,16 @@
 //! what the page shows.
 //!
 //! Every view card is in exactly one state: `idle` (not run yet), `loading`
-//! (admitted but not computed: the engine queue is full), `ready`, `empty`
-//! (a released result with no row or only unknown cells), `failed` or
-//! `denied`. Only `ready` and `empty` carry a receipt, and only `ready`
-//! carries a value; a failed or denied card is built from no result at all,
-//! so it can never show a number, a fabricated zero included (design §6.3,
-//! C06). Values are the engine's exact decimal strings with digit grouping;
-//! no arithmetic happens here.
+//! (nothing computed: the engine's admission for this organization was full
+//! or the request expired in its queue; the card is labelled `busy`, since
+//! with no island nothing is in flight when the page renders, APP-012 review
+//! m7), `ready`, `empty` (a released result with no row or only unknown
+//! cells), `failed` or `denied`. Only `ready` and `empty` carry a receipt, and
+//! only `ready` carries a value; a failed or denied card is built from no
+//! result at all, so it can never show a number, a fabricated zero included
+//! (design §6.3, C06). Values are the engine's exact strings; only the
+//! columns the typed query makes integers are digit-grouped (review m11); no
+//! arithmetic happens here.
 use super::{receipt::QueryReceipt, worker::WorkerResult};
 use crate::storage::{WorkOutline, WorkView};
 use axum::{
@@ -44,6 +47,9 @@ pub struct CardProps {
     pub kind: String,
     /// One of `idle`, `loading`, `ready`, `empty`, `failed`, `denied`.
     pub state: String,
+    /// The badge the page shows: the state's name, except that `loading`
+    /// reads `busy` (nothing is in flight on a no-JS page; review m7).
+    pub badge: String,
     pub message: String,
     pub idle: bool,
     pub loading: bool,
@@ -83,7 +89,9 @@ pub struct RowProps {
 /// Why a view has no result. None of these carries a number.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Reason {
-    /// Interrupted at the deadline, expired in the queue, or killed.
+    /// Past its budget: interrupted at the deadline, late past it, or killed
+    /// at the memory line (a request that expired in the admission queue is
+    /// the busy card instead, since nothing ran).
     Deadline,
     /// The engine failed or answered outside the protocol.
     Engine,
@@ -100,7 +108,7 @@ impl Reason {
     fn message(self) -> &'static str {
         match self {
             Self::Deadline => {
-                "This result could not be computed: the query did not finish within its deadline. No number is shown."
+                "This result could not be computed: the query is past its budget (it did not finish within its deadline or its memory line). Narrow the window. No number is shown."
             }
             Self::Engine => "This result could not be computed. No number is shown.",
             Self::SourceUnavailable => {
@@ -122,6 +130,8 @@ impl Reason {
 /// A view's outcome on this request.
 pub enum Outcome<'a> {
     Idle,
+    /// Nothing computed: the organization's engine admission was full, or the
+    /// request expired in its queue (the `busy` card).
     Loading,
     /// A released result with its receipt (`ready` or `empty` by its rows).
     Released(&'a WorkerResult, &'a QueryReceipt),
@@ -148,9 +158,12 @@ pub fn display(value: &str) -> String {
     format!("{sign}{grouped}")
 }
 
-fn cell_text(value: &Value) -> String {
+/// A cell's text: an integer column's exact value gains digit grouping; a
+/// text or timestamp column is shown verbatim, digits included (review m11).
+fn cell_text(value: &Value, integer: bool) -> String {
     match value {
-        Value::String(text) => display(text),
+        Value::String(text) if integer => display(text),
+        Value::String(text) => text.clone(),
         Value::Bool(flag) => flag.to_string(),
         // An unknown cell is shown as unknown, never as zero.
         _ => "unknown".to_owned(),
@@ -276,6 +289,7 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
         kind: view.kind.clone(),
         ..CardProps::default()
     };
+    let mut badge = None;
     let state = match outcome {
         Outcome::Idle => {
             card.idle = true;
@@ -284,8 +298,9 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
         }
         Outcome::Loading => {
             card.loading = true;
+            badge = Some("busy");
             card.message =
-                "Waiting: the query engine is busy. Run again in a few seconds. Nothing is shown until the result is computed."
+                "Busy: the query engine has no room for this run yet. Run again in a few seconds. Nothing is shown until the result is computed."
                     .into();
             "loading"
         }
@@ -310,6 +325,12 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
                 "empty"
             } else {
                 card.ready = true;
+                let integer = |column: usize| {
+                    result
+                        .columns
+                        .get(column)
+                        .is_some_and(|name| result.integer_columns.contains(name))
+                };
                 if view.kind == "summary" && result.rows.len() == 1 {
                     card.has_summary = true;
                     card.summary = result
@@ -318,7 +339,11 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
                         .zip(&result.rows[0])
                         .enumerate()
                         .map(|(index, (column, value))| {
-                            pair(&format!("m{index}"), column, cell_text(value))
+                            pair(
+                                &format!("m{index}"),
+                                column,
+                                cell_text(value, integer(index)),
+                            )
                         })
                         .collect();
                 } else {
@@ -343,7 +368,7 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
                                 .enumerate()
                                 .map(|(column, value)| CellProps {
                                     id: format!("r{index}c{column}"),
-                                    text: cell_text(value),
+                                    text: cell_text(value, integer(column)),
                                 })
                                 .collect(),
                         })
@@ -357,6 +382,7 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
         }
     };
     card.state = state.into();
+    card.badge = badge.unwrap_or(state).into();
     card
 }
 

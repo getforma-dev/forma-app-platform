@@ -5,12 +5,22 @@
 //!
 //! Mode is `published`: the run is the saved work's pinned publication. The
 //! receipt pins the organization, app, work, publication and definition
-//! digest; the view and operator version 1; the one source revision the query
-//! read (input, source, revision, `normalized_digest`); the record snapshot
-//! sequence; the parameters; the principal, membership epoch, policy epoch
-//! (the publication's policy version) and filter epoch; the result digest;
+//! digest; the view and operator version 1; every source dependency of the
+//! work (input, source, revision, `normalized_digest`, in `input_id` order:
+//! the contract's `validate_bundle` requires the receipt's `source_revisions`
+//! to equal the work's `source_dependencies`, APP-012 review M3; the engine
+//! still reads only the view's one input); the record snapshot sequence; the
+//! parameters; the principal, membership epoch, policy epoch (the
+//! publication's policy version) and filter epoch; the result digest;
 //! `partial: false`, the page flag and the full-input total scope; and the
 //! stored view query's and the effective query's `forma:query:v1` digests.
+//!
+//! Every built receipt is checked against the contract's receipt rule
+//! (`admission::admit_receipt`, the Rust equivalent of `contracts/validate.py`
+//! `validate` for a `query_receipt`, plus its digest) before it exists as a
+//! [`QueryReceipt`]: a receipt the contract validator would refuse is never
+//! delivered, and its run is treated as a failed execution with no number
+//! (APP-012 review M2).
 use super::worker::WorkerResult;
 use crate::{
     admission::{self, digest as identity},
@@ -33,12 +43,38 @@ pub fn digest(document: &Value) -> Option<String> {
     Some(identity::digest(identity::QUERY_RECEIPT, &canonical))
 }
 
-/// The receipt of `result` for `run`. `None` only if a value cannot be
-/// encoded (stored state outside its contract), which the caller treats as a
-/// failed execution: no receipt, no number.
+/// `contracts/validate.py` `validate` for a complete receipt document: the
+/// closed contract shape and the recomputed `digest`. The error names the
+/// refused location, never a value.
+pub fn conforms(document: &Value) -> Result<(), String> {
+    admission::admit_receipt(document).map_err(|error| format!("{}: {error:?}", error.code()))?;
+    let declared = document["digest"]
+        .as_str()
+        .ok_or("$.digest: required field missing")?;
+    if digest(document).as_deref() != Some(declared) {
+        return Err("$.digest: receipt digest mismatch".into());
+    }
+    Ok(())
+}
+
+/// The receipt of `result` for `run`. `None` if a value cannot be encoded or
+/// the built document fails the contract's receipt rule (stored state or a
+/// parameter outside its contract), which the caller treats as a failed
+/// execution: no receipt, no number.
 pub fn build(run: &QueryRun, result: &WorkerResult) -> Option<QueryReceipt> {
     let (query_digest, predicate_digest) = query_digests(run)?;
-    let source = run.source();
+    let source_revisions: Vec<Value> = run
+        .dependencies()
+        .iter()
+        .map(|source| {
+            json!({
+                "input_id": source.input(),
+                "source_id": source.source(),
+                "source_revision_id": source.revision(),
+                "source_digest": source.normalized_digest(),
+            })
+        })
+        .collect();
     let mut document = json!({
         "kind": "query_receipt",
         "schema_version": 1,
@@ -50,12 +86,7 @@ pub fn build(run: &QueryRun, result: &WorkerResult) -> Option<QueryReceipt> {
         "publication_id": run.publication(),
         "view_id": run.view(),
         "operator_version": 1,
-        "source_revisions": [{
-            "input_id": source.input(),
-            "source_id": source.source(),
-            "source_revision_id": source.revision(),
-            "source_digest": source.normalized_digest(),
-        }],
+        "source_revisions": source_revisions,
         "record_snapshot_sequence": run.record_snapshot_sequence(),
         "parameters": run.parameters(),
         "principal_id": run.principal(),
@@ -70,6 +101,10 @@ pub fn build(run: &QueryRun, result: &WorkerResult) -> Option<QueryReceipt> {
     });
     let id = digest(&document)?;
     document["digest"] = json!(id);
+    if let Err(reason) = conforms(&document) {
+        tracing::error!(reason, "receipt outside the contract; not delivered");
+        return None;
+    }
     Some(QueryReceipt {
         document,
         digest: id,

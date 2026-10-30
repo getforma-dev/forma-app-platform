@@ -71,6 +71,46 @@ impl CsrfKey {
                 .decode(token)
                 .is_ok_and(|tag| hmac::verify(&self.0, &Self::message(form, cookie), &tag).is_ok())
     }
+
+    /// APP-012 run cookie (reload restores): the tag over one work path
+    /// (`app`, `work`), the session cookie and the canonical parameters, so
+    /// the cookie restores only the run of that work for that session, and
+    /// only as submitted. A restart (a new key) or any other work, session
+    /// or parameter bytes leaves the cookie ignored.
+    fn run_message(app: &str, work: &str, cookie: &str, parameters: &[u8]) -> Vec<u8> {
+        let mut message = b"forma:run-cookie:v1\x00".to_vec();
+        for part in [app.as_bytes(), work.as_bytes(), cookie.as_bytes()] {
+            message.extend_from_slice(part);
+            message.push(0);
+        }
+        message.extend_from_slice(parameters);
+        message
+    }
+    pub fn run_tag(&self, app: &str, work: &str, cookie: &str, parameters: &[u8]) -> String {
+        URL_SAFE_NO_PAD.encode(hmac::sign(
+            &self.0,
+            &Self::run_message(app, work, cookie, parameters),
+        ))
+    }
+    /// Constant-time verification of a run cookie's 43-character tag.
+    pub fn verify_run(
+        &self,
+        app: &str,
+        work: &str,
+        cookie: &str,
+        parameters: &[u8],
+        tag: &str,
+    ) -> bool {
+        tag.len() == 43
+            && URL_SAFE_NO_PAD.decode(tag).is_ok_and(|tag| {
+                hmac::verify(
+                    &self.0,
+                    &Self::run_message(app, work, cookie, parameters),
+                    &tag,
+                )
+                .is_ok()
+            })
+    }
 }
 
 /// The single `csrf` field of a form body; any other field refuses.
@@ -153,5 +193,27 @@ mod tests {
             ]),
             None
         );
+    }
+
+    #[test]
+    fn run_tags_bind_work_session_parameters_and_process_key() {
+        let key = CsrfKey::new().unwrap();
+        let tag = key.run_tag("app-a", "work-a", "cookie-a", b"{\"window\":1}");
+        assert_eq!(tag.len(), 43);
+        assert!(key.verify_run("app-a", "work-a", "cookie-a", b"{\"window\":1}", &tag));
+        assert!(!key.verify_run("app-b", "work-a", "cookie-a", b"{\"window\":1}", &tag));
+        assert!(!key.verify_run("app-a", "work-b", "cookie-a", b"{\"window\":1}", &tag));
+        assert!(!key.verify_run("app-a", "work-a", "cookie-b", b"{\"window\":1}", &tag));
+        assert!(!key.verify_run("app-a", "work-a", "cookie-a", b"{\"window\":2}", &tag));
+        assert!(!key.verify_run("app-a", "work-a", "cookie-a", b"{\"window\":1}", &tag[..42]));
+        // The run tag and a form token never stand in for each other.
+        assert!(!key.verify(Form::Query, "cookie-a", &tag));
+        assert!(!CsrfKey::new().unwrap().verify_run(
+            "app-a",
+            "work-a",
+            "cookie-a",
+            b"{\"window\":1}",
+            &tag
+        ));
     }
 }

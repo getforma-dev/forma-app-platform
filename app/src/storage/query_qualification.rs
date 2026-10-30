@@ -9,7 +9,9 @@
 //! rewritten. The data role then authorizes runs (`Data::run_query`), the
 //! confined engine child executes them over the read-only cache, the release
 //! is re-authorized (`Data::release_result`) and the receipt is built and
-//! validated against the contract schema by the contract validator.
+//! validated against the contract schema by the contract validator, per
+//! document (`validate`) and against the work it cites (`validate_bundle`,
+//! APP-012 review M3).
 use super::{
     admission_qualification::{operator, operator_as, refused_for},
     definition_qualification::{grant, request},
@@ -88,6 +90,129 @@ fn contract_valid(document: &Value) -> bool {
 fn numbers(result: &crate::query::WorkerResult) -> Vec<Vec<Value>> {
     result.rows.clone()
 }
+/// The service's structured log (APP-076 G6), captured for the whole
+/// campaign process: the dispatch and release lines are counted against the
+/// dispatch counter and the engines' launch counts.
+static LOG: std::sync::OnceLock<Arc<std::sync::Mutex<Vec<u8>>>> = std::sync::OnceLock::new();
+struct LogSink(Arc<std::sync::Mutex<Vec<u8>>>);
+impl Write for LogSink {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+fn install_log() {
+    let buffer = LOG.get_or_init(Default::default).clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(move || LogSink(buffer.clone()))
+        .with_ansi(false)
+        .finish();
+    let _ = tracing::subscriber::set_global_default(subscriber);
+}
+/// Log lines carrying `event="<event>"`.
+fn log_lines(event: &str) -> usize {
+    let text = String::from_utf8_lossy(&LOG.get().unwrap().lock().unwrap()).into_owned();
+    let marker = format!("event=\"{event}\"");
+    text.lines().filter(|line| line.contains(&marker)).count()
+}
+/// Whether any log line carries `needle` (a parameter value must never).
+fn log_mentions(needle: &str) -> bool {
+    String::from_utf8_lossy(&LOG.get().unwrap().lock().unwrap()).contains(needle)
+}
+const FIXTURE_BUNDLE: &str = "contracts/fixtures/impl-2026-10-28.1/northstar.json";
+/// The seeded work's inventory dependency (`…0071`, placeholder digests),
+/// which `create-bound-work` copies: a receipt of a bound work lists it beside
+/// the events revision it read (APP-012 review M3).
+fn inventory_dependency() -> Value {
+    let bundle: Value =
+        serde_json::from_slice(&std::fs::read(repository().join(FIXTURE_BUNDLE)).unwrap()).unwrap();
+    bundle["work"]["source_dependencies"][1].clone()
+}
+/// The receipt's `source_revisions` for a work bound by `create-bound-work`.
+fn bound_sources() -> Value {
+    json!([
+        {"input_id": "events", "source_id": SOURCE, "source_revision_id": REVISION, "source_digest": NORMALIZED},
+        inventory_dependency()
+    ])
+}
+/// `contracts/validate.py` `validate_bundle` over the Northstar fixture bundle
+/// re-pointed at a bound work: its identity, its events binding and
+/// dependency moved to the registered revision (whose canonical envelope is
+/// `envelope`), the delivered `receipt`, every entity re-scoped to the
+/// receipt's organization (the seeded database's, not the fixture's
+/// synthetic one) and the command and outcome to that work and the receipt's
+/// principal. `Ok` when the validator accepts the bundle, else its refusal
+/// (APP-012 review M3, probe P17).
+fn bundle_verdict(
+    receipt: &Value,
+    work_id: &str,
+    envelope: &str,
+) -> std::result::Result<(), String> {
+    const SCRIPT: &str = "import json,sys
+from validate import validate_bundle, payload_digest, ContractError
+d = json.load(sys.stdin)
+b = json.load(open(d['fixture']))
+r = d['receipt']
+b['work']['work_id'] = d['work_id']
+for item in b['work']['bindings'] + b['work']['source_dependencies']:
+    if item.get('input_id') == 'events':
+        item['source_revision_id'] = d['revision_id']
+        item['source_digest'] = d['normalized_digest']
+b['sources'].append(json.loads(d['envelope']))
+b['receipt'] = r
+for k in ('command', 'outcome'):
+    b[k]['work_id'] = d['work_id']
+b['outcome']['principal_id'] = r['principal_id']
+b['context']['principal_id'] = r['principal_id']
+# The fixture names the contract's synthetic organization; the seeded database's is the receipt's.
+b['context']['organization_id'] = r['organization_id']
+for item in [b[k] for k in ('definition', 'publication', 'work', 'command', 'outcome')] + b['sources']:
+    if 'organization_id' in item:
+        item['organization_id'] = r['organization_id']
+b['outcome']['payload_digest'] = payload_digest(b['command'])
+try:
+    validate_bundle(b)
+except ContractError as e:
+    print('refused: ' + str(e))
+else:
+    print('valid')
+";
+    let input = json!({
+        "fixture": repository().join(FIXTURE_BUNDLE),
+        "receipt": receipt,
+        "work_id": work_id,
+        "revision_id": REVISION,
+        "normalized_digest": NORMALIZED,
+        "envelope": envelope,
+    });
+    let mut child = Command::new(fixture_python())
+        .current_dir(repository().join("contracts"))
+        .args(["-c", SCRIPT])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&serde_json::to_vec(&input).unwrap())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if output.status.success() && stdout == "valid" {
+        Ok(())
+    } else {
+        Err(format!(
+            "{stdout} {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
+    }
+}
 
 #[test]
 #[ignore = "requires local Docker, OpenSSL and the locked Python environment with DuckDB 2.0.0"]
@@ -109,6 +234,7 @@ fn native_query_campaign() {
 }
 
 async fn campaign() {
+    install_log();
     let fixture = Fixture::new();
     fixture.sql(
         "ALTER ROLE genui_migration PASSWORD 'synthetic-migration'",
@@ -363,9 +489,25 @@ async fn campaign() {
     ] {
         assert_eq!(total.document[key], value, "{key}");
     }
+    // Every source dependency of the work, as the contract's `validate_bundle`
+    // requires (review M3): the events revision it read and the inventory
+    // binding it did not.
+    assert_eq!(total.document["source_revisions"], bound_sources());
+    assert_eq!(run.dependencies().len(), 2);
+    let envelope = rows(&fixture, &format!("SELECT convert_from(canonical_envelope,'UTF8') FROM genui.source_revisions WHERE organization_id='{ORG}' AND source_id='{SOURCE}' AND revision_id='{REVISION}'")).await;
+    assert_eq!(envelope.len(), 1);
     assert_eq!(
-        total.document["source_revisions"],
-        json!([{"input_id": "events", "source_id": SOURCE, "source_revision_id": REVISION, "source_digest": NORMALIZED}])
+        bundle_verdict(&total.document, BOUND, &envelope[0]),
+        Ok(()),
+        "validate_bundle accepts the receipt against its work"
+    );
+    let mut cut = total.document.clone();
+    cut["source_revisions"] = json!([cut["source_revisions"][0].clone()]);
+    cut["digest"] = json!(receipt::digest(&cut).unwrap());
+    let refused = bundle_verdict(&cut, BOUND, &envelope[0]).expect_err("the read input alone");
+    assert!(
+        refused.contains("source evidence dependency mismatch"),
+        "{refused}"
     );
     let mut filtered = window();
     filtered["destination"] = json!("198.51.100.7");
@@ -422,7 +564,7 @@ async fn campaign() {
     assert!(contract_valid(&timeline_receipt.document));
     check(
         &mut checks,
-        "authorized_member_gets_exact_result_and_receipt_digest: total 1,140,000, destination 198.51.100.7 900,000 and the five timeline buckets of the APP-011 oracle, each released after re-authorization with a contract-valid published receipt pinning the new revision's real digest",
+        "authorized_member_gets_exact_result_and_receipt_digest: total 1,140,000, destination 198.51.100.7 900,000 and the five timeline buckets of the APP-011 oracle, each released after re-authorization with a contract-valid published receipt pinning the new revision's real digest; the receipt lists every source dependency of the work (events and inventory) and passes contracts/validate.py validate_bundle against the work, while a receipt cut to the read input alone is refused (source evidence dependency mismatch)",
     );
 
     // --- The seeded placeholder work: authorized, but never a number ---
@@ -663,7 +805,9 @@ async fn campaign() {
     );
     assert!(matches!(
         engine.execute(&run, Duration::from_millis(1)).await,
-        Err(QueryError::Failed(Failure::Deadline))
+        Err(QueryError::Failed(
+            Failure::QueueExpired | Failure::Deadline
+        ))
     ));
 
     // The pools hold process-wide role capacity (2 per role, 8 in all, as
@@ -765,6 +909,51 @@ fn raw_404(reply: &Raw) -> bool {
     reply.0 == axum::http::StatusCode::NOT_FOUND
         && reply.2 == b"{\"code\":\"not_found\",\"status\":404}"
         && reply.1[axum::http::header::CACHE_CONTROL] == "no-store"
+}
+/// The `name=value` pair of the run cookie a raw reply set.
+fn run_cookie_set(reply: &Raw) -> String {
+    reply
+        .1
+        .get_all(axum::http::header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().unwrap())
+        .find(|c| c.starts_with(&format!("{}=", crate::auth::cookies::RUN)))
+        .map(|c| c.split(';').next().unwrap().to_owned())
+        .unwrap_or_else(|| panic!("no run cookie set: {:?}", reply.1))
+}
+/// The run form through the browser (POST/redirect/GET): the POST answers
+/// `303` to the page and sets the run cookie (`Strict`, `HttpOnly`,
+/// `Secure`, 10 minutes); the GET it redirects to runs the views.
+async fn run_and_show(
+    browser: &mut crate::auth::tests::Browser,
+    routes: &axum::Router,
+    page: &str,
+    body: &str,
+) -> crate::auth::tests::Reply {
+    let posted = browser.post(routes, page, body).await;
+    assert_eq!(
+        posted.status,
+        axum::http::StatusCode::SEE_OTHER,
+        "{}",
+        posted.body
+    );
+    assert_eq!(posted.location(), page);
+    assert!(
+        posted.body.is_empty(),
+        "the POST carries no page and no number"
+    );
+    let set = posted
+        .sets(crate::auth::cookies::RUN)
+        .expect("the run cookie");
+    assert!(
+        set.contains("SameSite=Strict")
+            && set.contains("HttpOnly")
+            && set.contains("Secure")
+            && set.contains("Path=/")
+            && set.contains("Max-Age=600"),
+        "{set}"
+    );
+    browser.get(routes, page).await
 }
 /// A JSON 200's receipt: contract-valid, its digest recomputed, and the
 /// exact rows it covers.
@@ -923,9 +1112,12 @@ async fn route_campaign(
     ] {
         assert_eq!(total_receipt[key], value, "{key}");
     }
+    assert_eq!(total_receipt["source_revisions"], bound_sources());
+    let envelope = self::rows(&c.fixture, &format!("SELECT convert_from(canonical_envelope,'UTF8') FROM genui.source_revisions WHERE organization_id='{ORG}' AND source_id='{SOURCE}' AND revision_id='{REVISION}'")).await;
     assert_eq!(
-        total_receipt["source_revisions"],
-        json!([{"input_id": "events", "source_id": SOURCE, "source_revision_id": REVISION, "source_digest": NORMALIZED}])
+        bundle_verdict(&total_receipt, ROUTE_WORK, &envelope[0]),
+        Ok(()),
+        "the delivered receipt passes validate_bundle against its work"
     );
     assert_eq!(
         total_receipt["parameters"],
@@ -980,7 +1172,33 @@ async fn route_campaign(
     assert_eq!(counting.calls(), 4);
     check(
         checks,
-        "route_authorized_member_gets_exact_result_and_receipt_digest: a member signed in through the APP-009 routes gets total 1,140,000 for [10:00, 10:10), 900,000 for destination 198.51.100.7 at filter epoch 1 and the five timeline buckets from POST /v1/work/{app}/{work}/queries/{view} (application/json, no-store); each receipt is contract-valid, its digest and result digest recompute, it pins her principal, the new work and the uploaded revision's real digest; without the window the same view is 2,040,000 with a receipt that records no window",
+        "route_authorized_member_gets_exact_result_and_receipt_digest: a member signed in through the APP-009 routes gets total 1,140,000 for [10:00, 10:10), 900,000 for destination 198.51.100.7 at filter epoch 1 and the five timeline buckets from POST /v1/work/{app}/{work}/queries/{view} (application/json, no-store); each receipt is contract-valid (contracts/validate.py validate), its digest and result digest recompute, it pins her principal, the new work, every source dependency of the work and the uploaded revision's real digest, and the total receipt passes validate_bundle against its work; without the window the same view is 2,040,000 with a receipt that records no window",
+    );
+
+    // --- Review M2: an impossible window never runs, on either route ---
+    let calls = counting.calls();
+    for (start, end) in [
+        ("2026-02-31T00:00:00Z", "2026-03-01T00:00:00Z"),
+        ("0000-01-01T00:00:00Z", "0000-01-01T10:10:00Z"),
+        ("2026-04-31T00:00:00Z", "2026-05-01T00:00:00Z"),
+    ] {
+        let refused = maya
+            .post(
+                &routes,
+                &query("total"),
+                &query_body(&json!({"window": {"start": start, "end": end}})),
+            )
+            .await;
+        assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY, "{start}");
+        assert_eq!(
+            refused.body,
+            "{\"code\":\"invalid_parameters\",\"status\":422}"
+        );
+    }
+    assert_eq!(counting.calls(), calls, "impossible dates reach no engine");
+    check(
+        checks,
+        "impossible window bounds (2026-02-31, 2026-04-31, year 0000) are 422 invalid_parameters on the JSON route before authorization or any engine (review M2, probe P6)",
     );
 
     // --- The work page: idle views, then a run with every state's receipt ---
@@ -1005,22 +1223,23 @@ async fn route_campaign(
     let form = |start: &str, end: &str, destination: &str| {
         format!("csrf={csrf}&window_start={start}&window_end={end}&destination={destination}")
     };
-    let ran = maya
-        .post(
-            &routes,
-            &page,
-            &form("2026-10-22T10:00", "2026-10-22T10:10", ""),
-        )
-        .await;
-    assert_eq!(ran.status, StatusCode::OK);
+    let shown = run_and_show(
+        &mut maya,
+        &routes,
+        &page,
+        &form("2026-10-22T10:00", "2026-10-22T10:10", ""),
+    )
+    .await;
+    assert_eq!(shown.status, StatusCode::OK);
     let props = last_page();
     let total_card = &props.views[0];
     assert_eq!(
         (
             total_card.state.as_str(),
+            total_card.badge.as_str(),
             total_card.summary[0].value.as_str()
         ),
-        ("ready", "1,140,000")
+        ("ready", "ready", "1,140,000")
     );
     let card_receipt: Value = serde_json::from_str(&total_card.receipt_json).unwrap();
     assert!(contract_valid(&card_receipt));
@@ -1032,29 +1251,38 @@ async fn route_campaign(
         card_receipt["result_digest"],
         total_receipt["result_digest"]
     );
+    assert_eq!(card_receipt["source_revisions"], bound_sources());
     let timeline_card = &props.views[1];
     assert_eq!(timeline_card.state, "ready");
     assert_eq!(timeline_card.rows.len(), 5);
     assert_eq!(timeline_card.rows[3].cells[2].text, "600,000");
-    assert_eq!(props.window_start, "2026-10-22T10:00");
-    let ran = maya
-        .post(
-            &routes,
-            &page,
-            &form("2026-10-22T10:00", "2026-10-22T10:10", "198.51.100.7"),
-        )
-        .await;
-    assert_eq!(ran.status, StatusCode::OK);
-    assert_eq!(last_page().views[0].summary[0].value, "900,000");
+    // Timestamps and destinations are text: never digit-grouped (review m11).
+    assert_eq!(timeline_card.rows[3].cells[0].text, "2026-10-22T10:03:00Z");
+    // The restored form echoes the normalized window as the control spells it.
+    assert_eq!(props.window_start, "2026-10-22T10:00:00");
+    assert_eq!(props.window_end, "2026-10-22T10:10:00");
+    let mut delivered_receipts = vec![card_receipt.clone()];
+    let shown = run_and_show(
+        &mut maya,
+        &routes,
+        &page,
+        &form("2026-10-22T10:00", "2026-10-22T10:10", "198.51.100.7"),
+    )
+    .await;
+    assert_eq!(shown.status, StatusCode::OK);
+    let props = last_page();
+    assert_eq!(props.views[0].summary[0].value, "900,000");
+    assert_eq!(props.destination, "198.51.100.7");
+    delivered_receipts.push(serde_json::from_str(&props.views[0].receipt_json).unwrap());
     // A destination with no event in the window: empty, never zero.
-    let ran = maya
-        .post(
-            &routes,
-            &page,
-            &form("2026-10-22T10:00", "2026-10-22T10:10", "192.0.2.250"),
-        )
-        .await;
-    assert_eq!(ran.status, StatusCode::OK);
+    let shown = run_and_show(
+        &mut maya,
+        &routes,
+        &page,
+        &form("2026-10-22T10:00", "2026-10-22T10:10", "192.0.2.250"),
+    )
+    .await;
+    assert_eq!(shown.status, StatusCode::OK);
     let props = last_page();
     assert_eq!(
         props
@@ -1068,14 +1296,32 @@ async fn route_campaign(
         .views
         .iter()
         .all(|v| v.summary.is_empty() && v.rows.is_empty() && v.has_receipt));
+    for view in &props.views {
+        delivered_receipts.push(serde_json::from_str(&view.receipt_json).unwrap());
+    }
     let calls = counting.calls();
-    // No window: 422, every view idle, nothing ran; a bad token: 403.
-    let refused = maya
-        .post(&routes, &page, &form("", "", "198.51.100.7"))
-        .await;
-    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
-    let props = last_page();
-    assert!(props.form_error && props.views.iter().all(|v| v.idle));
+    // No window: 422 rendered directly (no redirect, the run cookie untouched),
+    // every view idle, nothing ran; an impossible day likewise; a bad token: 403.
+    let kept = maya.cookie(crate::auth::cookies::RUN).unwrap();
+    for refused_form in [
+        form("", "", "198.51.100.7"),
+        form("2026-02-31T00:00", "2026-03-01T00:00", ""),
+        form("0000-01-01T00:00", "0000-01-01T10:10", ""),
+    ] {
+        let refused = maya.post(&routes, &page, &refused_form).await;
+        assert_eq!(
+            refused.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{refused_form}"
+        );
+        assert!(refused.sets(crate::auth::cookies::RUN).is_none());
+        let props = last_page();
+        assert!(props.form_error && props.views.iter().all(|v| v.idle));
+    }
+    assert_eq!(
+        maya.cookie(crate::auth::cookies::RUN).as_deref(),
+        Some(kept.as_str())
+    );
     let forged = maya
         .post(
             &routes,
@@ -1090,7 +1336,227 @@ async fn route_campaign(
     assert_eq!(counting.calls(), calls, "refused forms run nothing");
     check(
         checks,
-        "work page: GET /w/{app}/{work} shows the definition's two runnable views idle and runs nothing; the run form (window required, destination optional, synchronizer token) shows total 1,140,000 and the five timeline buckets with contract-valid receipts, 900,000 for the destination, and empty (never zero) for a destination with no event; a missing window is 422 with every view idle and a forged token 403, neither reaching the engine",
+        "work page: GET /w/{app}/{work} shows the definition's two runnable views idle and runs nothing; the run form (window required, destination optional, synchronizer token) answers 303 to the page with the run cookie and the page then shows total 1,140,000 and the five timeline buckets with contract-valid receipts listing every source dependency, 900,000 for the destination, and empty (never zero) for a destination with no event; a missing window and an impossible day (2026-02-31, year 0000) are 422 with every view idle and the run cookie untouched, a forged token 403, none reaching the engine",
+    );
+
+    // --- Reload restores (ADR-010 §1 act 4): GET again, fresh run and release ---
+    let shown = run_and_show(
+        &mut maya,
+        &routes,
+        &page,
+        &form("2026-10-22T10:00", "2026-10-22T10:10", ""),
+    )
+    .await;
+    assert_eq!(shown.status, StatusCode::OK);
+    let first = last_page();
+    assert_eq!(first.views[0].summary[0].value, "1,140,000");
+    let before = counting.calls();
+    let mut reloads = Vec::new();
+    for reload in 1..=2 {
+        let again = maya.get(&routes, &page).await;
+        assert_eq!(again.status, StatusCode::OK, "reload {reload}");
+        assert!(again.headers.get(header::LOCATION).is_none());
+        let refreshed = again.sets(crate::auth::cookies::RUN).expect("refreshed");
+        assert!(refreshed.contains("Max-Age=600") && refreshed.contains("SameSite=Strict"));
+        let props = last_page();
+        assert_eq!(
+            props.views[0].summary[0].value, "1,140,000",
+            "reload {reload}"
+        );
+        assert_eq!(props.views[1].rows.len(), 5, "reload {reload}");
+        assert_eq!(props.window_start, "2026-10-22T10:00:00");
+        assert_eq!(
+            counting.calls(),
+            before + 2 * reload,
+            "each reload runs both views again"
+        );
+        // The same pinned state and parameters reproduce the same receipt
+        // identity: a fresh run, release and receipt, and the same number.
+        assert_eq!(props.views[0].receipt_digest, first.views[0].receipt_digest);
+        assert_eq!(props.views[1].receipt_digest, first.views[1].receipt_digest);
+        delivered_receipts.push(serde_json::from_str(&props.views[0].receipt_json).unwrap());
+        reloads.push(json!({"reload": reload, "total": props.views[0].summary[0].value, "timeline_rows": props.views[1].rows.len(), "receipt_digest": props.views[0].receipt_digest}));
+    }
+    // Revocation between execution and release on a restored run: denied cards.
+    let (computed, resume) = counting.pause_next();
+    let racing = tokio::spawn(send_raw(
+        routes.clone(),
+        raw_request("GET", &page, &jar(&maya), Vec::new()),
+    ));
+    computed.await.unwrap();
+    operator(
+        &c.fixture,
+        &[
+            "revoke-permission",
+            "--organization",
+            ORG,
+            "--principal",
+            &member,
+            "--permission",
+            "source_read",
+            "--source",
+            SOURCE,
+        ],
+    );
+    resume.send(()).unwrap();
+    let reply = racing.await.unwrap();
+    assert_eq!(reply.0, StatusCode::OK);
+    let props = last_page();
+    assert_eq!(
+        props
+            .views
+            .iter()
+            .map(|v| v.state.as_str())
+            .collect::<Vec<_>>(),
+        ["denied", "denied"]
+    );
+    assert!(props
+        .views
+        .iter()
+        .all(|v| v.summary.is_empty() && v.rows.is_empty() && !v.has_receipt));
+    // Authority already lost when the page reloads: the page itself fails
+    // closed (uniform 404), so nothing is shown at all.
+    assert!(maya.get(&routes, &page).await.uniform_404());
+    grant(&c.fixture, &member, "source_read", &["--source", SOURCE]);
+    assert_eq!(maya.get(&routes, &page).await.status, StatusCode::OK);
+    assert_eq!(last_page().views[0].summary[0].value, "1,140,000");
+    // Her run cookie presented on another work of hers: foreign, ignored,
+    // cleared; the page is idle and nothing runs. A tampered cookie likewise.
+    let second_work = "00000000-0000-4000-8000-0000000000f8";
+    operator(
+        &c.fixture,
+        &[
+            "create-bound-work",
+            "--organization",
+            ORG,
+            "--app",
+            APP,
+            "--from-work",
+            WORK,
+            "--work",
+            second_work,
+            "--creator",
+            &member,
+            "--input",
+            "events",
+            "--source",
+            SOURCE,
+            "--revision",
+            REVISION,
+        ],
+    );
+    let calls = counting.calls();
+    let other_page = maya.get(&routes, &format!("/w/{APP}/{second_work}")).await;
+    assert_eq!(other_page.status, StatusCode::OK);
+    assert!(other_page
+        .sets(crate::auth::cookies::RUN)
+        .is_some_and(|set| set.contains("Max-Age=0")));
+    assert!(last_page().views.iter().all(|v| v.idle));
+    assert_eq!(maya.cookie(crate::auth::cookies::RUN), None, "cleared");
+    assert!(last_page().views.iter().all(|v| v.idle));
+    let idle_again = maya.get(&routes, &page).await;
+    assert_eq!(idle_again.status, StatusCode::OK);
+    assert!(last_page().views.iter().all(|v| v.idle));
+    let shown = run_and_show(
+        &mut maya,
+        &routes,
+        &page,
+        &form("2026-10-22T10:00", "2026-10-22T10:10", ""),
+    )
+    .await;
+    assert_eq!(shown.status, StatusCode::OK);
+    let calls = calls + 2;
+    assert_eq!(counting.calls(), calls);
+    let mut tampered = maya.cookie(crate::auth::cookies::RUN).unwrap();
+    let last = tampered.pop().unwrap();
+    tampered.push(if last == 'A' { 'B' } else { 'A' });
+    maya.jar.insert(crate::auth::cookies::RUN.into(), tampered);
+    let ignored = maya.get(&routes, &page).await;
+    assert_eq!(ignored.status, StatusCode::OK);
+    assert!(ignored
+        .sets(crate::auth::cookies::RUN)
+        .is_some_and(|set| set.contains("Max-Age=0")));
+    assert!(last_page().views.iter().all(|v| v.idle));
+    assert_eq!(counting.calls(), calls, "an ignored cookie runs nothing");
+    // A query string on the page stays the uniform 404, cookie or not.
+    assert!(maya
+        .get(&routes, &format!("{page}?window_start=2026-10-22T10:00"))
+        .await
+        .uniform_404());
+    check(
+        checks,
+        "reload restores (ADR-010 act 4): after the run form's 303, GET /w/{app}/{work} twice shows the same 1,140,000 and five buckets with a fresh run and release each time (dispatch +2 per reload, identical receipt identity for the same pinned state and parameters) and refreshes the Strict run cookie; a source_read revocation between execution and release of a restored run renders both views denied, a revocation before the reload makes the page the uniform 404; the cookie presented on another work of hers and a tampered cookie are ignored and cleared with every view idle and no dispatch; a query string stays the uniform 404",
+    );
+
+    // --- D7.9 (review M4): a lock wait on the member's own row during session
+    // resolution is the uniform 404 (fails closed), never 503; no dispatch ---
+    let calls = counting.calls();
+    let holder = c.fixture.operator().await;
+    holder.client.batch_execute(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); SELECT 1 FROM genui.organizations WHERE organization_id='{ORG}' FOR SHARE; SELECT 1 FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{member}' FOR UPDATE;")).await.unwrap();
+    let token = auth.csrf.token(
+        crate::auth::csrf::Form::Query,
+        &maya.cookie(crate::auth::cookies::SESSION).unwrap(),
+    );
+    let mut lock_wait = Vec::new();
+    for (router, method, uri, body) in [
+        (c.app.clone(), "GET", "/workspace".to_owned(), Vec::new()),
+        (
+            routes.clone(),
+            "POST",
+            query("total"),
+            query_body(&window()).into_bytes(),
+        ),
+        (routes.clone(), "GET", page.clone(), Vec::new()),
+        (
+            routes.clone(),
+            "POST",
+            page.clone(),
+            format!("csrf={token}&window_start=2026-10-22T10:00&window_end=2026-10-22T10:10&destination=").into_bytes(),
+        ),
+    ] {
+        let started = Instant::now();
+        let reply = send_raw(router, raw_request(method, &uri, &jar(&maya), body)).await;
+        let elapsed = started.elapsed();
+        assert!(
+            raw_404(&reply),
+            "{method} {uri}: {} {}",
+            reply.0,
+            String::from_utf8_lossy(&reply.2)
+        );
+        assert!(reply.1.get(header::SET_COOKIE).is_none());
+        // The wait is the pool's lock_timeout (1,000 ms), inside the handler deadline.
+        assert!(
+            elapsed >= Duration::from_millis(900) && elapsed < Duration::from_secs(5),
+            "{method} {uri}: {elapsed:?}"
+        );
+        lock_wait.push(json!({"method": method, "route": uri.replace(APP, "{app}").replace(ROUTE_WORK, "{work}"), "status": 404, "elapsed_ms": elapsed.as_millis()}));
+    }
+    holder.client.batch_execute("ROLLBACK").await.unwrap();
+    drop(holder);
+    assert_eq!(counting.calls(), calls, "no dispatch while the row is held");
+    // Released, the same cookie is live again on every route.
+    assert_eq!(
+        send_raw(
+            c.app.clone(),
+            raw_request("GET", "/workspace", &jar(&maya), Vec::new())
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let shown = run_and_show(
+        &mut maya,
+        &routes,
+        &page,
+        &form("2026-10-22T10:00", "2026-10-22T10:10", ""),
+    )
+    .await;
+    assert_eq!(shown.status, StatusCode::OK);
+    assert_eq!(last_page().views[0].summary[0].value, "1,140,000");
+    assert_eq!(counting.calls(), calls + 2);
+    check(
+        checks,
+        "D7.9 lock wait during session resolution (review M4, probe P14): while an operator transaction holds the member's row FOR UPDATE, her live cookie on GET /workspace, the JSON route, the page and the run form answers the uniform 404 after lock_timeout (never 503), with no Set-Cookie and no dispatch; once released the same cookie is live again (200) and the run form shows 1,140,000",
     );
 
     // --- Filters travel in bodies only ---
@@ -1103,7 +1569,10 @@ async fn route_campaign(
         )
         .await;
     assert_eq!(in_url.status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(in_url.body, "{\"code\":\"invalid_parameters\",\"status\":422}");
+    assert_eq!(
+        in_url.body,
+        "{\"code\":\"invalid_parameters\",\"status\":422}"
+    );
     assert!(maya
         .get(&routes, &format!("{page}?destination=198.51.100.7"))
         .await
@@ -1133,6 +1602,7 @@ async fn route_campaign(
 
     // --- Foreign, revoked, pre-access and anonymous: uniform 404, no engine ---
     let calls = counting.calls();
+    let dispatch_lines = log_lines("query.dispatch");
     let mut anonymous = c.browser("198.51.100.20:1000");
     let pending_subject = "usr_00000000-0000-4000-8000-0000000012a2";
     c.issuer
@@ -1238,9 +1708,12 @@ async fn route_campaign(
         "no denied request reached the engine"
     );
     grant(&c.fixture, &member, "source_read", &["--source", SOURCE]);
+    // APP-076 G6: the service log shows the same: no `query.dispatch` line was
+    // written for any of these requests.
+    assert_eq!(log_lines("query.dispatch"), dispatch_lines);
     check(
         checks,
-        &format!("foreign, revoked, pre-access and anonymous requests get the uniform 404 and invoke no engine: {denials} requests (anonymous, a pre-access session, a pre-access cookie presented as a session, a canary member replaying the Northstar ids, a member without work or source access, a revoked membership, and the member after her own source_read revocation) on the JSON route, the page and the run form; the dispatch counter did not move"),
+        &format!("foreign, revoked, pre-access and anonymous requests get the uniform 404 and invoke no engine: {denials} requests (anonymous, a pre-access session, a pre-access cookie presented as a session, a canary member replaying the Northstar ids, a member without work or source access, a revoked membership, and the member after her own source_read revocation) on the JSON route, the page and the run form; the dispatch counter did not move and the service log gained no query.dispatch line"),
     );
 
     // --- Revocation between execution and delivery denies the release ---
@@ -1280,19 +1753,23 @@ async fn route_campaign(
         "the engine computed; the release was denied"
     );
     grant(&c.fixture, &member, "source_read", &["--source", SOURCE]);
-    // The page: both views computed or refused, then denied at release.
+    // The page: the form's 303 saves the run; the GET it redirects to computes
+    // both views, then denies both at release.
     let opened = maya.get(&routes, &page).await;
     assert_eq!(opened.status, StatusCode::OK);
     let csrf = last_page().csrf;
+    let posted = maya
+        .post(
+            &routes,
+            &page,
+            &format!("csrf={csrf}&window_start=2026-10-22T10:00&window_end=2026-10-22T10:10&destination="),
+        )
+        .await;
+    assert_eq!(posted.status, StatusCode::SEE_OTHER);
     let (computed, resume) = counting.pause_next();
     let racing = tokio::spawn(send_raw(
         routes.clone(),
-        raw_request(
-            "POST",
-            &page,
-            &jar(&maya),
-            format!("csrf={csrf}&window_start=2026-10-22T10:00&window_end=2026-10-22T10:10&destination=").into_bytes(),
-        ),
+        raw_request("GET", &page, &jar(&maya), Vec::new()),
     ));
     computed.await.unwrap();
     operator(
@@ -1325,24 +1802,27 @@ async fn route_campaign(
     assert!(maya.get(&routes, &page).await.uniform_404());
     check(
         checks,
-        "revocation between execution and delivery denies release: with the engine paused after computing 1,140,000, a source_read revocation turns the JSON response into the uniform 404 with no number; on the page a membership revocation in the same gap renders both views denied with no value or receipt, and the next request finds no session",
+        "revocation between execution and delivery denies release: with the engine paused after computing 1,140,000, a source_read revocation turns the JSON response into the uniform 404 with no number; on the page a membership revocation in the same gap (the run form's 303, then the restored GET) renders both views denied with no value or receipt, and the next request finds no session",
+    );
+    // Every receipt the page delivered validates under contracts/validate.py
+    // (review M2: a receipt the validator refuses is never delivered).
+    assert!(delivered_receipts.len() >= 6);
+    for document in &delivered_receipts {
+        assert!(contract_valid(document), "{document}");
+    }
+    check(
+        checks,
+        &format!("every receipt the work page delivered ({} receipts over the first run, the destination, the empty views and the reloads) validates under contracts/validate.py validate", delivered_receipts.len()),
     );
 
     // --- 429 under load: a full admission queue answers Retry-After: 2 ---
+    // The slow engine's cache holds the real revision bytes (the parent
+    // verifies the cached digest before every spawn, review m4).
     let load_root = crate::query::tests::Directory::new("route-load");
-    let cached = load_root.0.join("cache/o").join(ORG);
-    std::fs::create_dir_all(&cached).unwrap();
-    for path in [
-        load_root.0.join("cache"),
-        load_root.0.join("cache/o"),
-        cached.clone(),
-    ] {
-        std::fs::set_permissions(&path, std::os::unix::fs::PermissionsExt::from_mode(0o700))
-            .unwrap();
-    }
-    let file = cached.join(format!("{SOURCE}.{REVISION}.parquet"));
-    std::fs::write(&file, b"cached").unwrap();
-    std::fs::set_permissions(&file, std::os::unix::fs::PermissionsExt::from_mode(0o400)).unwrap();
+    assert_eq!(
+        cache_northstar(&fixture_python(), &load_root.0.join("cache"), ORG, REVISION),
+        NORMALIZED
+    );
     let line = r#"{"columns":["total_bytes"],"elapsed_ms":7,"outcome":"rows","partial":false,"rows":[["1140000"]],"total_scope":"full_authorized_filtered_input","truncated_page":false}"#;
     let slow = Arc::new(
         crate::query::Engine::new(crate::query::EngineSettings {
@@ -1433,12 +1913,13 @@ async fn route_campaign(
     assert_eq!(busy.1[header::RETRY_AFTER], "2");
     assert_eq!(busy.1[header::CACHE_CONTROL], "no-store");
     assert_eq!(busy.2, b"{\"code\":\"too_many_requests\",\"status\":429}");
-    // The page in the same state: every view is loading, none shows a value.
+    // The page in the same state: the form's 303 saves the run, and the GET
+    // it redirects to shows every view loading (labelled busy), none a value.
     let token = auth.csrf.token(
         crate::auth::csrf::Form::Query,
         &load_browser.cookie(crate::auth::cookies::SESSION).unwrap(),
     );
-    let loading = send_raw(
+    let posted = send_raw(
         loaded.clone(),
         raw_request(
             "POST",
@@ -1448,15 +1929,27 @@ async fn route_campaign(
         ),
     )
     .await;
+    assert_eq!(posted.0, StatusCode::SEE_OTHER);
+    let with_run = format!("{cookies}; {}", run_cookie_set(&posted));
+    let loading = send_raw(
+        loaded.clone(),
+        raw_request(
+            "GET",
+            &format!("/w/{APP}/{load_work}"),
+            &with_run,
+            Vec::new(),
+        ),
+    )
+    .await;
     assert_eq!(loading.0, StatusCode::OK);
     let props = last_page();
     assert_eq!(
         props
             .views
             .iter()
-            .map(|v| v.state.as_str())
+            .map(|v| (v.state.as_str(), v.badge.as_str()))
             .collect::<Vec<_>>(),
-        ["loading", "loading"]
+        [("loading", "busy"), ("loading", "busy")]
     );
     assert!(props
         .views
@@ -1466,7 +1959,7 @@ async fn route_campaign(
     while let Some(outcome) = fill.join_next().await {
         match outcome.unwrap() {
             Ok(()) => filled.0 += 1,
-            Err(QueryError::Failed(Failure::Deadline)) => filled.1 += 1,
+            Err(QueryError::Failed(Failure::QueueExpired | Failure::Deadline)) => filled.1 += 1,
             Err(other) => panic!("filler {other:?}"),
         }
     }
@@ -1490,13 +1983,16 @@ async fn route_campaign(
     assert_eq!(recovered.0, StatusCode::OK);
     check(
         checks,
-        &format!("429 under load: with the organization's engine admission full (2 running, 20 waiting), an authorized POST /v1/work/{{app}}/{{work}}/queries/{{view}} is 429 too_many_requests with Retry-After: 2 and no-store, and the work page renders both views loading with no value or receipt; the engine rejected exactly those 3 and never ran more than {} at once; the fillers finished ({} completed, {} expired in the queue as failed); once drained the same request is 200", load.peak_organization_running, filled.0, filled.1),
+        &format!("429 under load: with the organization's engine admission full (2 running, 20 waiting), an authorized POST /v1/work/{{app}}/{{work}}/queries/{{view}} is 429 too_many_requests with Retry-After: 2 and no-store, and the work page (the form's 303, then the restored GET) renders both views loading, labelled busy, with no value or receipt; the engine rejected exactly those 3 and never ran more than {} at once; the fillers finished ({} completed, {} expired in the queue); once drained the same request is 200", load.peak_organization_running, filled.0, filled.1),
     );
 
     let report = json!({
         "receipts": {"total": total_receipt, "destination": destination_receipt, "timeline": timeline_receipt, "whole_revision": whole_receipt},
         "dispatch_calls": counting.calls(),
         "denied_requests_without_dispatch": denials,
+        "reload_restores": {"mechanism": "POST 303 + __Host-genui_run (SameSite=Strict, HttpOnly, Secure, Max-Age 600, tag over work path, session cookie and canonical parameters) + GET", "reloads": reloads},
+        "lock_wait": {"requests": lock_wait, "lock_timeout_ms": 1000},
+        "delivered_page_receipts": delivered_receipts.len(),
         "load": {"fillers": crate::query::worker::ORGANIZATION_RUNNING + crate::query::worker::QUEUE, "filler_child_ms": 1500,
                  "fillers_completed": filled.0, "fillers_expired": filled.1, "route_too_many_requests": 1, "page_views_loading": 2,
                  "peak_organization_running": load.peak_organization_running, "rejected": load.rejected},
@@ -1599,6 +2095,47 @@ async fn route_campaign(
     );
     let mut report = report;
     report["store_outage"] = json!({"requests": outage, "elapsed_ms": outage_ms, "dispatch_calls": down_counting.calls()});
+
+    // --- APP-076 G6: the structured query log accounts for every dispatch ---
+    // One `query.dispatch` line per engine child launched (the real engine's
+    // and the slow engine's), release decisions logged with receipt and
+    // result identities, refusals before dispatch with their code; no window
+    // bound or destination value ever appears in the log.
+    let dispatched = log_lines("query.dispatch");
+    assert_eq!(
+        dispatched,
+        engine.stats().launched + slow.stats().launched,
+        "one dispatch line per child launched"
+    );
+    let released = log_lines("query.released");
+    let denied_release = log_lines("query.release_denied");
+    let refused_before = log_lines("query.refused_before_dispatch");
+    assert!(
+        released >= 10 && denied_release >= 2 && refused_before >= 3,
+        "{released} {denied_release} {refused_before}"
+    );
+    assert!(log_mentions(&format!(
+        "receipt_id=\"{}\"",
+        total_receipt["digest"].as_str().unwrap()
+    )));
+    assert!(
+        log_mentions("code=\"busy\"")
+            && log_mentions("code=\"denied\"")
+            && log_mentions("code=\"invalid_parameters\"")
+    );
+    for secret in [
+        "2026-10-22T10:00:00Z",
+        "198.51.100.7",
+        "192.0.2.250",
+        &cookies,
+    ] {
+        assert!(!log_mentions(secret), "{secret} in the log");
+    }
+    report["query_log"] = json!({"dispatch": dispatched, "released": released, "release_denied": denied_release, "refused_before_dispatch": refused_before});
+    check(
+        checks,
+        &format!("structured query log (APP-076 G6): {dispatched} query.dispatch lines, one per engine child launched across both engines; {released} query.released and {denied_release} query.release_denied lines carrying receipt and result identities; {refused_before} query.refused_before_dispatch lines with their codes (busy, denied, invalid_parameters among them); no window bound, destination or cookie value appears in the log"),
+    );
     let Campaign { fixture, .. } = c;
     (fixture, report)
 }

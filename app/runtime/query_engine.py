@@ -12,9 +12,17 @@ evidence/APP-012/README.md, are:
 2. `time_bucket` may name a new output field (the seeded Northstar `timeline`
    view buckets `time` as `minute`): the bucket replaces the time column in
    place under that name, and the time field is no longer addressable.
-3. Definition validation moved to the Rust process, which re-admits the stored
-   definition (APP-010) before it builds this request; `compile_query` still
-   refuses every operator, literal and shape outside the qualified subset.
+3. APP-005's `validate_query` (whole-query schema validation in the child) is
+   not copied. The stored definition is re-admitted by the Rust process
+   (APP-010) before it builds this request, and the run parameters the Rust
+   process adds to the stored view query (the window, the destination filter)
+   are judged there against the contract's rules (a window bound is a contract
+   `TIMESTAMP` naming a real day). The effective query is therefore not
+   schema-validated here; `compile_query` still refuses every operator,
+   literal and shape outside the qualified subset, re-checks both window
+   bounds with `strptime` (defense in depth, APP-012 review M2) and requires
+   every measure id it interpolates as an SQL alias to be a local identifier
+   (review m5).
 4. The source is not chosen from a fixture manifest: the request names one
    revision of the request's organization, whose file the credentialed Rust
    step already placed in the read-only cache; this child re-checks that it is
@@ -82,6 +90,13 @@ def compile_query(query, source_path):
     aggregated = False
     if "window" in query:
         require(query["window"].get("bounds") == "half_open", "window_refused")
+        for bound in ("start", "end"):
+            # Review M2: an impossible date (2026-02-31) or year 0000 never reaches DuckDB.
+            try:
+                datetime.datetime.strptime(query["window"][bound], "%Y-%m-%dT%H:%M:%SZ")
+            except (TypeError, ValueError):
+                raise Refused("window_refused") from None
+        require(query["window"]["start"] < query["window"]["end"], "window_refused")
         sql += " WHERE time >= ?::TIMESTAMP AND time < ?::TIMESTAMP"
         params += [query["window"]["start"], query["window"]["end"]]
 
@@ -123,7 +138,10 @@ def compile_query(query, source_path):
             for item in op["measures"]:
                 value = column(item["field"])
                 operator = {"count": "count", "sum": "sum", "min": "min", "max": "max"}[item["operation"]]
-                # Identifiers are schema-validated ASCII, literals are parameter-bound.
+                # The measure id becomes an SQL alias: a local identifier only (review m5);
+                # literals are parameter-bound.
+                require(isinstance(item["id"], str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", item["id"]) is not None,
+                        "query_shape_refused")
                 measures.append(f'{operator}({value}) AS "{item["id"]}"')
             sql = f"SELECT {', '.join(groups + measures)} FROM {source}"
             if groups:

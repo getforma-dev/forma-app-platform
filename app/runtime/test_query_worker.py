@@ -128,6 +128,31 @@ class EngineChild(unittest.TestCase):
         whole = self.child(self.request(self.views["total"]["query"]))
         self.assertEqual(whole["rows"], [["2040000"]])
 
+    def test_impossible_window_bounds_are_refused_before_duckdb(self):
+        # APP-012 review M2 (probe P6): the Rust parent refuses these first; the child
+        # re-checks both bounds with strptime so neither 2026-02-31 nor year 0000 runs.
+        for start, end in [("2026-02-31T00:00:00Z", "2026-03-01T00:00:00Z"), ("0000-01-01T00:00:00Z", "0000-01-01T10:10:00Z"),
+                           ("2026-04-31T00:00:00Z", "2026-05-01T00:00:00Z"), ("2026-10-22T10:10:00Z", "2026-10-22T10:00:00Z"),
+                           ("2026-10-22T10:00:00+00:00", "2026-10-22T10:10:00Z")]:
+            query = windowed(self.views["total"]["query"])
+            query["window"].update({"start": start, "end": end})
+            result = self.child(self.request(query))
+            self.assertEqual((result["outcome"], result["reason"]), ("refused", "window_refused"), (start, end))
+            self.assertNotIn("rows", result)
+        leap = windowed(self.views["total"]["query"])
+        leap["window"].update({"start": "2028-02-29T00:00:00Z", "end": "2028-03-01T00:00:00Z"})
+        self.assertEqual(self.child(self.request(leap))["outcome"], "rows")
+
+    def test_measure_ids_are_local_identifiers(self):
+        # APP-012 review m5 (probe P7): a measure id becomes an SQL alias, so only
+        # [a-z][a-z0-9_]{0,63} is interpolated; anything else is refused before DuckDB.
+        for bad in ['x" FROM (SELECT 1 AS x, 2 AS y) --', "Total", "a" * 65, 7]:
+            query = windowed(self.views["total"]["query"])
+            query["operations"][-1]["measures"][0]["id"] = bad
+            result = self.child(self.request(query))
+            self.assertEqual((result["outcome"], result["reason"]), ("refused", "query_shape_refused"), bad)
+            self.assertNotIn("rows", result)
+
     def test_ratio_lookup_and_money_views_stay_refused(self):
         current = seeded_views(edition="", name="northstar")
         rate = self.child(self.request(current["rate"]["query"]))

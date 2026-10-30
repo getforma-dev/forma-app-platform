@@ -2,8 +2,10 @@ import { h, mount, createShow, createList } from '@getforma/core';
 
 // APP-012 work page (native SSR, no JavaScript). Every value, state and
 // receipt row is resolved by the Rust handler; this page only lays them out.
-// A failed, denied, loading or idle view carries no value at all, so nothing
-// here can show a number for it.
+// A failed, denied, loading (shown as busy) or idle view carries no value at
+// all, so nothing here can show a number for it. A successful run answers a
+// redirect back to this page, which re-runs the saved parameters under a
+// fresh authorization: a reload restores the views without a re-submit.
 type Pair = { id: string; label: string; value: string };
 type Cell = { id: string; text: string };
 type Row = { id: string; cells: Cell[] };
@@ -12,6 +14,7 @@ type Card = {
   title: string;
   kind: string;
   state: string;
+  badge: string;
   message: string;
   idle: boolean;
   loading: boolean;
@@ -72,7 +75,7 @@ function Work(props: WorkProps) {
         <section class="view" data-view={card.id} data-state={card.state} aria-label={card.title}>
           <h2>{card.title}</h2>
           <p class="state" role="status">
-            <span class="badge">{card.state}</span> {card.message}
+            <span class="badge">{card.badge}</span> {card.message}
           </p>
           {createShow(() => card.hasSummary, () => (
             <dl class="summary">
