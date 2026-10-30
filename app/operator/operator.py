@@ -12,8 +12,10 @@ application or signup path, and never generic SQL:
                    idempotent; a changed seed refuses whole)
   admission ...    passed unchanged to admission_operator.main: whatever closed
                    subcommands that module defines (APP-073 and later), after
-                   the same pre-connect environment checks; `issue` and
-                   `reconcile` are refused inside a managed (ECS) task
+                   the same pre-connect environment checks; inside a managed
+                   (ECS) task `reconcile`, `issue` (except `issue
+                   --code-digest` without a provider invitation) and
+                   `register-source-revision` (except `--record-json`) refuse
   upload-sources   the closed fixture-source table below: original bytes
                    normalized through the reviewed APP-004/005 adapter path of
                    fixtures/qualify.py (parser-host and its WASM guest, then
@@ -95,6 +97,22 @@ MANAGED_TASK_VARIABLES = ("ECS_CONTAINER_METADATA_URI_V4", "ECS_CONTAINER_METADA
 # `register-source-revision` reads a local record file that a command-only
 # override cannot deliver (APP-012).
 MANAGED_REFUSED = ("issue", "reconcile", "register-source-revision")
+# APP-078's managed channel admits exactly two forms of those subcommands:
+# `issue --code-digest` without a provider invitation (the operator minted the
+# code locally; the task sees and prints only its digest) and
+# `register-source-revision --record-json` (the non-secret record inline).
+
+
+def managed_form_refused(parsed):
+    """True when this parsed admission command must not run in a managed task."""
+    if parsed is None or parsed.command not in MANAGED_REFUSED:
+        return False
+    if parsed.command == "issue":
+        return parsed.code_digest is None or any(
+            getattr(parsed, name) is not None for name in ("provider_email", "provider_role", "provider_issuer", "provider_tenant"))
+    if parsed.command == "register-source-revision":
+        return parsed.record is not None or parsed.record_json is None
+    return True
 # The record APP-012's register-source-revision consumes, one per uploaded revision.
 REGISTRATION_FIELDS = ("organization_id", "source_id", "revision_id", "content_digest", "normalized_digest", "object_digest",
                        "row_count", "contract_digest")
@@ -531,10 +549,11 @@ def admission(rest):
     try:
         # admission_operator's own parser decides the subcommand; an argv it
         # refuses never runs (it refuses again, before connecting).
-        command = admission_operator.parser().parse_args(rest).command
+        parsed = admission_operator.parser().parse_args(rest)
     except admission_operator.Refused:
-        command = None
-    require(not (managed_task() and command in MANAGED_REFUSED), "refused_in_managed_task")
+        parsed = None
+    command = parsed.command if parsed is not None else None
+    require(not (managed_task() and managed_form_refused(parsed)), "refused_in_managed_task")
     if command not in (None, "defaults"):
         database_environment()
     return admission_operator.main(rest)

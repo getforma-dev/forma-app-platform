@@ -138,16 +138,42 @@ class PackageTests(unittest.TestCase):
                 covered.add(args.command)
                 if args.command == "admission":
                     parsed = admission_operator.validate(admission_operator.parser().parse_args(args.rest))
-                    self.assertNotIn(parsed.command, op.MANAGED_REFUSED)
+                    # Every documented form runs in a managed task (APP-078 adds the two digest/inline forms).
+                    self.assertFalse(op.managed_form_refused(parsed))
                     admission_covered.add(parsed.command)
         self.assertEqual(covered, set(op.COMMANDS))
         self.assertEqual(op.parse(document["default_command"]).command, "verify-catalog")
         self.assertEqual([item["command"][:2] for item in document["not_ecs_overrides"]][0], ["admission", "issue"])
-        # Every admission subcommand is either documented (review m4) or refused in a managed task (M3).
+        # Every admission subcommand is either documented (review m4) or refused in a managed task (M3);
+        # `issue` and `register-source-revision` are both: only their APP-078 managed forms are documented.
         excluded = {item["command"][1] for item in document["not_ecs_overrides"]}
         self.assertEqual(excluded, set(op.MANAGED_REFUSED))
         self.assertEqual(admission_covered | excluded, set(admission_operator.parser()._subparsers._group_actions[0].choices))
-        self.assertEqual(admission_covered & excluded, set())
+        self.assertEqual(admission_covered & excluded, {"issue", "register-source-revision"})
+
+    def test_managed_channel_admits_only_the_digest_and_inline_forms(self):
+        import admission_operator
+        digest = "sha256:" + "0" * 63 + "1"
+        base = ["issue", "--organization", NORTHSTAR, "--issued-by", "ops", "--grant", "source_read:" + NORTHSTAR]
+        cases = [(base + ["--code-digest", digest], False), (base, True),
+                 (base + ["--code-digest", digest, "--provider-email", "a@b.test"], True),
+                 (base + ["--code-digest", digest, "--provider-tenant", "t"], True),
+                 (["register-source-revision", "--organization", NORTHSTAR, "--record-json", "{}"], False),
+                 (["register-source-revision", "--organization", NORTHSTAR, "--record", "/run/operator/r.json"], True),
+                 (["register-source-revision", "--organization", NORTHSTAR, "--record", "x", "--record-json", "{}"], True),
+                 (["register-source-revision", "--organization", NORTHSTAR], True),
+                 (["reconcile", "--organization", NORTHSTAR], True), (["list", "--organization", NORTHSTAR], False)]
+        for argv, refused in cases:
+            with self.subTest(argv=argv):
+                self.assertEqual(op.managed_form_refused(admission_operator.parser().parse_args(argv)), refused)
+        self.assertFalse(op.managed_form_refused(None))
+        # Through the command line inside a managed task: the digest form passes the guard and reaches
+        # the pre-connect host check; the raw form is refused by the guard.
+        env = {"ECS_CONTAINER_METADATA_URI_V4": "x", "PGHOST": "@abstract"}
+        completed = cli("admission", *base, "--code-digest", digest, env_extra=env)
+        self.assertEqual((completed.returncode, completed.stdout, refusal(completed)), (1, "", "socket_host_refused"))
+        completed = cli("admission", *base, env_extra=env)
+        self.assertEqual(refusal(completed), "refused_in_managed_task")
 
     def test_issue_and_reconcile_refuse_in_a_managed_task(self):
         # Review M3: a Fargate task's stdout is the awslogs group; the raw code must never reach it.

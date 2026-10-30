@@ -31,7 +31,12 @@ the retained JSON output is the record.
 
 A new access code's secret (32 CSPRNG bytes, base32) is printed exactly once,
 on standard output, after its transaction commits. It is never logged, stored
-or written anywhere else; only its domain-separated digest is stored. Listing
+or written anywhere else; only its domain-separated digest is stored. In a
+managed (ECS) task, whose standard output is CloudWatch Logs, the operator
+instead mints the code on its own machine (infra/scripts/window_requests.py
+mint-code) and passes `issue --code-digest` only: the task never sees the
+secret and prints only the digest; a reused digest refuses (code_index primary
+key), and a pre-minted code never carries a provider invitation. Listing
 and audit show identifiers, status and counts only. Refusals print a fixed
 reason code on standard error and never echo an argument value.
 
@@ -230,6 +235,10 @@ def parser():
     q.add_argument("--max-redemptions", type=int, default=DEFAULTS["max_redemptions_default"])
     q.add_argument("--expires-days", type=int, default=DEFAULTS["code_expiry_days_default"])
     q.add_argument("--grant", action="append", default=[])
+    # APP-078 managed channel: the operator mints the code on its own machine
+    # (mint_access_code) and the task receives only its digest, so no secret
+    # reaches a task override, CloudTrail or the awslogs group.
+    q.add_argument("--code-digest")
     for arg in ("--provider-email", "--provider-role", "--provider-issuer", "--provider-tenant"):
         q.add_argument(arg)
     for name in ("revoke", "extend"):
@@ -262,8 +271,11 @@ def parser():
         q.add_argument("--organization", required=True)
         q.add_argument("--handle", required=(name == "retire-handle"))
     q = sub.add_parser("register-source-revision")
-    for arg in ("--organization", "--record"):
-        q.add_argument(arg, required=True)
+    q.add_argument("--organization", required=True)
+    # Exactly one: a local record file, or (the APP-078 managed channel, where
+    # an override carries only the command) the same non-secret record inline.
+    q.add_argument("--record")
+    q.add_argument("--record-json")
     q = sub.add_parser("create-bound-work")
     for arg in ("--organization", "--app", "--from-work", "--work", "--creator", "--input", "--source", "--revision"):
         q.add_argument(arg, required=True)
@@ -298,6 +310,11 @@ def validate(args):
         # least-privilege provider role and the exact provider tenant; an
         # omitted role is refused, never defaulted.
         require(all(v is None for v in invitation) or all(v is not None for v in invitation), "invitation_incomplete")
+        if args.code_digest is not None:
+            # A pre-minted code is never combined with a provider invitation:
+            # that path keeps its own capability handling (APP-073).
+            require(DIGEST.fullmatch(args.code_digest) is not None, "malformed_code_digest")
+            require(args.provider_email is None, "code_digest_with_invitation_refused")
         if args.provider_email is not None:
             email = args.provider_email.strip()
             require(3 <= len(email) <= 320 and email.count("@") == 1 and email.isascii() and email.isprintable(), "malformed_email")
@@ -311,7 +328,12 @@ def validate(args):
             args.raw_handle = normalize_handle(args.handle)
             require(args.raw_handle is not None, "malformed_handle")
     if args.command == "register-source-revision":
-        args.revision_record = source_record(args.record, args.organization)
+        require((args.record is None) != (args.record_json is None), "record_refused")
+        if args.record is not None:
+            args.revision_record = source_record(args.record, args.organization)
+        else:
+            raw = args.record_json.encode("utf-8", errors="strict") if args.record_json.isascii() else b""
+            args.revision_record = source_record_bytes(raw, args.organization)
     if args.command == "create-bound-work":
         require(LOCAL_ID.fullmatch(args.input) is not None, "malformed_input")
         require(args.work != args.from_work, "work_exists")
@@ -343,9 +365,23 @@ def source_record(path, organization):
     try:
         with open(path, "rb") as stream:
             raw = stream.read(4097)
-        require(len(raw) <= 4096, "record_refused")
-        record = json.loads(raw)
-    except (OSError, ValueError):
+    except OSError:
+        raise Refused("record_refused") from None
+    return source_record_bytes(raw, organization)
+
+
+def _closed_pairs(pairs):
+    keys = [key for key, _ in pairs]
+    require(len(keys) == len(set(keys)), "record_refused")
+    return dict(pairs)
+
+
+def source_record_bytes(raw, organization):
+    """The same closed checks for a record given inline (``--record-json``)."""
+    try:
+        require(0 < len(raw) <= 4096, "record_refused")
+        record = json.loads(raw, object_pairs_hook=_closed_pairs)
+    except ValueError:
         raise Refused("record_refused") from None
     require(isinstance(record, dict) and set(record) == RECORD_KEYS, "record_refused")
     for key in ("organization_id", "source_id", "revision_id"):
@@ -496,13 +532,16 @@ def issue(c, args):
                               AND r.code_id=p.code_id AND r.operation='revoke')""",
                           (org, args.provider_issuer, args.provider_tenant, email_digest(args.provider_email))).fetchone() == (0,),
                 "provider_invitation_exists")
-    raw = secrets.token_bytes(DEFAULTS["code_secret_bytes"])
+    # Pre-minted (APP-078 managed channel): only the digest is known here and
+    # the secret is never printed; otherwise draw it now and print it once.
+    raw = None if args.code_digest is not None else secrets.token_bytes(DEFAULTS["code_secret_bytes"])
+    digest = args.code_digest if raw is None else code_digest(raw)
     code_id = str(uuid.uuid4())
-    c.execute("INSERT INTO genui_private.code_index(code_digest,organization_id) VALUES (%s,%s)", (code_digest(raw), org))
+    c.execute("INSERT INTO genui_private.code_index(code_digest,organization_id) VALUES (%s,%s)", (digest, org))
     c.execute("""INSERT INTO genui.access_codes(organization_id,code_id,code_digest,kind,status,destination_organization_id,max_redemptions,
                  redeemed_count,issued_at,expires_at,trial_days,issued_by,revoked_at)
                  VALUES (%s,%s,%s,%s,'active',%s,%s,0,now(),now()+make_interval(days=>%s),%s,%s,NULL)""",
-              (org, code_id, code_digest(raw), args.kind, org, args.max_redemptions, args.expires_days,
+              (org, code_id, digest, args.kind, org, args.max_redemptions, args.expires_days,
                DEFAULTS["trial_entitlement_days"], "genui_migration:" + args.issued_by))
     for permission, app, work, source in args.templates:
         c.execute("""INSERT INTO genui.code_grant_templates(organization_id,code_id,permission,app_id,work_id,source_id)
@@ -520,8 +559,11 @@ def issue(c, args):
     c.commit()
     # Only after the commit succeeded: the one and only appearance of the secret
     # (printed by main once the provider phase below has finished).
-    result = {"code_id": code_id, "code": encode_code(raw), "kind": args.kind, "max_redemptions": args.max_redemptions,
-              "expires_at": timestamp(expires)}
+    result = {"code_id": code_id, "kind": args.kind, "max_redemptions": args.max_redemptions, "expires_at": timestamp(expires)}
+    if raw is None:
+        result["code_digest"] = digest
+    else:
+        result["code"] = encode_code(raw)
     if invited:
         # Review m5: the code committed above is printed whatever happens in the provider phase,
         # including an interrupt; an unrecorded outcome is left to reconcile.
