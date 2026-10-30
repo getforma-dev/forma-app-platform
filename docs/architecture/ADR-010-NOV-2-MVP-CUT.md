@@ -114,6 +114,7 @@ Strategy: first the small items that harden the live beta or unblock Phase 2 (po
 
 | Position | Ticket | Why here |
 | --- | --- | --- |
+| 0 | APP-097 (PH08) | First post-November 2 step (target 2026-11-03), per ADR-011: decide what the pitch keeps and close the deferred work (APP-076 remainder, PH01 gate record, APP-086, APP-089, APP-090, APP-014 and APP-084 residuals) before the order below resumes. Added 2026-10-30. |
 | 1 | APP-088 (PH02) | ADR-009 re-review R-M1 and R-m1–R-m6 must be in the ADR text before APP-015's migration 0008 is written; doc-only, a day. |
 | 2 | APP-087 (PH02) | The parser fuel bound (M4) decides what beta members can import; `check-parser-record.py` must be wired before the first PH02 deployment; precedes APP-017 Task A5. |
 | 2a | APP-089 (PH02) | Base-image HIGH CVEs and scan-on-push that scans the arm64 child, before the first PH02 deployment ships a new image. Added 2026-10-30. |

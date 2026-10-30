@@ -13,3 +13,4 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 31 | [APP-029: Verify accessible component states and equivalent focused workflows](../0-backlog/APP-029.md) | [PH02](../phases/PH02.md) | S05 | UX | P1 | M | Backlog | APP-028 |
 | 34 | [APP-081: Integrate linked views and evidence connections on the canvas](../0-backlog/APP-081.md) | [PH02](../phases/PH02.md) | S05 | UX | P1 | M | Backlog | APP-025, APP-027 |
 | 90 | [APP-090: MVP UI fixes and the designer handoff](../0-backlog/APP-090.md) | [PH02](../phases/PH02.md) | S03 | UX | P1 | M | Backlog | APP-076, APP-078 |
+| 092 | [APP-092: Canvas in the signed-in workspace](../0-backlog/APP-092.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-091 |

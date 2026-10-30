@@ -96,3 +96,10 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 88 | [APP-088: Fold the ADR-009 re-review and contract-edition residuals into the Phase 2 record (APP-015 preparation)](0-backlog/APP-088.md) | [PH02](phases/PH02.md) | S03 | QRY | P1 | S | Backlog | None |
 | 89 | [APP-089: Harden the container images: base CVEs and effective scan-on-push](0-backlog/APP-089.md) | [PH02](phases/PH02.md) | S03 | OPS | P1 | M | Backlog | APP-075, APP-078 |
 | 90 | [APP-090: MVP UI fixes and the designer handoff](0-backlog/APP-090.md) | [PH02](phases/PH02.md) | S03 | UX | P1 | M | Backlog | APP-076, APP-078 |
+| 091 | [APP-091: Pitch clone and join plan: canvas, planner and composer on the platform backbone](2-in-progress/APP-091.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | In progress | APP-012, APP-074 |
+| 092 | [APP-092: Canvas in the signed-in workspace](0-backlog/APP-092.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-091 |
+| 093 | [APP-093: Composer: describe an app and assemble it from admitted modules](0-backlog/APP-093.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-091, APP-092 |
+| 094 | [APP-094: Governed data on the canvas: views with receipts and the record form](0-backlog/APP-094.md) | [PH08](phases/PH08.md) | S14 | QRY | P0 | L | Backlog | APP-093 |
+| 095 | [APP-095: Share an app with a teammate under policy](0-backlog/APP-095.md) | [PH08](phases/PH08.md) | S14 | SHR | P0 | M | Backlog | APP-094 |
+| 096 | [APP-096: Deploy and rehearse the pitch on beta.getforma.dev](0-backlog/APP-096.md) | [PH08](phases/PH08.md) | S14 | VAL | P0 | L | Backlog | APP-092, APP-093, APP-094, APP-095 |
+| 097 | [APP-097: Post-November 2 revisit: land the pitch and close the deferred work](0-backlog/APP-097.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | L | Backlog | APP-076, APP-078, APP-086, APP-089, APP-090, APP-014, APP-084, APP-096 |

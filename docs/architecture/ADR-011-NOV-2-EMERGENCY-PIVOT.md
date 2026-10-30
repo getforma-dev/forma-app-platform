@@ -1,0 +1,25 @@
+# ADR-011: November 2 emergency pivot — the pitch demo
+
+- Status: Accepted (Victor, 2026-10-30, in chat: "Pivot ASAP. The [MVP] product needs to show the pitch"; "capture the join in a clone and in tickets and backlog all deferred work and capture a revisit after Nov 2 so we don't lose planning and this mvp will be an emergency pivot")
+- Date: 2026-10-30
+- Supersedes for November 2 only: the MVP definition of [ADR-010](ADR-010-NOV-2-MVP-CUT.md) §1 and its §4.5 scope locks (no canvas island beyond APP-003; no model before APP-043; UI limited to the SSR pages). Everything else in ADR-010 stands and resumes after November 2.
+
+## Context
+
+ADR-010 cut the November 2 MVP to Phase 1 live: invite, verified sign-in, governed query with receipt, explicit command, restart/reopen. That is live at `https://beta.getforma.dev` since 2026-10-30 (APP-078 window, APP-076 trial; records in `evidence/APP-078/window/` and `evidence/APP-076/trial/`). It proves the platform's backbone, but it does not show the product: a company describing an app, seeing it appear on a canvas, running it on its data and sharing it with a teammate. For a YC investment conversation, the backbone alone reads as a course project. Working prototypes of the missing experience exist beside this repository: Forma Vector Studio (describe an interface; Claude generates reusable Forma modules), Forma Generative UI (an intent-driven infinite canvas routing through a vector index of published modules) and Forma GenUI Runtime (the reusable canvas layer).
+
+## Decision
+
+1. **The November 2 MVP is the pitch demo**: on the live beta, a signed-in member of an organization describes an app; it appears on a canvas assembled from reusable, admitted components (retrieved, adapted or generated, and labeled as such); its views run on the organization's data through the governed query path with visible receipts; the member shares it with a teammate, who opens it under the teammate's own permissions; a non-member cannot see it.
+2. **The join happens in a clone.** The integration of the canvas and composer prototypes with the backbone is built in `FormaBuiltApps/forma-pitch-mvp` on branch `pivot/pitch-mvp` (cloned from `phase-one-spikes` at `21199f4`, pushed). `forma-app-platform`'s planned track, its board and the live beta's evidence stay intact. What the clone proves is landed back into the platform only through reviewed tickets after November 2 (section 5).
+3. **Invariants that still hold in the clone** (ADR-010 §2, unchanged): verified identity; tenant isolation (RLS, uniform 404); receipts on every governed number; transactional, idempotent, audited commands; model output is data, never code, SQL, markup or grants — a generated component enters only as a typed definition through admission, and every AI result is labeled; no credential, address or code in public evidence.
+4. **What is relaxed for November 2 only**: client-side canvas islands beyond APP-003's qualification (the GenUI runtime canvas, measured but not budget-gated); a model call for composition (Claude, through Vector Studio's path, with the key from a secret, never argv or logs); review depth is risk-tiered as in ADR-010 §4 (Tier A only for auth, isolation and admission seams).
+5. **Planning is paused, not abandoned.** Every unfinished ADR-010 item is carried by a ticket in Backlog, with nothing deleted or rewritten: the APP-076 trial remainder (record reopen, canary replay, T5 revocation, T9 attachment clearing and FormaStack's key rotation, the laptop retry/conflict rows), the PH01 gate record, APP-078's qualification row (APP-086), APP-089 image hardening, APP-090 UI fixes and the designer handoff, the review residuals (APP-014, APP-084), and PH02–PH07 as planned. The ADR-010 §6 pick-up order remains the order.
+6. **Revisit on November 3** (ticket APP-097): decide what the pitch clone keeps and how it lands in the platform (ticket by ticket, through the normal review tiers), close the APP-076 remainder and the PH01 gate, and resume the ADR-010 §6 order with the pitch's lessons applied to PH02 Track C and PH03.
+
+## Consequences
+
+- The live beta keeps running the Phase 1 build until the pitch build is deployed; the pitch deploys to the same environment only through a reviewed change set, and the Phase 1 rollback revision stays available.
+- Two lines of work run in parallel until November 3: the pitch clone (APP-091–096) and nothing else on the platform board except Victor's pending trial checks.
+- The pitch's shortcuts are visible debt: each is named in its ticket and in APP-097, so the revisit can pay it or carry it.
+- The PH01 gate is not marked passed by the pivot; it passes only when its checklist is complete (`evidence/phases/PH01/GATE.md`).

@@ -8,3 +8,4 @@ Separate grants, derived information, revocation and exports.
 | 52 | [APP-049: Protect source-dependent saved and derived information](../0-backlog/APP-049.md) | [PH04](../phases/PH04.md) | S09 | SHR | P0 | L | Backlog | APP-048 |
 | 53 | [APP-050: Deliver and measure revocation end to end](../0-backlog/APP-050.md) | [PH04](../phases/PH04.md) | S09 | SHR | P0 | L | Backlog | APP-024, APP-040, APP-048, APP-049 |
 | 54 | [APP-051: Export an authorized labeled snapshot](../0-backlog/APP-051.md) | [PH04](../phases/PH04.md) | S09 | SHR | P1 | L | Backlog | APP-015, APP-048, APP-049, APP-050 |
+| 095 | [APP-095: Share an app with a teammate under policy](../0-backlog/APP-095.md) | [PH08](../phases/PH08.md) | S14 | SHR | P0 | M | Backlog | APP-094 |

@@ -17,3 +17,4 @@ Synthetic fixtures, both app journeys and reproducible release evidence.
 | 75 | [APP-072: Evaluate one real recurring workflow and second-person reuse](../0-backlog/APP-072.md) | [PH06](../phases/PH06.md) | S12 | VAL | P1 | M | Backlog | APP-058, APP-070, APP-071 |
 | 79 | [APP-076: Run the beta go-live trial on the live deployment](../0-backlog/APP-076.md) | [PH01](../phases/PH01.md) | S02 | VAL | P0 | L | Backlog | APP-012, APP-013, APP-014, APP-074, APP-078 |
 | 83 | [APP-083: Prove concurrent redemption through the public beta API on the live deployment (deferred from APP-076)](../0-backlog/APP-083.md) | [PH07](../phases/PH07.md) | S13 | VAL | P1 | S | Backlog | APP-076 |
+| 096 | [APP-096: Deploy and rehearse the pitch on beta.getforma.dev](../0-backlog/APP-096.md) | [PH08](../phases/PH08.md) | S14 | VAL | P0 | L | Backlog | APP-092, APP-093, APP-094, APP-095 |

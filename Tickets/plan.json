@@ -165,6 +165,14 @@
       "outcome": "Every acceptance sentence and review residual deferred by ADR-010 is proven on the live beta or the local harness, or dispositioned with evidence.",
       "exit": "APP-082–086 Done; each \"(Moved from APP-xxx by ADR-010.)\" sentence verified in its owner; every review residual fixed or recorded as an accepted limit with its review file and finding id.",
       "phase": "PH07"
+    },
+    {
+      "id": "S14",
+      "name": "PIVOT: November 2 pitch demo",
+      "entry": "Select individual tickets when their listed predecessors are Done. Integrated slice prerequisites: ADR-011 is accepted; the clone exists at FormaBuiltApps/forma-pitch-mvp on pivot/pitch-mvp.",
+      "outcome": "The pitch journey (describe, canvas, governed data, share) rehearsed on the live beta, then the November 3 revisit.",
+      "exit": "APP-091–097 Done; rehearsal evidence is sanitized and every deferred item is closed or re-ticketed by APP-097.",
+      "phase": "PH08"
     }
   ],
   "phases": [
@@ -343,6 +351,28 @@
       "depends_on": [
         "PH06"
       ],
+      "gate_status": "pending",
+      "gate_evidence": []
+    },
+    {
+      "id": "PH08",
+      "name": "PIVOT: November 2 pitch demo",
+      "entry": "ADR-011 (2026-10-30) is accepted. The pitch is built in the clone FormaBuiltApps/forma-pitch-mvp on branch pivot/pitch-mvp (from phase-one-spikes 21199f4); the platform's own planned track and the live beta's evidence stay intact.",
+      "outcome": "On the live beta, a signed-in member describes an app, sees it on a canvas of labeled retrieved/adapted/generated components, runs it on governed data with receipts, shares it with a teammate under the teammate's own permissions, and a non-member cannot see it; then the November 3 revisit decides what lands in the platform.",
+      "deliverables": [
+        "The pitch clone and the integration architecture of the GenUI runtime canvas, the intent planner with module index and the Claude-composed modules on the platform backbone (APP-091).",
+        "Canvas island in the signed-in workspace, composer, governed data with receipts, and sharing under policy (APP-092–095).",
+        "Deployment and rehearsal on beta.getforma.dev through a reviewed change set (APP-096).",
+        "The November 3 revisit that lands the pitch ticket by ticket and closes every deferred item (APP-097)."
+      ],
+      "exit_criteria": [
+        "APP-091–096 are Done: the pitch journey runs on beta.getforma.dev with sanitized rehearsal evidence, and the Phase 1 rollback revision stayed available.",
+        "APP-097 is Done: each deferred item it lists is closed or re-ticketed, and the ADR-010 §6 order resumes with the pitch's lessons applied.",
+        "The ADR-011 §3 invariants held throughout; the pitch's shortcuts are named in tickets and carried by APP-097. This phase does not mark the PH01 gate passed."
+      ],
+      "parallel_work": "Runs on the clone until 2026-11-02; no other platform ticket moves except Victor's pending trial checks (ADR-011 Consequences). Placed after PH07 because the board requires a new phase to have the highest order; it has no phase dependency, and its tickets depend only on earlier tickets.",
+      "order": 8,
+      "depends_on": [],
       "gate_status": "pending",
       "gate_evidence": []
     }
