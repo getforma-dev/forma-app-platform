@@ -703,7 +703,36 @@ impl Workspace {
             require(consumed.len() == 1 && text(&consumed[0], 0)? == pre.refresh_ref)?;
             transaction.query("INSERT INTO genui.sessions(organization_id,session_id,cookie_digest,principal_id,membership_epoch_at_mint,entitlement_id,registry_sha256,refresh_token_ref,created_at,last_seen_at,absolute_expires_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text,$3::text::uuid,$4::bigint,$5::text::uuid,$6::text,$7::text::uuid,now(),now(),now()+interval '12 hours')",
                 &[&organization,&digest(SESSION_DOMAIN,&cookie),&member.principal,&epoch,&member.entitlement,&registry.identity.sha256,&pre.refresh_ref]).await?;
-            append_as(&transaction, Chain::Workspace, organization, &member.principal, Event { kind: "session.signed_in", id: None, app: None, work: None, outcome: None }).await?;
+            append_as(&transaction, Chain::Workspace, organization, &member.principal, Event { kind: "session.signed_in", id: None, app: None, work: None, record: None, outcome: None }).await?;
+            Ok(())
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result.map(|()| cookie)
+    }
+
+    /// Test executable only (APP-013 command campaign): a workspace session
+    /// for a seeded active member with an active entitlement, bypassing the
+    /// provider exchange. Everything the route then does (`resolve_session`,
+    /// the fence, the data role's command) is the production path. Never
+    /// compiled into a release build.
+    #[cfg(test)]
+    pub(crate) async fn mint_session_for_tests(
+        &self,
+        organization: &str,
+        principal: &str,
+        refresh_ref: &str,
+    ) -> Result<String> {
+        require(valid_id(organization) && valid_id(principal) && valid_id(refresh_ref))?;
+        let registry = &self.inner.registry;
+        let cookie = capability(organization)?;
+        let transaction = Transaction::begin_nonmember(&self.inner, Some(organization)).await?;
+        let result = async {
+            let rows = transaction.query("SELECT m.membership_epoch,e.entitlement_id::text FROM genui.memberships m JOIN genui.entitlements e ON e.organization_id=m.organization_id AND e.principal_id=m.principal_id AND e.status='active' AND e.expires_at>clock_timestamp() WHERE m.organization_id=$1::text::uuid AND m.principal_id=$2::text::uuid AND m.status='active' LIMIT 1", &[&organization,&principal]).await?;
+            let row = rows.first().ok_or(Error::Denied)?;
+            let (epoch, entitlement) = (integer(row, 0)?, text(row, 1)?);
+            transaction.query("INSERT INTO genui.sessions(organization_id,session_id,cookie_digest,principal_id,membership_epoch_at_mint,entitlement_id,registry_sha256,refresh_token_ref,created_at,last_seen_at,absolute_expires_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text,$3::text::uuid,$4::bigint,$5::text::uuid,$6::text,$7::text::uuid,now(),now(),now()+interval '12 hours')",
+                &[&organization,&digest(SESSION_DOMAIN,&cookie),&principal,&epoch,&entitlement,&registry.identity.sha256,&refresh_ref]).await?;
             Ok(())
         }
         .await;

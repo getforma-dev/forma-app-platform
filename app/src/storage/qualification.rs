@@ -863,9 +863,12 @@ async fn campaign() {
             "ALTER TABLE genui.internal_records DISABLE ROW LEVEL SECURITY",
             "ALTER TABLE genui.internal_records ENABLE ROW LEVEL SECURITY",
         ),
+        // APP-013 (0007) grants genui_data UPDATE(current_version) on
+        // internal_records, so the extra table-level UPDATE probe moves to a
+        // relation the data role never writes.
         (
-            "GRANT UPDATE ON genui.internal_records TO genui_data",
-            "REVOKE UPDATE ON genui.internal_records FROM genui_data",
+            "GRANT UPDATE ON genui.publications TO genui_data",
+            "REVOKE UPDATE ON genui.publications FROM genui_data",
         ),
         (
             "ALTER TABLE genui.definition_inputs RENAME TO fixture_hidden_inputs",
@@ -892,9 +895,9 @@ async fn campaign() {
     fixture.sql("GRANT genui_owner TO genui_worker", "genui");
     assert!(Lease::acquire(&identity.worker.inner).await.is_err());
     fixture.sql("REVOKE genui_owner FROM genui_worker", "genui");
-    fixture.sql("ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check; UPDATE genui_meta.schema_version SET version=7;","genui");
+    fixture.sql("ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check; UPDATE genui_meta.schema_version SET version=8;","genui");
     assert!(Lease::acquire(&identity.worker.inner).await.is_err());
-    fixture.sql("UPDATE genui_meta.schema_version SET version=6; ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK(version BETWEEN 1 AND 6);","genui");
+    fixture.sql("UPDATE genui_meta.schema_version SET version=7; ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK(version BETWEEN 1 AND 7);","genui");
     let lease = Lease::acquire(&identity.worker.inner).await.unwrap();
     drop(lease);
     identity.close().await.unwrap();
@@ -1001,7 +1004,7 @@ async fn campaign() {
     version.close().await.unwrap();
     let version_fresh = Stores::new(fixture.settings()).unwrap();
     refuse_all_roles(&version_fresh).await;
-    fixture.sql("UPDATE genui_meta.schema_version SET version=6", "genui");
+    fixture.sql("UPDATE genui_meta.schema_version SET version=7", "genui");
     version_fresh.readiness().await.unwrap();
     version_fresh.close().await.unwrap();
     drop(operator);

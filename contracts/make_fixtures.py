@@ -1,7 +1,9 @@
 """Regenerate clearly synthetic contract examples; no parser/query execution is claimed.
 
-Edition impl-2026-10-29.2 specimens. Edition impl-2026-10-28.1's specimens and vectors are retained
-byte-identically in fixtures/impl-2026-10-28.1/ and are never regenerated.
+Edition impl-2026-10-29.3 specimens: the edition-two bundles and vectors unchanged, plus the APP-013
+recovery view, claim and command problem bodies (fixtures/command-recovery.json). Edition
+impl-2026-10-28.1's and impl-2026-10-29.2's specimens and vectors are retained byte-identically in
+fixtures/impl-2026-10-28.1/ and fixtures/impl-2026-10-29.2/ and are never regenerated.
 """
 import copy
 import hashlib
@@ -148,9 +150,47 @@ def canonical_vectors():
         vectors.append(vector(name, exact_rational(numerator, denominator), rational={"numerator": str(numerator), "denominator": str(denominator)}))
     return vectors
 
+def command_recovery():
+    """Edition impl-2026-10-29.3 (ADR-007 D7.9/D7.15, APP-013): the record command route's refusal bodies.
+
+    The Spend Review S05 sequence after ik-1 committed version 1: a stale edit expecting version 0 (409 with
+    the recovery view naming the current record), ik-1 reused with another payload (409 naming the stored
+    outcome), a moved work premise (412 naming the current revision), and the two waits. Synthetic: the
+    outcome is the bundle's, not a committed row.
+    """
+    b = spend_review()
+    command, outcome, work = b["command"], b["outcome"], b["work"]
+    scope = {"organization_id": outcome["organization_id"], "app_id": command["app_id"], "work_id": command["work_id"],
+             "publication_id": command["publication_id"], "work_version": work["version"], "record_id": command["record_id"], "command_id": command["command_id"]}
+    current = [{"field_id": "status", "value": {"type": "enum", "value": "needs_context"}},
+               {"field_id": "note", "value": {"type": "text", "value": "Review required — synthetic only"}}]
+    stale_edit = {"kind": "recovery_view", "schema_version": 1, **scope, "idempotency_key": "fedcba9876543210fedcba9876543210", "reason": "expected_version",
+                  "expected_record_version": 0, "current_record_version": 1, "current_values": current, "stored_outcome": None}
+    reused_key = {"kind": "recovery_view", "schema_version": 1, **scope, "idempotency_key": command["idempotency_key"], "reason": "payload_mismatch",
+                  "expected_record_version": 0, "current_record_version": 1, "current_values": current, "stored_outcome": outcome}
+    absent = {"kind": "recovery_view", "schema_version": 1, **scope, "idempotency_key": "00000000000000000000000000000009", "reason": "expected_version",
+              "expected_record_version": 3, "current_record_version": 0, "current_values": None, "stored_outcome": None}
+    claim = {"kind": "command_claim", "schema_version": 1, "organization_id": outcome["organization_id"], "app_id": command["app_id"], "work_id": command["work_id"],
+             "principal_id": outcome["principal_id"], "command_id": command["command_id"], "idempotency_key": command["idempotency_key"],
+             "payload_digest": outcome["payload_digest"], "claimed_at": outcome["committed_at"]}
+    problems = [
+        {"status": 409, "code": "conflict", "recovery_view": stale_edit},
+        {"status": 409, "code": "conflict", "recovery_view": reused_key},
+        {"status": 412, "code": "stale", "current_revision": {"publication_id": command["publication_id"], "definition_revision_id": b["definition"]["revision_id"],
+                                                               "definition_digest": b["definition"]["digest"], "work_version": work["version"]}},
+        {"status": 409, "code": "in_flight", "retry_after_seconds": 2},
+        {"status": 409, "code": "busy", "retry_after_seconds": 2},
+        {"status": 400, "code": "missing_idempotency_key"},
+        {"status": 400, "code": "malformed_idempotency_key"},
+        {"status": 400, "code": "malformed_command"},
+        {"status": 503, "code": "unknown_outcome"},
+    ]
+    return {"recovery_views": [stale_edit, reused_key, absent], "claim": claim, "problems": problems}
+
 def main():
     (ROOT / "fixtures").mkdir(exist_ok=True)
-    for name, value in (("northstar", northstar()), ("spend-review", spend_review()), ("canonical-vectors", canonical_vectors())):
+    for name, value in (("northstar", northstar()), ("spend-review", spend_review()), ("canonical-vectors", canonical_vectors()),
+                        ("command-recovery", command_recovery())):
         (ROOT / "fixtures" / (name + ".json")).write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
 if __name__ == "__main__":

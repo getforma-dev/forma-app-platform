@@ -414,17 +414,22 @@ def append(c, organization, kind, code_id=None, actor=None, app=None, work=None)
               (sequence, digest, organization))
 
 
-def organization_sequence_hook(c, organization):
-    """D7.7 TODO(APP-013, migration 0007): organization_sequences arrives with 0007.
+def organization_sequence_row(c, organization):
+    """D7.7 (migration 0007, APP-013): the organization's one commit-sequence row.
 
-    Until then there is nothing to create. When the relation exists this hook
-    refuses, so provisioning and backfill cannot silently skip the row; 0007's
-    slice must replace it with the D7.7 insert (next_commit_sequence = 1, or
-    1 + max(internal_record_revisions.commit_sequence) for a backfill).
+    Provisioning creates it at 1 in the organization's own transaction; the
+    backfill for an existing organization inserts it under scope at
+    1 + max(internal_record_revisions.commit_sequence) (1 when there is none)
+    and reports an existing row unchanged. The row is written by this channel
+    only (D7.19); a command that finds none writes nothing (Error::Configuration).
     """
-    require(c.execute("SELECT to_regclass('genui.organization_sequences') IS NULL").fetchone() == (True,),
-            "organization_sequences_hook_not_implemented")
-    return "organization_sequences: not created; the relation arrives with migration 0007 (D7.7)"
+    found = c.execute("SELECT next_commit_sequence FROM genui.organization_sequences WHERE organization_id=%s", (organization,)).fetchone()
+    if found is not None:
+        return {"organization_sequences": "existing", "next_commit_sequence": found[0]}
+    following = c.execute("SELECT coalesce(max(commit_sequence),0)+1 FROM genui.internal_record_revisions WHERE organization_id=%s",
+                          (organization,)).fetchone()[0]
+    c.execute("INSERT INTO genui.organization_sequences(organization_id,next_commit_sequence) VALUES (%s,%s)", (organization, following))
+    return {"organization_sequences": "created", "next_commit_sequence": following}
 
 
 # --- commands -----------------------------------------------------------------
@@ -439,14 +444,14 @@ def provision(c, args):
     for chain in CHAINS:
         c.execute("INSERT INTO genui.audit_heads(organization_id,writer_role,chain_sequence,head_hash) VALUES (%s,%s,1,%s)",
                   (org, chain, genesis(org, chain)))
-    deferred = organization_sequence_hook(c, org)
+    sequence = organization_sequence_row(c, org)
     raw = secrets.token_bytes(DEFAULTS["handle_bytes"])
     c.execute("INSERT INTO genui_private.handle_index(handle_digest,organization_id,retired_at) VALUES (%s,%s,NULL)", (handle_digest(raw), org))
     lock_organization(c, org, active=True)
     append(c, org, "organization.provisioned")
     c.commit()
     # The handle is non-secret routing (ADR-006); it is still shown only here.
-    return {"organization_id": org, "handle": encode_handle(raw), "audit_heads": list(CHAINS), "deferred": [deferred]}
+    return {"organization_id": org, "handle": encode_handle(raw), "audit_heads": list(CHAINS), "sequence": sequence}
 
 
 def backfill(c, args):
@@ -461,11 +466,12 @@ def backfill(c, args):
             c.execute("INSERT INTO genui.audit_heads(organization_id,writer_role,chain_sequence,head_hash) VALUES (%s,%s,1,%s)",
                       (org, chain, genesis(org, chain)))
             created.append(chain)
-    deferred = organization_sequence_hook(c, org)
+    sequence = organization_sequence_row(c, org)
     # D7.8's operator kinds are closed and name no backfill event; the genesis
-    # heads themselves are the record (verify recomputes them).
+    # heads themselves are the record (verify recomputes them), and so is the
+    # sequence row (D7.7).
     c.commit()
-    return {"organization_id": org, "created": created, "existing": existing, "deferred": [deferred]}
+    return {"organization_id": org, "created": created, "existing": existing, "sequence": sequence}
 
 
 def issue(c, args):
@@ -953,8 +959,22 @@ def verify(c, args):
           AND e.writer_role='admission' AND e.kind='admission.redeemed' AND e.code_id=d.code_id
           AND e.actor_principal_id=d.principal_id AND e.outcome_digest=d.payload_digest)""", (org,)).fetchone()[0]
     require(orphans == 0, "redemption_audit_mismatch")
+    # APP-013 (0007): command_outcomes.audit_event_id carries no foreign key
+    # (D7.8); every outcome names its own command.committed event with the
+    # record and the payload digest, and the organization's sequence row is
+    # ahead of every committed revision (D7.7).
+    outcomes = c.execute("""SELECT count(*), count(*) FILTER (WHERE NOT EXISTS (
+          SELECT 1 FROM genui.audit_events e WHERE e.organization_id=o.organization_id AND e.event_id=o.audit_event_id
+          AND e.writer_role='data' AND e.kind='command.committed' AND e.record_id=o.record_id AND e.work_id=o.work_id
+          AND e.actor_principal_id=o.principal_id AND e.outcome_digest=o.payload_digest))
+          FROM genui.command_outcomes o WHERE o.organization_id=%s""", (org,)).fetchone()
+    require(outcomes[1] == 0, "command_audit_mismatch")
+    sequence = c.execute("SELECT next_commit_sequence FROM genui.organization_sequences WHERE organization_id=%s", (org,)).fetchone()
+    highest = c.execute("SELECT coalesce(max(commit_sequence),0) FROM genui.internal_record_revisions WHERE organization_id=%s", (org,)).fetchone()[0]
+    require(sequence is None or sequence[0] > highest, "commit_sequence_mismatch")
     c.commit()
-    return {"organization_id": org, "verified": True, "chains": chains}
+    return {"organization_id": org, "verified": True, "chains": chains, "command_outcomes": outcomes[0],
+            "next_commit_sequence": None if sequence is None else sequence[0]}
 
 
 # --- provider invitation operations (APP-073 acceptance 6 and 7) -------------------
