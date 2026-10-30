@@ -19,10 +19,16 @@ pub mod directory;
 pub mod events;
 pub mod http;
 pub mod imports;
+// APP-099 (ADR-011 pitch): Forma as an MCP server; member-minted agent tokens.
+pub mod mcp;
+// APP-100 (DS-59): the channel a record version was committed through.
+pub mod origins;
 pub mod query;
 pub mod readiness;
 pub mod roles;
 // APP-095 (ADR-011 pitch): share a work with a teammate; the members list.
 pub mod sharing;
+// APP-100 (ADR-011 pitch): Slack slash command, buttons and approver DMs.
+pub mod slack;
 pub mod storage;
 pub mod supervise;

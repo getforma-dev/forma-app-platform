@@ -509,6 +509,27 @@ fn principal_document(principal: &str) -> Value {
 
 /// The records listing as JSON.
 pub fn records_document(listing: &RecordsListing) -> Value {
+    records_document_with(listing, &[])
+}
+
+/// The records listing as JSON, each record carrying `via`: the label of the
+/// agent token that committed its current version through MCP (APP-099's
+/// "via Claude" chip; display provenance, never authority), or null.
+pub fn records_document_with(
+    listing: &RecordsListing,
+    attributions: &[storage::AgentAttribution],
+) -> Value {
+    let via = |record: &str, version: i64| {
+        attributions
+            .iter()
+            .rev()
+            .find(|a| {
+                a.record
+                    .as_ref()
+                    .is_some_and(|(r, v)| r == record && *v == version)
+            })
+            .map(|a| a.label.clone())
+    };
     json!({
         "app_id": listing.app,
         "work_id": listing.work,
@@ -532,7 +553,8 @@ pub fn records_document(listing: &RecordsListing) -> Value {
                 "transitions": d.transitions.iter().map(|(f, a, b)| json!({"field_id": f, "from": a, "to": b})).collect::<Vec<_>>(),
             })).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
-        "records": listing.records.iter().map(|r| json!({
+        "records": listing.records.iter().map(|r| {
+            let mut record = json!({
             "record_id": r.record_id,
             "collection_id": r.collection,
             "schema_id": r.schema,
@@ -541,12 +563,20 @@ pub fn records_document(listing: &RecordsListing) -> Value {
             "committed_at": r.committed_at,
             "creator": principal_document(&r.creator),
             "updater": principal_document(&r.updater),
+            "via": via(&r.record_id, r.version),
             "values": r.values.as_array().into_iter().flatten().filter_map(|item| Some(json!({
                 "field_id": item.get("field_id")?,
                 "value": item.get("value")?,
                 "display": resolve::display(item.get("value")?),
             }))).collect::<Vec<_>>(),
-        })).collect::<Vec<_>>(),
+            });
+            // APP-100 (DS-59): the channel that committed this version, for
+            // the canvas's origin chip; a display label only.
+            if let Some(via) = crate::origins::label(&r.record_id, r.version) {
+                record["via"] = Value::String(via.to_owned());
+            }
+            record
+        }).collect::<Vec<_>>(),
         "truncated": listing.truncated,
     })
 }
@@ -580,7 +610,17 @@ async fn records(
                 count = listing.records.len(),
                 "records listed"
             );
-            document(StatusCode::OK, &records_document(&listing))
+            // APP-099: the agent labels of this work, read only after the
+            // listing authorized the member; a failed read shows no chip.
+            let attributions = stores
+                .workspace
+                .agent_attributions(&member, &app, &work)
+                .await
+                .unwrap_or_default();
+            document(
+                StatusCode::OK,
+                &records_document_with(&listing, &attributions),
+            )
         }
         Err(storage::Error::Denied) => http::not_found(),
         Err(_) => http::unavailable(),

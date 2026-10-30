@@ -123,6 +123,7 @@
 .cv-status-chip[data-status="approved"] { border-color: var(--cv-ready); color: var(--cv-ready); }
 .cv-status-chip[data-status="rejected"] { border-color: var(--cv-bad); color: var(--cv-bad); }
 .cv-records-by { color: var(--cv-muted); white-space: nowrap; }
+.cv-via-chip { margin-left: 0.4rem; padding: 0 0.35rem; border: 1px solid var(--cv-muted); border-radius: 999px; font-size: 0.75em; color: var(--cv-muted); }
 .cv-records-actions { white-space: nowrap; }
 .cv-records-actions button {
   margin-right: 0.3rem;
@@ -158,3 +159,63 @@
 @media (prefers-reduced-motion: reduce) {
   .cv-confirm, .cv-records-table tr.is-new > td { animation: none; }
 }
+
+/* APP-099: the "Connect an agent" panel (the via chip is APP-100's .cv-via-chip, shared). */
+.cv-agent-open {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 8px;
+  background: var(--cv-surface);
+  color: var(--cv-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cv-agent-open:hover { background: var(--cv-accent-soft); }
+.cv-agent-panel {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 14px;
+  background: var(--cv-surface);
+  color: var(--cv-text);
+  box-shadow: var(--cv-shadow-lift);
+  font-family: var(--cv-sans);
+}
+.cv-agent-panel::backdrop { background: rgb(10 13 19 / 45%); }
+.cv-agent-head { display: flex; align-items: center; justify-content: space-between; }
+.cv-agent-head h2 { margin: 0; font-size: 1.15rem; }
+.cv-agent-panel h3 { margin: 1.1rem 0 0.4rem; font-size: 0.9rem; color: var(--cv-muted); }
+.cv-agent-close { border: 0; background: none; color: var(--cv-muted); font-size: 1.4rem; cursor: pointer; }
+.cv-agent-copy-text, .cv-agent-note, .cv-agent-meta, .cv-agent-empty { color: var(--cv-muted); font-size: 0.85rem; }
+.cv-agent-form { display: flex; gap: 0.5rem; align-items: end; flex-wrap: wrap; }
+.cv-agent-label { display: grid; gap: 0.25rem; font-size: 0.8rem; color: var(--cv-muted); }
+.cv-agent-label input, .cv-agent-code {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 8px;
+  background: var(--cv-sunken);
+  color: var(--cv-text);
+  font: inherit;
+}
+.cv-agent-code { width: 100%; font-family: var(--cv-mono); font-size: 0.78rem; resize: vertical; }
+.cv-agent-create, .cv-agent-copy, .cv-agent-revoke {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 8px;
+  background: var(--cv-surface);
+  color: var(--cv-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cv-agent-create { background: var(--cv-accent); border-color: var(--cv-accent); color: var(--cv-on-accent); }
+.cv-agent-revoke { color: var(--cv-bad); }
+.cv-agent-copyable { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.25rem 0.5rem; align-items: start; margin: 0.5rem 0; }
+.cv-agent-copy-label { grid-column: 1 / -1; font-size: 0.78rem; font-weight: 600; color: var(--cv-muted); }
+.cv-agent-once { margin: 0.75rem 0 0; font-weight: 600; color: var(--cv-busy); }
+.cv-agent-list { list-style: none; margin: 0; padding: 0; }
+.cv-agent-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-top: 1px solid var(--cv-hairline); }
+.cv-agent-name { font-weight: 600; }

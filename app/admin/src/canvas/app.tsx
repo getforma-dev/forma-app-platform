@@ -1,5 +1,6 @@
 import { h, mount, createShow, createList, createSignal, activateIslands } from '@getforma/core';
 import { submitUtterance } from './actions';
+import { startAgents } from './agents';
 import { startBoard } from './board';
 
 // ADR-011 pitch canvas (APP-092, APP-094): the signed-in workspace as one
@@ -628,6 +629,7 @@ function Canvas(props: CanvasProps) {
 
 await activateIslands({ IntentBar });
 startBoard(document);
+startAgents(document);
 
 mount(
   () =>
