@@ -42,6 +42,16 @@ export const AUTH_CONFIGURATION_SECRET_ID_ENV = 'GENUI_AUTH_CONFIGURATION_SECRET
 // Written by the operator (PutSecretValue from a pipe, never argv); the initial `{}`
 // is "no key": the composer answers composer_unavailable and nothing else changes.
 export const COMPOSER_KEY_ENV = 'ANTHROPIC_API_KEY';
+// APP-100 (ADR-011 pitch): the Slack app's bot token and signing secret, from the
+// SlackApp secret's two JSON keys, injected into the service container only as these
+// two variables (slack/mod.rs reads them; runtime.py serve() passes its environment
+// through). Victor writes the values (PutSecretValue from a pipe, never argv). The
+// initial value names both keys empty, which the service treats as "no Slack app":
+// every Slack route answers the uniform 404 and nothing posts. (A bare `{}` would
+// stop the task from starting: ECS refuses a JSON-key secret whose key is absent.)
+export const SLACK_BOT_TOKEN_ENV = 'SLACK_BOT_TOKEN';
+export const SLACK_SIGNING_SECRET_ENV = 'SLACK_SIGNING_SECRET';
+export const SLACK_APP_PLACEHOLDER = '{"bot_token":"","signing_secret":""}';
 // ADR-011 pitch (APP-095): the same-origin path of the organization's event stream
 // the canvas island subscribes to; set on the service task so live updates are on.
 export const CANVAS_EVENTS_URL_ENV = 'GENUI_CANVAS_EVENTS_URL';
@@ -237,6 +247,18 @@ export class GenuiFoundation extends Stack {
       description: 'GenUI composer model key: written by the operator, injected into the service task only (APP-093, ADR-011)',
       encryptionKey: composerModelKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
     });
+    // APP-100 (ADR-011 pitch): the Slack app's bot token and signing secret, written
+    // by Victor (PutSecretValue from a pipe, never argv); ECS injects the two JSON keys
+    // into the service container only, as SLACK_BOT_TOKEN_ENV and SLACK_SIGNING_SECRET_ENV.
+    // Its own retained KMS key, like the composer key; a new value reaches the service
+    // at its next task start (force a new deployment after a write).
+    const slackAppKey = new kms.Key(this, 'SlackAppKey', {
+      description: 'GenUI Slack app credentials (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const slackApp = new secretsmanager.Secret(this, 'SlackApp', {
+      description: 'GenUI Slack app bot token and signing secret: written by the operator, injected into the service task only (APP-100, ADR-011)',
+      encryptionKey: slackAppKey, secretStringValue: SecretValue.unsafePlainText(SLACK_APP_PLACEHOLDER), removalPolicy: RemovalPolicy.RETAIN,
+    });
     const task = new ecs.FargateTaskDefinition(this, 'Task', { cpu: 2048, memoryLimitMiB: 8192, taskRole, executionRole, runtimePlatform });
     task.addVolume({ name: 'runtime-config' });
     const log = new logs.LogGroup(this, 'Logs', { retention: logs.RetentionDays.ONE_MONTH, removalPolicy: RemovalPolicy.RETAIN });
@@ -267,6 +289,8 @@ export class GenuiFoundation extends Stack {
         [CAPABILITY_SECRET_ENV]: ecs.Secret.fromSecretsManager(capabilitySecret),
         [AUTH_CONFIGURATION_ENV]: ecs.Secret.fromSecretsManager(authConfiguration),
         [COMPOSER_KEY_ENV]: ecs.Secret.fromSecretsManager(composerModel),
+        [SLACK_BOT_TOKEN_ENV]: ecs.Secret.fromSecretsManager(slackApp, 'bot_token'),
+        [SLACK_SIGNING_SECRET_ENV]: ecs.Secret.fromSecretsManager(slackApp, 'signing_secret'),
       },
       healthCheck: { command: ['CMD', 'python3', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health/live', timeout=2).read()"], interval: Duration.seconds(30), timeout: Duration.seconds(5), retries: 3, startPeriod: Duration.seconds(60) },
     });
@@ -431,9 +455,9 @@ export class GenuiFoundation extends Stack {
     // APP-078 B1: the same two actions on the auth configuration secret, so the
     // operator channel can read and rewrite it; the operator's own credentials do
     // the window's PutSecretValue from the composed private file.
-    operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], resources: [capabilitySecret.secretArn, authConfiguration.secretArn, composerModel.secretArn] }));
+    operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], resources: [capabilitySecret.secretArn, authConfiguration.secretArn, composerModel.secretArn, slackApp.secretArn] }));
     operatorRole.addToPolicy(new iam.PolicyStatement({
-      actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn, authConfigurationKey.keyArn, composerModelKey.keyArn],
+      actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn, authConfigurationKey.keyArn, composerModelKey.keyArn, slackAppKey.keyArn],
       conditions: { StringEquals: { 'kms:ViaService': `secretsmanager.${this.region}.amazonaws.com` } },
     }));
     // ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's
@@ -532,6 +556,7 @@ export class GenuiFoundation extends Stack {
     new CfnOutput(this, 'AuthConfigurationSecretArn', { value: authConfiguration.secretArn });
     // APP-093: the secret the operator's PutSecretValue of the composer model key targets (an identifier, not a value).
     new CfnOutput(this, 'ComposerModelSecretArn', { value: composerModel.secretArn });
+    new CfnOutput(this, 'SlackAppSecretArn', { value: slackApp.secretArn });
     // The operator host's invitation-input target (an identifier, not a value; APP-078 runbook 15.3).
     new CfnOutput(this, 'OperatorInvitationInputSecretArn', { value: invitationInput.secretArn });
     // APP-076 G11: the deny-all rollback revision on the same image (`PREVIOUS_TD`).

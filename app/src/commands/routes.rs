@@ -417,10 +417,31 @@ async fn submit(
     if !request.well_formed() || payload::digest(&request).is_none() {
         return http::problem(StatusCode::BAD_REQUEST, "malformed_command");
     }
+    let result = commit(stores, &trusted, &request).await;
+    answer(&mode, &app, &work, &request.record, result)
+}
+
+/// The audited command route's commit (ADR-007 D7.9; APP-095's hook): the
+/// request's shape, the commit under the handler deadline, the outcome log
+/// line and the `record.committed` announcement. The route calls it after
+/// its own refusals; APP-100's Slack Confirm and Approve call it with the
+/// TrustedRequest of a resolved Slack link, so every write takes this one
+/// path (ADR-011 I4).
+pub(crate) async fn commit(
+    stores: &storage::Stores,
+    trusted: &TrustedRequest,
+    request: &CommandRequest,
+) -> Result<CommandResult, storage::Error> {
+    if !idempotency_key_shaped(&request.idempotency_key)
+        || !request.well_formed()
+        || payload::digest(request).is_none()
+    {
+        return Err(storage::Error::Denied);
+    }
     let deadline = Instant::now() + COMMAND_HANDLER_DEADLINE - STORAGE_MARGIN;
     let result = stores
         .data
-        .commit_record_until(&trusted, &request, deadline)
+        .commit_record_until(trusted, request, deadline)
         .await;
     tracing::info!(
         outcome = match &result {
@@ -441,7 +462,7 @@ async fn submit(
     if let Ok(CommandResult::Committed(outcome)) = &result {
         crate::events::hub().record_committed(&outcome.organization, &outcome.app, &outcome.work);
     }
-    answer(&mode, &app, &work, &request.record, result)
+    result
 }
 
 /// ADR-002: after a lost response the client looks the outcome up by key

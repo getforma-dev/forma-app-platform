@@ -16,13 +16,14 @@ You do steps 1–4 once. The secret values stay with you: they go into the clone
    SLACK_SIGNING_SECRET=…            # Basic Information → App Credentials → Signing Secret
    ```
 
-4. **At the pitch deploy**, put the same two values into the `SlackApp` secret yourself. The deploy runbook gives the exact command, which reads from the `.env` without echoing.
+4. **At the pitch deploy**, put the same two values into the `SlackApp` secret yourself, as one JSON object with exactly these keys: `{"bot_token":"xoxb-…","signing_secret":"…"}`. The deploy runbook gives the exact command, which reads from the `.env` without echoing. ECS injects the two keys into the service as `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET`; the secret starts as `{"bot_token":"","signing_secret":""}`, which means "no Slack app" (every Slack route answers 404). Force a new deployment after the write.
 5. **Link the demo people.**
    1. In Slack, each demo person runs `/forma link` and opens the link while signed in to `beta.getforma.dev` as their Forma member.
    2. They confirm.
-   3. Check the result: `/forma what's waiting for me` should answer for that person.
+   3. Check the result: `/forma what's waiting for my approval` should answer for that person.
+   4. A sign-out on the canvas ends the Slack link (it advances the member's epoch). Re-link after one: run `/forma link` again. `/forma unlink` disconnects on purpose.
 6. **Rehearse.** Follow the Slack act in [`SCENARIOS.md`](SCENARIOS.md).
 
 ## Local testing before the deploy
 
-Slack can only reach a public HTTPS URL. Until the pitch deploy is live, the server is exercised with signed synthetic payloads and a loopback Slack API stub (`storage::slack_campaign`). For a live local test, you can run a tunnel (for example `cloudflared tunnel --url http://localhost:3000`) and temporarily point the two URLs in the app's settings at it. Point them back to `beta.getforma.dev` afterwards.
+Slack can only reach a public HTTPS URL. Until the pitch deploy is live, the server is exercised with signed synthetic payloads and a loopback Slack API stub (`storage::slack_campaign`, base URL from `GENUI_SLACK_API_BASE`, a test-only variable). For a live local test, you can run a tunnel (for example `cloudflared tunnel --url http://localhost:3000`) and temporarily point the two URLs in the app's settings at it. Point them back to `beta.getforma.dev` afterwards.

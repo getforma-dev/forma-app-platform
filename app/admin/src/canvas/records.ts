@@ -20,6 +20,8 @@ export type RecordJson = {
   record_id: string; collection_id: string; schema_id: string; version: number; commit_sequence: number;
   committed_at: string; creator: { principal_id: string; label: string }; updater: { principal_id: string; label: string };
   values: RecordValueJson[];
+  /** APP-100 (DS-59): the channel that committed this version ("Slack"), a display label only. */
+  via?: string;
 };
 export type RecordsJson = {
   app_id: string; work_id: string; publication_id: string; definition_digest: string; work_version: number; can_write: boolean;
@@ -126,7 +128,9 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
       if (statusField) {
         tr.append(el(document_, 'td', { class: 'cv-status' }, el(document_, 'span', { class: 'cv-status-chip', 'data-status': status }, status)));
       }
-      tr.append(el(document_, 'td', { class: 'cv-records-by', title: record.creator.principal_id }, record.creator.label));
+      const by = el(document_, 'td', { class: 'cv-records-by', title: record.creator.principal_id }, record.creator.label);
+      if (record.via) by.append(el(document_, 'span', { class: 'cv-via-chip', title: `Version ${record.version} was committed from ${record.via}` }, `via ${record.via}`));
+      tr.append(by);
       if (pending.length) {
         const cell = el(document_, 'td', { class: 'cv-records-actions' });
         if (isPending && decide) {

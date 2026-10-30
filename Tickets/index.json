@@ -3209,7 +3209,7 @@
       "Depends on": "APP-093, APP-095, APP-099",
       "External dependencies": "A Slack workspace and a Slack app created by Victor from `docs/pitch/slack-app-manifest.json` (steps in `docs/pitch/SLACK-SETUP.md`); the bot token and signing secret placed by Victor in the clone's gitignored `.env` and in the `SlackApp` secret",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started (`pivot/slack`, from `pivot/pitch-mvp`)",
+      "Branch / PR": "`pivot/slack` (from `pivot/pitch-mvp` ef54988; pushed, not merged)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

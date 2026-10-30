@@ -45,10 +45,10 @@ pub use queries::{
 };
 pub use registry::RegistryIdentity;
 pub use sessions::{
-    capability_organization, capability_shaped, AdmittedMember, Completion, Ended, FlowKind,
-    FlowRecord, FlowStart, Lookup, PreAccess, PreAccessStart, SignedOut, PRELOGIN_SECONDS,
-    PRE_ACCESS_ABSOLUTE_SECONDS, PRE_ACCESS_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS,
-    SESSION_IDLE_SECONDS,
+    capability_organization, capability_shaped, slack_id, AdmittedMember, Completion, Ended,
+    FlowKind, FlowRecord, FlowStart, Lookup, PreAccess, PreAccessStart, SignedOut,
+    PRELOGIN_SECONDS, PRE_ACCESS_ABSOLUTE_SECONDS, PRE_ACCESS_IDLE_SECONDS,
+    SESSION_ABSOLUTE_SECONDS, SESSION_IDLE_SECONDS,
 };
 pub use sharing::{
     member_label, Granted, Member, Openable, Shared, Standing, JUDGMENT_LIMIT,
@@ -141,5 +141,7 @@ mod query_qualification;
 mod race_qualification;
 #[cfg(test)]
 mod sharing_qualification;
+#[cfg(test)]
+mod slack_campaign;
 #[cfg(test)]
 mod tests;

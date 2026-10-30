@@ -687,3 +687,122 @@ pub async fn resolve(
         confirm_token,
     })))
 }
+
+/// APP-100: the decide command of a listing's collection of `record` (the
+/// command declaring transitions), its transition field and the record's
+/// current value of it.
+fn decide_of<'a>(
+    listing: &'a RecordsListing,
+    record: &RecordRow,
+) -> Option<(
+    &'a crate::storage::CollectionSummary,
+    &'a crate::storage::RecordCommand,
+    String,
+    String,
+)> {
+    let summary = listing
+        .collections
+        .iter()
+        .find(|c| c.collection == record.collection && c.schema == record.schema)?;
+    let command = summary
+        .commands
+        .iter()
+        .find(|c| !c.transitions.is_empty())?;
+    let field = command.transitions.first()?.0.clone();
+    let current = field_value(record, &field)
+        .and_then(|v| v.get("value"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
+    Some((summary, command, field, current))
+}
+
+/// APP-100: the records of `listing` waiting on a decision by `me`: the
+/// reader holds `record_write`, the record's transition field is at a
+/// declared `from`, and `me` did not file it (an approver decides other
+/// people's claims). Newest first, as listed.
+pub fn pending<'a>(listing: &'a RecordsListing, me: &str) -> Vec<&'a RecordRow> {
+    if !listing.can_write {
+        return Vec::new();
+    }
+    listing
+        .records
+        .iter()
+        .filter(|record| record.creator != me)
+        .filter(|record| {
+            decide_of(listing, record).is_some_and(|(_, command, field, current)| {
+                command
+                    .transitions
+                    .iter()
+                    .any(|(f, from, _)| *f == field && *from == current)
+            })
+        })
+        .collect()
+}
+
+/// APP-100: the typed `decide` command moving exactly `record_id` (no fuzzy
+/// matching: a button carries the record id) to the declared target that
+/// `wanted` names ("approved"/"rejected", or a prefix of it), with a fresh
+/// server-minted key. `NotFound` when the record is not in this listing or
+/// the reader cannot write it; `CouldNotDraft("already_decided")` when it is
+/// no longer at a declared `from`. Storage judges the command again.
+pub fn exact_decision<'a>(
+    listing: &'a RecordsListing,
+    record_id: &str,
+    wanted: &str,
+) -> Result<(CommandRequest, &'a RecordRow), Refusal> {
+    let record = listing
+        .records
+        .iter()
+        .find(|r| r.record_id == record_id)
+        .ok_or(Refusal::NotFound)?;
+    if !listing.can_write {
+        return Err(Refusal::NotFound);
+    }
+    let (summary, command, field, current) = decide_of(listing, record).ok_or(Refusal::NotFound)?;
+    let tos: Vec<&str> = command
+        .transitions
+        .iter()
+        .filter(|(f, from, _)| *f == field && *from == current)
+        .map(|(_, _, to)| to.as_str())
+        .collect();
+    if tos.is_empty() {
+        return Err(Refusal::CouldNotDraft("already_decided"));
+    }
+    let wanted = wanted.trim().to_lowercase();
+    let stem = wanted.get(..wanted.len().min(5)).unwrap_or("");
+    let to = tos
+        .iter()
+        .find(|t| **t == wanted)
+        .or_else(|| tos.iter().find(|t| !stem.is_empty() && t.starts_with(stem)))
+        .ok_or(Refusal::CouldNotDraft("no_transition"))?;
+    let spec = summary
+        .fields
+        .iter()
+        .find(|f| f.id == field)
+        .map(|f| f.value_type.clone())
+        .ok_or(Refusal::CouldNotDraft("no_transition"))?;
+    let typed = typed_value(&spec, to).ok_or(Refusal::CouldNotDraft("untypable_value"))?;
+    let key = fresh_key().ok_or(Refusal::StoreUnavailable)?;
+    Ok((
+        CommandRequest {
+            app: listing.app.clone(),
+            work: listing.work.clone(),
+            publication: listing.publication.clone(),
+            command: command.id.clone(),
+            schema: summary.schema.clone(),
+            schema_version_expected: i64::from(summary.schema_version),
+            record: record.record_id.clone(),
+            expected_record_version: record.version,
+            expected_work_version: listing.work_version,
+            values: Value::Array(vec![json!({"field_id": field, "value": typed})]),
+            idempotency_key: key,
+        },
+        record,
+    ))
+}
+
+/// APP-100: a record's value of `field` as people read it ("—" when absent).
+pub fn record_display(record: &RecordRow, field: &str) -> Option<String> {
+    field_value(record, field).map(display)
+}
