@@ -388,11 +388,15 @@ def activate(config, report, call, clock):
             not any(item['name'].startswith(('GENUI_AUTH_QUALIFICATION_', 'GENUI_PROVIDER_CAPABILIT', 'GENUI_AUTH_CONFIG', 'GENUI_IDENTITY_REGISTRY'))
                     for item in containers[0].get('environment', [])),
             'live qualification, capability or sign-in configuration cannot bypass the reviewed secret channel')
-    # ADR-003 amendment 2026-10-30 and APP-078 B1: exactly two injected secrets, the
-    # stack's provider capability secret and its hosted sign-in configuration, under
-    # the names runtime.py serve() consumes.
+    # ADR-003 amendment 2026-10-30 and APP-078 B1: the stack's provider capability secret
+    # and its hosted sign-in configuration, under the names runtime.py serve() consumes;
+    # ADR-011 pitch (APP-093, APP-100, APP-096): the composer's model key and the Slack
+    # app's two fields, each from the stack's own secret. Exactly these five.
     expected_secrets = [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': outputs['ProviderCapabilitySecretArn']},
-                        {'name': 'GENUI_AUTH_CONFIGURATION_JSON', 'valueFrom': outputs['AuthConfigurationSecretArn']}]
+                        {'name': 'GENUI_AUTH_CONFIGURATION_JSON', 'valueFrom': outputs['AuthConfigurationSecretArn']},
+                        {'name': 'ANTHROPIC_API_KEY', 'valueFrom': outputs['ComposerModelSecretArn']},
+                        {'name': 'SLACK_BOT_TOKEN', 'valueFrom': outputs['SlackAppSecretArn'] + ':bot_token::'},
+                        {'name': 'SLACK_SIGNING_SECRET', 'valueFrom': outputs['SlackAppSecretArn'] + ':signing_secret::'}]
     by_name = lambda entries: sorted(entries, key=lambda entry: entry['name'])
     require(by_name(containers[0].get('secrets', [])) == by_name(expected_secrets), 'live secret injection differs from the reviewed stack')
     # APP-076 item 8 / gap G11: the deny-all rollback revision (`PREVIOUS_TD`) exists on the same

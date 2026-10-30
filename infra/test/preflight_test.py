@@ -18,8 +18,14 @@ NOW = datetime(2026, 10, 28, 12, tzinfo=timezone.utc)
 CAPABILITY_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:ProviderCapabilities-AbCdEf'
 # APP-078 B1: the stack's hosted sign-in configuration secret (an output).
 AUTH_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:AuthConfiguration-GhIjKl'
+# ADR-011 pitch (APP-093, APP-100): the composer's model key and the Slack app's fields.
+COMPOSER_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:ComposerModel-MnOpQr'
+SLACK_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:SlackApp-StUvWx'
 INJECTED = [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': CAPABILITY_SECRET},
-            {'name': 'GENUI_AUTH_CONFIGURATION_JSON', 'valueFrom': AUTH_SECRET}]
+            {'name': 'GENUI_AUTH_CONFIGURATION_JSON', 'valueFrom': AUTH_SECRET},
+            {'name': 'ANTHROPIC_API_KEY', 'valueFrom': COMPOSER_SECRET},
+            {'name': 'SLACK_BOT_TOKEN', 'valueFrom': SLACK_SECRET + ':bot_token::'},
+            {'name': 'SLACK_SIGNING_SECRET', 'valueFrom': SLACK_SECRET + ':signing_secret::'}]
 RETIRED = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
 
 
@@ -53,7 +59,8 @@ class Preflight(unittest.TestCase):
                    'DeploymentExpiryGroup': 'owned-group', 'DeploymentExpiryRoleArn': 'arn:aws:iam::877573132739:role/owned-expiry',
                    'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:1',
                    'RollbackTaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-rollback:1',
-                   'ProviderCapabilitySecretArn': CAPABILITY_SECRET, 'AuthConfigurationSecretArn': AUTH_SECRET}
+                   'ProviderCapabilitySecretArn': CAPABILITY_SECRET, 'AuthConfigurationSecretArn': AUTH_SECRET,
+                   'ComposerModelSecretArn': COMPOSER_SECRET, 'SlackAppSecretArn': SLACK_SECRET}
         cluster = 'arn:aws:ecs:us-east-1:877573132739:cluster/owned-cluster'
         service = 'arn:aws:ecs:us-east-1:877573132739:service/owned-cluster/owned-service'
         stack = {'StackStatus': 'CREATE_COMPLETE', 'Parameters': [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()],
@@ -471,7 +478,8 @@ class AlwaysOnPlan(unittest.TestCase):
                    'DeploymentExpiryGroup': 'owned-group', 'DeploymentExpiryRoleArn': 'arn:aws:iam::877573132739:role/owned-expiry',
                    'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:3',
                    'RollbackTaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-rollback:3',
-                   'ProviderCapabilitySecretArn': CAPABILITY_SECRET, 'AuthConfigurationSecretArn': AUTH_SECRET}
+                   'ProviderCapabilitySecretArn': CAPABILITY_SECRET, 'AuthConfigurationSecretArn': AUTH_SECRET,
+                   'ComposerModelSecretArn': COMPOSER_SECRET, 'SlackAppSecretArn': SLACK_SECRET}
         cluster = 'arn:aws:ecs:us-east-1:877573132739:cluster/owned-cluster'
         service = 'arn:aws:ecs:us-east-1:877573132739:service/owned-cluster/owned-service'
         stack = {'StackStatus': 'UPDATE_COMPLETE', 'Parameters': [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()],
