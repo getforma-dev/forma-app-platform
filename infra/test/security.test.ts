@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { readFileSync } from 'node:fs';
-import { AUTH_CONFIGURATION_ENV, AUTH_CONFIGURATION_SECRET_ID_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, GenuiFoundation, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_ENV, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
+import { AUTH_CONFIGURATION_ENV, AUTH_CONFIGURATION_SECRET_ID_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, GenuiFoundation, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_URL_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
 
 const template = Template.fromStack(new GenuiFoundation(new App(), 'SecurityQualification'));
 const document = template.toJSON();
@@ -33,6 +33,9 @@ function resolve(value: any, parameters: Record<string, string>): any {
   if (value['Fn::Select']) return resolve(value['Fn::Select'][1], parameters)[Number(value['Fn::Select'][0])];
   if (value['Fn::Equals']) return resolve(value['Fn::Equals'][0], parameters) === resolve(value['Fn::Equals'][1], parameters);
   if (value['Fn::Not']) return !resolve(value['Fn::Not'][0], parameters);
+  if (value['Fn::And']) return value['Fn::And'].every((item: any) => resolve(item, parameters));
+  if (value['Fn::Or']) return value['Fn::Or'].some((item: any) => resolve(item, parameters));
+  if (typeof value.Condition === 'string' && Object.keys(value).length === 1) return resolve(document.Conditions[value.Condition], parameters);
   if (value['Fn::If']) return resolve(value['Fn::If'][resolve(document.Conditions[value['Fn::If'][0]], parameters) ? 1 : 2], parameters);
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, resolve(child, parameters)]).filter(([, child]) => child !== undefined));
 }
@@ -43,9 +46,10 @@ test('managed data stays private, encrypted, retained and versioned', () => {
   // Omission keeps the intended fixed 20-GiB allocation without enabling it.
   assert.equal(one('AWS::RDS::DBInstance')[1].Properties.MaxAllocatedStorage, undefined);
   template.hasResourceProperties('AWS::RDS::DBParameterGroup', { Parameters: { 'rds.force_ssl': '1' } });
-  // Two tenant keys, the capability secret's key, the auth configuration's key (APP-078 B1), and the keys of the
-  // management configuration and the operator invitation input (ADR-003 amendment 2026-10-30, managed invitations).
-  template.resourceCountIs('AWS::KMS::Key', 6);
+  // Two tenant keys, the capability secret's key, the auth configuration's key (APP-078 B1), and the operator
+  // invitation input's key (ADR-003 amendment 2026-10-30, managed invitations). The fAuth management secret is
+  // FormaStack's, attached by ARN: the stack creates no copy and no key for it.
+  template.resourceCountIs('AWS::KMS::Key', 5);
   for (const [, key] of entries('AWS::KMS::Key')) assert.equal(key.Properties.EnableKeyRotation, true);
   template.hasResourceProperties('AWS::S3::Bucket', { VersioningConfiguration: { Status: 'Enabled' }, PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }, OwnershipControls: { Rules: [{ ObjectOwnership: 'BucketOwnerEnforced' }] } });
   for (const type of ['AWS::RDS::DBInstance', 'AWS::S3::Bucket', 'AWS::KMS::Key', 'AWS::Logs::LogGroup', 'AWS::SecretsManager::Secret']) for (const [, item] of entries(type)) {
@@ -217,11 +221,12 @@ test('only migration execution role receives admin secret; migration has no tena
     [[{ Ref: role('ExecutionRole') }], [{ Ref: role('MigrationExecutionRole') }]]);
   const secretReads = (roleId: string) => policy(roleId).filter(statement => actions(statement).some(action => action.startsWith('secretsmanager:')));
   // The migration execution role (also the operator task's) resolves the database secret and, for the operator
-  // container alone, the two managed-invitation secrets (ADR-003 amendment 2026-10-30).
+  // container alone, the invitation input and (only when attached, by its own conditional policy) FormaStack's
+  // management secret (ADR-003 amendment 2026-10-30, managed invitations).
   assert.deepEqual(secretReads(role('MigrationExecutionRole')).map(statement => statement.Resource), [
     { Ref: one('AWS::SecretsManager::SecretTargetAttachment')[0] },
-    { Ref: one('AWS::SecretsManager::Secret', 'ProviderManagementKey')[0] },
     { Ref: one('AWS::SecretsManager::Secret', 'OperatorInvitationInput')[0] },
+    { Ref: 'ProviderManagementSecretArn' },
   ]);
   assert.deepEqual(secretReads(role('ExecutionRole')).map(statement => statement.Resource), [{ Ref: one('AWS::SecretsManager::Secret', 'ProviderCapabilities')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'AuthConfiguration')[0] }]);
   const migration = one('AWS::ECS::TaskDefinition', 'MigrationTask')[1].Properties;
@@ -267,9 +272,10 @@ test('the retired qualification secret has no parameter, condition, read policy 
   assert.equal(entries('AWS::IAM::Policy').some(([id]) => id.startsWith('QualificationConfigRead')), false);
   assert.equal(/QualificationConfigSecretArn|GENUI_AUTH_QUALIFICATION_/.test(JSON.stringify(document)), false);
   assert.equal(document.Parameters.ServiceDesiredCount.Default, 0);
-  // The migration secret, the capability secret, the auth configuration secret (APP-078 B1), the management
-  // configuration and the operator invitation input (ADR-003 amendment 2026-10-30, managed invitations) only.
-  template.resourceCountIs('AWS::SecretsManager::Secret', 5);
+  // The migration secret, the capability secret, the auth configuration secret (APP-078 B1) and the operator
+  // invitation input (ADR-003 amendment 2026-10-30, managed invitations) only; FormaStack's management secret is
+  // attached by ARN, never created here.
+  template.resourceCountIs('AWS::SecretsManager::Secret', 4);
 });
 
 test('the capability secret is KMS-encrypted, retained, starts empty and is injected into the service task only (ADR-003 amendment 2026-10-30)', () => {
@@ -331,44 +337,103 @@ test('the auth configuration secret is KMS-encrypted, retained, starts unconfigu
   ].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
 });
 
-test('the managed-invitation secrets are KMS-encrypted, retained, start empty and reach the operator task only (ADR-003 amendment 2026-10-30)', () => {
+test('the invitation input secret is KMS-encrypted, retained, starts empty and reaches the operator task only (ADR-003 amendment 2026-10-30)', () => {
   const executionRole = role('ExecutionRole'), taskRole = role('TaskRole'), operatorRole = role('OperatorRole'), migrationExecution = role('MigrationExecutionRole');
-  for (const [secretPrefix, keyPrefix, envName, output] of [
-    ['ProviderManagementKey', 'ProviderManagementKeyKey', PROVIDER_MANAGEMENT_ENV, 'ProviderManagementKeySecretArn'],
-    ['OperatorInvitationInput', 'OperatorInvitationInputKey', INVITATION_INPUT_ENV, 'OperatorInvitationInputSecretArn'],
-  ] as const) {
-    const [secretId, secret] = one('AWS::SecretsManager::Secret', secretPrefix);
-    const [keyId, key] = one('AWS::KMS::Key', keyPrefix);
-    assert.deepEqual(secret.Properties.KmsKeyId, { 'Fn::GetAtt': [keyId, 'Arn'] });
-    assert.equal(secret.Properties.SecretString, '{}', `${secretPrefix}: not configured / nothing to issue, never a generated value the operator would refuse`);
-    assert.equal(secret.Properties.GenerateSecretString, undefined);
-    for (const item of [secret, key]) { assert.equal(item.DeletionPolicy, 'Retain'); assert.equal(item.UpdateReplacePolicy, 'Retain'); }
-    assert.equal(key.Properties.EnableKeyRotation, true);
-    assert.deepEqual(document.Outputs[output].Value, { Ref: secretId });
-    // Injected whole into the operator container alone: never the service, its rollback revision, the migration or the qualification task.
-    for (const [id, task] of entries('AWS::ECS::TaskDefinition')) {
-      const body = JSON.stringify(task.Properties.ContainerDefinitions.map((container: any) => container.Secrets ?? []));
-      assert.equal(body.includes(secretId), id.startsWith('OperatorTask'), `${secretPrefix} ${id}`);
-      assert.equal(body.includes(envName), id.startsWith('OperatorTask'), `${envName} ${id}`);
-      assert.equal(JSON.stringify(task.Properties.ContainerDefinitions.map((container: any) => container.Environment ?? [])).includes(envName), false, id);
-    }
-    // Its key decrypts for the operator task's execution role only, through Secrets Manager.
-    const decrypts = key.Properties.KeyPolicy.Statement.filter((statement: any) => statement.Principal?.AWS?.['Fn::GetAtt']);
-    assert.deepEqual(decrypts.map((statement: any) => [statement.Principal.AWS['Fn::GetAtt'][0], statement.Action]), [[migrationExecution, 'kms:Decrypt']]);
-    for (const statement of decrypts) assert.deepEqual(Object.keys(statement.Condition.StringEquals), ['kms:ViaService']);
-    // Every IAM grant on the secret: the operator task's execution role resolves it at task start; no task role,
-    // not the service's execution role and not the operator role itself reads or writes it.
-    const grants = entries('AWS::IAM::Policy').flatMap(([, item]) => item.Properties.PolicyDocument.Statement
-      .filter((statement: any) => JSON.stringify(statement.Resource).includes(secretId))
-      .map((statement: any) => [item.Properties.Roles.map((value: any) => value.Ref), actions(statement).sort(), item.Condition ?? null]));
-    assert.deepEqual(grants, [[[migrationExecution], ['secretsmanager:DescribeSecret', 'secretsmanager:GetSecretValue'], null]]);
-    for (const roleId of [executionRole, taskRole, operatorRole]) {
-      assert.equal(policy(roleId).some(statement => JSON.stringify(statement.Resource).includes(secretId) || JSON.stringify(statement.Resource).includes(keyId)), false, `${roleId} ${secretPrefix}`);
-    }
+  const [secretId, secret] = one('AWS::SecretsManager::Secret', 'OperatorInvitationInput');
+  const [keyId, key] = one('AWS::KMS::Key', 'OperatorInvitationInputKey');
+  assert.deepEqual(secret.Properties.KmsKeyId, { 'Fn::GetAtt': [keyId, 'Arn'] });
+  assert.equal(secret.Properties.SecretString, '{}', 'nothing to issue, never a generated value the operator would refuse');
+  assert.equal(secret.Properties.GenerateSecretString, undefined);
+  for (const item of [secret, key]) { assert.equal(item.DeletionPolicy, 'Retain'); assert.equal(item.UpdateReplacePolicy, 'Retain'); }
+  assert.equal(key.Properties.EnableKeyRotation, true);
+  assert.deepEqual(document.Outputs.OperatorInvitationInputSecretArn.Value, { Ref: secretId });
+  // Injected whole into the operator container alone: never the service, its rollback revision, the migration or the qualification task.
+  for (const [id, task] of entries('AWS::ECS::TaskDefinition')) {
+    const body = JSON.stringify(task.Properties.ContainerDefinitions.map((container: any) => container.Secrets ?? []));
+    assert.equal(body.includes(secretId), id.startsWith('OperatorTask'), id);
+    assert.equal(body.includes(INVITATION_INPUT_ENV), id.startsWith('OperatorTask'), id);
+    assert.equal(JSON.stringify(task.Properties.ContainerDefinitions.map((container: any) => container.Environment ?? [])).includes(INVITATION_INPUT_ENV), false, id);
+  }
+  // Its key decrypts for the operator task's execution role only, through Secrets Manager.
+  const decrypts = key.Properties.KeyPolicy.Statement.filter((statement: any) => statement.Principal?.AWS?.['Fn::GetAtt']);
+  assert.deepEqual(decrypts.map((statement: any) => [statement.Principal.AWS['Fn::GetAtt'][0], statement.Action]), [[migrationExecution, 'kms:Decrypt']]);
+  for (const statement of decrypts) assert.deepEqual(Object.keys(statement.Condition.StringEquals), ['kms:ViaService']);
+  // Every IAM grant on the secret: the operator task's execution role resolves it at task start; no task role,
+  // not the service's execution role and not the operator role itself reads or writes it.
+  const grants = entries('AWS::IAM::Policy').flatMap(([, item]) => item.Properties.PolicyDocument.Statement
+    .filter((statement: any) => JSON.stringify(statement.Resource).includes(secretId))
+    .map((statement: any) => [item.Properties.Roles.map((value: any) => value.Ref), actions(statement).sort(), item.Condition ?? null]));
+  assert.deepEqual(grants, [[[migrationExecution], ['secretsmanager:DescribeSecret', 'secretsmanager:GetSecretValue'], null]]);
+  for (const roleId of [executionRole, taskRole, operatorRole]) {
+    assert.equal(policy(roleId).some(statement => JSON.stringify(statement.Resource).includes(secretId) || JSON.stringify(statement.Resource).includes(keyId)), false, roleId);
   }
   // The service's execution role still resolves exactly its two secrets, none of the operator's.
   const serviceReads = policy(executionRole).filter(statement => actions(statement).some(action => action.startsWith('secretsmanager:'))).map(statement => statement.Resource);
   assert.deepEqual(serviceReads, [{ Ref: one('AWS::SecretsManager::Secret', 'ProviderCapabilities')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'AuthConfiguration')[0] }]);
+});
+
+test('FormaStack\'s management secret is attached by ARN to the operator task only, never copied (ADR-003 amendment 2026-10-30, A12)', () => {
+  const NORTHSTAR_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:fauth-beta/management/northstar-jAkFuz';
+  const URL = 'https://auth-staging.getforma.dev';
+  const digest = `877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-operator@sha256:${'d'.repeat(64)}`;
+  // The parameters: empty by default (not attached), ARN-shaped or an https origin otherwise.
+  const parameter = (name: string) => document.Parameters[name];
+  assert.deepEqual([parameter('ProviderManagementSecretArn').Default, parameter('ProviderManagementSecretArn').AllowedPattern], ['', PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN]);
+  assert.deepEqual([parameter('ProviderManagementUrl').Default, parameter('ProviderManagementUrl').AllowedPattern], ['', PROVIDER_MANAGEMENT_URL_PATTERN]);
+  assert.equal(parameter('ProviderManagementSecretArn').NoEcho, undefined, 'an identifier: preflight compares it in describe-stacks');
+  const arnPattern = new RegExp(PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN), urlPattern = new RegExp(PROVIDER_MANAGEMENT_URL_PATTERN);
+  for (const good of ['', NORTHSTAR_SECRET]) assert.equal(arnPattern.test(good), true, good);
+  for (const bad of ['fauth-beta/management/northstar', 'arn:aws:secretsmanager:us-east-1:877573132739:secret:fauth-beta/management/northstar',
+    `${NORTHSTAR_SECRET}:management_key::`, `${NORTHSTAR_SECRET}\n`, 'arn:aws:s3:::bucket', 'arn:aws:secretsmanager:us-east-1:87757313273:secret:x-AbCdEf']) {
+    assert.equal(arnPattern.test(bad), false, bad);
+  }
+  for (const good of ['', URL, 'https://auth.example.test:8443']) assert.equal(urlPattern.test(good), true, good);
+  for (const bad of ['http://auth-staging.getforma.dev', `${URL}/`, `${URL}/manage`, 'https://user@auth.example.test', `${URL}\n`]) assert.equal(urlPattern.test(bad), false, bad);
+  // Both or neither (a template rule, checked by CloudFormation before any change).
+  const rule = document.Rules.ProviderManagementComplete.Assertions[0].Assert;
+  for (const [arn, url, ok] of [['', '', true], [NORTHSTAR_SECRET, URL, true], [NORTHSTAR_SECRET, '', false], ['', URL, false]] as const) {
+    assert.equal(resolve(rule, { ProviderManagementSecretArn: arn, ProviderManagementUrl: url }), ok, `${arn} ${url}`);
+  }
+  // No copy: no management secret, key or output in the stack.
+  assert.equal(entries('AWS::SecretsManager::Secret').some(([id]) => id.startsWith('ProviderManagementKey')), false);
+  assert.equal(entries('AWS::KMS::Key').some(([id]) => id.startsWith('ProviderManagementKey')), false);
+  assert.equal(Object.keys(document.Outputs).some(name => name.startsWith('ProviderManagement')), false);
+  assert.equal(JSON.stringify(document).includes('GENUI_PROVIDER_MANAGEMENT_JSON'), false);
+  // The operator container: empty parameter -> exactly the unattached lists; set -> the two JSON-key injections and the URL.
+  const operator = one('AWS::ECS::TaskDefinition', 'OperatorTask')[1];
+  const lists = (parameters: Record<string, string>) => {
+    const [container] = resolve(operator.Properties.ContainerDefinitions, parameters);
+    return { secrets: container.Secrets.map((entry: any) => [entry.Name, entry.ValueFrom]), environment: Object.fromEntries(container.Environment.map((entry: any) => [entry.Name, entry.Value])) };
+  };
+  const off = lists({ OperatorImageDigest: digest, ProviderManagementSecretArn: '', ProviderManagementUrl: '' });
+  assert.deepEqual(off.secrets.map(([name]: [string]) => name), ['PGPASSWORD', INVITATION_INPUT_ENV]);
+  for (const name of [PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_TENANT_ENV]) assert.equal(name in off.environment, false, name);
+  const on = lists({ OperatorImageDigest: digest, ProviderManagementSecretArn: NORTHSTAR_SECRET, ProviderManagementUrl: URL });
+  assert.deepEqual(on.secrets.slice(2), [[PROVIDER_MANAGEMENT_KEY_ENV, `${NORTHSTAR_SECRET}:management_key::`], [PROVIDER_MANAGEMENT_TENANT_ENV, `${NORTHSTAR_SECRET}:tenant_id::`]]);
+  assert.deepEqual(on.secrets.slice(0, 2), off.secrets);
+  assert.equal(on.environment[PROVIDER_MANAGEMENT_URL_ENV], URL);
+  assert.deepEqual(Object.keys(on.environment).filter(name => name !== PROVIDER_MANAGEMENT_URL_ENV), Object.keys(off.environment));
+  // The secret ARN and its injected names appear in no other task definition (service, rollback, migration, qualification).
+  for (const [id, task] of entries('AWS::ECS::TaskDefinition')) {
+    const body = JSON.stringify(task.Properties);
+    for (const needle of ['ProviderManagementSecretArn', 'ProviderManagementUrl', PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV]) {
+      assert.equal(body.includes(needle), id.startsWith('OperatorTask'), `${needle} ${id}`);
+    }
+  }
+  // The only grant: GetSecretValue on exactly that ARN, to the operator task's execution role, only when the
+  // operator task exists and the secret is attached. No KMS statement (AWS-managed key), no other role.
+  const readers = entries('AWS::IAM::Policy').filter(([, item]) => JSON.stringify(item.Properties.PolicyDocument).includes('ProviderManagementSecretArn'));
+  assert.equal(readers.length, 1);
+  const [readerId, reader] = readers[0];
+  assert.match(readerId, /^OperatorProviderManagementRead/);
+  assert.deepEqual(reader.Properties.Roles, [{ Ref: role('MigrationExecutionRole') }]);
+  assert.deepEqual(reader.Properties.PolicyDocument.Statement, [{ Effect: 'Allow', Action: 'secretsmanager:GetSecretValue', Resource: { Ref: 'ProviderManagementSecretArn' } }]);
+  for (const [image, arn, enabled] of [['', '', false], ['', NORTHSTAR_SECRET, false], [digest, '', false], [digest, NORTHSTAR_SECRET, true]] as const) {
+    assert.equal(resolve({ Condition: reader.Condition }, { OperatorImageDigest: image, ProviderManagementSecretArn: arn }), enabled, `${image} ${arn}`);
+  }
+  for (const [, item] of entries('AWS::IAM::Policy')) for (const statement of item.Properties.PolicyDocument.Statement) {
+    if (actions(statement).some(action => action.startsWith('kms:'))) assert.equal(JSON.stringify(statement).includes('ProviderManagement'), false);
+  }
 });
 
 test('the rollback revision runs the same image with no secret injected, so it starts deny-all (APP-076 G11)', () => {
@@ -500,17 +565,21 @@ test('operator task is absent by default; when supplied it is a count-zero stand
   assert.equal(task.Properties.ContainerDefinitions.length, 1);
   assert.equal(container.Name, overrides.container);
   assert.deepEqual(container.EntryPoint, overrides.entryPoint); assert.deepEqual(container.Command, overrides.default_command);
-  // PGPASSWORD plus the two managed-invitation secrets, whole (ADR-003 amendment 2026-10-30).
-  assert.deepEqual(container.Secrets, [
+  // PGPASSWORD and the invitation input, whole, plus (only when attached) the management secret's two JSON keys
+  // (ADR-003 amendment 2026-10-30, managed invitations; asserted in detail by the attached-secret test).
+  assert.deepEqual(container.Secrets.slice(0, 2), [
     { Name: 'PGPASSWORD', ValueFrom: { 'Fn::Join': ['', [{ Ref: one('AWS::SecretsManager::SecretTargetAttachment')[0] }, ':password::']] } },
-    { Name: PROVIDER_MANAGEMENT_ENV, ValueFrom: { Ref: one('AWS::SecretsManager::Secret', 'ProviderManagementKey')[0] } },
     { Name: INVITATION_INPUT_ENV, ValueFrom: { Ref: one('AWS::SecretsManager::Secret', 'OperatorInvitationInput')[0] } },
   ]);
+  assert.deepEqual(container.Secrets.slice(2).map((entry: any) => [entry['Fn::If'][0], entry['Fn::If'][1].Name, entry['Fn::If'][2]]),
+    [['ProviderManagementAttached', PROVIDER_MANAGEMENT_KEY_ENV, { Ref: 'AWS::NoValue' }], ['ProviderManagementAttached', PROVIDER_MANAGEMENT_TENANT_ENV, { Ref: 'AWS::NoValue' }]]);
   assert.equal(container.PortMappings, undefined); assert.equal(container.HealthCheck, undefined);
   assert.deepEqual(container.MountPoints, [{ ContainerPath: '/run/operator', ReadOnly: false, SourceVolume: 'operator-scratch' }]);
   assert.deepEqual(task.Properties.Volumes, [{ Name: 'operator-scratch' }]);
   assert.equal(container.LogConfiguration.Options['awslogs-stream-prefix'], 'genui-operator');
-  const environment = Object.fromEntries(container.Environment.map((value: any) => [value.Name, value.Value]));
+  // The attached-only URL entry is the conditional last one (asserted by the attached-secret test).
+  const environment = Object.fromEntries(container.Environment.filter((value: any) => value.Name).map((value: any) => [value.Name, value.Value]));
+  assert.equal(container.Environment.length, Object.keys(environment).length + 1);
   assert.deepEqual(Object.keys(environment).sort(), ['AWS_REGION', AUTH_CONFIGURATION_SECRET_ID_ENV, 'GENUI_EVIDENCE_BUCKET', 'GENUI_OPERATOR_TENANTS_JSON', CAPABILITY_SECRET_ID_ENV, 'PGDATABASE', 'PGHOST', 'PGPORT', 'PGSSLMODE', 'PGSSLROOTCERT', 'PGUSER'].sort());
   // ADR-003 amendment 2026-10-30: the capability secret's identifier (never its value) for `revoke`;
   // B1 review m5: the auth configuration secret's identifier for `bind-provider-tenant --from-auth-configuration`.

@@ -1,4 +1,4 @@
-import { CfnCondition, CfnOutput, CfnParameter, Duration, Fn, RemovalPolicy, SecretValue, Stack, StackProps, Tags } from 'aws-cdk-lib';
+import { Aws, CfnCondition, CfnOutput, CfnParameter, CfnRule, Duration, Fn, RemovalPolicy, SecretValue, Stack, StackProps, Tags, Validations } from 'aws-cdk-lib';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
@@ -36,16 +36,28 @@ export const CAPABILITY_SECRET_ID_ENV = 'GENUI_PROVIDER_CAPABILITY_SECRET_ID';
 // service reads (GENUI_AUTH_CONFIG_FILE, GENUI_IDENTITY_REGISTRY_FILE).
 export const AUTH_CONFIGURATION_ENV = 'GENUI_AUTH_CONFIGURATION_JSON';
 export const AUTH_CONFIGURATION_SECRET_ID_ENV = 'GENUI_AUTH_CONFIGURATION_SECRET_ID';
-// ADR-003 amendment 2026-10-30 (managed invitations; APP-076 G2): two more secrets,
-// injected into the managed operator task only. The fAuth management configuration
-// (URL and tenant-scoped management key, written by FormaStack under approval A12;
-// provider_management.management_configuration) and the operator's invitation input
+// ADR-003 amendment 2026-10-30 (managed invitations; APP-076 G2), as revised the same
+// day after FormaStack's answers: two inputs reach the managed operator task only.
+// FormaStack's existing tenant-scoped fAuth management secret (for Northstar
+// `fauth-beta/management/northstar`, JSON `{tenant_id, management_key}`) is attached
+// by ARN (parameter ProviderManagementSecretArn, approval A12), never copied: ECS
+// injects its two JSON keys, beside the non-secret management URL (parameter
+// ProviderManagementUrl), into the operator container alone
+// (provider_management.management_configuration). The operator's invitation input
 // (the invitees' addresses bound to minted code digests, written by the operator host
-// immediately before an issue task and overwritten with `{}` right after;
-// admission_operator.invitation_input). Neither value ever enters an override,
-// argv, CloudTrail or a log; the service task reads neither.
-export const PROVIDER_MANAGEMENT_ENV = 'GENUI_PROVIDER_MANAGEMENT_JSON';
+// immediately before an issue task and emptied right after;
+// admission_operator.invitation_input) is GenUI's own short-lived secret. Neither
+// value ever enters an override, argv, CloudTrail or a log; the service task reads
+// neither.
+export const PROVIDER_MANAGEMENT_URL_ENV = 'GENUI_PROVIDER_MANAGEMENT_URL';
+export const PROVIDER_MANAGEMENT_KEY_ENV = 'GENUI_PROVIDER_MANAGEMENT_SECRET_KEY';
+export const PROVIDER_MANAGEMENT_TENANT_ENV = 'GENUI_PROVIDER_MANAGEMENT_SECRET_TENANT_ID';
 export const INVITATION_INPUT_ENV = 'GENUI_OPERATOR_INVITATION_INPUT_JSON';
+// Empty (not attached), or one complete Secrets Manager secret ARN (with its six-character
+// suffix, as the ECS JSON-key form requires); preflight also requires this account and region.
+export const PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN = '^(?:|arn:aws:secretsmanager:[a-z]{2}(?:-[a-z]+)+-[0-9]:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]{1,512}-[A-Za-z0-9]{6})(?![\\s\\S])';
+// Empty, or an https origin with no path, query, credentials or fragment.
+export const PROVIDER_MANAGEMENT_URL_PATTERN = '^(?:|https://[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::[0-9]{1,5})?)(?![\\s\\S])';
 
 /** Reviewable deployment model. Synth/tests never create cloud resources. */
 export class GenuiFoundation extends Stack {
@@ -371,21 +383,42 @@ export class GenuiFoundation extends Stack {
       actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn, authConfigurationKey.keyArn],
       conditions: { StringEquals: { 'kms:ViaService': `secretsmanager.${this.region}.amazonaws.com` } },
     }));
-    // ADR-003 amendment 2026-10-30 (managed invitations): the fAuth management
-    // configuration and the operator's invitation input, each under its own retained
-    // rotating key, initial `{}` (not configured / nothing to issue), injected whole
-    // into the operator container only, through the operator task's execution role.
-    // FormaStack writes the management configuration (PutSecretValue, approval A12);
-    // the operator host writes the invitation input before an issue task and `{}`
-    // after it. No task role reads either; the service task never names them.
-    // CloudFormation never rewrites them while these properties are unchanged.
-    const managementKeyKey = new kms.Key(this, 'ProviderManagementKeyKey', {
-      description: 'GenUI fAuth management configuration for the managed operator task (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
+    // ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's
+    // answers): FormaStack's existing management secret, attached by ARN for the window
+    // and the trial (approval A12) and cleared by a stack update afterwards. No copy:
+    // the stack creates no management secret or key. Empty means not attached: no
+    // injection, no grant. Both parameters or neither (the rule below). The secret
+    // uses the AWS-managed `aws/secretsmanager` key (FormaStack, 2026-10-30), so the
+    // execution role needs no kms:Decrypt statement; preflight --activate refuses an
+    // attached secret under a customer key, which would need a key-policy grant first.
+    const managementSecretArn = new CfnParameter(this, 'ProviderManagementSecretArn', {
+      type: 'String', default: '', allowedPattern: PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN,
+      constraintDescription: 'Empty, or one complete Secrets Manager secret ARN including its six-character suffix.',
+      description: 'Optional: FormaStack\'s tenant-scoped fAuth management secret (JSON tenant_id, management_key), attached to the managed operator task only (ADR-003 amendment 2026-10-30, approval A12). Empty attaches nothing. Clear it after the trial.',
     });
-    const managementKey = new secretsmanager.Secret(this, 'ProviderManagementKey', {
-      description: 'GenUI fAuth management URL and tenant-scoped management key: written by FormaStack, injected into the managed operator task only (ADR-003 amendment 2026-10-30, managed invitations)',
-      encryptionKey: managementKeyKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
+    // An identifier, not a value: NoEcho would hide it from describe-stacks, which preflight compares with the reservation.
+    Validations.of(this).acknowledge({ id: 'CloudFormation-Validate::W2509', reason: 'The parameter is a secret ARN (an identifier), never a secret value; preflight compares it in describe-stacks.' });
+    const managementUrl = new CfnParameter(this, 'ProviderManagementUrl', {
+      type: 'String', default: '', allowedPattern: PROVIDER_MANAGEMENT_URL_PATTERN,
+      constraintDescription: 'Empty, or an https origin with no path.',
+      description: 'Optional: the fAuth management origin for the attached secret (non-secret). Set exactly when ProviderManagementSecretArn is set.',
     });
+    const managementAttached = new CfnCondition(this, 'ProviderManagementAttached', {
+      expression: Fn.conditionNot(Fn.conditionEquals(managementSecretArn.valueAsString, '')),
+    });
+    new CfnRule(this, 'ProviderManagementComplete', {
+      assertions: [{
+        assert: Fn.conditionOr(
+          Fn.conditionAnd(Fn.conditionEquals(managementSecretArn.valueAsString, ''), Fn.conditionEquals(managementUrl.valueAsString, '')),
+          Fn.conditionAnd(Fn.conditionNot(Fn.conditionEquals(managementSecretArn.valueAsString, '')), Fn.conditionNot(Fn.conditionEquals(managementUrl.valueAsString, '')))),
+        assertDescription: 'ProviderManagementSecretArn and ProviderManagementUrl are set together or left empty together.',
+      }],
+    });
+    // The operator host writes the invitation input before an issue task and empties it
+    // after (APP-078 runbook 15.3), under its own retained rotating key, initial `{}`
+    // (nothing to issue), injected whole into the operator container only, through the
+    // operator task's execution role. No task role reads it; the service task never
+    // names it. CloudFormation never rewrites it while these properties are unchanged.
     const invitationInputKey = new kms.Key(this, 'OperatorInvitationInputKey', {
       description: 'GenUI operator invitation input for the managed operator task (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
     });
@@ -409,11 +442,32 @@ export class GenuiFoundation extends Stack {
       },
       secrets: {
         PGPASSWORD: ecs.Secret.fromSecretsManager(database.secret!, 'password'),
-        [PROVIDER_MANAGEMENT_ENV]: ecs.Secret.fromSecretsManager(managementKey),
         [INVITATION_INPUT_ENV]: ecs.Secret.fromSecretsManager(invitationInput),
       },
     });
     operatorContainer.addMountPoints({ sourceVolume: 'operator-scratch', containerPath: '/run/operator', readOnly: false });
+    // The attached management secret: two JSON-key injections and the URL, appended to the
+    // operator container's lists only when attached (AWS::NoValue removes each entry
+    // otherwise), so an empty parameter leaves the task definition exactly as before.
+    const attachedOnly = (entry: object) => Fn.conditionIf(managementAttached.logicalId, entry, Aws.NO_VALUE);
+    const operatorDefinition = operatorTask.node.defaultChild as ecs.CfnTaskDefinition;
+    const operatorEnvironmentCount = 11, operatorSecretCount = 2;  // asserted against the rendered lists in security.test.ts
+    operatorDefinition.addPropertyOverride(`ContainerDefinitions.0.Environment.${operatorEnvironmentCount}`,
+      attachedOnly({ Name: PROVIDER_MANAGEMENT_URL_ENV, Value: managementUrl.valueAsString }));
+    operatorDefinition.addPropertyOverride(`ContainerDefinitions.0.Secrets.${operatorSecretCount}`,
+      attachedOnly({ Name: PROVIDER_MANAGEMENT_KEY_ENV, ValueFrom: Fn.join('', [managementSecretArn.valueAsString, ':management_key::']) }));
+    operatorDefinition.addPropertyOverride(`ContainerDefinitions.0.Secrets.${operatorSecretCount + 1}`,
+      attachedOnly({ Name: PROVIDER_MANAGEMENT_TENANT_ENV, ValueFrom: Fn.join('', [managementSecretArn.valueAsString, ':tenant_id::']) }));
+    // The operator task's execution role (the migration execution role, whose task
+    // definition never names the secret) resolves exactly that one ARN, only when the
+    // operator task exists and the secret is attached. No other role, no KMS statement.
+    const operatorManagementRead = new iam.CfnPolicy(this, 'OperatorProviderManagementRead', {
+      policyName: 'genui-operator-provider-management-read', roles: [migrationExecutionRole.roleName],
+      policyDocument: { Version: '2012-10-17', Statement: [{ Effect: 'Allow', Action: 'secretsmanager:GetSecretValue', Resource: managementSecretArn.valueAsString }] },
+    });
+    operatorManagementRead.cfnOptions.condition = new CfnCondition(this, 'OperatorProviderManagementEnabled', {
+      expression: Fn.conditionAnd(operatorTaskEnabled, managementAttached),
+    });
     for (const construct of [operatorTask.node.defaultChild, operatorRole.node.defaultChild, operatorRole.node.tryFindChild('DefaultPolicy')?.node.defaultChild]) {
       if (construct) (construct as iam.CfnRole).cfnOptions.condition = operatorTaskEnabled;
     }
@@ -423,9 +477,7 @@ export class GenuiFoundation extends Stack {
     new CfnOutput(this, 'ProviderCapabilitySecretArn', { value: capabilitySecret.secretArn });
     // The secret the window's PutSecretValue targets (an identifier, not a value).
     new CfnOutput(this, 'AuthConfigurationSecretArn', { value: authConfiguration.secretArn });
-    // The two managed-invitation secrets (identifiers, not values): FormaStack's PutSecretValue
-    // target (A12) and the operator host's input target (APP-078 runbook 15.3).
-    new CfnOutput(this, 'ProviderManagementKeySecretArn', { value: managementKey.secretArn });
+    // The operator host's invitation-input target (an identifier, not a value; APP-078 runbook 15.3).
     new CfnOutput(this, 'OperatorInvitationInputSecretArn', { value: invitationInput.secretArn });
     // APP-076 G11: the deny-all rollback revision on the same image (`PREVIOUS_TD`).
     new CfnOutput(this, 'RollbackTaskDefinition', { value: rollback.taskDefinitionArn });

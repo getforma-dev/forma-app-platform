@@ -105,14 +105,15 @@ MANAGED_REFUSED = ("issue", "register-source-revision")
 # prints only its digest), alone or with `--provider-input-from-secret`
 # (ADR-003 amendment 2026-10-30, managed invitations: the invitation's address,
 # role, issuer and tenant come from the injected OperatorInvitationInput
-# secret's entry for that digest, and the management key from the injected
-# ProviderManagementKey secret, so neither appears in argv), and
-# `register-source-revision --record-json` (the non-secret record inline). A
-# provider flag beside the digest is refused: the address never travels in
-# argv. `reconcile` and `revoke` run in a managed task because the management
-# configuration reaches them through the injected secret, never argv
-# (provider_management.ENV_MANAGEMENT_JSON); without it they refuse or skip
-# the provider phase exactly as on a host without provider settings.
+# secret's entry for that digest, and the management key and its tenant from
+# FormaStack's management secret, attached by ARN and injected by ECS, so
+# neither appears in argv), and `register-source-revision --record-json` (the
+# non-secret record inline). A provider flag beside the digest is refused: the
+# address never travels in argv. `reconcile` and `revoke` run in a managed task
+# because the management configuration reaches them through the injected
+# secret, never argv (provider_management.MANAGED_NAMES); without it they
+# refuse or skip the provider phase exactly as on a host without provider
+# settings.
 PROVIDER_FLAGS = ("provider_email", "provider_role", "provider_issuer", "provider_tenant")
 
 

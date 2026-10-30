@@ -196,11 +196,15 @@ class PackageTests(unittest.TestCase):
                     completed = cli(*argv, env_extra=dict(task, **{variable: "http://169.254.170.2/v4/x"}))
                     self.assertEqual((completed.returncode, completed.stdout, refusal(completed)), (1, "", "refused_in_managed_task"))
                     self.assertNotIn("a@b.test", completed.stderr)
-        # `reconcile` passes the guard; without the injected management configuration (or with it still `{}`,
-        # before FormaStack's A12 write) it refuses on configuration, before any connection; a plain provider
-        # variable beside the injected secret is a conflict.
-        for extra, code in (({}, "provider_configuration_missing"), ({"GENUI_PROVIDER_MANAGEMENT_JSON": "{}"}, "provider_configuration_missing"),
-                            ({"GENUI_PROVIDER_MANAGEMENT_JSON": "{}", "GENUI_PROVIDER_URL": "https://auth.example.test"}, "provider_configuration_conflict")):
+        # `reconcile` passes the guard; without the attached management secret (the parameter empty, before A12) or
+        # with a piece of it missing it refuses on configuration, before any connection; a plain provider variable
+        # beside the attached secret is a conflict; the retired whole-document injection refuses.
+        attached = {"GENUI_PROVIDER_MANAGEMENT_URL": "https://auth.example.test", "GENUI_PROVIDER_MANAGEMENT_SECRET_KEY": "mgmt_" + "k" * 16,
+                    "GENUI_PROVIDER_MANAGEMENT_SECRET_TENANT_ID": "ten_operator_test"}
+        for extra, code in (({}, "provider_configuration_missing"),
+                            ({"GENUI_PROVIDER_MANAGEMENT_URL": "https://auth.example.test"}, "provider_configuration_missing"),
+                            (dict(attached, GENUI_PROVIDER_URL="https://auth.example.test"), "provider_configuration_conflict"),
+                            ({"GENUI_PROVIDER_MANAGEMENT_JSON": "{}"}, "provider_management_json_retired")):
             with self.subTest(code=code):
                 # Inside a managed task the guard admits the form (the checkout lacks the image's pinned CA, so
                 # the managed host check answers next); outside it the configuration refusal is exact.

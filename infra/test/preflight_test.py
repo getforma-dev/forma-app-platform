@@ -525,5 +525,77 @@ class AlwaysOnPlan(unittest.TestCase):
         self.assertEqual(preflight.activate(fixture[0], fixture[1], call, lambda: NOW)['desired_count'], 1)
 
 
+MANAGEMENT_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:fauth-beta/management/northstar-jAkFuz'
+MANAGEMENT_URL = 'https://auth-staging.getforma.dev'
+
+
+class AttachedManagementSecret(unittest.TestCase):
+    """ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's answers; A12)."""
+
+    def attached(self):
+        config, ledger = always_on()
+        return dict(config, provider_management_secret_arn=MANAGEMENT_SECRET, provider_management_url=MANAGEMENT_URL), ledger
+
+    def test_the_parameters_are_empty_by_default_and_passed_through_when_attached(self):
+        config, ledger = always_on()
+        _, report = preflight.reserve(config, ledger, WINDOW)
+        self.assertEqual((report['cloudformation_parameters']['ProviderManagementSecretArn'], report['cloudformation_parameters']['ProviderManagementUrl']), ('', ''))
+        config, ledger = self.attached()
+        _, report = preflight.reserve(config, ledger, WINDOW)
+        self.assertEqual((report['cloudformation_parameters']['ProviderManagementSecretArn'], report['cloudformation_parameters']['ProviderManagementUrl']),
+                         (MANAGEMENT_SECRET, MANAGEMENT_URL))
+
+    def test_shape_account_region_and_both_or_neither(self):
+        config, ledger = self.attached()
+        for changes in ({'provider_management_url': ''}, {'provider_management_secret_arn': ''},
+                        {'provider_management_secret_arn': MANAGEMENT_SECRET.replace('877573132739', '123456789012')},
+                        {'provider_management_secret_arn': MANAGEMENT_SECRET.replace('us-east-1', 'eu-west-2')},
+                        {'provider_management_secret_arn': MANAGEMENT_SECRET[:-7]}, {'provider_management_secret_arn': 'fauth-beta/management/northstar'},
+                        {'provider_management_secret_arn': MANAGEMENT_SECRET + ':management_key::'}, {'provider_management_secret_arn': None},
+                        {'provider_management_url': 'http://auth-staging.getforma.dev'}, {'provider_management_url': MANAGEMENT_URL + '/manage'},
+                        {'provider_management_url': MANAGEMENT_URL + '\n'}, {'operator_image_digest': ''}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                preflight.reserve(dict(config, **changes), ledger, WINDOW)
+
+    def test_attaching_and_clearing_stay_within_the_reserved_window(self):
+        config, ledger = always_on()
+        updated, report = preflight.reserve(config, ledger, WINDOW)
+        attached, _ = self.attached()
+        again, same = preflight.reserve(attached, updated, WINDOW + timedelta(hours=1))
+        self.assertEqual((again, same['input_sha256'], same['reused_reservation']), (updated, report['input_sha256'], True))
+        cleared, cleared_report = preflight.reserve(dict(attached, provider_management_secret_arn='', provider_management_url=''), again, WINDOW + timedelta(hours=2))
+        self.assertEqual((cleared, cleared_report['input_sha256']), (updated, report['input_sha256']))
+        self.assertEqual(cleared_report['cloudformation_parameters']['ProviderManagementSecretArn'], '')
+
+    def activation(self, described):
+        config, ledger = self.attached(); config['service_desired_count'] = 1
+        _, report = preflight.reserve(config, ledger, WINDOW)
+        _, _, stack, calls, call = AlwaysOnPlan('test_legacy_stack_without_task_image_parameters_is_disabled_only').activation()
+        stack['Parameters'] = [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()]
+
+        def live(*args):
+            if args[:2] == ('secretsmanager', 'describe-secret'):
+                calls.append(args)
+                return dict(described)
+            return call(*args)
+        return config, report, calls, live
+
+    def test_activation_requires_the_named_live_secret_under_the_aws_managed_key(self):
+        config, report, calls, live = self.activation({'ARN': MANAGEMENT_SECRET, 'Name': 'fauth-beta/management/northstar'})
+        self.assertEqual(preflight.activate(config, report, live, lambda: WINDOW + timedelta(hours=1))['desired_count'], 1)
+        self.assertIn(('secretsmanager', 'describe-secret', '--secret-id', MANAGEMENT_SECRET), calls)
+        for described in ({'ARN': MANAGEMENT_SECRET, 'KmsKeyId': 'arn:aws:kms:us-east-1:877573132739:key/00000000-0000-4000-8000-0000000000aa'},
+                          {'ARN': MANAGEMENT_SECRET, 'DeletedDate': '2026-11-01T00:00:00Z'},
+                          {'ARN': MANAGEMENT_SECRET.replace('jAkFuz', 'zzzzzz')}):
+            config, report, calls, live = self.activation(described)
+            with self.subTest(described=sorted(described)), self.assertRaises(ValueError):
+                preflight.activate(config, report, live, lambda: WINDOW + timedelta(hours=1))
+            self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls))
+        # Not attached: no Secrets Manager call at all.
+        config, report, _, calls, call = AlwaysOnPlan('test_legacy_stack_without_task_image_parameters_is_disabled_only').activation()
+        self.assertEqual(preflight.activate(config, report, call, lambda: WINDOW + timedelta(hours=1))['desired_count'], 1)
+        self.assertFalse(any(c[0] == 'secretsmanager' for c in calls))
+
+
 if __name__ == '__main__':
     unittest.main()
