@@ -579,6 +579,10 @@ pub struct WorkView {
     pub id: String,
     pub title: String,
     pub kind: String,
+    /// The view's exact-integer result columns (`query::worker::
+    /// integer_columns` of its stored query): the canvas island digit-groups
+    /// only these, as the server does (APP-012 review m11; ADR-011 canvas).
+    pub integer_columns: Vec<String>,
 }
 /// What the work page shows before any run: the pinned definition's title
 /// and its runnable views, in definition order.
@@ -624,6 +628,11 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
                 id: label(view.get("id"))?,
                 title: label(view.get("title"))?,
                 kind: label(view.get("kind"))?,
+                integer_columns: query
+                    .map(crate::query::worker::integer_columns)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .collect(),
             });
         }
     }

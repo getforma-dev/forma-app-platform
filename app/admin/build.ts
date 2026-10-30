@@ -14,9 +14,13 @@ await build({
     { entry: 'src/workspace/app.tsx', outfile: 'workspace.js' },
     { entry: 'src/record/app.tsx', outfile: 'record.js' },
     { entry: 'src/work/app.tsx', outfile: 'work.js' },
+    { entry: 'src/canvas/app.tsx', outfile: 'canvas.js' },
   ],
   cssEntries: [
     { input: 'src/styles/app.css', outfile: 'app.css' },
+    // ADR-011: the vendored GenUI canvas geometry styles and the pitch canvas.
+    { input: 'src/canvas-vendor/canvas.css', outfile: 'canvas-vendor.css' },
+    { input: 'src/styles/canvas.css', outfile: 'canvas.css' },
   ],
   // APP-009 (ADR-006): the sign-in page also serves /signin/{handle}; the
   // denial page is rendered by the callback and the pending route. APP-074:
@@ -33,6 +37,9 @@ await build({
     '/record': { js: ['record'], css: ['app'] },
     // APP-012: the work page (GET and POST /w/{app}/{work}).
     '/w/{app}/{work}': { js: ['work'], css: ['app'] },
+    // ADR-011 (APP-092): the pitch canvas, one island; a declared canvas
+    // route (365 KiB JavaScript ceiling; Forma's own code stays at N2's).
+    '/canvas': { js: ['canvas'], css: ['app', 'canvas-vendor', 'canvas'], canvas: true },
   },
   outputDir: 'dist',
   ssr: isSsr,
@@ -49,6 +56,7 @@ await build({
     workspace: 'src/workspace/app.tsx',
     record: 'src/record/app.tsx',
     work: 'src/work/app.tsx',
+    canvas: 'src/canvas/app.tsx',
   } } : {}),
   // Unsupported native source is a mandatory coded refusal. Strict mode also
   // rejects advisory diagnostics; FORMA_STRICT=1 enables it without the flag.

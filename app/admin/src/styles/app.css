@@ -14,7 +14,9 @@
   --fg: #1b1b1b;
   --muted: #5c5c5c;
   --accent: #2d6a4f;
-  --border: #dcdcdc;
+  /* Design brief §3: UI edges at least 3:1 (was #dcdcdc, 1.37:1). */
+  --border: #757575;
+  --bad: #b3261e;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,7 +25,9 @@
     --fg: #e8e6e3;
     --muted: #9aa0a6;
     --accent: #7ee2a8;
-    --border: #2c3038;
+    /* At least 3:1 on --bg (was #2c3038, 1.34:1); red at 7.8:1 (was 2.72:1). */
+    --border: #6b7280;
+    --bad: #ff8a80;
   }
 }
 
@@ -145,7 +149,7 @@ body {
 .view h2 { margin: 0 0 0.5rem; font-size: 1.125rem; }
 .badge { display: inline-block; padding: 0 0.5rem; border-radius: 1rem; border: 1px solid var(--border); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .view[data-state="ready"] .badge { border-color: var(--accent); color: var(--accent); }
-.view[data-state="failed"] .badge, .view[data-state="denied"] .badge { border-color: #b3261e; color: #b3261e; }
+.view[data-state="failed"] .badge, .view[data-state="denied"] .badge { border-color: var(--bad); color: var(--bad); }
 .summary .value { font-size: 1.75rem; font-weight: 600; font-variant-numeric: tabular-nums; margin: 0; }
 .view table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .view th, .view td { text-align: left; padding: 0.25rem 1rem 0.25rem 0; border-bottom: 1px solid var(--border); }
@@ -159,3 +163,11 @@ body {
 .openable > li { border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem 1rem; margin: 0 0 0.75rem; }
 .openable .label { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.875rem; }
 .openable ul { margin: 0.5rem 0 0; padding-left: 1.25rem; }
+/* Design brief §3: a visible focus ring on every link, input and button. */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* ADR-011: the workspace's way onto the canvas. */
+.canvas-entry { display: inline-block; margin: 0 0 1.5rem; padding: 0.5rem 1rem; border: 1px solid var(--accent); border-radius: 0.5rem; color: var(--accent); font-weight: 600; text-decoration: none; }
+.openable .canvas-link { margin-left: 0.75rem; font-size: 0.875rem; }

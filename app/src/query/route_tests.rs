@@ -538,6 +538,7 @@ fn view(id: &str, kind: &str) -> WorkView {
         id: id.into(),
         title: id.into(),
         kind: kind.into(),
+        integer_columns: Vec::new(),
     }
 }
 /// A result whose integer columns are the byte counts (`total_bytes`,

@@ -121,6 +121,10 @@ pub struct Work {
     pages: Arc<dyn WorkPages>,
 }
 impl Work {
+    /// The sessions, synchronizer key and stores (the pitch canvas, ADR-011).
+    pub(crate) fn auth(&self) -> &Arc<Auth> {
+        &self.auth
+    }
     pub fn new(
         auth: Arc<Auth>,
         executor: Option<Arc<dyn Executor>>,
@@ -188,7 +192,10 @@ pub fn engine_refusal(error: &QueryError) -> Response {
 /// /workspace`; a lock wait on the member's row is refused by
 /// `resolve_session`, D7.9), and 503 when the workspace store itself is
 /// unavailable, which depends on no identity.
-async fn member(auth: &Auth, headers: &HeaderMap) -> Result<(String, TrustedRequest), Response> {
+pub(crate) async fn member(
+    auth: &Auth,
+    headers: &HeaderMap,
+) -> Result<(String, TrustedRequest), Response> {
     let cookie = cookies::read(headers, cookies::SESSION).ok_or_else(http::not_found)?;
     let stores = auth.stores.as_ref().ok_or_else(http::not_found)?;
     let live = |reference: &str| auth.vault.contains(reference);
@@ -490,10 +497,12 @@ async fn work_page(
             (FormValues::default(), idle_views(&outline))
         }
         Restore::Parameters(parameters) => {
-            let views = match run_views(&work, member, &outline, &app, &saved, &parameters).await {
-                Ok(views) => views,
-                Err(refusal) => return refusal,
-            };
+            let views =
+                match run_views(&work, Arc::new(member), &outline, &app, &saved, &parameters).await
+                {
+                    Ok(views) => views,
+                    Err(refusal) => return refusal,
+                };
             // A run that was restored keeps restoring: the cookie is refreshed.
             if let Some(value) = run_cookie_value(&work.auth, &app, &saved, &cookie, &parameters) {
                 set_cookie = Some(cookies::set_run(&value));
@@ -656,9 +665,9 @@ async fn compute(
 /// admits two per organization); each result is released immediately before
 /// the page is rendered (C07). `Err` is the response for a failure that is
 /// no view's own (a task that could not be joined).
-async fn run_views(
+pub(crate) async fn run_views(
     work: &Arc<Work>,
-    member: TrustedRequest,
+    member: Arc<TrustedRequest>,
     outline: &WorkOutline,
     app: &str,
     saved: &str,
@@ -668,7 +677,6 @@ async fn run_views(
         return Err(http::not_found());
     };
     let started = Instant::now();
-    let member = Arc::new(member);
     let mut tasks = tokio::task::JoinSet::new();
     for (index, view) in outline.views.iter().enumerate() {
         let task = compute(
@@ -780,10 +788,12 @@ async fn run_page(
         None => {
             // Parameters the cookie cannot carry (unreachable through the
             // bounded form): run and render directly, with no restore.
-            let views = match run_views(&work, member, &outline, &app, &saved, &parameters).await {
-                Ok(views) => views,
-                Err(refusal) => return refusal,
-            };
+            let views =
+                match run_views(&work, Arc::new(member), &outline, &app, &saved, &parameters).await
+                {
+                    Ok(views) => views,
+                    Err(refusal) => return refusal,
+                };
             work.pages.work(&page::props(
                 &outline,
                 action(&app, &saved),
