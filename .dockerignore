@@ -203,6 +203,8 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/ledger.ts
 !app/admin/src/canvas/receipt.ts
 !app/admin/src/canvas/records.ts
+!app/admin/src/canvas/slash.ts
+!app/admin/src/canvas/agents.ts
 !app/admin/src/canvas/widgets/
 app/admin/src/canvas/widgets/**
 !app/admin/src/canvas/widgets/index.ts
