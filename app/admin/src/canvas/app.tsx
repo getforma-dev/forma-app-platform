@@ -4,6 +4,7 @@ import { startAgents } from './agents';
 import { startBoard } from './board';
 import { startLibrary } from './library';
 import { startControls } from './controls';
+import { startStacks } from './stacks';
 import { registerCommands, startSlash } from './slash';
 // APP-103 utility widgets, registered as canvas slash commands (APP-101):
 // `/weather`, `/calculator`, `/clock` in the `/` list and `/apps`; a command
@@ -700,6 +701,7 @@ function Canvas(props: CanvasProps) {
                         ))}
                         <span class="cv-lib-on" data-lib-on></span>
                       </button>
+                      <button type="button" class="cv-lib-stack" data-lib-stack title="Add the app as one stack">Stack</button>
                       <button type="button" class="cv-lib-all" data-lib-all>Add all</button>
                     </div>
                     <ul class="cv-lib-cards">
@@ -770,6 +772,7 @@ startAgents(document);
 restoreWidgets();
 startLibrary(document);
 startControls(document);
+startStacks(document);
 
 mount(
   () =>

@@ -95,3 +95,26 @@ export function savePlaced(member: string, placed: Map<string, PlacedWork>): voi
   for (const [work, entry] of placed) if (entry.cards.length) out[work] = entry;
   write(placedKey(member), out);
 }
+
+// APP-104 stacks (DS-67): per member in this browser, card ids, a title the
+// member may edit (text only), the top card and the stack's position.
+export type StoredStack = { id: string; title: string; cards: string[]; top: number; x: number; y: number };
+const stacksKey = (member: string) => `forma.canvas.stacks.v1:${member}`;
+export function loadStacks(member: string): StoredStack[] {
+  if (!/^[0-9a-f]{16}$/.test(member)) return [];
+  const stored = read(stacksKey(member));
+  if (!Array.isArray(stored)) return [];
+  return stored.slice(0, 32).flatMap((value): StoredStack[] => {
+    const entry = value as Partial<StoredStack> | null;
+    if (!entry || typeof entry.id !== 'string' || !/^[a-z0-9]{4,24}$/.test(entry.id) || !Array.isArray(entry.cards)) return [];
+    if (!finite(entry.x) || !finite(entry.y)) return [];
+    const cards = entry.cards.filter((id): id is string => typeof id === 'string' && CARD.test(id)).slice(0, 64);
+    return [{
+      id: entry.id, title: typeof entry.title === 'string' ? entry.title.slice(0, 80) : '', cards,
+      top: finite(entry.top) ? Math.max(0, Math.floor(entry.top)) : 0, x: entry.x, y: entry.y,
+    }];
+  });
+}
+export function saveStacks(member: string, stacks: StoredStack[]): void {
+  if (/^[0-9a-f]{16}$/.test(member)) write(stacksKey(member), stacks);
+}

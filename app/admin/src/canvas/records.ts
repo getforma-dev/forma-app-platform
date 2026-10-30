@@ -95,6 +95,7 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
   const froms = new Set((decide?.transitions ?? []).map((t) => t.from));
   const records = listing.records.filter((r) => r.collection_id === collection.collection_id);
   const pending = records.filter((r) => listing.can_write && froms.has(statusOf(r, statusField)));
+  card.dataset.pendingNow = String(pending.length);
   card.dataset.decide = decide?.id ?? '';
   card.dataset.statusField = statusField;
   card.dataset.canWrite = listing.can_write ? 'true' : 'false';

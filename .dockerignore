@@ -208,6 +208,7 @@ app/admin/src/canvas/**
 # APP-104: the library pane and the Figma-style canvas controls.
 !app/admin/src/canvas/library.ts
 !app/admin/src/canvas/controls.ts
+!app/admin/src/canvas/stacks.ts
 !app/admin/src/canvas/widgets/
 app/admin/src/canvas/widgets/**
 !app/admin/src/canvas/widgets/index.ts

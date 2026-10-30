@@ -22,7 +22,9 @@
 import { canvasApi, itemKind, nudgeItems, refreshZoomLabel, removeCards, removeUtilityItem, resetLayout } from './board';
 import { closeLibrary, isLibraryOpen, toggleLibrary } from './library';
 import { el } from './render';
+import { registerCommands } from './slash';
 import { removeWidgets } from './widgets/index';
+import { collapseAll, dissolve, expand, isStackItem, shuffle, stackOfItem, stackSelection } from './stacks';
 
 const selection = new Set<HTMLElement>();
 let tool: 'move' | 'hand' = 'move';
@@ -93,6 +95,7 @@ function removeSelected(): void {
     if (kind === 'widget') removeWidgets(item);
     else if (kind === 'utility') removeUtilityItem(item);
     else if (kind === 'card' && item.dataset.instanceId) cards.push(item.dataset.instanceId);
+    else if (isStackItem(item)) cards.push(...(stackOfItem(item)?.cards ?? []));
   }
   if (cards.length) removeCards(cards);
   selection.clear();
@@ -140,6 +143,14 @@ const SHORTCUTS: [string, [string, string][]][] = [
     ['Delete', 'Back to the library (no data changes)'],
     ['Esc', 'Clear the selection'],
   ]],
+  ['Stacks', [
+    ['Drag onto a card, hold', 'Stack them'],
+    [`${MOD} + G`, 'Stack the selection'],
+    [`${MOD} + Shift + G`, 'Spread a stack out'],
+    ['← · →, Shift + scroll', 'Leaf through a stack'],
+    ['Enter, double-click, +N', 'Fan a stack out'],
+    ['Double-click the name', 'Rename a stack'],
+  ]],
   ['Canvas', [
     ['L', 'Library'],
     ['/', 'Commands in the bar: /card 3.2, /app expense'],
@@ -181,6 +192,22 @@ function onKey(event: KeyboardEvent): void {
   if (event.defaultPrevented || event.isComposing) return;
   const mod = event.metaKey || event.ctrlKey;
   // The browser's page zoom keys zoom the canvas instead (outside text fields).
+  // Cmd/Ctrl+G stacks the selection; with Shift, spreads the selected stacks.
+  if (mod && !event.altKey && event.code === 'KeyG' && !editable(event.target)) {
+    event.preventDefault();
+    const chosen = [...selection].filter((item) => item.isConnected);
+    if (event.shiftKey) {
+      for (const item of chosen) {
+        const stack = stackOfItem(item);
+        if (stack) dissolve(stack);
+      }
+    } else if (!stackSelection(chosen)) {
+      announce('Select two or more cards (Shift + click), then press G with Cmd or Ctrl to stack them.');
+    }
+    selection.clear();
+    renderSelection();
+    return;
+  }
   if (mod && !event.altKey && ['=', '+', '-', '_'].includes(event.key)) {
     if (editable(event.target)) return;
     event.preventDefault();
@@ -188,6 +215,10 @@ function onKey(event: KeyboardEvent): void {
     return;
   }
   if (event.key === 'Escape') {
+    if (!editable(event.target) && collapseAll()) {
+      event.preventDefault();
+      return;
+    }
     if (sheet && !sheet.hidden) {
       event.preventDefault();
       hideSheet();
@@ -239,6 +270,20 @@ function onKey(event: KeyboardEvent): void {
     if (active && (event.key === 'Delete' || event.key === 'Backspace')) selected.push(active);
   }
   if (!selected.length) return;
+  // A selected stack: ←/→ leaf through it, Enter or Space fans it out.
+  const stack = selected.length === 1 ? stackOfItem(selected[0]!) : null;
+  if (stack && (event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !event.shiftKey) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    shuffle(stack, event.key === 'ArrowRight' ? 1 : -1);
+    return;
+  }
+  if (stack && (event.key === 'Enter' || event.key === ' ')) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    expand(stack);
+    return;
+  }
   if (event.key === 'Delete' || event.key === 'Backspace') {
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -319,6 +364,17 @@ export function startControls(document_: Document): void {
     for (const node of document_.querySelectorAll<HTMLElement>('.cv-kbd-group')) node.textContent = (node.textContent ?? '').replace('⌘', 'Ctrl');
   }
   document_.addEventListener('keydown', onKey, true);
+  registerCommands([{
+    slug: 'arrange',
+    title: 'Arrange by app',
+    purpose: 'Lay the canvas out again, one row per app (view layout only)',
+    run: (_text: string, report?: (message: string) => void) => {
+      resetLayout();
+      const input = document_.getElementById('intent-input') as HTMLInputElement | null;
+      if (input) input.value = '';
+      report?.('Arranged by app: one row per app.');
+    },
+  }]);
   // A page-zoom pinch over the dock or the pane zooms nothing.
   document_.addEventListener('wheel', (event) => {
     if (event.ctrlKey && !host.contains(event.target as Node)) event.preventDefault();

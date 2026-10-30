@@ -12,6 +12,7 @@
 //
 // Titles are text nodes; ids are the server's card ids.
 import { addCards, boardWorks, isOnBoard, onBoardChange, removeCards } from './board';
+import { stackCards } from './stacks';
 import { registerCommands, registerCompleter, type Completion } from './slash';
 import { el, isUuid } from './render';
 import { removeWidgets, runWidget, widgetCount, WIDGET_COMMANDS } from './widgets/index';
@@ -107,6 +108,7 @@ function buildAppRow(
       el(document_, 'span', { class: 'cv-lib-app-title' }, entry.title),
       ...(entry.slug ? [el(document_, 'code', { class: 'cv-lib-slug' }, `/${entry.slug}`)] : []),
       el(document_, 'span', { class: 'cv-lib-on', 'data-lib-on': '' })),
+    ...(entry.widget ? [] : [el(document_, 'button', { type: 'button', class: 'cv-lib-stack', 'data-lib-stack': '', title: 'Add the app as one stack' }, 'Stack')]),
     el(document_, 'button', { type: 'button', class: 'cv-lib-all', 'data-lib-all': '' }, 'Add all'));
   const list = el(document_, 'ul', { class: 'cv-lib-cards' },
     ...entry.cards.map((card) => el(document_, 'li', {
@@ -387,6 +389,13 @@ export function startLibrary(document_: Document): void {
       const open = !app.row.classList.contains('is-expanded');
       expand(app, open);
       app.row.classList.toggle('was-expanded', open);
+      return;
+    }
+    if (target?.closest('[data-lib-stack]') && !app.widget) {
+      void addCards(app.app, app.work, null, { focus: false }).then(() => {
+        stackCards(app.cards.map((card) => card.id), app.title);
+        if (phone()) closeLibrary();
+      });
       return;
     }
     if (target?.closest('[data-lib-all]')) {

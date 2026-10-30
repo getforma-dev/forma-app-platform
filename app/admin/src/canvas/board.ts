@@ -91,20 +91,20 @@ function reflow(): void {
   // canvas's visibility pass deferred to one at the end.
   const sizes = new Map<HTMLElement, [number, number]>();
   for (const group of groups.values()) {
-    for (const item of group.items) sizes.set(item, [item.offsetWidth, item.offsetHeight]);
+    for (const item of rowItems(group)) sizes.set(item, [item.offsetWidth, item.offsetHeight]);
   }
   const flush = canvas.deferDerivedUpdates(false);
   let y = ORIGIN;
   for (const group of groups.values()) {
-    if (!group.items.length) continue;
+    if (!rowItems(group).length) continue;
     let bottom = y;
     if (group.pinned) {
-      for (const item of group.items) {
+      for (const item of rowItems(group)) {
         bottom = Math.max(bottom, Number(item.dataset.canvasY ?? 0) + (sizes.get(item)?.[1] ?? 0));
       }
     } else {
       let x = ORIGIN;
-      for (const item of group.items) {
+      for (const item of rowItems(group)) {
         const [width, height] = sizes.get(item) ?? [0, 0];
         if (Number(item.dataset.canvasX) !== x || Number(item.dataset.canvasY) !== y) canvas.moveItemTo(item, x, y);
         x += width + GAP;
@@ -115,6 +115,10 @@ function reflow(): void {
   }
   flush();
   if (fitPending) canvas.fitAll();
+}
+/** A group's items in its row: a stack's fanned-out cards float apart. */
+function rowItems(group: Group): HTMLElement[] {
+  return group.items.filter((item) => !item.dataset.fanned);
 }
 function scheduleReflow(): void {
   if (!reflowFrame) reflowFrame = requestAnimationFrame(reflow);
@@ -136,6 +140,9 @@ function nextRow(): number {
     for (const item of group.items) {
       bottom = Math.max(bottom, Number(item.dataset.canvasY ?? 0) + item.offsetHeight + ROW_GAP);
     }
+  }
+  for (const item of host?.querySelectorAll<HTMLElement>('.cv-item-stack') ?? []) {
+    bottom = Math.max(bottom, Number(item.dataset.canvasY ?? 0) + item.offsetHeight + ROW_GAP);
   }
   return bottom;
 }
@@ -269,7 +276,7 @@ function saveSoon(): void {
 function updateSummary(): void {
   const chip = host?.ownerDocument.getElementById('cv-summary');
   if (chip) {
-    let cards = widgetItems.size;
+    let cards = widgetItems.size + stackHooks.count();
     let apps = 0;
     for (const group of groups.values()) {
       if (group.items.length) apps += 1;
@@ -286,7 +293,7 @@ function updateSummary(): void {
 /** The empty state shows exactly when nothing is on the board. */
 function updateEmpty(): void {
   if (!host) return;
-  let any = widgetItems.size > 0 || utilityItems.size > 0;
+  let any = widgetItems.size > 0 || utilityItems.size > 0 || stackHooks.count() > 0;
   for (const group of groups.values()) any ||= group.items.length > 0;
   host.classList.toggle('has-groups', any);
   const empty = host.ownerDocument.getElementById('cv-empty');
@@ -306,6 +313,7 @@ export function canvasApi(): WidgetCanvas | null {
 
 /** Whether the card `id` is on the board now. */
 export function isOnBoard(id: string): boolean {
+  if (stackHooks.has(id)) return true;
   for (const group of groups.values()) {
     if (group.items.some((item) => item.dataset.instanceId === id)) return true;
   }
@@ -333,6 +341,76 @@ export function boardWorks(): { app: string; work: string; title: string; cards:
     })),
   }));
 }
+
+// --- APP-104 stacks (`stacks.ts`): the board's side of piles and fans ---
+const stackHooks = {
+  has: (_id: string): boolean => false,
+  count: (): number => 0,
+  remove: (_ids: string[]): string[] => [],
+  live: (_work: string): void => undefined,
+  settled: (): void => undefined,
+  dragEnd: (_item: HTMLElement): void => undefined,
+};
+export function setStackHooks(hooks: Partial<typeof stackHooks>): void {
+  Object.assign(stackHooks, hooks);
+}
+/** Where a card is: its group, its element, and its canvas item when it is on the board on its own. */
+function findCard(id: string): { group: Group; card: HTMLElement; item: HTMLElement | null } | null {
+  for (const group of groups.values()) {
+    const card = group.cards.find((candidate) => candidate.dataset.card === id);
+    if (!card) continue;
+    const item = group.items.find((other) => other.dataset.instanceId === id) ?? null;
+    return { group, card, item };
+  }
+  return null;
+}
+export const stackBoard = {
+  canvas: (): WidgetCanvas | null => canvas,
+  findCard,
+  title: (id: string): string => findCard(id)?.group.title ?? 'Stack',
+  /** Takes a card's own item off the board, keeping it in the placed set. */
+  lift(id: string): void {
+    const found = findCard(id);
+    if (found?.item) unmountCard(found.group, found.item);
+  },
+  /** Puts a card on the board on its own at `at`; `fanned` floats it out of the rows. */
+  drop(id: string, at: { x: number; y: number }, fanned = false): HTMLElement | null {
+    const found = findCard(id);
+    if (!found || found.item) return found?.item ?? null;
+    const item = mountCard(found.group, found.card, at, fanned ? 0 : -1, fanned);
+    if (item) runCards(found.group, [found.card]);
+    return item;
+  },
+  /** A stack's top card: wired, and run if it never ran. */
+  show(id: string): HTMLElement | null {
+    const found = findCard(id);
+    if (!found) return null;
+    wireCard(found.group, found.card);
+    runCards(found.group, [found.card]);
+    return found.card;
+  },
+  /** A card element back into the hidden board. */
+  park(card: HTMLElement): void {
+    for (const group of groups.values()) {
+      if (group.cards.includes(card)) {
+        group.section.append(card);
+        return;
+      }
+    }
+  },
+  /** Every group keeps its arrangement (a stack sits among them). */
+  pinAll(): void {
+    for (const group of groups.values()) group.pinned = true;
+  },
+  changed(): void {
+    scheduleReflow();
+    updateSummary();
+    saveSoon();
+  },
+  member: (): string => member,
+  announce,
+  flash,
+};
 
 function keepPlaced(): void {
   if (member) savePlaced(member, placed);
@@ -496,7 +574,7 @@ function adopt(section: HTMLElement, y: number, animate: boolean, include: (card
  * Puts one card of `group` on the board at `at` (or its saved position);
  * `delay` ≥ 0 animates it into place. Wires the card the first time.
  */
-function mountCard(group: Group, card: HTMLElement, at: { x: number; y: number }, delay: number): HTMLElement | null {
+function mountCard(group: Group, card: HTMLElement, at: { x: number; y: number }, delay: number, fanned = false): HTMLElement | null {
   if (!canvas) return null;
   const id = card.dataset.card ?? '';
   if (!id || group.items.some((item) => item.dataset.instanceId === id)) return null;
@@ -514,16 +592,24 @@ function mountCard(group: Group, card: HTMLElement, at: { x: number; y: number }
   });
   item.classList.add('cv-item', `cv-item-${kind || 'view'}`);
   item.dataset.group = group.work;
+  if (fanned) item.dataset.fanned = 'true';
   if (delay >= 0) {
     item.classList.add('is-placing');
     item.style.setProperty('--place-delay', `${delay * 70}ms`);
   }
-  canvas.mountItem(item, group.saved.get(id) ?? at, { focus: false });
+  canvas.mountItem(item, (fanned ? undefined : group.saved.get(id)) ?? at, { focus: false });
   resized?.observe(item);
   const order = group.cards.indexOf(card);
   const before = group.items.findIndex((other) => group.cards.indexOf(other.querySelector<HTMLElement>(':scope > .cv-card') ?? other) > order);
   if (before < 0) group.items.push(item);
   else group.items.splice(before, 0, item);
+  wireCard(group, card);
+  return item;
+}
+
+/** Wires a card's form, records or ledger the first time; refreshes them after. */
+function wireCard(group: Group, card: HTMLElement): void {
+  const kind = card.dataset.kind ?? '';
   if (card.dataset.wired !== 'true') {
     const form = card.querySelector<HTMLFormElement>('form.cv-command');
     if (form) {
@@ -537,7 +623,6 @@ function mountCard(group: Group, card: HTMLElement, at: { x: number; y: number }
   } else if (kind === 'ledger') {
     void refreshLedger(card);
   }
-  return item;
 }
 
 /** Takes a card off the board (it goes back to the library pane; no data changes). */
@@ -623,6 +708,12 @@ export async function addCards(app: string, work: string, ids: string[] | null, 
 /** APP-104: takes cards off the board (back to the library pane; never deletes data). */
 export function removeCards(ids: string[]): number {
   let removed = 0;
+  // Cards in a stack leave the stack (`stacks.ts`).
+  for (const id of stackHooks.remove(ids)) {
+    removed += 1;
+    dismissed.add(id);
+    for (const entry of placed.values()) entry.cards = entry.cards.filter((card) => card !== id);
+  }
   for (const group of groups.values()) {
     for (const item of [...group.items]) {
       const id = item.dataset.instanceId ?? '';
@@ -1055,6 +1146,7 @@ function onLive(event: LiveEvent): void {
     const group = groups.get(event.work_id);
     if (group?.items.length) runGroup(event.work_id, true);
     // APP-104: a record may now wait for this member in a work not on the board.
+    stackHooks.live(event.work_id);
     if (!group?.items.some((item) => item.querySelector('.cv-records'))) void showWaiting(event.app_id, event.work_id);
     return;
   }
@@ -1149,6 +1241,7 @@ export function startBoard(document_: Document): void {
     // Moving a card by hand (drag or keyboard) pins its group's layout.
     onActiveDragStateChange: (item, dragging) => {
       if (dragging) return;
+      stackHooks.dragEnd(item);
       if (widgetItems.has(item)) item.dataset.widgetPinned = 'true';
       const group = groups.get(item.dataset.group ?? '');
       if (group) group.pinned = true;
@@ -1212,6 +1305,7 @@ export function startBoard(document_: Document): void {
 /** After the board's first contents are in place: camera, summary, runs. */
 function settle(document_: Document): void {
   if (!canvas || !host) return;
+  stackHooks.settled();
   const camera = demo() ? null : loadCamera();
   const target = location.hash.match(/^#g-([0-9a-f-]{36})$/)?.[1];
   const items = Array.from(groups.values()).flatMap((group) => group.items);

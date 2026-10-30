@@ -139,6 +139,8 @@ The canvas starts empty except for what the member brought onto it and any recor
 
 Controls follow Figma: scroll or two-finger swipe pans (Shift: sideways); Cmd/Ctrl + scroll and pinch zoom at the cursor; Space + drag or middle-drag pans; `V` move, `H` hand (toolbar bottom center, with the zoom menu); Cmd/Ctrl + `=`/`-` zoom, Shift + 0 / 1 / 2 zoom to 100% / fit / selection; click a card's header to select, Shift + click to add, drag the header to move, arrows nudge 1 px (Shift 10 px), Delete puts the selection back in the library (no data changes), Esc clears; `?` shows the sheet. Touch: one finger pans the empty canvas, two fingers pinch. No shortcut fires while typing.
 
+Stacks (after macOS Stacks and BumpTop's piles): drag a card onto another and hold a moment (the target lights up), select cards and press Cmd/Ctrl + G, or "Stack" on an app in the library. A stack shows its top card with the edges of the others, "+N" and "2/5"; horizontal scroll, Shift + scroll, ←/→ or a swipe leafs through it; "+N", Enter or a double-click fans it out (Esc folds it back; drag a card out of the fan to take it out); Cmd/Ctrl + Shift + G spreads it; double-click the name to rename. A new record waiting for you in a stacked app pulses the stack and brings its records card to the top. `/arrange` lays the canvas out one row per app.
+
 ## What each screen shows, in one line each
 
 - **Intent bar status**: "Understanding…" → "Understood in N ms. Review the record, then confirm." → "Committing through the audited command path…" → "Filed: record v1, commit N, audit ab12cd34. Shared with Sarah Chen for approval."
