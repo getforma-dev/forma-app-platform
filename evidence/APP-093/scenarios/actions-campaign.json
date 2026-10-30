@@ -6,23 +6,23 @@
       "passed": true
     },
     {
-      "name": "scenario 1a: the employee's utterance answers a confirmation card in 704 ms with the typed values ($86.00, Nobu, meals, yesterday, the note, status submitted), the approver resolved to Sarah Chen by display name, a server-minted key, the expense app instantiated for him (placed, app.placed on his stream and not on hers), and no record written",
+      "name": "scenario 1a: the employee's utterance answers a confirmation card in 859 ms with the typed values ($86.00, Nobu, meals, yesterday, the note, status submitted), the approver resolved to Sarah Chen by display name, a server-minted key, the expense app instantiated for him (placed, app.placed on his stream and not on hers), and no record written",
       "passed": true
     },
     {
-      "name": "scenario 1b: Confirm posts the draft through the audited command route (200 ms): committed as record version 1 by the employee, a replay returns the stored outcome, record.committed reaches his stream and not hers, his records list shows the claim submitted with its display values and his group JSON carries the records card; Sarah cannot read it yet",
+      "name": "scenario 1b: Confirm posts the draft through the audited command route (150 ms): committed as record version 1 by the employee, a replay returns the stored outcome, record.committed reaches his stream and not hers, his records list shows the claim submitted with its display values and his group JSON carries the records card; Sarah cannot read it yet",
       "passed": true
     },
     {
-      "name": "scenario 1c: the auto-share grants Sarah exactly the submitter's subset with record_write (110 ms); app.shared reaches her stream (43 ms after the share); her records list and her group's records card show the claim waiting for her approval",
+      "name": "scenario 1c: the auto-share grants Sarah exactly the submitter's subset with record_write (153 ms); app.shared reaches her stream (48 ms after the share); her records list and her group's records card show the claim waiting for her approval",
       "passed": true
     },
     {
-      "name": "scenario 2: Sarah's \"approve the Nobu dinner\" resolves the pending record from her list and drafts the decide transition (772 ms); her Confirm commits version 2 approved (307 ms); record.committed reaches his stream (44 ms) and his list shows it approved by Sarah Chen; a second approval has no transition to fire and is refused before any write",
+      "name": "scenario 2: Sarah's \"approve the Nobu dinner\" resolves the pending record from her list and drafts the decide transition (645 ms); her Confirm commits version 2 approved (326 ms); record.committed reaches his stream (111 ms) and his list shows it approved by Sarah Chen; a second approval has no transition to fire and is refused before any write",
       "passed": true
     },
     {
-      "name": "scenario 3: an unrehearsed utterance goes to the model over the loopback endpoint (431 ms; the utterance travels as data, the catalog names only his app) and drafts $42.50 Figma software with the status forced to submitted; a structured Reject from the records card commits version 2 rejected with a note; both streams see every commit; a repeat share announces nothing; \"what's waiting for my approval\" opens Sarah's shared work without a model call",
+      "name": "scenario 3: an unrehearsed utterance goes to the model over the loopback endpoint (538 ms; the utterance travels as data, the catalog names only his app) and drafts $42.50 Figma software with the status forced to submitted; a structured Reject from the records card commits version 2 rejected with a note; both streams see every commit; a repeat share announces nothing; \"what's waiting for my approval\" opens Sarah's shared work without a model call",
       "passed": true
     },
     {
@@ -45,13 +45,13 @@
   "model": "loopback Messages stub through GENUI_COMPOSER_ENDPOINT; rehearsed utterances deterministic in the demo organization",
   "passed": true,
   "timings_ms": {
-    "act_create_ms": 704,
-    "act_decide_ms": 772,
-    "act_model_ms": 431,
-    "confirm_create_ms": 200,
-    "confirm_decide_ms": 307,
-    "diego_record_committed_event_ms": 44,
-    "sarah_app_shared_event_ms": 43,
-    "share_ms": 110
+    "act_create_ms": 859,
+    "act_decide_ms": 645,
+    "act_model_ms": 538,
+    "confirm_create_ms": 150,
+    "confirm_decide_ms": 326,
+    "diego_record_committed_event_ms": 111,
+    "sarah_app_shared_event_ms": 48,
+    "share_ms": 153
   }
 }
