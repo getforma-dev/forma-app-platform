@@ -43,6 +43,11 @@ ADMIT_FUNCTIONS = {
     # own permission subset onto a teammate (recorded ADR-007 debt).
     'share_work': ('p_org uuid, p_sharer uuid, p_grantee uuid, p_app uuid, p_work uuid, p_record_write boolean',
                    'TABLE(scope text, resource_id uuid, permission text, inserted boolean)'),
+    # Migration 0011 (ADR-011 pitch, APP-108): the eighth definer; a member's
+    # confirmed folder CSV/XLSX becomes a source, revision and source_read.
+    'register_box_source': ('p_org uuid, p_principal uuid, p_box uuid, p_file uuid, p_source uuid, p_revision uuid, p_content_digest text, '
+                            'p_normalized_digest text, p_contract_digest text, p_envelope bytea, p_row_count bigint',
+                            'TABLE(source_id uuid, revision_id uuid, created_at timestamp with time zone)'),
 }
 # Relations migration 0003 adds to genui (D7.3: each states RLS, FORCE and tenant_scope).
 ADMISSION_TABLES = ('access_codes','audit_events','audit_heads','code_grant_templates','code_redemptions',
@@ -107,6 +112,14 @@ ADMIT_GRANTS = set().union(
              'app_id','work_id','record_id','code_id','outcome_digest','occurred_at','previous_hash','hash'),
     _columns('audit_heads','SELECT','organization_id','writer_role','chain_sequence','head_hash'),
     _columns('audit_heads','UPDATE','chain_sequence','head_hash'),
+    # 0011 (APP-108): register_box_source's reads and writes.
+    _columns('boxes','SELECT','organization_id','box_id','owner_principal_id'),
+    _columns('box_files','SELECT','organization_id','box_id','file_id','kind','content_digest'),
+    _columns('sources','INSERT','organization_id','source_id'),
+    _columns('source_revisions','INSERT','organization_id','source_id','revision_id','content_digest','normalized_digest','contract_digest',
+             'deleted_at','canonical_envelope'),
+    _columns('box_file_sources','INSERT','organization_id','box_id','file_id','content_digest','source_id','revision_id','normalized_digest',
+             'row_count','registered_by','created_at'),
 )
 
 
@@ -160,7 +173,9 @@ DEFINITION_WORK_GRANTS = set().union(
 )
 # D7.8 closed chains and kinds of the application roles 0005 and 0007 bind.
 APPLICATION_CHAIN_KINDS = {
-    'genui_workspace': ('workspace', ('session.signed_in','app.created','definition.drafted','work.saved','work.bound')),
+    # 0011 (APP-108) widens the workspace list in place with the folder commands.
+    'genui_workspace': ('workspace', ('session.signed_in','app.created','definition.drafted','work.saved','work.bound','box.created',
+                                      'box.renamed','box.file_added','box.data_registered','box.app_derived','box.shared')),
     'genui_control': ('control', ('publication.published','policy.changed')),
     'genui_data': ('data', ('command.committed',)),
 }
@@ -205,6 +220,27 @@ AGENT_GRANTS = set().union(
     _role_columns('genui_workspace','agent_tokens','UPDATE','last_used_at','revoked_at'),
     _role_columns('genui_workspace','agent_attributions','SELECT',*AGENT_ATTRIBUTION_COLUMNS),
     _role_columns('genui_workspace','agent_attributions','INSERT',*AGENT_ATTRIBUTION_COLUMNS),
+)
+
+# Migration 0011 (ADR-011 pitch, APP-108): folders. genui_workspace column
+# SELECT and INSERT on every relation, UPDATE(name) on boxes (rename), no
+# DELETE; box_file_sources is read here and written only by the definer.
+BOX_TABLES = ('box_briefs','box_derivations','box_explanations','box_file_grants','box_file_sources','box_files','box_shares','boxes')
+BOX_COLUMNS = {
+    'boxes': ('organization_id','box_id','owner_principal_id','name','kind','app_id','created_at'),
+    'box_files': ('organization_id','box_id','file_id','name','kind','media_type','byte_length','content_digest','object_key','uploaded_by','created_at'),
+    'box_derivations': ('organization_id','derivation_id','box_id','app_id','work_id','kind','file_ids','file_digests','created_by','created_at'),
+    'box_shares': ('organization_id','box_id','principal_id','granted_by','created_at'),
+    'box_file_grants': ('organization_id','box_id','file_id','principal_id','app_id','work_id','granted_by','created_at'),
+    'box_explanations': ('organization_id','explanation_id','app_id','work_id','template','created_by','created_at'),
+    'box_briefs': ('organization_id','brief_id','box_id','body','created_by','created_at'),
+}
+BOX_GRANTS = set().union(
+    *(_role_columns('genui_workspace',table,'SELECT',*columns) for table,columns in BOX_COLUMNS.items()),
+    *(_role_columns('genui_workspace',table,'INSERT',*columns) for table,columns in BOX_COLUMNS.items()),
+    _role_columns('genui_workspace','box_file_sources','SELECT','organization_id','box_id','file_id','content_digest','source_id','revision_id',
+                  'normalized_digest','row_count','registered_by','created_at'),
+    _role_columns('genui_workspace','boxes','UPDATE','name'),
 )
 
 # Migration 0007 (ADR-007 D7.3/D7.7/D7.8/D7.9, ADR-009 D9.8; APP-013): the record
@@ -370,7 +406,7 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
         # Application roles reach 0003's relations only through 0004's entitlement
         # reads, 0005's and 0007's own-chain audit append (D7.8) and 0006's narrow
@@ -410,7 +446,7 @@ def admission_checks(pg, passed, denied):
         writes=[r[0] for r in functions if re.search(r'\b(update|insert\s+into|delete\s+from)\s+genui\.organizations\b',r[7],re.I)]
         assert writes==[] and all(re.search(r'genui\.organizations\s+o\s+where\s+o\.organization_id\s*=\s*p_org\s+for\s+share',r[7],re.I)
                                   for r in functions if r[0] not in ('resolve_code','resolve_handle')),writes
-    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; seven exact STRICT VOLATILE definers (six of D7.1 and the 0008 share_work) with fixed search_path and no organizations write',
+    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; eight exact STRICT VOLATILE definers (six of D7.1, the 0008 share_work and the 0011 register_box_source) with fixed search_path and no organizations write',
            incoming=[list(r) for r in incoming])
 
     # --- RESTRICTIVE audit bindings: INSERT holders equal policy targets (D7.8) ---
@@ -557,7 +593,7 @@ def admission_checks(pg, passed, denied):
         if role!='genui_workspace':
             for name,(arguments,_) in ADMIT_FUNCTIONS.items():
                 # Non-NULL arguments: a STRICT call on NULL constants folds away before the EXECUTE check.
-                values=','.join("'%s'::%s"%(str(uuid.uuid4()) if kind=='uuid' else 'true' if kind=='boolean' else 'x',kind) for kind in (a.split()[1] for a in arguments.split(', ')))
+                values=','.join("'%s'::%s"%(str(uuid.uuid4()) if kind=='uuid' else 'true' if kind=='boolean' else '1' if kind=='bigint' else 'x',kind) for kind in (a.split()[1] for a in arguments.split(', ')))
                 denied(role+' cannot execute '+name,role,'SELECT genui_private.%s(%s)'%(name,values))
 
     # --- resolve_code / resolve_handle before any scope ---
@@ -1058,6 +1094,17 @@ def session_checks(pg, passed, denied):
         assert digests==[('token_digest','genui.digest'),('token_id','uuid')],digests
     passed('0009 agent_tokens and agent_attributions are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the token only as genui.digest',
            tables=list(AGENT_TABLES))
+    # 0011 (APP-108): the folder relations, likewise owner-held under FORCE RLS.
+    with pg.connect('postgres') as c:
+        rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",
+                       (list(BOX_TABLES),)).fetchall()
+        assert rows==[(t,True,True,'genui_owner') for t in sorted(BOX_TABLES)],rows
+        rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
+          AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(BOX_TABLES),)).fetchall()
+        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in sorted(BOX_TABLES)],rows
+    passed('0011 folder relations (boxes, files, registrations, derivations, shares, file grants, explanations, briefs) are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy',
+           tables=list(BOX_TABLES))
     flow=("""INSERT INTO genui.prelogin_flows(organization_id,flow_id,cookie_digest,state_digest,kind,code_verifier_ciphertext,client_address_class,
       created_at,expires_at) VALUES (%s,%s,%s,%s,'signin',%s,'v4:192.0.2.1',now(),now()+interval '10 minutes')""",
           (org0,str(uuid.uuid4()),sha('cookie-'+uuid.uuid4().hex),sha('state'),b'\x01'*40))

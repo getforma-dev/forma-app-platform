@@ -9,6 +9,8 @@ mod actions;
 mod admission;
 mod agents;
 mod authorization;
+// APP-108 (ADR-011 pitch): boxes, files, registered data, derivations.
+mod boxes;
 mod catalog;
 mod commands;
 mod composer;
@@ -29,6 +31,10 @@ pub use agents::{
     agent_label_shaped, AgentAttribution, AgentToken, MintedAgentToken, MAX_LIVE_AGENT_TOKENS,
 };
 pub use authorization::{Action, Publication, Record, TrustedRequest};
+pub use boxes::{
+    box_name, BoxFile, BoxRow, BoxView, Derivation, FileData, Lineage, NewFile, NewRegistration,
+    MAX_BOX_FILES,
+};
 pub use commands::{
     idempotency_key_shaped, CommandOutcome, CommandRequest, CommandResult, ConflictReason,
     RecordCommand, RecordDetail, RecordField, RecoveryView, COMMAND_COMMITTED,
@@ -126,8 +132,12 @@ fn valid_id(value: &str) -> bool {
 // (`auth::tests`); still compiled only into the test executable.
 #[cfg(test)]
 mod actions_campaign;
+// APP-108: the folders campaign (Docker; upload → parse → register → view →
+// derived app → share → isolation).
 #[cfg(test)]
 pub(crate) mod admission_qualification;
+#[cfg(test)]
+mod box_campaign;
 #[cfg(test)]
 pub(crate) mod command_qualification;
 #[cfg(test)]

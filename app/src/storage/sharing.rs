@@ -249,6 +249,18 @@ impl Workspace {
         }
         .await;
         transaction.finish(result.is_ok()).await?;
+        // APP-108: a work built from a folder carries read access to exactly
+        // the folder files it was built from (every share path: canvas,
+        // Slack, MCP), in its own audited transaction under the sharer's
+        // authority; a work not built from a folder writes nothing.
+        if result.is_ok() {
+            if let Err(error) = self
+                .grant_box_files_for_work(request, app, work, grantee)
+                .await
+            {
+                tracing::warn!(code = %error, "share.box_files_refused");
+            }
+        }
         result
     }
 }

@@ -68,6 +68,17 @@
 !app/src/widgets/state.rs
 !app/src/widgets/tests.rs
 !app/src/widgets/weather.rs
+!app/src/boxes/brief.rs
+!app/src/boxes/derive.rs
+!app/src/boxes/explain.rs
+!app/src/boxes/inspect.rs
+!app/src/boxes/intent.rs
+!app/src/boxes/mod.rs
+!app/src/boxes/register.rs
+!app/src/boxes/routes.rs
+!app/src/boxes/sniff.rs
+!app/src/boxes/store.rs
+!app/src/boxes/tests.rs
 !app/src/commands/mod.rs
 !app/src/commands/payload.rs
 !app/src/commands/routes.rs
@@ -125,6 +136,8 @@
 !app/src/storage/rules.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
+!app/src/storage/boxes.rs
+!app/src/storage/box_campaign.rs
 !app/src/storage/sharing_qualification.rs
 !app/src/storage/slack_campaign.rs
 !app/src/storage/workflows_campaign.rs
@@ -137,6 +150,7 @@
 !app/migrations/catalog-v8.json
 !app/migrations/catalog-v9.json
 !app/migrations/catalog-v10.json
+!app/migrations/catalog-v11.json
 !app/certs/rds-global-bundle.pem
 !app/runtime/runtime.py
 !app/runtime/qualification_supervisor.py

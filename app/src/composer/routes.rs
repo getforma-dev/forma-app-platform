@@ -583,6 +583,29 @@ async fn draft_publish_save(
     saved
 }
 
+/// APP-108: drafts, owner-publishes and saves an admitted definition built
+/// outside the composer's own routing (a box's derived app or data card),
+/// through the same path every generated definition takes; announces
+/// `app.placed`.
+pub(crate) async fn publish_planned(
+    stores: &Stores,
+    member: &TrustedRequest,
+    context: &ComposerContext,
+    planned: super::plan::Planned,
+    intent: &str,
+) -> Result<Composed, Refused> {
+    draft_publish_save(
+        stores,
+        member,
+        context,
+        planned,
+        intent,
+        Instant::now(),
+        true,
+    )
+    .await
+}
+
 /// A published revision not yet saved as a work (review M5). Dropped armed
 /// (a refusal, the route deadline cancelling the future, a lost connection),
 /// it logs `composer.publication_orphaned` with the ids, so the orphan is

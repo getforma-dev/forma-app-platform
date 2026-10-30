@@ -252,6 +252,22 @@ pub(super) enum Body {
     },
 }
 
+/// APP-108: `{"utterance", "box_id"?}`: the words and the folder the canvas
+/// named (its active chip or an @-mention), if any.
+pub(super) fn folder_body(bytes: &[u8]) -> Option<(String, Option<String>)> {
+    let value = crate::admission::decode(bytes).ok()?;
+    let object = value.as_object()?;
+    if !object.keys().all(|k| k == "utterance" || k == "box_id") {
+        return None;
+    }
+    let utterance = prompt::utterance(object.get("utterance")?.as_str()?)?.to_owned();
+    let box_id = match object.get("box_id") {
+        None => None,
+        Some(v) => Some(v.as_str()?.to_owned()),
+    };
+    Some((utterance, box_id))
+}
+
 pub(super) fn body(bytes: &[u8]) -> Option<Body> {
     let value: Value = crate::admission::decode(bytes).ok()?;
     let object = value.as_object()?;
@@ -387,6 +403,31 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
         Err(refusal) => return refusal,
     };
     let started = Instant::now();
+    // APP-108: a folder request (the canvas's active folder chip or
+    // @-mention as `box_id`, or a folder named in the words) is answered by
+    // the folder path; anything else continues below unchanged.
+    if multipart.is_none() && parts.uri.query().is_none() {
+        if let Some((utterance, box_id)) = folder_body(&bytes) {
+            let key = format!("act:{}:{}", member.organization(), member.principal());
+            if let Some(answer) =
+                crate::boxes::intent::act(&member, &utterance, box_id.as_deref()).await
+            {
+                if let Err(retry_after) = state.auth.limits.admit(&[(&key, ACT_MEMBER)]) {
+                    return http::too_many_requests(retry_after);
+                }
+                return match answer {
+                    crate::boxes::intent::Answer::Done(value) => document(StatusCode::OK, &value),
+                    crate::boxes::intent::Answer::NotAFolderRequest => {
+                        http::problem(StatusCode::UNPROCESSABLE_ENTITY, "not_a_folder_request")
+                    }
+                    crate::boxes::intent::Answer::Refused(refused) => refused.response(),
+                };
+            }
+            if box_id.is_some() {
+                return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "not_a_folder_request");
+            }
+        }
+    }
     let parsed_body = match multipart.as_deref() {
         Some(content_type) => match receipt::multipart(content_type, &bytes) {
             Ok((utterance, receipt)) => Some(Body::Receipt { utterance, receipt }),

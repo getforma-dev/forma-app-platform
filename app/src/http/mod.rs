@@ -189,7 +189,15 @@ where
 
 /// D7.14 handler deadline; a request that outlives it is unavailable.
 pub async fn deadline(request: Request, next: Next) -> Response {
-    tokio::time::timeout(HANDLER_DEADLINE, next.run(request))
+    // APP-108: the folder routes that parse, normalize or call a model run
+    // under the composer's deadline (their paths carry ids, so they cannot
+    // be `uniform_with_many`'s static long paths).
+    let budget = if crate::boxes::routes::long_path(request.uri().path()) {
+        COMPOSE_DEADLINE
+    } else {
+        HANDLER_DEADLINE
+    };
+    tokio::time::timeout(budget, next.run(request))
         .await
         .unwrap_or_else(|_| unavailable())
 }

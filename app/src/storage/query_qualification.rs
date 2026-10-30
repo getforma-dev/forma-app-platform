@@ -2657,4 +2657,4 @@ mod canvas_campaign;
 
 /// ADR-011: the pitch integration campaign (APP-096) extends this one too.
 #[path = "pitch_qualification.rs"]
-mod pitch_campaign;
+pub(crate) mod pitch_campaign;

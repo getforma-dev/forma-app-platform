@@ -73,6 +73,11 @@ function answerOf(body: unknown): ActAnswer | null {
   if (typeof body !== 'object' || body === null) return null;
   const value = body as Record<string, unknown>;
   if (value.action === 'place') return { action: 'place' };
+  // APP-108: an app built from the selected folder (`kind: build_from_box`),
+  // placed like an opened work.
+  if (value.via === 'folder' && isUuid(value.app_id) && isUuid(value.work_id) && value.action !== 'create' && value.action !== 'decide') {
+    return { action: 'open', app_id: value.app_id, work_id: value.work_id, title: String(value.title ?? ''), placed: true, view: 'records', range: null };
+  }
   if (value.action === 'open') {
     const range = value.range as Record<string, unknown> | null | undefined;
     return isUuid(value.app_id) && isUuid(value.work_id)
@@ -281,15 +286,28 @@ function confirmCard(document_: Document, draft: Draft, utterance: string, recei
 }
 
 /**
+ * APP-108: the folder lane. With a folder chip active or mentioned in the bar,
+ * plain sentences go to that folder (`folder-bar.ts`); the router answers
+ * true when it took the sentence.
+ */
+type UtteranceRouter = (text: string, report: (message: string) => void) => Promise<boolean>;
+let utteranceRouter: UtteranceRouter | null = null;
+export function setUtteranceRouter(router: UtteranceRouter): void {
+  utteranceRouter = router;
+}
+
+/**
  * The intent bar's submit: the action path first, the composer when the
  * server says `place`; `report` updates the bar's status line.
  */
 export async function submitUtterance(text: string, report: (message: string) => void, app: string | null = null): Promise<void> {
+  const receiptAttached = document.getElementById('intent-form')?.getAttribute('data-receipt') === 'attached';
   // APP-101: `/name rest` is the explicit lane (`slash.ts`): no guessing.
-  if (!app && text.startsWith('/') && document.getElementById('intent-form')?.getAttribute('data-receipt') !== 'attached') {
+  if (!app && text.startsWith('/') && !receiptAttached) {
     await runSlash(text, report);
     return;
   }
+  if (!app && !receiptAttached && utteranceRouter && await utteranceRouter(text, report)) return;
   await submitAction(text, report, app);
 }
 

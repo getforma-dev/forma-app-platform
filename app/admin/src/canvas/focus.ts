@@ -37,6 +37,54 @@ let session: Session | null = null;
 let observer: MutationObserver | null = null;
 let lastPointed: HTMLElement | null = null;
 const INERT = ['.cv-top', '#cv-canvas', '#cv-library', '.cv-dock'];
+
+/**
+ * APP-108: cards that are not an app's cards (a folder, an app's Summary, a
+ * folder's Brief) can be focused too: each registers itself with its own
+ * header for the focus button and an optional callback (a focused folder
+ * becomes the bar's active folder). They are focused alone (no strip).
+ */
+type Standalone = { card: HTMLElement; label: string; onFocus?: () => void };
+const standalone = new Map<string, Standalone>();
+function svgFocus(document_: Document): SVGElement {
+  const svg = document_.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document_.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10');
+  svg.append(path);
+  return svg;
+}
+/** Registers a standalone card (it needs a `data-card` id); its focus button goes into `head`. */
+export function registerFocusCard(card: HTMLElement, head: HTMLElement, label: string, onFocus?: () => void): void {
+  const id = card.dataset.card ?? '';
+  if (!/^[A-Za-z0-9_-]{1,96}$/.test(id)) return;
+  standalone.set(id, { card, label, onFocus });
+  // A deep link (`#focus=<id>`) or a reload may name this card before it existed
+  // (it mounts after the board settles): open it once it is on the canvas.
+  requestAnimationFrame(() => {
+    if (!session && card.isConnected && location.hash === `#focus=${id}`) openFocus(id);
+  });
+  if (head.querySelector(':scope > [data-focus-card]')) return;
+  const button = el(card.ownerDocument, 'button', { type: 'button', class: 'cv-card-focus', 'data-focus-card': '', 'aria-label': `Focus ${card.getAttribute('aria-label') ?? label}`, title: 'Focus · F' });
+  button.append(svgFocus(card.ownerDocument));
+  head.append(button);
+}
+/** The card left the canvas: it can no longer be focused (closed first if it is). */
+export function unregisterFocusCard(card: HTMLElement): void {
+  const id = card.dataset.card ?? '';
+  if (session?.card === card) closeFocus();
+  standalone.delete(id);
+}
+function cardOf(id: string): HTMLElement | undefined {
+  return board.findCard(id)?.card ?? standalone.get(id)?.card;
+}
+/** A dialog stacked above focus (a file viewer opened from a focused card) owns the keys. */
+function modalAbove(): boolean {
+  return Boolean(documentRef?.querySelector('[data-modal-above]'));
+}
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
 
 function editable(target: EventTarget | null): boolean {
@@ -119,6 +167,7 @@ function build(document_: Document): HTMLElement {
 
 /** The cards ← / → walk: the stack the card is in, its frame, or its app's cards on the canvas. */
 function sequenceFor(id: string): string[] {
+  if (standalone.has(id)) return [id];
   const stack = stackCardsOf(id);
   if (stack) return stack.cards;
   const frame = frameCardsOf(id);
@@ -143,7 +192,7 @@ function renderStrip(): void {
   const document_ = documentRef;
   const total = session.ids.length;
   strip.replaceChildren(...session.ids.map((id, index) => {
-    const card = board.findCard(id)?.card;
+    const card = cardOf(id);
     const title = titleOf(card);
     // A status view is a breakdown: drawn as a chart, not one number.
     const raw = card?.dataset.kind ?? '';
@@ -165,7 +214,7 @@ function syncStrip(): void {
   if (!session || !strip) return;
   for (const thumb of strip.querySelectorAll<HTMLElement>('[data-focus-index]')) {
     const index = Number(thumb.dataset.focusIndex);
-    const card = board.findCard(thumb.dataset.thumb ?? '')?.card;
+    const card = cardOf(thumb.dataset.thumb ?? '');
     if (index === session.index) thumb.setAttribute('aria-current', 'true');
     else thumb.removeAttribute('aria-current');
     const count = pending(card);
@@ -194,7 +243,7 @@ function watch(): void {
     syncStrip();
   });
   for (const id of session.ids) {
-    const card = board.findCard(id)?.card;
+    const card = cardOf(id);
     if (card) observer.observe(card, { attributes: true, attributeFilter: ['data-pending-now', 'data-waiting', 'data-state', 'class'] });
   }
 }
@@ -218,7 +267,7 @@ function show(index: number): void {
   const total = session.ids.length;
   const next = ((index % total) + total) % total;
   const id = session.ids[next] ?? '';
-  const card = board.findCard(id)?.card;
+  const card = cardOf(id);
   if (!card) return;
   putBack();
   session.index = next;
@@ -239,7 +288,9 @@ function show(index: number): void {
   session.placeholder = placeholder;
   const work = board.workOf(card) ?? '';
   const app = dialog.querySelector('[data-focus-app]');
-  if (app) app.textContent = board.group(work)?.title ?? '';
+  const own = standalone.get(id);
+  if (app) app.textContent = own ? own.label : board.group(work)?.title ?? '';
+  own?.onFocus?.();
   const title = dialog.querySelector('[data-focus-title]');
   if (title) title.textContent = titleOf(card);
   const pos = dialog.querySelector('[data-focus-pos]');
@@ -263,7 +314,7 @@ function go(step: number): void {
 /** Opens card `id` in focus (it must be on the canvas). */
 export function openFocus(id: string, opener: HTMLElement | null = null): boolean {
   const document_ = documentRef;
-  if (!document_ || !board.findCard(id) || !isOnBoard(id)) return false;
+  if (!document_ || !((board.findCard(id) && isOnBoard(id)) || standalone.get(id)?.card.isConnected)) return false;
   dialog ??= build(document_);
   const ids = sequenceFor(id);
   if (session) putBack();
@@ -312,11 +363,13 @@ export function focusFromItem(item: HTMLElement | null): boolean {
   if (item.classList.contains('cv-item-stack')) {
     return openFocus(item.querySelector<HTMLElement>('.cv-stack-top > .cv-card')?.dataset.card ?? '');
   }
-  return item.dataset.group ? openFocus(item.dataset.instanceId ?? '') : false;
+  if (item.dataset.group) return openFocus(item.dataset.instanceId ?? '');
+  const own = item.querySelector<HTMLElement>('.cv-card[data-card]');
+  return own && standalone.has(own.dataset.card ?? '') ? openFocus(own.dataset.card ?? '') : false;
 }
 
 function onKey(event: KeyboardEvent): void {
-  if (!session || !dialog || event.isComposing) return;
+  if (!session || !dialog || event.isComposing || modalAbove()) return;
   if (event.key === 'Escape') {
     event.preventDefault();
     event.stopImmediatePropagation();

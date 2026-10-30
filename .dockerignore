@@ -81,6 +81,20 @@ app/src/slack/**
 !app/src/slack/signature.rs
 !app/src/slack/text.rs
 # slack/tests.rs, storage/slack_campaign.rs and storage/workflows_campaign.rs are cfg(test) only; the qualification context lists them.
+# APP-108: folders (boxes): files, real data, apps built from them.
+!app/src/boxes/
+app/src/boxes/**
+!app/src/boxes/brief.rs
+!app/src/boxes/derive.rs
+!app/src/boxes/explain.rs
+!app/src/boxes/inspect.rs
+!app/src/boxes/intent.rs
+!app/src/boxes/mod.rs
+!app/src/boxes/register.rs
+!app/src/boxes/routes.rs
+!app/src/boxes/sniff.rs
+!app/src/boxes/store.rs
+!app/src/boxes/tests.rs
 # APP-103: canvas widgets (weather, customize in words).
 !app/src/widgets/
 app/src/widgets/**
@@ -126,6 +140,7 @@ app/src/storage/**
 !app/src/storage/agents.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
+!app/src/storage/boxes.rs
 !app/src/storage/actions.rs
 !app/src/storage/actions_campaign.rs
 !app/src/storage/tests.rs
@@ -216,6 +231,14 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/unite.ts
 # APP-109: quick notes.
 !app/admin/src/canvas/notes.ts
+# APP-108: folders on the canvas (cards, viewer, data sheet, summary, brief, folder bar).
+!app/admin/src/canvas/box-api.ts
+!app/admin/src/canvas/box-viewer.ts
+!app/admin/src/canvas/boxes.ts
+!app/admin/src/canvas/brief.ts
+!app/admin/src/canvas/data-sheet.ts
+!app/admin/src/canvas/explain.ts
+!app/admin/src/canvas/folder-bar.ts
 !app/admin/src/canvas/widgets/
 app/admin/src/canvas/widgets/**
 !app/admin/src/canvas/widgets/index.ts
@@ -249,6 +272,7 @@ app/admin/src/styles/**
 app/runtime/**
 !app/runtime/runtime.py
 !app/runtime/query_engine.py
+!app/runtime/box_normalize.py
 !app/runtime/requirements.lock
 !app/migrations/
 app/migrations/**
@@ -261,6 +285,7 @@ app/migrations/**
 !app/migrations/0007_command_outcomes.sql
 !app/migrations/0008_sharing.sql
 !app/migrations/0010_agent_tokens.sql
+!app/migrations/0011_boxes.sql
 !app/migrations/0009_slack_links.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
@@ -274,6 +299,7 @@ app/migrations/**
 !app/migrations/catalog-v8.json
 !app/migrations/catalog-v9.json
 !app/migrations/catalog-v10.json
+!app/migrations/catalog-v11.json
 !app/certs/
 app/certs/**
 !app/certs/rds-global-bundle.pem

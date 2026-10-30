@@ -138,7 +138,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v10.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v11.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 145] = [
+const SOURCES: [(&str, &[u8]); 158] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -270,6 +270,47 @@ const SOURCES: [(&str, &[u8]); 145] = [
     (
         "app/src/auth_qualification/tests.rs",
         include_bytes!("../auth_qualification/tests.rs"),
+    ),
+    (
+        "app/src/boxes/brief.rs",
+        include_bytes!("../boxes/brief.rs"),
+    ),
+    (
+        "app/src/boxes/derive.rs",
+        include_bytes!("../boxes/derive.rs"),
+    ),
+    (
+        "app/src/boxes/explain.rs",
+        include_bytes!("../boxes/explain.rs"),
+    ),
+    (
+        "app/src/boxes/inspect.rs",
+        include_bytes!("../boxes/inspect.rs"),
+    ),
+    (
+        "app/src/boxes/intent.rs",
+        include_bytes!("../boxes/intent.rs"),
+    ),
+    ("app/src/boxes/mod.rs", include_bytes!("../boxes/mod.rs")),
+    (
+        "app/src/boxes/register.rs",
+        include_bytes!("../boxes/register.rs"),
+    ),
+    (
+        "app/src/boxes/routes.rs",
+        include_bytes!("../boxes/routes.rs"),
+    ),
+    (
+        "app/src/boxes/sniff.rs",
+        include_bytes!("../boxes/sniff.rs"),
+    ),
+    (
+        "app/src/boxes/store.rs",
+        include_bytes!("../boxes/store.rs"),
+    ),
+    (
+        "app/src/boxes/tests.rs",
+        include_bytes!("../boxes/tests.rs"),
     ),
     (
         "app/src/commands/mod.rs",
@@ -442,6 +483,11 @@ const SOURCES: [(&str, &[u8]); 145] = [
         "app/src/storage/authorization.rs",
         include_bytes!("authorization.rs"),
     ),
+    (
+        "app/src/storage/box_campaign.rs",
+        include_bytes!("box_campaign.rs"),
+    ),
+    ("app/src/storage/boxes.rs", include_bytes!("boxes.rs")),
     (
         "app/src/storage/canvas_campaign.rs",
         include_bytes!("canvas_campaign.rs"),

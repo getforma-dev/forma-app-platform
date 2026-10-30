@@ -56,9 +56,13 @@ pub const DRAFT_DECISION: &str = "forma_draft_decision";
 pub const COMMIT: &str = "forma_commit";
 pub const LIST_PENDING: &str = "forma_list_pending";
 pub const SHARE: &str = "forma_share";
+/// APP-108: folders (the member-facing noun of a box).
+pub const LIST_FOLDERS: &str = "forma_list_folders";
+pub const FOLDER_FORMATION: &str = "forma_folder_formation";
+pub const FOLDER_BRIEF: &str = "forma_folder_brief";
 /// The ticket's closed tool set (its text says seven; its list names eight,
 /// the two drafts sharing one bullet), and nothing else.
-pub const NAMES: [&str; 8] = [
+pub const NAMES: [&str; 11] = [
     LIST_APPS,
     RUN_VIEW,
     COMPOSE_APP,
@@ -67,6 +71,9 @@ pub const NAMES: [&str; 8] = [
     COMMIT,
     LIST_PENDING,
     SHARE,
+    LIST_FOLDERS,
+    FOLDER_FORMATION,
+    FOLDER_BRIEF,
 ];
 /// Rows of a view shown to the agent.
 pub const MAX_ROWS: usize = 50;
@@ -168,6 +175,32 @@ pub fn definitions() -> Vec<Value> {
                 "record_write": {"type": "boolean"},
             }, "required": ["app_id", "work_id", "member_name"], "additionalProperties": false},
             "annotations": write("Share a work", true),
+        }),
+        json!({
+            "name": LIST_FOLDERS,
+            "title": "List folders",
+            "description": "List the member's Forma folders (files, real CSV/XLSX data and the apps built from them): number, name, file count and the files with their types and whether their data is registered.",
+            "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
+            "annotations": read_only("List folders"),
+        }),
+        json!({
+            "name": FOLDER_FORMATION,
+            "title": "Formation from a folder",
+            "description": "Act on one of the member's folders in words: build an app from its data (\"build a metrics app and explain it\") or brief me on it. The folder is its number or name from forma_list_folders. The app is generated from a capped context (file names, each confirmed schema and at most 20 sample rows), admitted, placed on the canvas, and traces back to the folder's files; receipts name the registered revisions. Returns the app link, origin label and the folder provenance.",
+            "inputSchema": {"type": "object", "properties": {
+                "folder": {"type": "string", "minLength": 1, "maxLength": 60},
+                "instruction": {"type": "string", "minLength": 3, "maxLength": 500},
+            }, "required": ["folder", "instruction"], "additionalProperties": false},
+            "annotations": write("Formation from a folder", false),
+        }),
+        json!({
+            "name": FOLDER_BRIEF,
+            "title": "Brief on a folder",
+            "description": "The folder's brief: an overview, a paragraph per file and key points; numbers from data files come from governed results with receipts, PDF statements are cited by page.",
+            "inputSchema": {"type": "object", "properties": {
+                "folder": {"type": "string", "minLength": 1, "maxLength": 60},
+            }, "required": ["folder"], "additionalProperties": false},
+            "annotations": write("Brief on a folder", false),
         }),
     ]
 }
@@ -308,6 +341,9 @@ pub async fn call(state: &Mcp, caller: &AgentCaller, name: &str, arguments: &Val
         COMMIT => commit(state, &stores, caller, arguments).await,
         LIST_PENDING => list_pending(state, &stores, caller, arguments).await,
         SHARE => share(state, &stores, caller, arguments).await,
+        LIST_FOLDERS => list_folders(state, caller, arguments).await,
+        FOLDER_FORMATION => folder_formation(state, &stores, caller, arguments).await,
+        FOLDER_BRIEF => folder_brief(caller, arguments).await,
         _ => Err(Output::not_found()),
     };
     result.unwrap_or_else(|refusal| refusal)
@@ -1168,4 +1204,143 @@ pub(crate) fn create_hints_for_tests(
     values: &Value,
 ) -> Result<Map<String, Value>, Output> {
     create_hints(app, values)
+}
+
+// --- APP-108: folders ---
+
+fn folder_ref(text: &str) -> crate::boxes::intent::FolderRef {
+    match text.trim().trim_start_matches('#').parse::<usize>() {
+        Ok(n) => crate::boxes::intent::FolderRef::Number(n),
+        Err(_) => crate::boxes::intent::FolderRef::Name(text.trim().to_owned()),
+    }
+}
+
+async fn resolve_folder(
+    caller: &AgentCaller,
+    arguments: &Value,
+) -> Result<
+    (
+        std::sync::Arc<crate::boxes::routes::Boxes>,
+        String,
+        Map<String, Value>,
+    ),
+    Output,
+> {
+    let state = crate::boxes::intent::installed().ok_or_else(Output::unavailable)?;
+    let arguments = closed(arguments, &["folder", "instruction"]).ok_or_else(|| {
+        Output::invalid("Give `folder` (number or name) and, for formation, `instruction`.")
+    })?;
+    let folder = text_arg(&arguments, "folder", 60)?
+        .ok_or_else(|| Output::invalid("`folder` is required."))?;
+    match crate::boxes::intent::resolve(&state, &caller.request, &folder_ref(&folder)).await {
+        crate::boxes::intent::Resolved::One(id, _) => Ok((state, id, arguments)),
+        crate::boxes::intent::Resolved::Many(choices) => Err(Output::invalid(&format!(
+            "Several folders match: {}. Name one by number.",
+            choices
+                .iter()
+                .map(|(n, _, name)| format!("{n}. {name}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+        crate::boxes::intent::Resolved::None => Err(Output::not_found()),
+    }
+}
+
+async fn list_folders(_state: &Mcp, caller: &AgentCaller, arguments: &Value) -> ToolResult {
+    closed(arguments, &[]).ok_or_else(|| Output::invalid("No arguments."))?;
+    let boxes = crate::boxes::intent::installed().ok_or_else(Output::unavailable)?;
+    let rows = crate::boxes::routes::numbered(&boxes, &caller.request)
+        .await
+        .map_err(storage_output)?;
+    let mut folders = Vec::new();
+    for (number, row) in rows.iter().take(50) {
+        let view = crate::boxes::routes::box_view_json(&boxes, &caller.request, &row.box_id)
+            .await
+            .map_err(storage_output)?;
+        let files: Vec<Value> = view["files"].as_array().into_iter().flatten()
+            .map(|f| json!({"name": f["name"], "type": f["kind"], "data_registered": !f["data"].is_null()})).collect();
+        folders.push(json!({"number": number, "folder_id": row.box_id, "name": row.name, "file_count": row.file_count, "files": files}));
+    }
+    let summary = if folders.is_empty() {
+        "No folders yet.".to_owned()
+    } else {
+        rows.iter()
+            .map(|(n, r)| format!("{n}. {} ({} files)", r.name, r.file_count))
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    Ok(Output::ok("ok", summary, json!({"folders": folders})))
+}
+
+async fn folder_formation(
+    state: &Mcp,
+    stores: &Stores,
+    caller: &AgentCaller,
+    arguments: &Value,
+) -> ToolResult {
+    let (boxes, box_id, arguments) = resolve_folder(caller, arguments).await?;
+    let instruction = text_arg(&arguments, "instruction", MAX_TEXT)?
+        .ok_or_else(|| Output::invalid("`instruction` is required."))?;
+    match crate::boxes::intent::ask(&instruction) {
+        Some(crate::boxes::intent::Ask::Brief) => {
+            let brief = crate::boxes::brief::generate(&boxes, &caller.request, &box_id)
+                .await
+                .map_err(|r| match r {
+                    crate::boxes::routes::BuildRefusal::NotFound => Output::not_found(),
+                    _ => Output::unavailable(),
+                })?;
+            Ok(Output::ok(
+                "ok",
+                "Folder brief ready (numbers from receipts, PDF statements cited by page).".into(),
+                json!({"brief": brief}),
+            ))
+        }
+        _ => {
+            let purpose = crate::boxes::intent::purpose(&instruction);
+            let built = crate::boxes::routes::build_from_box(
+                &boxes,
+                &caller.request,
+                &box_id,
+                &purpose,
+                None,
+            )
+            .await
+            .map_err(|r| match r {
+                crate::boxes::routes::BuildRefusal::NotFound => Output::not_found(),
+                crate::boxes::routes::BuildRefusal::NoData => {
+                    Output::invalid("This folder has no CSV or XLSX data to build from.")
+                }
+                crate::boxes::routes::BuildRefusal::CouldNotCompose(_) => Output::invalid(
+                    "Forma could not compose an app from this folder; rephrase the purpose.",
+                ),
+                _ => Output::unavailable(),
+            })?;
+            attribute(stores, caller, &built.placed.app, &built.placed.work, None).await;
+            let mut value = crate::boxes::routes::built_json(&built);
+            value["link"] = json!(link(state, &built.placed.app, &built.placed.work));
+            let summary = format!(
+                "{} ({}, {}). {}",
+                built.placed.title,
+                built.origin,
+                value["label"].as_str().unwrap_or(""),
+                value["link"].as_str().unwrap_or("")
+            );
+            Ok(Output::ok("ok", summary, value))
+        }
+    }
+}
+
+async fn folder_brief(caller: &AgentCaller, arguments: &Value) -> ToolResult {
+    let (boxes, box_id, _) = resolve_folder(caller, arguments).await?;
+    let brief = crate::boxes::brief::generate(&boxes, &caller.request, &box_id)
+        .await
+        .map_err(|r| match r {
+            crate::boxes::routes::BuildRefusal::NotFound => Output::not_found(),
+            _ => Output::unavailable(),
+        })?;
+    Ok(Output::ok(
+        "ok",
+        "Folder brief ready (numbers from receipts, PDF statements cited by page).".into(),
+        json!({"brief": brief}),
+    ))
 }

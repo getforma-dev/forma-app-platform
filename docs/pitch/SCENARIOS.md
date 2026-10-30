@@ -135,6 +135,17 @@ Say: "Two vendors' agents just acted on one governed record. Neither got a right
 Tools (closed set, typed JSON Schemas, annotations): `forma_list_apps`, `forma_run_view` (rows ≤ 50 with the receipt id, the canvas's query path), `forma_compose_app` (the composer; the app is placed live), `forma_draft_record`, `forma_draft_decision`, `forma_commit` (held drafts: 10 minutes, the member's and token's own, one record each; a repeated commit replays the same outcome), `forma_list_pending`, `forma_share`. Refusals: a missing, malformed, unknown, revoked, foreign or epoch-stale token and a cookie without a bearer are all the byte-identical 404; a foreign `Origin` is 403; inside a tool, every denial is the same `not_found` result.
 
 Measured on the local stand (`storage::mcp_campaign`, Docker PostgreSQL, stub engine; debug build): draft ~0.8 s (the expense app placed on first use), commit + share ~0.24 s, `app.shared` on Sarah's stream ~45 ms later, Sarah's draft + commit ~0.5 s, `record.committed` on Diego's stream immediately.
+## Scenario 7: a folder of files becomes an app with receipts (APP-108)
+
+The fixture is `docs/pitch/folder-fixture/` (synthetic: `q3_metrics.csv`, `q3_pipeline.csv`, `q3_metrics_brief.pdf`; every figure invented).
+
+1. Click **+ Folder**, type "Q3 metrics", and drop the three files. The CSVs show their typed columns at once (month: date, revenue: money, signups: integer, churn_rate: decimal); click a PDF tile and it opens in the viewer.
+2. Click the folder (its chip appears in the bar) and type: **"build a metrics app and explain it"**. In the demo organization the rehearsed metrics app (DS-73) lands at once with "Built from folder: Q3 metrics · 2 files" and a Summary card whose every number is a receipt-carrying value (DS-74). Outside the demo the generation model gets only the capped context (names and types, each schema with at most 20 rows; PDFs by name).
+3. Open a KPI card's receipt: "Source file: q3_metrics.csv (folder Q3 metrics)" with **Open file**.
+4. **Brief me** on the folder: the overview, a paragraph per file, and the PDF's statements cited "q3_metrics_brief.pdf, p. 1" (DS-75 in the demo; real citations otherwise).
+5. Share the app with Sarah: she opens it and its receipts, reads the CSV it was built from, and does not see the PDF.
+6. Same in other surfaces: Slack `/forma build a metrics app from the Q3 metrics folder` (or `/forma folder 1 formation brief me`); MCP `forma_list_folders`, `forma_folder_formation {folder, instruction}`, `forma_folder_brief {folder}`.
+
 ## The canvas: library pane and controls (APP-104)
 
 The canvas starts empty except for what the member brought onto it and any record waiting for their decision (Sarah's pending expense always shows). **Library** in the top bar (or `L`) opens the pane: Category → App → Card, every card numbered (`3.2`), Add/Remove per card, "Add all" per app, search by name or number. In the bar, `/card 3.2` places one card and `/app expense` an app's cards, with autocomplete. The placed set is kept in this browser (DS-67).
@@ -166,6 +177,7 @@ Stacks (after macOS Stacks and BumpTop's piles): drag a card onto another and ho
 - `POST /v1/act` `{"utterance"}` or `{"decide": {app_id, work_id, record_id, status, note?}}` → a confirmation card payload (`command_request` with a server-minted `Idempotency-Key`, typed `values`, `approver`, `target`, `confirm_token`), `{"action":"open"}` or `{"action":"place"}`. Rate-limited 60/member/hour; uniform 404 for strangers; 422 `could_not_parse` / `could_not_draft`; 503 `composer_unavailable` without a key outside the demo organization.
 - `GET /v1/work/{app}/{work}/records` → the work's current records, newest first, at most 200, with schema, commands and display labels; uniform 404 otherwise.
 - `POST /v1/mcp` (APP-099: MCP Streamable HTTP, bearer agent token, 120/token/hour, long deadline; `GET` 405), `POST|GET /v1/agent-tokens`, `DELETE /v1/agent-tokens/{id}` (canvas session, same-origin).
+- Folders (APP-108): `GET|POST /v1/boxes`, `POST /v1/boxes/uploads`, `GET /v1/boxes/{box}`, `POST /v1/boxes/{box}/name|share`, `POST /v1/boxes/{box}/files` (multipart, one `file` part), `GET /v1/boxes/{box}/files/{file}/content|preview`, `POST /v1/boxes/{box}/files/{file}/data|attach`, `POST /v1/boxes/{box}/apps`, `GET|POST /v1/boxes/{box}/brief`, `GET /v1/boxes/lineage/{app}/{work}`, `GET|POST /v1/boxes/explain/{app}/{work}`; `POST /v1/act` also takes `box_id`.
 - `POST /v1/work/{app}/{work}/commands/{command}` (existing, audited), `POST /v1/work/{app}/{work}/share` (existing), `GET /v1/events` (existing), `POST /v1/compose` (existing).
 
 ## Evidence

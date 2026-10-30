@@ -428,7 +428,7 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
     ? labels.map((text_) => ({ kind: originKind(text_), text: text_ }))
     : (group.origins ?? []).filter((origin) => typeof origin?.text === 'string');
   const chips = el(document_, 'p', { class: 'cv-origins', 'aria-label': 'How this app was assembled', title: group.label },
-    ...origins.map((origin) => el(document_, 'span', { class: 'cv-origin', 'data-origin': origin.kind === 'filter' ? 'filter' : originKind(origin.kind === 'seeded' ? 'seeded' : origin.text) }, origin.text)));
+    ...origins.map((origin) => el(document_, 'span', { class: 'cv-origin', 'data-origin': ['filter', 'box', 'data'].includes(origin.kind) ? origin.kind : originKind(origin.kind === 'seeded' ? 'seeded' : origin.text) }, origin.text)));
   const app = el(document_, 'article', { class: 'cv-card cv-app', 'data-card': group.app_card, 'data-kind': 'app', 'aria-label': group.title },
     el(document_, 'h2', {}, group.title),
     chips,

@@ -1203,3 +1203,55 @@ Path({str(report)!r}).write_text(json.dumps(out))
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class BoxObjects(unittest.TestCase):
+    """APP-108: the credentialed object child writes once under the tenant key and reads back digest-checked."""
+
+    ORG = "00000000-0000-4000-8000-000000000001"
+    KEY = "o/00000000-0000-4000-8000-000000000001/b/00000000-0000-4000-8000-0000000000aa/f/00000000-0000-4000-8000-0000000000bb"
+
+    class Client:
+        def __init__(self):
+            self.puts, self.objects = [], {}
+        def put_object(self, **kwargs):
+            if kwargs["Key"] in self.objects:
+                error = Exception("exists"); error.response = {"Error": {"Code": "PreconditionFailed"}}; raise error
+            self.puts.append({k: v for k, v in kwargs.items() if k != "Body"})
+            self.objects[kwargs["Key"]] = kwargs["Body"]
+        def get_object(self, Bucket, Key):
+            import io
+            body = self.objects[Key]
+            return {"ContentLength": len(body), "Body": io.BytesIO(body)}
+
+    def request(self, operation, path, data=b"forma"):
+        import hashlib
+        return runtime.object_request(json.dumps({"operation": operation, "organization_id": self.ORG, "key": self.KEY,
+                                                  "path": str(path), "sha256": hashlib.sha256(data).hexdigest()}).encode())
+
+    def test_put_is_sse_kms_if_none_match_and_get_is_digest_checked(self):
+        import tempfile
+        directory = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(directory, True))
+        staged = directory / "staged"; staged.write_bytes(b"forma")
+        client = self.Client()
+        tenant = {"kms_key_arn": "arn:aws:kms:us-east-1:877573132739:key/00000000-0000-0000-0000-000000000000"}
+        runtime.put_object(client, "bucket", tenant, self.request("put", staged))
+        put = client.puts[0]
+        self.assertEqual((put["ServerSideEncryption"], put["SSEKMSKeyId"], put["IfNoneMatch"]), ("aws:kms", tenant["kms_key_arn"], "*"))
+        self.assertTrue(put["ChecksumSHA256"])
+        with self.assertRaises(SystemExit) as exists:
+            runtime.put_object(client, "bucket", tenant, self.request("put", staged))
+        self.assertEqual(exists.exception.code, 3)
+        runtime.get_object(client, "bucket", self.request("get", directory / "out"))
+        self.assertEqual((directory / "out").read_bytes(), b"forma")
+        with self.assertRaises(runtime.Refused):
+            runtime.get_object(client, "bucket", self.request("get", directory / "other", b"different"))
+
+    def test_requests_are_closed_and_stay_under_the_organization(self):
+        for change in ({"operation": "delete"}, {"key": "o/00000000-0000-4000-8000-000000000002/b/x"}, {"key": self.KEY + "/../x"},
+                       {"path": "relative"}, {"extra": 1}):
+            raw = {"operation": "put", "organization_id": self.ORG, "key": self.KEY, "path": "/tmp/x", "sha256": "0" * 64}
+            raw.update(change)
+            with self.assertRaises((runtime.Refused, Exception)):
+                runtime.object_request(json.dumps(raw).encode())

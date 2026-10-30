@@ -4,7 +4,9 @@
 // ADR-011 scenarios: the action path (utterance -> typed draft -> confirm).
 pub mod actions;
 pub mod admission;
+// APP-108 (ADR-011 pitch): folders (boxes): files, real data, apps built from them.
 pub mod auth;
+pub mod boxes;
 // ADR-007 D7.13: compiled only with the `qualification-harness` feature (the
 // isolated qualification executable); release builds never contain it.
 pub mod auth_qualification;
