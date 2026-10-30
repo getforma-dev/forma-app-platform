@@ -168,7 +168,8 @@ class PackageTests(unittest.TestCase):
                  (["register-source-revision", "--organization", NORTHSTAR, "--record", "x", "--record-json", "{}"], True),
                  (["register-source-revision", "--organization", NORTHSTAR], True),
                  (["reconcile", "--organization", NORTHSTAR], False), (["revoke", "--organization", NORTHSTAR, "--code-id", NORTHSTAR], False),
-                 (["seed-spend-review", "--organization", NORTHSTAR], False), (["list", "--organization", NORTHSTAR], False)]
+                 (["seed-spend-review", "--organization", NORTHSTAR], False), (["seed-library", "--organization", NORTHSTAR], False),
+                 (["list", "--organization", NORTHSTAR], False)]
         for argv, refused in cases:
             with self.subTest(argv=argv):
                 self.assertEqual(op.managed_form_refused(admission_operator.parser().parse_args(argv)), refused)

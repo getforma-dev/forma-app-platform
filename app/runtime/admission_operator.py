@@ -98,6 +98,19 @@ definition is not re-admitted through the service's whole-output admission
 path (APP-010, Rust): that path is not reproducible from Python byte for byte,
 so the seeded rows are used, exactly as the seed itself placed them.
 
+The prebuilt library (ADR-011 pitch, APP-094): `seed-library` seeds every library
+app of contracts/fixtures/library/ (the catalog sidecar names each fixture and its
+digest; tenant_seed.make_library_bundles validates all of them before the first
+write) into the named fixture organization through tenant_seed.seed, in one
+transaction under the organization FOR SHARE, exactly as `seed-spend-review`
+does for one bundle: app shell, definition revision with inputs and record
+schemas, publication, saved work with its collection and bindings, the source
+revision (its REAL normalized digest, the bytes `library_sources.py build`
+places in the cache or the deploy uploads), the seeded decision record and the
+author's grants. Exact-match idempotent (`changed: false` on a repeat; any
+differing row refuses whole); no audit event, as for the other seeds. The
+output lists each app with its identities so the record is the retained JSON.
+
 Provider tenant bindings (APP-078 B1): `bind-provider-tenant` binds an existing
 organization (the two seeded ones) to its real provider tenant for an issuer, the
 row the callback's registry/database agreement needs (ADR-006; the seed binds only
@@ -364,6 +377,8 @@ def parser():
         q.add_argument(arg, required=True)
     # APP-076 G3: the Spend Review fixture bundle seeded into a fixture organization (Northstar).
     sub.add_parser("seed-spend-review").add_argument("--organization", required=True)
+    # ADR-011 library (APP-094): every library app seeded into a fixture organization.
+    sub.add_parser("seed-library").add_argument("--organization", required=True)
     return p
 
 
@@ -1271,6 +1286,49 @@ def seed_spend_review(c, args):
             "changed": bool(changes), "rows_inserted": len(changes), "audit_event": None}
 
 
+def seed_library(c, args):
+    """ADR-011 library (APP-094): every library bundle in a fixture organization, through the operator seed itself.
+
+    Same transaction shape and rules as `seed_spend_review`: the organization FOR SHARE first
+    (D7.1), every bundle validated before any write, `tenant_seed.seed` writing with its
+    `ON CONFLICT DO NOTHING` then equality check (a repeat is `changed: false`; a differing row
+    refuses whole), D7.7's sequence check, no audit event (D7.8 names no kind): this output is the
+    record. The source bytes are not placed here: `library_sources.py build` writes them into
+    the revision cache (or the deploy uploads them) under the digests these rows pin.
+    """
+    import tenant_seed
+    org = args.organization
+    require(org in tenant_seed.ORGANIZATIONS, "organization_refused")
+    try:
+        bundles = tenant_seed.make_library_bundles(org)
+    except Exception:
+        raise Refused("seed_bundle_refused") from None
+    begin(c, org)
+    lock_organization(c, org, active=True)
+    c.execute("RESET ROLE")
+    changes = []
+    try:
+        tenant_seed.seed(c, bundles, changes)
+    except ValueError:
+        raise Refused("seed_refused") from None
+    c.execute("SET LOCAL ROLE genui_owner")
+    c.execute("SELECT set_config('genui.organization_id',%s,true)", (org,))
+    sequence = c.execute("SELECT next_commit_sequence FROM genui.organization_sequences WHERE organization_id=%s", (org,)).fetchone()
+    highest = c.execute("SELECT coalesce(max(commit_sequence),0) FROM genui.internal_record_revisions WHERE organization_id=%s", (org,)).fetchone()[0]
+    require(sequence is None or sequence[0] > highest, "commit_sequence_mismatch")
+    c.commit()
+    apps = []
+    for b in bundles:
+        d, pub, w, outcome = b["definition"], b["publication"], b["work"], b["outcome"]
+        apps.append({"title": d["content"]["title"], "app_id": d["app_id"], "definition_revision_id": d["revision_id"], "definition_digest": d["digest"],
+                     "publication_id": pub["publication_id"], "work_id": w["work_id"], "collection_ids": [item["id"] for item in w["record_collections"]],
+                     "sources": [{"input_id": s["input_contract"]["id"], "source_id": s["source_id"], "revision_id": s["revision_id"],
+                                  "normalized_digest": s["normalized_digest"], "row_count": s["row_count"]} for s in b["sources"]],
+                     "seeded_record": {"record_id": outcome["record_id"], "version": outcome["record_version"]}})
+    return {"organization_id": org, "label": "seeded definition", "edition": tenant_seed.LIBRARY_EDITION, "synthetic": True, "apps": apps,
+            "author_principal_id": bundles[0]["context"]["principal_id"], "changed": bool(changes), "rows_inserted": len(changes), "audit_event": None}
+
+
 def verify(c, args):
     """SR10: recompute every chain of the organization in chain_sequence order; the tail equals the head."""
     import psycopg
@@ -1939,7 +1997,7 @@ COMMANDS = {"provision": provision, "bind-provider-tenant": bind_provider_tenant
             "create-app": create_app, "revoke-creator-authority": revoke_creator_authority,
             "issue-handle": issue_handle, "rotate-handle": rotate_handle, "retire-handle": retire_handle,
             "register-source-revision": register_source_revision, "create-bound-work": create_bound_work,
-            "seed-spend-review": seed_spend_review}
+            "seed-spend-review": seed_spend_review, "seed-library": seed_library}
 
 
 def provider_configuration(args):

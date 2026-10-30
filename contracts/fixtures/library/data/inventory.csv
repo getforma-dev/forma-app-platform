@@ -1,0 +1,43 @@
+sku,product,warehouse,on_hand,reorder_point,unit_cost
+SKU-3001-AU,Standing desk frame,austin,125,100,251.74
+SKU-3001-RE,Standing desk frame,reno,200,40,251.74
+SKU-3001-NE,Standing desk frame,newark,75,40,251.74
+SKU-3002-AU,Monitor arm,austin,282,60,135.69
+SKU-3002-RE,Monitor arm,reno,373,20,135.69
+SKU-3002-NE,Monitor arm,newark,230,100,135.69
+SKU-3003-AU,USB-C dock,austin,80,40,258.09
+SKU-3003-RE,USB-C dock,reno,249,100,258.09
+SKU-3003-NE,USB-C dock,newark,263,40,258.09
+SKU-3004-AU,Laptop stand,austin,127,60,163.63
+SKU-3004-RE,Laptop stand,reno,127,100,163.63
+SKU-3004-NE,Laptop stand,newark,284,60,163.63
+SKU-3005-AU,Noise-cancelling headset,austin,346,40,44.43
+SKU-3005-RE,Noise-cancelling headset,reno,220,100,44.43
+SKU-3005-NE,Noise-cancelling headset,newark,382,60,44.43
+SKU-3006-AU,Ergonomic chair,austin,221,60,479.71
+SKU-3006-RE,Ergonomic chair,reno,24,60,479.71
+SKU-3006-NE,Ergonomic chair,newark,344,100,479.71
+SKU-3007-AU,Webcam 4K,austin,218,100,155.27
+SKU-3007-RE,Webcam 4K,reno,174,40,155.27
+SKU-3007-NE,Webcam 4K,newark,248,60,155.27
+SKU-3008-AU,Mechanical keyboard,austin,343,100,245.67
+SKU-3008-RE,Mechanical keyboard,reno,8,60,245.67
+SKU-3008-NE,Mechanical keyboard,newark,337,40,245.67
+SKU-3009-AU,Conference speaker,austin,295,100,363.04
+SKU-3009-RE,Conference speaker,reno,216,100,363.04
+SKU-3009-NE,Conference speaker,newark,395,20,363.04
+SKU-3010-AU,Label printer,austin,317,60,372.31
+SKU-3010-RE,Label printer,reno,285,40,372.31
+SKU-3010-NE,Label printer,newark,0,60,372.31
+SKU-3011-AU,Cable organizer,austin,167,20,378.31
+SKU-3011-RE,Cable organizer,reno,227,100,378.31
+SKU-3011-NE,Cable organizer,newark,288,100,378.31
+SKU-3012-AU,Desk lamp,austin,231,40,338.75
+SKU-3012-RE,Desk lamp,reno,205,100,338.75
+SKU-3012-NE,Desk lamp,newark,113,60,338.75
+SKU-3013-AU,Whiteboard 6ft,austin,204,60,550.08
+SKU-3013-RE,Whiteboard 6ft,reno,161,40,550.08
+SKU-3013-NE,Whiteboard 6ft,newark,407,40,550.08
+SKU-3014-AU,Barcode scanner,austin,23,100,38.80
+SKU-3014-RE,Barcode scanner,reno,382,60,38.80
+SKU-3014-NE,Barcode scanner,newark,339,100,38.80

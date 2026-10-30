@@ -1000,18 +1000,37 @@ fn seed_catalog_and_migration_pins_match_repository_files() {
         sha(&format!("app/migrations/catalog-v{version}.json"))
     );
     // The seed reads exactly these two contract fixtures, from the pinned
-    // edition's folder; an edition switch in the seed fails here.
+    // edition's folder; an edition switch in the seed fails here. The library
+    // catalog (ADR-011) is pinned beside them and names the same edition.
     let editions: BTreeSet<&str> = SEED_INPUTS
         .iter()
-        .filter_map(|(_, path, _)| path.strip_prefix("contracts/fixtures/"))
+        .filter_map(|(_, path, _)| path.strip_prefix("contracts/fixtures/impl-"))
         .map(|rest| rest.split('/').next().unwrap())
         .collect();
     assert_eq!(editions.len(), 1);
-    let edition = editions.into_iter().next().unwrap();
+    let edition = format!("impl-{}", editions.into_iter().next().unwrap());
     let seed = fs::read_to_string(repo.join("app/runtime/tenant_seed.py")).unwrap();
     assert!(seed.contains(&format!(
         "CONTRACTS / \"fixtures\" / \"{edition}\" / (name + \".json\")"
     )));
+    let catalog: Value = serde_json::from_slice(
+        &fs::read(repo.join("contracts/fixtures/library/catalog.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(catalog["edition"], json!(edition));
+    assert_eq!(catalog["synthetic"], json!(true));
+    for entry in catalog["apps"].as_array().unwrap() {
+        let fixture = entry["fixture"].as_str().unwrap();
+        assert_eq!(
+            format!(
+                "sha256:{}",
+                sha(&format!("contracts/fixtures/library/{fixture}"))
+            ),
+            format!("sha256:{}", entry["fixture_sha256"].as_str().unwrap()),
+            "{fixture}"
+        );
+    }
+    assert!(seed.contains("LIBRARY_EDITION = \"impl-2026-10-28.1\""));
     assert!(seed.contains("((\"northstar\", ORGANIZATIONS[0]), (\"northstar\", ORGANIZATIONS[1]), (\"spend-review\", ORGANIZATIONS[1]))"));
     for name in ["northstar", "spend-review"] {
         assert!(SEED_INPUTS

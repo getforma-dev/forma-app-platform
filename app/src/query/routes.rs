@@ -141,8 +141,37 @@ impl Work {
 pub fn router(work: Arc<Work>) -> Router {
     Router::new()
         .route("/v1/work/{app}/{work}/queries/{view}", post(query))
+        .route("/v1/library", get(library))
         .route("/w/{app}/{work}", get(work_page).post(run_page))
         .with_state(work)
+}
+
+/// `GET /v1/library` (ADR-011 library, APP-094): the admitted library apps
+/// the signed-in member may open now, with the router sidecar's metadata, as
+/// `storage::Data::library_catalog` lists them under the session's tenant
+/// scope. No session, a refused member or a denied listing is the uniform
+/// 404; a store outage is 503. Nothing runs and nothing is written.
+async fn library(State(work): State<Arc<Work>>, headers: HeaderMap) -> Response {
+    let (_, member) = match member(&work.auth, &headers).await {
+        Ok(live) => live,
+        Err(refusal) => return refusal,
+    };
+    let Some(stores) = &work.auth.stores else {
+        return http::not_found();
+    };
+    let entries = match stores.data.library_catalog(&member).await {
+        Ok(entries) => entries,
+        Err(error) => return storage_refusal(&error),
+    };
+    let body = json!({
+        "schema_version": 1,
+        "synthetic": true,
+        "apps": entries.iter().map(|e| e.to_json()).collect::<Vec<_>>(),
+    });
+    match serde_json::to_vec(&body) {
+        Ok(bytes) => json_response(bytes),
+        Err(_) => http::unavailable(),
+    }
 }
 
 fn problem(status: StatusCode, code: &'static str) -> Response {

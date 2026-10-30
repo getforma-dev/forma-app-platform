@@ -94,7 +94,7 @@ const CA: &str = "/etc/ssl/certs/rds-global-bundle.pem";
 /// bytes seeded the target, so these are declared pins the operator must
 /// match; the rest of the operator's seed environment is bound by APP-077's
 /// operator-image digest.
-const SEED_INPUTS: [(&str, &str, &str); 5] = [
+const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "fixture_setup_sha256",
         "fixtures/phase-one/v1/setup.json",
@@ -113,12 +113,19 @@ const SEED_INPUTS: [(&str, &str, &str); 5] = [
     (
         "seed_program_sha256",
         "app/runtime/tenant_seed.py",
-        "d2f8a6ea0b94b0158ac31f18fb024db9a27afe2d3790dbdcd79e767b61ab8b0d",
+        "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
     ),
     (
         "seed_validator_sha256",
         "contracts/validate.py",
         "7c9492bc55d12c818f984f7889ab5e95024699cfda11222ebafc84d982e973d5",
+    ),
+    // ADR-011 library (APP-094): the catalog pins every library fixture the
+    // `seed-library` command places (each entry's `fixture_sha256`).
+    (
+        "seed_library_sha256",
+        "contracts/fixtures/library/catalog.json",
+        "f29233e0594a4faec5c78dcf990f6b1f05c0297679bec91427b72c7c15277b5e",
     ),
 ];
 /// The shared cases' checks a pass requires, in order (`qualification_cases`).
@@ -152,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 90] = [
+const SOURCES: [(&str, &[u8]); 91] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -408,6 +415,10 @@ const SOURCES: [(&str, &[u8]); 90] = [
         include_bytes!("../../../contracts/fixtures/impl-2026-10-29.2/spend-review.json"),
     ),
     (
+        "contracts/fixtures/library/catalog.json",
+        include_bytes!("../../../contracts/fixtures/library/catalog.json"),
+    ),
+    (
         "contracts/fixtures/negative-vectors.json",
         include_bytes!("../../../contracts/fixtures/negative-vectors.json"),
     ),
@@ -446,6 +457,7 @@ struct Pins {
     seed_spend_review_sha256: String,
     seed_program_sha256: String,
     seed_validator_sha256: String,
+    seed_library_sha256: String,
     catalog_query_sha256: String,
     database_version: u32,
     catalog_sha256: String,
@@ -579,6 +591,7 @@ fn expected_pins() -> Pins {
         seed_spend_review_sha256: SEED_INPUTS[2].2.into(),
         seed_program_sha256: SEED_INPUTS[3].2.into(),
         seed_validator_sha256: SEED_INPUTS[4].2.into(),
+        seed_library_sha256: SEED_INPUTS[5].2.into(),
         catalog_query_sha256: digest(QUERY),
         database_version: database_version(),
         catalog_sha256: digest(CATALOG),

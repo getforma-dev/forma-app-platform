@@ -1,0 +1,667 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "principal_id": "00000000-0000-4000-8000-000000000066"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001181",
+    "revision_id": "00000000-0000-4000-8000-000000001182",
+    "content": {
+      "title": "Incident timeline",
+      "description": "Incidents opened per day, by severity and service, the ones still open, and a review form. Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
+      "inputs": [
+        {
+          "id": "incidents",
+          "contract_id": "incidents_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "incident_id",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            },
+            {
+              "id": "severity",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "sev1",
+                  "sev2",
+                  "sev3",
+                  "sev4"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "service",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "open",
+                  "mitigated",
+                  "resolved"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "minutes_to_resolve",
+              "value_type": {
+                "type": "integer",
+                "unit": "minute"
+              },
+              "nullable": true
+            }
+          ]
+        },
+        {
+          "id": "decisions",
+          "contract_id": "decisions_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "timeline",
+          "kind": "timeline",
+          "renderer_version": 1,
+          "title": "Incidents opened per day",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "incidents"
+            ],
+            "operations": [
+              {
+                "type": "time_bucket",
+                "field": {
+                  "input_id": "incidents",
+                  "field_id": "time"
+                },
+                "seconds": 86400,
+                "timezone": "UTC",
+                "output_field": "time"
+              },
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "incidents",
+                    "field_id": "time"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "incidents",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "incidents",
+                      "field_id": "incident_id"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "by_severity",
+          "kind": "chart",
+          "renderer_version": 1,
+          "title": "Incidents by severity",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "incidents"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "incidents",
+                    "field_id": "severity"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "incidents",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "incidents",
+                      "field_id": "incident_id"
+                    }
+                  },
+                  {
+                    "id": "longest_minutes",
+                    "operation": "max",
+                    "field": {
+                      "input_id": "incidents",
+                      "field_id": "minutes_to_resolve"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "open",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "Open and mitigated incidents",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "incidents"
+            ],
+            "operations": [
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "incidents",
+                  "field_id": "status"
+                },
+                "comparison": "ne",
+                "value": {
+                  "type": "enum",
+                  "value": "resolved"
+                }
+              },
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "incidents",
+                    "field_id": "incident_id"
+                  },
+                  {
+                    "input_id": "incidents",
+                    "field_id": "time"
+                  },
+                  {
+                    "input_id": "incidents",
+                    "field_id": "severity"
+                  },
+                  {
+                    "input_id": "incidents",
+                    "field_id": "service"
+                  },
+                  {
+                    "input_id": "incidents",
+                    "field_id": "status"
+                  }
+                ]
+              },
+              {
+                "type": "sort",
+                "fields": [
+                  {
+                    "field": {
+                      "input_id": "incidents",
+                      "field_id": "severity"
+                    },
+                    "direction": "asc"
+                  },
+                  {
+                    "field": {
+                      "input_id": "incidents",
+                      "field_id": "time"
+                    },
+                    "direction": "desc"
+                  }
+                ],
+                "stable_tiebreak": {
+                  "input_id": "incidents",
+                  "field_id": "incident_id"
+                }
+              },
+              {
+                "type": "limit",
+                "rows": 50
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "totals",
+          "kind": "summary",
+          "renderer_version": 1,
+          "title": "Incident totals",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "incidents"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [],
+                "measures": [
+                  {
+                    "id": "incidents",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "incidents",
+                      "field_id": "incident_id"
+                    }
+                  },
+                  {
+                    "id": "resolved",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "incidents",
+                      "field_id": "minutes_to_resolve"
+                    }
+                  },
+                  {
+                    "id": "longest_minutes",
+                    "operation": "max",
+                    "field": {
+                      "input_id": "incidents",
+                      "field_id": "minutes_to_resolve"
+                    }
+                  },
+                  {
+                    "id": "fastest_minutes",
+                    "operation": "min",
+                    "field": {
+                      "input_id": "incidents",
+                      "field_id": "minutes_to_resolve"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "review",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "Record an incident review",
+          "command_id": "record_decision"
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "record_decision",
+          "record_schema_id": "decision",
+          "operation": "create",
+          "writable_fields": [
+            "status",
+            "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "timeline",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "by_severity",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "open",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "totals",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "review",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:b9b5e8574d3d20ea01ebb8498f28c8a285ed7d10b56f221452a80b858e9145cf"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001181",
+    "publication_id": "00000000-0000-4000-8000-000000001183",
+    "definition_revision_id": "00000000-0000-4000-8000-000000001182",
+    "definition_digest": "sha256:b9b5e8574d3d20ea01ebb8498f28c8a285ed7d10b56f221452a80b858e9145cf",
+    "input_contract_digests": [
+      {
+        "input_id": "incidents",
+        "digest": "sha256:5c4454817ab34536973bf1f30f5c2424e9d37b235dfe4c61c9257ef366ad68f4"
+      },
+      {
+        "input_id": "decisions",
+        "digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "decision",
+        "digest": "sha256:3c075b4099b1f49f692e0ad0fb78f4f4a7888c008ff4fe852c48d9d7298251bf"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "admission_digest": "sha256:c9ec2cbf7261fd638c5deb94cfd8639df2c42923f91d4c04abb5a22efa3fbba7",
+    "policy": {
+      "id": "00000000-0000-4000-8000-0000000000e0",
+      "version": 1,
+      "kind": "owner_publish"
+    },
+    "author_id": "00000000-0000-4000-8000-000000000066",
+    "approver_id": "00000000-0000-4000-8000-000000000066",
+    "approver_epoch": 1,
+    "published_at": "2026-10-30T09:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001181",
+    "work_id": "00000000-0000-4000-8000-000000001184",
+    "publication_id": "00000000-0000-4000-8000-000000001183",
+    "version": 1,
+    "context": "Prebuilt library: Incident timeline",
+    "bindings": [
+      {
+        "input_id": "incidents",
+        "source_id": "00000000-0000-4000-8000-000000003006",
+        "source_revision_id": "00000000-0000-4000-8000-000000003007",
+        "source_digest": "sha256:119828e6afc04d48ce1c757bc60bbf0089d1994390e47d3a87e0d83019505f0f",
+        "kind": "source",
+        "contract_digest": "sha256:5c4454817ab34536973bf1f30f5c2424e9d37b235dfe4c61c9257ef366ad68f4"
+      },
+      {
+        "input_id": "decisions",
+        "kind": "records",
+        "contract_digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5",
+        "collection_id": "00000000-0000-4000-8000-000000001185",
+        "schema_id": "decision",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-000000001185",
+        "schema_id": "decision",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "incidents",
+        "source_id": "00000000-0000-4000-8000-000000003006",
+        "source_revision_id": "00000000-0000-4000-8000-000000003007",
+        "source_digest": "sha256:119828e6afc04d48ce1c757bc60bbf0089d1994390e47d3a87e0d83019505f0f"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "source_id": "00000000-0000-4000-8000-000000003006",
+      "revision_id": "00000000-0000-4000-8000-000000003007",
+      "content_digest": "sha256:e625f5ae0d32913e6e12710e28ec8d6e7f908b4f9c9aa90c8ecab988b96c33a3",
+      "normalized_digest": "sha256:119828e6afc04d48ce1c757bc60bbf0089d1994390e47d3a87e0d83019505f0f",
+      "input_contract": {
+        "id": "incidents",
+        "contract_id": "incidents_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "incident_id",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "time",
+            "value_type": {
+              "type": "timestamp"
+            },
+            "nullable": false
+          },
+          {
+            "id": "severity",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "sev1",
+                "sev2",
+                "sev3",
+                "sev4"
+              ]
+            },
+            "nullable": false
+          },
+          {
+            "id": "service",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "status",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "open",
+                "mitigated",
+                "resolved"
+              ]
+            },
+            "nullable": false
+          },
+          {
+            "id": "minutes_to_resolve",
+            "value_type": {
+              "type": "integer",
+              "unit": "minute"
+            },
+            "nullable": true
+          }
+        ]
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 96,
+      "timezone": "UTC",
+      "time_semantics": "event",
+      "units_confirmed": true,
+      "created_at": "2026-10-30T09:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001181",
+    "work_id": "00000000-0000-4000-8000-000000001184",
+    "mode": "published",
+    "definition_digest": "sha256:b9b5e8574d3d20ea01ebb8498f28c8a285ed7d10b56f221452a80b858e9145cf",
+    "publication_id": "00000000-0000-4000-8000-000000001183",
+    "view_id": "timeline",
+    "operator_version": 1,
+    "source_revisions": [
+      {
+        "input_id": "incidents",
+        "source_id": "00000000-0000-4000-8000-000000003006",
+        "source_revision_id": "00000000-0000-4000-8000-000000003007",
+        "source_digest": "sha256:119828e6afc04d48ce1c757bc60bbf0089d1994390e47d3a87e0d83019505f0f"
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:d17c0ad75683b618a55d53f8e13a86ac92bc3b6c95c22cfad5e7c4c787873678",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:b0e24ca374bf0d30fe10400e21750c29640af5a955692c927ef4fcd41bf12f5a",
+      "predicate_digest": "sha256:b0e24ca374bf0d30fe10400e21750c29640af5a955692c927ef4fcd41bf12f5a"
+    },
+    "digest": "sha256:cc663d957392d377c86f9993357ba0feb0bd5da93409e057c71fdd33af5a0d60"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-000000001181",
+    "work_id": "00000000-0000-4000-8000-000000001184",
+    "publication_id": "00000000-0000-4000-8000-000000001183",
+    "command_id": "record_decision",
+    "schema_id": "decision",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-000000001186",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "needs_context"
+        }
+      },
+      {
+        "field_id": "note",
+        "value": {
+          "type": "text",
+          "value": "Reviewer action; synthetic only"
+        }
+      }
+    ],
+    "idempotency_key": "00000000000000000000000000001180"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001181",
+    "work_id": "00000000-0000-4000-8000-000000001184",
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "command_id": "record_decision",
+    "idempotency_key": "00000000000000000000000000001180",
+    "payload_digest": "sha256:b57a28ea05877f5cf6be93f764068f299c28f1be4e6f77f87bf8a3fdaeb7d753",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-000000001186",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-000000001187",
+    "committed_at": "2026-10-30T09:05:00Z",
+    "retry_expires_at": "2026-10-31T09:05:00Z"
+  }
+}

@@ -983,6 +983,61 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual((verified["verified"], verified["next_commit_sequence"]), (True, 2))
         self.assertEqual(self.cli("seed-spend-review", "--organization", northstar)["changed"], False)
 
+    @unittest.skipUnless(importlib.util.find_spec("jsonschema") is not None, "seed-library validates every bundle with contracts/validate.py")
+    def test_seed_spend_review_then_library_places_every_library_app_in_northstar_once(self):
+        """ADR-011 library (APP-094): all library bundles in the first fixture organization, idempotent, exact-match.
+
+        Named to run after `test_seed_spend_review_places_the_fixture_bundle_in_northstar_once` (the class
+        shares one database and that test counts Northstar's apps), so the counts here are relative.
+        """
+        import tenant_seed
+        northstar, canary = tenant_seed.ORGANIZATIONS
+        with self.connect() as c:
+            tenant_seed.seed(c, tenant_seed.make_bundles())
+        bundles = tenant_seed.make_library_bundles(northstar)
+        catalog = tenant_seed.library_catalog()
+        self.assertEqual(len(bundles), 13)
+        self.assertEqual([b["definition"]["app_id"] for b in bundles], [a["app_id"] for a in catalog["apps"]])
+        apps = lambda org: self.query("SELECT count(*) FROM genui.apps WHERE organization_id=%s", (org,))[0][0]
+        before = (apps(northstar), apps(canary))
+        self.assertIn("organization_refused", self.cli("seed-library", "--organization", ORG, expect=1).stderr)
+        first = self.cli("seed-library", "--organization", northstar)
+        self.assertEqual((first["changed"], first["label"], first["edition"], first["synthetic"], first["audit_event"]),
+                         (True, "seeded definition", "impl-2026-10-28.1", True, None))
+        self.assertEqual([a["app_id"] for a in first["apps"]], [a["app_id"] for a in catalog["apps"]])
+        self.assertEqual((apps(northstar), apps(canary)), (before[0] + 13, before[1]))
+        for b, reported in zip(bundles, first["apps"]):
+            app, work = b["definition"]["app_id"], b["work"]["work_id"]
+            self.assertEqual((reported["work_id"], reported["publication_id"], reported["definition_digest"]),
+                             (work, b["publication"]["publication_id"], b["definition"]["digest"]))
+            stored = self.query("SELECT digest::text,canonical_content FROM genui.definition_revisions WHERE organization_id=%s AND app_id=%s", (northstar, app))
+            self.assertEqual(stored, [(b["definition"]["digest"], tenant_seed.canonical(b["definition"]["content"]))])
+            # The source revision row pins the real normalized digest of the generated data (library_sources.py).
+            revision = self.query("SELECT normalized_digest::text FROM genui.source_revisions WHERE organization_id=%s AND source_id=%s AND revision_id=%s",
+                                  (northstar, b["sources"][0]["source_id"], b["sources"][0]["revision_id"]))
+            self.assertEqual(revision, [(b["sources"][0]["normalized_digest"],)])
+            self.assertEqual(self.query("SELECT count(*) FROM genui.work_bindings WHERE organization_id=%s AND app_id=%s AND work_id=%s", (northstar, app, work)), [(2,)])
+            self.assertEqual(self.query("SELECT count(*) FROM genui.internal_records WHERE organization_id=%s AND app_id=%s", (northstar, app)), [(1,)])
+            self.assertEqual(self.query("""SELECT count(*) FROM genui.app_permissions WHERE organization_id=%s AND app_id=%s AND principal_id=%s
+                  AND permission IN ('discover','run')""", (northstar, app, b["context"]["principal_id"])), [(2,)])
+        snapshot = self.dump()
+        again = self.cli("seed-library", "--organization", northstar)
+        self.assertEqual((again["changed"], again["rows_inserted"]), (False, 0))
+        self.assertEqual(self.dump(), snapshot)
+        # A differing existing row refuses whole and writes nothing.
+        app, work = bundles[3]["definition"]["app_id"], bundles[3]["work"]["work_id"]
+        with self.connect("postgres") as c:
+            c.execute("UPDATE genui.saved_work SET version=2 WHERE organization_id=%s AND app_id=%s AND work_id=%s", (northstar, app, work))
+        tampered = self.dump()
+        self.assertIn("seed_refused", self.cli("seed-library", "--organization", northstar, expect=1).stderr)
+        self.assertEqual(self.dump(), tampered)
+        with self.connect("postgres") as c:
+            c.execute("UPDATE genui.saved_work SET version=1 WHERE organization_id=%s AND app_id=%s AND work_id=%s", (northstar, app, work))
+        self.cli("backfill", "--organization", northstar)
+        verified = self.cli("verify", "--organization", northstar)
+        self.assertEqual(verified["verified"], True)
+        self.assertEqual(self.cli("seed-library", "--organization", northstar)["changed"], False)
+
     def test_verify_recomputes_sql_written_admission_chain_and_detects_tamper(self):
         out = self.issue("--max-redemptions", "1")
         digest = op.code_digest(op.normalize_code(out["code"]))

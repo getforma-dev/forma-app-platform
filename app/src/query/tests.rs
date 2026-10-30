@@ -6,8 +6,8 @@
 use super::{
     receipt,
     worker::{
-        integer_columns, result_digest, Engine, EngineSettings, Failure, QueryError, QUEUE,
-        RSS_LIMIT_BYTES,
+        integer_columns, result_digest, typed_integer_columns, Engine, EngineSettings, Failure,
+        QueryError, QUEUE, RSS_LIMIT_BYTES,
     },
 };
 use crate::storage::QueryRun;
@@ -421,6 +421,32 @@ fn integer_columns_follow_the_typed_query() {
         {"id": "events", "operation": "count", "field": {"input_id": "events", "field_id": "destination"}}]}]});
     assert_eq!(names(integer_columns(&extremes)), ["events", "largest"]);
     assert_eq!(names(integer_columns(&json!({}))), ["bytes"]);
+    // ADR-011 library: money and integer fields of any input are exact
+    // integers; text, enum, date, boolean and timestamp columns are not.
+    let fields = vec![
+        json!({"id": "expense_id", "value_type": {"type": "text"}, "nullable": false}),
+        json!({"id": "time", "value_type": {"type": "timestamp"}, "nullable": false}),
+        json!({"id": "category", "value_type": {"type": "enum", "values": ["travel"]}, "nullable": false}),
+        json!({"id": "amount", "value_type": {"type": "money", "currency": "USD", "minor_unit_exponent": 2}, "nullable": false}),
+        json!({"id": "paid", "value_type": {"type": "boolean"}, "nullable": false}),
+        json!({"id": "due", "value_type": {"type": "date"}, "nullable": false}),
+    ];
+    assert_eq!(
+        names(typed_integer_columns(&json!({}), &fields)),
+        ["amount"]
+    );
+    let grouped = json!({"operations": [{"type": "aggregate", "group_by": [{"input_id": "x", "field_id": "category"}], "measures": [
+        {"id": "claims", "operation": "count", "field": {"input_id": "x", "field_id": "expense_id"}},
+        {"id": "spend", "operation": "sum", "field": {"input_id": "x", "field_id": "amount"}},
+        {"id": "latest", "operation": "max", "field": {"input_id": "x", "field_id": "time"}},
+        {"id": "largest", "operation": "max", "field": {"input_id": "x", "field_id": "amount"}}]}]});
+    assert_eq!(
+        names(typed_integer_columns(&grouped, &fields)),
+        ["claims", "largest", "spend"]
+    );
+    let bucketed = json!({"operations": [{"type": "time_bucket", "field": {"input_id": "x", "field_id": "time"}, "seconds": 86400, "timezone": "UTC", "output_field": "time"},
+        {"type": "aggregate", "group_by": [{"input_id": "x", "field_id": "time"}], "measures": [{"id": "total", "operation": "sum", "field": {"input_id": "x", "field_id": "amount"}}]}]});
+    assert_eq!(names(typed_integer_columns(&bucketed, &fields)), ["total"]);
 }
 
 #[tokio::test]
