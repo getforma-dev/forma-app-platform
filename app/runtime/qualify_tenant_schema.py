@@ -120,6 +120,8 @@ ADMIT_GRANTS = set().union(
              'deleted_at','canonical_envelope'),
     _columns('box_file_sources','INSERT','organization_id','box_id','file_id','content_digest','source_id','revision_id','normalized_digest',
              'row_count','registered_by','created_at'),
+    # 0012 (APP-113 review): the idempotency lookup of register_box_source.
+    _columns('box_file_sources','SELECT','organization_id','box_id','file_id','normalized_digest','source_id','revision_id','created_at'),
 )
 
 
@@ -173,9 +175,11 @@ DEFINITION_WORK_GRANTS = set().union(
 )
 # D7.8 closed chains and kinds of the application roles 0005 and 0007 bind.
 APPLICATION_CHAIN_KINDS = {
-    # 0011 (APP-108) widens the workspace list in place with the folder commands.
+    # 0011 (APP-108) widens the workspace list in place with the folder commands;
+    # 0012 (APP-113 review) adds the summary and brief saves.
     'genui_workspace': ('workspace', ('session.signed_in','app.created','definition.drafted','work.saved','work.bound','box.created',
-                                      'box.renamed','box.file_added','box.data_registered','box.app_derived','box.shared')),
+                                      'box.renamed','box.file_added','box.data_registered','box.app_derived','box.shared',
+                                      'box.explained','box.briefed')),
     'genui_control': ('control', ('publication.published','policy.changed')),
     'genui_data': ('data', ('command.committed',)),
 }
@@ -207,12 +211,13 @@ SESSION_GRANTS = set().union(
 )
 
 
-# Migration 0009 (ADR-011 pitch, APP-099): member-minted agent tokens (only a
+# Migration 0010 (ADR-011 pitch, APP-099): member-minted agent tokens (only a
 # digest) and their display attributions; genui_workspace column SELECT and
-# INSERT, UPDATE(last_used_at, revoked_at) on tokens, no DELETE.
+# INSERT, UPDATE(last_used_at, revoked_at) on tokens, no DELETE. 0012
+# (APP-113 review) adds expires_at (SELECT and INSERT).
 AGENT_TABLES = ('agent_attributions','agent_tokens')
 AGENT_TOKEN_COLUMNS = ('organization_id','token_id','token_digest','principal_id','label','membership_epoch_at_mint',
-                       'registry_sha256','created_at')
+                       'registry_sha256','created_at','expires_at')
 AGENT_ATTRIBUTION_COLUMNS = ('organization_id','attribution_id','token_id','app_id','work_id','record_id','record_version','created_at')
 AGENT_GRANTS = set().union(
     _role_columns('genui_workspace','agent_tokens','SELECT',*AGENT_TOKEN_COLUMNS,'last_used_at','revoked_at'),
@@ -1787,6 +1792,16 @@ def qualify():
                     assert e.sqlstate==expected,(name,e.sqlstate)
                     passed(name,sqlstate=e.sqlstate)
                 else: raise AssertionError('expected refusal: '+name)
+
+            # 0012 (APP-113 review): a member's slash-command name is unique, case-folded,
+            # whichever task names it (the route answers name_taken on the refusal).
+            named="INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES (%s,%s,%s,%s,1,%s,%s)"
+            with pg.connect() as c:
+                scope(c); c.execute('SET LOCAL ROLE genui_owner')
+                c.execute(named,(ORGANIZATIONS[0],APP,str(uuid.uuid4()),PUB,'forma-command:/qualify-name\nfirst',P))
+                c.execute(named,(ORGANIZATIONS[0],APP,str(uuid.uuid4()),PUB,'forma-command:/qualify-name-two\nfirst',P))
+            denied('a member cannot hold the same slash-command name twice','genui_migration',named,
+                   (ORGANIZATIONS[0],APP,str(uuid.uuid4()),PUB,'forma-command:/QUALIFY-name\nsecond',P),expected='23505')
 
             for role in ('genui_workspace','genui_control','genui_data','genui_worker'):
                 with pg.connect(role) as c:

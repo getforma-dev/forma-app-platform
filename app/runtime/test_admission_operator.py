@@ -996,7 +996,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
             tenant_seed.seed(c, tenant_seed.make_bundles())
         bundles = tenant_seed.make_library_bundles(northstar)
         catalog = tenant_seed.library_catalog()
-        self.assertEqual(len(bundles), 14)
+        self.assertEqual(len(bundles), 20)
         self.assertEqual([b["definition"]["app_id"] for b in bundles], [a["app_id"] for a in catalog["apps"]])
         apps = lambda org: self.query("SELECT count(*) FROM genui.apps WHERE organization_id=%s", (org,))[0][0]
         before = (apps(northstar), apps(canary))
@@ -1005,7 +1005,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual((first["changed"], first["label"], first["edition"], first["synthetic"], first["audit_event"]),
                          (True, "seeded definition", "impl-2026-10-28.1", True, None))
         self.assertEqual([a["app_id"] for a in first["apps"]], [a["app_id"] for a in catalog["apps"]])
-        self.assertEqual((apps(northstar), apps(canary)), (before[0] + 14, before[1]))
+        self.assertEqual((apps(northstar), apps(canary)), (before[0] + 20, before[1]))
         for b, reported in zip(bundles, first["apps"]):
             app, work = b["definition"]["app_id"], b["work"]["work_id"]
             self.assertEqual((reported["work_id"], reported["publication_id"], reported["definition_digest"]),
@@ -1064,7 +1064,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         events = lambda: self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s AND writer_role='operator' AND kind='permission.granted'", (northstar,))[0][0]
         sources = {r[0] for r in self.query("""SELECT DISTINCT source_id::text FROM genui.work_bindings b JOIN genui.saved_work w USING (organization_id,app_id,work_id)
               WHERE b.organization_id=%s AND b.kind='source' AND w.app_id = ANY(%s::uuid[])""", (northstar, [a["app_id"] for a in catalog["apps"]]))}
-        self.assertEqual(len(sources), 13)
+        self.assertEqual(len(sources), 19)
 
         demo, authoring = member_in(northstar), str(uuid.uuid4())
         before_events = events()
@@ -1073,16 +1073,16 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual([a["library_id"] for a in out["library_apps"]], [a["library_id"] for a in catalog["apps"]])
         self.assertEqual((out["changed"], out["record_write"], out["membership_epoch"]), (True, True, 1))
         self.assertEqual(out["authoring_app"], {"app_id": authoring, "created": True, "owner_principal_id": demo})
-        # 13 x (discover, run) + (discover, edit_definition, run) on the owned app; 13 x (record_read, record_write); one source each.
-        self.assertEqual(rows("app_permissions", demo), 29)
-        self.assertEqual(rows("work_permissions", demo), 26)
-        self.assertEqual(rows("source_permissions", demo), 13)
+        # 20 x (discover, run) + (discover, edit_definition, run) on the owned app; 20 x (record_read, record_write); 19 sources.
+        self.assertEqual(rows("app_permissions", demo), 43)
+        self.assertEqual(rows("work_permissions", demo), 40)
+        self.assertEqual(rows("source_permissions", demo), 19)
         self.assertEqual({r[0] for r in self.query("SELECT source_id::text FROM genui.source_permissions WHERE principal_id=%s", (demo,))}, sources)
         self.assertEqual(self.query("SELECT space_id::text,owner_principal_id::text FROM genui.apps WHERE organization_id=%s AND app_id=%s", (northstar, authoring)),
                          [(tenant_seed.SPACE, demo)])
         self.assertEqual(sorted(r[0] for r in self.query("SELECT permission FROM genui.app_permissions WHERE app_id=%s AND principal_id=%s", (authoring, demo))),
                          ["discover", "edit_definition", "run"])
-        self.assertEqual(len(out["granted"]), 29 + 26 + 13)
+        self.assertEqual(len(out["granted"]), 43 + 40 + 19)
         self.assertEqual(events(), before_events + len(out["granted"]))
         # A work row's event names the work; an app row's names the app alone; a source row's neither.
         kinds = self.query("""SELECT app_id::text,work_id::text FROM genui.audit_events WHERE organization_id=%s AND writer_role='operator'
@@ -1098,7 +1098,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         reader = member_in(northstar)
         out = self.cli("grant-library-access", "--organization", northstar, "--principal", reader)
         self.assertEqual((out["authoring_app"], out["record_write"], rows("app_permissions", reader), rows("work_permissions", reader),
-                          rows("source_permissions", reader)), (None, False, 26, 13, 13))
+                          rows("source_permissions", reader)), (None, False, 40, 20, 19))
         self.assertEqual(self.query("SELECT count(*) FROM genui.work_permissions WHERE principal_id=%s AND permission='record_write'", (reader,)), [(0,)])
         # Refusals write nothing: an inactive or unknown member, another member's app as the authoring app, a space
         # without an authoring app, an unknown space, and an organization without the library.

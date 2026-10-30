@@ -3804,7 +3804,7 @@
       },
       "app_id": "00000000-0000-4000-8000-000000001681",
       "definition_revision_id": "00000000-0000-4000-8000-000000001682",
-      "definition_digest": "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de",
+      "definition_digest": "sha256:0c96d5874075db5caba022c8ab7f3a937ea080e23125c21db003687cecb59ab7",
       "publication_id": "00000000-0000-4000-8000-000000001683",
       "work_id": "00000000-0000-4000-8000-000000001684",
       "collection_id": "00000000-0000-4000-8000-000000001685",
@@ -3986,7 +3986,13 @@
             "note",
             "status"
           ],
-          "transitions": []
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "submitted"
+            }
+          ]
         },
         {
           "id": "decide",
@@ -4145,7 +4151,7 @@
           }
         }
       ],
-      "fixture_sha256": "446e5485a97b1a261b4c5ca6ee6836aee99f43e14140e61f3b41a3dfc97bd059"
+      "fixture_sha256": "0591b1a61bfeba9a4410322bc51e19d18247019c82f32adea8909c97072f94fc"
     },
     {
       "library_id": "time-off",

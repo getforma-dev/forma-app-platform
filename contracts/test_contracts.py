@@ -479,6 +479,49 @@ class EditionThreeTests(unittest.TestCase):
             check_command(edited(purchase, lambda c: c[1]["transitions"][0]["when"].update(sql="1=1")))
 
 
+    def test_filing_creates_declare_the_initial_value_of_a_governed_field(self):
+        """APP-113 review (storage 2, 14): a create that may write an enum field another command governs by declared
+        transitions must declare its `initial` value (the expense `submit` could file a claim as `approved`); a
+        command declares each (field, from, to) once; and a guarded transition only counts as fired when its guard
+        holds on the values the command carries."""
+        library = ROOT / "fixtures" / "library"
+        expense = loads((library / "expense-claims.json").read_bytes())
+        purchase = loads((library / "purchase-requests.json").read_bytes())
+        validate_bundle(copy.deepcopy(expense))
+        # The expense seed may not file a claim already approved.
+        bundle = copy.deepcopy(expense)
+        next(item for item in bundle["command"]["values"] if item["field_id"] == "status")["value"]["value"] = "approved"
+        bundle["outcome"]["payload_digest"] = payload_digest(bundle["command"])
+        with self.assertRaisesRegex(ContractError, "declared initial value"):
+            validate_bundle(bundle)
+        def edited(source, change):
+            bundle = copy.deepcopy(source)
+            change(bundle["definition"]["content"]["commands"])
+            return bundle
+        for source, change in ((expense, lambda c: c[next(i for i, x in enumerate(c) if x["id"] == "submit")].pop("initial")),
+                               (purchase, lambda c: c[0].pop("initial"))):
+            with self.assertRaisesRegex(ContractError, "requires initial"):
+                check_command(edited(source, change))
+        with self.assertRaisesRegex(ContractError, "duplicate transition"):
+            check_command(edited(purchase, lambda c: c[1]["transitions"].append(copy.deepcopy(c[1]["transitions"][-1]))))
+        # Guard parity: submitted -> manager_approved holds only when amount > $5,000.
+        def decided(amount):
+            bundle = edited(purchase, lambda c: c[1]["writable_fields"].append("amount"))
+            definition = bundle["definition"]
+            definition["digest"] = digest("app-definition", definition["content"])
+            bundle["publication"]["definition_digest"] = bundle["receipt"]["definition_digest"] = definition["digest"]
+            rehash_receipt(bundle["receipt"])
+            command = bundle["command"]
+            command.update(command_id="decide", expected_record_version=1, values=[
+                {"field_id": "status", "value": {"type": "enum", "value": "manager_approved"}},
+                {"field_id": "amount", "value": {"type": "money", "minor_units": amount, "currency": "USD", "minor_unit_exponent": 2}}])
+            bundle["outcome"].update(command_id="decide", record_version=2, payload_digest=payload_digest(command))
+            return bundle
+        validate_bundle(decided("600000"))
+        with self.assertRaisesRegex(ContractError, "create expects absent record"):
+            validate_bundle(decided("100"))
+
+
 def check_command(bundle):
     """validate_bundle after a definition edit: re-identify the definition and its pins."""
     definition = bundle["definition"]

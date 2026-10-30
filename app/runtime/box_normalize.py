@@ -8,14 +8,14 @@ writes the normalized Parquet to `target` and prints one JSON line
 `{"normalized_digest": "sha256:…", "row_count": n}`; any refusal prints
 `{"refused": "<code>"}` and exits 1.
 
-The normalization is exactly `library_sources.normalize` (ADR-011 pitch,
-APP-094; the operator's `normalize`): DuckDB, one thread, `FORMAT PARQUET,
-COMPRESSION ZSTD, ROW_GROUP_SIZE 100000`, rows ordered by the `time`
-timestamp field then the original record, the same typing table (money and
-decimals as BIGINT coefficients, never a float), and the round-trip check.
-It is copied here because the service image ships `runtime.py`,
-`query_engine.py` and this file only; `test_library.py` proves both produce
-the same bytes for every library CSV. The Rust caller builds the canonical
+This module is the one normalization (ADR-011 pitch, APP-094; the operator's
+`normalize`): DuckDB, one thread, `FORMAT PARQUET, COMPRESSION ZSTD,
+ROW_GROUP_SIZE 100000`, rows ordered by the `time` timestamp field (nulls
+last) then the original record, the same typing table (money and decimals as
+BIGINT coefficients, never a float), and the round-trip check.
+`library_sources.py` imports it (APP-113 review: one implementation, not a
+copy); it lives here because the service image ships `runtime.py`,
+`query_engine.py` and this file only. The Rust caller builds the canonical
 CSV from the sealed parser's cells under the member's confirmed types
 (`boxes::inspect::canonical_csv`); this child re-checks every cell.
 """
@@ -134,14 +134,35 @@ def rows_of(contract, data):
     return rows
 
 
+def ordered_rows(fields, rows):
+    """The rows in normalized order: the `time` timestamp field when the contract has one
+    (a null time after every timestamp), then the original record (D9.3 determinism)."""
+    time_index = next((i for i, f in enumerate(fields) if f["id"] == "time" and f["value_type"]["type"] == "timestamp"), None)
+
+    def key(item):
+        position, row = item
+        if time_index is None:
+            return (position,)
+        moment = row[time_index]
+        return (0, moment, position) if moment is not None else (1, position)
+
+    return [row for _, row in sorted(enumerate(rows, 1), key=key)]
+
+
 def normalize(contract, data, target):
-    """library_sources.normalize, verbatim in behavior: (normalized_digest, row_count)."""
+    """Writes the normalized Parquet of CSV bytes `data` to `target`; returns (normalized_digest, row_count).
+
+    The rows are written in `ordered_rows` order: each row's `original` column is its
+    position in that order (APP-113 review: it was the CSV position, so a CSV whose
+    times were not already ascending was written in file order and refused by the
+    round-trip check). For a time-ordered CSV both are the same, so every pinned
+    digest is unchanged.
+    """
     import duckdb
     fields = contract["fields"]
     rows = rows_of(contract, data)
     names = [f["id"] for f in fields]
-    time_index = next((i for i, f in enumerate(fields) if f["id"] == "time" and f["value_type"]["type"] == "timestamp"), None)
-    ordered = sorted(enumerate(rows, 1), key=lambda item: ((item[1][time_index], item[0]) if time_index is not None else (item[0],)))
+    ordered = ordered_rows(fields, rows)
     declarations = ", ".join('"%s" %s%s' % (f["id"], column_type(f["value_type"]), "" if f.get("nullable") else " NOT NULL") for f in fields)
     quoted = ", ".join('"%s"' % n for n in names)
     target = Path(target)
@@ -149,14 +170,15 @@ def normalize(contract, data, target):
     try:
         connection.execute("SET threads=1")
         connection.execute("CREATE TABLE source(%s, original INTEGER NOT NULL)" % declarations)
-        connection.executemany("INSERT INTO source VALUES (%s)" % ", ".join("?" * (len(names) + 1)), [(*row, index) for index, row in ordered])
+        connection.executemany("INSERT INTO source VALUES (%s)" % ", ".join("?" * (len(names) + 1)),
+                               [(*row, position) for position, row in enumerate(ordered, 1)])
         connection.execute("COPY (SELECT %s FROM source ORDER BY original) TO ? (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 100000)" % quoted,
                            [str(target)])
         back = connection.execute("SELECT %s FROM read_parquet(?)" % quoted, [str(target)]).fetchall()
         columns = [row[0] for row in connection.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(target)]).fetchall()]
     finally:
         connection.close()
-    require(columns == names and back == [row for _, row in ordered], "normalized_round_trip_refused")
+    require(columns == names and back == ordered, "normalized_round_trip_refused")
     return sha256(target.read_bytes()), len(rows)
 
 

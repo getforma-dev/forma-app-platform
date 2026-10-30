@@ -123,6 +123,7 @@ impl Openable {
         }
     }
     /// How many principals the judgment found current (tests).
+    #[cfg(test)]
     pub fn current_count(&self) -> usize {
         self.current.len()
     }
@@ -242,6 +243,19 @@ impl Workspace {
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;
+            // APP-108: a work built from a folder carries read access to
+            // exactly the folder files it was built from (every share path:
+            // canvas, Slack, MCP), audited, in this same transaction (APP-113
+            // review: a share never commits without its file grants); a work
+            // not built from a folder writes nothing.
+            super::boxes::grant_box_files_for_work(
+                permit.transaction(),
+                request,
+                app,
+                work,
+                grantee,
+            )
+            .await?;
             Ok(Shared {
                 grantee: grantee.to_owned(),
                 granted,
@@ -249,18 +263,6 @@ impl Workspace {
         }
         .await;
         transaction.finish(result.is_ok()).await?;
-        // APP-108: a work built from a folder carries read access to exactly
-        // the folder files it was built from (every share path: canvas,
-        // Slack, MCP), in its own audited transaction under the sharer's
-        // authority; a work not built from a folder writes nothing.
-        if result.is_ok() {
-            if let Err(error) = self
-                .grant_box_files_for_work(request, app, work, grantee)
-                .await
-            {
-                tracing::warn!(code = %error, "share.box_files_refused");
-            }
-        }
         result
     }
 }

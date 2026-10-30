@@ -340,10 +340,30 @@ pub(super) struct FieldSpec {
 pub(super) struct Declaration {
     pub(super) operation: String,
     pub(super) writable: Vec<String>,
-    /// `(field_id, from, to)`.
-    pub(super) transitions: Vec<(String, String, String)>,
-    /// APP-107: the declared guards and initial values.
+    /// APP-107: the declared transitions with their guards, and the initial
+    /// values (the one parse of `transitions` and `initial`).
     pub(super) rules: super::rules::Rules,
+    /// APP-113 review (storage 2): `(field_id, value)` pairs this command
+    /// may not create a record at: every declared transition target of
+    /// another command of the same record schema, on a field this command
+    /// declares no `initial` value for. A filing create therefore never
+    /// writes a decision outcome (an expense `submit` cannot file a claim as
+    /// `approved`); a declared `initial` (Deal desk's guarded auto-approval)
+    /// governs its field instead.
+    pub(super) decided: Vec<(String, String)>,
+}
+impl Declaration {
+    /// The declared transitions `(field_id, from, to)`, in declaration order.
+    pub(super) fn transitions(&self) -> Vec<(String, String, String)> {
+        self.rules
+            .transitions
+            .iter()
+            .map(|(field, from, to, _)| (field.clone(), from.clone(), to.clone()))
+            .collect()
+    }
+    pub(super) fn has_transitions(&self) -> bool {
+        !self.rules.transitions.is_empty()
+    }
 }
 /// The published definition's record schema `schema` at `version` and the
 /// commands declared on it (stored content is admitted content: a shape that
@@ -361,6 +381,37 @@ fn string_list(value: Option<&Value>) -> Result<Vec<String>> {
         .iter()
         .map(|item| item.as_str().map(str::to_owned).ok_or(Error::Unavailable))
         .collect()
+}
+
+/// Sets every command's `decided` (see `Declaration::decided`): the other
+/// commands' transition targets on the fields it declares no `initial` for.
+fn fence_starts(commands: &mut BTreeMap<String, Declaration>) {
+    let targets: Vec<(String, String, String)> = commands
+        .iter()
+        .flat_map(|(id, declaration)| {
+            declaration
+                .rules
+                .transitions
+                .iter()
+                .map(move |(field, _, to, _)| (id.clone(), field.clone(), to.clone()))
+        })
+        .collect();
+    for (id, declaration) in commands.iter_mut() {
+        let initial: Vec<String> = declaration
+            .rules
+            .initial_fields()
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let mut decided: Vec<(String, String)> = targets
+            .iter()
+            .filter(|(owner, field, _)| owner != id && !initial.contains(field))
+            .map(|(_, field, to)| (field.clone(), to.clone()))
+            .collect();
+        decided.sort();
+        decided.dedup();
+        declaration.decided = decided;
+    }
 }
 
 pub(super) async fn published(
@@ -416,21 +467,6 @@ pub(super) async fn published(
             .get("id")
             .and_then(Value::as_str)
             .ok_or(Error::Unavailable)?;
-        let transitions = declared
-            .get("transitions")
-            .and_then(Value::as_array)
-            .ok_or(Error::Unavailable)?
-            .iter()
-            .map(|t| {
-                let part = |key: &str| -> Result<String> {
-                    Ok(t.get(key)
-                        .and_then(Value::as_str)
-                        .ok_or(Error::Unavailable)?
-                        .to_owned())
-                };
-                Ok((part("field_id")?, part("from")?, part("to")?))
-            })
-            .collect::<Result<Vec<_>>>()?;
         commands.insert(
             id.to_owned(),
             Declaration {
@@ -440,11 +476,12 @@ pub(super) async fn published(
                     .ok_or(Error::Unavailable)?
                     .to_owned(),
                 writable: string_list(declared.get("writable_fields"))?,
-                transitions,
                 rules: super::rules::Rules::from_declaration(declared).ok_or(Error::Unavailable)?,
+                decided: Vec::new(),
             },
         );
     }
+    fence_starts(&mut commands);
     Ok(Published {
         definition_digest: text(row, 1)?,
         fields,
@@ -699,11 +736,19 @@ pub(super) fn state_map(state: Option<&Value>) -> Result<BTreeMap<String, Value>
 /// `update`, and a `create` command must fire one of its declared
 /// transitions: a note-only edit or a resubmission of the current values
 /// through a `create` is refused, and no command writes a no-op revision.
+///
+/// APP-113 review (storage 1, 2): `by_filer` is whether the deciding
+/// principal created the record; a declared transition on an existing record
+/// is never taken by its filer (an approver decides other people's claims,
+/// in every path: canvas, Slack, MCP, the command route). A create never
+/// starts a field at another command's transition target unless this
+/// command declares that field's `initial` value (`Declaration::decided`).
 pub(super) fn compose(
     spec: &[FieldSpec],
     declaration: &Declaration,
     current: Option<&Value>,
     values: &Value,
+    by_filer: bool,
 ) -> Result<Vec<u8>> {
     let current = state_map(current)?;
     let creating = current.is_empty();
@@ -757,11 +802,10 @@ pub(super) fn compose(
     // every field the command names one for.
     let mut fired = false;
     for (field, from, to) in moves {
-        let declared = declaration
-            .transitions
-            .iter()
-            .any(|(f, a, b)| f == field && Some(a) == from.as_ref() && Some(b) == to.as_ref())
-            && match (&from, &to) {
+        let declared =
+            declaration.rules.transitions.iter().any(|(f, a, b, _)| {
+                f == field && Some(a) == from.as_ref() && Some(b) == to.as_ref()
+            }) && match (&from, &to) {
                 (Some(from), Some(to)) => declaration.rules.allows(field, from, to, &composed),
                 _ => false,
             };
@@ -776,9 +820,13 @@ pub(super) fn compose(
                 .ok_or(Error::Denied)?;
             require(composed.get(field) == Some(&json!({"type": "enum", "value": value})))?;
         }
+        for (field, value) in &declaration.decided {
+            require(composed.get(field) != Some(&json!({"type": "enum", "value": value})))?;
+        }
     }
     if !creating {
         require(changed && (fired || declaration.operation == "update"))?;
+        require(!(fired && by_filer))?;
     }
     let bytes = admission::encode(&Value::Array(state)).map_err(|_| Error::Denied)?;
     require(bytes.len() <= MAX_CANONICAL_BYTES)?;
@@ -951,8 +999,8 @@ impl Data {
                         id: id.clone(),
                         operation: declaration.operation.clone(),
                         writable_fields: declaration.writable.clone(),
-                        transitions: declaration.transitions.clone(),
-                            rules: declaration.rules.clone(),
+                        transitions: declaration.transitions(),
+                        rules: declaration.rules.clone(),
                     })
                     .collect(),
                 can_write,
@@ -1150,13 +1198,14 @@ async fn commit<'a>(
     require(if current_version == 0 {
         declaration.operation == "create"
     } else {
-        declaration.operation == "update" || !declaration.transitions.is_empty()
+        declaration.operation == "update" || declaration.has_transitions()
     })?;
     let state = compose(
         &published.fields,
         declaration,
         current_values.as_ref(),
         &command.values,
+        creator.as_deref() == Some(request.principal.as_str()),
     )?;
     let version = current_version + 1;
     require_stored(version <= SAFE_MAX)?;
@@ -1237,9 +1286,26 @@ mod tests {
         Declaration {
             operation: "create".into(),
             writable: vec!["status".into(), "note".into()],
-            transitions: vec![("status".into(), "needs_context".into(), "reviewed".into())],
-            rules: Default::default(),
+            rules: super::super::rules::Rules {
+                transitions: vec![(
+                    "status".into(),
+                    "needs_context".into(),
+                    "reviewed".into(),
+                    None,
+                )],
+                initial: Vec::new(),
+            },
+            decided: Vec::new(),
         }
+    }
+    /// `compose` as a decider who did not file the record.
+    fn compose(
+        spec: &[FieldSpec],
+        declaration: &Declaration,
+        current: Option<&Value>,
+        values: &Value,
+    ) -> Result<Vec<u8>> {
+        super::compose(spec, declaration, current, values, false)
     }
     fn values(status: &str, note: &str) -> Value {
         json!([
@@ -1375,7 +1441,7 @@ mod tests {
         );
         let mut update = record_decision();
         update.operation = "update".into();
-        update.transitions.clear();
+        update.rules.transitions.clear();
         assert!(compose(
             &spec,
             &update,
@@ -1409,6 +1475,142 @@ mod tests {
             .err(),
             Some(Error::Denied)
         );
+    }
+
+    /// APP-113 review (storage 1): the filer never takes a declared
+    /// transition on their own record, in the dry run and the commit alike
+    /// (both call `compose`); an `update` edit by the filer and a decision by
+    /// anyone else are unchanged.
+    #[test]
+    fn the_filer_cannot_decide_their_own_record() {
+        let spec = decision();
+        let declaration = record_decision();
+        let first: Value = serde_json::from_slice(
+            &super::compose(
+                &spec,
+                &declaration,
+                None,
+                &values("needs_context", "x"),
+                true,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            super::compose(
+                &spec,
+                &declaration,
+                Some(&first),
+                &values("reviewed", "mine"),
+                true
+            )
+            .err(),
+            Some(Error::Denied)
+        );
+        assert!(super::compose(
+            &spec,
+            &declaration,
+            Some(&first),
+            &values("reviewed", "theirs"),
+            false
+        )
+        .is_ok());
+        let mut edit = record_decision();
+        edit.operation = "update".into();
+        edit.rules.transitions.clear();
+        let note_only = json!([{"field_id": "note", "value": {"type": "text", "value": "n"}}]);
+        assert!(super::compose(&spec, &edit, Some(&first), &note_only, true).is_ok());
+    }
+
+    /// APP-113 review (storage 2): a filing create without a declared
+    /// `initial` never starts at another command's transition target (an
+    /// expense `submit` cannot file a claim as `approved`); a declared
+    /// `initial` governs its field instead (Deal desk's guarded approval).
+    #[test]
+    fn a_filing_create_never_starts_at_a_decision_outcome() {
+        let spec = vec![
+            field(
+                "status",
+                json!({"type": "enum", "values": ["submitted", "approved", "rejected"]}),
+                false,
+            ),
+            field("note", json!({"type": "text"}), false),
+        ];
+        let submit = Declaration {
+            operation: "create".into(),
+            writable: vec!["status".into(), "note".into()],
+            rules: Default::default(),
+            decided: vec![
+                ("status".into(), "approved".into()),
+                ("status".into(), "rejected".into()),
+            ],
+        };
+        let filed = |status: &str| {
+            json!([
+                {"field_id": "status", "value": {"type": "enum", "value": status}},
+                {"field_id": "note", "value": {"type": "text", "value": "n"}},
+            ])
+        };
+        assert!(compose(&spec, &submit, None, &filed("submitted")).is_ok());
+        for outcome in ["approved", "rejected"] {
+            assert_eq!(
+                compose(&spec, &submit, None, &filed(outcome)).err(),
+                Some(Error::Denied),
+                "{outcome}"
+            );
+        }
+        let auto = Declaration {
+            rules: super::super::rules::Rules::from_declaration(&json!({"transitions": [], "initial": [
+                {"field_id": "status", "value": "approved", "when": {"field_id": "note", "comparison": "eq", "value": {"type": "text", "value": "small"}}},
+                {"field_id": "status", "value": "submitted"},
+            ]}))
+            .unwrap(),
+            decided: Vec::new(),
+            ..submit
+        };
+        let small = json!([
+            {"field_id": "status", "value": {"type": "enum", "value": "approved"}},
+            {"field_id": "note", "value": {"type": "text", "value": "small"}},
+        ]);
+        assert!(compose(&spec, &auto, None, &small).is_ok());
+    }
+
+    #[test]
+    fn decided_starts_are_the_other_commands_targets_without_an_initial() {
+        let rules = |value: Value| super::super::rules::Rules::from_declaration(&value).unwrap();
+        let declaration = |rules| Declaration {
+            operation: "create".into(),
+            writable: vec!["status".into()],
+            rules,
+            decided: Vec::new(),
+        };
+        let mut commands = BTreeMap::from([
+            (
+                "submit".to_owned(),
+                declaration(rules(json!({"transitions": []}))),
+            ),
+            (
+                "decide".to_owned(),
+                declaration(rules(json!({"transitions": [
+                    {"field_id": "status", "from": "submitted", "to": "approved"},
+                    {"field_id": "status", "from": "submitted", "to": "rejected"},
+                ]}))),
+            ),
+            (
+                "auto".to_owned(),
+                declaration(rules(
+                    json!({"transitions": [], "initial": [{"field_id": "status", "value": "approved"}]}),
+                )),
+            ),
+        ]);
+        fence_starts(&mut commands);
+        let pair = |a: &str, b: &str| (a.to_owned(), b.to_owned());
+        assert_eq!(
+            commands["submit"].decided,
+            [pair("status", "approved"), pair("status", "rejected")]
+        );
+        assert!(commands["decide"].decided.is_empty());
+        assert!(commands["auto"].decided.is_empty());
     }
 
     #[test]

@@ -118,14 +118,14 @@ const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "seed_validator_sha256",
         "contracts/validate.py",
-        "f4bc08407c9575691e2543e696be36f2e936297f882692f9b48848060f4d4c29",
+        "2b2181f371b525db84f14369863e363ae59ecb02699beba9d2c22453dd2f4ad3",
     ),
     // ADR-011 library (APP-094): the catalog pins every library fixture the
     // `seed-library` command places (each entry's `fixture_sha256`).
     (
         "seed_library_sha256",
         "contracts/fixtures/library/catalog.json",
-        "dd3a121da4c4400193b5e8195daa064965447aa458db354672190845bad3d7d8",
+        "3de5c4d6892f626350770c459712f46b1cf7fa65c77576b1c4147e4257c51d3f",
     ),
 ];
 /// The shared cases' checks a pass requires, in order (`qualification_cases`).
@@ -138,7 +138,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v11.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v12.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;

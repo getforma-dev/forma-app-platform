@@ -10,13 +10,17 @@
 //! owner, a member it was shared with (`box_shares`), and a member holding
 //! a grant on one of its files (`box_file_grants`, written when a derived
 //! app is shared), who then sees exactly those files and nothing else of the
-//! box. Only the owner adds files, registers data or derives apps. Writes
-//! append one workspace-chain audit event each (`box.created`,
-//! `box.file_added`, `box.data_registered`, `box.app_derived`,
-//! `box.shared`); the source ledger and the owner's `source_read` are
-//! written only by the 0011 definer `genui_private.register_box_source`.
+//! box. A file grant counts only while the grantee can still open the work
+//! it was granted through (`record_read` on that work, judged now; APP-113
+//! review). Only the owner adds files, registers data or derives apps.
+//! Writes append one workspace-chain audit event each (`box.created`,
+//! `box.renamed`, `box.file_added`, `box.data_registered`,
+//! `box.app_derived`, `box.shared`, and since 0012 `box.explained` and
+//! `box.briefed`); the source ledger and the owner's `source_read` are
+//! written only by the definer `genui_private.register_box_source` (0011,
+//! idempotent per file and normalized digest since 0012).
 use super::{
-    authorization::{Action, Resource, Transaction},
+    authorization::{record_read_clause, Action, Resource, Transaction},
     definitions::{append, confirm_identity, Chain, Event},
     pool::Workspace,
     require, valid_id, Error, Result, TrustedRequest,
@@ -170,6 +174,38 @@ fn outcome(kind: &str, parts: &[&str]) -> String {
     )
 }
 
+/// The SHA-256 of a stored body, as an audit outcome part.
+fn body_digest(body: &[u8]) -> String {
+    use sha2::{Digest as _, Sha256};
+    Sha256::digest(body)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// Serializes one member's counted writes of one kind (APP-113 review,
+/// storage 5): a transaction-scoped advisory lock on the scope, the member
+/// and `what`, taken under the fence before counting, so two concurrent
+/// requests cannot both pass a count of `limit - 1`. It needs no grant,
+/// is released at COMMIT or ROLLBACK and waits under `lock_timeout`.
+pub(super) async fn serialize_member(
+    transaction: &Transaction<'_>,
+    request: &TrustedRequest,
+    what: &str,
+) -> Result<()> {
+    let key = format!(
+        "genui:{what}:{}:{}",
+        request.organization, request.principal
+    );
+    transaction
+        .query(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))::text",
+            &[&key],
+        )
+        .await?;
+    Ok(())
+}
+
 /// A box name: 1–60 characters, no control characters, trimmed.
 pub fn box_name(name: &str) -> Option<String> {
     let name = name.trim();
@@ -183,11 +219,22 @@ fn time(column: &str) -> String {
     TIME.replace("{}", column)
 }
 
-/// The visibility clause of a box for `$2` (the principal): owner, shared,
-/// or holding a grant on one of its files.
-const VISIBLE: &str = "(b.owner_principal_id=$2::text::uuid OR EXISTS(SELECT 1 FROM genui.box_shares s WHERE s.organization_id=b.organization_id AND s.box_id=b.box_id AND s.principal_id=$2::text::uuid) OR EXISTS(SELECT 1 FROM genui.box_file_grants g WHERE g.organization_id=b.organization_id AND g.box_id=b.box_id AND g.principal_id=$2::text::uuid))";
+/// A grant on a file of box `b` held by `$2` (the principal) that still
+/// counts: the grantee can open the work it was granted through now.
+/// `file` narrows it to one file (`AND g.file_id=…`) or is empty.
+fn granted(file: &str) -> String {
+    format!(
+        "EXISTS(SELECT 1 FROM genui.box_file_grants g JOIN genui.saved_work w ON w.organization_id=g.organization_id AND w.app_id=g.app_id AND w.work_id=g.work_id WHERE g.organization_id=b.organization_id AND g.box_id=b.box_id{file} AND g.principal_id=$2::text::uuid AND {})",
+        record_read_clause("g.principal_id")
+    )
+}
 /// Whether the principal sees the whole box (owner or shared).
 const WHOLE: &str = "(b.owner_principal_id=$2::text::uuid OR EXISTS(SELECT 1 FROM genui.box_shares s WHERE s.organization_id=b.organization_id AND s.box_id=b.box_id AND s.principal_id=$2::text::uuid))";
+/// Whether file `f` of box `b` is visible to `$2`: the whole box, or a live
+/// grant on that file.
+fn file_visible() -> String {
+    format!("({WHOLE} OR {})", granted(" AND g.file_id=f.file_id"))
+}
 
 async fn box_rows(
     transaction: &Transaction<'_>,
@@ -195,9 +242,10 @@ async fn box_rows(
     only: Option<&str>,
 ) -> Result<Vec<BoxRow>> {
     let sql = format!(
-        "SELECT b.box_id::text,b.name,b.kind,b.app_id::text,b.owner_principal_id=$2::text::uuid,{created},{whole},(SELECT count(*) FROM genui.box_files f WHERE f.organization_id=b.organization_id AND f.box_id=b.box_id AND ({whole} OR EXISTS(SELECT 1 FROM genui.box_file_grants g WHERE g.organization_id=f.organization_id AND g.box_id=f.box_id AND g.file_id=f.file_id AND g.principal_id=$2::text::uuid))) FROM genui.boxes b WHERE b.organization_id=$1::text::uuid AND {VISIBLE} AND ($3::text IS NULL OR b.box_id=$3::text::uuid) ORDER BY b.created_at,b.box_id LIMIT $4",
+        "SELECT b.box_id::text,b.name,b.kind,b.app_id::text,b.owner_principal_id=$2::text::uuid,{created},(SELECT count(*) FROM genui.box_files f WHERE f.organization_id=b.organization_id AND f.box_id=b.box_id AND {visible}) FROM genui.boxes b WHERE b.organization_id=$1::text::uuid AND ({WHOLE} OR {any}) AND ($3::text IS NULL OR b.box_id=$3::text::uuid) ORDER BY b.created_at,b.box_id LIMIT $4",
         created = time("b.created_at"),
-        whole = WHOLE,
+        visible = file_visible(),
+        any = granted(""),
     );
     let rows = transaction
         .query(
@@ -212,7 +260,6 @@ async fn box_rows(
         .await?;
     rows.iter()
         .map(|row| {
-            let _whole = boolean(row, 6)?;
             Ok(BoxRow {
                 box_id: text(row, 0)?,
                 name: text(row, 1)?,
@@ -220,10 +267,37 @@ async fn box_rows(
                 app_id: optional(row, 3)?,
                 owner: boolean(row, 4)?,
                 created_at: text(row, 5)?,
-                file_count: integer(row, 7)?,
+                file_count: integer(row, 6)?,
             })
         })
         .collect()
+}
+
+/// One `box_file_sources` row joined with its revision, as selected by
+/// `registration_columns` (envelope decoded).
+fn registered_row(row: &Row) -> Result<(String, FileData)> {
+    let envelope: Vec<u8> = row.try_get(6).map_err(|_| Error::Unavailable)?;
+    let envelope = admission::decode(&envelope).map_err(|_| Error::Unavailable)?;
+    Ok((
+        text(row, 0)?,
+        FileData {
+            source_id: text(row, 1)?,
+            revision_id: text(row, 2)?,
+            normalized_digest: text(row, 3)?,
+            row_count: integer(row, 4)?,
+            contract_digest: text(row, 5)?,
+            contract: envelope
+                .get("input_contract")
+                .cloned()
+                .ok_or(Error::Unavailable)?,
+            created_at: text(row, 7)?,
+        },
+    ))
+}
+/// The columns `registration` reads, over `box_file_sources s` joined with
+/// `source_revisions r`.
+fn registration_columns() -> String {
+    format!("s.file_id::text,s.source_id::text,s.revision_id::text,s.normalized_digest::text,s.row_count,r.contract_digest::text,r.canonical_envelope,{} FROM genui.box_file_sources s JOIN genui.source_revisions r ON r.organization_id=s.organization_id AND r.source_id=s.source_id AND r.revision_id=s.revision_id", time("s.created_at"))
 }
 
 /// The newest registration of each file of `box_id` (envelope decoded).
@@ -232,29 +306,9 @@ async fn registrations(
     organization: &str,
     box_id: &str,
 ) -> Result<Vec<(String, FileData)>> {
-    let sql = format!("SELECT DISTINCT ON (s.file_id) s.file_id::text,s.source_id::text,s.revision_id::text,s.normalized_digest::text,s.row_count,r.contract_digest::text,r.canonical_envelope,{} FROM genui.box_file_sources s JOIN genui.source_revisions r ON r.organization_id=s.organization_id AND r.source_id=s.source_id AND r.revision_id=s.revision_id WHERE s.organization_id=$1::text::uuid AND s.box_id=$2::text::uuid AND r.deleted_at IS NULL ORDER BY s.file_id,s.created_at DESC,s.revision_id", time("s.created_at"));
+    let sql = format!("SELECT DISTINCT ON (s.file_id) {} WHERE s.organization_id=$1::text::uuid AND s.box_id=$2::text::uuid AND r.deleted_at IS NULL ORDER BY s.file_id,s.created_at DESC,s.revision_id", registration_columns());
     let rows = transaction.query(&sql, &[&organization, &box_id]).await?;
-    rows.iter()
-        .map(|row| {
-            let envelope: Vec<u8> = row.try_get(6).map_err(|_| Error::Unavailable)?;
-            let envelope = admission::decode(&envelope).map_err(|_| Error::Unavailable)?;
-            Ok((
-                text(row, 0)?,
-                FileData {
-                    source_id: text(row, 1)?,
-                    revision_id: text(row, 2)?,
-                    normalized_digest: text(row, 3)?,
-                    row_count: integer(row, 4)?,
-                    contract_digest: text(row, 5)?,
-                    contract: envelope
-                        .get("input_contract")
-                        .cloned()
-                        .ok_or(Error::Unavailable)?,
-                    created_at: text(row, 7)?,
-                },
-            ))
-        })
-        .collect()
+    rows.iter().map(registered_row).collect()
 }
 
 async fn file_rows(
@@ -263,11 +317,17 @@ async fn file_rows(
     box_id: &str,
     only: Option<&str>,
 ) -> Result<Vec<BoxFile>> {
-    let sql = format!("SELECT f.file_id::text,f.name,f.kind,f.media_type,f.byte_length,f.content_digest::text,f.object_key,{} FROM genui.box_files f JOIN genui.boxes b USING(organization_id,box_id) WHERE f.organization_id=$1::text::uuid AND f.box_id=$3::text::uuid AND ($4::text IS NULL OR f.file_id=$4::text::uuid) AND ({WHOLE} OR EXISTS(SELECT 1 FROM genui.box_file_grants g WHERE g.organization_id=f.organization_id AND g.box_id=f.box_id AND g.file_id=f.file_id AND g.principal_id=$2::text::uuid)) ORDER BY f.created_at,f.file_id LIMIT 64", time("f.created_at"));
+    let sql = format!("SELECT f.file_id::text,f.name,f.kind,f.media_type,f.byte_length,f.content_digest::text,f.object_key,{} FROM genui.box_files f JOIN genui.boxes b USING(organization_id,box_id) WHERE f.organization_id=$1::text::uuid AND f.box_id=$3::text::uuid AND ($4::text IS NULL OR f.file_id=$4::text::uuid) AND {} ORDER BY f.created_at,f.file_id LIMIT $5", time("f.created_at"), file_visible());
     let rows = transaction
         .query(
             &sql,
-            &[&request.organization, &request.principal, &box_id, &only],
+            &[
+                &request.organization,
+                &request.principal,
+                &box_id,
+                &only,
+                &MAX_BOX_FILES,
+            ],
         )
         .await?;
     let registered = registrations(transaction, &request.organization, box_id).await?;
@@ -313,6 +373,51 @@ async fn derivations(
             })
         })
         .collect()
+}
+
+/// After `share_work`, in the share's own transaction (APP-113 review,
+/// storage 11): the grantee may read exactly the box files the shared work
+/// was built from. `transaction` is already fenced with the sharer's
+/// `record_read` on the work; the sharer must also see the whole box (else
+/// nothing is granted). Returns how many grants were written (one
+/// `box.shared` event when > 0); the grantee's active membership was judged
+/// by `share_work`.
+pub(super) async fn grant_box_files_for_work(
+    t: &Transaction<'_>,
+    request: &TrustedRequest,
+    app: &str,
+    work: &str,
+    grantee: &str,
+) -> Result<usize> {
+    let rows = t.query(&format!("SELECT d.box_id::text,d.file_ids::text[] FROM genui.box_derivations d JOIN genui.boxes b USING(organization_id,box_id) WHERE d.organization_id=$1::text::uuid AND d.app_id=$3::text::uuid AND d.work_id=$4::text::uuid AND {WHOLE}"), &[&request.organization,&request.principal,&app,&work]).await?;
+    let Some(row) = rows.first() else {
+        return Ok(0);
+    };
+    let box_id = text(row, 0)?;
+    let files = texts(row, 1)?;
+    let mut inserted = 0;
+    for file in &files {
+        let rows = t.query("INSERT INTO genui.box_file_grants(organization_id,box_id,file_id,principal_id,app_id,work_id,granted_by,created_at) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text::uuid,$7::text::uuid,date_trunc('second',now())) ON CONFLICT DO NOTHING RETURNING 1", &[&request.organization,&box_id,file,&grantee,&app,&work,&request.principal]).await?;
+        inserted += rows.len();
+    }
+    if inserted > 0 {
+        let digest = outcome("shared", &[&box_id, grantee, &files.join(",")]);
+        append(
+            t,
+            Chain::Workspace,
+            request,
+            Event {
+                kind: "box.shared",
+                id: None,
+                app: Some(app),
+                work: Some(work),
+                record: None,
+                outcome: Some(&digest),
+            },
+        )
+        .await?;
+    }
+    Ok(inserted)
 }
 
 impl Workspace {
@@ -422,10 +527,18 @@ impl Workspace {
                     permit.also(Action::Run, Resource::App(app)).await?;
                 }
                 let t = permit.transaction();
+                // The member's box writes in order: the one-per-kind lookup
+                // and the count both see every earlier committed box.
+                serialize_member(t, request, "boxes").await?;
+                let existing = || async {
+                    let rows = t.query("SELECT box_id::text FROM genui.boxes WHERE organization_id=$1::text::uuid AND owner_principal_id=$2::text::uuid AND kind=$3 AND ($4::text IS NULL OR app_id=$4::text::uuid)", &[&request.organization,&request.principal,&kind,&app]).await?;
+                    match rows.first() {
+                        Some(row) => Ok::<_, Error>(Some(text(row, 0)?)),
+                        None => Ok(None),
+                    }
+                };
                 if kind != "box" {
-                    let existing = t.query("SELECT box_id::text FROM genui.boxes WHERE organization_id=$1::text::uuid AND owner_principal_id=$2::text::uuid AND kind=$3 AND ($4::text IS NULL OR app_id=$4::text::uuid)", &[&request.organization,&request.principal,&kind,&app]).await?;
-                    if let Some(row) = existing.first() {
-                        let id = text(row, 0)?;
+                    if let Some(id) = existing().await? {
                         return box_rows(t, request, Some(&id))
                             .await?
                             .into_iter()
@@ -437,7 +550,18 @@ impl Workspace {
                 require(integer(owned.first().ok_or(Error::Unavailable)?, 0)? < MAX_OWNED_BOXES)?;
                 let fresh = t.query("SELECT gen_random_uuid()::text", &[]).await?;
                 let id = text(fresh.first().ok_or(Error::Unavailable)?, 0)?;
-                t.query("INSERT INTO genui.boxes(organization_id,box_id,owner_principal_id,name,kind,app_id,created_at) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4,$5,$6::text::uuid,date_trunc('second',now()))", &[&request.organization,&id,&request.principal,&name,&kind,&app]).await?;
+                // The one-per-member `uploads` and one-per-app boxes are
+                // unique indexes: a racing creator's row wins and is returned
+                // (review storage 13), never a unique-violation 503.
+                let inserted = t.query("INSERT INTO genui.boxes(organization_id,box_id,owner_principal_id,name,kind,app_id,created_at) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4,$5,$6::text::uuid,date_trunc('second',now())) ON CONFLICT DO NOTHING RETURNING 1", &[&request.organization,&id,&request.principal,&name,&kind,&app]).await?;
+                if inserted.is_empty() {
+                    let id = existing().await?.ok_or(Error::Unavailable)?;
+                    return box_rows(t, request, Some(&id))
+                        .await?
+                        .into_iter()
+                        .next()
+                        .ok_or(Error::Unavailable);
+                }
                 let digest = outcome("created", &[&id, kind]);
                 append(t, Chain::Workspace, request, Event { kind: "box.created", id: None, app, work: None, record: None, outcome: Some(&digest) }).await?;
                 box_rows(t, request, Some(&id))
@@ -472,8 +596,13 @@ impl Workspace {
                 confirm_identity(transaction, request).await?;
                 let permit = transaction.fence_member().await?;
                 let t = permit.transaction();
-                let owned = t.query("SELECT (SELECT count(*) FROM genui.box_files f WHERE f.organization_id=b.organization_id AND f.box_id=b.box_id) FROM genui.boxes b WHERE b.organization_id=$1::text::uuid AND b.box_id=$2::text::uuid AND b.owner_principal_id=$3::text::uuid", &[&request.organization,&box_id,&request.principal]).await?;
-                let count = integer(owned.first().ok_or(Error::Denied)?, 0)?;
+                // The box row FOR UPDATE (the owner's UPDATE(name) grant),
+                // then the count in its own statement, so it sees every file
+                // a concurrent add committed before this lock was granted.
+                let owned = t.query("SELECT 1 FROM genui.boxes b WHERE b.organization_id=$1::text::uuid AND b.box_id=$2::text::uuid AND b.owner_principal_id=$3::text::uuid FOR UPDATE", &[&request.organization,&box_id,&request.principal]).await?;
+                require(!owned.is_empty())?;
+                let counted = t.query("SELECT count(*) FROM genui.box_files WHERE organization_id=$1::text::uuid AND box_id=$2::text::uuid", &[&request.organization,&box_id]).await?;
+                let count = integer(counted.first().ok_or(Error::Unavailable)?, 0)?;
                 if count >= MAX_BOX_FILES {
                     return Ok(None);
                 }
@@ -490,14 +619,18 @@ impl Workspace {
     }
 
     /// Registers a confirmed CSV/XLSX of a box the member owns as a new
-    /// source revision (the 0011 definer), audited.
+    /// source revision (the definer), audited, and returns the registration
+    /// as stored. Idempotent per file and normalized digest (0012): a repeat
+    /// of the same normalized content returns the existing registration (its
+    /// source, revision and contract; the caller's fresh ids are unused) and
+    /// appends no second event.
     pub async fn register_box_data(
         &self,
         request: &TrustedRequest,
         box_id: &str,
         file_id: &str,
         registration: &NewRegistration<'_>,
-    ) -> Result<()> {
+    ) -> Result<FileData> {
         require(
             valid_id(box_id)
                 && valid_id(file_id)
@@ -509,19 +642,25 @@ impl Workspace {
                 confirm_identity(transaction, request).await?;
                 let permit = transaction.fence_member().await?;
                 let t = permit.transaction();
-                let rows = t.query("SELECT source_id::text FROM genui_private.register_box_source($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text::uuid,$7,$8,$9,$10,$11::bigint)", &[&request.organization,&request.principal,&box_id,&file_id,&registration.source_id,&registration.revision_id,&registration.content_digest,&registration.normalized_digest,&registration.contract_digest,&registration.envelope,&registration.row_count]).await?;
+                let rows = t.query("SELECT source_id::text,revision_id::text FROM genui_private.register_box_source($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text::uuid,$7,$8,$9,$10,$11::bigint)", &[&request.organization,&request.principal,&box_id,&file_id,&registration.source_id,&registration.revision_id,&registration.content_digest,&registration.normalized_digest,&registration.contract_digest,&registration.envelope,&registration.row_count]).await?;
                 require(rows.len() == 1)?;
-                let digest = outcome("data", &[box_id, file_id, registration.source_id, registration.revision_id, registration.normalized_digest]);
-                append(t, Chain::Workspace, request, Event { kind: "box.data_registered", id: None, app: None, work: None, record: None, outcome: Some(&digest) }).await?;
-                Ok(())
+                let (source, revision) = (text(&rows[0], 0)?, text(&rows[0], 1)?);
+                if source == registration.source_id && revision == registration.revision_id {
+                    let digest = outcome("data", &[box_id, file_id, registration.source_id, registration.revision_id, registration.normalized_digest]);
+                    append(t, Chain::Workspace, request, Event { kind: "box.data_registered", id: None, app: None, work: None, record: None, outcome: Some(&digest) }).await?;
+                }
+                let stored = t.query(&format!("SELECT {} WHERE s.organization_id=$1::text::uuid AND s.box_id=$2::text::uuid AND s.file_id=$3::text::uuid AND s.source_id=$4::text::uuid AND s.revision_id=$5::text::uuid", registration_columns()), &[&request.organization,&box_id,&file_id,&source,&revision]).await?;
+                Ok(registered_row(stored.first().ok_or(Error::Unavailable)?)?.1)
             })
         })
         .await
     }
 
     /// Records that `work` of `app` was built from files of a box the member
-    /// owns (`derived` or `data`), audited. The member must be able to open
-    /// the work.
+    /// owns (`derived` or `data`), audited. The member must hold
+    /// `record_write` on the work (its unrevoked creator does), and every
+    /// `(file, digest)` pair must name a file of that box with exactly that
+    /// content digest (paired, not two independent sets; APP-113 review).
     pub async fn record_box_derivation(
         &self,
         request: &TrustedRequest,
@@ -536,8 +675,12 @@ impl Workspace {
                 && valid_id(app)
                 && valid_id(work)
                 && matches!(kind, "derived" | "data")
-                && (1..=20).contains(&files.len())
-                && files.iter().all(|(id, _)| valid_id(id)),
+                && (1..=MAX_BOX_FILES as usize).contains(&files.len())
+                && files.iter().all(|(id, _)| valid_id(id))
+                && files
+                    .iter()
+                    .enumerate()
+                    .all(|(i, (id, _))| files[..i].iter().all(|(other, _)| other != id)),
         )?;
         let ids: Vec<String> = files.iter().map(|(id, _)| id.clone()).collect();
         let digests: Vec<String> = files.iter().map(|(_, d)| d.clone()).collect();
@@ -546,11 +689,11 @@ impl Workspace {
         let result = async {
             confirm_identity(&transaction, request).await?;
             let precheck = transaction
-                .precheck(Action::RecordRead, Resource::Work { app, work })
+                .precheck(Action::RecordWrite, Resource::Work { app, work })
                 .await?;
             let permit = transaction.fence(precheck).await?;
             let t = permit.transaction();
-            let owned = t.query("SELECT count(*) FROM genui.box_files f JOIN genui.boxes b USING(organization_id,box_id) WHERE f.organization_id=$1::text::uuid AND f.box_id=$2::text::uuid AND b.owner_principal_id=$3::text::uuid AND f.file_id::text = ANY($4) AND f.content_digest::text = ANY($5)", &[&request.organization,&box_id,&request.principal,&ids,&digests]).await?;
+            let owned = t.query("SELECT count(*) FROM unnest($4::text[],$5::text[]) AS u(file_id,digest) JOIN genui.box_files f ON f.organization_id=$1::text::uuid AND f.box_id=$2::text::uuid AND f.file_id::text=u.file_id AND f.content_digest::text=u.digest JOIN genui.boxes b ON b.organization_id=f.organization_id AND b.box_id=f.box_id WHERE b.owner_principal_id=$3::text::uuid", &[&request.organization,&box_id,&request.principal,&ids,&digests]).await?;
             require(integer(owned.first().ok_or(Error::Unavailable)?, 0)? == ids.len() as i64)?;
             t.query("INSERT INTO genui.box_derivations(organization_id,derivation_id,box_id,app_id,work_id,kind,file_ids,file_digests,created_by,created_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text::uuid,$3::text::uuid,$4::text::uuid,$5,$6::text[]::uuid[],$7,$8::text::uuid,date_trunc('second',now()))", &[&request.organization,&box_id,&app,&work,&kind,&ids,&digests,&request.principal]).await?;
             let mut parts = vec![box_id, kind];
@@ -592,30 +735,18 @@ impl Workspace {
                 .iter()
                 .map(|r| Ok((text(r, 0)?, text(r, 1)?)))
                 .collect::<Result<_>>()?;
-            let all = t.query(&format!("SELECT s.file_id::text,s.source_id::text,s.revision_id::text,s.normalized_digest::text,s.row_count,r.contract_digest::text,r.canonical_envelope,{} FROM genui.box_file_sources s JOIN genui.source_revisions r ON r.organization_id=s.organization_id AND r.source_id=s.source_id AND r.revision_id=s.revision_id WHERE s.organization_id=$1::text::uuid AND s.box_id=$2::text::uuid", time("s.created_at")), &[&request.organization,&box_id]).await?;
+            let all = t.query(&format!("SELECT {} WHERE s.organization_id=$1::text::uuid AND s.box_id=$2::text::uuid", registration_columns()), &[&request.organization,&box_id]).await?;
+            let all = all.iter().map(registered_row).collect::<Result<Vec<_>>>()?;
             let files = file_rows(t, request, &box_id, None).await?;
             let mut out = Vec::new();
             for file in files.into_iter().filter(|f| used.contains(&f.file_id)) {
-                let mut data = None;
-                for r in &all {
-                    if text(r, 0)? != file.file_id {
-                        continue;
-                    }
-                    let pair = (text(r, 1)?, text(r, 2)?);
-                    if bound.contains(&pair) {
-                        let envelope: Vec<u8> = r.try_get(6).map_err(|_| Error::Unavailable)?;
-                        let envelope = admission::decode(&envelope).map_err(|_| Error::Unavailable)?;
-                        data = Some(FileData {
-                            source_id: pair.0,
-                            revision_id: pair.1,
-                            normalized_digest: text(r, 3)?,
-                            row_count: integer(r, 4)?,
-                            contract_digest: text(r, 5)?,
-                            contract: envelope.get("input_contract").cloned().ok_or(Error::Unavailable)?,
-                            created_at: text(r, 7)?,
-                        });
-                    }
-                }
+                let data = all
+                    .iter()
+                    .find(|(id, data)| {
+                        *id == file.file_id
+                            && bound.contains(&(data.source_id.clone(), data.revision_id.clone()))
+                    })
+                    .map(|(_, data)| data.clone());
                 out.push((file, data));
             }
             Ok(Some(Lineage {
@@ -625,52 +756,6 @@ impl Workspace {
                 file_count: used.len(),
                 files: out,
             }))
-        }
-        .await;
-        transaction.finish(result.is_ok()).await?;
-        result
-    }
-
-    /// After `share_work`: the grantee may read exactly the box files the
-    /// shared work was built from. The sharer must open the work and see the
-    /// whole box. Returns how many grants were written (an event when > 0).
-    pub async fn grant_box_files_for_work(
-        &self,
-        request: &TrustedRequest,
-        app: &str,
-        work: &str,
-        grantee: &str,
-    ) -> Result<usize> {
-        require(
-            valid_id(app) && valid_id(work) && valid_id(grantee) && grantee != request.principal,
-        )?;
-        let cap = Instant::now() + BOX_DEADLINE;
-        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
-        let result = async {
-            let precheck = transaction
-                .precheck(Action::RecordRead, Resource::Work { app, work })
-                .await?;
-            let permit = transaction.fence(precheck).await?;
-            let t = permit.transaction();
-            let rows = t.query(&format!("SELECT d.box_id::text,d.file_ids::text[] FROM genui.box_derivations d JOIN genui.boxes b USING(organization_id,box_id) WHERE d.organization_id=$1::text::uuid AND d.app_id=$3::text::uuid AND d.work_id=$4::text::uuid AND {WHOLE}"), &[&request.organization,&request.principal,&app,&work]).await?;
-            let Some(row) = rows.first() else {
-                return Ok(0);
-            };
-            let box_id = text(row, 0)?;
-            let files = texts(row, 1)?;
-            let member = t.query("SELECT 1 FROM genui.memberships WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND status='active'", &[&request.organization,&grantee]).await?;
-            require(!member.is_empty())?;
-            let mut inserted = 0;
-            for file in &files {
-                let rows = t.query("INSERT INTO genui.box_file_grants(organization_id,box_id,file_id,principal_id,app_id,work_id,granted_by,created_at) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text::uuid,$7::text::uuid,date_trunc('second',now())) ON CONFLICT DO NOTHING RETURNING 1", &[&request.organization,&box_id,file,&grantee,&app,&work,&request.principal]).await;
-                // RETURNING needs SELECT on the returned expression only.
-                inserted += rows?.len();
-            }
-            if inserted > 0 {
-                let digest = outcome("shared", &[&box_id, grantee, &files.join(",")]);
-                append(t, Chain::Workspace, request, Event { kind: "box.shared", id: None, app: Some(app), work: Some(work), record: None, outcome: Some(&digest) }).await?;
-            }
-            Ok(inserted)
         }
         .await;
         transaction.finish(result.is_ok()).await?;
@@ -730,7 +815,7 @@ impl Workspace {
         .await
     }
 
-    /// Stores a folder's brief (owner only).
+    /// Stores a folder's brief (owner only), audited `box.briefed` (0012).
     pub async fn save_box_brief(
         &self,
         request: &TrustedRequest,
@@ -745,8 +830,11 @@ impl Workspace {
                 let t = permit.transaction();
                 let owned = t.query("SELECT 1 FROM genui.boxes WHERE organization_id=$1::text::uuid AND box_id=$2::text::uuid AND owner_principal_id=$3::text::uuid", &[&request.organization,&box_id,&request.principal]).await?;
                 require(!owned.is_empty())?;
-                let rows = t.query(&format!("INSERT INTO genui.box_briefs(organization_id,brief_id,box_id,body,created_by,created_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text::uuid,$3,$4::text::uuid,date_trunc('second',now())) RETURNING {}", time("created_at")), &[&request.organization,&box_id,&body,&request.principal]).await?;
-                text(rows.first().ok_or(Error::Unavailable)?, 0)
+                let rows = t.query(&format!("INSERT INTO genui.box_briefs(organization_id,brief_id,box_id,body,created_by,created_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text::uuid,$3,$4::text::uuid,date_trunc('second',now())) RETURNING {},brief_id::text", time("created_at")), &[&request.organization,&box_id,&body,&request.principal]).await?;
+                let row = rows.first().ok_or(Error::Unavailable)?;
+                let digest = outcome("briefed", &[box_id, &text(row, 1)?, &body_digest(body)]);
+                append(t, Chain::Workspace, request, Event { kind: "box.briefed", id: None, app: None, work: None, record: None, outcome: Some(&digest) }).await?;
+                text(row, 0)
             })
         })
         .await
@@ -776,7 +864,10 @@ impl Workspace {
         .await
     }
 
-    /// Stores a validated summary template for a work the member can open.
+    /// Stores a validated summary template for a work the member may write
+    /// (`record_write`, which its unrevoked creator holds; APP-113 review),
+    /// audited `box.explained` (0012). A reader without write authority
+    /// reads the stored template and never replaces it.
     pub async fn save_box_explanation(
         &self,
         request: &TrustedRequest,
@@ -788,13 +879,17 @@ impl Workspace {
         let cap = Instant::now() + BOX_DEADLINE;
         let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
         let result = async {
+            confirm_identity(&transaction, request).await?;
             let precheck = transaction
-                .precheck(Action::RecordRead, Resource::Work { app, work })
+                .precheck(Action::RecordWrite, Resource::Work { app, work })
                 .await?;
             let permit = transaction.fence(precheck).await?;
             let t = permit.transaction();
-            let rows = t.query(&format!("INSERT INTO genui.box_explanations(organization_id,explanation_id,app_id,work_id,template,created_by,created_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text::uuid,$3::text::uuid,$4,$5::text::uuid,date_trunc('second',now())) RETURNING {}", time("created_at")), &[&request.organization,&app,&work,&template,&request.principal]).await?;
-            text(rows.first().ok_or(Error::Unavailable)?, 0)
+            let rows = t.query(&format!("INSERT INTO genui.box_explanations(organization_id,explanation_id,app_id,work_id,template,created_by,created_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text::uuid,$3::text::uuid,$4,$5::text::uuid,date_trunc('second',now())) RETURNING {},explanation_id::text", time("created_at")), &[&request.organization,&app,&work,&template,&request.principal]).await?;
+            let row = rows.first().ok_or(Error::Unavailable)?;
+            let digest = outcome("explained", &[app, work, &text(row, 1)?, &body_digest(template)]);
+            append(t, Chain::Workspace, request, Event { kind: "box.explained", id: None, app: Some(app), work: Some(work), record: None, outcome: Some(&digest) }).await?;
+            text(row, 0)
         }
         .await;
         transaction.finish(result.is_ok()).await?;

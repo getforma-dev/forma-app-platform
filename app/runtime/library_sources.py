@@ -43,141 +43,26 @@ Operator use (local demo or the APP-096 deploy):
 from __future__ import annotations
 
 import argparse
-import csv
-import datetime
-import hashlib
-import io
 import json
 import os
 from pathlib import Path
 import re
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+# APP-113 review: the one normalization (typing table, order, round trip) is the
+# service image's box normalizer; this module only maps the library onto it.
+from box_normalize import (  # noqa: E402
+    Refused, column_type, normalize, ordered_rows, require, rows_of, scaled_integer, sha256, typed_value,
+)
+
+__all__ = ["Refused", "column_type", "normalize", "ordered_rows", "require", "rows_of", "scaled_integer", "sha256",
+           "typed_value", "load_catalog", "sources_of", "cache_path", "object_keys", "build", "main"]
+
 REPOSITORY = Path(__file__).resolve().parents[2]
 LIBRARY = REPOSITORY / "contracts" / "fixtures" / "library"
 CATALOG = LIBRARY / "catalog.json"
-INTEGER = re.compile(r"-?(0|[1-9][0-9]{0,37})")
-DECIMAL = re.compile(r"(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?")
-TIMESTAMP = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
-DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
-
-
-class Refused(ValueError):
-    pass
-
-
-def require(condition, reason):
-    if not condition:
-        raise Refused(reason)
-
-
-def sha256(data):
-    return "sha256:" + hashlib.sha256(data).hexdigest()
-
-
-def column_type(value_type):
-    kind = value_type["type"]
-    if kind in ("text", "enum"):
-        return "VARCHAR"
-    if kind == "boolean":
-        return "BOOLEAN"
-    if kind in ("integer", "money", "decimal"):
-        return "BIGINT"
-    if kind == "date":
-        return "DATE"
-    if kind == "timestamp":
-        return "TIMESTAMP"
-    raise Refused("field type is not a source column type")
-
-
-def scaled_integer(text, scale):
-    """Exact decimal text at `scale` places as an integer coefficient; no float."""
-    match = DECIMAL.fullmatch(text)
-    require(match is not None, "decimal_refused")
-    sign, whole, fraction = match.group(1), match.group(2), match.group(3) or ""
-    require(len(fraction) <= scale, "decimal_scale_refused")
-    coefficient = int(whole) * 10**scale + int(fraction.ljust(scale, "0"))
-    require(coefficient < 2**63, "integer_range_refused")
-    return -coefficient if sign else coefficient
-
-
-def typed_value(field, text):
-    """The CSV cell as the Python value DuckDB stores for the field's column."""
-    kind = field["value_type"]["type"]
-    if text == "":
-        require(field.get("nullable", False), "null_refused")
-        return None
-    if kind == "text":
-        return text
-    if kind == "enum":
-        require(text in field["value_type"]["values"], "enum_refused")
-        return text
-    if kind == "boolean":
-        require(text in ("true", "false"), "boolean_refused")
-        return text == "true"
-    if kind == "integer":
-        require(INTEGER.fullmatch(text) is not None, "integer_refused")
-        value = int(text)
-        require(-(2**63) <= value < 2**63, "integer_range_refused")
-        return value
-    if kind == "money":
-        require(field["value_type"]["currency"] == "USD" and field["value_type"]["minor_unit_exponent"] == 2, "money_refused")
-        require(DECIMAL.fullmatch(text) is not None and len((DECIMAL.fullmatch(text).group(3) or "")) == 2, "money_refused")
-        return scaled_integer(text, 2)
-    if kind == "decimal":
-        return scaled_integer(text, field["value_type"]["scale"])
-    if kind == "date":
-        require(DATE.fullmatch(text) is not None, "date_refused")
-        return datetime.date.fromisoformat(text)
-    if kind == "timestamp":
-        require(TIMESTAMP.fullmatch(text) is not None, "timestamp_refused")
-        return datetime.datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ")
-    raise Refused("field type is not a source column type")
-
-
-def rows_of(contract, data):
-    """Typed rows of a library CSV, in original order; the header must be the contract's fields."""
-    fields = contract["fields"]
-    reader = csv.reader(io.StringIO(data.decode("utf-8"), newline=""))
-    header = next(reader, None)
-    require(header == [f["id"] for f in fields], "header_refused")
-    rows = []
-    for record in reader:
-        require(len(record) == len(fields), "row_shape_refused")
-        rows.append(tuple(typed_value(field, cell) for field, cell in zip(fields, record)))
-    require(0 < len(rows) <= 1000000, "row_count_refused")
-    return rows
-
-
-def normalize(contract, data, target):
-    """Writes the normalized Parquet of CSV bytes `data` to `target`; returns (normalized_digest, row_count).
-
-    Order: the `time` timestamp field then the original record when the contract has
-    one, else the original record order (D9.3 determinism); one thread, ZSTD.
-    """
-    import duckdb
-    fields = contract["fields"]
-    rows = rows_of(contract, data)
-    names = [f["id"] for f in fields]
-    time_index = next((i for i, f in enumerate(fields) if f["id"] == "time" and f["value_type"]["type"] == "timestamp"), None)
-    ordered = sorted(enumerate(rows, 1), key=lambda item: ((item[1][time_index], item[0]) if time_index is not None else (item[0],)))
-    declarations = ", ".join('"%s" %s%s' % (f["id"], column_type(f["value_type"]), "" if f.get("nullable") else " NOT NULL") for f in fields)
-    quoted = ", ".join('"%s"' % n for n in names)
-    target = Path(target)
-    connection = duckdb.connect()
-    try:
-        connection.execute("SET threads=1")
-        connection.execute("CREATE TABLE source(%s, original INTEGER NOT NULL)" % declarations)
-        connection.executemany("INSERT INTO source VALUES (%s)" % ", ".join("?" * (len(names) + 1)), [(*row, index) for index, row in ordered])
-        connection.execute("COPY (SELECT %s FROM source ORDER BY original) TO ? (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 100000)" % quoted,
-                           [str(target)])
-        back = connection.execute("SELECT %s FROM read_parquet(?)" % quoted, [str(target)]).fetchall()
-        columns = [row[0] for row in connection.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(target)]).fetchall()]
-    finally:
-        connection.close()
-    require(columns == names and back == [row for _, row in ordered], "normalized_round_trip_refused")
-    return sha256(target.read_bytes()), len(rows)
 
 
 def load_catalog(path=CATALOG):

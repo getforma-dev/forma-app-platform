@@ -943,7 +943,10 @@ impl Data {
         let result = async {
             let permit = transaction.fence_member().await?;
             let org = &request.organization;
-            let candidates = permit.transaction().query("SELECT w.app_id::text,w.work_id::text FROM genui.saved_work w JOIN genui.publications p ON p.organization_id=w.organization_id AND p.app_id=w.app_id AND p.publication_id=w.publication_id WHERE w.organization_id=$1::text::uuid ORDER BY p.published_at DESC,w.app_id,w.work_id LIMIT $2", &[org,&LISTING_CANDIDATES]).await?;
+            // APP-113 review: the listing clause filters in SQL before the
+            // cap, so other members' works never crowd out the member's own;
+            // `open_listed` below still judges each under the fence.
+            let candidates = permit.transaction().query(&format!("SELECT w.app_id::text,w.work_id::text FROM genui.saved_work w JOIN genui.publications u ON u.organization_id=w.organization_id AND u.app_id=w.app_id AND u.publication_id=w.publication_id WHERE w.organization_id=$1::text::uuid AND {} ORDER BY u.published_at DESC,w.app_id,w.work_id LIMIT $2", listable("$3::text::uuid")), &[org,&LISTING_CANDIDATES,&request.principal]).await?;
             let mut seen = std::collections::BTreeSet::new();
             let mut listed = Vec::new();
             for row in &candidates {
@@ -966,6 +969,16 @@ impl Data {
         transaction.finish(result.is_ok()).await?;
         result
     }
+}
+
+/// The listing clause in SQL over a `genui.saved_work` row `w` for
+/// `principal`: `discover` on the app and `record_read` on the work (the
+/// prefilter before a listing's cap; `open_listed` stays the judgment).
+fn listable(principal: &str) -> String {
+    format!(
+        "EXISTS(SELECT 1 FROM genui.app_permissions x WHERE x.organization_id=w.organization_id AND x.principal_id={principal} AND x.app_id=w.app_id AND x.permission='discover') AND {}",
+        super::authorization::record_read_clause(principal)
+    )
 }
 
 /// APP-101: the first line of a named saved work's `context` (the work the
@@ -1000,7 +1013,7 @@ impl Data {
             let permit = transaction.fence_member().await?;
             let org = &request.organization;
             let pattern = format!("{COMMAND_MARKER}%");
-            let candidates = permit.transaction().query("SELECT app_id::text,work_id::text,context FROM genui.saved_work WHERE organization_id=$1::text::uuid AND context LIKE $2 ORDER BY app_id,work_id LIMIT $3", &[org,&pattern,&NAMED_CANDIDATES]).await?;
+            let candidates = permit.transaction().query(&format!("SELECT w.app_id::text,w.work_id::text,w.context FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.context LIKE $2 AND {} ORDER BY w.app_id,w.work_id LIMIT $3", listable("$4::text::uuid")), &[org,&pattern,&NAMED_CANDIDATES,&request.principal]).await?;
             let mut named = Vec::new();
             for row in &candidates {
                 let (app, work, context) = (text(row, 0)?, text(row, 1)?, text(row, 2)?);
