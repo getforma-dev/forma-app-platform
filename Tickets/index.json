@@ -261,9 +261,10 @@
         "APP-108",
         "APP-109",
         "APP-110",
-        "APP-111"
+        "APP-111",
+        "APP-112"
       ],
-      "ticket_count": 21,
+      "ticket_count": 22,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -3552,6 +3553,37 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-108"
+      ]
+    },
+    {
+      "id": "APP-112",
+      "title": "Command parity: every slash command has a click path",
+      "path": "0-backlog/APP-112.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "112",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md): the November 2 emergency pivot. No dedicated phase existed, so the board's new phase PH08 / sprint S14 (order 8, no phase dependency; added to `plan.json`) holds the pitch tickets. Invariants of ADR-011 \u00a73 that bind this ticket: I3 receipts on every governed number; I4 transactional, idempotent, audited commands; I5 model output is data, never code, SQL, markup or grants (I1\u2013I6 number the six invariants in \u00a73 in order).",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-104, APP-106, APP-108, APP-109",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent on `pivot/focus-unite`)",
+      "Branch / PR": "Not started (`pivot/parity`, after APP-108 merges)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-104",
+        "APP-106",
+        "APP-108",
+        "APP-109"
       ]
     }
   ]
