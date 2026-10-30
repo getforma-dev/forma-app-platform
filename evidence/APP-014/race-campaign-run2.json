@@ -1,5 +1,5 @@
 {
-  "checks_total": 25,
+  "checks_total": 26,
   "closing": [
     {
       "name": "the operator recomputes the data chain to its head: 17 command.committed events for 17 outcomes and 17 claims, every outcome naming its own event; no refused or raced command left a claim, outcome or event",
@@ -11,7 +11,7 @@
     }
   ],
   "commits": 17,
-  "elapsed_ms": 28457,
+  "elapsed_ms": 29621,
   "groups": [
     {
       "checks": [
@@ -32,7 +32,7 @@
           "passed": true
         }
       ],
-      "elapsed_ms": 3195,
+      "elapsed_ms": 3116,
       "group": "lost_response_retry_returns_original_outcome_with_stale_expected_version"
     },
     {
@@ -46,15 +46,19 @@
           "passed": true
         },
         {
-          "name": "same_key_and_different_key_races_commit_exactly_one_intended_write: two different keys expecting version 2 race: the second waits on the organization sequence row, then conflicts (expected 2, current 3, the winner's values, no stored outcome) without writing; its authorized recovery on version 3 under a new key commits version 4, and the stale edit stays a conflict",
+          "name": "same_key_and_different_key_races_commit_exactly_one_intended_write: APP-013 M1 under race: on a record that has taken its only declared transition (version 2, reviewed), two different keys racing a third commit on version 2 (a note-only edit and the undeclared reverse transition) serialize, the second waiting on the organization sequence row (observed) while the first holds the record row, and both are refused (Denied); on the route both and a resubmission of the current values are the uniform 404; the record keeps two revisions, outcomes and events, no claim remains and the organization sequence does not advance",
           "passed": true
         },
         {
-          "name": "same_key_and_different_key_races_commit_exactly_one_intended_write: on the route, the same key behind a command holding its claim and a different key behind its sequence lock each wait past lock_timeout and answer 409 in_flight with Retry-After: 2 (never 503) with nothing written; after the holder commits, the same key returns its outcome (200) and the different key conflicts (409 expected_version) until its authorized recovery commits; seven intended writes, seven revisions, outcomes and events",
+          "name": "same_key_and_different_key_races_commit_exactly_one_intended_write: two different keys expecting version 1 (needs_context) race to fire the record's transition: the second waits on the organization sequence row (observed), then conflicts (expected 1, current 2, the winner's values, no stored outcome) without writing; the recovery view shows the transition taken, so a recovery on version 2 under a new key is refused (Denied in storage, the uniform 404 on the route; no declared transition is left to fire) and the stale edit stays a conflict; the record keeps two revisions, outcomes and events",
+          "passed": true
+        },
+        {
+          "name": "same_key_and_different_key_races_commit_exactly_one_intended_write: on the route, the same key behind a command holding its claim and a different key behind its sequence lock each wait past lock_timeout and answer 409 in_flight with Retry-After: 2 (never 503) with nothing written; after the holder commits, the same key returns its outcome (200) and the different key conflicts (409 expected_version, current version 1 with the winner's values) until its authorized recovery on version 1 commits the record's transition (version 2); seven intended writes in the group, matched by exactly seven revisions, outcomes and events (two, two, one and two on its four records)",
           "passed": true
         }
       ],
-      "elapsed_ms": 4030,
+      "elapsed_ms": 5513,
       "group": "same_key_and_different_key_races_commit_exactly_one_intended_write"
     },
     {
@@ -72,7 +76,7 @@
           "passed": true
         }
       ],
-      "elapsed_ms": 2710,
+      "elapsed_ms": 2816,
       "group": "other_principal_cannot_retrieve_key"
     },
     {
@@ -98,7 +102,7 @@
           "passed": true
         }
       ],
-      "elapsed_ms": 4456,
+      "elapsed_ms": 4541,
       "group": "adoption_vs_commit_both_orders"
     },
     {
@@ -132,7 +136,7 @@
           "passed": true
         }
       ],
-      "elapsed_ms": 8165,
+      "elapsed_ms": 7950,
       "group": "revocation_vs_commit_both_orders"
     }
   ],
@@ -148,11 +152,11 @@
   "passed": true,
   "s05": {
     "app_id": "00000000-0000-4000-8000-0000000000c9",
-    "collection_id": "800e96d1-9394-4adb-bc18-0d2f94e21032",
+    "collection_id": "f1377510-c48c-4b8e-a5f1-e677e74d96d6",
     "definition_digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9",
     "organization_id": "00000000-0000-4000-8000-000000000001",
-    "publication_id": "a1ab191b-583d-4809-a48c-c1d50e68c7c4",
-    "work_id": "75205d7d-0e55-433a-95d4-941361cda888"
+    "publication_id": "3a7a49db-52d5-47aa-b2a4-c412aadc28e0",
+    "work_id": "0186c818-84c5-4796-bbe2-6019ada4e82c"
   },
   "schema_version": 1,
   "scope": "APP-014 isolated native PostgreSQL TLS command retry, conflict and authorization race qualification",
