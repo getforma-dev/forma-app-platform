@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -896,6 +897,9 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual((entry["redemptions"][0]["membership_status"], entry["redemptions"][0]["entitlement_status"]), ("active", "revoked"))
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
 
+    @unittest.skipUnless(importlib.util.find_spec("jsonschema") is not None,
+                         "seed-spend-review validates the bundle with contracts/validate.py; jsonschema is in the operator image's "
+                         "lock (app/operator/requirements.lock) and in tenant-foundation CI, not in the runtime-only lock")
     def test_seed_spend_review_places_the_fixture_bundle_in_northstar_once(self):
         """APP-076 G3: the Spend Review bundle in the first fixture organization through the operator seed, idempotent."""
         import tenant_seed
