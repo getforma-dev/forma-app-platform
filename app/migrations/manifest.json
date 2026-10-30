@@ -40,7 +40,7 @@
     {
       "version": 8,
       "file": "0008_sharing.sql",
-      "sha256": "c98ede67b43b95d32e976e687fddd3bc05330b6edf625dcfa0ac7ff64b52405b"
+      "sha256": "bc0a4dbaebc8a36e8bfe8b860b0824f0e308b09204f4089a8174449dded0b829"
     }
   ],
   "catalog": [
@@ -78,7 +78,7 @@
     },
     {
       "file": "catalog-v8.json",
-      "sha256": "8c97dc4e8cb8cd4848fb862c9f8b8a7d23bf859ee34c769e8b005057f13f62dd"
+      "sha256": "03d2851b6cf55ff274ed60b7a3dcc6e4239fd9ac73e18e8430545731e5af55ed"
     }
   ]
 }

@@ -5,7 +5,7 @@
       "passed": true
     },
     {
-      "name": "the creator shares the work read-only: the teammate receives exactly discover and run on the app, record_read on the work and source_read on its one source dependency (never edit_definition, record_write or anything the creator does not hold), with one permission.granted event on the admission chain naming the sharer, the app and the work",
+      "name": "the creator shares the work read-only: the teammate receives exactly discover and run on the app, record_read on the work and source_read on its one source dependency (never edit_definition, record_write or anything the creator does not hold), with one permission.granted event on the admission chain naming the sharer, the app and the work, and one work_shares row naming exactly the inserted set, referenced by the event, from which the event's outcome_digest recomputes",
       "passed": true
     },
     {
@@ -13,7 +13,7 @@
       "passed": true
     },
     {
-      "name": "a repeat share inserts nothing and appends no event; sharing record_write adds exactly that row with its own event, after which the teammate's command commits",
+      "name": "a repeat share inserts nothing and appends no event or record; sharing record_write adds exactly that row with its own event and a record naming only record_write, after which the teammate's command commits",
       "passed": true
     },
     {
@@ -33,7 +33,7 @@
       "passed": true
     },
     {
-      "name": "the event stream delivers record.committed for a work the subscriber can open now and nothing for a work it cannot (or of another organization); the creator's share over the route inserts exactly the missing row, answers the granted set and announces app.shared to every subscriber who can open the work; a replay announces nothing",
+      "name": "the event stream delivers record.committed for a work the subscriber can open now and nothing for a work it cannot (or of another organization); the creator's share over the route inserts exactly the missing row (one event, one work_shares record), answers the granted subset without disclosing which rows were new, and announces app.shared to every subscriber who can open the work; a replay answers the byte-identical body and announces nothing",
       "passed": true
     },
     {
@@ -45,7 +45,7 @@
       "passed": true
     },
     {
-      "name": "the admission chain verifies with its permission.granted events (one per share that wrote a row); no other chain carries the kind",
+      "name": "the admission chain verifies with its permission.granted events (one per share that wrote a row), each paired with the one work_shares record it references whose inserted set recomputes the event's outcome_digest; no other chain carries the kind",
       "passed": true
     }
   ],

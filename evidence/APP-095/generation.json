@@ -12,10 +12,10 @@
     "0005_definition_work_grants.sql": "78d837a2968a661253f5fa9ddaab1502fc17a4e84aac979d5acf6e6c969de06e",
     "0006_sessions.sql": "0372a295771eda11ee5f73472c991a4b1d6955db63d68519612fb6cfa30d07ed",
     "0007_command_outcomes.sql": "7a0007184cad993594749139d87d4ceec88ee262c0af078471fefdd842cc11e9",
-    "0008_sharing.sql": "c98ede67b43b95d32e976e687fddd3bc05330b6edf625dcfa0ac7ff64b52405b",
+    "0008_sharing.sql": "bc0a4dbaebc8a36e8bfe8b860b0824f0e308b09204f4089a8174449dded0b829",
     "catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
     "generate_schema_catalog.py": "f6802d633a695202c28cb6d5b604ee4a14462fe57d50f48f647b3f8246783b24",
-    "qualify_tenant_schema.py": "85cc496aa326edff401f19af4f0c8e0372fa410383f2d27bb55ff555a436b2f1",
+    "qualify_tenant_schema.py": "5f9cebdf7315bc4b0babe7792d3efadb63a5ce372b3bea4dd2b23c9e32fefd0d",
     "runtime.py": "ee1600d202db4ee257440340bc37ae1a97269dbfc0fba3343cf3d987e57c29d2"
   },
   "candidate_sha256": {
@@ -25,7 +25,7 @@
     "catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
     "catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
     "catalog-v5.json": "66112bd02c1cf3e04753c8fe38d7baa261ecae91f35f5254d58c8d61d6987804",
-    "catalog-v8.json": "8c97dc4e8cb8cd4848fb862c9f8b8a7d23bf859ee34c769e8b005057f13f62dd",
+    "catalog-v8.json": "03d2851b6cf55ff274ed60b7a3dcc6e4239fd9ac73e18e8430545731e5af55ed",
     "catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6"
   },
   "body_bytes": {
@@ -36,7 +36,7 @@
     "catalog-v5.json": 219611,
     "catalog-v6.json": 245786,
     "catalog-v7.json": 271368,
-    "catalog-v8.json": 280768
+    "catalog-v8.json": 287337
   },
   "file_bytes": {
     "catalog-v1.json": 3905,
@@ -46,7 +46,7 @@
     "catalog-v5.json": 215525,
     "catalog-v6.json": 241098,
     "catalog-v7.json": 266132,
-    "catalog-v8.json": 275500
+    "catalog-v8.json": 281918
   },
   "guard_bytes": 419430
 }
