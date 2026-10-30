@@ -24,6 +24,7 @@
 !app/migrations/0004_entitlement_reads.sql
 !app/migrations/0005_definition_work_grants.sql
 !app/migrations/0006_sessions.sql
+!app/migrations/0007_command_outcomes.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
 !app/migrations/catalog-v1.json
@@ -32,6 +33,7 @@
 !app/migrations/catalog-v4.json
 !app/migrations/catalog-v5.json
 !app/migrations/catalog-v6.json
+!app/migrations/catalog-v7.json
 !app/certs/rds-global-bundle.pem
 !contracts/validate.py
 !contracts/schema.json

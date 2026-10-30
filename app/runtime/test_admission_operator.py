@@ -289,17 +289,26 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         for role, sequence, head in heads:
             if role in first["created"]:
                 self.assertEqual((sequence, head), (1, op.genesis(ORG, role)))
+        # D7.7 (0007): the backfilled row starts at 1 + the highest committed
+        # revision sequence (1 when this fixture has none); a second backfill
+        # leaves it unchanged.
+        following = self.query("SELECT coalesce(max(commit_sequence),0)+1 FROM genui.internal_record_revisions WHERE organization_id=%s", (ORG,))[0][0]
+        self.assertEqual(first["sequence"], {"organization_sequences": "created", "next_commit_sequence": following})
+        self.assertEqual(self.query("SELECT next_commit_sequence FROM genui.organization_sequences WHERE organization_id=%s", (ORG,)), [(following,)])
         again = self.cli("backfill", "--organization", ORG)
         self.assertEqual(again["created"], [])
         self.assertEqual(sorted(again["existing"]), sorted(op.CHAINS))
-        self.assertIn("organization_sequences", again["deferred"][0])
+        self.assertEqual(again["sequence"], {"organization_sequences": "existing", "next_commit_sequence": following})
+        verified = self.cli("verify", "--organization", ORG)
+        self.assertEqual((verified["command_outcomes"], verified["next_commit_sequence"]), (0, following))
         self.cli("backfill", "--organization", str(uuid.uuid4()), expect=1)
 
     def test_provision_creates_organization_binding_heads_handle_and_event_once(self):
         org = str(uuid.uuid4())
         out = self.cli("provision", "--organization", org, "--display-name", "Operator test trial",
                        "--issuer", ISSUER, "--provider-tenant", "ten_" + org[-12:])
-        self.assertEqual(set(out), {"organization_id", "handle", "audit_heads", "deferred"})
+        self.assertEqual(set(out), {"organization_id", "handle", "audit_heads", "sequence"})
+        self.assertEqual(out["sequence"], {"organization_sequences": "created", "next_commit_sequence": 1})
         raw = op.normalize_handle(out["handle"])
         self.assertIsNotNone(raw)
         self.assertEqual(self.query("SELECT status FROM genui.organizations WHERE organization_id=%s", (org,)), [("active",)])

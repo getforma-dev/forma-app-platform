@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://getforma.dev/contracts/impl-2026-10-29.2/schema.json",
+  "$id": "https://getforma.dev/contracts/impl-2026-10-29.3/schema.json",
   "$defs": {
     "value": {
       "oneOf": [
@@ -2809,7 +2809,15 @@
             "lookup_ambiguous",
             "resource_limit",
             "payload_too_large",
-            "limit_exceeded"
+            "limit_exceeded",
+            "conflict",
+            "stale",
+            "in_flight",
+            "busy",
+            "missing_idempotency_key",
+            "malformed_idempotency_key",
+            "malformed_command",
+            "unknown_outcome"
           ]
         },
         "limit": {
@@ -2825,11 +2833,235 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
+        },
+        "recovery_view": {
+          "$ref": "#/$defs/recovery_view"
+        },
+        "current_revision": {
+          "$ref": "#/$defs/current_revision"
         }
       },
       "required": [
         "status",
         "code"
+      ],
+      "additionalProperties": false
+    },
+    "recovery_view": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "recovery_view"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "organization_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "app_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "work_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "publication_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "work_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "record_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "command_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}(?![\\s\\S])"
+        },
+        "reason": {
+          "enum": [
+            "expected_version",
+            "payload_mismatch",
+            "retry_expired"
+          ]
+        },
+        "expected_record_version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "current_record_version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "current_values": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/named_value"
+              },
+              "minItems": 0,
+              "maxItems": 32
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stored_outcome": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/command_outcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "schema_version",
+        "organization_id",
+        "app_id",
+        "work_id",
+        "publication_id",
+        "work_version",
+        "record_id",
+        "command_id",
+        "idempotency_key",
+        "reason",
+        "expected_record_version",
+        "current_record_version",
+        "current_values",
+        "stored_outcome"
+      ],
+      "additionalProperties": false
+    },
+    "command_claim": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "command_claim"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "organization_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "app_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "work_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "principal_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "command_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}(?![\\s\\S])"
+        },
+        "payload_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "claimed_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(?![\\s\\S])",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "kind",
+        "schema_version",
+        "organization_id",
+        "app_id",
+        "work_id",
+        "principal_id",
+        "command_id",
+        "idempotency_key",
+        "payload_digest",
+        "claimed_at"
+      ],
+      "additionalProperties": false
+    },
+    "current_revision": {
+      "type": "object",
+      "properties": {
+        "publication_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "definition_revision_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "definition_digest": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "work_version": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "publication_id",
+        "definition_revision_id",
+        "definition_digest",
+        "work_version"
       ],
       "additionalProperties": false
     },
@@ -3602,6 +3834,12 @@
     },
     {
       "$ref": "#/$defs/job_state_v2"
+    },
+    {
+      "$ref": "#/$defs/recovery_view"
+    },
+    {
+      "$ref": "#/$defs/command_claim"
     }
   ]
 }

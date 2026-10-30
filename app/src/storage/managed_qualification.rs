@@ -118,7 +118,7 @@ const SEED_INPUTS: [(&str, &str, &str); 5] = [
     (
         "seed_validator_sha256",
         "contracts/validate.py",
-        "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
+        "70962d749fd952091ed0af660eeceaf42cda44a5ab2e289da96a81d6c4c5b826",
     ),
 ];
 /// The shared cases' checks a pass requires, in order (`qualification_cases`).
@@ -131,7 +131,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v6.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v7.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -152,7 +152,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 57] = [
+const SOURCES: [(&str, &[u8]); 68] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -216,6 +216,22 @@ const SOURCES: [(&str, &[u8]); 57] = [
         "app/src/auth_qualification/tests.rs",
         include_bytes!("../auth_qualification/tests.rs"),
     ),
+    (
+        "app/src/commands/mod.rs",
+        include_bytes!("../commands/mod.rs"),
+    ),
+    (
+        "app/src/commands/payload.rs",
+        include_bytes!("../commands/payload.rs"),
+    ),
+    (
+        "app/src/commands/routes.rs",
+        include_bytes!("../commands/routes.rs"),
+    ),
+    (
+        "app/src/commands/tests.rs",
+        include_bytes!("../commands/tests.rs"),
+    ),
     ("app/src/config.rs", include_bytes!("../config.rs")),
     (
         "app/src/http/limits.rs",
@@ -247,6 +263,11 @@ const SOURCES: [(&str, &[u8]); 57] = [
         include_bytes!("authorization.rs"),
     ),
     ("app/src/storage/catalog.rs", include_bytes!("catalog.rs")),
+    (
+        "app/src/storage/command_qualification.rs",
+        include_bytes!("command_qualification.rs"),
+    ),
+    ("app/src/storage/commands.rs", include_bytes!("commands.rs")),
     (
         "app/src/storage/definition_qualification.rs",
         include_bytes!("definition_qualification.rs"),
@@ -282,6 +303,10 @@ const SOURCES: [(&str, &[u8]); 57] = [
         include_bytes!("../../../contracts/fixtures/canonical-vectors.json"),
     ),
     (
+        "contracts/fixtures/command-recovery.json",
+        include_bytes!("../../../contracts/fixtures/command-recovery.json"),
+    ),
+    (
         "contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json",
         include_bytes!("../../../contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json"),
     ),
@@ -296,6 +321,22 @@ const SOURCES: [(&str, &[u8]); 57] = [
     (
         "contracts/fixtures/impl-2026-10-28.1/spend-review.json",
         include_bytes!("../../../contracts/fixtures/impl-2026-10-28.1/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.2/canonical-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.2/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.2/negative-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.2/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.2/northstar.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.2/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.2/spend-review.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.2/spend-review.json"),
     ),
     (
         "contracts/fixtures/negative-vectors.json",

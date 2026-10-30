@@ -28,6 +28,8 @@ pub enum Form {
     Resend,
     SignOut,
     SignOutAll,
+    /// APP-013: the record command form (D7.16), tied to the workspace session.
+    Command,
 }
 impl Form {
     fn name(self) -> &'static [u8] {
@@ -35,6 +37,7 @@ impl Form {
             Self::Resend => b"resend",
             Self::SignOut => b"signout",
             Self::SignOutAll => b"signout-all",
+            Self::Command => b"command",
         }
     }
 }

@@ -14,6 +14,7 @@ use forma_server::{
 use genui::auth::{
     self, Auth, AuthConfig, DeniedView, PendingView, ResendResult, SigninView, WorkspaceView,
 };
+use genui::commands::{self, Notice, RecordPage, RecordView};
 use rust_embed::Embed;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
@@ -54,6 +55,46 @@ struct WorkspaceProps {
     csrf_signout: String,
     csrf_signout_all: String,
 }
+// APP-013 record page (D7.16): typed rows and premise fields; the key and the
+// token are minted per render by the route, never read from the request.
+#[derive(PageProps)]
+struct FieldRowProps {
+    id: String,
+    kind: String,
+    value: String,
+    input: String,
+    spec: String,
+    spec_input: String,
+    options: String,
+    nullable: bool,
+    writable: bool,
+}
+#[derive(PageProps)]
+struct RecordProps {
+    app: String,
+    work: String,
+    collection: String,
+    record_id: String,
+    schema: String,
+    schema_version: String,
+    publication: String,
+    work_version: String,
+    version: String,
+    exists: bool,
+    fields: Vec<FieldRowProps>,
+    command: String,
+    action: String,
+    can_write: bool,
+    csrf: String,
+    idempotency_key: String,
+    committed: bool,
+    replayed: bool,
+    conflict: bool,
+    stale: bool,
+    in_flight: bool,
+    busy: bool,
+    unknown: bool,
+}
 
 struct AppState {
     manifest: forma_server::AssetManifest,
@@ -69,6 +110,57 @@ struct SsrPages {
     pending: PageHandle<PendingProps>,
     denied: PageHandle<DeniedProps>,
     workspace: PageHandle<WorkspaceProps>,
+    record: PageHandle<RecordProps>,
+}
+impl RecordPage for SsrPages {
+    fn record(&self, view: &RecordView) -> Response {
+        let notice = |expected: Notice| view.notice == Some(expected);
+        respond(
+            "/record",
+            self.record.render(
+                &RecordProps {
+                    app: view.app.clone(),
+                    work: view.work.clone(),
+                    collection: view.collection.clone(),
+                    record_id: view.record_id.clone(),
+                    schema: view.schema.clone(),
+                    schema_version: view.schema_version.clone(),
+                    publication: view.publication.clone(),
+                    work_version: view.work_version.clone(),
+                    version: view.version.clone(),
+                    exists: view.exists,
+                    fields: view
+                        .fields
+                        .iter()
+                        .map(|row| FieldRowProps {
+                            id: row.id.clone(),
+                            kind: row.kind.clone(),
+                            value: row.value.clone(),
+                            input: row.input.clone(),
+                            spec: row.spec.clone(),
+                            spec_input: row.spec_input.clone(),
+                            options: row.options.clone(),
+                            nullable: row.nullable,
+                            writable: row.writable,
+                        })
+                        .collect(),
+                    command: view.command.clone(),
+                    action: view.action.clone(),
+                    can_write: view.can_write,
+                    csrf: view.csrf.clone(),
+                    idempotency_key: view.idempotency_key.clone(),
+                    committed: notice(Notice::Committed),
+                    replayed: notice(Notice::Replayed),
+                    conflict: notice(Notice::Conflict),
+                    stale: notice(Notice::Stale),
+                    in_flight: notice(Notice::InFlight),
+                    busy: notice(Notice::Busy),
+                    unknown: notice(Notice::Unknown) || notice(Notice::Refused),
+                },
+                &RenderCtx::new().with_title("Record"),
+            ),
+        )
+    }
 }
 impl auth::Pages for SsrPages {
     fn signin(&self, view: &SigninView) -> Response {
@@ -251,6 +343,7 @@ async fn main() {
         "/auth/pending",
         "/auth/callback",
         "/workspace",
+        "/record",
     ] {
         require_ssr(manifest.route(route).map(|entry| entry.mode))
             .unwrap_or_else(|reason| panic!("required SSR route {route}: {reason}"));
@@ -292,6 +385,9 @@ async fn main() {
         workspace: pages
             .bind::<WorkspaceProps>("workspace")
             .unwrap_or_else(bind_errors),
+        record: pages
+            .bind::<RecordProps>("record")
+            .unwrap_or_else(bind_errors),
     });
     pages.finalize().unwrap_or_else(|errors| {
         for error in errors {
@@ -311,8 +407,15 @@ async fn main() {
     // refuses the operator qualification configuration here.
     let qualification = qualification_router();
     let auth = Arc::new(
-        Auth::new(auth_config, stores.clone(), auth_pages).unwrap_or_else(|reason| refuse(reason)),
+        Auth::new(auth_config, stores.clone(), auth_pages.clone())
+            .unwrap_or_else(|reason| refuse(reason)),
     );
+    // APP-013: the command route and the record page share the session,
+    // vault and synchronizer key with the ADR-006 routes.
+    let command_routes = Arc::new(commands::routes::Commands {
+        auth: auth.clone(),
+        page: auth_pages,
+    });
     let readiness = genui::readiness::Readiness::start(
         credential_path.into(),
         std::env::var("GENUI_HELPER_PATH")
@@ -351,7 +454,9 @@ async fn main() {
     // for its isolated run; the two never share a router.
     let app = match qualification {
         Some(harness) => app.merge(harness),
-        None => app.merge(auth::routes::router(auth.clone())),
+        None => app
+            .merge(auth::routes::router(auth.clone()))
+            .merge(commands::routes::router(command_routes)),
     }
     .fallback(genui::http::fallback)
     .method_not_allowed_fallback(genui::http::fallback)
@@ -470,7 +575,13 @@ mod tests {
 
     fn pages() -> SsrPages {
         let manifest = assets::try_load_manifest::<Assets>().expect("admin/dist built");
-        for route in ["/signin", "/auth/pending", "/auth/callback", "/workspace"] {
+        for route in [
+            "/signin",
+            "/auth/pending",
+            "/auth/callback",
+            "/workspace",
+            "/record",
+        ] {
             require_ssr(manifest.route(route).map(|entry| entry.mode)).unwrap();
         }
         let pages = load_ir_modules::<Assets>(&manifest).unwrap();
@@ -479,6 +590,7 @@ mod tests {
             pending: pages.bind::<PendingProps>("pending").unwrap(),
             denied: pages.bind::<DeniedProps>("denied").unwrap(),
             workspace: pages.bind::<WorkspaceProps>("workspace").unwrap(),
+            record: pages.bind::<RecordProps>("record").unwrap(),
         };
         // Home and about stay unbound here; finalize judges only bound routes.
         let _ = pages.bind::<HomeProps>("home");
@@ -556,5 +668,76 @@ mod tests {
         }))
         .await;
         assert!(body.contains("action=\"/auth/signout-all\"") && body.contains(&"A".repeat(43)));
+    }
+
+    /// APP-013 (D7.16): the record page renders its field rows and a form
+    /// carrying exactly the per-render key, the token and the premise as
+    /// hidden fields, without JavaScript; a reader without record_write sees
+    /// no form; a notice flag shows its one message.
+    #[tokio::test]
+    async fn record_page_renders_rows_and_the_keyed_form_without_javascript() {
+        let pages = pages();
+        let row = |id: &str, kind: &str, value: &str, options: &str| commands::FieldRow {
+            id: id.into(),
+            kind: kind.into(),
+            value: value.into(),
+            input: format!("value.{id}"),
+            spec: format!("{{\"type\":\"{kind}\"}}"),
+            spec_input: format!("spec.{id}"),
+            options: options.into(),
+            nullable: false,
+            writable: true,
+        };
+        let view = RecordView {
+            app: "00000000-0000-4000-8000-0000000000c9".into(),
+            work: "00000000-0000-4000-8000-0000000000cd".into(),
+            collection: "00000000-0000-4000-8000-0000000000ce".into(),
+            record_id: "00000000-0000-4000-8000-0000000000f0".into(),
+            schema: "decision".into(),
+            schema_version: "1".into(),
+            publication: "00000000-0000-4000-8000-0000000000cc".into(),
+            work_version: "1".into(),
+            version: "1".into(),
+            exists: true,
+            fields: vec![
+                row(
+                    "status",
+                    "enum",
+                    "needs_context",
+                    "needs_context | reviewed",
+                ),
+                row("note", "text", "Review required", ""),
+            ],
+            command: "record_decision".into(),
+            action: "/v1/work/00000000-0000-4000-8000-0000000000c9/work/commands/record_decision"
+                .into(),
+            can_write: true,
+            csrf: "C".repeat(43),
+            idempotency_key: "0123456789abcdef0123456789abcdef".into(),
+            notice: Some(Notice::Conflict),
+        };
+        let (status, headers, body) = html(pages.record(&view)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert!(headers[header::CACHE_CONTROL]
+            .to_str()
+            .unwrap()
+            .contains("no-store"));
+        assert!(!body.contains("<script src"));
+        assert!(body.contains("needs_context | reviewed") && body.contains("Review required"));
+        assert!(body.contains("name=\"value.status\"") && body.contains("name=\"spec.note\""));
+        assert_eq!(body.matches("0123456789abcdef0123456789abcdef").count(), 1);
+        assert!(body.contains(&format!("value=\"{}\"", "C".repeat(43))));
+        assert!(
+            body.contains("name=\"expected_record_version\" value=\"1\"")
+                || body.contains("value=\"1\" name=\"expected_record_version\"")
+        );
+        assert!(body.contains("The record changed before your command"));
+        assert!(!body.contains("was committed"));
+        let mut reader = view.clone();
+        reader.can_write = false;
+        reader.notice = None;
+        let (_, _, body) = html(pages.record(&reader)).await;
+        assert!(!body.contains("<form") && body.contains("not change it"));
+        assert!(!body.contains("The record changed"));
     }
 }

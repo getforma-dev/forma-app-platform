@@ -1,12 +1,14 @@
 //! Tenant storage primitives, the APP-073 admission operations, the APP-010
-//! definition, publication and saved-work operations and the APP-009 session
-//! records. `sessions` constructs `VerifiedNonmember` from a verified provider
-//! exchange and is the only constructor of a `TrustedRequest`, from the
-//! session row, the member's current epoch and the registry identity.
-//! A caller cannot construct a trusted request from headers or verifier strings.
+//! definition, publication and saved-work operations, the APP-009 session
+//! records and the APP-013 record commands. `sessions` constructs
+//! `VerifiedNonmember` from a verified provider exchange and is the only
+//! constructor of a `TrustedRequest`, from the session row, the member's
+//! current epoch and the registry identity. A caller cannot construct a
+//! trusted request from headers or verifier strings.
 mod admission;
 mod authorization;
 mod catalog;
+mod commands;
 mod definitions;
 mod pool;
 mod registry;
@@ -17,6 +19,11 @@ pub use admission::{
     VerifiedNonmember,
 };
 pub use authorization::{Action, Publication, Record, TrustedRequest};
+pub use commands::{
+    idempotency_key_shaped, CommandOutcome, CommandRequest, CommandResult, ConflictReason,
+    RecordCommand, RecordDetail, RecordField, RecoveryView, COMMAND_COMMITTED,
+    COMMAND_HANDLER_DEADLINE, MAX_COMMAND_VALUES, RETRY_HORIZON_SECONDS,
+};
 pub use definitions::{
     CurrentRevision, DefinitionDetail, DefinitionRevision, InputContract, PublicationDetail,
     PublishResult, RecordSchema, SavedWork, SavedWorkDetail, WorkBinding, MAX_CANONICAL_BYTES,
@@ -69,6 +76,14 @@ fn require(condition: bool) -> Result<()> {
 pub fn valid_organization(value: &str) -> bool {
     valid_id(value)
 }
+/// A canonical contract identifier in a route path (shape only; no lookup).
+pub fn valid_identifier(value: &str) -> bool {
+    valid_id(value)
+}
+/// A lowercase local identifier in a route path (`genui.local_id`).
+pub fn valid_local_id(value: &str) -> bool {
+    definitions::local_id(value)
+}
 
 /// Canonical contract UUIDs: lowercase, RFC variant, version4 or7.
 fn valid_id(value: &str) -> bool {
@@ -88,6 +103,8 @@ fn valid_id(value: &str) -> bool {
 // (`auth::tests`); still compiled only into the test executable.
 #[cfg(test)]
 pub(crate) mod admission_qualification;
+#[cfg(test)]
+pub(crate) mod command_qualification;
 #[cfg(test)]
 mod definition_qualification;
 #[cfg(test)]

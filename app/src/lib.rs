@@ -6,6 +6,8 @@ pub mod auth;
 // ADR-007 D7.13: compiled only with the `qualification-harness` feature (the
 // isolated qualification executable); release builds never contain it.
 pub mod auth_qualification;
+// APP-013: the declared record command route, payload digest and record page.
+pub mod commands;
 pub mod config;
 pub mod http;
 pub mod imports;

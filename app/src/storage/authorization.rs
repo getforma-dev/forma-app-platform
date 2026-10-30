@@ -108,6 +108,10 @@ pub(super) struct Transaction<'a> {
     /// Set when any statement of this transaction failed with SQLSTATE 40001
     /// (ADR-007 D7.6): PostgreSQL has then aborted the whole transaction.
     serialization: AtomicBool,
+    /// Set when any statement failed with SQLSTATE 55P03 (a lock wait past
+    /// `lock_timeout`) or 40P01 (a deadlock PostgreSQL resolved against this
+    /// transaction): D7.9 answers these as 409 `busy`/`in_flight`, never 503.
+    lock_wait: AtomicBool,
 }
 impl<'a> Transaction<'a> {
     pub async fn begin(pool: &Arc<RolePool>, request: &'a TrustedRequest) -> Result<Self> {
@@ -235,6 +239,7 @@ impl<'a> Transaction<'a> {
             deadline,
             request,
             serialization: AtomicBool::new(false),
+            lock_wait: AtomicBool::new(false),
         };
         transaction.batch(isolation).await?;
         #[cfg(test)]
@@ -246,16 +251,28 @@ impl<'a> Transaction<'a> {
     fn member(&self) -> Result<&'a TrustedRequest> {
         self.request.ok_or(Error::Denied)
     }
-    /// Records a 40001 refusal; it never leaves storage (D7.9).
+    /// Records a 40001, 55P03 or 40P01 refusal; none leaves storage (D7.9).
     fn note(&self, error: &tokio_postgres::Error) {
-        if error.code() == Some(&SqlState::T_R_SERIALIZATION_FAILURE) {
-            self.serialization.store(true, Ordering::Relaxed);
+        match error.code() {
+            Some(&SqlState::T_R_SERIALIZATION_FAILURE) => {
+                self.serialization.store(true, Ordering::Relaxed);
+            }
+            Some(&SqlState::LOCK_NOT_AVAILABLE) | Some(&SqlState::T_R_DEADLOCK_DETECTED) => {
+                self.lock_wait.store(true, Ordering::Relaxed);
+            }
+            _ => {}
         }
     }
     /// Whether a statement of this transaction failed with SQLSTATE 40001, so
     /// PostgreSQL has rolled the whole transaction back (D7.6).
     pub fn serialization_failed(&self) -> bool {
         self.serialization.load(Ordering::Relaxed)
+    }
+    /// Whether a statement of this transaction waited past `lock_timeout`
+    /// (55P03) or lost a deadlock (40P01); the transaction is aborted either
+    /// way and the caller answers 409 `busy` or `in_flight` (D7.9).
+    pub fn lock_timed_out(&self) -> bool {
+        self.lock_wait.load(Ordering::Relaxed)
     }
     pub async fn batch(&self, sql: &str) -> Result<()> {
         timeout_at(self.deadline, self.lease.client().batch_execute(sql))
