@@ -135,3 +135,207 @@ fn long_paths_are_exactly_the_parser_normalizer_and_model_routes() {
         assert!(!long_path(&path), "{path}");
     }
 }
+
+/// The real-Haiku folder smoke (ADR-011 pitch; APP-108): the key file named
+/// by `GENUI_BOX_SMOKE_KEY_FILE` is read into memory only (never printed,
+/// logged or copied). Over the synthetic fixture folder it runs the derived
+/// app's generation with the capped context (Haiku as the generation model),
+/// the explanation over computed results, and the brief's cited PDF call;
+/// it prints sizes, latencies and verdicts only.
+#[tokio::test]
+#[ignore = "calls the real Anthropic endpoint with the key file named by GENUI_BOX_SMOKE_KEY_FILE"]
+async fn real_haiku_folder_smoke() {
+    use crate::composer::model::{Anthropic, Model, DEFAULT_ENDPOINT, DEFAULT_ROUTER_MODEL};
+    use serde_json::{json, Value};
+    let Some(path) = std::env::var_os("GENUI_BOX_SMOKE_KEY_FILE") else {
+        eprintln!("skipped: GENUI_BOX_SMOKE_KEY_FILE not set");
+        return;
+    };
+    let text = std::fs::read_to_string(path).expect("the key file");
+    let key = text
+        .lines()
+        .find_map(|line| {
+            line.trim()
+                .strip_prefix("ANTHROPIC_API_KEY=")
+                .map(|k| k.trim().trim_matches('"').to_owned())
+        })
+        .expect("an ANTHROPIC_API_KEY line");
+    let client = Anthropic::new(&key, DEFAULT_ENDPOINT).expect("a usable key");
+    drop((text, key));
+    let model: Arc<dyn Model> = Arc::new(client);
+    let composer =
+        crate::composer::Composer::new(Some(model), DEFAULT_ROUTER_MODEL, DEFAULT_ROUTER_MODEL);
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs/pitch/folder-fixture");
+    let csv = std::fs::read_to_string(dir.join("q3_metrics.csv")).unwrap();
+    let mut lines = csv
+        .lines()
+        .map(|l| l.split(',').map(str::to_owned).collect::<Vec<_>>());
+    let table = super::inspect::Table {
+        format: "csv",
+        sheet: None,
+        header: lines.next().unwrap(),
+        rows: lines.collect(),
+    };
+    let columns = super::inspect::columns(&table);
+    let source = "0a1b2c3d-0000-4000-8000-000000000001";
+    let contract = super::register::contract("q3_metrics", source, &columns);
+    let canonical = crate::admission::encode(&contract).unwrap();
+    let data = crate::storage::FileData {
+        source_id: source.into(),
+        revision_id: "0a1b2c3d-0000-4000-8000-000000000002".into(),
+        normalized_digest: format!("sha256:{}", "0".repeat(64)),
+        row_count: table.rows.len() as i64,
+        contract_digest: crate::admission::digest::digest(
+            crate::admission::digest::INPUT_CONTRACT,
+            &canonical,
+        ),
+        contract,
+        created_at: "2026-10-30T00:00:00Z".into(),
+    };
+    let file = |name: &str, kind: &str| crate::storage::BoxFile {
+        box_id: ID.into(),
+        file_id: ID.into(),
+        name: name.into(),
+        kind: kind.into(),
+        media_type: String::new(),
+        bytes: 1,
+        content_digest: String::new(),
+        object_key: String::new(),
+        created_at: String::new(),
+        data: None,
+    };
+    let files = vec![
+        file("q3_metrics.csv", "csv"),
+        file("q3_metrics_brief.pdf", "pdf"),
+    ];
+    let derived = vec![super::derive::DataFile {
+        file: files[0].clone(),
+        data: data.clone(),
+        sample: table.rows.iter().take(20).cloned().collect(),
+    }];
+    let context = super::derive::context("Q3 metrics", &files, &derived);
+    let started = std::time::Instant::now();
+    let generated = composer
+        .generate_with(
+            "Build an app that shows the key metrics",
+            Some(&context),
+            &[super::derive::readable(&data)],
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-00000000e0a1",
+            tokio::time::Instant::now() + std::time::Duration::from_secs(100),
+        )
+        .await;
+    println!(
+        "{}",
+        json!({"step": "generation", "context_bytes": context.to_string().len(), "ms": started.elapsed().as_millis() as u64,
+            "admitted": generated.is_ok(), "refused_attempts": generated.as_ref().map(|g| g.refused.len()).unwrap_or(0),
+            "views": generated.as_ref().map(|g| g.planned.admitted.view_count).unwrap_or(0)})
+    );
+    // The explanation over results the engine would compute (synthetic sums).
+    let revenue: i64 = table
+        .rows
+        .iter()
+        .map(|r| r[2].replace('.', "").parse::<i64>().unwrap())
+        .sum();
+    let signups: i64 = table
+        .rows
+        .iter()
+        .map(|r| r[3].parse::<i64>().unwrap())
+        .sum();
+    let results = vec![super::explain::ViewResult {
+        view_id: "kpis".into(),
+        title: "Q3 totals".into(),
+        columns: vec![
+            "rows".into(),
+            "total_revenue".into(),
+            "total_signups".into(),
+        ],
+        column_types: json!({"rows": {"type": "integer"}, "total_revenue": {"type": "money", "currency": "USD", "minor_unit_exponent": 2}, "total_signups": {"type": "integer"}}),
+        rows: vec![vec![
+            json!(table.rows.len().to_string()),
+            json!(revenue.to_string()),
+            json!(signups.to_string()),
+        ]],
+        receipt_digest: "sha256:smoke".into(),
+    }];
+    let input = super::explain::model_input(&results);
+    let started = std::time::Instant::now();
+    let reply = composer
+        .complete_fast(
+            super::explain::SYSTEM,
+            input.clone(),
+            800,
+            std::time::Duration::from_secs(20),
+        )
+        .await;
+    let judged = reply
+        .as_ref()
+        .ok()
+        .and_then(|r| super::explain::judge(&r.text, &results));
+    // Verdict facts only (never the reply text): digits outside braces.
+    let stray_digits = reply
+        .as_ref()
+        .map(|r| {
+            let mut depth = 0i32;
+            r.text
+                .chars()
+                .filter(|c| {
+                    if *c == '{' {
+                        depth += 1
+                    } else if *c == '}' {
+                        depth -= 1
+                    };
+                    depth <= 1 && c.is_ascii_digit()
+                })
+                .count()
+        })
+        .unwrap_or(0);
+    println!(
+        "{}",
+        json!({"step": "explanation", "input_bytes": input.len(), "ms": started.elapsed().as_millis() as u64,
+        "replied": reply.is_ok(), "accepted": judged.is_some(), "findings": judged.as_ref().map(Vec::len).unwrap_or(0),
+        "digits_outside_placeholders": stray_digits})
+    );
+    if let Some(findings) = &judged {
+        let filled = super::explain::fill(findings, &results).unwrap();
+        let values: Vec<Value> = filled
+            .iter()
+            .flat_map(|f| {
+                f["parts"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(|p| p.get("exact").cloned())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert!(values.iter().all(|v| [
+            json!(table.rows.len().to_string()),
+            json!(revenue.to_string()),
+            json!(signups.to_string())
+        ]
+        .contains(v)));
+    }
+    // The brief's cited PDF call.
+    let pdf = std::fs::read(dir.join("q3_metrics_brief.pdf")).unwrap();
+    let started = std::time::Instant::now();
+    let cited = composer
+        .complete_documents(
+            "You brief a busy owner on one document. Write one short paragraph (two to four sentences) of its key facts, citing the document for every factual statement. Plain prose only.",
+            "Brief me on this document.".into(),
+            &[crate::composer::model::DocumentInput { title: "q3_metrics_brief.pdf", bytes: &pdf }],
+            700,
+            std::time::Duration::from_secs(40),
+        )
+        .await;
+    let parts = cited
+        .as_ref()
+        .map(|r| super::brief::cited_parts(r, ID))
+        .unwrap_or_default();
+    println!(
+        "{}",
+        json!({"step": "pdf_citations", "pdf_bytes": pdf.len(), "ms": started.elapsed().as_millis() as u64,
+        "replied": cited.is_ok(), "input_tokens": cited.as_ref().ok().and_then(|r| r.input_tokens), "output_tokens": cited.as_ref().ok().and_then(|r| r.output_tokens),
+        "cited_statements": parts.iter().filter(|p| p.get("cite").is_some()).count(), "kept_parts": parts.len()})
+    );
+}

@@ -171,8 +171,10 @@ function choose(index: number): void {
 export async function openFolderPicker(): Promise<void> {
   if (!input || !hooks) return;
   await hooks.refresh();
-  pickerMode = 'active';
   input.value = '';
+  // The `/` list re-judges the empty bar and closes.
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  pickerMode = 'active';
   input.focus();
   renderPicker('');
 }

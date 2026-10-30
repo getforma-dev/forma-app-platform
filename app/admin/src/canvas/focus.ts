@@ -62,6 +62,11 @@ export function registerFocusCard(card: HTMLElement, head: HTMLElement, label: s
   const id = card.dataset.card ?? '';
   if (!/^[A-Za-z0-9_-]{1,96}$/.test(id)) return;
   standalone.set(id, { card, label, onFocus });
+  // A deep link (`#focus=<id>`) or a reload may name this card before it existed
+  // (it mounts after the board settles): open it once it is on the canvas.
+  requestAnimationFrame(() => {
+    if (!session && card.isConnected && location.hash === `#focus=${id}`) openFocus(id);
+  });
   if (head.querySelector(':scope > [data-focus-card]')) return;
   const button = el(card.ownerDocument, 'button', { type: 'button', class: 'cv-card-focus', 'data-focus-card': '', 'aria-label': `Focus ${card.getAttribute('aria-label') ?? label}`, title: 'Focus · F' });
   button.append(svgFocus(card.ownerDocument));

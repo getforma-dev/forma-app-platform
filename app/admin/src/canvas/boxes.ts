@@ -592,7 +592,11 @@ export async function newUntitled(files: File[] = []): Promise<string> {
 // --- Provenance on app cards and receipts ---
 
 function workOf(node: Element): { app: string; work: string } | null {
-  const work = node.closest<HTMLElement>('.cv-item')?.dataset.group ?? node.closest<HTMLElement>('.cv-group')?.dataset.work ?? '';
+  // A card moved into focus mode leaves its canvas item: its own id
+  // (`c-{work}-{view}`, `a-{work}`) still names the work.
+  const cardId = node.closest<HTMLElement>('[data-card]')?.dataset.card ?? '';
+  const fromId = /^[ac]-([0-9a-f-]{36})/.exec(cardId)?.[1] ?? '';
+  const work = node.closest<HTMLElement>('.cv-item')?.dataset.group ?? node.closest<HTMLElement>('.cv-group')?.dataset.work ?? fromId;
   const found = boardWorks().find((entry) => entry.work === work);
   const app = found?.app ?? node.closest<HTMLElement>('.cv-group')?.dataset.app ?? '';
   return isUuid(app) && isUuid(work) ? { app, work } : null;
@@ -616,9 +620,9 @@ function markChips(): void {
 
 async function receiptLineage(details: HTMLDetailsElement): Promise<void> {
   if (details.dataset.lineage) return;
-  details.dataset.lineage = 'pending';
   const owner = workOf(details);
   if (!owner) return;
+  details.dataset.lineage = 'pending';
   const found = await lineage(owner.app, owner.work);
   if (!found || !found.files.length) return;
   const body = details.querySelector('.cv-receipt-body');
@@ -665,6 +669,17 @@ async function formation(box: Box, instruction: string, report: Report): Promise
   report(await buildApp(box.box_id, purposeOf(words) || words, report));
 }
 
+/**
+ * A command that ran leaves the bar empty and the `/` list closed (as `/card`
+ * and `/app` do, APP-104): the `input` event lets the slash list re-judge.
+ */
+function clearBar(): void {
+  const input = document.getElementById('intent-input') as HTMLInputElement | null;
+  if (!input || !input.value) return;
+  input.value = '';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 const FOLDER = {
   slug: FOLDER_COMMAND,
   aliases: FOLDER_ALIASES,
@@ -681,6 +696,7 @@ const FOLDER = {
     }
     const created = words.match(/^new\s+([\s\S]{1,60})$/i);
     if (created) {
+      clearBar();
       report(await newBox((created[1] ?? '').trim()));
       return;
     }
@@ -697,6 +713,7 @@ const FOLDER = {
         report(`Which ${noun}? Type ${CMD} <number> formation <instruction>, or select a ${noun} card first.`);
         return;
       }
+      clearBar();
       await formation(target, bare[1] ?? '', report);
       return;
     }
@@ -716,6 +733,7 @@ const FOLDER = {
       report(`There is no ${noun} “${words.slice(0, 40)}”. Type ${CMD} to see your ${nouns}.`);
       return;
     }
+    clearBar();
     const named = target.rest.trim().match(/^formation\b\s*([\s\S]*)$/i);
     if (named) {
       await formation(target.box, named[1] ?? '', report);

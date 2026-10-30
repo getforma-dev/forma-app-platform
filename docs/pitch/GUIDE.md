@@ -15,6 +15,7 @@ Forma is a canvas where teams describe what they need and get working apps: expe
 5. **Any agent.** Claude (or OpenAI) acts through Forma's MCP server under the member's own permissions, marked "via Claude".
 6. **Your canvas, your way.** Bring cards from the library pane, stack and shuffle them, and restyle widgets in words ("make it a TI-84 in Matrix style").
 7. **Proof on every number.** Each governed figure carries a receipt (`Verified …`) that identifies the source revision and query.
+8. **Folders: your files become apps.** Drop PDFs and spreadsheets into a folder, click it, and say "build a metrics app and explain it". The CSVs are parsed and typed at once, the app is built from them, labeled "Built from folder", and its summary's numbers each come from a receipt that names the file.
 
 ## Getting in
 
@@ -73,6 +74,17 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 - Delete returns a card to the library; it never deletes data.
 - `?` lists all shortcuts.
 
+**Folders (APP-108).** Lead with click → type:
+
+1. **Click** "+ Folder" (toolbar or the library pane's Folders group), or drop files on empty canvas: a folder opens with its name ready to edit (click the title any time to rename).
+2. **Drop** PDFs, images, CSV, XLSX or text onto it, or use "Add files" (up to 20 files, 20 MB each). A CSV or XLSX is read at once and shows its column types and first rows; adjust any type, or keep the defaults ("Keep as card" places a data card with receipts).
+3. **Click the folder** to make it active: its chip appears in the bar ("📁 Q3 board pack ×") and plain sentences now act on it: "build a metrics app and explain it", "brief me". × or Esc clears it.
+4. **Buttons**: "✨ Formation" (an editable prompt, prefilled "Build an app that shows the key metrics and explain them") and "Brief me" (an overview, a paragraph per file and key points; PDF statements cited "file, p. N").
+5. **@-mention** a folder in any sentence: "build a metrics app from @Q3 metrics".
+6. **Commands last**, for power users: `/folder` (picker), `/folder new <name>`, `/folder <name|number>`, `/folder uploads`, `/folder <name|number> formation <instruction>`; aliases `/storage`, `/box`.
+
+A CSV dropped on the canvas or the bar outside a folder goes to your "Uploads" folder and becomes a data card. Apps built from a folder show "Built from folder: <name> · N files" (click it to open the folder) and a Summary card ("AI summary · numbers from receipts"); a receipt lists the source files. Sharing such an app gives the teammate exactly the files it was built from.
+
 **Connect an agent.** The header button mints a token, shown once, and gives the setup lines for Claude Code or OpenAI.
 
 ## Operating it (operator only)
@@ -89,6 +101,8 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 | --- | --- |
 | **App** | One typed definition: its data (sources and records), its views, its actions (commands such as *submit* or *decide*), and who may use it. It has revisions and a publication. |
 | **Work (saved work)** | A member's own copy of an app, bound to their data. It is what gets opened, shared and permissioned. |
+| **Folder** | A member's files in one card (internally a "box"): PDFs, images, CSV/XLSX and text, kept as immutable objects. A confirmed CSV/XLSX becomes a registered source revision; apps built from the folder record which files they used. |
+| **Formation** | The AI keyword for a folder: everything after it is the instruction (build an app, brief me). |
 | **Card** | One view of an app on the canvas: a number, chart, table, records list, form or ledger. Apps have several cards. |
 | **Widget** | A stand-alone utility card (weather, calculator, clock) with no governed data. |
 | **Library** | The prebuilt apps an organization can retrieve instantly (14 in Northstar). |
