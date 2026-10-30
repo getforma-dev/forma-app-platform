@@ -1,5 +1,7 @@
 # APP-012 storage and query-worker half: author evidence
 
+> 2026-10-29: the route and page half (open question 2 below) is recorded in [routes/README.md](routes/README.md); its `query-campaign.json` (14 checks) supersedes the counts here for the current source. This file's measurements and hashes are left as recorded at `3a1b5f3`.
+
 **Author evidence, not acceptance.** This covers plan Task 9's storage and worker half only: `Data::run_query` and `Data::release_result`, the confined DuckDB engine child (`app/runtime/query_engine.py`, `runtime.py query`), the credentialed revision-cache fetch (`runtime.py cache`), the Rust supervisor and admission (`app/src/query/worker.rs`), the receipt builder (`app/src/query/receipt.rs`) and the operator commands that make the receipt truthful. The JSON route, the `/w/{app}/{work}` page and its loading/empty/failed/denied states wait for APP-009's sessions (`resolve_session`) and are the second half. No independent review has run, so no acceptance box is checked. Nothing touched AWS. Everything ran on one Apple-silicon Mac (Darwin arm64) with local Docker; every container started was removed.
 
 ## Decisions

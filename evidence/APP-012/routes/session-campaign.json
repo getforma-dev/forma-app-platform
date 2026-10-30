@@ -1,0 +1,155 @@
+{
+  "checks": [
+    {
+      "name": "operator issue-handle installs the two recorded fixture handles (digest only) with one handle.rotated event each",
+      "passed": true
+    },
+    {
+      "name": "unknown and malformed handles answer the same neutral page with no provider request; a known handle starts a fresh flow (digest-only cookie and state, sealed verifier, 10 minutes) and PAR without invite_token, then 303s to authorize with client_id and request_uri only",
+      "passed": true
+    },
+    {
+      "name": "unverified_mailbox_commits_no_slot_membership_or_entitlement: an invited signup whose exchange reports email_verified false lands on /auth/pending with a 24-hour pending admission bound to the verified identity, counted but not redeemed",
+      "passed": true
+    },
+    {
+      "name": "pre_access_cannot_reach_protected_routes_or_mint_session: the pre-access cookie reads no workspace (uniform 404, also when presented as a session cookie), cannot sign out everywhere, and a client-supplied grant field is refused",
+      "passed": true
+    },
+    {
+      "name": "pending_resend_mapping_for_all_five_provider_outcomes through POST /auth/pending/resend: 202 provider_accepted → requested; 429 resend_cooldown/too_many_requests, 503 email_unavailable, 502 email_failed, dfba787's 200 {message} and 500, and a timeout → unavailable; GenUI's 60 s cooldown answers unavailable with no provider call; 200 already_verified, 401, 404 and a failed refresh destroy the pre-access record and 303 to /signin/{handle}; CSRF refusals make no provider call; a pre-access sign-out destroys the record and revokes its token",
+      "passed": true
+    },
+    {
+      "name": "a fresh sign-in whose exchange reports email_verified true redeems the live pending admission through admit_redemption (slot, membership epoch 1, entitlement, audit) and mints the workspace session once (12 h, digest-only cookie, session.signed_in on the workspace chain; chains verify); later requests make no provider call",
+      "passed": true
+    },
+    {
+      "name": "replayed_callback_mismatched_state: a replayed callback finds no flow and never reaches the token endpoint; a mismatched state consumes the flow; a code bound to another flow's PKCE challenge and a consumed code are refused upstream; no session is minted by any of them",
+      "passed": true
+    },
+    {
+      "name": "unknown key, forged signature, wrong issuer or audience, expiry, missing or foreign tenant, sub≠user.id and contract-shape drift are refused uniformly with no session; the provider session of a parseable refused exchange is logged out; JWKS refresh stays bounded",
+      "passed": true
+    },
+    {
+      "name": "a verified canary identity with no membership gets the neutral denial page (sign-out only); a Northstar session value under the canary scope prefix resolves nothing (uniform 404)",
+      "passed": true
+    },
+    {
+      "name": "sign-out advances the member epoch (advance_member_epoch, session.sign_out on the admission chain) and deletes the record in one transaction, then logs out the refresh token; receipts: the provider refuses that token with 401 invalid_grant and the old cookie admits nothing (uniform 404); in-flight old-epoch authority fails; repeat sign-out is idempotent; missing, wrong-form and cross-site tokens are refused",
+      "passed": true
+    },
+    {
+      "name": "sign-out-everywhere deletes every session of the member in the organization, advances the epoch once (session.sign_out_all) and revokes each refresh token (both refused afterwards)",
+      "passed": true
+    },
+    {
+      "name": "idle_and_absolute_expiry: a workspace session idle 1 hour or 12 hours old, a pre-login flow past 10 minutes and a pre-access session idle 10 minutes admit nothing; the expired record is deleted and its refresh token revoked; last_seen_at is written at most once a minute",
+      "passed": true
+    },
+    {
+      "name": "revoked_entitlement_during_pending_never_mints: a code revoked, or a pending admission lapsed (denied_for_reconciliation), before the verified sign-in yields the neutral denial and commits nothing; a resend after the lapse destroys the record and 303s to a fresh sign-in",
+      "passed": true
+    },
+    {
+      "name": "both_admission_completion_orders_mint_at_most_one_session: a mint holding the member fence commits before a racing entitlement revocation, which then invalidates the session (uniform 404); with the revocation first a later verified completion is denied; two concurrent completions of one verified record mint exactly one session; an unverified record never mints",
+      "passed": true
+    },
+    {
+      "name": "restart_invalidates_refresh_tokens: a new process (new key, empty vault) admits no earlier workspace session, completes no earlier pre-login flow, accepts no earlier synchronizer token, and sends an earlier pending identity to a fresh sign-in",
+      "passed": true
+    },
+    {
+      "name": "the expiry sweep deletes idle or expired records in every registry organization and revokes their refresh tokens",
+      "passed": true
+    },
+    {
+      "name": "no_provider_token_or_set_cookie_reaches_browser: 149 responses carry none of 185 issued codes, tokens or request URIs (outside the authorize redirect), no token JSON and no issuer Set-Cookie",
+      "passed": true
+    }
+  ],
+  "handles": {
+    "canary": "z33gibxjspwxcnopbsdxqtijey",
+    "northstar": "se45m37vabqrfvbh3gbwn22qkm"
+  },
+  "hosted_acceptance": false,
+  "limits": [
+    "The provider is the cfg(test) synthetic loopback issuer (simulated transport and hosted page), never the deployed fAuth; hosted PAR, mail delivery and browsers are APP-074/076.",
+    "The invited-signup entry is a labeled local stand-in for APP-074's POST /invite/validate.",
+    "Synthetic local password authentication is not RDS IAM; identifiers are synthetic.",
+    "Rendering uses a test page renderer; the SSR pages are covered by the binary's own test and the HTTP probes."
+  ],
+  "managed_acceptance": false,
+  "passed": true,
+  "refused_token_modes": [
+    "UnknownKid",
+    "ForgedSignature",
+    "WrongIssuer",
+    "WrongAudience",
+    "Expired",
+    "MissingTenant",
+    "ForeignTenant",
+    "SubjectMismatch",
+    "ExtraField",
+    "MissingEmailVerified"
+  ],
+  "resend_outcomes": [
+    {
+      "genui": "Some(Requested)",
+      "provider": "Accepted"
+    },
+    {
+      "genui": "Some(Unavailable)",
+      "provider": "Cooldown"
+    },
+    {
+      "genui": "Some(Unavailable)",
+      "provider": "TooManyRequests"
+    },
+    {
+      "genui": "Some(Unavailable)",
+      "provider": "EmailUnavailable"
+    },
+    {
+      "genui": "Some(Unavailable)",
+      "provider": "EmailFailed"
+    },
+    {
+      "genui": "Some(Unavailable)",
+      "provider": "LegacyMessage"
+    },
+    {
+      "genui": "Some(Unavailable)",
+      "provider": "LegacyFailed"
+    },
+    {
+      "genui": "Some(Unavailable)",
+      "provider": "Timeout"
+    },
+    {
+      "genui": "303 /signin/{handle}, pre-access destroyed",
+      "provider": "AlreadyVerified",
+      "refresh": "Normal"
+    },
+    {
+      "genui": "303 /signin/{handle}, pre-access destroyed",
+      "provider": "Unauthorized",
+      "refresh": "Normal"
+    },
+    {
+      "genui": "303 /signin/{handle}, pre-access destroyed",
+      "provider": "NotFound",
+      "refresh": "Normal"
+    },
+    {
+      "genui": "303 /signin/{handle}, pre-access destroyed",
+      "provider": "Accepted",
+      "refresh": "Unauthorized"
+    }
+  ],
+  "schema_version": 1,
+  "scope": "APP-009 isolated native PostgreSQL TLS session campaign: ADR-006 routes over the real router, reviewed verifier, cfg(test) synthetic loopback issuer",
+  "server_version": "16.13 (Debian 16.13-1.pgdg13+1)",
+  "sessions_at_end": 5
+}

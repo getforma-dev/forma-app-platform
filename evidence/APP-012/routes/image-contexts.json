@@ -1,0 +1,24 @@
+{
+  "service_missing": [],
+  "qualification_missing": [],
+  "app012_new_files_in_service": [
+    "app/src/query/page.rs",
+    "app/src/query/routes.rs",
+    "app/admin/src/work/app.tsx",
+    "app/admin/src/forma-types.d.ts"
+  ],
+  "app012_new_files_in_qualification": [
+    "app/src/query/page.rs",
+    "app/src/query/routes.rs",
+    "app/src/query/route_tests.rs"
+  ],
+  "service_test_only_excluded": [
+    "app/src/admission/tests.rs",
+    "app/src/query/route_tests.rs",
+    "app/src/query/tests.rs",
+    "app/src/storage/admission_qualification.rs",
+    "app/src/storage/managed_qualification.rs",
+    "app/src/storage/managed_qualification/tests.rs",
+    "app/src/storage/query_qualification.rs"
+  ]
+}
