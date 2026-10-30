@@ -3422,7 +3422,7 @@
       "Depends on": "APP-093, APP-095, APP-099, APP-100",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent on `pivot/focus-unite`)",
-      "Branch / PR": "Not started (`pivot/workflows`, from `pivot/pitch-mvp`)",
+      "Branch / PR": "`pivot/workflows` (from `pivot/pitch-mvp` d353831), built, not merged",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
