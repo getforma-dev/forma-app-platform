@@ -597,5 +597,150 @@ class AttachedManagementSecret(unittest.TestCase):
         self.assertFalse(any(c[0] == 'secretsmanager' for c in calls))
 
 
+EARLIER = '88d1b19d-db20-4593-993c-de275d4e7318'
+LATER = '00000000-0000-4000-8000-0000000000b2'
+REDEPLOY = datetime(2026, 11, 1, 17, tzinfo=timezone.utc)
+SERVICE_V2 = '877573132739.dkr.ecr.us-east-1.amazonaws.com/genui@sha256:' + 'e' * 64
+
+
+class Supersede(unittest.TestCase):
+    """A redeploy of the same always-on service supersedes its earlier window instead of double-counting it."""
+
+    def earlier(self, legacy=False):
+        """The APP-078 shape: a window reserved on Oct 30 that runs to the end-of-November backstop."""
+        reserved_at = datetime(2026, 10, 30, 20, tzinfo=timezone.utc)
+        config, ledger = always_on(reserved_at)
+        config['window_id'] = EARLIER
+        ledger['months']['2026-10'] = dict(ledger['months']['2026-11'])
+        updated, report = preflight.reserve(config, ledger, reserved_at)
+        if legacy:  # a record written before service identities existed, like the live 88d1b19d
+            del updated['windows'][EARLIER]['service_identity']
+        # Re-reconciled at the redeploy, as runbook step 4.1 requires.
+        for entry in updated['months'].values():
+            entry['reconciled_at_utc'] = REDEPLOY.strftime('%Y-%m-%dT%H:%M:%SZ')
+        return config, updated, report
+
+    def redeploy(self, config, **changes):
+        return {**config, 'window_id': LATER, 'image_digest': SERVICE_V2, **changes}
+
+    def test_a_supersede_fits_under_the_caps_where_a_second_plain_window_refuses(self):
+        config, ledger, first = self.earlier()
+        self.assertEqual(first['cost_by_month']['2026-11']['all_window_compute_reservations_cents'], 8787)
+        with self.assertRaisesRegex(ValueError, 'budget exceeded for 2026-11'):
+            preflight.reserve(self.redeploy(config), ledger, REDEPLOY)
+        updated, report = preflight.reserve(self.redeploy(config, supersedes_window_id=EARLIER), ledger, REDEPLOY)
+        self.assertEqual(report['superseded_window_id'], EARLIER)
+        self.assertFalse(report['reused_reservation'])
+        month = report['cost_by_month']['2026-11']
+        # Earlier: Nov 1 00:00-17:00 elapsed plus its three task-hours stay counted (8787 - floor(703 h) = 244);
+        # later: 703 h plus three task-hours (8580), exactly the APP-078 figure.
+        self.assertEqual(updated['windows'][EARLIER]['counted_compute_cents_by_month'], {'2026-10': first['cost_by_month']['2026-10']['all_window_compute_reservations_cents'], '2026-11': 244})
+        self.assertEqual(updated['windows'][LATER]['reserved_compute_cents_by_month'], {'2026-11': 8580})
+        self.assertEqual((month['all_window_compute_reservations_cents'], month['superseded_compute_released_cents']), (8580 + 244, 8787 - 244))
+        self.assertEqual((month['genui_total_cents'], month['project_total_cents']), (5074 + 8824 + 1500, 5074 + 8824 + 1500 + 3800))
+        self.assertLessEqual(month['genui_total_cents'], 17000)
+        self.assertLessEqual(month['project_total_cents'], 20800)
+        # The caps are unchanged: a supersede that would still exceed them refuses.
+        tight = copy.deepcopy(ledger); tight['months']['2026-11']['prior_extra_spend_cents'] = 17000 - 15398 + 1
+        with self.assertRaisesRegex(ValueError, 'budget exceeded for 2026-11'):
+            preflight.reserve(self.redeploy(config, supersedes_window_id=EARLIER), tight, REDEPLOY)
+
+    def test_the_earlier_record_remains_and_cannot_be_reused(self):
+        config, ledger, first = self.earlier()
+        before = copy.deepcopy(ledger['windows'][EARLIER])
+        later = self.redeploy(config, supersedes_window_id=EARLIER)
+        updated, report = preflight.reserve(later, ledger, REDEPLOY)
+        self.assertEqual(set(updated['windows']), {EARLIER, LATER})
+        kept = updated['windows'][EARLIER]
+        self.assertEqual({k: kept[k] for k in before}, before)  # original figures, identity and binding untouched
+        self.assertEqual((kept['superseded_by_window_id'], kept['superseded_at_utc']), (LATER, '2026-11-01T17:00:00Z'))
+        self.assertEqual(updated['windows'][LATER]['supersedes_window_id'], EARLIER)
+        self.assertNotEqual(report['input_sha256'], first['input_sha256'])
+        # The superseding window's retry reuses its reservation and changes nothing.
+        again, retry = preflight.reserve(dict(later, service_desired_count=1), updated, REDEPLOY + timedelta(minutes=5))
+        self.assertEqual((again, retry['reused_reservation'], retry['superseded_window_id']), (updated, True, EARLIER))
+        # The superseded window can no longer be retried or activated.
+        with self.assertRaisesRegex(ValueError, 'superseded by ' + LATER):
+            preflight.reserve(dict(config, service_desired_count=1), updated, REDEPLOY + timedelta(minutes=5))
+        # A plain window without supersede is unchanged: no superseded_window_id.
+        self.assertIsNone(first['superseded_window_id'])
+        self.assertEqual(first['cost_by_month']['2026-11']['superseded_compute_released_cents'], 0)
+
+    def test_a_legacy_record_without_identity_can_be_superseded(self):
+        config, ledger, _ = self.earlier(legacy=True)
+        updated, report = preflight.reserve(self.redeploy(config, supersedes_window_id=EARLIER), ledger, REDEPLOY)
+        self.assertEqual((report['superseded_window_id'], report['cost_by_month']['2026-11']['all_window_compute_reservations_cents']), (EARLIER, 8824))
+        self.assertNotIn('service_identity', updated['windows'][EARLIER])
+
+    def test_unknown_already_superseded_or_foreign_windows_refuse(self):
+        config, ledger, _ = self.earlier()
+        with self.assertRaisesRegex(ValueError, 'not in the ledger'):
+            preflight.reserve(self.redeploy(config, supersedes_window_id='00000000-0000-4000-8000-0000000000ff'), ledger, REDEPLOY)
+        for bad in (None, 1, EARLIER.upper(), EARLIER + '\n', 'not-a-window'):
+            with self.assertRaisesRegex(ValueError, 'canonical UUID'):
+                preflight.reserve(self.redeploy(config, supersedes_window_id=bad), ledger, REDEPLOY)
+        updated, _ = preflight.reserve(self.redeploy(config, supersedes_window_id=EARLIER), ledger, REDEPLOY)
+        third = self.redeploy(config, supersedes_window_id=EARLIER, window_id='00000000-0000-4000-8000-0000000000b3')
+        with self.assertRaisesRegex(ValueError, 'already superseded by ' + LATER):
+            preflight.reserve(third, updated, REDEPLOY + timedelta(hours=1))
+        # Another service (hostname) or plan recorded on the earlier window refuses.
+        for field, value in (('hostname', 'other.getforma.dev'), ('account', '123456789012')):
+            foreign = copy.deepcopy(ledger); foreign['windows'][EARLIER]['service_identity'][field] = value
+            with self.assertRaisesRegex(ValueError, 'another operating plan, service or account'):
+                preflight.reserve(self.redeploy(config, supersedes_window_id=EARLIER), foreign, REDEPLOY)
+        foreign = copy.deepcopy(ledger); foreign['windows'][EARLIER]['service_identity']['operating_plan'] = 'bounded-window'
+        with self.assertRaisesRegex(ValueError, 'another operating plan'):
+            preflight.reserve(self.redeploy(config, supersedes_window_id=EARLIER), foreign, REDEPLOY)
+
+    def test_the_live_head_may_be_superseded_again_but_never_into_a_cycle(self):
+        config, ledger, _ = self.earlier()
+        updated, _ = preflight.reserve(self.redeploy(config, supersedes_window_id=EARLIER), ledger, REDEPLOY)
+        # A window cannot supersede itself.
+        with self.assertRaisesRegex(ValueError, 'cycle'):
+            preflight.reserve(self.redeploy(config, supersedes_window_id=LATER), updated, REDEPLOY)
+        # A ledger whose records form a cycle (hand-edited) is refused before anything is reserved.
+        # (Times made equal so that only the cycle itself is wrong.)
+        cyclic = copy.deepcopy(updated); same = cyclic['windows'][LATER]['created_at_utc']
+        cyclic['windows'][EARLIER].update(supersedes_window_id=LATER, created_at_utc=same)
+        cyclic['windows'][LATER].update(superseded_by_window_id=EARLIER, superseded_at_utc=same,
+                                        counted_compute_cents_by_month=cyclic['windows'][LATER]['reserved_compute_cents_by_month'])
+        with self.assertRaisesRegex(ValueError, 'supersession cycle in the ledger'):
+            preflight.reserve(self.redeploy(config, window_id='00000000-0000-4000-8000-0000000000b3'), cyclic, REDEPLOY)
+        # One-sided or inconsistent supersession records are refused too.
+        for mutate in (lambda w: w[LATER].pop('supersedes_window_id'),
+                       lambda w: w[EARLIER].pop('counted_compute_cents_by_month'),
+                       lambda w: w[EARLIER].update(superseded_at_utc='2026-11-01T18:00:00Z'),
+                       lambda w: w[EARLIER]['counted_compute_cents_by_month'].update({'2026-11': 8788})):
+            broken = copy.deepcopy(updated); mutate(broken['windows'])
+            with self.assertRaises(ValueError):
+                preflight.reserve(self.redeploy(config, window_id='00000000-0000-4000-8000-0000000000b3'), broken, REDEPLOY)
+        # Superseding the current head (the second redeploy) is a fresh, single-successor link.
+        third = self.redeploy(config, window_id='00000000-0000-4000-8000-0000000000b3', supersedes_window_id=LATER,
+                              image_digest=SERVICE_V2[:-1] + 'f')
+        final, report = preflight.reserve(third, updated, REDEPLOY + timedelta(hours=1))
+        self.assertEqual(report['superseded_window_id'], LATER)
+        self.assertEqual(len(final['windows']), 3)
+        self.assertLessEqual(report['cost_by_month']['2026-11']['genui_total_cents'], 17000)
+
+    def test_future_months_of_the_earlier_window_are_released_entirely(self):
+        # Earlier window Nov 20 -> Dec 20; superseded Nov 25: December's reservation (window time and
+        # task-hours) is released, November keeps elapsed hours plus the task-hour allowance.
+        start = datetime(2026, 11, 20, 12, tzinfo=timezone.utc)
+        config, ledger = always_on(start)
+        config.update(window_id=EARLIER, deployment_expires_at_utc='2026-12-20T12:00:00Z')
+        ledger['months']['2026-12'] = dict(ledger['months']['2026-11'])
+        updated, first = preflight.reserve(config, ledger, start)
+        later_at = datetime(2026, 11, 25, 12, tzinfo=timezone.utc)
+        for entry in updated['months'].values(): entry['reconciled_at_utc'] = later_at.strftime('%Y-%m-%dT%H:%M:%SZ')
+        final, report = preflight.reserve(self.redeploy(config, supersedes_window_id=EARLIER), updated, later_at)
+        counted = final['windows'][EARLIER]['counted_compute_cents_by_month']
+        self.assertEqual(counted['2026-12'], 0)
+        rate = preflight.TASK_HOURLY * 100
+        # Nov 20 12:00 -> Nov 25 12:00 is 120 h; plus three task-hours: about $14.95.
+        self.assertGreaterEqual(counted['2026-11'], int(123 * rate))
+        self.assertLessEqual(counted['2026-11'], int(123 * rate) + 2)
+        self.assertEqual(report['cost_by_month']['2026-12']['superseded_compute_released_cents'], first['cost_by_month']['2026-12']['all_window_compute_reservations_cents'])
+
+
 if __name__ == '__main__':
     unittest.main()
