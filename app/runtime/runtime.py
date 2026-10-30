@@ -336,8 +336,15 @@ _CLIENT_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 _VALID_ID = re.compile(_CAPABILITY_UUID)
 # A DNS host as the service's `url` crate serializes it (lowercase labels, no percent-encoding, no space),
 # or an IPv4 literal; the url crate refuses `exa mple.com` and `ex%41mple.com`, so this reader does too.
+_IPV4_HOST = r"(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])"
+_IPV4 = re.compile(_IPV4_HOST)
 _ORIGIN_HOST = re.compile(r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.?"
-                          r"|(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])")
+                          r"|" + _IPV4_HOST)
+# APP-078 review M1: WHATWG's "ends in a number" rule. A host whose last label (ignoring one trailing dot) is
+# decimal digits or `0x` hex is parsed as IPv4 by the url crate and then normalized (`127.1`, `0x7f.1`,
+# `2130706433`, `012.0.0.1` all become `127.0.0.1`/`10.0.0.1`) or refused (`example.0`, `1.2.3.4.5`,
+# `09.1.1.1`); either way the serialization differs from the value, so only a strict canonical dotted quad passes.
+_NUMERIC_LABEL = re.compile(r"[0-9]+|0x[0-9a-f]*")
 
 
 def _graphic(value, bound):
@@ -350,7 +357,8 @@ def _exact_origin(value):
 
     B1 review m1: the host must also be one the service's `url` crate would serialize unchanged
     (no space, no percent-encoding, no uppercase), so nothing this reader accepts can make the
-    child refuse its configuration file and crash-loop the task."""
+    child refuse its configuration file and crash-loop the task. APP-078 review M1: that includes
+    WHATWG's "ends in a number" rule, so a numeric last label passes only as a canonical dotted quad."""
     if not isinstance(value, str) or not value.isascii() or "%" in value or len(value) > 512:
         return False
     from urllib.parse import urlsplit
@@ -361,6 +369,9 @@ def _exact_origin(value):
         return False
     if url.scheme != "https" or not url.hostname or url.username is not None or url.password is not None \
             or url.path or url.query or url.fragment or _ORIGIN_HOST.fullmatch(url.hostname) is None:
+        return False
+    labels = url.hostname[:-1].split(".") if url.hostname.endswith(".") else url.hostname.split(".")
+    if _NUMERIC_LABEL.fullmatch(labels[-1]) is not None and _IPV4.fullmatch(url.hostname) is None:
         return False
     return value == "https://%s%s" % (url.hostname, "" if port in (None, 443) else ":%d" % port)
 
