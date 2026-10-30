@@ -483,7 +483,9 @@ impl Engine {
 
     /// Executes `run` within `deadline` (capped at [`INTERACTIVE_DEADLINE`]).
     /// Emits one `query.dispatch` log line per child launched, or one
-    /// `query.refused_before_dispatch` line when no child runs (APP-076 G6).
+    /// `query.refused_before_dispatch` line when no child runs (APP-076 G6);
+    /// a launched child that yields no result adds one
+    /// `query.failed_after_dispatch` line with its code (B1 review m4).
     pub async fn execute(
         &self,
         run: &QueryRun,
@@ -526,8 +528,8 @@ impl Engine {
             "cache_root": self.settings.cache_root,
             "scratch": scratch.0,
         });
-        let bytes =
-            serde_json::to_vec(&request).map_err(|_| QueryError::Failed(Failure::Engine))?;
+        let bytes = serde_json::to_vec(&request)
+            .map_err(|_| refused(QueryError::Failed(Failure::Engine)))?;
         self.running
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -542,28 +544,35 @@ impl Engine {
             duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
             "engine child dispatched"
         );
-        let outcome = self.run_child(&scratch.0, bytes).await;
-        drop(scratch);
-        drop(slot);
-        let output = outcome.map_err(|killed| {
-            QueryError::Failed(match killed {
-                Killed::Deadline => Failure::Deadline,
-                _ => Failure::Killed,
-            })
-        })?;
-        // The parent enforces the interactive deadline too: an answer that
-        // arrives late is withheld, whatever the child reported (review m1).
-        if Instant::now() > until + LATE_GRACE {
-            return Err(QueryError::Failed(Failure::Deadline));
+        let finished = async {
+            let outcome = self.run_child(&scratch.0, bytes).await;
+            drop(scratch);
+            drop(slot);
+            let output = outcome.map_err(|killed| {
+                QueryError::Failed(match killed {
+                    Killed::Deadline => Failure::Deadline,
+                    _ => Failure::Killed,
+                })
+            })?;
+            // The parent enforces the interactive deadline too: an answer that
+            // arrives late is withheld, whatever the child reported (review m1).
+            if Instant::now() > until + LATE_GRACE {
+                return Err(QueryError::Failed(Failure::Deadline));
+            }
+            if !output.status.success() {
+                return Err(QueryError::Failed(Failure::Engine));
+            }
+            let mut result = parse_result(&output.stdout)?;
+            result.integer_columns = integer_columns(run.query());
+            result.wall = started.elapsed();
+            result.peak_rss_bytes = output.peak_rss_bytes;
+            Ok(result)
         }
-        if !output.status.success() {
-            return Err(QueryError::Failed(Failure::Engine));
+        .await;
+        if let Err(error) = &finished {
+            log_failed_after_dispatch(run, refusal_code(error), started.elapsed());
         }
-        let mut result = parse_result(&output.stdout)?;
-        result.integer_columns = integer_columns(run.query());
-        result.wall = started.elapsed();
-        result.peak_rss_bytes = output.peak_rss_bytes;
-        Ok(result)
+        finished
     }
 
     /// The confined engine child with one request; its raw output.
@@ -596,6 +605,22 @@ pub fn refusal_code(error: &QueryError) -> &'static str {
         QueryError::Failed(Failure::Killed) => "killed",
         QueryError::Failed(Failure::Engine) => "engine",
     }
+}
+
+/// B1 review m4: the terminal line of a dispatched run that produced no
+/// result (deadline, killed, engine failure, protocol refusal), so every
+/// `query.dispatch` line reconciles with exactly one terminal line.
+pub fn log_failed_after_dispatch(run: &QueryRun, code: &str, elapsed: Duration) {
+    tracing::info!(
+        event = "query.failed_after_dispatch",
+        code,
+        organization_id = run.organization(),
+        app_id = run.app(),
+        work_id = run.work(),
+        view_id = run.view(),
+        duration_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
+        "query failed after dispatch"
+    );
 }
 
 /// APP-076 G6: one structured line when an authorized run is refused before

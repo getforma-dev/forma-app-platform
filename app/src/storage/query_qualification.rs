@@ -2117,9 +2117,17 @@ async fn route_campaign(
     let released = log_lines("query.released");
     let denied_release = log_lines("query.release_denied");
     let refused_before = log_lines("query.refused_before_dispatch");
+    // B1 review m4: a dispatched run that yields no result has its own
+    // terminal line; every terminal line follows a dispatch (runs the
+    // campaign drives through the engine directly have no release line).
+    let failed_after = log_lines("query.failed_after_dispatch");
     assert!(
         released >= 10 && denied_release >= 2 && refused_before >= 3,
         "{released} {denied_release} {refused_before}"
+    );
+    assert!(
+        released + denied_release + failed_after <= dispatched,
+        "{released} + {denied_release} + {failed_after} terminal lines exceed {dispatched} dispatches"
     );
     assert!(log_mentions(&format!(
         "receipt_id=\"{}\"",
@@ -2138,10 +2146,10 @@ async fn route_campaign(
     ] {
         assert!(!log_mentions(secret), "{secret} in the log");
     }
-    report["query_log"] = json!({"dispatch": dispatched, "released": released, "release_denied": denied_release, "refused_before_dispatch": refused_before});
+    report["query_log"] = json!({"dispatch": dispatched, "released": released, "release_denied": denied_release, "failed_after_dispatch": failed_after, "refused_before_dispatch": refused_before});
     check(
         checks,
-        &format!("structured query log (APP-076 G6): {dispatched} query.dispatch lines, one per engine child launched across both engines; {released} query.released and {denied_release} query.release_denied lines carrying receipt and result identities; {refused_before} query.refused_before_dispatch lines with their codes (busy, denied, invalid_parameters among them); no window bound, destination or cookie value appears in the log"),
+        &format!("structured query log (APP-076 G6): {dispatched} query.dispatch lines, one per engine child launched across both engines; {released} query.released and {denied_release} query.release_denied lines carrying receipt and result identities; {failed_after} query.failed_after_dispatch lines, and no more terminal lines than dispatches; {refused_before} query.refused_before_dispatch lines with their codes (busy, denied, invalid_parameters among them); no window bound, destination or cookie value appears in the log"),
     );
     let Campaign { fixture, .. } = c;
     (fixture, report)

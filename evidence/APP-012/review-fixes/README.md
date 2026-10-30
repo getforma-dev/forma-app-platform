@@ -70,3 +70,7 @@ Docker: before and after every campaign `docker ps -a` showed only `gatewasm-db-
 - The reload-restore flow is exercised through the test browser (a cookie jar that obeys `Set-Cookie`) and raw requests, not a real browser; APP-076 observes the hosted page.
 - The receipt-rule port (`admit_receipt`) covers edition-1 `query_receipt` only; the Python validator stays the oracle (every delivered receipt in the campaign is also run through it).
 - No image was built; APP-078 rebuilds the candidate with these sources.
+
+## 2026-10-30: B1 review m4 (terminal log line after dispatch)
+
+The [B1/APP-074 Tier A review](../../APP-074/local/b1-independent-review.md) (m4) found that a dispatched run producing no result (deadline, kill, engine failure, protocol refusal, or a receipt that fails its contract check) left no terminal log line. `Engine::execute` now emits one `query.failed_after_dispatch` line with its code for every post-dispatch failure, and both routes emit it with code `receipt_nonconforming` when `receipt::build` refuses. The query campaign records the count and asserts that terminal lines never exceed dispatches (runs the campaign drives through the engine directly have no release line). Re-run at the merged tip: 1 passed, 20 checks; log 139 `query.dispatch`, 25 `query.released`, 5 `query.release_denied`, 2 `query.failed_after_dispatch`, 38 `query.refused_before_dispatch` ([query-campaign.json](query-campaign.json), replaced). `cargo test --locked`: lib 130 / 13 ignored, bin 5, doctests 3; fmt and clippy clean.

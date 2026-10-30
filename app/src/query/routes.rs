@@ -352,6 +352,7 @@ async fn query(
     };
     // A receipt outside the contract's receipt rule is never delivered.
     let Some(receipt) = receipt::build(&run, &result) else {
+        super::worker::log_failed_after_dispatch(&run, "receipt_nonconforming", result.wall);
         return engine_refusal(&QueryError::Failed(Failure::Engine));
     };
     let Ok(body) = serde_json::to_vec(&json!({
@@ -621,7 +622,14 @@ async fn compute(
     let outcome = match executor.execute(&run, INTERACTIVE_DEADLINE).await {
         Ok(result) => match receipt::build(&run, &result) {
             Some(receipt) => Pending::Computed(Box::new((run, result, receipt))),
-            None => Pending::Done(Box::new(page::card(&view, Outcome::Failed(Reason::Engine)))),
+            None => {
+                super::worker::log_failed_after_dispatch(
+                    &run,
+                    "receipt_nonconforming",
+                    result.wall,
+                );
+                Pending::Done(Box::new(page::card(&view, Outcome::Failed(Reason::Engine))))
+            }
         },
         // Nothing ran: the organization's admission was full or the request
         // expired in its queue (the busy card; review m2).

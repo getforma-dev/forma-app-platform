@@ -80,7 +80,7 @@
       "passed": true
     },
     {
-      "name": "structured query log (APP-076 G6): 139 query.dispatch lines, one per engine child launched across both engines; 25 query.released and 5 query.release_denied lines carrying receipt and result identities; 38 query.refused_before_dispatch lines with their codes (busy, denied, invalid_parameters among them); no window bound, destination or cookie value appears in the log",
+      "name": "structured query log (APP-076 G6): 139 query.dispatch lines, one per engine child launched across both engines; 25 query.released and 5 query.release_denied lines carrying receipt and result identities; 2 query.failed_after_dispatch lines, and no more terminal lines than dispatches; 38 query.refused_before_dispatch lines with their codes (busy, denied, invalid_parameters among them); no window bound, destination or cookie value appears in the log",
       "passed": true
     },
     {
@@ -90,28 +90,28 @@
   ],
   "latency": {
     "authorized_path_wall_ms": {
-      "max": 298.2,
-      "p50": 257.0,
-      "p95": 282.0,
+      "max": 267.3,
+      "p50": 246.0,
+      "p95": 263.2,
       "samples": 20
     },
     "child": {
       "engine_reported_ms": {
-        "max": 84,
-        "p50": 77
+        "max": 75,
+        "p50": 69
       },
-      "peak_rss_bytes": 50626560,
+      "peak_rss_bytes": 54050816,
       "samples": 40,
       "sequential_wall_ms": {
-        "max": 158.9,
-        "p50": 147.3,
-        "p95": 154.1,
-        "p99": 158.9
+        "max": 141.1,
+        "p50": 132.0,
+        "p95": 138.4,
+        "p99": 141.1
       },
       "wave_of_two_wall_ms": {
-        "max": 215.3,
-        "p50": 155.3,
-        "p99": 215.3
+        "max": 148.9,
+        "p50": 142.3,
+        "p99": 148.9
       }
     }
   },
@@ -326,25 +326,25 @@
       "lock_timeout_ms": 1000,
       "requests": [
         {
-          "elapsed_ms": 1045,
+          "elapsed_ms": 1059,
           "method": "GET",
           "route": "/workspace",
           "status": 404
         },
         {
-          "elapsed_ms": 1047,
+          "elapsed_ms": 1080,
           "method": "POST",
           "route": "/v1/work/{app}/{work}/queries/total",
           "status": 404
         },
         {
-          "elapsed_ms": 1065,
+          "elapsed_ms": 1078,
           "method": "GET",
           "route": "/w/{app}/{work}",
           "status": 404
         },
         {
-          "elapsed_ms": 1046,
+          "elapsed_ms": 1093,
           "method": "POST",
           "route": "/w/{app}/{work}",
           "status": 404
@@ -353,6 +353,7 @@
     },
     "query_log": {
       "dispatch": 139,
+      "failed_after_dispatch": 2,
       "refused_before_dispatch": 38,
       "release_denied": 5,
       "released": 25
@@ -361,7 +362,7 @@
       "destination": {
         "app_id": "00000000-0000-4000-8000-000000000065",
         "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
-        "digest": "sha256:3124e2918478d61224ae3c5a21897fcefc4d6c3408dfa0d182d2bee9ed737aab",
+        "digest": "sha256:872e122aaec5cd3c998f2ecf2b24a2d18c352b4905bcbceaf8d2647eb6859ee1",
         "filter_epoch": 1,
         "kind": "query_receipt",
         "membership_epoch": 1,
@@ -393,7 +394,7 @@
         ],
         "partial": false,
         "policy_epoch": 1,
-        "principal_id": "d9f6651d-8eb9-436f-9a21-cc0117383f65",
+        "principal_id": "a2d1c807-1d75-4f4e-9d7d-6eeae70c1ee0",
         "provenance": {
           "predicate_digest": "sha256:4ff14af639531c302342be991cc5127338ab7edc0e67b484481347ea62d8bb47",
           "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
@@ -424,7 +425,7 @@
       "timeline": {
         "app_id": "00000000-0000-4000-8000-000000000065",
         "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
-        "digest": "sha256:83e809074c253a1371952c866030fdc896a32c97310e283e04f5737c68463747",
+        "digest": "sha256:519976d56f2d78b66e540ad482fe182ad5eb56755ec80437a68f5637e56e48f4",
         "filter_epoch": 0,
         "kind": "query_receipt",
         "membership_epoch": 1,
@@ -449,7 +450,7 @@
         ],
         "partial": false,
         "policy_epoch": 1,
-        "principal_id": "d9f6651d-8eb9-436f-9a21-cc0117383f65",
+        "principal_id": "a2d1c807-1d75-4f4e-9d7d-6eeae70c1ee0",
         "provenance": {
           "predicate_digest": "sha256:93e239a0bf50df6c543799243ff7e426250893e01914f7f330ef0d5c08adfe9a",
           "query_digest": "sha256:b3d11fb7d535628a5eaf5b2bf2e3c5d6e34e285d53bc964be349837381e942e7"
@@ -480,7 +481,7 @@
       "total": {
         "app_id": "00000000-0000-4000-8000-000000000065",
         "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
-        "digest": "sha256:39ac05473c4d65a64e75706b572be69b9d0a3f2ea23f8decac4d65e43dd6b4ca",
+        "digest": "sha256:e5224c2f4a52f1a92095baa91a55c3693ec26e33b209c5825e862393867cdade",
         "filter_epoch": 0,
         "kind": "query_receipt",
         "membership_epoch": 1,
@@ -505,7 +506,7 @@
         ],
         "partial": false,
         "policy_epoch": 1,
-        "principal_id": "d9f6651d-8eb9-436f-9a21-cc0117383f65",
+        "principal_id": "a2d1c807-1d75-4f4e-9d7d-6eeae70c1ee0",
         "provenance": {
           "predicate_digest": "sha256:cb3af210e42e9eef5c055488404710cb6d1a3bc3fdb33f240a67399c49b07e9d",
           "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
@@ -536,7 +537,7 @@
       "whole_revision": {
         "app_id": "00000000-0000-4000-8000-000000000065",
         "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
-        "digest": "sha256:6618446475938fb51998246f586e5acda2630ea47b0cddab2cdfcf1b21b4dff1",
+        "digest": "sha256:87d8cb0b14538bf5c0d13fe39532cab8434254a5e581ee0113f0e4e29de634be",
         "filter_epoch": 0,
         "kind": "query_receipt",
         "membership_epoch": 1,
@@ -546,7 +547,7 @@
         "parameters": [],
         "partial": false,
         "policy_epoch": 1,
-        "principal_id": "d9f6651d-8eb9-436f-9a21-cc0117383f65",
+        "principal_id": "a2d1c807-1d75-4f4e-9d7d-6eeae70c1ee0",
         "provenance": {
           "predicate_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66",
           "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
@@ -579,13 +580,13 @@
       "mechanism": "POST 303 + __Host-genui_run (SameSite=Strict, HttpOnly, Secure, Max-Age 600, tag over work path, session cookie and canonical parameters) + GET",
       "reloads": [
         {
-          "receipt_digest": "sha256:39ac05473c4d65a64e75706b572be69b9d0a3f2ea23f8decac4d65e43dd6b4ca",
+          "receipt_digest": "sha256:e5224c2f4a52f1a92095baa91a55c3693ec26e33b209c5825e862393867cdade",
           "reload": 1,
           "timeline_rows": 5,
           "total": "1,140,000"
         },
         {
-          "receipt_digest": "sha256:39ac05473c4d65a64e75706b572be69b9d0a3f2ea23f8decac4d65e43dd6b4ca",
+          "receipt_digest": "sha256:e5224c2f4a52f1a92095baa91a55c3693ec26e33b209c5825e862393867cdade",
           "reload": 2,
           "timeline_rows": 5,
           "total": "1,140,000"
