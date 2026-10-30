@@ -519,6 +519,7 @@ def apps():
     yield ("expense-claims", "Expense claims", "File an expense in your own words, send it to your manager for approval, and watch the decision land live: every claim is a typed record, every decision an audited command.", s, [
         view("totals", "summary", "Claims to date", query([s], [aggregate(s, [], [measure("claims", "count", s, "expense_id"), measure("total_amount", "sum", s, "amount"), measure("largest_claim", "max", s, "amount")])])),
         view("by_status", "status", "Past claims by status", query([s], [aggregate(s, ["status"], [measure("claims", "count", s, "expense_id"), measure("amount", "sum", s, "amount")])])),
+        view("recent", "table", "Recent past claims", query([s], [{"type": "project", "fields": [f(s, "expense_id"), f(s, "time"), f(s, "employee"), f(s, "vendor"), f(s, "category"), f(s, "amount"), f(s, "status")]}, sort(s, [("time", "desc")], "expense_id"), limit(25)])),
         view("submit", "form", "File an expense claim", command_id="submit"),
         view("how", "note", "How approval works", text="A claim is filed as a typed record with status submitted. Your approver sees it live and decides; the decision is an audited command, never an edit."),
     ], routing("Expense claims with manager approval: file a claim (amount, merchant, category, date, note), share it with an approver, approve or reject it; the claims list updates live.",

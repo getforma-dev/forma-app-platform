@@ -240,6 +240,74 @@
           }
         },
         {
+          "id": "recent",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "Recent past claims",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "expense_claims"
+            ],
+            "operations": [
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "expense_claims",
+                    "field_id": "expense_id"
+                  },
+                  {
+                    "input_id": "expense_claims",
+                    "field_id": "time"
+                  },
+                  {
+                    "input_id": "expense_claims",
+                    "field_id": "employee"
+                  },
+                  {
+                    "input_id": "expense_claims",
+                    "field_id": "vendor"
+                  },
+                  {
+                    "input_id": "expense_claims",
+                    "field_id": "category"
+                  },
+                  {
+                    "input_id": "expense_claims",
+                    "field_id": "amount"
+                  },
+                  {
+                    "input_id": "expense_claims",
+                    "field_id": "status"
+                  }
+                ]
+              },
+              {
+                "type": "sort",
+                "fields": [
+                  {
+                    "field": {
+                      "input_id": "expense_claims",
+                      "field_id": "time"
+                    },
+                    "direction": "desc"
+                  }
+                ],
+                "stable_tiebreak": {
+                  "input_id": "expense_claims",
+                  "field_id": "expense_id"
+                }
+              },
+              {
+                "type": "limit",
+                "rows": 25
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
           "id": "submit",
           "kind": "form",
           "renderer_version": 1,
@@ -370,20 +438,26 @@
           "width": 12
         },
         {
-          "view_id": "submit",
+          "view_id": "recent",
           "column": 0,
           "row": 2,
           "width": 12
         },
         {
-          "view_id": "how",
+          "view_id": "submit",
           "column": 0,
           "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "how",
+          "column": 0,
+          "row": 4,
           "width": 12
         }
       ]
     },
-    "digest": "sha256:34537f6eb61c4fc78c313dbccd29b80d90c980f28319a713fa7d5fc593b7af8c"
+    "digest": "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de"
   },
   "publication": {
     "kind": "publication",
@@ -392,7 +466,7 @@
     "app_id": "00000000-0000-4000-8000-000000001681",
     "publication_id": "00000000-0000-4000-8000-000000001683",
     "definition_revision_id": "00000000-0000-4000-8000-000000001682",
-    "definition_digest": "sha256:34537f6eb61c4fc78c313dbccd29b80d90c980f28319a713fa7d5fc593b7af8c",
+    "definition_digest": "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de",
     "input_contract_digests": [
       {
         "input_id": "expense_claims",
@@ -574,7 +648,7 @@
     "app_id": "00000000-0000-4000-8000-000000001681",
     "work_id": "00000000-0000-4000-8000-000000001684",
     "mode": "published",
-    "definition_digest": "sha256:34537f6eb61c4fc78c313dbccd29b80d90c980f28319a713fa7d5fc593b7af8c",
+    "definition_digest": "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de",
     "publication_id": "00000000-0000-4000-8000-000000001683",
     "view_id": "totals",
     "operator_version": 1,
@@ -600,7 +674,7 @@
       "query_digest": "sha256:68b5b5d1cbd12c0fb5af50aac9149159139aa50277f521859af43ea3f11ff760",
       "predicate_digest": "sha256:68b5b5d1cbd12c0fb5af50aac9149159139aa50277f521859af43ea3f11ff760"
     },
-    "digest": "sha256:dcdef9120a1c3dafa19db3dae72fb11a58f77931578d26bd0e93917645dcb4ff"
+    "digest": "sha256:2c5cb374485608ae9e67226acec1880cab53f7fd2365486236a768be069c471b"
   },
   "command": {
     "kind": "command_request",

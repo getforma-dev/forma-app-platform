@@ -101,4 +101,4 @@ Honest notes: generation needs the member to own an app with `edit_definition` a
 
 ## Evidence
 
-`evidence/APP-093/scenarios/` (to be copied from the scratch run): `actions-campaign.json` (checks and timings), the two-window screenshots `01`–`08`, and the campaign log with cookies and keys redacted.
+`evidence/APP-093/scenarios/`: `actions-campaign.json` (the Docker campaign's 10 checks and timings), `two-window-shoot-notes.json` (the Playwright two-window run's measurements), `README.md`. The screenshots of the two-window run stay in the session scratch (synthetic data; not retained in the repository).

@@ -544,17 +544,20 @@ pub fn records_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Rec
                 .map(|f| CellProps {
                     id: f.id.clone(),
                     text: f.id.replace('_', " "),
+                    raw: String::new(),
                 })
                 .collect();
             if !status_field.is_empty() {
                 columns.push(CellProps {
                     id: status_field.clone(),
                     text: status_field.replace('_', " "),
+                    raw: String::new(),
                 });
             }
             columns.push(CellProps {
                 id: "filed_by".into(),
                 text: "filed by".into(),
+                raw: String::new(),
             });
             let mut pending = 0usize;
             let rows: Vec<RecordRowProps> = listing
@@ -587,17 +590,20 @@ pub fn records_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Rec
                             text: value(&f.id)
                                 .map(crate::actions::resolve::display)
                                 .unwrap_or_else(|| "—".into()),
+                            raw: String::new(),
                         })
                         .collect();
                     if !status_field.is_empty() {
                         cells.push(CellProps {
                             id: status_field.clone(),
                             text: status.clone(),
+                            raw: String::new(),
                         });
                     }
                     cells.push(CellProps {
                         id: "filed_by".into(),
                         text: crate::directory::label(&record.creator),
+                        raw: String::new(),
                     });
                     RecordRowProps {
                         id: format!("rec-{}", record.record_id),

@@ -286,3 +286,76 @@ fn the_request_body_is_an_utterance_or_a_structured_decision() {
     .is_none());
     assert!(body(br#"{"decide":{"app_id":"00000000-0000-4000-8000-000000001681","work_id":"00000000-0000-4000-8000-000000001684","record_id":"00000000-0000-4000-8000-0000000000a2","status":"approved","permission":"admin"}}"#).is_none());
 }
+
+/// The real Haiku parse step, a handful of calls (ADR-011 §4: the key from a
+/// file named by `GENUI_ACT_SMOKE_KEY_FILE`, read into memory only; never
+/// printed, logged or copied). Prints the parsed actions and latencies.
+#[tokio::test]
+#[ignore = "calls the real Anthropic endpoint with the key file named by GENUI_ACT_SMOKE_KEY_FILE"]
+async fn real_haiku_parse_smoke() {
+    use crate::composer::model::{Anthropic, Model, DEFAULT_ENDPOINT, DEFAULT_ROUTER_MODEL};
+    use std::sync::Arc;
+    let Some(path) = std::env::var_os("GENUI_ACT_SMOKE_KEY_FILE") else {
+        eprintln!("skipped: GENUI_ACT_SMOKE_KEY_FILE not set");
+        return;
+    };
+    let text = std::fs::read_to_string(path).expect("the key file");
+    let key = text
+        .lines()
+        .find_map(|line| {
+            line.trim()
+                .strip_prefix("ANTHROPIC_API_KEY=")
+                .map(|k| k.trim().trim_matches('"').to_owned())
+        })
+        .expect("an ANTHROPIC_API_KEY line");
+    let client = Anthropic::new(&key, DEFAULT_ENDPOINT).expect("a usable key");
+    drop(text);
+    let parser = super::Parser::new(
+        Some(Arc::new(client) as Arc<dyn Model>),
+        DEFAULT_ROUTER_MODEL,
+    );
+    let catalog = vec![expense_app()];
+    let today = "2026-10-30";
+    let mut lines = Vec::new();
+    for utterance in [
+        "I spent $86 on a client dinner at Nobu last night, Sarah approves my expenses",
+        "approve the Nobu dinner",
+        "what's waiting for my approval",
+        "Investigate outbound traffic from build-worker-17",
+        "Yesterday I paid 42.50 for a Figma seat for the design team; Sarah signs off",
+    ] {
+        let started = std::time::Instant::now();
+        let parse = parser.parse(utterance, &catalog, false, today).await;
+        let ms = started.elapsed().as_millis();
+        match parse {
+            Ok(parse) => {
+                lines.push(format!(
+                    "{ms} ms  {:?}  app_hint={}  values={}  approver={:?}  target={:?}",
+                    parse.parsed.kind,
+                    if parse.parsed.app_hint.is_empty() {
+                        "-"
+                    } else {
+                        "catalog"
+                    },
+                    serde_json::Value::Object(parse.parsed.values.clone()),
+                    parse.parsed.approver_name,
+                    parse.parsed.target_record_hint
+                ));
+            }
+            Err(error) => lines.push(format!("{ms} ms  refused {error:?}")),
+        }
+    }
+    for line in &lines {
+        eprintln!("HAIKU_SMOKE {line}");
+    }
+    assert!(
+        lines
+            .iter()
+            .filter(|l| l.contains("Create")
+                || l.contains("Decide")
+                || l.contains("Open")
+                || l.contains("Place"))
+            .count()
+            >= 4
+    );
+}

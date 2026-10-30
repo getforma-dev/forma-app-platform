@@ -1,0 +1,57 @@
+{
+  "campaign": "ADR-011 scenarios: the action path, records list, auto-share and live approval (synthetic identities, Docker)",
+  "checks": [
+    {
+      "name": "the library seeds the expense claims app (submit creates, decide transitions submitted to approved or rejected); the employee, granted discover, run and source_read by the operator, has it in the action catalog and no saved work of it yet",
+      "passed": true
+    },
+    {
+      "name": "scenario 1a: the employee's utterance answers a confirmation card in 704 ms with the typed values ($86.00, Nobu, meals, yesterday, the note, status submitted), the approver resolved to Sarah Chen by display name, a server-minted key, the expense app instantiated for him (placed, app.placed on his stream and not on hers), and no record written",
+      "passed": true
+    },
+    {
+      "name": "scenario 1b: Confirm posts the draft through the audited command route (200 ms): committed as record version 1 by the employee, a replay returns the stored outcome, record.committed reaches his stream and not hers, his records list shows the claim submitted with its display values and his group JSON carries the records card; Sarah cannot read it yet",
+      "passed": true
+    },
+    {
+      "name": "scenario 1c: the auto-share grants Sarah exactly the submitter's subset with record_write (110 ms); app.shared reaches her stream (43 ms after the share); her records list and her group's records card show the claim waiting for her approval",
+      "passed": true
+    },
+    {
+      "name": "scenario 2: Sarah's \"approve the Nobu dinner\" resolves the pending record from her list and drafts the decide transition (772 ms); her Confirm commits version 2 approved (307 ms); record.committed reaches his stream (44 ms) and his list shows it approved by Sarah Chen; a second approval has no transition to fire and is refused before any write",
+      "passed": true
+    },
+    {
+      "name": "scenario 3: an unrehearsed utterance goes to the model over the loopback endpoint (431 ms; the utterance travels as data, the catalog names only his app) and drafts $42.50 Figma software with the status forced to submitted; a structured Reject from the records card commits version 2 rejected with a note; both streams see every commit; a repeat share announces nothing; \"what's waiting for my approval\" opens Sarah's shared work without a model call",
+      "passed": true
+    },
+    {
+      "name": "the audit chains of the organization verify after the four commits (two claims, two decisions): exactly four command.committed events name the work, and every row count matches the story",
+      "passed": true
+    },
+    {
+      "name": "isolation: a member of another organization gets the uniform 404 on the records route and on the action route (utterance and structured decision alike, with no model call), as do an anonymous and a forged session and a query string; a cross-site POST is 403; the approver cannot share the work onward; nothing was written",
+      "passed": true
+    },
+    {
+      "name": "hostile: model output naming a foreign app, a grant phrase as the approver and SQL as a value drafts only typed text on his own app with no approver; output outside the closed shape is could_not_parse; markup as a status is could_not_draft; a foreign app hint opens only his own app; SQL in the utterance is text; an over-long utterance is invalid_utterance; no row changed and the chains still verify",
+      "passed": true
+    },
+    {
+      "name": "scenario 4 handoff: an utterance that is not a record action answers `place`, so the canvas composes it through POST /v1/compose (library-first router, admitted definitions)",
+      "passed": true
+    }
+  ],
+  "model": "loopback Messages stub through GENUI_COMPOSER_ENDPOINT; rehearsed utterances deterministic in the demo organization",
+  "passed": true,
+  "timings_ms": {
+    "act_create_ms": 704,
+    "act_decide_ms": 772,
+    "act_model_ms": 431,
+    "confirm_create_ms": 200,
+    "confirm_decide_ms": 307,
+    "diego_record_committed_event_ms": 44,
+    "sarah_app_shared_event_ms": 43,
+    "share_ms": 110
+  }
+}

@@ -3715,7 +3715,7 @@
       },
       "app_id": "00000000-0000-4000-8000-000000001681",
       "definition_revision_id": "00000000-0000-4000-8000-000000001682",
-      "definition_digest": "sha256:34537f6eb61c4fc78c313dbccd29b80d90c980f28319a713fa7d5fc593b7af8c",
+      "definition_digest": "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de",
       "publication_id": "00000000-0000-4000-8000-000000001683",
       "work_id": "00000000-0000-4000-8000-000000001684",
       "collection_id": "00000000-0000-4000-8000-000000001685",
@@ -3849,6 +3849,21 @@
           "input": "expense_claims",
           "operators": [
             "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "recent",
+          "kind": "table",
+          "title": "Recent past claims",
+          "input": "expense_claims",
+          "operators": [
+            "limit",
+            "project",
+            "sort"
           ],
           "parameters": [
             "window"
@@ -4041,7 +4056,7 @@
           }
         }
       ],
-      "fixture_sha256": "782cf0f2cc35f93ab45abd2ef70144b77f4ed3ac17eda2eb6dc7603335ec0b59"
+      "fixture_sha256": "446e5485a97b1a261b4c5ca6ee6836aee99f43e14140e61f3b41a3dfc97bd059"
     }
   ]
 }

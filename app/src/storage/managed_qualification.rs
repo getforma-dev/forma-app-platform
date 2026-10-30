@@ -125,7 +125,7 @@ const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "seed_library_sha256",
         "contracts/fixtures/library/catalog.json",
-        "d8a0d0db6c6f89572852bcf1b050a91cbadf612754d9248beb9acde17727e21d",
+        "8142befce343434dc2f3684698416b52a4492ce85cc6943cacf35cb5d5d1c860",
     ),
 ];
 /// The shared cases' checks a pass requires, in order (`qualification_cases`).
