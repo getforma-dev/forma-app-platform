@@ -75,9 +75,11 @@
         "APP-031",
         "APP-081",
         "APP-087",
-        "APP-088"
+        "APP-088",
+        "APP-089",
+        "APP-090"
       ],
-      "ticket_count": 20,
+      "ticket_count": 22,
       "done_count": 0,
       "blocked_count": 0
     },
@@ -2833,6 +2835,64 @@
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": []
+    },
+    {
+      "id": "APP-089",
+      "title": "Harden the container images: base CVEs and effective scan-on-push",
+      "path": "0-backlog/APP-089.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Verification",
+      "Sprint": "S03",
+      "Phase": "PH02",
+      "Order": "89",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "Placed in PH02 (the earliest phase after PH01) because the first PH02 deployment ships a new image and PH02 tickets may not depend on PH07. Post-MVP work by Victor's rule: nothing is lost, deferred until after 2026-11-02 and listed in pick-up order (ADR-010 \u00a76 position 2a).",
+      "Requirements": "C01, SR1, SR8",
+      "Depends on": "APP-075, APP-078",
+      "External dependencies": "None beyond listed local predecessors",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-075",
+        "APP-078"
+      ]
+    },
+    {
+      "id": "APP-090",
+      "title": "MVP UI fixes and the designer handoff",
+      "path": "0-backlog/APP-090.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Feature",
+      "Sprint": "S03",
+      "Phase": "PH02",
+      "Order": "90",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "Engineering fixes named by the [designer brief](../../docs/design-brief/README.md) \u00a76, then the designer's mocks. Placed in PH02 (the earliest phase after PH01) and ordered before the demo recording (ADR-010 \u00a76 position 6a). Nothing is lost: deferred until after 2026-11-02.",
+      "Requirements": "C01, N7, SR1",
+      "Depends on": "APP-076, APP-078",
+      "External dependencies": "None beyond listed local predecessors",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-076",
+        "APP-078"
+      ]
     }
   ]
 }

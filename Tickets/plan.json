@@ -201,7 +201,7 @@
         "Durable bounded jobs, immutable source storage, CSV/XLSX processing and confirmed interpretation (APP-015–019).",
         "Typed queries, exact arithmetic/domain operators, reproducible receipts, resource admission and linked filter epochs (APP-020–025).",
         "Company navigation, canvas interactions, trusted renderers, accessibility, general forms and distinct new/continued work (APP-026–031, APP-081).",
-        "ADR-010 preparation residuals: the parser fuel bound and packaging follow-ups (APP-087) and the ADR-009 re-review and contract-edition amendments (APP-088), before APP-015's migration and APP-017 Task A5."
+        "ADR-010 preparation residuals: the parser fuel bound and packaging follow-ups (APP-087) and the ADR-009 re-review and contract-edition amendments (APP-088), before APP-015's migration and APP-017 Task A5; image hardening (APP-089) and the MVP UI fixes and designer handoff (APP-090)."
       ],
       "exit_criteria": [
         "Both drop and keyboard upload exercise actual CSV/XLSX parsing, mapping confirmation and refusal paths; archive-wide memory/time/expansion limits and provenance are verified (APP-015–019).",
