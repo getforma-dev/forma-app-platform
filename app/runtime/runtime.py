@@ -35,7 +35,7 @@ ROLES = ("workspace", "control", "data", "worker")
 # probe comparisons then use the pinned manifest itself.
 # scripts/check-schema-pins.py keeps this value, the manifest, the native
 # version check and both embedded catalogs on the same version.
-DATABASE_SCHEMA_VERSION = 6
+DATABASE_SCHEMA_VERSION = 7
 # Byte bound of the canonical catalog projection and of each catalog file
 # (ADR-007 D7.12, moved once in 0003's slice). It must equal catalog-query.json
 # max_output_bytes and its SQL octet_length literal and the native BOUND;

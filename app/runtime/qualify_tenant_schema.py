@@ -140,10 +140,11 @@ DEFINITION_WORK_GRANTS = set().union(
       for role in ('genui_workspace','genui_control')),
     *(_role_columns(role,'audit_heads','UPDATE','chain_sequence','head_hash') for role in ('genui_workspace','genui_control')),
 )
-# D7.8 closed chains and kinds of the two application roles 0005 binds.
+# D7.8 closed chains and kinds of the application roles 0005 and 0007 bind.
 APPLICATION_CHAIN_KINDS = {
     'genui_workspace': ('workspace', ('session.signed_in','app.created','definition.drafted','work.saved','work.bound')),
     'genui_control': ('control', ('publication.published','policy.changed')),
+    'genui_data': ('data', ('command.committed',)),
 }
 
 
@@ -171,6 +172,40 @@ SESSION_GRANTS = set().union(
     {('genui_workspace',table,'DELETE',None) for table in SESSION_TABLES},
     _role_columns('genui_workspace','code_reservations','SELECT',*PENDING_LOOKUP_COLUMNS),
 )
+
+
+# Migration 0007 (ADR-007 D7.3/D7.7/D7.8/D7.9, ADR-009 D9.8; APP-013): the record
+# command's relations and genui_data's column-limited writes. query_receipts
+# carries no application grant (APP-023 cites receipts).
+COMMAND_TABLES = ('organization_sequences','command_claims','command_outcomes','query_receipts')
+CLAIM_COLUMNS = ('organization_id','principal_id','app_id','work_id','command_id','idempotency_key','payload_digest','claimed_at')
+OUTCOME_COLUMNS = ('organization_id','app_id','work_id','principal_id','command_id','idempotency_key','payload_digest','state','record_id',
+                   'record_version','work_version','commit_sequence','audit_event_id','committed_at','retry_expires_at')
+REVISION_COLUMNS = ('organization_id','app_id','work_id','collection_id','record_id','version','creator_id','updater_id','commit_sequence',
+                    'committed_at','canonical_values')
+RECORD_DEPENDENCY_COLUMNS = ('organization_id','app_id','work_id','collection_id','record_id','record_version','input_id','source_id',
+                             'source_revision_id','source_digest')
+COMMAND_GRANTS = set().union(
+    _role_columns('genui_data','organization_sequences','SELECT','organization_id','next_commit_sequence'),
+    _role_columns('genui_data','organization_sequences','UPDATE','next_commit_sequence'),
+    _role_columns('genui_data','command_claims','SELECT',*CLAIM_COLUMNS),
+    _role_columns('genui_data','command_claims','INSERT',*CLAIM_COLUMNS),
+    _role_columns('genui_data','command_outcomes','SELECT',*OUTCOME_COLUMNS),
+    _role_columns('genui_data','command_outcomes','INSERT',*OUTCOME_COLUMNS),
+    _role_columns('genui_data','internal_records','INSERT','organization_id','app_id','work_id','collection_id','record_id','current_version'),
+    _role_columns('genui_data','internal_records','UPDATE','current_version'),
+    _role_columns('genui_data','internal_record_revisions','INSERT',*REVISION_COLUMNS),
+    _role_columns('genui_data','record_source_dependencies','INSERT',*RECORD_DEPENDENCY_COLUMNS),
+    _role_columns('genui_data','audit_events','INSERT',*AUDIT_EVENT_COLUMNS),
+    _role_columns('genui_data','audit_heads','SELECT','organization_id','writer_role','chain_sequence','head_hash'),
+    _role_columns('genui_data','audit_heads','UPDATE','chain_sequence','head_hash'),
+)
+# 0007's RESTRICTIVE row bindings beyond the audit chains: the data role claims,
+# commits and reads outcomes only as the scoped principal, and records itself as
+# a revision's updater.
+COMMAND_POLICIES = {('command_claims','command_principal','INSERT'),('command_claims','command_principal_read','SELECT'),
+                    ('command_outcomes','command_principal','INSERT'),('command_outcomes','command_principal_read','SELECT'),
+                    ('internal_record_revisions','record_updater','INSERT')}
 
 
 def sha(value):
@@ -265,13 +300,13 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
         # Application roles reach 0003's relations only through 0004's entitlement
-        # reads, 0005's own-chain audit append (D7.8) and 0006's narrow pending
-        # lookup (no code_id, no context digest); never codes or indexes.
+        # reads, 0005's and 0007's own-chain audit append (D7.8) and 0006's narrow
+        # pending lookup (no code_id, no context digest); never codes or indexes.
         assert {t for t in actual if t[0] in APP_ROLES and t[1] in ADMISSION_TABLES+('code_index','handle_index')}==ENTITLEMENT_READS|{
-            t for t in DEFINITION_WORK_GRANTS if t[1] in ('audit_events','audit_heads')}|{
+            t for t in DEFINITION_WORK_GRANTS|COMMAND_GRANTS if t[1] in ('audit_events','audit_heads')}|{
             t for t in SESSION_GRANTS if t[1]=='code_reservations'}
         schema=set(c.execute("""SELECT n.nspname,a.privilege_type FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) a
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND pg_get_userbyid(a.grantee)='genui_admit'""").fetchall())
@@ -281,8 +316,9 @@ def admission_checks(pg, passed, denied):
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND a.privilege_type='EXECUTE' AND a.grantee<>p.proowner""").fetchall())
         assert executes=={('lock_member_authority',r) for r in ('genui_workspace','genui_control','genui_data')}|{('lock_work_revision','genui_data')}|{
             (name,'genui_workspace') for name in ADMIT_FUNCTIONS},executes
-    passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns plus 0006 session columns (D7.3); EXECUTE on the six functions is genui_workspace only',
-           admit_grant_count=len(ADMIT_GRANTS),definition_work_grant_count=len(DEFINITION_WORK_GRANTS),session_grant_count=len(SESSION_GRANTS))
+    passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns plus 0006 session columns plus 0007 command columns (D7.3); EXECUTE on the six functions is genui_workspace only',
+           admit_grant_count=len(ADMIT_GRANTS),definition_work_grant_count=len(DEFINITION_WORK_GRANTS),session_grant_count=len(SESSION_GRANTS),
+           command_grant_count=len(COMMAND_GRANTS))
 
     # --- genui_admit attributes, memberships and function properties (D7.1, A3, A4) ---
     with pg.connect('postgres') as c:
@@ -327,15 +363,15 @@ def admission_checks(pg, passed, denied):
             assert ('audit_heads',name,'RESTRICTIVE',[role],'UPDATE',"(writer_role = '%s'::text)"%chain,None) in policies,(role,policies)
             # D7.3 "audit_heads (own chain)": the head read is bound to the chain too.
             assert ('audit_heads',name+'_read','RESTRICTIVE',[role],'SELECT',"(writer_role = '%s'::text)"%chain,None) in policies,(role,policies)
-        assert len(policies)==10,policies
+        assert len(policies)==13,policies
         targets=lambda table,cmd: {r[3][0] for r in policies if r[0]==table and r[4]==cmd}
-        writers={'genui_admit','genui_owner','genui_workspace','genui_control'}
+        writers={'genui_admit','genui_owner','genui_workspace','genui_control','genui_data'}
         assert holders('audit_events','INSERT')==targets('audit_events','INSERT')==writers
         assert holders('audit_heads','UPDATE')==targets('audit_heads','UPDATE')==writers
-        assert targets('audit_heads','SELECT')=={'genui_workspace','genui_control'}
+        assert targets('audit_heads','SELECT')=={'genui_workspace','genui_control','genui_data'}
         # Insert-only for every role (D7.8), the owner included.
         assert holders('audit_events','UPDATE')==holders('audit_events','DELETE')==holders('audit_events','TRUNCATE')==set()
-    passed('every INSERT holder on audit_events (genui_admit, genui_owner, and since 0005 genui_workspace, genui_control) has its RESTRICTIVE chain/kind policy and its own-chain head UPDATE policy; the two application roles also read only their own head',
+    passed('every INSERT holder on audit_events (genui_admit, genui_owner, since 0005 genui_workspace and genui_control, since 0007 genui_data) has its RESTRICTIVE chain/kind policy and its own-chain head UPDATE policy; the three application roles also read only their own head',
            policies=[list(p[:5]) for p in policies])
     # D7.8 (as amended, 0003 review m4 / APP-073 review M2): every chain hash is genui.digest.
     with pg.connect('postgres') as c:
@@ -893,7 +929,9 @@ def definition_work_checks(pg, passed, denied):
             ('workspace cannot append an admission kind','genui_workspace',event(org0,'workspace','admission.redeemed')),
             ('control cannot append to the workspace chain','genui_control',event(org0,'workspace','work.saved')),
             ('control cannot append a workspace kind','genui_control',event(org0,'control','definition.drafted')),
-            ('data cannot append audit events before 0007','genui_data',event(org0,'data','command.committed')),
+            ('data cannot append to the workspace chain (0007 binds it to the data chain)','genui_data',event(org0,'workspace','work.saved')),
+            ('data cannot append a workspace kind to its own chain','genui_data',event(org0,'data','work.saved')),
+            ('data cannot UPDATE audit events','genui_data',('UPDATE genui.audit_events SET kind=kind',())),
             ('workspace cannot UPDATE audit events','genui_workspace',('UPDATE genui.audit_events SET kind=kind',())),
             ('control cannot DELETE audit events','genui_control',('DELETE FROM genui.audit_events',())),
             ('workspace cannot rewrite a draft','genui_workspace',('UPDATE genui.definition_revisions SET digest=digest',())),
@@ -975,6 +1013,115 @@ def session_checks(pg, passed, denied):
     passed('0006 role separation and bounds: only genui_workspace touches session rows, only last_seen_at/revoked_at are updatable, the pending lookup reads no code id or context digest, and the 10-minute, 30-minute and 12-hour CHECKs hold')
 
 
+def command_checks(pg, passed, denied):
+    """ADR-007 D7.3/D7.7/D7.8/D7.9 and ADR-009 D9.8 for migration 0007 (APP-013) on the actual local database.
+
+    The storage-module command transaction (claim, fences, sequence, record,
+    audit, outcome in D7.9 order) and the route are the Rust command campaign's;
+    this proves the relations, grants, RESTRICTIVE bindings and CHECKs they rely
+    on, as each role, every probe rolled back.
+    """
+    org0,org1=ORGANIZATIONS
+    author='00000000-0000-4000-8000-0000000000ca'
+    with pg.connect('postgres') as c:
+        rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",
+                       (list(COMMAND_TABLES),)).fetchall()
+        assert rows==[(t,True,True,'genui_owner') for t in sorted(COMMAND_TABLES)],rows
+        policy="(organization_id = (NULLIF(current_setting('genui.organization_id'::text, true), ''::text))::uuid)"
+        rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
+          AND tablename = ANY(%s) AND policyname='tenant_scope' ORDER BY tablename""",(list(COMMAND_TABLES),)).fetchall()
+        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in sorted(COMMAND_TABLES)],rows
+        principal="(principal_id = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid)"
+        bindings=c.execute("""SELECT tablename,policyname,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
+          AND tablename IN ('command_claims','command_outcomes','internal_record_revisions') AND policyname<>'tenant_scope' ORDER BY tablename,policyname""").fetchall()
+        assert bindings==[('command_claims','command_principal','RESTRICTIVE',['genui_data'],'INSERT',None,principal),
+                          ('command_claims','command_principal_read','RESTRICTIVE',['genui_data'],'SELECT',principal,None),
+                          ('command_outcomes','command_principal','RESTRICTIVE',['genui_data'],'INSERT',None,principal),
+                          ('command_outcomes','command_principal_read','RESTRICTIVE',['genui_data'],'SELECT',principal,None),
+                          ('internal_record_revisions','record_updater','RESTRICTIVE',['genui_data'],'INSERT',None,
+                           "(updater_id = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid)")],bindings
+        typed=c.execute("""SELECT c.relname,a.attname,format_type(a.atttypid,a.atttypmod) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND a.attnum>0 AND NOT a.attisdropped
+          AND (a.attname LIKE '%%digest' OR a.attname LIKE '%%sequence' OR a.attname LIKE '%%version' OR a.attname='command_id') ORDER BY 1,2""",
+                       (list(COMMAND_TABLES),)).fetchall()
+        assert typed==[('command_claims','command_id','genui.local_id'),('command_claims','payload_digest','genui.digest'),
+                       ('command_outcomes','command_id','genui.local_id'),('command_outcomes','commit_sequence','genui.safe_counter'),
+                       ('command_outcomes','payload_digest','genui.digest'),('command_outcomes','record_version','genui.safe_counter'),
+                       ('command_outcomes','work_version','genui.safe_counter'),('organization_sequences','next_commit_sequence','genui.safe_counter'),
+                       ('query_receipts','digest','genui.digest')],typed
+        # D7.7: one commit sequence names one revision per organization; D9.8: one receipt digest per organization.
+        uniques=set(c.execute("""SELECT c.relname,pg_get_constraintdef(k.oid) FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND k.contype='u' AND c.relname IN ('command_outcomes','query_receipts')""").fetchall())
+        assert uniques=={('command_outcomes','UNIQUE (organization_id, commit_sequence)'),('command_outcomes','UNIQUE (organization_id, audit_event_id)'),
+                         ('query_receipts','UNIQUE (organization_id, digest)')},uniques
+        # D7.8: no foreign key from command_outcomes to the insert-only audit_events.
+        assert c.execute("""SELECT count(*) FROM pg_constraint k WHERE k.contype='f' AND k.conrelid='genui.command_outcomes'::regclass
+          AND k.confrelid='genui.audit_events'::regclass""").fetchone()==(0,)
+        assert c.execute("""SELECT count(*) FROM pg_constraint k WHERE k.contype='f' AND k.conrelid='genui.command_outcomes'::regclass
+          AND k.confrelid='genui.command_claims'::regclass""").fetchone()==(1,)
+        work,app,publication,collection=c.execute("""SELECT w.work_id::text,w.app_id::text,w.publication_id::text,r.collection_id::text FROM genui.saved_work w
+          JOIN genui.record_collections r USING(organization_id,app_id,work_id) WHERE w.organization_id=%s LIMIT 1""",(org0,)).fetchone()
+    passed('0007 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the data role is bound to the scoped principal on claims, outcomes and revisions; ids, digests, sequences and versions are domain-typed; one commit sequence per outcome; the outcome references its claim and has no foreign key into the insert-only audit log',
+           tables=list(COMMAND_TABLES))
+    # The operator-only sequence row (D7.7/D7.19), as the owner, so the data role probes have a row to lock.
+    with pg.connect() as c:
+        c.execute('SET LOCAL ROLE genui_owner')
+        c.execute("SELECT set_config('genui.organization_id',%s,true)",(org0,))
+        c.execute("INSERT INTO genui.organization_sequences VALUES (%s,2) ON CONFLICT DO NOTHING",(org0,))
+        c.commit()
+    key='0123456789abcdef0123456789abcdef'
+    claim=("""INSERT INTO genui.command_claims(organization_id,principal_id,app_id,work_id,command_id,idempotency_key,payload_digest,claimed_at)
+      VALUES (%s,%s,%s,%s,'record_decision',%s,%s,now())""",(org0,author,app,work,key,sha('payload')))
+    outcome="""INSERT INTO genui.command_outcomes(organization_id,app_id,work_id,principal_id,command_id,idempotency_key,payload_digest,state,record_id,
+      record_version,work_version,commit_sequence,audit_event_id,committed_at,retry_expires_at)
+      VALUES (%s,%s,%s,%s,'record_decision',%s,%s,'committed',%s,1,1,2,%s,now(),now()+interval 'HORIZON')"""
+    record=str(uuid.uuid4())
+    with pg.connect('genui_data') as c:
+        scope(c,org0,author)
+        assert c.execute('SELECT next_commit_sequence FROM genui.organization_sequences WHERE organization_id=%s FOR UPDATE',(org0,)).fetchall()==[(2,)]
+        assert c.execute('UPDATE genui.organization_sequences SET next_commit_sequence=3 WHERE organization_id=%s AND next_commit_sequence=2',(org0,)).rowcount==1
+        assert c.execute(*claim).rowcount==1
+        assert c.execute('SELECT count(*) FROM genui.command_claims').fetchone()==(1,)
+        assert c.execute(outcome.replace('HORIZON','24 hours'),(org0,app,work,author,key,sha('payload'),record,str(uuid.uuid4()))).rowcount==1
+        assert c.execute('SELECT count(*) FROM genui.command_outcomes WHERE idempotency_key=%s',(key,)).fetchone()==(1,)
+        c.rollback()
+        # A claim of another principal is row-invisible under this principal's scope.
+        scope(c,org0,P)
+        assert c.execute('SELECT count(*) FROM genui.command_claims').fetchone()==(0,)
+        c.rollback()
+    passed('0007 grants: genui_data locks and advances its organization sequence, claims under its own principal, reads the claim and commits an outcome referencing it (rolled back); another principal sees no claim')
+    for name,role,(statement,params),expected in (
+            ('an outcome needs its claim','genui_data',(outcome.replace('HORIZON','24 hours'),(org0,app,work,P,'ffffffffffffffffffffffffffffffff',sha('payload'),record,str(uuid.uuid4()))),'23503'),
+            ('data cannot claim as another principal (scope P, row author)','genui_data',(claim[0],(org0,author,app,work,key,sha('payload'))),'42501'),
+            ('data cannot update an outcome','genui_data',('UPDATE genui.command_outcomes SET record_version=record_version',()),'42501'),
+            ('data cannot delete a claim','genui_data',('DELETE FROM genui.command_claims',()),'42501'),
+            ('data cannot update a revision','genui_data',('UPDATE genui.internal_record_revisions SET canonical_values=canonical_values',()),'42501'),
+            ('data cannot create a sequence row (D7.19)','genui_data',("INSERT INTO genui.organization_sequences VALUES (%s,1)",(org1,)),'42501'),
+            ('data cannot touch receipts yet','genui_data',('SELECT receipt_id FROM genui.query_receipts',()),'42501'),
+            ("data cannot append another chain",'genui_data',("""INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,actor_principal_id,app_id,work_id,
+              record_id,code_id,outcome_digest,occurred_at,previous_hash,hash) VALUES (%s,gen_random_uuid(),'workspace',2,'command.committed',%s,NULL,NULL,NULL,NULL,NULL,now(),%s,%s)""",
+              (org0,author,sha('p'),sha('h'))),'42501'),
+            ("data cannot append another kind",'genui_data',("""INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,actor_principal_id,app_id,work_id,
+              record_id,code_id,outcome_digest,occurred_at,previous_hash,hash) VALUES (%s,gen_random_uuid(),'data',2,'work.saved',%s,NULL,NULL,NULL,NULL,NULL,now(),%s,%s)""",
+              (org0,author,sha('p'),sha('h'))),'42501'),
+            ('a malformed key is refused','genui_data',(claim[0],(org0,P,app,work,'ABCDEF0123456789abcdef0123456789',sha('payload'))),'23514'),
+            ('workspace cannot read outcomes','genui_workspace',('SELECT record_id FROM genui.command_outcomes',()),'42501'),
+            ('control cannot read claims','genui_control',('SELECT command_id FROM genui.command_claims',()),'42501'),
+            ('worker cannot read the sequence','genui_worker',('SELECT next_commit_sequence FROM genui.organization_sequences',()),'42501'),
+            ('workspace cannot write the sequence','genui_workspace',('UPDATE genui.organization_sequences SET next_commit_sequence=next_commit_sequence',()),'42501')):
+        denied('0007 '+name,role,statement,params,expected=expected)
+    with pg.connect('genui_data') as c:
+        scope(c,org0,author)
+        c.execute(*claim)
+        try:
+            c.execute(outcome.replace('HORIZON','23 hours'),(org0,app,work,author,key,sha('payload'),record,str(uuid.uuid4())))
+        except psycopg.errors.CheckViolation: pass
+        else: raise AssertionError('retry horizon other than 24 hours accepted')
+        c.rollback()
+    passed('0007 role separation and bounds: only genui_data touches the command relations and only as the scoped principal, with no UPDATE or DELETE on claims, outcomes or revisions, no sequence creation and no other chain or kind; the key shape and the 24-hour retry horizon CHECKs hold')
+
+
 def command(args, check=True):
     p = subprocess.run(args, capture_output=True, text=True, timeout=60)
     if check and p.returncode: raise RuntimeError('local Docker operation failed: '+p.stderr[-1200:])
@@ -1029,7 +1176,7 @@ def scope(c, org=ORGANIZATIONS[0], principal=P, epoch=1):
 
 
 def qualify():
-    report={'schema_version':1,'scope':'APP-008/APP-073/APP-010/APP-009 real local PostgreSQL schema/ACL, admission-function, definition/work and session grant qualification',
+    report={'schema_version':1,'scope':'APP-008/APP-073/APP-010/APP-009/APP-013 real local PostgreSQL schema/ACL, admission-function, definition/work, session and command grant qualification',
             'managed_acceptance':False,'image':IMAGE,'server_version':'16.13','network':'random loopback-only published port',
             'checks':[],'passed':False,'limits':['Local trust authentication is not RDS IAM/TLS qualification.',
             'Operator-seeded contract shapes are not source import, hosted identity or successful application business writes.',
@@ -1037,6 +1184,7 @@ def qualify():
             'the storage-module admission path, the operator package, sessions and hosted identity are not exercised.',
             'The 0005 definition/work grants are exercised as raw role statements; the storage-module definition, publication and saved-work transactions are the Rust definition campaign.',
             'The 0006 session grants and CHECKs are exercised as raw role statements; the session transactions and routes are the Rust session campaign (auth::tests::native_session_campaign).',
+            'The 0007 command grants, RESTRICTIVE bindings and CHECKs are exercised as raw role statements; the command transaction, its lock order and the route are the Rust command campaign (storage::command_qualification::native_command_campaign).',
             'Native pool cancellation/reuse and actual managed trials remain separate.']}
     def passed(name, **facts): report['checks'].append({'name':name,'passed':True,**facts})
     catalog_query=json.loads((MIGRATIONS/'catalog-query.json').read_text())['sql']
@@ -1461,7 +1609,11 @@ def qualify():
                   AND p.cmd='ALL' AND p.roles='{public}' AND p.qual IS NOT NULL AND p.with_check IS NOT NULL)""").fetchone()==(0,)
                 assert c.execute("""SELECT count(*) FROM pg_policies WHERE schemaname='genui' AND policyname<>'tenant_scope'
                   AND NOT (permissive='RESTRICTIVE' AND tablename IN ('audit_events','audit_heads'))
-                  AND NOT (permissive='RESTRICTIVE' AND tablename='saved_work' AND policyname='saved_work_creator')""").fetchone()==(0,)
+                  AND NOT (permissive='RESTRICTIVE' AND tablename='saved_work' AND policyname='saved_work_creator')
+                  AND NOT (permissive='RESTRICTIVE' AND tablename IN ('command_claims','command_outcomes','internal_record_revisions'))""").fetchone()==(0,)
+                # 0007's RESTRICTIVE principal bindings, exactly (checked in detail by command_checks).
+                assert set(c.execute("""SELECT tablename,policyname,cmd FROM pg_policies WHERE schemaname='genui' AND permissive='RESTRICTIVE'
+                  AND tablename IN ('command_claims','command_outcomes','internal_record_revisions')""").fetchall())==COMMAND_POLICIES
                 lock=c.execute("SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit FROM pg_roles WHERE rolname='genui_lock'").fetchone()
                 assert lock==(False,)*7
                 assert c.execute("SELECT count(*) FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname='genui_lock')").fetchone()==(0,)
@@ -1680,6 +1832,7 @@ def qualify():
             admission_checks(pg,passed,denied)
             definition_work_checks(pg,passed,denied)
             session_checks(pg,passed,denied)
+            command_checks(pg,passed,denied)
             report['source_sha256']={str(p.relative_to(Path(__file__).resolve().parents[2])):hashlib.sha256(p.read_bytes()).hexdigest()
                                     for p in (Path(runtime.__file__),Path(__file__),Path(__file__).with_name('tenant_seed.py'),MIGRATIONS/'manifest.json',
                                               *(MIGRATIONS/item['file'] for item in manifest['migrations']+manifest['catalog']))}

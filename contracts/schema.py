@@ -108,7 +108,10 @@ OPERATOR_IDS = tuple(op["properties"]["type"]["const"] for op in OPERATORS)
 LIMITS = ("organization_queue", "task_queue", "imports_per_day", "stored_original_bytes", "queries_per_hour")
 # Problem codes this edition registers (D9.6, D9.9 B17); other codes belong to the HTTP layer's own registry.
 PROBLEM_CODES = ("source_deleted", "source_quarantined", "unknown_value_in_aggregate", "lookup_ambiguous",
-                 "resource_limit", "payload_too_large", "limit_exceeded")
+                 "resource_limit", "payload_too_large", "limit_exceeded",
+                 # Edition impl-2026-10-29.3 (ADR-007 D7.9/D7.15, APP-013): the record command route.
+                 "conflict", "stale", "in_flight", "busy", "missing_idempotency_key", "malformed_idempotency_key",
+                 "malformed_command", "unknown_outcome")
 RATIO_V2 = tagged("ratio", {**OPERATORS[6]["properties"], "type": {"const": "ratio"},
                             "denominator": {"oneOf": [*OPERATORS[6]["properties"]["denominator"]["oneOf"], tagged("window_minutes", {})]}})
 assert OPERATOR_IDS[6] == "ratio"
@@ -132,7 +135,26 @@ DEFS.update({
     "receipt_source": obj({**DEFS["source_dependency"]["properties"], "mapping_version": POS}),
     "exact_rational": tagged("exact_rational", {"numerator": INTEGER_TEXT, "denominator": POSITIVE_INTEGER_TEXT}),
     "problem": obj({"status": {"type": "integer", "minimum": 400, "maximum": 599}, "code": enum(*PROBLEM_CODES), "limit": enum(*LIMITS),
-                    "retry_after_seconds": POS}, optional=("limit", "retry_after_seconds")),
+                    "retry_after_seconds": POS, "recovery_view": ref("recovery_view"), "current_revision": ref("current_revision")},
+                   optional=("limit", "retry_after_seconds", "recovery_view", "current_revision")),
+})
+# Edition impl-2026-10-29.3 (ADR-007 D7.15; APP-013): the two wire shapes the record command route adds. The
+# recovery view is the authorized 409 body (C07): the record as the caller may currently see it, read in the
+# fenced transaction that refused the command, with the stored outcome when the key is the conflict. The claim
+# is the insert-only idempotency row (D7.9). Both are edition-1 shapes of new kinds; nothing else changes.
+IDEMPOTENCY_KEY = {"type": "string", "pattern": "^[0-9a-f]{32}(?![\\s\\S])"}
+NULLABLE = lambda schema: {"oneOf": [schema, {"type": "null"}]}  # noqa: E731
+DEFS.update({
+    "recovery_view": entity("recovery_view", {**SCOPE, "work_id": UUID, "publication_id": UUID, "work_version": POS, "record_id": UUID, "command_id": ID,
+                                              "idempotency_key": IDEMPOTENCY_KEY, "reason": enum("expected_version", "payload_mismatch", "retry_expired"),
+                                              "expected_record_version": INT, "current_record_version": INT,
+                                              "current_values": NULLABLE(arr(ref("named_value"), 32)), "stored_outcome": NULLABLE(ref("command_outcome"))}),
+    "command_claim": entity("command_claim", {**SCOPE, "work_id": UUID, "principal_id": UUID, "command_id": ID, "idempotency_key": IDEMPOTENCY_KEY,
+                                              "payload_digest": DIGEST, "claimed_at": TIME}),
+    # The 412 body (D7.9 Stale): the saved work's current publication, its definition and version; all null
+    # members mean an app with no publication yet (a publication's own 412).
+    "current_revision": obj({"publication_id": NULLABLE(UUID), "definition_revision_id": NULLABLE(UUID), "definition_digest": NULLABLE(DIGEST),
+                             "work_version": NULLABLE(POS)}),
 })
 DEFS["view_v2"] = obj({**DEFS["view"]["properties"], "query": ref("query_v2")}, optional=("query", "command_id", "text"))
 DEFS["definition_content_v2"] = obj({**DEFS["definition_content"]["properties"], "inputs": arr(ref("input_contract_v2"), 8), "views": arr(ref("view_v2"), 24, 1)})
@@ -154,8 +176,9 @@ DEFS.update({
                               optional=("queue_position", "expected_wait_seconds", "result_digest", "failure_code")),
 })
 ENTITIES = ("app_definition", "publication", "saved_work", "source_revision", "query_receipt", "command_request", "command_outcome", "job_state",
-            "app_definition_v2", "publication_v2", "source_revision_v2", "query_receipt_v2", "job_state_v2")
-SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://getforma.dev/contracts/impl-2026-10-29.2/schema.json", "$defs": DEFS,
+            "app_definition_v2", "publication_v2", "source_revision_v2", "query_receipt_v2", "job_state_v2",
+            "recovery_view", "command_claim")
+SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://getforma.dev/contracts/impl-2026-10-29.3/schema.json", "$defs": DEFS,
           "oneOf": [ref(n) for n in ENTITIES]}
 
 if __name__ == "__main__":

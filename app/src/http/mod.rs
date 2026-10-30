@@ -52,6 +52,29 @@ pub fn problem(status: StatusCode, code: &'static str) -> Response {
     secure(response.headers_mut());
     response
 }
+/// A design §9 refusal carrying its class-specific authorized members
+/// (ADR-007 D7.15: the recovery view on 409, the current revision on 412):
+/// `status`, `code` and `extra`'s members, as forma-json-v1 (contract
+/// `problem`). A member that is not forma-json-v1 makes the answer a plain
+/// `unavailable`, never a partial body.
+pub fn problem_with(status: StatusCode, code: &'static str, extra: serde_json::Value) -> Response {
+    let mut body = serde_json::Map::new();
+    body.insert("status".into(), serde_json::Value::from(status.as_u16()));
+    body.insert("code".into(), serde_json::Value::from(code));
+    if let serde_json::Value::Object(members) = extra {
+        body.extend(members);
+    }
+    let Ok(bytes) = crate::admission::encode(&serde_json::Value::Object(body)) else {
+        return unavailable();
+    };
+    let mut response = (status, bytes).into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/problem+json"),
+    );
+    secure(response.headers_mut());
+    response
+}
 /// The uniform refusal: unknown, anonymous, pre-access, expired, revoked and
 /// foreign callers of a protected route are indistinguishable (ADR-006).
 pub fn not_found() -> Response {

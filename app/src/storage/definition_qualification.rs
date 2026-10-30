@@ -974,6 +974,7 @@ async fn campaign() {
             publication: Some(newest.publication_id.clone()),
             revision: Some(s05.revision.clone()),
             definition_digest: Some(genuine.digest.clone()),
+            work_version: None,
         })
     );
     assert_eq!(failures(), 3);
@@ -1037,6 +1038,7 @@ async fn campaign() {
             publication: Some(retried.publication_id.clone()),
             revision: Some(s05.revision.clone()),
             definition_digest: Some(genuine.digest.clone()),
+            work_version: None,
         })
     );
     assert_eq!(failures() - base, 2);
@@ -1083,6 +1085,7 @@ async fn campaign() {
             publication: Some(winner.publication_id.clone()),
             revision: Some(s05.revision.clone()),
             definition_digest: Some(genuine.digest.clone()),
+            work_version: None,
         })
     );
     let elapsed = start.elapsed();
