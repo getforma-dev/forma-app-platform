@@ -23,26 +23,34 @@ ENTITLEMENT_WINDOW = ("2026-10-01T00:00:00+00:00", "2036-10-01T00:00:00+00:00")
 OWNER_PUBLISH_POLICY = "00000000-0000-4000-8000-0000000000e0"
 
 
+FIXTURE_NAMES = ("northstar", "spend-review")
+
+
+def make_bundle(name, organization):
+    """One retained fixture bundle rewritten onto `organization` (a fixture organization), validated."""
+    if name not in FIXTURE_NAMES or organization not in ORGANIZATIONS:
+        raise ValueError("seed bundle refused")
+    # PH01 seeding is edition impl-2026-10-28.1 data (operator-seeded revisions; ADR-009 D9.3), so it reads
+    # that edition's retained fixtures, not the current edition's.
+    bundle = copy.deepcopy(json.loads((CONTRACTS / "fixtures" / "impl-2026-10-28.1" / (name + ".json")).read_text()))
+    old = bundle["context"]["organization_id"]
+    def replace(value):
+        if isinstance(value, dict): return {k: replace(v) for k, v in value.items()}
+        if isinstance(value, list): return [replace(v) for v in value]
+        return organization if value == old else value
+    bundle = replace(bundle)
+    receipt = bundle["receipt"]
+    receipt["digest"] = digest("query-receipt", {k: v for k, v in receipt.items() if k != "digest"})
+    validate_bundle(bundle)
+    return bundle
+
+
 def make_bundles():
-    result = []
-    for name, organization in (("northstar", ORGANIZATIONS[0]), ("northstar", ORGANIZATIONS[1]), ("spend-review", ORGANIZATIONS[1])):
-        # PH01 seeding is edition impl-2026-10-28.1 data (operator-seeded revisions; ADR-009 D9.3), so it reads
-        # that edition's retained fixtures, not the current edition's.
-        bundle = copy.deepcopy(json.loads((CONTRACTS / "fixtures" / "impl-2026-10-28.1" / (name + ".json")).read_text()))
-        old = bundle["context"]["organization_id"]
-        def replace(value):
-            if isinstance(value, dict): return {k: replace(v) for k, v in value.items()}
-            if isinstance(value, list): return [replace(v) for v in value]
-            return organization if value == old else value
-        bundle = replace(bundle)
-        receipt = bundle["receipt"]
-        receipt["digest"] = digest("query-receipt", {k: v for k, v in receipt.items() if k != "digest"})
-        validate_bundle(bundle)
-        result.append(bundle)
-    return result
+    return [make_bundle(name, organization)
+            for name, organization in (("northstar", ORGANIZATIONS[0]), ("northstar", ORGANIZATIONS[1]), ("spend-review", ORGANIZATIONS[1]))]
 
 
-def seed(connection, bundles):
+def seed(connection, bundles, changes=None):
     """Caller owns the entire transaction; a changed existing seed refuses whole.
 
     All bundles validate before the first SQL write. This only seeds the declared
@@ -51,6 +59,8 @@ def seed(connection, bundles):
     receives one deterministic, explicitly synthetic entitlement (fixed window,
     kind member_invite); it is fixture authority, never an admission result.
     Since APP-010 each organization also receives its owner_publish policy row.
+    `changes`, when given, receives the table name of every row this call inserted
+    (none on an exact repeat), so a caller can report `changed`.
     """
     from psycopg import sql
     if connection.autocommit:
@@ -67,7 +77,9 @@ def seed(connection, bundles):
         # table/field names are fixed call sites below, never fixture values.
         identifiers = sql.SQL(',').join(map(sql.Identifier, fields))
         params = sql.SQL(',').join(sql.Placeholder() for _ in fields)
-        connection.execute(sql.SQL("INSERT INTO genui.{} ({}) VALUES ({}) ON CONFLICT DO NOTHING").format(sql.Identifier(table), identifiers, params), values)
+        inserted = connection.execute(sql.SQL("INSERT INTO genui.{} ({}) VALUES ({}) ON CONFLICT DO NOTHING").format(sql.Identifier(table), identifiers, params), values)
+        if changes is not None and inserted.rowcount == 1:
+            changes.append(table)
         where = sql.SQL(' AND ').join(sql.SQL('{}=%s').format(sql.Identifier(k)) for k in fields[:key_count])
         check = sql.SQL("SELECT ROW({}) IS NOT DISTINCT FROM ROW({}) FROM genui.{} WHERE {}").format(identifiers, params, sql.Identifier(table), where)
         if connection.execute(check, (*values, *values[:key_count])).fetchall() != [(True,)]:

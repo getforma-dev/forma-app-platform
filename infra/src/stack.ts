@@ -35,6 +35,17 @@ export const CAPABILITY_SECRET_ID_ENV = 'GENUI_PROVIDER_CAPABILITY_SECRET_ID';
 // container only; runtime.py serve() writes it as the two private files the
 // service reads (GENUI_AUTH_CONFIG_FILE, GENUI_IDENTITY_REGISTRY_FILE).
 export const AUTH_CONFIGURATION_ENV = 'GENUI_AUTH_CONFIGURATION_JSON';
+export const AUTH_CONFIGURATION_SECRET_ID_ENV = 'GENUI_AUTH_CONFIGURATION_SECRET_ID';
+// ADR-003 amendment 2026-10-30 (managed invitations; APP-076 G2): two more secrets,
+// injected into the managed operator task only. The fAuth management configuration
+// (URL and tenant-scoped management key, written by FormaStack under approval A12;
+// provider_management.management_configuration) and the operator's invitation input
+// (the invitees' addresses bound to minted code digests, written by the operator host
+// immediately before an issue task and overwritten with `{}` right after;
+// admission_operator.invitation_input). Neither value ever enters an override,
+// argv, CloudTrail or a log; the service task reads neither.
+export const PROVIDER_MANAGEMENT_ENV = 'GENUI_PROVIDER_MANAGEMENT_JSON';
+export const INVITATION_INPUT_ENV = 'GENUI_OPERATOR_INVITATION_INPUT_JSON';
 
 /** Reviewable deployment model. Synth/tests never create cloud resources. */
 export class GenuiFoundation extends Stack {
@@ -204,6 +215,27 @@ export class GenuiFoundation extends Stack {
     });
     container.addMountPoints({ sourceVolume: 'runtime-config', containerPath: '/run/genui', readOnly: false });
     container.addPortMappings({ containerPort: 3000 });
+    // APP-076 item 8 / gap G11: the deny-all rollback revision. The same image digest,
+    // roles, environment, volume, port and health check as the service's task
+    // definition, with no secret injected: runtime.py serve() then starts the child
+    // with the private empty identity registry, no provider routing and no
+    // invitation capability, so every sign-in fails neutrally, no code obtains a
+    // handoff and every protected route answers the uniform 404 (no dispatch, no
+    // admission) while the schema stays migrated. `aws ecs update-service
+    // --task-definition <RollbackTaskDefinition>` is the rollback; the candidate
+    // revision is the restore (APP-076 runbook §8). It is never the service's
+    // configured task definition, so a stack update never deploys it by itself.
+    const rollback = new ecs.FargateTaskDefinition(this, 'RollbackTask', { cpu: 2048, memoryLimitMiB: 8192, taskRole, executionRole, runtimePlatform });
+    rollback.addVolume({ name: 'runtime-config' });
+    const rollbackContainer = rollback.addContainer('workspace', {
+      image: ecs.ContainerImage.fromRegistry(image.valueAsString), readonlyRootFilesystem: true,
+      user: '65532:65532',
+      logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'genui-rollback', logGroup: log }),
+      environment: runtimeEnvironment,
+      healthCheck: { command: ['CMD', 'python3', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health/live', timeout=2).read()"], interval: Duration.seconds(30), timeout: Duration.seconds(5), retries: 3, startPeriod: Duration.seconds(60) },
+    });
+    rollbackContainer.addMountPoints({ sourceVolume: 'runtime-config', containerPath: '/run/genui', readOnly: false });
+    rollbackContainer.addPortMappings({ containerPort: 3000 });
 
     const albSecurity = new ec2.SecurityGroup(this, 'AlbSecurity', { vpc, allowAllOutbound: false });
     albSecurity.addIngressRule(ec2.Peer.ipv4(Fn.conditionIf(publicIngress.logicalId, '0.0.0.0/0', operatorCidr.valueAsString).toString()), ec2.Port.tcp(443), 'Public beta HTTPS or the temporary operator-only trial');
@@ -339,6 +371,28 @@ export class GenuiFoundation extends Stack {
       actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn, authConfigurationKey.keyArn],
       conditions: { StringEquals: { 'kms:ViaService': `secretsmanager.${this.region}.amazonaws.com` } },
     }));
+    // ADR-003 amendment 2026-10-30 (managed invitations): the fAuth management
+    // configuration and the operator's invitation input, each under its own retained
+    // rotating key, initial `{}` (not configured / nothing to issue), injected whole
+    // into the operator container only, through the operator task's execution role.
+    // FormaStack writes the management configuration (PutSecretValue, approval A12);
+    // the operator host writes the invitation input before an issue task and `{}`
+    // after it. No task role reads either; the service task never names them.
+    // CloudFormation never rewrites them while these properties are unchanged.
+    const managementKeyKey = new kms.Key(this, 'ProviderManagementKeyKey', {
+      description: 'GenUI fAuth management configuration for the managed operator task (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const managementKey = new secretsmanager.Secret(this, 'ProviderManagementKey', {
+      description: 'GenUI fAuth management URL and tenant-scoped management key: written by FormaStack, injected into the managed operator task only (ADR-003 amendment 2026-10-30, managed invitations)',
+      encryptionKey: managementKeyKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const invitationInputKey = new kms.Key(this, 'OperatorInvitationInputKey', {
+      description: 'GenUI operator invitation input for the managed operator task (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const invitationInput = new secretsmanager.Secret(this, 'OperatorInvitationInput', {
+      description: 'GenUI operator invitation input (invitee addresses bound to minted code digests): written by the operator host immediately before an issue task and emptied right after, injected into the managed operator task only (ADR-003 amendment 2026-10-30, managed invitations)',
+      encryptionKey: invitationInputKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
+    });
     const operatorTask = new ecs.FargateTaskDefinition(this, 'OperatorTask', { cpu: 1024, memoryLimitMiB: 2048, taskRole: operatorRole, executionRole: migrationExecutionRole, runtimePlatform });
     operatorTask.addVolume({ name: 'operator-scratch' });
     const operatorContainer = operatorTask.addContainer('operator', {
@@ -349,8 +403,15 @@ export class GenuiFoundation extends Stack {
         PGHOST: database.instanceEndpoint.hostname, PGPORT: '5432', PGDATABASE: 'genui', PGUSER: 'genui_migration', PGSSLROOTCERT: '/etc/ssl/certs/rds-global-bundle.pem', PGSSLMODE: 'verify-full',
         GENUI_EVIDENCE_BUCKET: bucket.bucketName, GENUI_OPERATOR_TENANTS_JSON: this.toJsonString(operatorTenants), AWS_REGION: this.region,
         [CAPABILITY_SECRET_ID_ENV]: capabilitySecret.secretArn,
+        // B1 review m5: `bind-provider-tenant --from-auth-configuration` reads the routing secret the
+        // operator role already holds, so no `ten_` id or issuer travels in an override (an identifier).
+        [AUTH_CONFIGURATION_SECRET_ID_ENV]: authConfiguration.secretArn,
       },
-      secrets: { PGPASSWORD: ecs.Secret.fromSecretsManager(database.secret!, 'password') },
+      secrets: {
+        PGPASSWORD: ecs.Secret.fromSecretsManager(database.secret!, 'password'),
+        [PROVIDER_MANAGEMENT_ENV]: ecs.Secret.fromSecretsManager(managementKey),
+        [INVITATION_INPUT_ENV]: ecs.Secret.fromSecretsManager(invitationInput),
+      },
     });
     operatorContainer.addMountPoints({ sourceVolume: 'operator-scratch', containerPath: '/run/operator', readOnly: false });
     for (const construct of [operatorTask.node.defaultChild, operatorRole.node.defaultChild, operatorRole.node.tryFindChild('DefaultPolicy')?.node.defaultChild]) {
@@ -362,6 +423,12 @@ export class GenuiFoundation extends Stack {
     new CfnOutput(this, 'ProviderCapabilitySecretArn', { value: capabilitySecret.secretArn });
     // The secret the window's PutSecretValue targets (an identifier, not a value).
     new CfnOutput(this, 'AuthConfigurationSecretArn', { value: authConfiguration.secretArn });
+    // The two managed-invitation secrets (identifiers, not values): FormaStack's PutSecretValue
+    // target (A12) and the operator host's input target (APP-078 runbook 15.3).
+    new CfnOutput(this, 'ProviderManagementKeySecretArn', { value: managementKey.secretArn });
+    new CfnOutput(this, 'OperatorInvitationInputSecretArn', { value: invitationInput.secretArn });
+    // APP-076 G11: the deny-all rollback revision on the same image (`PREVIOUS_TD`).
+    new CfnOutput(this, 'RollbackTaskDefinition', { value: rollback.taskDefinitionArn });
     new CfnOutput(this, 'DatabaseEndpoint', { value: database.instanceEndpoint.hostname });
     new CfnOutput(this, 'EvidenceBucket', { value: bucket.bucketName });
     new CfnOutput(this, 'ClusterName', { value: cluster.clusterName });

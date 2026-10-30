@@ -331,7 +331,13 @@ IDENTITY_REGISTRY_KEYS = frozenset({"schema_version", "registry_version", "bindi
 IDENTITY_BINDING_KEYS = frozenset({"issuer", "provider_tenant_id", "organization_id"})
 _TENANT_SLUG = re.compile(r"[a-z0-9-]{1,64}")
 _CLIENT_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
-_VALID_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+# B1 review m1: the service's `storage::valid_id` (lowercase, RFC variant, version 4 or 7), not any hex UUID,
+# so a value this reader accepts is one the service's decoders accept too.
+_VALID_ID = re.compile(_CAPABILITY_UUID)
+# A DNS host as the service's `url` crate serializes it (lowercase labels, no percent-encoding, no space),
+# or an IPv4 literal; the url crate refuses `exa mple.com` and `ex%41mple.com`, so this reader does too.
+_ORIGIN_HOST = re.compile(r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.?"
+                          r"|(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])")
 
 
 def _graphic(value, bound):
@@ -340,8 +346,12 @@ def _graphic(value, bound):
 
 
 def _exact_origin(value):
-    """The service's `exact_origin`: an https origin whose ASCII serialization is the value itself."""
-    if not isinstance(value, str) or not value.isascii():
+    """The service's `exact_origin`: an https origin whose ASCII serialization is the value itself.
+
+    B1 review m1: the host must also be one the service's `url` crate would serialize unchanged
+    (no space, no percent-encoding, no uppercase), so nothing this reader accepts can make the
+    child refuse its configuration file and crash-loop the task."""
+    if not isinstance(value, str) or not value.isascii() or "%" in value or len(value) > 512:
         return False
     from urllib.parse import urlsplit
     try:
@@ -350,7 +360,7 @@ def _exact_origin(value):
     except ValueError:
         return False
     if url.scheme != "https" or not url.hostname or url.username is not None or url.password is not None \
-            or url.path or url.query or url.fragment:
+            or url.path or url.query or url.fragment or _ORIGIN_HOST.fullmatch(url.hostname) is None:
         return False
     return value == "https://%s%s" % (url.hostname, "" if port in (None, 443) else ":%d" % port)
 
@@ -418,6 +428,9 @@ def auth_configuration(text):
     registry = identity_registry_document(value["identity_registry"])
     routed = {route["organization_id"] for route in config["organizations"]}
     require({binding["organization_id"] for binding in registry["bindings"]} == routed)
+    # B1 review m2: exactly one binding per routed organization, so `Registry::tenant_for` is never
+    # ambiguous (two tenants for one organization would deny that organization's every sign-in silently).
+    require(len(registry["bindings"]) == len(routed))
     require(all(binding["issuer"] == config["issuer"] for binding in registry["bindings"]))
     files = {AUTH_CONFIG_FILE_NAME: document_bytes(config), IDENTITY_REGISTRY_FILE_NAME: document_bytes(registry)}
     require(all(len(data) <= AUTH_DOCUMENT_BYTES_MAX for data in files.values()))

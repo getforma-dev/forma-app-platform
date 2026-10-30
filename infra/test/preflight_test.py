@@ -23,6 +23,13 @@ INJECTED = [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': CAPABILITY
 RETIRED = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
 
 
+def rollback_definition(outputs, config):
+    """APP-076 G11: the deny-all revision, the live container without its secrets."""
+    return {'taskDefinitionArn': outputs['RollbackTaskDefinition'], 'runtimePlatform': {'cpuArchitecture': config['image_architecture']},
+            'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest'], 'secrets': [],
+                                      'environment': [{'name': 'GENUI_RUNTIME_CONFIG_FILE', 'value': '/run/genui/credentials.json'}]}]}
+
+
 def inputs(now=NOW):
     config = {'window_id': '00000000-0000-4000-8000-000000000001', 'account': '877573132739', 'region': 'us-east-1',
               'hostname': 'beta.getforma.dev', 'operator': 'Synthetic test operator', 'ingress_mode': 'operator',
@@ -45,6 +52,7 @@ class Preflight(unittest.TestCase):
         outputs = {'DeploymentExpiryScheduleArn': 'arn:aws:scheduler:us-east-1:877573132739:schedule/owned-group/expiry',
                    'DeploymentExpiryGroup': 'owned-group', 'DeploymentExpiryRoleArn': 'arn:aws:iam::877573132739:role/owned-expiry',
                    'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:1',
+                   'RollbackTaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-rollback:1',
                    'ProviderCapabilitySecretArn': CAPABILITY_SECRET, 'AuthConfigurationSecretArn': AUTH_SECRET}
         cluster = 'arn:aws:ecs:us-east-1:877573132739:cluster/owned-cluster'
         service = 'arn:aws:ecs:us-east-1:877573132739:service/owned-cluster/owned-service'
@@ -59,13 +67,15 @@ class Preflight(unittest.TestCase):
         definition = {'taskDefinitionArn': outputs['TaskDefinition'], 'runtimePlatform': {'cpuArchitecture': config['image_architecture']},
                       'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest'],
                                                 'secrets': list(INJECTED)}]}
+        rollback = rollback_definition(outputs, config)
         calls = []
         def call(*args):
             calls.append(args)
             if args[:2] == ('sts', 'get-caller-identity'): return {'Account': '877573132739'}
             if args[:2] == ('cloudformation', 'describe-stacks'): return {'Stacks': [stack]}
             if args[:2] == ('scheduler', 'get-schedule'): return schedule
-            if args[:2] == ('ecs', 'describe-task-definition'): return {'taskDefinition': copy.deepcopy(definition)}
+            if args[:2] == ('ecs', 'describe-task-definition'):
+                return {'taskDefinition': copy.deepcopy(rollback if args[-1] == outputs['RollbackTaskDefinition'] else definition)}
             if args[:2] == ('ecs', 'describe-services'): return {'services': [dict(current)], 'failures': []}
             if args[:2] == ('ecs', 'update-service'):
                 current['desiredCount'] = int(args[-1]); return {'service': dict(current)}
@@ -77,7 +87,8 @@ class Preflight(unittest.TestCase):
         self.assertEqual(report['cloudformation_parameters']['ServiceDesiredCount'], '0')
         outcome = preflight.activate(config, report, call, lambda: NOW)
         self.assertEqual(outcome['status'], 'activation_requested_not_healthy')
-        self.assertEqual([x[:2] for x in calls], [('sts', 'get-caller-identity'), ('cloudformation', 'describe-stacks'), ('scheduler', 'get-schedule'), ('ecs', 'describe-task-definition'), ('ecs', 'describe-services'), ('ecs', 'update-service'), ('ecs', 'describe-services')])
+        self.assertEqual([x[:2] for x in calls], [('sts', 'get-caller-identity'), ('cloudformation', 'describe-stacks'), ('scheduler', 'get-schedule'), ('ecs', 'describe-task-definition'), ('ecs', 'describe-task-definition'), ('ecs', 'describe-services'), ('ecs', 'update-service'), ('ecs', 'describe-services')])
+        self.assertEqual(outcome['rollback_task_definition'], 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-rollback:1')
         self.assertEqual(calls[2], ('scheduler', 'get-schedule', '--group-name', 'owned-group', '--name', 'expiry'))
 
     def test_retired_qualification_secret_is_accepted_only_empty_and_keeps_disabled_bindings(self):
@@ -110,7 +121,7 @@ class Preflight(unittest.TestCase):
             config, report, _, _, _, calls, call = self.activation_fixture()
             def changed(*args):
                 value = call(*args)
-                if args[:2] == ('ecs', 'describe-task-definition'):
+                if args[:2] == ('ecs', 'describe-task-definition') and 'owned-rollback' not in args[-1]:
                     definition = value['taskDefinition']; container = definition['containerDefinitions'][0]
                     if mutation == 'definition': definition['taskDefinitionArn'] += '9'
                     if mutation == 'image': container['image'] = config['image_digest'][:-1] + 'b'
@@ -129,7 +140,7 @@ class Preflight(unittest.TestCase):
             config, report, _, _, _, calls, call = self.activation_fixture()
             def changed(*args):
                 value = call(*args)
-                if args[:2] == ('ecs', 'describe-task-definition'):
+                if args[:2] == ('ecs', 'describe-task-definition') and 'owned-rollback' not in args[-1]:
                     secrets = copy.deepcopy(INJECTED)
                     if mutation == 'reordered': secrets.reverse()
                     if mutation == 'missing': secrets = []
@@ -156,7 +167,7 @@ class Preflight(unittest.TestCase):
             config, report, _, _, _, calls, call = self.activation_fixture()
             def changed(*args):
                 value = call(*args)
-                if args[:2] == ('ecs', 'describe-task-definition'):
+                if args[:2] == ('ecs', 'describe-task-definition') and 'owned-rollback' not in args[-1]:
                     container = value['taskDefinition']['containerDefinitions'][0]
                     names = {'raw_json': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'config_file': 'GENUI_AUTH_QUALIFICATION_CONFIG_FILE',
                              'future_qualification_field': 'GENUI_AUTH_QUALIFICATION_UNREVIEWED',
@@ -170,6 +181,38 @@ class Preflight(unittest.TestCase):
                 return value
             with self.assertRaises(ValueError): preflight.activate(config, report, changed, lambda: NOW)
             self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), mutation)
+
+    def test_the_rollback_revision_must_exist_on_the_same_image_with_no_secret(self):
+        """APP-076 item 8 / G11: activation requires the deny-all rollback task definition (PREVIOUS_TD)."""
+        for mutation in ('correct', 'absent_output', 'same_as_live', 'image', 'architecture', 'secret', 'auth_env', 'registry_env',
+                         'capability_env', 'environment_file', 'entrypoint', 'two_containers', 'wrong_name'):
+            config, report, stack, _, _, calls, call = self.activation_fixture()
+            if mutation == 'absent_output':
+                stack['Outputs'] = [o for o in stack['Outputs'] if o['OutputKey'] != 'RollbackTaskDefinition']
+            if mutation == 'same_as_live':
+                for output in stack['Outputs']:
+                    if output['OutputKey'] == 'RollbackTaskDefinition': output['OutputValue'] = 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:1'
+            def changed(*args):
+                value = call(*args)
+                if args[:2] == ('ecs', 'describe-task-definition') and 'owned-rollback' in args[-1]:
+                    definition = value['taskDefinition']; container = definition['containerDefinitions'][0]
+                    if mutation == 'image': container['image'] = config['image_digest'][:-1] + 'b'
+                    if mutation == 'architecture': definition['runtimePlatform']['cpuArchitecture'] = 'X86_64'
+                    if mutation == 'secret': container['secrets'] = [INJECTED[1]]
+                    if mutation == 'auth_env': container['environment'].append({'name': 'GENUI_AUTH_CONFIG_FILE', 'value': '/run/genui/auth.json'})
+                    if mutation == 'registry_env': container['environment'].append({'name': 'GENUI_IDENTITY_REGISTRY_FILE', 'value': '/run/genui/registry.json'})
+                    if mutation == 'capability_env': container['environment'].append({'name': 'GENUI_PROVIDER_CAPABILITY_DIR', 'value': '/run/genui/caps'})
+                    if mutation == 'environment_file': container['environmentFiles'] = [{'type': 's3', 'value': 'arn:aws:s3:::synthetic/config.env'}]
+                    if mutation == 'entrypoint': container['entryPoint'] = ['sh', '-c']
+                    if mutation == 'two_containers': definition['containerDefinitions'].append(dict(container))
+                    if mutation == 'wrong_name': container['name'] = 'rollback'
+                return value
+            if mutation == 'correct':
+                outcome = preflight.activate(config, report, changed, lambda: NOW)
+                self.assertEqual((outcome['desired_count'], outcome['rollback_task_definition']), (1, 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-rollback:1'))
+            else:
+                with self.assertRaises(ValueError): preflight.activate(config, report, changed, lambda: NOW)
+                self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), mutation)
 
     def test_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry(self):
         for mutation in ('stack', 'disabled', 'schedule_arn', 'group', 'target', 'role', 'task', 'near_expiry'):
@@ -427,6 +470,7 @@ class AlwaysOnPlan(unittest.TestCase):
         outputs = {'DeploymentExpiryScheduleArn': 'arn:aws:scheduler:us-east-1:877573132739:schedule/owned-group/expiry',
                    'DeploymentExpiryGroup': 'owned-group', 'DeploymentExpiryRoleArn': 'arn:aws:iam::877573132739:role/owned-expiry',
                    'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:3',
+                   'RollbackTaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-rollback:3',
                    'ProviderCapabilitySecretArn': CAPABILITY_SECRET, 'AuthConfigurationSecretArn': AUTH_SECRET}
         cluster = 'arn:aws:ecs:us-east-1:877573132739:cluster/owned-cluster'
         service = 'arn:aws:ecs:us-east-1:877573132739:service/owned-cluster/owned-service'
@@ -441,13 +485,15 @@ class AlwaysOnPlan(unittest.TestCase):
         definition = {'taskDefinitionArn': outputs['TaskDefinition'], 'runtimePlatform': {'cpuArchitecture': 'ARM64'},
                       'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest'],
                                                 'secrets': list(INJECTED)}]}
+        rollback = rollback_definition(outputs, config)
         calls = []
         def call(*args):
             calls.append(args)
             if args[:2] == ('sts', 'get-caller-identity'): return {'Account': '877573132739'}
             if args[:2] == ('cloudformation', 'describe-stacks'): return {'Stacks': [stack]}
             if args[:2] == ('scheduler', 'get-schedule'): return schedule
-            if args[:2] == ('ecs', 'describe-task-definition'): return {'taskDefinition': copy.deepcopy(definition)}
+            if args[:2] == ('ecs', 'describe-task-definition'):
+                return {'taskDefinition': copy.deepcopy(rollback if args[-1] == outputs['RollbackTaskDefinition'] else definition)}
             if args[:2] == ('ecs', 'describe-services'): return {'services': [dict(current)], 'failures': []}
             if args[:2] == ('ecs', 'update-service'):
                 current['desiredCount'] = int(args[-1]); return {'service': dict(current)}

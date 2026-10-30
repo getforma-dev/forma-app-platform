@@ -17,6 +17,15 @@ file://...``), or checks a response file the CLI returned:
                    an owned 0700 private directory, and only its digest is printed
                    for ``admission issue --code-digest`` (the task, its override,
                    CloudTrail and the log never see the secret)
+  invitation-input compose the OperatorInvitationInput secret value (ADR-003
+                   amendment 2026-10-30, managed invitations) from a private
+                   recipients file (label, organization, address, role), the
+                   minted codes' digests (``--codes-dir``, never the codes) and
+                   the issuer and tenant ids of FormaStack's identifiers file,
+                   validated with the admission operator's own reader; the
+                   document goes only to a 0600 file in an owned 0700 private
+                   directory for PutSecretValue, and only labels, organizations,
+                   digests and its own digest are printed (never an address)
   operator-task    an ECS RunTask request for the OperatorTask from one documented
                    override of app/operator/overrides.json, with only that
                    override's flag values replaced; the result must parse, pass
@@ -222,6 +231,51 @@ def auth_configuration(args):
             'handling': 'PutSecretValue --secret-string file://<private_file> only; never a task override, log, ticket, chat or evidence.'}
 
 
+RECIPIENT_FIELDS = ('label', 'organization_id', 'email', 'role')
+
+
+def invitation_input(args):
+    """The OperatorInvitationInput secret value: one entry per recipient, bound to the minted code's
+    digest (read from mint-code's private file by label) and to the real issuer and tenant id of the
+    recipient's organization (from the identifiers file), validated as the task validates it."""
+    admission = admission_operator()
+    private_directory(args.output.parent)
+    recipients = read_json(args.private_file)
+    require(isinstance(recipients, dict) and set(recipients) == {'recipients'} and isinstance(recipients['recipients'], list)
+            and recipients['recipients'], 'recipients file must hold exactly a non-empty "recipients" list')
+    identifiers = read_json(args.identifiers)
+    require(isinstance(identifiers, dict) and isinstance(identifiers.get('jwt_iss'), str) and isinstance(identifiers.get('tenants'), list),
+            'identifiers file lacks jwt_iss or tenants')
+    tenants = {}
+    for tenant in identifiers['tenants']:
+        require(isinstance(tenant, dict) and all(k in tenant for k in TENANT_FIELDS), 'tenant entry lacks a required field')
+        tenants[tenant['genui_org_uuid']] = tenant['tenant_id']
+    entries, printed, labels = [], [], set()
+    for recipient in recipients['recipients']:
+        require(isinstance(recipient, dict) and set(recipient) == set(RECIPIENT_FIELDS), 'recipient entry fields do not match the closed shape')
+        label = recipient['label']
+        require(re.fullmatch(r'[a-z0-9][a-z0-9-]{0,39}', label) is not None and label not in labels, 'label must be a short lowercase name, named once')
+        labels.add(label)
+        require(recipient['organization_id'] in ORGANIZATIONS, 'recipient names an organization outside the two fixture organizations')
+        require(recipient['organization_id'] in tenants, 'the identifiers file binds no tenant to this organization')
+        minted = read_json(Path(args.codes_dir) / ('access-code-%s.json' % label))
+        require(minted.get('organization_id') == recipient['organization_id'] and isinstance(minted.get('code_digest'), str),
+                'minted code file does not belong to this organization')
+        entries.append({'organization_id': recipient['organization_id'], 'code_digest': minted['code_digest'], 'email': recipient['email'],
+                        'role': recipient['role'], 'issuer': identifiers['jwt_iss'], 'tenant': tenants[recipient['organization_id']]})
+        printed.append({'label': label, 'organization_id': recipient['organization_id'], 'code_digest': minted['code_digest']})
+    document = {'format': admission.INVITATION_INPUT_FORMAT, 'invitations': entries}
+    text = json.dumps(document, indent=2, sort_keys=True) + '\n'
+    # The admission operator's own reader (the task refuses anything else before connecting).
+    try:
+        require(len(admission.invitation_input(text)) == len(entries), 'the composed document is not one the operator accepts')
+    except admission.Refused as refusal:
+        raise Refused('the composed document is not one the operator accepts: ' + str(refusal))
+    sha = write_json(args.output, document, private=True)
+    return {'private_file': str(args.output), 'sha256': sha, 'bytes': len(text.encode()), 'invitations': printed,
+            'handling': 'PutSecretValue --secret-string file://<private_file> immediately before the issue task, then PutSecretValue {} right after; never a task override, log, ticket, chat or evidence.'}
+
+
 def compose_operator_command(document, name, sets, adds):
     entries = {item['name']: item for item in document['overrides']}
     require(name in entries, 'unknown documented override')
@@ -355,6 +409,11 @@ def main(argv=None):
     p.add_argument('--output', type=Path, required=True, help='0600 file in an owned 0700 private directory')
     p.add_argument('--app-origin', default=APP_ORIGIN)
     p.add_argument('--max-access-lifetime-seconds', type=int, default=900, help='the verifier cap; the planned fAuth access lifetime is 900 s (APP-006)')
+    p = sub.add_parser('invitation-input')
+    p.add_argument('--private-file', type=Path, required=True, help='0600 recipients JSON: {"recipients": [{label, organization_id, email, role}]}')
+    p.add_argument('--codes-dir', type=Path, required=True, help="mint-code's private directory (access-code-<label>.json; only the digest is read)")
+    p.add_argument('--identifiers', type=Path, required=True, help="FormaStack's private identifiers JSON (jwt_iss and each tenant's tenant_id only)")
+    p.add_argument('--output', type=Path, required=True, help='0600 file in an owned 0700 private directory')
     for name in ('operator-task', 'qualification-task'):
         p = sub.add_parser(name)
         p.add_argument('--outputs', type=Path, required=True, help='describe-stacks output after the stack update')
@@ -372,8 +431,8 @@ def main(argv=None):
     p = sub.add_parser('review-change-set')
     p.add_argument('--describe', type=Path, required=True); p.add_argument('--receipt', type=Path); p.add_argument('--output', type=Path)
     args = parser.parse_args(argv)
-    handlers = {'mint-code': mint_code, 'auth-configuration': auth_configuration, 'operator-task': operator_task, 'qualification-task': qualification_task,
-                'change-set': change_set, 'review-change-set': review_change_set}
+    handlers = {'mint-code': mint_code, 'auth-configuration': auth_configuration, 'invitation-input': invitation_input, 'operator-task': operator_task,
+                'qualification-task': qualification_task, 'change-set': change_set, 'review-change-set': review_change_set}
     try:
         result = handlers[args.command](args)
     except (Refused, KeyError, ValueError, OSError) as error:

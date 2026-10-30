@@ -165,6 +165,72 @@ class Composer(unittest.TestCase):
             self.assertEqual(self.operator('--step', 'bad', '--override', 'admission-issue-preminted', *bad)[0], 1, bad)
         self.assertEqual(self.operator('--step', 'bad', '--override', 'admission-issue')[0], 1)  # undocumented: raw issue
 
+    def test_invitation_input_binds_minted_digests_and_prints_no_address(self):
+        """ADR-003 amendment 2026-10-30 (managed invitations): the OperatorInvitationInput secret value."""
+        codes = self.private / 'codes'; codes.mkdir(mode=0o700)
+        digests = {}
+        for label, organization in (('ns', NORTHSTAR), ('spare', NORTHSTAR), ('canary', CANARY)):
+            code, out, _ = run('mint-code', '--organization', organization, '--label', label, '--out-dir', str(codes))
+            self.assertEqual(code, 0)
+            digests[label] = json.loads(out)['code_digest']
+        identifiers, document = self.synthetic_identifiers()
+        recipients = self.private / 'recipients.json'
+        recipients.write_text(json.dumps({'recipients': [{'label': 'ns', 'organization_id': NORTHSTAR, 'email': 'Victor@Example.test', 'role': 'user'},
+                                                         {'label': 'spare', 'organization_id': NORTHSTAR, 'email': 'spare@example.test', 'role': 'user'}]}))
+        recipients.chmod(0o600)
+        output = self.private / 'invitation-input.json'
+        code, out, err = run('invitation-input', '--private-file', str(recipients), '--codes-dir', str(codes), '--identifiers', str(identifiers), '--output', str(output))
+        self.assertEqual((code, err), (0, ''), err)
+        result = json.loads(out)
+        self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+        self.assertEqual(result['invitations'], [{'label': 'ns', 'organization_id': NORTHSTAR, 'code_digest': digests['ns']},
+                                                 {'label': 'spare', 'organization_id': NORTHSTAR, 'code_digest': digests['spare']}])
+        self.assertEqual(result['sha256'], hashlib.sha256(output.read_bytes()).hexdigest())
+        # Printed: labels, organizations and digests only. Never an address, a tenant id, the issuer or a code.
+        for hidden in ('Victor', 'victor', 'spare@', 'ten_', 'syn-iss', 'example.test'):
+            self.assertNotIn(hidden, out, hidden)
+        for label in digests:
+            self.assertNotIn(json.loads((codes / ('access-code-%s.json' % label)).read_text())['code'], out + output.read_text())
+        # The document is what the task's reader accepts, with the real issuer and tenant of each organization.
+        admission = wr.admission_operator()
+        entries = admission.invitation_input(output.read_text())
+        self.assertEqual(entries, [{'organization_id': NORTHSTAR, 'code_digest': digests['ns'], 'email': 'Victor@Example.test', 'role': 'user',
+                                    'issuer': 'syn-iss', 'tenant': 'ten_00000000-0000-4000-8000-00000000a001'},
+                                   {'organization_id': NORTHSTAR, 'code_digest': digests['spare'], 'email': 'spare@example.test', 'role': 'user',
+                                    'issuer': 'syn-iss', 'tenant': 'ten_00000000-0000-4000-8000-00000000a001'}])
+        # Never overwritten; refusals: an unminted label, a minted code of another organization, a foreign
+        # organization, an extra recipient field, a non-user role, a loose output directory.
+        self.assertEqual(run('invitation-input', '--private-file', str(recipients), '--codes-dir', str(codes), '--identifiers', str(identifiers), '--output', str(output))[0], 1)
+        bad = self.private / 'bad.json'
+        for recipient in ([{'label': 'missing', 'organization_id': NORTHSTAR, 'email': 'a@example.test', 'role': 'user'}],
+                          [{'label': 'canary', 'organization_id': NORTHSTAR, 'email': 'a@example.test', 'role': 'user'}],
+                          [{'label': 'ns', 'organization_id': '00000000-0000-4000-8000-000000000003', 'email': 'a@example.test', 'role': 'user'}],
+                          [{'label': 'ns', 'organization_id': NORTHSTAR, 'email': 'a@example.test', 'role': 'user', 'note': 'x'}],
+                          [{'label': 'ns', 'organization_id': NORTHSTAR, 'email': 'a@example.test', 'role': 'admin'}],
+                          [{'label': 'ns', 'organization_id': NORTHSTAR, 'email': 'not-an-address', 'role': 'user'}],
+                          [{'label': 'ns', 'organization_id': NORTHSTAR, 'email': 'a@example.test', 'role': 'user'},
+                           {'label': 'ns', 'organization_id': NORTHSTAR, 'email': 'b@example.test', 'role': 'user'}], []):
+            with self.subTest(recipient=recipient[:1]):
+                bad.write_text(json.dumps({'recipients': recipient}))
+                target = self.private / ('refused-%d.json' % len(list(self.private.iterdir())))
+                code, out, err = run('invitation-input', '--private-file', str(bad), '--codes-dir', str(codes), '--identifiers', str(identifiers), '--output', str(target))
+                self.assertEqual((code, out), (1, ''))
+                self.assertNotIn('a@example.test', err); self.assertNotIn('b@example.test', err)
+                self.assertFalse(target.exists())
+        loose = self.root / 'loose'; loose.mkdir(mode=0o755); loose.chmod(0o755)
+        self.assertEqual(run('invitation-input', '--private-file', str(recipients), '--codes-dir', str(codes), '--identifiers', str(identifiers), '--output', str(loose / 'x.json'))[0], 1)
+        # The managed-invitation override composes with this digest and refuses an address in argv.
+        code, request, err = self.operator('--step', 'issue-ns', '--override', 'admission-issue-managed-invitation',
+                                           '--set=--code-digest=' + digests['ns'], '--set=--issued-by=app078-operator',
+                                           '--set=--grant=discover:00000000-0000-4000-8000-000000000065', '--add=--grant=run:00000000-0000-4000-8000-000000000065')
+        self.assertEqual(code, 0, err)
+        command = request['overrides']['containerOverrides'][0]['command']
+        self.assertIn('--provider-input-from-secret', command)
+        self.assertEqual(command[command.index('--code-digest') + 1], digests['ns'])
+        self.assertNotIn('@', json.dumps(request))
+        for bad_set in (['--add=--provider-email=a@b.test'], ['--set=--provider-email=a@b.test'], ['--set=--code-digest=not-a-digest']):
+            self.assertEqual(self.operator('--step', 'bad', '--override', 'admission-issue-managed-invitation', *bad_set)[0], 1, bad_set)
+
     def test_inline_registration_uses_the_printed_record(self):
         plan = json.loads((wr.REPOSITORY / 'evidence/APP-077/upload-sources/plan-in-image.json').read_text())
         record_path = self.root / 'record.json'; record_path.write_text(json.dumps(plan['registration'][0]))

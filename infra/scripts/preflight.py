@@ -259,6 +259,22 @@ def activate(config, report, call, clock):
                         {'name': 'GENUI_AUTH_CONFIGURATION_JSON', 'valueFrom': outputs['AuthConfigurationSecretArn']}]
     by_name = lambda entries: sorted(entries, key=lambda entry: entry['name'])
     require(by_name(containers[0].get('secrets', [])) == by_name(expected_secrets), 'live secret injection differs from the reviewed stack')
+    # APP-076 item 8 / gap G11: the deny-all rollback revision (`PREVIOUS_TD`) exists on the same
+    # image with no secret injected and no sign-in configuration in its environment, so a rollback
+    # redeploy answers the uniform 404 on every protected route while the schema stays migrated.
+    require('RollbackTaskDefinition' in outputs, 'the stack has no deny-all rollback task definition (APP-076 G11)')
+    rollback = call('ecs', 'describe-task-definition', '--task-definition', outputs['RollbackTaskDefinition'])['taskDefinition']
+    require(rollback['taskDefinitionArn'] == outputs['RollbackTaskDefinition'] and rollback['taskDefinitionArn'] != outputs['TaskDefinition'],
+            'unexpected rollback task definition')
+    fallback = rollback['containerDefinitions']
+    require(len(fallback) == 1 and fallback[0]['name'] == 'workspace' and fallback[0]['image'] == config['image_digest']
+            and rollback['runtimePlatform']['cpuArchitecture'] == config['image_architecture'],
+            'rollback task definition must run the reserved image on one workspace container')
+    require(fallback[0].get('secrets', []) == [] and fallback[0].get('environmentFiles', []) == []
+            and fallback[0].get('entryPoint', []) == [] and fallback[0].get('command', []) == []
+            and not any(item['name'].startswith(('GENUI_AUTH_QUALIFICATION_', 'GENUI_PROVIDER_CAPABILIT', 'GENUI_AUTH_CONFIG', 'GENUI_IDENTITY_REGISTRY'))
+                        for item in fallback[0].get('environment', [])),
+            'rollback task definition must inject no secret and name no sign-in configuration: it starts deny-all')
     def current_service():
         result = call('ecs', 'describe-services', '--cluster', cluster_arn, '--services', service_arn)
         require(not result.get('failures') and len(result['services']) == 1, 'intended service is unavailable')
@@ -284,6 +300,7 @@ def activate(config, report, call, clock):
         raise ValueError('expiry elapsed during activation; stop requested and outcome must be reconciled')
     return {'status': 'activation_requested_not_healthy', 'observed_at_utc': observed.strftime('%Y-%m-%dT%H:%M:%SZ'),
             'cluster_arn': cluster_arn, 'service_arn': service_arn, 'schedule_arn': arn,
+            'task_definition': outputs['TaskDefinition'], 'rollback_task_definition': outputs['RollbackTaskDefinition'],
             'expires_at_utc': config['deployment_expires_at_utc'], 'desired_count': 1,
             'limit': 'Retain the reservation on failure/unknown outcome. Verify desiredCount zero and stopped tasks at expiry; this API response is not readiness or a billing cutoff.'}
 
