@@ -24,6 +24,8 @@ app/src/auth/**
 !app/src/auth/capability.rs
 !app/src/auth/cookies.rs
 !app/src/auth/csrf.rs
+!app/src/auth/invite.rs
+!app/src/auth/invite_tests.rs
 !app/src/auth/mod.rs
 !app/src/auth/pending.rs
 !app/src/auth/pkce.rs
@@ -83,6 +85,9 @@ app/admin/src/home/**
 !app/admin/src/about/
 app/admin/src/about/**
 !app/admin/src/about/app.tsx
+!app/admin/src/invite/
+app/admin/src/invite/**
+!app/admin/src/invite/app.tsx
 !app/admin/src/signin/
 app/admin/src/signin/**
 !app/admin/src/signin/app.tsx

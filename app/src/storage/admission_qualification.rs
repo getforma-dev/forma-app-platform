@@ -285,20 +285,36 @@ async fn admit_new(stores: &Stores, digest: &str, label: &str) -> (String, i64, 
 /// child process serving on 127.0.0.1 that answers one JSON control line per
 /// request on its stdin. SIMULATED TRANSPORT. Its management key and the
 /// operator's capability directory live in the fixture's private directory.
-struct FakeProvider {
+/// Crate-visible for the APP-074 invitation campaign (`auth::invite_tests`),
+/// which runs one per fixture tenant over one shared capability directory.
+pub(crate) struct FakeProvider {
     child: Child,
     stdin: Option<ChildStdin>,
     stdout: BufReader<ChildStdout>,
     url: String,
     key_file: PathBuf,
-    capabilities: PathBuf,
+    pub(crate) capabilities: PathBuf,
 }
 impl FakeProvider {
     fn start(fixture: &Fixture, tenant: &str) -> Self {
-        let root = fixture.directory.0.join("provider");
-        let capabilities = root.join("capabilities");
+        Self::start_at(fixture, tenant, "provider", None)
+    }
+    /// A stand-in for `tenant` under `<fixture>/<name>`, writing capabilities
+    /// to `capabilities` (created 0700 when absent) or `<name>/capabilities`.
+    pub(crate) fn start_at(
+        fixture: &Fixture,
+        tenant: &str,
+        name: &str,
+        capabilities: Option<&std::path::Path>,
+    ) -> Self {
+        let root = fixture.directory.0.join(name);
+        let capabilities = capabilities
+            .map(|p| p.to_owned())
+            .unwrap_or_else(|| root.join("capabilities"));
         for dir in [&root, &capabilities] {
-            std::fs::create_dir(dir).unwrap();
+            if !dir.exists() {
+                std::fs::create_dir(dir).unwrap();
+            }
             std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
         }
         let mut bytes = [0u8; 24];
@@ -339,7 +355,7 @@ impl FakeProvider {
             capabilities,
         }
     }
-    fn control(&mut self, command: Value) -> Value {
+    pub(crate) fn control(&mut self, command: Value) -> Value {
         let stdin = self.stdin.as_mut().unwrap();
         writeln!(stdin, "{command}").unwrap();
         stdin.flush().unwrap();
@@ -347,7 +363,7 @@ impl FakeProvider {
         self.stdout.read_line(&mut line).unwrap();
         serde_json::from_str(&line).expect("stand-in control reply")
     }
-    fn env(&self) -> [(&'static str, String); 3] {
+    pub(crate) fn env(&self) -> [(&'static str, String); 3] {
         [
             ("GENUI_PROVIDER_URL", self.url.clone()),
             (
@@ -379,7 +395,7 @@ impl Drop for FakeProvider {
         let _ = self.child.wait();
     }
 }
-fn operator_with(fixture: &Fixture, provider: &FakeProvider, args: &[&str]) -> Value {
+pub(crate) fn operator_with(fixture: &Fixture, provider: &FakeProvider, args: &[&str]) -> Value {
     let mut cmd = cli_command(fixture, "genui_migration", "synthetic-migration", args);
     cmd.envs(provider.env());
     accepted(

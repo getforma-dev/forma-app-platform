@@ -1,21 +1,21 @@
 //! ADR-006 routes, exactly: `GET /signin`, `GET|POST /signin/{handle}`,
 //! `GET /auth/callback`, `GET /auth/pending`, `POST /auth/pending/resend`,
 //! `POST /auth/signout`, `POST /auth/signout-all`, and the protected
-//! workspace entry `GET /workspace`. (`GET /invite` and `POST
-//! /invite/validate` are APP-074's.) Refusal order for a `POST`: fetch
+//! workspace entry `GET /workspace`, and APP-074's `GET /invite` and `POST
+//! /invite/validate` (`invite.rs`). Refusal order for a `POST`: fetch
 //! metadata (403), then the limit (429), then the bounded body (413), then the
 //! synchronizer token (403), and only then any hashing, database or provider
 //! work. Every protected refusal is the uniform 404.
 use super::{
-    cookies, csrf, pending, pkce::Pkce, Auth, DeniedView, Route, SigninView, WorkspaceView,
+    cookies, csrf, invite, pending, pkce::Pkce, Auth, DeniedView, Route, SigninView, WorkspaceView,
 };
 use crate::{
-    http::{self, limits, proxy},
+    http::{self, limits},
     storage::{handle_digest, Completion, FlowKind, Lookup, PendingAdmission},
 };
 use axum::{
     body::Body,
-    extract::{ConnectInfo, Path, Request, State},
+    extract::{rejection::PathRejection, ConnectInfo, Path, Request, State},
     http::{header, request::Parts, HeaderValue, StatusCode},
     response::Response,
     routing::{get, post},
@@ -25,6 +25,8 @@ use std::{net::SocketAddr, sync::Arc};
 
 pub fn router(auth: Arc<Auth>) -> Router {
     Router::new()
+        .route("/invite", get(invite::entry))
+        .route("/invite/validate", post(invite::validate))
         .route("/signin", get(signin_page))
         .route(
             "/signin/{handle}",
@@ -85,8 +87,18 @@ async fn signin_page(State(auth): State<Arc<Auth>>, request: Request) -> Respons
     let hint = cookies::read(request.headers(), cookies::ORGANIZATION_HINT);
     signin(&auth, hint.as_deref().and_then(handle_action), false)
 }
-async fn signin_handle_page(State(auth): State<Arc<Auth>>, Path(handle): Path<String>) -> Response {
-    signin(&auth, handle_action(&handle), false)
+/// A path the extractor cannot decode (invalid percent-encoding or UTF-8)
+/// is no handle at all: the same page as a malformed one, never axum's
+/// plain-text rejection (APP-009 review m2).
+fn handle_of(path: Result<Path<String>, PathRejection>) -> String {
+    path.map(|Path(handle)| handle).unwrap_or_default()
+}
+
+async fn signin_handle_page(
+    State(auth): State<Arc<Auth>>,
+    path: Result<Path<String>, PathRejection>,
+) -> Response {
+    signin(&auth, handle_action(&handle_of(path)), false)
 }
 
 /// The fresh server-side flow and the PAR hand-off (ADR-006 `POST
@@ -148,14 +160,15 @@ pub(crate) fn verifier_context(organization: &str) -> Vec<u8> {
 
 async fn signin_start(
     State(auth): State<Arc<Auth>>,
-    Path(handle): Path<String>,
+    path: Result<Path<String>, PathRejection>,
     request: Request,
 ) -> Response {
+    let handle = handle_of(path);
     let (parts, body) = request.into_parts();
     if !csrf::same_origin(&parts.headers, auth.origin()) {
         return http::cross_site();
     }
-    let class = proxy::address_class(&parts.headers, peer(&parts));
+    let class = auth.address_class(&parts);
     if let Err(retry) = auth.limits.admit(&[
         (&format!("signin:{class}"), limits::SIGNIN_ADDRESS),
         ("signin:global", limits::SIGNIN_GLOBAL),
@@ -343,21 +356,32 @@ async fn callback(State(auth): State<Arc<Auth>>, request: Request) -> Response {
         return failed(&auth);
     };
     let arrival = arrive(&auth, &cookie, &code, &state).await;
-    // One pre-access record per browser: a new arrival replaces (destroys and
-    // revokes) the record an earlier cookie of this browser named.
-    if let (Ok(_), Some(earlier), Some(stores)) = (
-        &arrival,
-        cookies::read(&parts.headers, cookies::PRE_ACCESS),
-        &auth.stores,
-    ) {
-        if let Ok(Some(ended)) = stores.workspace.destroy_pre_access(&earlier).await {
-            auth.revoke(&ended).await;
+    // One pre-access record and one workspace session per browser: a new
+    // arrival replaces (destroys and revokes) the records the browser's
+    // earlier cookies named; an earlier workspace session ends exactly as a
+    // sign-out does, with its epoch advance (APP-009 review m1).
+    if let (Ok(_), Some(stores)) = (&arrival, &auth.stores) {
+        if let Some(earlier) = cookies::read(&parts.headers, cookies::PRE_ACCESS) {
+            if let Ok(Some(ended)) = stores.workspace.destroy_pre_access(&earlier).await {
+                auth.revoke(&ended).await;
+            }
+        }
+        if let Some(earlier) = cookies::read(&parts.headers, cookies::SESSION) {
+            match stores.workspace.sign_out(&earlier).await {
+                Ok(Some(signed)) => {
+                    tracing::info!(epoch = signed.epoch, "auth.superseded");
+                    auth.revoke(&signed.ended).await;
+                }
+                Ok(None) => {}
+                Err(error) => tracing::info!(code = %error, "auth.supersede_failed"),
+            }
         }
     }
     match arrival {
         Ok(Arrival::Pending(pre)) => {
             let mut response = http::see_other("/auth/pending");
             add_cookie(&mut response, cookies::clear(cookies::PRELOGIN));
+            add_cookie(&mut response, cookies::clear(cookies::SESSION));
             add_cookie(&mut response, cookies::set(cookies::PRE_ACCESS, &pre));
             response
         }
@@ -371,6 +395,7 @@ async fn callback(State(auth): State<Arc<Auth>>, request: Request) -> Response {
         Ok(Arrival::Denied(pre)) => {
             let mut response = denied(&auth, &pre);
             add_cookie(&mut response, cookies::clear(cookies::PRELOGIN));
+            add_cookie(&mut response, cookies::clear(cookies::SESSION));
             add_cookie(&mut response, cookies::set(cookies::PRE_ACCESS, &pre));
             response
         }

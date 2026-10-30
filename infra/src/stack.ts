@@ -146,6 +146,9 @@ export class GenuiFoundation extends Stack {
       GENUI_EVIDENCE_BUCKET: bucket.bucketName, GENUI_DATABASE_ROLES_JSON: this.toJsonString(databaseRoles), GENUI_TENANTS_JSON: this.toJsonString(tenants),
       GENUI_RUNTIME_CONFIG_FILE: '/run/genui/credentials.json', GENUI_RDS_CA_FILE: '/etc/ssl/certs/rds-global-bundle.pem',
       FORMA_BIND_ADDRESS: '0.0.0.0', FORMA_PORT: '3000', AWS_REGION: this.region, PYTHONDONTWRITEBYTECODE: '1',
+      // ADR-007 D7.14 (APP-074): only the ALB's subnets are trusted proxies, so the
+      // rightmost X-Forwarded-For hop is believed from them alone.
+      GENUI_TRUSTED_PROXY_CIDRS: vpc.publicSubnets.map(subnet => subnet.ipv4CidrBlock).join(','),
     };
     const container = task.addContainer('workspace', {
       image: ecs.ContainerImage.fromRegistry(image.valueAsString), readonlyRootFilesystem: true,

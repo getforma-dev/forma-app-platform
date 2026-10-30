@@ -1,0 +1,238 @@
+{
+  "recorded_at": "2026-10-30T02:06:07.519002+00:00",
+  "scope": "Local image/volume/HTTP security qualification; no managed service calls",
+  "passed": true,
+  "ownership_and_atomic_write": {
+    "uid": 65532,
+    "volume_mode": "0700",
+    "atomic_file_mode": "0600",
+    "passed": true
+  },
+  "state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-10-30T02:06:07.972595511Z",
+    "FinishedAt": "2026-10-30T02:06:08.251373012Z"
+  },
+  "controls": {
+    "user": "65532:65532",
+    "host": {
+      "NetworkMode": "none",
+      "ReadonlyRootfs": true,
+      "CapDrop": [
+        "ALL"
+      ],
+      "SecurityOpt": [
+        "no-new-privileges"
+      ],
+      "Memory": 1073741824,
+      "MemorySwap": 1073741824,
+      "NanoCpus": 2000000000,
+      "PidsLimit": 64
+    },
+    "mounts": [
+      {
+        "destination": "/run/genui",
+        "read_write": true,
+        "type": "volume"
+      }
+    ]
+  },
+  "http_checks": [
+    {
+      "scope": "synthetic local HTTP denial smoke; not managed acceptance",
+      "live": 200,
+      "ready_without_native_registry": 503,
+      "positive_mock_helper_not_launched": true,
+      "native_html_count": 7,
+      "fresh_csp_nonces": true,
+      "no_store": true,
+      "signin_page": 200,
+      "invite_page": 200,
+      "protected_uniform_404": true
+    },
+    {
+      "scope": "startup credential permission failure",
+      "passed": true,
+      "credential_values_disclosed": false
+    },
+    {
+      "scope": "accepted RDS hostname with missing private registry cannot bind a listener",
+      "passed": true
+    }
+  ],
+  "supervisor_checks": {
+    "scope": "Actual production supervisor/native image with only synthetic refresh replacement",
+    "managed_acceptance": false,
+    "provider_acceptance": false,
+    "results": [
+      {
+        "mode": "disabled",
+        "callback_status": 400,
+        "refused_before_bind": false,
+        "refused_by_supervisor_before_child": false,
+        "native_environment_observed": true,
+        "raw_secret_in_child_environment": false,
+        "private_file_modes": "0600",
+        "empty_registry_observed": true,
+        "secret_output": false,
+        "owned_files_removed": true,
+        "native_child_removed": true,
+        "passed": true
+      },
+      {
+        "mode": "injected",
+        "callback_status": null,
+        "refused_before_bind": true,
+        "refused_by_supervisor_before_child": true,
+        "native_environment_observed": false,
+        "raw_secret_in_child_environment": false,
+        "private_file_modes": "0600",
+        "empty_registry_observed": true,
+        "secret_output": false,
+        "owned_files_removed": true,
+        "native_child_removed": true,
+        "passed": true
+      },
+      {
+        "mode": "malformed",
+        "callback_status": null,
+        "refused_before_bind": true,
+        "refused_by_supervisor_before_child": true,
+        "native_environment_observed": false,
+        "raw_secret_in_child_environment": false,
+        "private_file_modes": "0600",
+        "empty_registry_observed": true,
+        "secret_output": false,
+        "owned_files_removed": true,
+        "native_child_removed": true,
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "parser_artifacts": {
+    "guest": {
+      "path": "/app/parser/parser_guest.wasm",
+      "sha256": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
+      "bytes": 855790,
+      "mode": "0o755"
+    },
+    "host": {
+      "path": "/app/parser/parser-host",
+      "sha256": "44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934",
+      "bytes": 10795440,
+      "mode": "0o755"
+    },
+    "startup": {
+      "manifest_accepted_then": "configuration refused: credential file unavailable",
+      "tampered_manifest": "parser manifest refused: parser artifact digest mismatch"
+    },
+    "source": {
+      "cargo_lock_sha256": "d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+      "rust_toolchain": "1.93.1",
+      "rustc": {
+        "LLVM version": "21.1.8",
+        "commit-hash": "01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf",
+        "host": "aarch64-unknown-linux-gnu",
+        "release": "1.93.1"
+      },
+      "source_files": 102,
+      "sources_sha256": "8971131071475adc792392c4813a869c2e7b141d34b8b50011da6301424bde61",
+      "vendor_provenance_sha256": "5259d9a04cb06b892c19fa17a0c99b0951a40484ae1c25ea98332a12bcf20e1a"
+    }
+  },
+  "parser_jobs": [
+    {
+      "fixture": "literal.csv",
+      "exit": 0,
+      "status": "parsed",
+      "reason": null,
+      "available_sheets": null,
+      "report": {
+        "config_sha256": "sha256:27dbe0880d995f2a75cae9aa1cc603264dc9d62e575dca5118c393c661a0d3d5",
+        "elapsed_ms": 0,
+        "fuel_consumed": 1127463,
+        "input_sha256": "sha256:7a3c349a1a025e56f8eb61007319222a3853560f9a346260eb64f3ba587e88d0",
+        "interface_imports": [],
+        "memory_bytes": 1376256,
+        "process_ms": 774,
+        "reason": null,
+        "resource_limits": {
+          "fuel": 5000000000,
+          "guest_linear_memory_bytes": 2147483648,
+          "input_bytes": 10485760,
+          "output_bytes": 134217728,
+          "wall_clock_ms": 120000
+        },
+        "status": "parsed",
+        "wasm_sha256": "sha256:a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774"
+      }
+    },
+    {
+      "fixture": "valid.xlsx",
+      "exit": 2,
+      "status": "refused",
+      "reason": "sheet_selection_required",
+      "available_sheets": [
+        "Inventory",
+        "Other"
+      ],
+      "report": {
+        "config_sha256": "sha256:6ab4f1212e46f9fe15da0f8c17069dc6a232e0d886574b151403a217f4b4206c",
+        "elapsed_ms": 1,
+        "fuel_consumed": 1069243,
+        "input_sha256": "sha256:f345b3805cb38ca8cf9ec2617af71d4b7864479e7170be2fd0f9fcdc3227ad87",
+        "interface_imports": [],
+        "memory_bytes": 1376256,
+        "process_ms": 884,
+        "reason": "sheet_selection_required",
+        "resource_limits": {
+          "fuel": 5000000000,
+          "guest_linear_memory_bytes": 2147483648,
+          "input_bytes": 5242880,
+          "output_bytes": 134217728,
+          "wall_clock_ms": 120000
+        },
+        "status": "refused",
+        "wasm_sha256": "sha256:a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774"
+      }
+    },
+    {
+      "fixture": "formula.xlsx",
+      "exit": 2,
+      "status": "refused",
+      "reason": "formula_refused",
+      "available_sheets": null,
+      "report": {
+        "config_sha256": "sha256:db577f075efa896639eb03c6d9d3854848d931ac129e76108f49382b7a3f3110",
+        "elapsed_ms": 0,
+        "fuel_consumed": 924090,
+        "input_sha256": "sha256:7d3e6a82961a8c062a27f2aef7988b78c7ddb833a25e868be495a55f839a1d7a",
+        "interface_imports": [],
+        "memory_bytes": 1376256,
+        "process_ms": 775,
+        "reason": "formula_refused",
+        "resource_limits": {
+          "fuel": 5000000000,
+          "guest_linear_memory_bytes": 2147483648,
+          "input_bytes": 5242880,
+          "output_bytes": 134217728,
+          "wall_clock_ms": 120000
+        },
+        "status": "refused",
+        "wasm_sha256": "sha256:a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774"
+      }
+    }
+  ],
+  "image_id": "sha256:4f45d2ae645bf406b6346c5e9d8099186e4da5de34f2b664c1dc3723c87f1ecb",
+  "architecture": "arm64",
+  "temporary_volume_removed": true
+}

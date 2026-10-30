@@ -73,6 +73,7 @@ TOKEN = REMOTE_ID  # same shape as the id (management.rs:1718-1719); never inter
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 ERROR_CODE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 CAPABILITY_FORMAT = "forma:fauth-invite-capability:v1"
+CODE_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 TIMESTAMP = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})")
 
 
@@ -445,16 +446,24 @@ def _partial_path(directory, organization, invitation_id):
     return Path(directory, ".%s.%s.%s.partial" % (organization, invitation_id, secrets.token_hex(8)))
 
 
-def write_capability(directory, organization, invitation_id, remote_id, token, expires_at):
+def write_capability(directory, organization, invitation_id, remote_id, token, expires_at, code_digest=None):
     """Write the 0600 capability under a private partial name, fsync it, then link it to its final
     name, which never existed (link fails rather than overwrite). The final name therefore only
-    ever holds a complete record, so a concurrent sweep cannot read or delete a half-written one."""
+    ever holds a complete record, so a concurrent sweep cannot read or delete a half-written one.
+
+    APP-074: `code_digest` (the code's stored `sha256:` digest, never the code) lets the service's
+    invitation entry find the one capability of a validated code; the service never reads the
+    operator's tables, and a record without it is never handed off."""
     path = capability_path(directory, organization, invitation_id)
     require(isinstance(token, str) and TOKEN.fullmatch(token) is not None and isinstance(remote_id, str)
             and REMOTE_ID.fullmatch(remote_id) is not None, "provider_contract_mismatch")
+    require(code_digest is None or (isinstance(code_digest, str) and CODE_DIGEST.fullmatch(code_digest) is not None),
+            "malformed_identifier")
     private_directory(str(directory))
     record = {"format": CAPABILITY_FORMAT, "organization_id": organization, "invitation_id": invitation_id,
               "remote_invitation_id": remote_id, "provider_expires_at": expires_at, "invite_token": token}
+    if code_digest is not None:
+        record["code_digest"] = code_digest
     partial = _partial_path(directory, organization, invitation_id)
     try:
         fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), 0o600)

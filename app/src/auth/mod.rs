@@ -10,9 +10,14 @@
 //! verified token's `(issuer, tenant_id)` through the closed registry, never
 //! from a path, header or body. Rendering is the binary's (`Pages`): this
 //! module decides the state, the status and the cookies.
+//!
+//! APP-074 adds the public invitation entry (`invite`): `GET /invite` and
+//! `POST /invite/validate`, the backend PAR with the confidential provider
+//! `invite_token`, and the trusted-proxy restriction of the limit keys.
 pub mod capability;
 pub mod cookies;
 pub mod csrf;
+pub mod invite;
 pub mod pending;
 pub mod pkce;
 pub mod provider;
@@ -20,15 +25,17 @@ pub mod routes;
 pub mod vault;
 
 #[cfg(test)]
+mod invite_tests;
+#[cfg(test)]
 mod synthetic_issuer;
 #[cfg(test)]
 mod tests;
 
 use crate::{
-    http::limits::Limiter,
+    http::{limits::Limiter, proxy::TrustedProxies},
     storage::{capability_shaped, Ended, Stores},
 };
-use axum::response::Response;
+use axum::{http::request::Parts, response::Response};
 use genui_auth_verifier::{Config as VerifierConfig, ContractProfile, Verifier};
 use serde::Deserialize;
 use std::{
@@ -222,7 +229,15 @@ pub struct WorkspaceView {
     pub csrf_signout: String,
     pub csrf_signout_all: String,
 }
+/// APP-074 invitation entry. The submitted code is never shown back.
+pub struct InviteView {
+    /// The one neutral refusal of every unusable code.
+    pub failed: bool,
+    /// The invitation limits refused the attempt (429 with `Retry-After`).
+    pub limited: bool,
+}
 pub trait Pages: Send + Sync {
+    fn invite(&self, view: &InviteView) -> Response;
     fn signin(&self, view: &SigninView) -> Response;
     fn pending(&self, view: &PendingView) -> Response;
     fn denied(&self, view: &DeniedView) -> Response;
@@ -268,6 +283,10 @@ pub struct Auth {
     pub(crate) vault: vault::Vault,
     pub(crate) csrf: csrf::CsrfKey,
     pub(crate) limits: Limiter,
+    /// D7.14: the load balancer's peers (none: every forwarded header ignored).
+    pub(crate) proxies: TrustedProxies,
+    /// APP-073's provider invitation capabilities (none: no signup handoff).
+    pub(crate) invitations: Option<invite::Invitations>,
     pub(crate) pages: Arc<dyn Pages>,
 }
 
@@ -284,8 +303,24 @@ impl Auth {
             vault: vault::Vault::new().ok_or("random source unavailable")?,
             csrf: csrf::CsrfKey::new().ok_or("random source unavailable")?,
             limits: Limiter::default(),
+            proxies: TrustedProxies::none(),
+            invitations: None,
             pages,
         })
+    }
+    /// D7.14: believe the rightmost `X-Forwarded-For` hop from these peers only.
+    pub fn with_trusted_proxies(mut self, proxies: TrustedProxies) -> Self {
+        self.proxies = proxies;
+        self
+    }
+    /// APP-074: the provider invitation capabilities for signup handoffs.
+    pub fn with_invitations(mut self, invitations: Option<invite::Invitations>) -> Self {
+        self.invitations = invitations;
+        self
+    }
+    /// The limit key of a request's client (D7.14 trusted proxy).
+    pub(crate) fn address_class(&self, parts: &Parts) -> String {
+        crate::http::proxy::address_class(&parts.headers, routes::peer(parts), &self.proxies)
     }
     /// Production: an `https` auth origin and the reviewed verifier with the
     /// pinned access-only profile and JWKS path (`{auth_origin}/auth/jwks`).
@@ -354,16 +389,28 @@ impl Auth {
     /// The ADR-006 expiry sweep: destroys idle and expired records and
     /// revokes their refresh tokens. Run periodically by the binary.
     pub async fn sweep(&self) {
-        let Some(stores) = &self.stores else {
-            return;
-        };
-        match stores.workspace.sweep_expired().await {
-            Ok(ended) => {
-                for record in &ended {
-                    self.revoke(record).await;
+        if let Some(stores) = &self.stores {
+            match stores.workspace.sweep_expired().await {
+                Ok(ended) => {
+                    for record in &ended {
+                        self.revoke(record).await;
+                    }
                 }
+                Err(error) => tracing::warn!(code = %error, "auth.sweep"),
             }
-            Err(error) => tracing::warn!(code = %error, "auth.sweep"),
+        }
+        // APP-009 review m5: no row outlives the 12-hour absolute session, so
+        // an older vault entry is referenced by nothing; end it.
+        let stale = self.vault.stale(crate::storage::SESSION_ABSOLUTE_SECONDS);
+        for reference in &stale {
+            self.revoke(&Ended {
+                organization: String::new(),
+                refresh_ref: reference.clone(),
+            })
+            .await;
+        }
+        if !stale.is_empty() {
+            tracing::info!(entries = stale.len(), "auth.vault_sweep");
         }
     }
 }

@@ -16,7 +16,9 @@ pub fn same_origin(headers: &HeaderMap, origin: &str) -> bool {
         [site] => site.as_bytes() == b"same-origin",
         [] => {
             let origins: Vec<_> = headers.get_all("origin").iter().collect();
-            matches!(origins.as_slice(), [value] if value.as_bytes() == origin.as_bytes())
+            // An unconfigured (empty) app origin matches nothing, not an
+            // empty `Origin:` header (APP-009 review m3).
+            matches!(origins.as_slice(), [value] if !origin.is_empty() && value.as_bytes() == origin.as_bytes())
         }
         _ => false,
     };
@@ -111,6 +113,15 @@ mod tests {
         ] {
             assert!(!check(refused), "{refused:?}");
         }
+        // APP-009 review m3: with no configured origin, an empty `Origin:`
+        // (or any Origin) never passes; fetch metadata still decides.
+        let mut empty = HeaderMap::new();
+        empty.append("origin", HeaderValue::from_static(""));
+        assert!(!same_origin(&empty, ""));
+        assert!(!same_origin(&empty, ORIGIN));
+        let mut fetch = HeaderMap::new();
+        fetch.append("sec-fetch-site", HeaderValue::from_static("same-origin"));
+        assert!(same_origin(&fetch, ""));
     }
 
     #[test]

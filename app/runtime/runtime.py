@@ -60,27 +60,20 @@ def require(condition):
         raise Refused("runtime configuration refused")
 
 
-def take_qualification_json(mode):
-    """Remove optional injected bytes before any operation/child can inherit them.
-
-    Only UTF-8 transport/size is checked here. Rust owns JSON/schema/expiry and
-    authentication policy. No exception or logging may include the raw value.
+def refuse_qualification_injection():
+    """ADR-007 D7.13 (APP-009 review m6): the operator qualification harness is
+    not part of the product image, so its configuration is refused in every
+    mode before any operation runs or any child is started. The raw injected
+    value is removed from this process first, so nothing can inherit it; no
+    exception or log line includes it.
     """
-    if QUALIFICATION_JSON_ENV not in os.environ:
-        return None
-    raw = os.environ.pop(QUALIFICATION_JSON_ENV)
-    require(mode == "serve" and QUALIFICATION_FILE_ENV not in os.environ)
-    require(0 < len(raw) <= 8192 and raw.strip())
-    try:
-        payload = raw.encode("utf-8", errors="strict")
-    except UnicodeError:
-        raise Refused("runtime configuration refused") from None
-    require(0 < len(payload) <= 8192)
-    return payload
+    injected = os.environ.pop(QUALIFICATION_JSON_ENV, None) is not None
+    require(not injected and QUALIFICATION_FILE_ENV not in os.environ)
 
 
 class QualificationFile:
-    """One newly created secret file; never replace or clean someone else's file."""
+    """One newly created private file; never replace or clean someone else's file.
+    Used for the deny-all identity registry (the harness injection is retired)."""
     PREFIX = ".auth-qualification-"
     def __init__(self, runtime_path, payload):
         self.directory_fd = None
@@ -570,26 +563,18 @@ def cleanup(report_path):
 
 
 def serve(path):
-    injected = take_qualification_json("serve")
+    refuse_qualification_injection()
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT): signal.signal(sig, lambda *_: stop.set())
     child = None
-    qualification_file = None
     registry_file = None
     credentials_started = False
     try:
-        if injected is not None:
-            qualification_file = QualificationFile(path, injected)
-        injected = None
         Path(path).parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         child_environment = os.environ.copy()
         if IDENTITY_REGISTRY_FILE_ENV not in child_environment:
             registry_file = EmptyIdentityRegistryFile(path)
             child_environment[IDENTITY_REGISTRY_FILE_ENV] = str(registry_file.path)
-        # Always omit the raw injected value; the file path is the only handoff.
-        child_environment.pop(QUALIFICATION_JSON_ENV, None)
-        if qualification_file is not None:
-            child_environment[QUALIFICATION_FILE_ENV] = str(qualification_file.path)
         while not stop.is_set():
             try:
                 credentials_started = True
@@ -601,8 +586,6 @@ def serve(path):
                 if child is None:
                     # Unsafe/replaced handoff state is a terminal refusal, not
                     # a transient managed-dependency retry.
-                    if qualification_file is not None:
-                        qualification_file.check_file()
                     if registry_file is not None:
                         registry_file.check_file()
                     try:
@@ -620,15 +603,11 @@ def serve(path):
                 except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=5)
         finally:
             try:
-                if qualification_file is not None:
-                    qualification_file.close()
+                if registry_file is not None:
+                    registry_file.close()
             finally:
-                try:
-                    if registry_file is not None:
-                        registry_file.close()
-                finally:
-                    if credentials_started:
-                        Path(path).unlink(missing_ok=True)
+                if credentials_started:
+                    Path(path).unlink(missing_ok=True)
     return 0
 
 
@@ -709,10 +688,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup", "query", "cache")); parser.add_argument("--generation"); parser.add_argument("--report")
     args = parser.parse_args()
     try:
-        # Probe helpers launched by Rust inherit only the path and ignore it.
-        # A raw injection in any non-serve mode is removed and refused before
-        # credential refresh, managed probes, migration or qualification runs.
-        if args.mode != "serve": take_qualification_json(args.mode)
+        # D7.13: a harness injection in any mode, serve included, is removed
+        # and refused before credential refresh, managed probes, migration,
+        # qualification or the native child runs (APP-009 review m6).
+        refuse_qualification_injection()
         path = os.environ.get("GENUI_RUNTIME_CONFIG_FILE", "/run/genui/credentials.json")
         # The engine child answers every request with its own one JSON line.
         if args.mode == "query": raise SystemExit(query())

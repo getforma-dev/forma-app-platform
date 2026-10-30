@@ -17,6 +17,8 @@
 !app/src/auth/capability.rs
 !app/src/auth/cookies.rs
 !app/src/auth/csrf.rs
+!app/src/auth/invite.rs
+!app/src/auth/invite_tests.rs
 !app/src/auth/mod.rs
 !app/src/auth/pending.rs
 !app/src/auth/pkce.rs

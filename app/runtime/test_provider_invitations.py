@@ -167,6 +167,16 @@ class CapabilityTests(unittest.TestCase):
                 pm.write_capability(self.directory, bad[0], bad[1], remote, token, "2026-11-01T00:00:00Z")
         with self.assertRaises(pm.Refused):
             pm.write_capability(self.directory, self.org, self.invitation, remote, "not-a-token", "2026-11-01T00:00:00Z")
+        # APP-074: an optional code digest, digest-shaped only; still read by capability_record.
+        digest = "sha256:" + "ab" * 32
+        path = pm.write_capability(self.directory, self.org, self.invitation, remote, token, "2026-11-01T00:00:00Z", code_digest=digest)
+        self.assertEqual(json.loads(path.read_text())["code_digest"], digest)
+        self.assertEqual(pm.capability_record(self.directory, self.org, self.invitation)["remote_invitation_id"], remote)
+        other = str(uuid.uuid4())
+        for bad in ("ABCD", "sha256:" + "AB" * 32, "sha256:" + "ab" * 31, 7):
+            with self.subTest(digest=bad), self.assertRaises(pm.Refused):
+                pm.write_capability(self.directory, self.org, other, remote, token, "2026-11-01T00:00:00Z", code_digest=bad)
+        self.assertFalse(pm.capability_present(self.directory, self.org, other))
 
     def test_a_capability_appears_complete_or_not_at_all(self):
         """Review m6: the final name is linked to a fully written, fsynced file, so a sweep never reads a partial one."""
@@ -454,8 +464,15 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         info = os.lstat(path)
         self.assertEqual((stat.S_IMODE(info.st_mode), info.st_uid), (0o600, os.geteuid()))
         self.assertEqual(stat.S_IMODE(os.lstat(self.capabilities).st_mode), 0o700)
-        token = json.loads(path.read_text())["invite_token"]
+        record = json.loads(path.read_text())
+        token = record["invite_token"]
         self.assertRegex(token, pm.TOKEN)
+        # APP-074: the capability records the code's stored digest (never the code),
+        # which is how the service's invitation entry finds it for a validated code.
+        self.assertEqual(record["code_digest"], op.code_digest(op.normalize_code(out["code"])))
+        self.assertEqual(set(record), {"format", "organization_id", "invitation_id", "remote_invitation_id",
+                                       "provider_expires_at", "invite_token", "code_digest"})
+        self.assertNotIn(out["code"], path.read_text())
         dump = self.dump()
         for text in (token, email, email.lower(), KEY):
             self.assertNotIn(text, dump)
