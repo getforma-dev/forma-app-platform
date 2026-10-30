@@ -8,6 +8,7 @@ import * as kms from 'aws-cdk-lib/aws-kms';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import { readFileSync } from 'node:fs';
 import * as scheduler from 'aws-cdk-lib/aws-scheduler';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
@@ -71,6 +72,30 @@ export const DEMO_ORGANIZATION_ID = '00000000-0000-4000-8000-000000000002';
 // app/src/demo.rs requires this switch as well as the organization list
 // (the action path's rehearsed parser); both name the same demo scope.
 export const DEMO_MODE_ENV = 'GENUI_DEMO_MODE';
+// ADR-011 pitch (APP-096, APP-098 DS-44): member display names for the demo
+// personas, read at synth from the private file named by the `displayNamesFile`
+// context value (`{"members":[{"principal_id","display_name"}]}`), passed to
+// the task inline as GENUI_DISPLAY_NAMES_JSON (app/src/directory.rs). Absent
+// context: no variable, every member keeps the neutral label.
+export const DISPLAY_NAMES_JSON_ENV = 'GENUI_DISPLAY_NAMES_JSON';
+export const DISPLAY_NAMES_CONTEXT = 'displayNamesFile';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+export function displayNamesEnvironment(path: unknown): Record<string, string> {
+  if (path === undefined) return {};
+  if (typeof path !== 'string' || path === '') throw new Error('displayNamesFile must name a file');
+  const parsed = JSON.parse(readFileSync(path, 'utf8'));
+  const members = parsed?.members;
+  if (!Array.isArray(members) || members.length > 50) throw new Error('displayNamesFile: members must be a list of at most 50');
+  const clean = members.map((member: any) => {
+    const keys = Object.keys(member ?? {}).sort().join(',');
+    if (keys !== 'display_name,principal_id' || typeof member.principal_id !== 'string' || !UUID.test(member.principal_id)
+      || typeof member.display_name !== 'string' || !/^[^\u0000-\u001f\u007f]{1,80}$/.test(member.display_name)) {
+      throw new Error('displayNamesFile: each member is exactly {principal_id, display_name}');
+    }
+    return { principal_id: member.principal_id, display_name: member.display_name };
+  });
+  return { [DISPLAY_NAMES_JSON_ENV]: JSON.stringify({ members: clean }) };
+}
 // ADR-003 amendment 2026-10-30 (managed invitations; APP-076 G2), as revised the same
 // day after FormaStack's answers: two inputs reach the managed operator task only.
 // FormaStack's existing tenant-scoped fAuth management secret (for Northstar
@@ -276,6 +301,7 @@ export class GenuiFoundation extends Stack {
       [CANVAS_EVENTS_URL_ENV]: CANVAS_EVENTS_URL,
       [DEMO_ORGANIZATIONS_ENV]: DEMO_ORGANIZATION_ID,
       [DEMO_MODE_ENV]: '1',
+      ...displayNamesEnvironment(this.node.tryGetContext(DISPLAY_NAMES_CONTEXT)),
     };
     const container = task.addContainer('workspace', {
       image: ecs.ContainerImage.fromRegistry(image.valueAsString), readonlyRootFilesystem: true,

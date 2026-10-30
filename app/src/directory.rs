@@ -18,6 +18,9 @@ use std::{
 };
 
 pub const FILE_ENV: &str = "GENUI_DISPLAY_NAMES_FILE";
+/// The same JSON inline (the deployed task: the stack sets it at synth from a
+/// private file, APP-096); the file wins when both are set.
+pub const JSON_ENV: &str = "GENUI_DISPLAY_NAMES_JSON";
 /// A display name is short, printable, single-line text.
 pub const MAX_NAME_CHARACTERS: usize = 80;
 const MAX_FILE_BYTES: u64 = 256 * 1024;
@@ -61,7 +64,24 @@ fn parse(bytes: &[u8]) -> Option<HashMap<String, String>> {
 }
 
 fn load_from_env() -> Option<HashMap<String, String>> {
-    let path = std::env::var_os(FILE_ENV)?;
+    let Some(path) = std::env::var_os(FILE_ENV) else {
+        let inline = std::env::var(JSON_ENV).ok()?;
+        if inline.len() as u64 > MAX_FILE_BYTES {
+            tracing::warn!(
+                event = "directory.refused",
+                code = "too_large",
+                "display names refused"
+            );
+            return None;
+        }
+        let parsed = parse(inline.as_bytes());
+        tracing::info!(
+            event = "directory.loaded",
+            count = parsed.as_ref().map(HashMap::len).unwrap_or(0),
+            "display names loaded"
+        );
+        return parsed;
+    };
     let metadata = std::fs::metadata(&path).ok()?;
     if metadata.len() > MAX_FILE_BYTES {
         tracing::warn!(
