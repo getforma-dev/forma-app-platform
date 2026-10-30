@@ -146,10 +146,6 @@
 !app/src/storage/tests.rs
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
-!app/migrations/catalog-v7.json
-!app/migrations/catalog-v8.json
-!app/migrations/catalog-v9.json
-!app/migrations/catalog-v10.json
 !app/migrations/catalog-v11.json
 !app/certs/rds-global-bundle.pem
 !app/runtime/runtime.py
@@ -164,7 +160,6 @@
 !contracts/fixtures/library/
 contracts/fixtures/library/**
 !contracts/fixtures/library/catalog.json
-!contracts/fixtures/library/expense-claims.json
 !contracts/schema.json
 !spikes/APP-006/Cargo.toml
 !spikes/APP-006/src/lib.rs

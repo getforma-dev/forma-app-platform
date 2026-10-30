@@ -92,7 +92,7 @@ A CSV dropped on the canvas or the bar outside a folder goes to your "Uploads" f
 - **Deploy:** follow [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md). It covers building and qualifying the three images, pushing them, preflight, the reviewed change set, operator tasks and activation. Every AWS change needs Victor's word, recorded in the private approvals file.
 - **Secrets:** keys live only in the clone's gitignored `.env`. They go into AWS Secrets Manager by piping from that file, are never printed, and are never put in chat or in a commit. After a secret changes, force a new deployment of the service.
 - **Health:** `/health/live` returns 200. Every protected route answers the same 404 when signed out.
-- **Rollback:** the Phase 1 build cannot run on schema 10. Fix forward, or restore the pre-migration snapshot (runbook, "Rollback").
+- **Rollback:** each build refuses any schema but its own (the live database is at schema 11), and a replaced task definition cannot be redeployed. Fix forward by default; the other paths are in the runbook's "Rollback" section.
 - **Known shortcuts and limits:** every mock, hard-coded path and pitch limit is in [APP-098](../../Tickets/0-backlog/APP-098.md) (DS-01 onward). The demo shortcuts only run inside the demo organization. Everything after a parse is real.
 
 ## Definitions

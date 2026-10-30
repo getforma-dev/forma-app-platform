@@ -16,7 +16,7 @@ You do steps 1–4 once. The secret values stay with you: they go into the clone
    SLACK_SIGNING_SECRET=…            # Basic Information → App Credentials → Signing Secret
    ```
 
-4. **At the pitch deploy**, put the same two values into the `SlackApp` secret yourself, as one JSON object with exactly these keys: `{"bot_token":"xoxb-…","signing_secret":"…"}`. The deploy runbook gives the exact command, which reads from the `.env` without echoing. ECS injects the two keys into the service as `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET`; the secret starts as `{"bot_token":"","signing_secret":""}`, which means "no Slack app" (every Slack route answers 404). Force a new deployment after the write.
+4. **At the pitch deploy**, put the same two values into the `SlackApp` secret yourself, as one JSON object with exactly these keys: `{"bot_token":"xoxb-…","signing_secret":"…"}`. The deploy runbook gives the exact command (`app/scripts/read_env.py --object …` piped into `put-secret-value`), which reads from the `.env` without echoing. Quotes, `export` and Windows line endings are fine; a name written twice is refused. ECS injects the two keys into the service as `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET`; the secret starts as `{"bot_token":"","signing_secret":""}`, which means "no Slack app" (every Slack route answers 404). Force a new deployment after the write.
 5. **Link the demo people.**
    1. In Slack, each demo person runs `/forma link` and opens the link while signed in to `beta.getforma.dev` as their Forma member.
    2. They confirm.
