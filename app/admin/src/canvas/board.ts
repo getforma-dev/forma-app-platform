@@ -16,6 +16,8 @@ import { subscribeLive, type LiveEvent } from './live';
 import { parametersOf, runView } from './queries';
 import { buildForm, buildGroup, el, groupJson, isUuid, renderNoValue, type FormJson } from './render';
 import { recordsCardsOf, refreshRecords, wireRecordsCard } from './records';
+import { ledgerCardsOf, refreshLedger, wireLedgerCard } from './ledger';
+import { wireReceiptAttach } from './receipt';
 
 type Group = {
   app: string;
@@ -26,8 +28,8 @@ type Group = {
   pinned: boolean;
 };
 
-const WIDTH: Record<string, number> = { app: 340, summary: 400, timeline: 620, form: 360, records: 680 };
-const HEIGHT: Record<string, number> = { app: 300, summary: 250, timeline: 340, form: 300, records: 260 };
+const WIDTH: Record<string, number> = { app: 340, summary: 400, timeline: 620, form: 360, records: 680, ledger: 520 };
+const HEIGHT: Record<string, number> = { app: 300, summary: 250, timeline: 340, form: 300, records: 260, ledger: 280 };
 const GAP = 28;
 const ROW_GAP = 72;
 const ORIGIN = 64;
@@ -147,6 +149,7 @@ export function runGroup(work: string, live = false): void {
   const parameters = parametersOf(form);
   // ADR-011 scenarios: the group's records cards re-read their listing too.
   for (const card of recordsCardsOf(group.items)) void refreshRecords(card, live);
+  for (const card of ledgerCardsOf(group.items)) void refreshLedger(card, live);
   for (const item of group.items) {
     const card = item.querySelector<HTMLElement>('.cv-view');
     if (!card) continue;
@@ -264,6 +267,7 @@ function adopt(section: HTMLElement, y: number, animate: boolean): Group | null 
     const form = card.querySelector<HTMLFormElement>('form.cv-command');
     if (form) wireCommand(form, group, card);
     if (card.dataset.kind === 'records') wireRecordsCard(card);
+    if (card.dataset.kind === 'ledger') wireLedgerCard(card);
   }
   return group;
 }
@@ -272,7 +276,18 @@ function adopt(section: HTMLElement, y: number, animate: boolean): Group | null 
 export async function refreshGroupRecords(work: string, live = false): Promise<void> {
   const group = groups.get(work);
   if (!group) return;
-  await Promise.all(recordsCardsOf(group.items).map((card) => refreshRecords(card, live)));
+  await Promise.all([
+    ...recordsCardsOf(group.items).map((card) => refreshRecords(card, live)),
+    ...ledgerCardsOf(group.items).map((card) => refreshLedger(card, live)),
+  ]);
+}
+
+/** APP-102: centers a card's canvas item and flashes it (the ledger an `open` asked for). */
+export function focusCard(card: HTMLElement): void {
+  const item = card.closest<HTMLElement>('.cv-item');
+  if (!canvas || !item) return;
+  canvas.centerItem(item);
+  flash(item);
 }
 
 async function fetchGroup(app: string, work: string) {
@@ -404,6 +419,7 @@ function wireTools(document_: Document): void {
 /** Activates the canvas once, after the page's islands are active. */
 export function startBoard(document_: Document): void {
   if (canvas) return;
+  wireReceiptAttach(document_);
   host = document_.getElementById('cv-canvas');
   if (!host) return;
   const surface = createCanvasSurface(host, { className: 'cv-surface', navigatorLabel: 'Canvas navigator' });

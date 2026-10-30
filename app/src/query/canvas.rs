@@ -149,6 +149,9 @@ pub struct GroupProps {
     /// the island refreshes them on `record.committed`.
     pub has_records: bool,
     pub records: Vec<RecordsCardProps>,
+    /// APP-102: the expense ledger over the same listing (`canvas_ledger`).
+    pub has_ledger: bool,
+    pub ledger: Vec<super::canvas_ledger::LedgerCardProps>,
 }
 
 /// One records card (ADR-011 scenarios): a collection's current records,
@@ -827,12 +830,15 @@ async fn group(
             }
         }
     }
-    let records = if listed.collections.is_empty() {
-        Vec::new()
+    let (records, ledger) = if listed.collections.is_empty() {
+        (Vec::new(), Vec::new())
     } else {
         match stores.data.list_records(member, app, work).await {
-            Ok(listing) => records_cards(app, work, &listing),
-            Err(Error::Denied) => Vec::new(),
+            Ok(listing) => (
+                records_cards(app, work, &listing),
+                super::canvas_ledger::ledger_cards(app, work, &listing),
+            ),
+            Err(Error::Denied) => (Vec::new(), Vec::new()),
             Err(error) => return Err(routes::storage_refusal(&error)),
         }
     };
@@ -856,6 +862,8 @@ async fn group(
         forms,
         has_records: !records.is_empty(),
         records,
+        has_ledger: !ledger.is_empty(),
+        ledger,
     }))
 }
 

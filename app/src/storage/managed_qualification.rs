@@ -159,12 +159,16 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 111] = [
+const SOURCES: [(&str, &[u8]); 115] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
         "app/certs/rds-global-bundle.pem",
         include_bytes!("../../certs/rds-global-bundle.pem"),
+    ),
+    (
+        "app/src/actions/ledger.rs",
+        include_bytes!("../actions/ledger.rs"),
     ),
     (
         "app/src/actions/mod.rs",
@@ -173,6 +177,14 @@ const SOURCES: [(&str, &[u8]); 111] = [
     (
         "app/src/actions/prompt.rs",
         include_bytes!("../actions/prompt.rs"),
+    ),
+    (
+        "app/src/actions/receipt.rs",
+        include_bytes!("../actions/receipt.rs"),
+    ),
+    (
+        "app/src/actions/receipt_tests.rs",
+        include_bytes!("../actions/receipt_tests.rs"),
     ),
     (
         "app/src/actions/rehearsed.rs",
@@ -329,6 +341,10 @@ const SOURCES: [(&str, &[u8]); 111] = [
     (
         "app/src/query/canvas_display.rs",
         include_bytes!("../query/canvas_display.rs"),
+    ),
+    (
+        "app/src/query/canvas_ledger.rs",
+        include_bytes!("../query/canvas_ledger.rs"),
     ),
     (
         "app/src/query/canvas_tests.rs",

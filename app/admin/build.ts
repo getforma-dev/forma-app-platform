@@ -23,6 +23,8 @@ await build({
     { input: 'src/styles/canvas.css', outfile: 'canvas.css' },
     // ADR-011 scenarios: the confirmation card and the records card.
     { input: 'src/styles/actions.css', outfile: 'actions.css' },
+    // APP-102: the receipt attachment and the expense ledger.
+    { input: 'src/styles/ledger.css', outfile: 'ledger.css' },
   ],
   // APP-009 (ADR-006): the sign-in page also serves /signin/{handle}; the
   // denial page is rendered by the callback and the pending route. APP-074:
@@ -41,7 +43,7 @@ await build({
     '/w/{app}/{work}': { js: ['work'], css: ['app'] },
     // ADR-011 (APP-092): the pitch canvas, one island; a declared canvas
     // route (365 KiB JavaScript ceiling; Forma's own code stays at N2's).
-    '/canvas': { js: ['canvas'], css: ['app', 'canvas-vendor', 'canvas', 'actions'], canvas: true },
+    '/canvas': { js: ['canvas'], css: ['app', 'canvas-vendor', 'canvas', 'actions', 'ledger'], canvas: true },
   },
   outputDir: 'dist',
   ssr: isSsr,

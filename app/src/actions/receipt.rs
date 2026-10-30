@@ -281,7 +281,7 @@ Rules: the action is always create. Where the member's words and the receipt dis
 /// What the member's words state plainly, overriding the receipt (the text
 /// wins): an amount with a dollar sign or currency word, a merchant after
 /// "at", a date word or literal date, a category keyword, the approver; and,
-/// for the rehearsed receipt only, the first clause as the note.
+/// the first clause as the note.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TextHints {
     pub values: Map<String, Value>,
@@ -373,7 +373,6 @@ pub fn merge(
     hints: &TextHints,
     utterance: &str,
     app: &CatalogApp,
-    use_text_note: bool,
 ) -> Result<Parsed, &'static str> {
     let mut values = image.values;
     let currency = values
@@ -394,20 +393,13 @@ pub fn merge(
     }
     values.retain(|field, _| app.field(field).is_some());
     values.remove("status");
-    let note = if use_text_note {
-        hints.note.clone().or_else(|| {
-            values
-                .get("note")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        })
-    } else {
+    // The member's words are the note when they give one; else the receipt's.
+    let note = hints.note.clone().or_else(|| {
         values
             .get("note")
             .and_then(Value::as_str)
             .map(str::to_owned)
-            .or_else(|| hints.note.clone())
-    };
+    });
     let note = match note.map(|n| n.trim().chars().take(160).collect::<String>()) {
         Some(n) if !n.is_empty() => format!("{n} · {ATTACHED_NOTE}"),
         _ => ATTACHED_NOTE.to_owned(),
@@ -464,7 +456,7 @@ impl Parser {
                 target_record_hint: None,
             };
             let parsed =
-                merge(image, &hints, utterance, app, true).map_err(ParseFailure::CouldNotParse)?;
+                merge(image, &hints, utterance, app).map_err(ParseFailure::CouldNotParse)?;
             return Ok(Parse {
                 parsed,
                 rehearsed: true,
@@ -489,8 +481,7 @@ impl Parser {
         let decoded =
             super::decode(&reply.text).ok_or(ParseFailure::CouldNotParse("malformed_parse"))?;
         // Whatever the model answered, an image yields a create at most (I5).
-        let parsed =
-            merge(decoded, &hints, utterance, app, false).map_err(ParseFailure::CouldNotParse)?;
+        let parsed = merge(decoded, &hints, utterance, app).map_err(ParseFailure::CouldNotParse)?;
         Ok(Parse {
             parsed,
             rehearsed: false,

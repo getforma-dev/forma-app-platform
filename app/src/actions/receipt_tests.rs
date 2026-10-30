@@ -169,7 +169,6 @@ fn the_text_wins_and_the_note_marks_the_receipt() {
         &hints,
         "Sweetgreen lunch with the design team, Sarah approves",
         &app,
-        true,
     )
     .unwrap();
     assert_eq!(merged.kind, Kind::Create);
@@ -195,7 +194,6 @@ fn the_text_wins_and_the_note_marks_the_receipt() {
         &hints,
         "it was $40 with the tip, at Blue Door yesterday",
         &app,
-        false,
     )
     .unwrap();
     assert_eq!(merged.values["amount"], "40");
@@ -203,7 +201,7 @@ fn the_text_wins_and_the_note_marks_the_receipt() {
     assert_eq!(merged.values["spent_on"], "2026-10-29");
     assert_eq!(
         merged.values["note"],
-        format!("two bowls · {ATTACHED_NOTE}")
+        format!("it was $40 with the tip · {ATTACHED_NOTE}")
     );
     // A currency the app cannot hold is refused unless the words give dollars.
     let euros = super::decode(
@@ -211,12 +209,12 @@ fn the_text_wins_and_the_note_marks_the_receipt() {
     )
     .unwrap();
     assert_eq!(
-        receipt::merge(euros, &receipt::text_hints("", TODAY), "", &app, false),
+        receipt::merge(euros, &receipt::text_hints("", TODAY), "", &app),
         Err("unsupported_currency")
     );
     let nothing = super::decode(r#"{"action":"create","app_hint":"","values":{}}"#).unwrap();
     assert_eq!(
-        receipt::merge(nothing, &receipt::text_hints("", TODAY), "", &app, false),
+        receipt::merge(nothing, &receipt::text_hints("", TODAY), "", &app),
         Err("no_amount")
     );
 }

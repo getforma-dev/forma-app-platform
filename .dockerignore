@@ -51,8 +51,11 @@ app/src/events/**
 !app/src/events/routes.rs
 !app/src/actions/
 app/src/actions/**
+!app/src/actions/ledger.rs
 !app/src/actions/mod.rs
 !app/src/actions/prompt.rs
+!app/src/actions/receipt.rs
+!app/src/actions/receipt_tests.rs
 !app/src/actions/rehearsed.rs
 !app/src/actions/resolve.rs
 !app/src/actions/routes.rs
@@ -99,6 +102,7 @@ app/src/storage/**
 app/src/query/**
 !app/src/query/canvas.rs
 !app/src/query/canvas_display.rs
+!app/src/query/canvas_ledger.rs
 !app/src/query/mod.rs
 !app/src/query/page.rs
 !app/src/query/receipt.rs
@@ -164,6 +168,8 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/queries.ts
 !app/admin/src/canvas/render.ts
 !app/admin/src/canvas/actions.ts
+!app/admin/src/canvas/ledger.ts
+!app/admin/src/canvas/receipt.ts
 !app/admin/src/canvas/records.ts
 !app/admin/src/canvas-vendor/
 app/admin/src/canvas-vendor/**
@@ -184,6 +190,7 @@ app/admin/src/styles/**
 !app/admin/src/styles/app.css
 !app/admin/src/styles/canvas.css
 !app/admin/src/styles/actions.css
+!app/admin/src/styles/ledger.css
 !app/runtime/
 app/runtime/**
 !app/runtime/runtime.py
