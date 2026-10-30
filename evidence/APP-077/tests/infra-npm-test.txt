@@ -1,0 +1,27 @@
+ok 1 - deployment preflight refuses stale/over-budget windows and durably preserves reservations
+ok 2 - runtime negative runner preserves isolation, refusal and cleanup boundaries locally
+ok 3 - managed data stays private, encrypted, retained and versioned
+ok 4 - only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact
+ok 5 - operator and certificate are required; broad/private/placeholder networks fail
+ok 6 - expiry is one UTC execution that can update only this service in this cluster
+ok 7 - expiry schedule ARN output uses the actual group and schedule names without GetAtt
+ok 8 - digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints
+ok 9 - task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it
+ok 10 - each DB identity connects only as its fixed username on this database
+ok 11 - tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required
+ok 12 - execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants
+ok 13 - only migration execution role receives admin secret; migration has no tenant AWS authority
+ok 14 - app environment contains identities only and one private ephemeral credential mount
+ok 15 - qualification secret parameter accepts only empty or the exact rehearsal account/region/name scope
+ok 16 - qualification is disabled by default without an app secret or a live optional read policy
+ok 17 - enabled qualification injects the whole exact secret only into the app through its execution role
+ok 18 - qualification image parameter accepts only empty or a reviewed digest
+ok 19 - qualification task is absent by default; when supplied it is a count-zero standalone task on the runtime role only
+ok 20 - operator image parameter accepts only empty or a reviewed digest
+ok 21 - operator task is absent by default; when supplied it is a count-zero standalone task with the migration channel only
+ok 22 - operator task role holds no role assumption and reaches only B1 source objects under each tenant key
+ok 23 - documented operator overrides fit the 8,192-byte ECS limit and match the task entry point
+ok 24 - the service, migration and qualification task definitions do not reference the operator
+# tests 24
+# pass 24
+# fail 0

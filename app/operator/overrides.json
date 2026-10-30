@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "scope": "APP-077 documented ECS RunTask overrides for the optional OperatorTask. Each `overrides` value is the complete RunTask `overrides` member. It carries only `command`, which ECS passes to the task definition's entryPoint; never environment, credentials, endpoints or SQL.",
+  "container": "operator",
+  "entryPoint": ["python3", "-I", "/operator/app/operator/operator.py"],
+  "default_command": ["verify-catalog"],
+  "max_override_bytes": 8192,
+  "overrides": [
+    {"name": "verify-catalog", "purpose": "Read-only catalog proof; the task definition's default command.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["verify-catalog"]}]}},
+    {"name": "migrate", "purpose": "Canonical apply_migrations for every landed migration; a repeat is unchanged.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["migrate"]}]}},
+    {"name": "seed", "purpose": "tenant_seed.seed with validated envelopes in one transaction; exact-match idempotent.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["seed"]}]}},
+    {"name": "upload-sources-plan", "purpose": "Normalize and digest the fixture source; no AWS call.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["upload-sources", "--plan"]}]}},
+    {"name": "upload-sources", "purpose": "Write the ADR-009 B1 objects with SSE-KMS under the tenant key and print the real digests.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["upload-sources"]}]}},
+    {"name": "admission-backfill-northstar", "purpose": "Genesis audit heads for an existing organization (D7.7).",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "backfill", "--organization", "00000000-0000-4000-8000-000000000001"]}]}},
+    {"name": "admission-backfill-canary", "purpose": "Genesis audit heads for an existing organization (D7.7).",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "backfill", "--organization", "00000000-0000-4000-8000-000000000002"]}]}},
+    {"name": "admission-verify-northstar", "purpose": "Recompute every audit chain of the organization.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "verify", "--organization", "00000000-0000-4000-8000-000000000001"]}]}},
+    {"name": "admission-verify-canary", "purpose": "Recompute every audit chain of the organization.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "verify", "--organization", "00000000-0000-4000-8000-000000000002"]}]}},
+    {"name": "admission-list-northstar", "purpose": "Codes, status and counts; never a secret.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "list", "--organization", "00000000-0000-4000-8000-000000000001"]}]}},
+    {"name": "admission-revoke", "purpose": "Revoke a code by id (the id shown is an example of the exact shape).",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "revoke", "--organization", "00000000-0000-4000-8000-000000000001", "--code-id", "00000000-0000-4000-8000-0000000000c0"]}]}},
+    {"name": "admission-extend", "purpose": "Move a code's expiry later (the id shown is an example of the exact shape).",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "extend", "--organization", "00000000-0000-4000-8000-000000000001", "--code-id", "00000000-0000-4000-8000-0000000000c0", "--expires-days", "30"]}]}}
+  ],
+  "not_ecs_overrides": [
+    {"command": ["admission", "issue"], "reason": "It prints the raw access code once on standard output, and a Fargate task's standard output is the awslogs log group: issuing through ECS would retain the secret in CloudWatch Logs. The managed delivery channel is APP-078's decision; locally the command is unchanged."},
+    {"command": ["admission", "issue", "--provider-email"], "reason": "A provider invitation needs the management key and a private 0700 capability directory; neither belongs in a task override or on a read-only task filesystem."},
+    {"command": ["admission", "reconcile"], "reason": "Needs the provider management key, as above."}
+  ]
+}

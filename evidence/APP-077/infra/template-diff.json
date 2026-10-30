@@ -1,0 +1,113 @@
+{
+  "added_output_conditions": {
+    "OperatorTaskDefinition": "OperatorTaskEnabled",
+    "OperatorTaskRoleArn": "OperatorTaskEnabled"
+  },
+  "added_resource_conditions": {
+    "OperatorImagePull": "OperatorTaskEnabled",
+    "OperatorRole6A7B6B68": "OperatorTaskEnabled",
+    "OperatorRoleDefaultPolicyA061B00C": "OperatorTaskEnabled",
+    "OperatorTask534EBA45": "OperatorTaskEnabled"
+  },
+  "named_existing_resources": {
+    "MigrationExecutionRoleB6B10AD3": {
+      "base": "sha256:f6ed069e914ac4eb6183b1984466f3ae47d225c322a1737fffe1a81aed857f79",
+      "new": "sha256:f6ed069e914ac4eb6183b1984466f3ae47d225c322a1737fffe1a81aed857f79"
+    },
+    "MigrationExecutionRoleDefaultPolicy2DEB579B": {
+      "base": "sha256:b9fbb25174e83df65a03e3843dbd1b1292faeb63e93f09e92fd0752796ecb49e",
+      "new": "sha256:b9fbb25174e83df65a03e3843dbd1b1292faeb63e93f09e92fd0752796ecb49e"
+    },
+    "MigrationRole55C404E5": {
+      "base": "sha256:f6ed069e914ac4eb6183b1984466f3ae47d225c322a1737fffe1a81aed857f79",
+      "new": "sha256:f6ed069e914ac4eb6183b1984466f3ae47d225c322a1737fffe1a81aed857f79"
+    },
+    "MigrationTask69EAEF9D": {
+      "base": "sha256:442b77f4fbd6f33e853023a7dbcb2f26c064edca612a2eba5ff580d79501afe2",
+      "new": "sha256:442b77f4fbd6f33e853023a7dbcb2f26c064edca612a2eba5ff580d79501afe2"
+    },
+    "QualificationExecutionRoleB1C1B7AE": {
+      "base": "sha256:04663724ae90d7b20593878b8b874c776a81d8311de7cc73af5d34e396a1ed14",
+      "new": "sha256:04663724ae90d7b20593878b8b874c776a81d8311de7cc73af5d34e396a1ed14"
+    },
+    "QualificationExecutionRoleDefaultPolicyA24111D8": {
+      "base": "sha256:f9c5a907892233bd77f4ca715e294c70c47111d3dfa8bd71fb59aab202e37811",
+      "new": "sha256:f9c5a907892233bd77f4ca715e294c70c47111d3dfa8bd71fb59aab202e37811"
+    },
+    "QualificationTask4466B6E0": {
+      "base": "sha256:d141963c49815ff10bb395564f6e586da6038c75dd7a0a693881e6d9ea4d4d1a",
+      "new": "sha256:d141963c49815ff10bb395564f6e586da6038c75dd7a0a693881e6d9ea4d4d1a"
+    },
+    "ServiceD69D759B": {
+      "base": "sha256:84c933649d9e6fea9f6147efd6315bbad44dbeba70bcd30d4482b494eedb1786",
+      "new": "sha256:84c933649d9e6fea9f6147efd6315bbad44dbeba70bcd30d4482b494eedb1786"
+    },
+    "Task79114B6B": {
+      "base": "sha256:5eb061ac12fc4d79b45101aa512b157de0628a6f908531bfa4c864202ca9ff4d",
+      "new": "sha256:5eb061ac12fc4d79b45101aa512b157de0628a6f908531bfa4c864202ca9ff4d"
+    },
+    "TaskRole30FC0FBB": {
+      "base": "sha256:f6ed069e914ac4eb6183b1984466f3ae47d225c322a1737fffe1a81aed857f79",
+      "new": "sha256:f6ed069e914ac4eb6183b1984466f3ae47d225c322a1737fffe1a81aed857f79"
+    },
+    "TaskRoleDefaultPolicy07FC53DE": {
+      "base": "sha256:5d733d68061f534a4a7dc68a06522eaf73140af79bf1383ef0cdf92b0904b714",
+      "new": "sha256:5d733d68061f534a4a7dc68a06522eaf73140af79bf1383ef0cdf92b0904b714"
+    },
+    "TaskSecurity3206A714": {
+      "base": "sha256:73d38ced2cf326de8501743097fb70d6425f77266a38d146684472cc3af3ac3d",
+      "new": "sha256:73d38ced2cf326de8501743097fb70d6425f77266a38d146684472cc3af3ac3d"
+    },
+    "TaskSecurityfromSecurityQualificationAlbSecurityBA1723D33000453DBFA6": {
+      "base": "sha256:c968d36ea058a1232564da25c25864101cc56a69e029a7f5785933eb91683562",
+      "new": "sha256:c968d36ea058a1232564da25c25864101cc56a69e029a7f5785933eb91683562"
+    },
+    "TaskSecuritytoSecurityQualificationDatabaseSecurity53C6B5B55432931A8CC8": {
+      "base": "sha256:d446256d4f82f7726dbe2d07426d743988a287d51f362895fa018bee865dd8bb",
+      "new": "sha256:d446256d4f82f7726dbe2d07426d743988a287d51f362895fa018bee865dd8bb"
+    }
+  },
+  "scope": "APP-077 CDK template comparison: GenuiFoundation('SecurityQualification') synthesized at d6986c2 (base) and at the APP-077 commit (new), same aws-cdk-lib 2.275.0; no cloud call",
+  "sections": {
+    "Conditions": {
+      "added": [
+        "OperatorTaskEnabled"
+      ],
+      "changed": [],
+      "removed": [],
+      "unchanged_count": 3,
+      "unchanged_digest": "sha256:4373b9737226246cd83cf1449ed71002fcfd46e40d816fb4408938944ee6f5f8"
+    },
+    "Outputs": {
+      "added": [
+        "OperatorTaskDefinition",
+        "OperatorTaskRoleArn"
+      ],
+      "changed": [],
+      "removed": [],
+      "unchanged_count": 19,
+      "unchanged_digest": "sha256:d22d80edd56b2806f880cadaa9e5088438ee98567d169f483eb63c9bc6a3f29a"
+    },
+    "Parameters": {
+      "added": [
+        "OperatorImageDigest"
+      ],
+      "changed": [],
+      "removed": [],
+      "unchanged_count": 12,
+      "unchanged_digest": "sha256:fb9c3a2b1db4085ed7d0814faf3cc80c1bd851accdf986c98abe62cf1b4a4a79"
+    },
+    "Resources": {
+      "added": [
+        "OperatorImagePull",
+        "OperatorRole6A7B6B68",
+        "OperatorRoleDefaultPolicyA061B00C",
+        "OperatorTask534EBA45"
+      ],
+      "changed": [],
+      "removed": [],
+      "unchanged_count": 68,
+      "unchanged_digest": "sha256:00d7df48249824081c42020aadfdae0a3d98a0cb4a7812bb33a3b17a28c25f0d"
+    }
+  }
+}
