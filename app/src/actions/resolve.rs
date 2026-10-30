@@ -361,6 +361,11 @@ pub fn match_target<'a>(
                 .is_some_and(|current| froms.contains(&current))
         })
         .collect();
+    // A record id (the records card's Approve/Reject) names exactly one
+    // record: never a fuzzy match, never the newest as a fallback.
+    if let Some(id) = hint.filter(|h| crate::storage::valid_identifier(h)) {
+        return candidates.into_iter().find(|record| record.record_id == id);
+    }
     let wanted = hint.map(tokens).unwrap_or_default();
     if wanted.is_empty() {
         return candidates.first().copied();
