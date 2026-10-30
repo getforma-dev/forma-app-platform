@@ -35,7 +35,7 @@ ROLES = ("workspace", "control", "data", "worker")
 # probe comparisons then use the pinned manifest itself.
 # scripts/check-schema-pins.py keeps this value, the manifest, the native
 # version check and both embedded catalogs on the same version.
-DATABASE_SCHEMA_VERSION = 10
+DATABASE_SCHEMA_VERSION = 11
 # Byte bound of the canonical catalog projection and of each catalog file
 # (ADR-007 D7.12, moved once in 0003's slice). It must equal catalog-query.json
 # max_output_bytes and its SQL octet_length literal and the native BOUND;
@@ -1057,6 +1057,82 @@ def cache(path, stdin=None):
     return fetch_revision(client, value["storage"]["bucket"], request)
 
 
+# --- APP-108 box objects (the credentialed write/read child) and the normalizer ---
+OBJECT_REQUEST_KEYS = {"operation", "organization_id", "key", "path", "sha256"}
+MAX_OBJECT_BYTES = 64 * 1024 * 1024
+_OBJECT_KEY = re.compile(r"o/[0-9a-f-]{36}/(b/[0-9a-f-]{36}/f/[0-9a-f-]{36}|s/[0-9a-f-]{36}/r/[0-9a-f-]{36}/(original|part\.parquet))")
+
+
+def object_request(raw):
+    require(len(raw) <= 4096)
+    request = json.loads(raw)
+    require(isinstance(request, dict) and set(request) == OBJECT_REQUEST_KEYS)
+    require(request["operation"] in ("put", "get"))
+    require(isinstance(request["organization_id"], str) and _UUID.fullmatch(request["organization_id"]) is not None)
+    require(isinstance(request["key"], str) and _OBJECT_KEY.fullmatch(request["key"]) is not None)
+    require(request["key"].startswith("o/" + request["organization_id"] + "/"))
+    require(isinstance(request["sha256"], str) and re.fullmatch(r"[0-9a-f]{64}", request["sha256"]))
+    require(isinstance(request["path"], str) and Path(request["path"]).is_absolute())
+    return request
+
+
+def put_object(client, bucket, tenant, request):
+    """One write-once PutObject under the tenant key: SSE-KMS, If-None-Match, SHA-256 checksum."""
+    import base64
+    path = Path(request["path"])
+    metadata = path.lstat()
+    require(stat.S_ISREG(metadata.st_mode) and metadata.st_uid == os.geteuid() and metadata.st_size <= MAX_OBJECT_BYTES)
+    body = path.read_bytes()
+    require(hashlib.sha256(body).hexdigest() == request["sha256"])
+    try:
+        client.put_object(Bucket=bucket, Key=request["key"], Body=body, ServerSideEncryption="aws:kms",
+                          SSEKMSKeyId=tenant["kms_key_arn"], ChecksumSHA256=base64.b64encode(bytes.fromhex(request["sha256"])).decode(),
+                          IfNoneMatch="*")
+    except Exception as error:
+        code = getattr(error, "response", {}).get("Error", {}).get("Code", "")
+        if code in ("PreconditionFailed", "412"):
+            raise SystemExit(3)
+        raise
+    return {"stored": True, "bytes": len(body)}
+
+
+def get_object(client, bucket, request):
+    """One bounded GetObject, digest-checked, written to the caller's private path."""
+    path = Path(request["path"])
+    require(not path.exists())
+    response = client.get_object(Bucket=bucket, Key=request["key"])
+    require(0 < int(response["ContentLength"]) <= MAX_OBJECT_BYTES)
+    body = response["Body"].read(MAX_OBJECT_BYTES + 1)
+    require(len(body) == int(response["ContentLength"]) and hashlib.sha256(body).hexdigest() == request["sha256"])
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(body)
+    return {"read": True, "bytes": len(body)}
+
+
+def object_operation(path, stdin=None):
+    request = object_request((stdin or sys.stdin.buffer).read(4097))
+    value = load(path)
+    tenants = [t for t in value["storage"]["tenants"] if t["organization_id"] == request["organization_id"]]
+    require(len(tenants) == 1)
+    tenant = tenants[0]
+    require(request["key"].startswith(tenant["prefix"]))
+    credentials = {"AccessKeyId": tenant["access_key_id"], "SecretAccessKey": tenant["secret_access_key"], "SessionToken": tenant["session_token"]}
+    client = scoped_session(credentials, value["storage"]["region"]).client("s3", config=sdk_config())
+    if request["operation"] == "put":
+        return put_object(client, value["storage"]["bucket"], tenant, request)
+    return get_object(client, value["storage"]["bucket"], request)
+
+
+def normalize():
+    """The box normalizer child (no credential); imported by path as `query`."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("box_normalize", Path(__file__).resolve().with_name("box_normalize.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.main()
+
+
 def query():
     """The confined engine child; imported by path because `python3 -I` drops the script directory."""
     import importlib.util
@@ -1071,7 +1147,7 @@ if __name__ == "__main__":
     # mode, first; only serve() writes it out, for its service child alone.
     capabilities = take_capability_injection()
     auth_configuration_text = take_auth_configuration_injection()
-    parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup", "query", "cache")); parser.add_argument("--generation"); parser.add_argument("--report")
+    parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup", "query", "cache", "object", "normalize")); parser.add_argument("--generation"); parser.add_argument("--report")
     args = parser.parse_args()
     try:
         # D7.13: a harness injection in any mode, serve included, is removed
@@ -1081,8 +1157,10 @@ if __name__ == "__main__":
         path = os.environ.get("GENUI_RUNTIME_CONFIG_FILE", "/run/genui/credentials.json")
         # The engine child answers every request with its own one JSON line.
         if args.mode == "query": raise SystemExit(query())
+        if args.mode == "normalize": raise SystemExit(normalize())
         if args.mode == "refresh": refresh(path)
         elif args.mode == "cache": print(json.dumps(cache(path)))
+        elif args.mode == "object": print(json.dumps(object_operation(path)))
         elif args.mode == "probe": print(json.dumps(probe(path, args.generation)))
         elif args.mode == "migrate": migrate()
         elif args.mode == "qualify": qualification(path)

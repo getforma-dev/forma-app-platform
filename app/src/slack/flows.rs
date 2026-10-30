@@ -350,6 +350,12 @@ async fn act_message(state: &Slack, team: &str, user: &str, utterance: &str) -> 
             false,
         );
     }
+    // APP-108: a folder named in the words ("build a metrics app from the
+    // Q3 metrics folder", `/forma folder 1 formation brief me`); Slack has no
+    // selected folder, so the name or number is required.
+    if let Some(answer) = crate::boxes::intent::act(&member, utterance, None).await {
+        return folder_message(state, answer);
+    }
     let context = match stores.workspace.composer_context(&member).await {
         Ok(context) => context,
         Err(storage::Error::Denied) => return text::ephemeral(REFUSED, None, false),
@@ -929,4 +935,118 @@ pub(crate) fn approval_request(record: &RecordRow, state: &Slack) -> (String, Ve
     blocks.push(decision_buttons(record));
     blocks.push(text::context(&canvas_link(state)));
     (format!("{filer} filed a claim for your approval"), blocks)
+}
+
+/// APP-108: a folder answer as an ephemeral Slack message (text only; every
+/// value is escaped; numbers come from receipts or page citations).
+fn folder_message(state: &Slack, answer: crate::boxes::intent::Answer) -> Value {
+    use crate::boxes::intent::Answer;
+    let noun = crate::boxes::NOUN_LOWER;
+    let value = match answer {
+        Answer::Done(value) => value,
+        Answer::NotAFolderRequest => return text::ephemeral(REFUSED, None, false),
+        Answer::Refused(refused) => {
+            let message = match refused {
+                crate::boxes::routes::BuildRefusal::NoData => format!("That {noun} has no CSV or XLSX data to build from yet."),
+                crate::boxes::routes::BuildRefusal::ComposerUnavailable => UNAVAILABLE.to_owned(),
+                crate::boxes::routes::BuildRefusal::CouldNotCompose(_) => format!("Forma could not build an app from that {noun}. Try saying what it should show."),
+                _ => REFUSED.to_owned(),
+            };
+            return text::ephemeral(&message, None, false);
+        }
+    };
+    let parts = |parts: &Value| -> String {
+        parts
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|p| {
+                if let Some(v) = p.get("value").and_then(Value::as_str) {
+                    v.to_owned()
+                } else if let Some(page) = p
+                    .get("cite")
+                    .and_then(|c| c.get("page"))
+                    .and_then(Value::as_u64)
+                {
+                    format!(
+                        "{} (p. {page})",
+                        p.get("text").and_then(Value::as_str).unwrap_or("").trim()
+                    )
+                } else {
+                    p.get("text")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    };
+    match value["kind"].as_str() {
+        Some("build_from_box") => {
+            let url = format!(
+                "{}/w/{}/{}",
+                state.origin(),
+                value["app_id"].as_str().unwrap_or(""),
+                value["work_id"].as_str().unwrap_or("")
+            );
+            let line = format!(
+                "{} is on your canvas ({}). {}",
+                text::escape(value["title"].as_str().unwrap_or("Your app")),
+                text::escape(value["label"].as_str().unwrap_or("")),
+                text::link(&url, "Open it")
+            );
+            text::ephemeral(
+                &line,
+                Some(vec![
+                    text::section(&line),
+                    text::context(&canvas_link(state)),
+                ]),
+                false,
+            )
+        }
+        Some("brief") => {
+            let brief = &value["brief"];
+            let mut lines = vec![text::escape(&parts(&brief["overview"]))];
+            for file in brief["files"].as_array().into_iter().flatten() {
+                let body = match file["status"].as_str() {
+                    Some("too_large") => "too large for the brief in this plan".to_owned(),
+                    _ => parts(&file["paragraph"]),
+                };
+                if !body.is_empty() {
+                    lines.push(format!(
+                        "*{}*: {}",
+                        text::escape(file["name"].as_str().unwrap_or("")),
+                        text::escape(&body)
+                    ));
+                }
+            }
+            let message = lines.join("\n");
+            text::ephemeral(
+                &message,
+                Some(vec![
+                    text::section(&message),
+                    text::context("AI brief · cited from your files"),
+                ]),
+                false,
+            )
+        }
+        Some("choose_folder") => {
+            let choices: Vec<String> = value["choices"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|c| {
+                    format!(
+                        "{}. {}",
+                        c["number"],
+                        text::escape(c["name"].as_str().unwrap_or(""))
+                    )
+                })
+                .collect();
+            let message = format!("Which {noun}? {}. Say it by number, e.g. `/forma {noun} 1 formation build a metrics app`.", choices.join(", "));
+            text::ephemeral(&message, None, false)
+        }
+        _ => text::ephemeral(REFUSED, None, false),
+    }
 }

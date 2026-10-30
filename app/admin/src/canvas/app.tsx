@@ -6,6 +6,7 @@ import { startLibrary } from './library';
 import { startControls } from './controls';
 import { startStacks } from './stacks';
 import { registerCommands, startSlash } from './slash';
+import { startBoxes } from './boxes';
 // APP-103 utility widgets, registered as canvas slash commands (APP-101):
 // `/weather`, `/calculator`, `/clock` in the `/` list and `/apps`; a command
 // with words restyles the selected widget of that kind (`runWidget`).
@@ -771,6 +772,8 @@ registerCommands(WIDGET_COMMANDS.map((command) => ({
 startAgents(document);
 restoreWidgets();
 startLibrary(document);
+// APP-108: boxes (cards, upload, viewer, data, /storage, the pane's Boxes).
+startBoxes(document);
 startControls(document);
 startStacks(document);
 

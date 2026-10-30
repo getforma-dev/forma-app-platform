@@ -111,8 +111,48 @@ impl fmt::Debug for ImageInput<'_> {
     }
 }
 
+/// APP-108: a PDF sent as a Messages `document` block with citations
+/// enabled (base64). `Debug` prints the title length and byte count only.
+pub struct DocumentInput<'a> {
+    pub title: &'a str,
+    pub bytes: &'a [u8],
+}
+impl fmt::Debug for DocumentInput<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "DocumentInput({} bytes)", self.bytes.len())
+    }
+}
+/// A `page_location` citation of a reply text block (1-indexed pages; the
+/// end page is exclusive as the API reports it).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Citation {
+    pub document_index: usize,
+    pub start_page: u64,
+    pub end_page: u64,
+    pub cited_text: String,
+}
+/// A reply split into its text blocks, each with its citations.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct CitedReply {
+    pub blocks: Vec<(String, Vec<Citation>)>,
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+}
+pub type CitedCompletion<'a> =
+    Pin<Box<dyn Future<Output = Result<CitedReply, ModelError>> + Send + 'a>>;
+
 /// What completes a request: the HTTPS client in the binary, stubs in tests.
 pub trait Model: Send + Sync {
+    /// `request` with `documents` (PDF `document` blocks, citations enabled)
+    /// before the user text; a model without document support refuses.
+    fn complete_with_documents<'a>(
+        &'a self,
+        request: &'a ModelRequest,
+        documents: &'a [DocumentInput<'a>],
+    ) -> CitedCompletion<'a> {
+        let _ = (request, documents);
+        Box::pin(async { Err(ModelError::Refused) })
+    }
     fn complete<'a>(&'a self, request: &'a ModelRequest) -> Completion<'a>;
     /// `request` with `image` before the user text (one Messages image
     /// content block, base64). A model without vision refuses.
@@ -244,6 +284,52 @@ struct Usage {
     output_tokens: Option<u64>,
 }
 
+#[derive(Deserialize)]
+struct CitedBlock {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    citations: Option<Vec<Value>>,
+}
+#[derive(Deserialize)]
+struct CitedReplyWire {
+    content: Vec<CitedBlock>,
+    #[serde(default)]
+    usage: Option<Usage>,
+}
+
+/// Every text block of a Messages reply with its `page_location`
+/// citations (other citation kinds are ignored).
+pub fn parse_cited(bytes: &[u8]) -> Option<CitedReply> {
+    let reply: CitedReplyWire = serde_json::from_slice(bytes).ok()?;
+    let mut blocks = Vec::new();
+    for block in reply.content.iter().filter(|b| b.kind == "text") {
+        let text = block.text.clone()?;
+        let citations = block
+            .citations
+            .iter()
+            .flatten()
+            .filter(|c| c.get("type").and_then(Value::as_str) == Some("page_location"))
+            .filter_map(|c| {
+                Some(Citation {
+                    document_index: usize::try_from(c.get("document_index")?.as_u64()?).ok()?,
+                    start_page: c.get("start_page_number")?.as_u64()?,
+                    end_page: c.get("end_page_number")?.as_u64()?,
+                    cited_text: c.get("cited_text")?.as_str()?.chars().take(2000).collect(),
+                })
+            })
+            .collect();
+        blocks.push((text, citations));
+    }
+    (!blocks.is_empty()).then(|| CitedReply {
+        blocks,
+        input_tokens: reply.usage.as_ref().and_then(|u| u.input_tokens),
+        output_tokens: reply.usage.as_ref().and_then(|u| u.output_tokens),
+    })
+}
+
 /// The first text block of a Messages reply, with its usage.
 fn parse_reply(bytes: &[u8]) -> Option<ModelReply> {
     let reply: Reply = serde_json::from_slice(bytes).ok()?;
@@ -261,6 +347,79 @@ fn parse_reply(bytes: &[u8]) -> Option<ModelReply> {
 }
 
 impl Model for Anthropic {
+    fn complete_with_documents<'a>(
+        &'a self,
+        request: &'a ModelRequest,
+        documents: &'a [DocumentInput<'a>],
+    ) -> CitedCompletion<'a> {
+        use base64::Engine as _;
+        Box::pin(async move {
+            let started = Instant::now();
+            let mut content: Vec<Value> = documents
+                .iter()
+                .map(|d| {
+                    json!({"type": "document", "title": d.title,
+                    "source": {"type": "base64", "media_type": "application/pdf",
+                        "data": base64::engine::general_purpose::STANDARD.encode(d.bytes)},
+                    "citations": {"enabled": true}})
+                })
+                .collect();
+            content.push(json!({"type": "text", "text": request.user}));
+            let body = json!({
+                "model": request.model,
+                "max_tokens": request.max_tokens,
+                "temperature": 0,
+                "system": request.system,
+                "messages": [{"role": "user", "content": content}],
+            });
+            let deadline = started + request.budget;
+            let remaining = deadline
+                .checked_duration_since(Instant::now())
+                .ok_or(ModelError::Timeout)?;
+            let response = self
+                .http
+                .post(&self.endpoint)
+                .header("x-api-key", self.key.0.as_str())
+                .header("anthropic-version", "2023-06-01")
+                .header("content-type", "application/json")
+                .timeout(remaining)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|error| {
+                    if error.is_timeout() {
+                        ModelError::Timeout
+                    } else {
+                        ModelError::Unavailable
+                    }
+                })?;
+            let status = response.status();
+            if status.as_u16() == 429 || status.is_server_error() {
+                return Err(ModelError::Unavailable);
+            }
+            if !status.is_success() {
+                return Err(ModelError::Refused);
+            }
+            let bytes = response
+                .bytes()
+                .await
+                .map_err(|_| ModelError::Unavailable)?;
+            if bytes.len() > MAX_REPLY_BYTES {
+                return Err(ModelError::Malformed);
+            }
+            let reply = parse_cited(&bytes).ok_or(ModelError::Malformed)?;
+            tracing::info!(
+                event = "composer.model_documents",
+                requested_model = request.model,
+                documents = documents.len(),
+                input_tokens = reply.input_tokens,
+                output_tokens = reply.output_tokens,
+                duration_ms = elapsed_ms(started),
+                "model replied with citations"
+            );
+            Ok(reply)
+        })
+    }
     fn complete<'a>(&'a self, request: &'a ModelRequest) -> Completion<'a> {
         self.send(request, Value::String(request.user.clone()))
     }
@@ -368,6 +527,23 @@ mod tests {
         let rendered = format!("{client:?} {:?}", client.key);
         assert!(!rendered.contains("secret"));
         assert!(rendered.contains("redacted"));
+    }
+
+    #[test]
+    fn cited_replies_keep_page_locations() {
+        let reply = parse_cited(br#"{"content":[{"type":"text","text":"The brief says "},{"type":"text","text":"revenue rose","citations":[{"type":"page_location","cited_text":"Revenue rose 12%","document_index":0,"document_title":"q3.pdf","start_page_number":1,"end_page_number":2}]},{"type":"text","text":".","citations":[{"type":"char_location","cited_text":"x","document_index":0,"start_char_index":0,"end_char_index":1}]}],"usage":{"input_tokens":900,"output_tokens":40}}"#).unwrap();
+        assert_eq!(reply.blocks.len(), 3);
+        assert_eq!(
+            reply.blocks[1].1,
+            vec![Citation {
+                document_index: 0,
+                start_page: 1,
+                end_page: 2,
+                cited_text: "Revenue rose 12%".into()
+            }]
+        );
+        assert!(reply.blocks[2].1.is_empty());
+        assert_eq!(reply.input_tokens, Some(900));
     }
 
     #[test]

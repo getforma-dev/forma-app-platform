@@ -130,7 +130,12 @@ fn tools_list_is_the_closed_set_with_schemas_and_annotations() {
         .collect();
     assert_eq!(
         read_only,
-        ["forma_list_apps", "forma_run_view", "forma_list_pending"]
+        [
+            "forma_list_apps",
+            "forma_run_view",
+            "forma_list_pending",
+            "forma_list_folders"
+        ]
     );
 }
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 10,
+  "database_version": 11,
   "migrations": [
     {
       "version": 1,
@@ -51,6 +51,11 @@
       "version": 10,
       "file": "0010_agent_tokens.sql",
       "sha256": "82b79d6102604211db1950060a1892a0aab783ab720e530a66414df9037c6d03"
+    },
+    {
+      "version": 11,
+      "file": "0011_boxes.sql",
+      "sha256": "115ef6d2a57655389a0e7d7f35e33dcbaa53040f0f6547ec4520bb759be72671"
     }
   ],
   "catalog": [
@@ -97,6 +102,10 @@
     {
       "file": "catalog-v10.json",
       "sha256": "96b33ed02618b5ffaf7744bd7948016d8bdf15ba8f1f9a9bb15dd7dfcdbae026"
+    },
+    {
+      "file": "catalog-v11.json",
+      "sha256": "31032d7215ecbee0d02289ab82dd79e69f57eed474306132fdc95cce8f091541"
     }
   ]
 }

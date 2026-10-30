@@ -19,6 +19,16 @@ export const RECEIPT_REFUSED = 'That file can’t be read as a receipt. Attach a
 export type PendingReceipt = { blob: Blob; name: string; thumb: string };
 let pending: PendingReceipt | null = null;
 
+/**
+ * APP-108: a file the bar should not read as a receipt (a CSV or XLSX goes to
+ * the boxes path). The router answers true when it took the file.
+ */
+let fileRouter: ((file: File) => boolean) | null = null;
+export function setFileRouter(router: (file: File) => boolean): void {
+  fileRouter = router;
+}
+const routed = (file: File): boolean => fileRouter?.(file) ?? false;
+
 type Kind = 'jpeg' | 'png' | 'webp' | 'heic' | null;
 /** The image kind from its first bytes (the declared type is not trusted). */
 export function magic(bytes: Uint8Array): Kind {
@@ -158,7 +168,7 @@ export function wireReceiptAttach(document_: Document): void {
   const input = document_.getElementById('intent-input');
   if (!form || !input || form.dataset.attach === 'wired') return;
   form.dataset.attach = 'wired';
-  const picker = el(document_, 'input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif', hidden: '', 'data-receipt-input': '' });
+  const picker = el(document_, 'input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,.csv,.xlsx', hidden: '', 'data-receipt-input': '' });
   const button = el(document_, 'button', { type: 'button', class: 'cv-attach', 'aria-label': 'Attach a receipt photo', title: 'Attach a receipt photo (or drop or paste one)' });
   // A paperclip, built as nodes (the page enforces Trusted Types).
   const svg = document_.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -177,7 +187,7 @@ export function wireReceiptAttach(document_: Document): void {
   picker.addEventListener('change', () => {
     const file = picker.files?.[0];
     picker.value = '';
-    if (file) void attach(document_, file);
+    if (file && !routed(file)) void attach(document_, file);
   });
   for (const name of ['dragenter', 'dragover']) {
     form.addEventListener(name, (event) => {
@@ -195,7 +205,7 @@ export function wireReceiptAttach(document_: Document): void {
   }
   form.addEventListener('drop', (event) => {
     const file = (event as DragEvent).dataTransfer?.files[0];
-    if (file) void attach(document_, file);
+    if (file && !routed(file)) void attach(document_, file);
   });
   input.addEventListener('paste', (event) => {
     const file = Array.from((event as ClipboardEvent).clipboardData?.files ?? []).find((f) => f.type.startsWith('image/'));

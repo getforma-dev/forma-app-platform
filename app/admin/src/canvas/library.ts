@@ -215,6 +215,8 @@ function sync(): void {
 function filter(query: string): void {
   const words = query.trim().toLowerCase();
   for (const section of pane?.querySelectorAll<HTMLElement>('.cv-lib-cat') ?? []) {
+    // APP-108: the "Boxes" section is built and filtered by `boxes.ts`.
+    if (section.dataset.external) continue;
     let shown = 0;
     for (const row of section.querySelectorAll<HTMLElement>('.cv-lib-app')) {
       const app = apps.find((candidate) => candidate.row === row);

@@ -211,6 +211,45 @@ impl Composer {
     pub fn matcher_on(&self) -> bool {
         self.matcher
     }
+    /// APP-108: one fast-model call (the router model) for a typed answer
+    /// the caller judges (the box explanation); `Unavailable` without a model.
+    pub async fn complete_fast(
+        &self,
+        system: &str,
+        user: String,
+        max_tokens: u32,
+        budget: Duration,
+    ) -> Result<model::ModelReply, ModelError> {
+        let model = self.model.as_ref().ok_or(ModelError::Unavailable)?;
+        model
+            .complete(&ModelRequest {
+                model: self.router_model.clone(),
+                system: system.to_owned(),
+                user,
+                max_tokens,
+                budget,
+            })
+            .await
+    }
+    /// APP-108: one fast-model call with PDF documents and citations.
+    pub async fn complete_documents(
+        &self,
+        system: &str,
+        user: String,
+        documents: &[model::DocumentInput<'_>],
+        max_tokens: u32,
+        budget: Duration,
+    ) -> Result<model::CitedReply, ModelError> {
+        let model = self.model.as_ref().ok_or(ModelError::Unavailable)?;
+        let request = ModelRequest {
+            model: self.router_model.clone(),
+            system: system.to_owned(),
+            user,
+            max_tokens,
+            budget,
+        };
+        model.complete_with_documents(&request, documents).await
+    }
     pub fn router_model(&self) -> &str {
         &self.router_model
     }
@@ -313,6 +352,22 @@ impl Composer {
         app: &str,
         deadline: Instant,
     ) -> Result<Generated, GenerationFailure> {
+        self.generate_with(intent, None, sources, organization, app, deadline)
+            .await
+    }
+
+    /// APP-108: generation with a box's capped context in the user message
+    /// (`prompt::generation_user_with`); `sources` are the box's registered
+    /// revisions only, so every source input is pinned to one of them.
+    pub async fn generate_with(
+        &self,
+        intent: &str,
+        context: Option<&serde_json::Value>,
+        sources: &[ReadableSource],
+        organization: &str,
+        app: &str,
+        deadline: Instant,
+    ) -> Result<Generated, GenerationFailure> {
         let model = self
             .model
             .as_ref()
@@ -337,7 +392,7 @@ impl Composer {
             let request = ModelRequest {
                 model: self.generation_model.clone(),
                 system: prompt::generation_system().to_owned(),
-                user: prompt::generation_user(intent, &contracts, feedback),
+                user: prompt::generation_user_with(intent, &contracts, feedback, context),
                 max_tokens: GENERATION_MAX_TOKENS,
                 budget,
             };

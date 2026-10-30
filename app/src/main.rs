@@ -544,6 +544,24 @@ async fn main() {
         ) as Arc<dyn genui::query::Executor>
     });
     let work = Arc::new(genui::query::Work::new(auth.clone(), engine, work_page));
+    // APP-108 (ADR-011 pitch): folders. Objects through the credentialed
+    // `runtime.py object` child under the tenant role, the normalizer child,
+    // the engine cache, and the sealed parser the image verified at start.
+    let box_state = Arc::new(genui::boxes::routes::Boxes {
+        auth: auth.clone(),
+        work: work.clone(),
+        composer: genui::composer::Composer::from_env(),
+        store: genui::boxes::store::ObjectStore::image(),
+        normalizer: genui::boxes::register::Normalizer::image(),
+        parser: if std::env::var_os(genui::imports::sandbox::MANIFEST_ENV).is_some() {
+            genui::imports::sandbox::verify_manifest().ok()
+        } else {
+            None
+        },
+    });
+    genui::boxes::intent::install(box_state.clone());
+    let box_routes = genui::boxes::routes::router(box_state.clone());
+    let box_long_routes = genui::boxes::routes::long_routes(box_state.clone());
     let work_routes = genui::query::routes::router(work.clone());
     // APP-099 (ADR-011 pitch): Forma as an MCP server (`POST /v1/mcp`, long
     // deadline: `forma_compose_app` waits on the model), bearer agent tokens
@@ -647,14 +665,18 @@ async fn main() {
                 .merge(genui::mcp::tokens::router(auth.clone()))
                 .merge(slack_routes)
                 // APP-101: the slash-command list and "save as /name".
-                .merge(genui::composer::commands::router(auth.clone())),
+                .merge(genui::composer::commands::router(auth.clone()))
+                .merge(box_routes),
             vec![
                 (genui::composer::routes::PATH, compose_routes),
                 (genui::actions::PATH, act_routes),
                 (genui::mcp::PATH, mcp_routes),
                 (genui::widgets::WEATHER_PATH, widget_routes.clone()),
                 (genui::widgets::CUSTOMIZE_PATH, widget_routes),
-            ],
+            ]
+            .into_iter()
+            .chain(box_long_routes)
+            .collect(),
         ),
     };
 

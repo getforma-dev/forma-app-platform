@@ -341,6 +341,42 @@ pub fn adapted_origins(description: &str) -> Option<Vec<OriginProps>> {
     )
 }
 
+/// APP-108: the chips of a work built from a folder: "Generated" (or "Data
+/// from file") and "Built from folder: <name> · N files" (kind `box`, which
+/// the island makes a link to the folder).
+pub fn folder_origins(lineage: &crate::storage::Lineage) -> Vec<OriginProps> {
+    let noun = crate::boxes::NOUN_LOWER;
+    let files = lineage.file_count;
+    let first = if lineage.kind == "data" {
+        ("data", "Data from file".to_owned())
+    } else {
+        ("generated", "Generated".to_owned())
+    };
+    let link = if lineage.kind == "data" {
+        let name = lineage
+            .files
+            .first()
+            .map(|(file, _)| file.name.clone())
+            .unwrap_or_default();
+        format!("From {noun}: {} · {name}", lineage.box_name)
+    } else {
+        format!(
+            "Built from {noun}: {} · {files} {}",
+            lineage.box_name,
+            if files == 1 { "file" } else { "files" }
+        )
+    };
+    [first, ("box", link)]
+        .into_iter()
+        .enumerate()
+        .map(|(index, (kind, text))| OriginProps {
+            id: format!("o{index}"),
+            kind: kind.to_owned(),
+            text,
+        })
+        .collect()
+}
+
 /// One saved work on the canvas.
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct GroupProps {
@@ -950,10 +986,13 @@ pub struct SsrCanvasPages {
 }
 impl CanvasPages for SsrCanvasPages {
     fn canvas(&self, props: &CanvasProps) -> Response {
-        match self
-            .page
-            .render(props, &RenderCtx::new().with_title("Canvas"))
-        {
+        match self.page.render(
+            props,
+            // APP-108: the folder viewer frames same-origin file views.
+            &RenderCtx::new()
+                .with_title("Canvas")
+                .with_policy(forma_server::PolicyExtensions::new().frame_src("'self'")),
+        ) {
             Ok(page) => page.into_response(),
             Err(error) => {
                 tracing::error!(code = error.code(), route = "/canvas", "{error}");
@@ -1171,18 +1210,40 @@ async fn assemble(
         None => (Vec::new(), Vec::new()),
     };
     let adapted = adapted_origins(&outline.description);
+    // APP-108: a work built from a folder (or a file's data card) names it.
+    let folder = match stores.workspace.box_lineage(member, app, work).await {
+        Ok(lineage) => lineage,
+        Err(error) => {
+            tracing::info!(code = %error, "canvas.lineage_unavailable");
+            None
+        }
+    };
+    let (label, origins) = match (&folder, adapted) {
+        (Some(lineage), _) => (
+            if lineage.kind == "data" {
+                format!("Data from a file in your {} (types you confirmed; receipts name the file's revision).", crate::boxes::NOUN_LOWER)
+            } else {
+                format!(
+                    "Generated from your {}'s capped context (typed definition, admitted).",
+                    crate::boxes::NOUN_LOWER
+                )
+            },
+            folder_origins(lineage),
+        ),
+        (None, Some(adapted)) => (
+            "Adapted to your request from a library app (typed transform, admitted).".to_owned(),
+            adapted,
+        ),
+        (None, None) => (SEEDED_LABEL.to_owned(), seeded_origins()),
+    };
     Ok(GroupProps {
         id: format!("g-{work}"),
         app: app.to_owned(),
         work: work.to_owned(),
         app_card: format!("a-{work}"),
         title: outline.title,
-        label: if adapted.is_some() {
-            "Adapted to your request from a library app (typed transform, admitted).".to_owned()
-        } else {
-            SEEDED_LABEL.to_owned()
-        },
-        origins: adapted.unwrap_or_else(seeded_origins),
+        label,
+        origins,
         href: format!("/w/{app}/{work}"),
         csrf: auth.csrf.token(csrf::Form::Query, cookie),
         window_start: echo.window_start,

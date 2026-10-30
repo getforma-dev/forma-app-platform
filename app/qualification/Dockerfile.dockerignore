@@ -134,6 +134,7 @@
 !app/migrations/catalog-v8.json
 !app/migrations/catalog-v9.json
 !app/migrations/catalog-v10.json
+!app/migrations/catalog-v11.json
 !app/certs/rds-global-bundle.pem
 !app/runtime/runtime.py
 !app/runtime/qualification_supervisor.py
