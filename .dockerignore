@@ -28,14 +28,11 @@ app/src/auth/**
 !app/src/auth/cookies.rs
 !app/src/auth/csrf.rs
 !app/src/auth/invite.rs
-!app/src/auth/invite_tests.rs
 !app/src/auth/mod.rs
 !app/src/auth/pending.rs
 !app/src/auth/pkce.rs
 !app/src/auth/provider.rs
 !app/src/auth/routes.rs
-!app/src/auth/synthetic_issuer.rs
-!app/src/auth/tests.rs
 !app/src/auth/vault.rs
 !app/src/http/
 app/src/http/**
@@ -43,9 +40,6 @@ app/src/http/**
 !app/src/http/mod.rs
 !app/src/http/proxy.rs
 !app/src/auth_qualification.rs
-!app/src/auth_qualification/
-app/src/auth_qualification/**
-!app/src/auth_qualification/tests.rs
 !app/src/events/
 app/src/events/**
 !app/src/events/mod.rs
@@ -56,12 +50,10 @@ app/src/actions/**
 !app/src/actions/mod.rs
 !app/src/actions/prompt.rs
 !app/src/actions/receipt.rs
-!app/src/actions/receipt_tests.rs
 !app/src/actions/rehearsed.rs
 !app/src/actions/workflows.rs
 !app/src/actions/resolve.rs
 !app/src/actions/routes.rs
-!app/src/actions/tests.rs
 !app/src/sharing/
 app/src/sharing/**
 !app/src/sharing/mod.rs
@@ -94,7 +86,6 @@ app/src/boxes/**
 !app/src/boxes/routes.rs
 !app/src/boxes/sniff.rs
 !app/src/boxes/store.rs
-!app/src/boxes/tests.rs
 # APP-103: canvas widgets (weather, customize in words).
 !app/src/widgets/
 app/src/widgets/**
@@ -102,14 +93,12 @@ app/src/widgets/**
 !app/src/widgets/mod.rs
 !app/src/widgets/routes.rs
 !app/src/widgets/state.rs
-!app/src/widgets/tests.rs
 !app/src/widgets/weather.rs
 !app/src/commands/
 app/src/commands/**
 !app/src/commands/mod.rs
 !app/src/commands/payload.rs
 !app/src/commands/routes.rs
-!app/src/commands/tests.rs
 !app/src/composer/
 app/src/composer/**
 !app/src/composer/mod.rs
@@ -131,21 +120,15 @@ app/src/storage/**
 !app/src/storage/rules.rs
 !app/src/storage/authorization.rs
 !app/src/storage/catalog.rs
-!app/src/storage/command_qualification.rs
 !app/src/storage/commands.rs
 !app/src/storage/composer.rs
 !app/src/storage/definitions.rs
 !app/src/storage/queries.rs
-!app/src/storage/definition_qualification.rs
 !app/src/storage/agents.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
 !app/src/storage/boxes.rs
 !app/src/storage/actions.rs
-!app/src/storage/actions_campaign.rs
-!app/src/storage/tests.rs
-!app/src/storage/qualification.rs
-!app/src/storage/qualification_cases.rs
 !app/src/query/
 app/src/query/**
 !app/src/query/canvas.rs
@@ -222,6 +205,8 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/records.ts
 !app/admin/src/canvas/slash.ts
 !app/admin/src/canvas/agents.ts
+# APP-113: the dock's one card host (confirmation and chooser).
+!app/admin/src/canvas/dock-card.ts
 # APP-104: the library pane and the Figma-style canvas controls.
 !app/admin/src/canvas/library.ts
 !app/admin/src/canvas/controls.ts
@@ -467,4 +452,3 @@ contracts/fixtures/impl-2026-10-28.1/**
 !contracts/fixtures/library/
 contracts/fixtures/library/**
 !contracts/fixtures/library/catalog.json
-!contracts/fixtures/library/expense-claims.json

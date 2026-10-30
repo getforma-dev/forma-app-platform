@@ -96,7 +96,7 @@ function mountCard(app: string, work: string, title: string) {
   const status = el(document_, 'p', { class: 'cv-ex-status', role: 'status' });
   const when = el(document_, 'p', { class: 'cv-ex-when' });
   const regenerate = el(document_, 'button', { type: 'button', class: 'cv-ex-regen' }, 'Regenerate');
-  const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'aria-label': 'Remove the summary from the canvas', title: 'Remove' }, '×');
+  const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'data-widget-close': '', 'aria-label': 'Remove the summary from the canvas', title: 'Remove' }, '×');
   const head = el(document_, 'header', { class: 'cv-ex-head' },
     el(document_, 'div', { class: 'cv-ex-id' },
       el(document_, 'h2', {}, 'Summary'),

@@ -5,7 +5,7 @@ import { Match, Template } from 'aws-cdk-lib/assertions';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ALB_IDLE_TIMEOUT_SECONDS, DISPLAY_NAMES_CONTEXT, DISPLAY_NAMES_JSON_ENV, AUTH_CONFIGURATION_ENV, DEMO_MODE_ENV, DEMO_ORGANIZATIONS_ENV, DEMO_ORGANIZATION_ID, AUTH_CONFIGURATION_SECRET_ID_ENV, CANVAS_EVENTS_URL, CANVAS_EVENTS_URL_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, COMPOSE_DEADLINE_SECONDS, COMPOSER_KEY_ENV, GenuiFoundation, SLACK_APP_PLACEHOLDER, SLACK_BOT_TOKEN_ENV, SLACK_SIGNING_SECRET_ENV, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_URL_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
+import { ALB_IDLE_TIMEOUT_SECONDS, DISPLAY_NAMES_CONTEXT, DISPLAY_NAMES_JSON_ENV, AUTH_CONFIGURATION_ENV, DEMO_MODE_ENV, DEMO_ORGANIZATIONS_ENV, DEMO_ORGANIZATION_ID, displayNamesEnvironment, MAX_DISPLAY_NAME_CHARACTERS, TENANT_IDS, usableDisplayName, AUTH_CONFIGURATION_SECRET_ID_ENV, CANVAS_EVENTS_URL, CANVAS_EVENTS_URL_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, COMPOSE_DEADLINE_SECONDS, COMPOSER_KEY_ENV, GenuiFoundation, SLACK_APP_PLACEHOLDER, SLACK_BOT_TOKEN_ENV, SLACK_SIGNING_SECRET_ENV, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_URL_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
 
 const template = Template.fromStack(new GenuiFoundation(new App(), 'SecurityQualification'));
 const document = template.toJSON();
@@ -406,14 +406,12 @@ test('the Slack app secret is KMS-encrypted, retained, starts as no app and is i
   const decrypts = key.Properties.KeyPolicy.Statement.filter((statement: any) => statement.Principal?.AWS?.['Fn::GetAtt']);
   assert.deepEqual(decrypts.map((statement: any) => [statement.Principal.AWS['Fn::GetAtt'][0], statement.Action]), [[role('ExecutionRole'), 'kms:Decrypt']]);
   for (const statement of decrypts) assert.deepEqual(Object.keys(statement.Condition.StringEquals), ['kms:ViaService']);
-  // Every IAM grant on the secret: the execution role reads it; the operator role reads and writes it, nothing else.
+  // Every IAM grant on the secret and its key: the execution role reads it, nothing else (APP-113: the
+  // operator role neither reads nor writes it; Victor writes it with his own credentials).
   const grants = entries('AWS::IAM::Policy').flatMap(([, item]) => item.Properties.PolicyDocument.Statement
-    .filter((statement: any) => JSON.stringify(statement.Resource).includes(secretId))
+    .filter((statement: any) => JSON.stringify(statement.Resource).includes(secretId) || JSON.stringify(statement.Resource).includes(`"${keyId}"`))
     .map((statement: any) => [item.Properties.Roles.map((value: any) => value.Ref), actions(statement).sort(), item.Condition ?? null]));
-  assert.deepEqual(grants.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))), [
-    [[role('ExecutionRole')], ['secretsmanager:DescribeSecret', 'secretsmanager:GetSecretValue'], null],
-    [[role('OperatorRole')], ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], 'OperatorTaskEnabled'],
-  ].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+  assert.deepEqual(grants, [[[role('ExecutionRole')], ['secretsmanager:DescribeSecret', 'secretsmanager:GetSecretValue'], null]]);
 });
 
 test('the composer model key secret is KMS-encrypted, retained, starts as no key and is injected into the service task only (APP-093, ADR-011)', () => {
@@ -437,14 +435,12 @@ test('the composer model key secret is KMS-encrypted, retained, starts as no key
   const decrypts = key.Properties.KeyPolicy.Statement.filter((statement: any) => statement.Principal?.AWS?.['Fn::GetAtt']);
   assert.deepEqual(decrypts.map((statement: any) => [statement.Principal.AWS['Fn::GetAtt'][0], statement.Action]), [[role('ExecutionRole'), 'kms:Decrypt']]);
   for (const statement of decrypts) assert.deepEqual(Object.keys(statement.Condition.StringEquals), ['kms:ViaService']);
-  // Every IAM grant on the secret: the execution role reads it; the operator role reads and writes it, nothing else.
+  // Every IAM grant on the secret and its key: the execution role reads it, nothing else (APP-113: the
+  // operator role neither reads nor writes it; Victor writes it with his own credentials).
   const grants = entries('AWS::IAM::Policy').flatMap(([, item]) => item.Properties.PolicyDocument.Statement
-    .filter((statement: any) => JSON.stringify(statement.Resource).includes(secretId))
+    .filter((statement: any) => JSON.stringify(statement.Resource).includes(secretId) || JSON.stringify(statement.Resource).includes(`"${keyId}"`))
     .map((statement: any) => [item.Properties.Roles.map((value: any) => value.Ref), actions(statement).sort(), item.Condition ?? null]));
-  assert.deepEqual(grants.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))), [
-    [[role('ExecutionRole')], ['secretsmanager:DescribeSecret', 'secretsmanager:GetSecretValue'], null],
-    [[role('OperatorRole')], ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], 'OperatorTaskEnabled'],
-  ].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+  assert.deepEqual(grants, [[[role('ExecutionRole')], ['secretsmanager:DescribeSecret', 'secretsmanager:GetSecretValue'], null]]);
 });
 
 test('FormaStack\'s management secret is attached by ARN to the operator task only, never copied (ADR-003 amendment 2026-10-30, A12)', () => {
@@ -714,9 +710,13 @@ test('operator task is absent by default; when supplied it is a count-zero stand
 test('operator task role holds no role assumption and reaches only B1 source objects under each tenant key', () => {
   const all = policy(role('OperatorRole'));
   // ADR-003 amendment 2026-10-30 and APP-078 B1: plus exactly Get/PutSecretValue on the capability and auth
-  // configuration secrets and their keys via Secrets Manager.
-  const secretRefs = ['ProviderCapabilities', 'AuthConfiguration', 'ComposerModel', 'SlackApp'].map(prefix => ({ Ref: one('AWS::SecretsManager::Secret', prefix)[0] }));
-  const keyArns = ['ProviderCapabilityKey', 'AuthConfigurationKey', 'ComposerModelKey', 'SlackAppKey'].map(prefix => ({ 'Fn::GetAtt': [one('AWS::KMS::Key', prefix)[0], 'Arn'] }));
+  // configuration secrets and their keys via Secrets Manager. APP-113: never the composer model key or the
+  // Slack app secret (no operator command uses them; Victor writes both with his own credentials).
+  const secretRefs = ['ProviderCapabilities', 'AuthConfiguration'].map(prefix => ({ Ref: one('AWS::SecretsManager::Secret', prefix)[0] }));
+  const keyArns = ['ProviderCapabilityKey', 'AuthConfigurationKey'].map(prefix => ({ 'Fn::GetAtt': [one('AWS::KMS::Key', prefix)[0], 'Arn'] }));
+  const unused = [one('AWS::SecretsManager::Secret', 'ComposerModel')[0], one('AWS::SecretsManager::Secret', 'SlackApp')[0],
+    one('AWS::KMS::Key', 'ComposerModelKey')[0], one('AWS::KMS::Key', 'SlackAppKey')[0]];
+  for (const id of unused) assert.equal(JSON.stringify(all).includes(`"${id}"`), false, `operator role names ${id}`);
   const custody = all.filter(statement => JSON.stringify(statement.Resource) === JSON.stringify(secretRefs)
     || JSON.stringify(statement.Resource) === JSON.stringify(keyArns));
   assert.deepEqual(custody.map(statement => [actions(statement).sort(), statement.Condition ?? null]), [
@@ -797,4 +797,27 @@ test('display names reach the service task only from the synth context file (APP
   assert.equal(serviceEnv(named)[DISPLAY_NAMES_JSON_ENV], '{"members":[{"principal_id":"00000000-0000-4000-8000-00000000006f","display_name":"Sarah Chen"}]}');
   writeFileSync(file, JSON.stringify({ members: [{ principal_id: 'nope', display_name: 'X', extra: 1 }] }));
   assert.throws(() => new GenuiFoundation(new App({ context: { [DISPLAY_NAMES_CONTEXT]: file } }), 'Bad'));
+});
+
+test('display names follow the service rule (directory.rs usable_name), stricter on format characters, one per principal (APP-113)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'names-'));
+  const file = join(dir, 'names.json');
+  const id = '00000000-0000-4000-8000-00000000006f', other = '00000000-0000-4000-8000-000000000070';
+  const synth = (members: unknown[]) => { writeFileSync(file, JSON.stringify({ members })); return displayNamesEnvironment(file); };
+  // Accepted: 80 characters counted as the service counts them (scalar values, not UTF-16 units); trimmed.
+  assert.equal(JSON.parse(synth([{ principal_id: id, display_name: '\u{1F600}'.repeat(80) }])[DISPLAY_NAMES_JSON_ENV]).members[0].display_name.length, 160);
+  assert.deepEqual(JSON.parse(synth([{ principal_id: id, display_name: '  Sarah Chen ' }])[DISPLAY_NAMES_JSON_ENV]).members, [{ principal_id: id, display_name: 'Sarah Chen' }]);
+  assert.equal(JSON.parse(synth([{ principal_id: id, display_name: 'Zoë Ñúñez' }, { principal_id: other, display_name: 'D' }])[DISPLAY_NAMES_JSON_ENV]).members.length, 2);
+  for (const name of ['', '   ', 'x'.repeat(81), '\u{1F600}'.repeat(81), 'tab\there', 'line\nbreak', 'del\u007f', 'c1\u0085next', 'c1\u009b',
+    'bidi\u202eevil', 'isolate\u2066x', 'zero\u200bwidth', 'bom\ufeff', 'sep\u2028x', 'para\u2029x', 7, null]) {
+    assert.throws(() => synth([{ principal_id: id, display_name: name }]), /usable name/, JSON.stringify(name));
+    assert.equal(usableDisplayName(name), false, JSON.stringify(name));
+  }
+  assert.throws(() => synth([{ principal_id: id, display_name: 'Diego Ramos' }, { principal_id: id, display_name: 'Sarah Chen' }]), /appears once/);
+  assert.equal(MAX_DISPLAY_NAME_CHARACTERS, 80);
+});
+
+test('the demo organization is the first configured tenant (Northstar), and the ALB idle timeout derives from the composer deadline', () => {
+  assert.equal(DEMO_ORGANIZATION_ID, TENANT_IDS[0]);
+  assert.equal(ALB_IDLE_TIMEOUT_SECONDS, COMPOSE_DEADLINE_SECONDS + 10);
 });

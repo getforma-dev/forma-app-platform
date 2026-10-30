@@ -15,11 +15,16 @@ if [ ! -f "$env_file" ]; then
   echo "composer smoke skipped: no $env_file" >&2
   exit 0
 fi
-# Only the one variable, only from that file; everything else in it is ignored.
-key=$(grep -m1 '^ANTHROPIC_API_KEY=' "$env_file" | cut -d= -f2- | tr -d '\r\n"' || true)
-if [ -z "$key" ]; then
+# Only the one variable, only from that file, through the one .env reader
+# (app/scripts/read_env.py, APP-113: strips quotes, CR and `export`; refuses a
+# duplicate line). Exit 3 means missing or empty: skip.
+status=0
+key=$(python3 -I "$here/read_env.py" --file "$env_file" --optional --raw ANTHROPIC_API_KEY) || status=$?
+if [ "$status" -eq 3 ]; then
   echo "composer smoke skipped: no ANTHROPIC_API_KEY line in $env_file" >&2
   exit 0
+elif [ "$status" -ne 0 ]; then
+  exit "$status"
 fi
 export ANTHROPIC_API_KEY="$key"
 unset key

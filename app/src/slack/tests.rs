@@ -424,3 +424,28 @@ fn the_approver_dm_names_any_record_app() {
         .0
         .ends_with("filed a claim for your approval"));
 }
+
+/// Review: Slack drafts had only the process cap; a member holds at most
+/// twenty live drafts, as on MCP.
+#[test]
+fn slack_drafts_are_capped_per_member() {
+    let state = slack_state("http://127.0.0.1:9");
+    let org = "00000000-0000-4000-8000-000000000001";
+    let diego =
+        crate::storage::AgentCaller::for_tests(org, "00000000-0000-4000-8000-00000000006f", "t")
+            .request;
+    let sarah =
+        crate::storage::AgentCaller::for_tests(org, "00000000-0000-4000-8000-00000000006d", "t")
+            .request;
+    for _ in 0..20 {
+        assert!(state
+            .hold(&diego, "T1", "U1", crate::mcp::tests::draft())
+            .is_some());
+    }
+    assert!(state
+        .hold(&diego, "T1", "U1", crate::mcp::tests::draft())
+        .is_none());
+    assert!(state
+        .hold(&sarah, "T1", "U2", crate::mcp::tests::draft())
+        .is_some());
+}

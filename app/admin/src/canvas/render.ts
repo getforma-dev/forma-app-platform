@@ -38,24 +38,10 @@ export function pulseTarget(card: HTMLElement): HTMLElement {
   return parent?.classList.contains('cv-item') ? parent : card;
 }
 
-/** Exact decimal strings gain digit grouping; anything else is unchanged (`page::display`). */
-export function display(value: string): string {
-  const negative = value.startsWith('-');
-  const digits = negative ? value.slice(1) : value;
-  if (!digits || !/^[0-9]+$/.test(digits)) return value;
-  let grouped = '';
-  for (let index = 0; index < digits.length; index += 1) {
-    if (index > 0 && (digits.length - index) % 3 === 0) grouped += ',';
-    grouped += digits[index];
-  }
-  return (negative ? '-' : '') + grouped;
-}
-
-/** A cell's text (`page::cell_text`): an unknown cell is "unknown", never zero. */
-export function cellText(value: unknown, integer: boolean): string {
-  if (typeof value === 'string') return integer ? display(value) : value;
-  if (typeof value === 'boolean') return String(value);
-  return 'unknown';
+/** The canvas's polite activity line (`#cv-activity`): every module announces through here. */
+export function announce(message: string, document_: Document = document): void {
+  const status = document_.getElementById('cv-activity');
+  if (status) status.textContent = message;
 }
 
 function text(document_: unknown, key: string): string {

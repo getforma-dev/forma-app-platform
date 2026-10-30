@@ -311,15 +311,6 @@ fn id_arg(arguments: &Map<String, Value>, key: &str) -> Result<String, Output> {
         .ok_or_else(|| Output::invalid(&format!("`{key}` must be a lowercase UUID.")))
 }
 
-/// Today in UTC as `YYYY-MM-DD` (the action path's default date).
-fn today() -> String {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    events::timestamp(seconds)[..10].to_owned()
-}
-
 fn storage_output(error: storage::Error) -> Output {
     match error {
         storage::Error::Denied => Output::not_found(),
@@ -773,7 +764,7 @@ async fn hold(
         catalog,
         parsed,
         context,
-        &today(),
+        &crate::events::today(),
     )
     .await
     .map_err(|refusal| match refusal {
@@ -971,8 +962,9 @@ async fn commit(
         }
         Err(_) => return Err(Output::unavailable()),
     };
-    let first = !held.spent;
-    state.drafts.spend(caller, id);
+    // The draft's first commit, decided atomically (a concurrent commit of
+    // the same draft replays the record and does not attribute or share).
+    let first = state.drafts.spend(caller, id);
     let mut shared_with = Value::Null;
     let mut share_note = String::new();
     if first {
@@ -1169,14 +1161,17 @@ async fn share(
     // No teammate of that name is the uniform denial too (a member of
     // another organization is never named).
     let grantee = resolve::match_approver(&name, &members).ok_or_else(Output::not_found)?;
-    let shared = stores
-        .workspace
-        .share_work(member, &app, &work, &grantee.principal, record_write)
-        .await
-        .map_err(storage_output)?;
-    if shared.changed() {
-        events::hub().app_shared(member.organization(), &app, &work);
-    }
+    // The canvas route's own path, the composition's adaptation included.
+    let shared = crate::sharing::share_with_lineage(
+        stores,
+        member,
+        &app,
+        &work,
+        &grantee.principal,
+        record_write,
+    )
+    .await
+    .map_err(storage_output)?;
     Ok(Output::ok(
         "ok",
         format!(
@@ -1283,12 +1278,11 @@ async fn folder_formation(
         .ok_or_else(|| Output::invalid("`instruction` is required."))?;
     match crate::boxes::intent::ask(&instruction) {
         Some(crate::boxes::intent::Ask::Brief) => {
+            // The brief route's own per-member window, shared with the canvas.
+            crate::boxes::routes::admit_explain(&boxes, &caller.request).map_err(folder_refused)?;
             let brief = crate::boxes::brief::generate(&boxes, &caller.request, &box_id)
                 .await
-                .map_err(|r| match r {
-                    crate::boxes::routes::BuildRefusal::NotFound => Output::not_found(),
-                    _ => Output::unavailable(),
-                })?;
+                .map_err(folder_refused)?;
             Ok(Output::ok(
                 "ok",
                 "Folder brief ready (numbers from receipts, PDF statements cited by page).".into(),
@@ -1296,6 +1290,8 @@ async fn folder_formation(
             ))
         }
         _ => {
+            // The composer's per-member window, shared with the canvas.
+            crate::boxes::routes::admit_compose(&boxes, &caller.request).map_err(folder_refused)?;
             let purpose = crate::boxes::intent::purpose(&instruction);
             let built = crate::boxes::routes::build_from_box(
                 &boxes,
@@ -1313,7 +1309,7 @@ async fn folder_formation(
                 crate::boxes::routes::BuildRefusal::CouldNotCompose(_) => Output::invalid(
                     "Forma could not compose an app from this folder; rephrase the purpose.",
                 ),
-                _ => Output::unavailable(),
+                other => folder_refused(other),
             })?;
             attribute(stores, caller, &built.placed.app, &built.placed.work, None).await;
             let mut value = crate::boxes::routes::built_json(&built);
@@ -1332,15 +1328,25 @@ async fn folder_formation(
 
 async fn folder_brief(caller: &AgentCaller, arguments: &Value) -> ToolResult {
     let (boxes, box_id, _) = resolve_folder(caller, arguments).await?;
+    crate::boxes::routes::admit_explain(&boxes, &caller.request).map_err(folder_refused)?;
     let brief = crate::boxes::brief::generate(&boxes, &caller.request, &box_id)
         .await
-        .map_err(|r| match r {
-            crate::boxes::routes::BuildRefusal::NotFound => Output::not_found(),
-            _ => Output::unavailable(),
-        })?;
+        .map_err(folder_refused)?;
     Ok(Output::ok(
         "ok",
         "Folder brief ready (numbers from receipts, PDF statements cited by page).".into(),
         json!({"brief": brief}),
     ))
+}
+
+/// A folder refusal as a tool error (the folder routes' windows included).
+fn folder_refused(refused: crate::boxes::routes::BuildRefusal) -> Output {
+    match refused {
+        crate::boxes::routes::BuildRefusal::NotFound => Output::not_found(),
+        crate::boxes::routes::BuildRefusal::TooMany(_) => Output::error(
+            "too_many_requests",
+            "Too many folder requests in the last hour. Try again later.",
+        ),
+        _ => Output::unavailable(),
+    }
 }

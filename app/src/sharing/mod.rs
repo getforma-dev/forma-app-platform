@@ -148,6 +148,12 @@ async fn share(
     let Some((_, trusted)) = session(&auth, &parts.headers).await else {
         return http::not_found();
     };
+    if let Err(retry_after) = auth
+        .limits
+        .admit_member_write(trusted.organization(), trusted.principal())
+    {
+        return http::too_many_requests(retry_after);
+    }
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };
@@ -160,10 +166,7 @@ async fn share(
     let Some((grantee, record_write)) = parse_share(&bytes) else {
         return http::problem(StatusCode::BAD_REQUEST, "malformed_share");
     };
-    let result = stores
-        .workspace
-        .share_work(&trusted, &app, &work, &grantee, record_write)
-        .await;
+    let result = share_with_lineage(stores, &trusted, &app, &work, &grantee, record_write).await;
     tracing::info!(
         outcome = match &result {
             Ok(shared) if shared.changed() => "shared",
@@ -174,61 +177,69 @@ async fn share(
         "share.submit"
     );
     match result {
-        Ok(shared) => {
-            if shared.changed() {
-                events::hub().app_shared(trusted.organization(), &app, &work);
-            }
-            // APP-101: a composition's standard work shared by the member who
-            // composed it carries its live adaptation, through this same
-            // share path under the sharer's own authority
-            // (`composer::lineage`); the teammate's canvas reshapes.
-            if let Some((adapted_app, adapted_work)) = crate::composer::lineage::lineage().shared(
-                trusted.organization(),
-                trusted.principal(),
-                &work,
-                &shared.grantee,
-                record_write,
-            ) {
-                let adapted = stores
-                    .workspace
-                    .share_work(
-                        &trusted,
-                        &adapted_app,
-                        &adapted_work,
-                        &grantee,
-                        record_write,
-                    )
-                    .await;
-                tracing::info!(
-                    outcome = if adapted.is_ok() { "shared" } else { "refused" },
-                    "share.adapted"
-                );
-                if adapted.is_ok() {
-                    events::hub().app_adapted(
-                        trusted.organization(),
-                        &adapted_app,
-                        &adapted_work,
-                        &app,
-                        &work,
-                    );
-                }
-            }
-            document(
-                StatusCode::OK,
-                &json!({
-                    "app_id": app,
-                    "work_id": work,
-                    "grantee_principal_id": shared.grantee,
-                    "granted": shared.granted.iter().map(|g| json!({
-                        "scope": g.scope, "resource_id": g.resource,
-                        "permission": g.permission,
-                    })).collect::<Vec<_>>(),
-                }),
-            )
-        }
+        Ok(shared) => document(
+            StatusCode::OK,
+            &json!({
+                "app_id": app,
+                "work_id": work,
+                "grantee_principal_id": shared.grantee,
+                "granted": shared.granted.iter().map(|g| json!({
+                    "scope": g.scope, "resource_id": g.resource,
+                    "permission": g.permission,
+                })).collect::<Vec<_>>(),
+            }),
+        ),
         Err(storage::Error::Denied) => http::not_found(),
         Err(_) => http::unavailable(),
     }
+}
+
+/// Shares a work with a teammate under the sharer's own authority, with its
+/// event, and (APP-101) a composition's standard work shared by the member
+/// who composed it carries its live adaptation through this same path
+/// (`composer::lineage`); the teammate's canvas reshapes. The one share path
+/// of the canvas route and MCP's `forma_share`.
+pub async fn share_with_lineage(
+    stores: &storage::Stores,
+    trusted: &TrustedRequest,
+    app: &str,
+    work: &str,
+    grantee: &str,
+    record_write: bool,
+) -> Result<storage::Shared, storage::Error> {
+    let shared = stores
+        .workspace
+        .share_work(trusted, app, work, grantee, record_write)
+        .await?;
+    if shared.changed() {
+        events::hub().app_shared(trusted.organization(), app, work);
+    }
+    if let Some((adapted_app, adapted_work)) = crate::composer::lineage::lineage().shared(
+        trusted.organization(),
+        trusted.principal(),
+        work,
+        &shared.grantee,
+        record_write,
+    ) {
+        let adapted = stores
+            .workspace
+            .share_work(trusted, &adapted_app, &adapted_work, grantee, record_write)
+            .await;
+        tracing::info!(
+            outcome = if adapted.is_ok() { "shared" } else { "refused" },
+            "share.adapted"
+        );
+        if adapted.is_ok() {
+            events::hub().app_adapted(
+                trusted.organization(),
+                &adapted_app,
+                &adapted_work,
+                app,
+                work,
+            );
+        }
+    }
+    Ok(shared)
 }
 
 #[cfg(test)]

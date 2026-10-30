@@ -50,6 +50,12 @@ pub const CALLBACK_GLOBAL: &[Window] = &[per(800, 3600)];
 /// arrival before its cookie is replaced.
 pub const LOOKUP_FAILURE_ADDRESS: &[Window] = &[per(15, 60), per(80, 3600)];
 
+/// APP-113 review: per member, the routes that create or change rows with
+/// no model call and no window of their own (folder create, the uploads
+/// folder, folder rename and share, work share, the notes work, a
+/// slash-command name) share this window.
+pub const MEMBER_WRITES: &[Window] = &[per(120, 3600)];
+
 /// Which check refused (APP-074 review m4): the index of its key in the
 /// checks, the blocking window's period, and when that window frees a slot.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -74,6 +80,10 @@ impl Limiter {
     /// refuses, naming when the earliest blocking window frees a slot.
     pub fn admit(&self, checks: &[(&str, &[Window])]) -> Result<(), u64> {
         self.admit_at(checks, Instant::now())
+    }
+    /// One row-creating or row-changing request of a member (`MEMBER_WRITES`).
+    pub fn admit_member_write(&self, organization: &str, principal: &str) -> Result<(), u64> {
+        self.admit(&[(&format!("writes:{organization}:{principal}"), MEMBER_WRITES)])
     }
     /// `admit`, naming which key and window refused.
     pub fn admit_blocked(&self, checks: &[(&str, &[Window])]) -> Result<(), Blocked> {
@@ -177,6 +187,19 @@ impl Limiter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// APP-113 review: the row-creating routes had no window; they share
+    /// one per member (another member is unaffected).
+    #[test]
+    fn member_writes_are_limited_per_member() {
+        let limiter = Limiter::default();
+        let org = "00000000-0000-4000-8000-000000000001";
+        for _ in 0..MEMBER_WRITES[0].limit {
+            assert!(limiter.admit_member_write(org, "a").is_ok());
+        }
+        assert!(limiter.admit_member_write(org, "a").is_err());
+        assert!(limiter.admit_member_write(org, "b").is_ok());
+    }
 
     #[test]
     fn windows_admit_up_to_their_limit_and_refusals_record_nothing() {

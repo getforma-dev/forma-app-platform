@@ -64,7 +64,7 @@ export async function openBrief(boxId: string, name: string, generate: boolean, 
   const status = el(document_, 'p', { class: 'cv-ex-status', role: 'status' });
   const when = el(document_, 'p', { class: 'cv-ex-when' });
   const regenerate = el(document_, 'button', { type: 'button', class: 'cv-ex-regen' }, 'Regenerate');
-  const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'aria-label': 'Remove the brief from the canvas', title: 'Remove' }, '×');
+  const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'data-widget-close': '', 'aria-label': 'Remove the brief from the canvas', title: 'Remove' }, '×');
   const label = el(document_, 'span', { class: 'cv-origin cv-ex-label', 'data-origin': 'generated' }, LABEL);
   const head = el(document_, 'header', { class: 'cv-ex-head' },
     el(document_, 'div', { class: 'cv-ex-id' }, el(document_, 'h2', {}, 'Brief'), el(document_, 'p', { class: 'cv-ex-of' }, `${NOUN} ${name}`)),

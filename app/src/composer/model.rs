@@ -246,13 +246,9 @@ impl Anthropic {
         if !status.is_success() {
             return Err((ModelError::Refused, false));
         }
-        let bytes = response
-            .bytes()
+        let bytes = capped_body(response, MAX_REPLY_BYTES)
             .await
-            .map_err(|_| (ModelError::Unavailable, true))?;
-        if bytes.len() > MAX_REPLY_BYTES {
-            return Err((ModelError::Malformed, false));
-        }
+            .map_err(|error| (error, error == ModelError::Unavailable))?;
         parse_reply(&bytes).ok_or((ModelError::Malformed, false))
     }
 }
@@ -400,13 +396,7 @@ impl Model for Anthropic {
             if !status.is_success() {
                 return Err(ModelError::Refused);
             }
-            let bytes = response
-                .bytes()
-                .await
-                .map_err(|_| ModelError::Unavailable)?;
-            if bytes.len() > MAX_REPLY_BYTES {
-                return Err(ModelError::Malformed);
-            }
+            let bytes = capped_body(response, MAX_REPLY_BYTES).await?;
             let reply = parse_cited(&bytes).ok_or(ModelError::Malformed)?;
             tracing::info!(
                 event = "composer.model_documents",
@@ -504,6 +494,31 @@ pub(super) fn elapsed_ms(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
+/// The reply body, read chunk by chunk and refused (`Malformed`) as soon as
+/// it passes `cap`, or before any read when its declared length does
+/// (review: the whole reply used to be buffered before the size check); a
+/// failed read is `Unavailable`.
+async fn capped_body(mut response: reqwest::Response, cap: usize) -> Result<Vec<u8>, ModelError> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > cap as u64)
+    {
+        return Err(ModelError::Malformed);
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| ModelError::Unavailable)?
+    {
+        if body.len() + chunk.len() > cap {
+            return Err(ModelError::Malformed);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -519,6 +534,19 @@ mod tests {
         assert!(Anthropic::new("sk-ant-synthetic", "http://example.com/v1").is_none());
         assert!(Anthropic::new("sk-ant-synthetic", DEFAULT_ENDPOINT).is_some());
         assert!(Anthropic::new("sk-ant-synthetic", "http://127.0.0.1:1/v1/messages").is_some());
+    }
+
+    #[tokio::test]
+    async fn replies_are_capped_while_read() {
+        let reply = |body: &'static str| {
+            reqwest::Response::from(axum::http::Response::new(reqwest::Body::from(body)))
+        };
+        assert_eq!(capped_body(reply("12345"), 5).await.unwrap(), b"12345");
+        assert_eq!(
+            capped_body(reply("123456"), 5).await,
+            Err(ModelError::Malformed)
+        );
+        assert_eq!(capped_body(reply(""), 5).await.unwrap(), b"");
     }
 
     #[test]

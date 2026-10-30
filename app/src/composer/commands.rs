@@ -179,6 +179,22 @@ fn bindings(document: &Value) -> Option<Vec<WorkBinding>> {
         .collect()
 }
 
+/// The organization's naming lock: the slug uniqueness check and the create
+/// of the named work run under it, so two concurrent namings in this process
+/// cannot both pass the check (review: check-then-create race). Slugs are
+/// organization-wide. Across tasks a storage constraint is the full fix
+/// (APP-113 carries it; the pitch runs one task).
+fn naming_lock(organization: &str) -> Arc<tokio::sync::Mutex<()>> {
+    static LOCKS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    > = std::sync::OnceLock::new();
+    let mut locks = LOCKS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    locks.entry(organization.to_owned()).or_default().clone()
+}
+
 /// `POST /v1/work/{app}/{work}/name`.
 async fn name(
     State(auth): State<Arc<Auth>>,
@@ -195,6 +211,12 @@ async fn name(
     let Some((_, member)) = crate::sharing::session(&auth, &parts.headers).await else {
         return http::not_found();
     };
+    if let Err(retry_after) = auth
+        .limits
+        .admit_member_write(member.organization(), member.principal())
+    {
+        return http::too_many_requests(retry_after);
+    }
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };
@@ -212,6 +234,8 @@ async fn name(
     if RESERVED.contains(&slug.as_str()) || super::matcher::library_slugs().contains(&slug) {
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "name_taken");
     }
+    let lock = naming_lock(member.organization());
+    let _naming = lock.lock().await;
     match stores.data.named_works(&member).await {
         Ok(named) if named.iter().any(|n| n.slug == slug) => {
             return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "name_taken");
@@ -299,6 +323,22 @@ mod tests {
         for slug in ["expense", "expense-review", "spend", "traffic", "mrr"] {
             assert!(reserved.contains(slug), "{slug}");
         }
+    }
+
+    #[tokio::test]
+    async fn namings_in_one_organization_are_serialized() {
+        let org = "00000000-0000-4000-8000-0000000000c1";
+        let first = naming_lock(org);
+        let held = first.lock().await;
+        assert!(
+            naming_lock(org).try_lock().is_err(),
+            "a second naming waits for the first's check and create"
+        );
+        assert!(naming_lock("00000000-0000-4000-8000-0000000000c2")
+            .try_lock()
+            .is_ok());
+        drop(held);
+        assert!(naming_lock(org).try_lock().is_ok());
     }
 
     #[test]

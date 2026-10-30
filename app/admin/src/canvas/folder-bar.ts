@@ -15,6 +15,7 @@
 //   answer goes the usual action path without the folder.
 // ×, Esc, or a click on empty canvas clears the active folder. Only the chip
 // or a mention ever sends a `box_id`; slash commands never do.
+import { eventOriginatesInTextEntry } from '../canvas-vendor/index';
 import { setUtteranceRouter, submitAction } from './actions';
 import { call, BoxError, makeApp, noun, nouns, refusalText, wantsBrief, type Box } from './box-api';
 import { openBrief } from './brief';
@@ -284,9 +285,8 @@ export function startFolderBar(document_: Document, given: Hooks): void {
   input.addEventListener('blur', () => window.setTimeout(closePicker, 120));
   // Esc anywhere (outside a field and a dialog) clears the active folder.
   document_.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape' || !active || isModalOpen()) return;
-    const target = event.target as HTMLElement | null;
-    if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+    if (event.key !== 'Escape' || event.defaultPrevented || !active || isModalOpen()) return;
+    if (eventOriginatesInTextEntry(event)) return;
     setActiveFolder(null);
   });
   // A click on empty canvas (not a pan) clears it too.

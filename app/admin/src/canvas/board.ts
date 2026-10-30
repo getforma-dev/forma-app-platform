@@ -14,7 +14,7 @@ import { submitCommand } from './commands';
 import { clearLayouts, loadCamera, loadLayout, loadPlaced, saveCamera, saveLayout, savePlaced, type ItemLayout, type PlacedWork } from './layout';
 import { subscribeLive, type LiveEvent } from './live';
 import { parametersOf, runView } from './queries';
-import { buildForm, buildGroup, el, groupJson, isUuid, pulseTarget, renderNoValue, type FormJson } from './render';
+import { announce, buildForm, buildGroup, el, groupJson, isUuid, pulseTarget, renderNoValue, type FormJson } from './render';
 import { refreshRecords, wireRecordsCard } from './records';
 import { refreshCommands } from './slash';
 import { refreshLedger, wireLedgerCard } from './ledger';
@@ -37,9 +37,16 @@ type Group = {
 
 const WIDTH: Record<string, number> = { app: 340, summary: 400, timeline: 620, form: 360, records: 680, ledger: 520 };
 const HEIGHT: Record<string, number> = { app: 300, summary: 250, timeline: 340, form: 300, records: 260, ledger: 280 };
-const GAP = 28;
+/** The gap between cards in a row, in a fan and in a frame (board, `stacks.ts`, `unite.ts`). */
+export const GAP = 28;
+/** A stack's width, and the column a fanned or broken-apart card takes (`stacks.ts`, `unite.ts`). */
+export const SLOT_WIDTH = 460;
+/** The row height of a stack's fan-out grid (`stacks.ts`). */
+export const FAN_ROW_HEIGHT = 380;
 const ROW_GAP = 72;
 const ORIGIN = 64;
+/** Live re-runs of one work within this window coalesce into one (APP-113). */
+const LIVE_RUN_MS = 250;
 
 let canvas: WidgetCanvas | null = null;
 let host: HTMLElement | null = null;
@@ -127,11 +134,6 @@ function scheduleReflow(): void {
 /** `GENUI_DEMO_MODE` is on for this page (`data-demo="on"`). */
 function demo(): boolean {
   return host?.dataset.demo === 'on';
-}
-
-function announce(message: string): void {
-  const status = host?.ownerDocument.getElementById('cv-activity');
-  if (status) status.textContent = message;
 }
 
 function nextRow(): number {
@@ -499,6 +501,8 @@ function notePlaced(group: Group, ids: string[]): void {
     dismissed.delete(id);
     if (!entry.cards.includes(id)) entry.cards.push(id);
   }
+  // Most recent last: storage keeps the newest when it caps (`layout.ts`).
+  placed.delete(group.work);
   placed.set(group.work, entry);
   keepPlaced();
 }
@@ -517,11 +521,27 @@ function pulse(card: HTMLElement): void {
   window.setTimeout(() => item.classList.remove('is-live-updated'), 1600);
 }
 
+/** Pending live re-runs by work (APP-113). */
+const liveRuns = new Map<string, number>();
 /**
  * Runs every view card of a group with its window form's parameters;
  * `live` marks a re-run a live event asked for (the cards pulse on arrival).
  */
 export function runGroup(work: string, live = false): void {
+  // APP-113: a burst of live events for one work runs its cards once.
+  window.clearTimeout(liveRuns.get(work));
+  liveRuns.delete(work);
+  if (live) {
+    liveRuns.set(work, window.setTimeout(() => {
+      liveRuns.delete(work);
+      runGroupNow(work, true);
+    }, LIVE_RUN_MS));
+    return;
+  }
+  runGroupNow(work, false);
+}
+
+function runGroupNow(work: string, live: boolean): void {
   const group = groups.get(work);
   if (!group) return;
   const parameters = parametersOf(windowForm(group));
@@ -925,6 +945,8 @@ async function placeWorkNow(app: string, work: string, labels: string[]): Promis
   const group = await fetchGroup(app, work);
   canvas.removeItem(ghost, { selectFallback: false });
   if (!group) return 'The app could not be opened. Nothing was placed.';
+  // APP-113: another path (addCards, a swap) placed it while this one waited.
+  if (groups.has(work)) return placeWorkNow(app, work, labels);
   const started = performance.now();
   const section = buildGroup(document_, group, labels);
   if (nameable(labels, group.origins)) section.dataset.nameable = 'true';
@@ -1076,12 +1098,21 @@ async function nameWork(app: string, work: string, slug: string): Promise<{ app_
  * The pair record follows the swap so the toggle keeps working.
  */
 async function swapGroup(fromWork: string, toApp: string, toWork: string, labels: string[] = [], keepPair = true): Promise<boolean> {
-  const old = groups.get(fromWork);
-  if (!old || !canvas || !host || groups.has(toWork)) return false;
+  if (!groups.has(fromWork) || !canvas || !host || groups.has(toWork)) return false;
   const json = await fetchGroup(toApp, toWork);
-  if (!json || !groups.has(fromWork)) return false;
+  // APP-113: re-check after the wait (another swap or placement may have run).
+  const old = groups.get(fromWork);
+  if (!json || !old || !canvas || !host || groups.has(toWork)) return false;
   const document_ = host.ownerDocument;
-  const y = Number(old.items[0]?.dataset.canvasY ?? nextRow());
+  // The new group takes the old one's row: its first card, else its unite frame or stack.
+  const frame = host.querySelector<HTMLElement>(`.cv-item-unite[data-unite="${fromWork}"]`);
+  const y = Number(old.items[0]?.dataset.canvasY ?? frame?.dataset.canvasY ?? nextRow());
+  // APP-113: the old cards leave their stacks and unite frames too (a stack
+  // left with one card spreads it; an emptied frame is removed and forgotten),
+  // so no stale card, frame or count survives the swap.
+  const ids = old.cards.map((card) => card.dataset.card ?? '').filter(Boolean);
+  stackHooks.remove(ids);
+  uniteHooks.remove(ids);
   const section = buildGroup(document_, json, labels);
   if (nameable(labels, json.origins) || old.section.dataset.nameable === 'true') section.dataset.nameable = 'true';
   document_.getElementById('cv-board')?.append(section);
@@ -1105,10 +1136,13 @@ async function swapGroup(fromWork: string, toApp: string, toWork: string, labels
   if (!keepPair) pairs.delete(fromWork);
   window.clearTimeout(tailoring.get(fromWork));
   tailoring.delete(fromWork);
+  window.clearTimeout(liveRuns.get(fromWork));
+  liveRuns.delete(fromWork);
   decorate(fresh);
   scheduleReflow();
   runGroup(toWork);
   updateSummary();
+  saveSoon();
   const first = fresh.items[0];
   if (first) {
     canvas.centerItem(first);

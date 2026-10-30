@@ -55,12 +55,8 @@ pub fn is_demo_org(organization: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Whether demo mode is on at all (for the structured log and the page).
-pub fn enabled() -> bool {
-    settings().read().map(|s| s.enabled).unwrap_or(false)
-}
-
 /// Tests and campaigns: set the switches without the environment.
+#[cfg(test)]
 pub fn configure_for_tests(enabled: bool, organizations: &[&str]) {
     if let Ok(mut current) = settings().write() {
         current.enabled = enabled;
@@ -87,6 +83,18 @@ mod tests {
             !is_demo_org(org),
             "no organization listed: no shortcut anywhere"
         );
+        // Review: the composer's and the canvas's own lists go through this
+        // switch too, so demo mode off turns every shortcut off.
+        let composer =
+            crate::composer::Composer::new(None, "r", "g").with_demo_organizations([org.into()]);
+        let canvas: std::collections::BTreeSet<String> = [org.to_owned()].into();
+        configure_for_tests(false, &[org]);
+        assert!(!composer.demo_for(org));
+        assert!(!crate::query::canvas::is_demo(&canvas, org));
+        configure_for_tests(true, &[org]);
+        assert!(composer.demo_for(org) && !composer.demo_for(other));
+        assert!(crate::query::canvas::is_demo(&canvas, org));
+        assert!(!crate::query::canvas::is_demo(&Default::default(), org));
         configure_for_tests(false, &[]);
     }
 }

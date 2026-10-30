@@ -7,6 +7,7 @@
 // a placeholder only, never a live token. Nothing here grants anything: a
 // token acts as this member, with this member's permissions, receipts and
 // audit, and the server re-judges every call.
+import { when as displayWhen } from './display';
 import { el, isUuid } from './render';
 
 export const TOKENS_URL = '/v1/agent-tokens';
@@ -20,8 +21,14 @@ function mcpUrl(served: unknown): string {
     : `${window.location.origin}/v1/mcp`;
 }
 
+// The token never goes on a command line (argv, shell history): Claude Code
+// expands `${FORMA_AGENT_TOKEN}` from the environment in a project `.mcp.json`.
 function claudeSnippet(url: string): string {
-  return `claude mcp add --transport http forma ${url} --header "Authorization: Bearer ${PLACEHOLDER}"`;
+  return JSON.stringify(
+    { mcpServers: { forma: { type: 'http', url, headers: { Authorization: 'Bearer ${FORMA_AGENT_TOKEN}' } } } },
+    null,
+    2,
+  );
 }
 function openaiSnippet(url: string): string {
   return JSON.stringify(
@@ -51,10 +58,13 @@ function copyable(document_: Document, label: string, text: string, multiline = 
   return el(document_, 'div', { class: 'cv-agent-copyable' }, el(document_, 'span', { class: 'cv-agent-copy-label' }, label), field, button);
 }
 
+/** A token's time as the rest of the canvas shows times: `Oct 22, 10:03 UTC` (`display.ts`). */
 function when(stamp: string | null): string {
   if (!stamp) return 'never used';
   const date = new Date(stamp);
-  return Number.isNaN(date.getTime()) ? stamp : date.toLocaleString();
+  if (Number.isNaN(date.getTime())) return stamp;
+  const shown = displayWhen(date.toISOString());
+  return shown ? `${shown} UTC` : stamp;
 }
 
 async function listTokens(): Promise<{ tokens: TokenJson[]; url: string } | null> {
@@ -96,9 +106,9 @@ function buildPanel(document_: Document): HTMLDialogElement {
       return;
     }
     snippets.replaceChildren(
-      copyable(document_, 'Claude Code', claudeSnippet(listed.url)),
+      copyable(document_, 'Claude Code (.mcp.json in your project)', claudeSnippet(listed.url), true),
       copyable(document_, 'OpenAI Responses API (tools entry)', openaiSnippet(listed.url), true),
-      el(document_, 'p', { class: 'cv-agent-note' }, `Replace ${PLACEHOLDER} with the token you create. Forma keeps only a digest of it.`),
+      el(document_, 'p', { class: 'cv-agent-note' }, `For Claude Code, export the token as FORMA_AGENT_TOKEN in your shell; it never goes on a command line. For OpenAI, replace ${PLACEHOLDER} in your own code. Forma keeps only a digest of the token.`),
     );
     if (!listed.tokens.length) {
       list.replaceChildren(el(document_, 'li', { class: 'cv-agent-empty' }, 'No agent is connected.'));

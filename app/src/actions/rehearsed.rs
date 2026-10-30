@@ -66,11 +66,28 @@ pub(super) fn lower_words(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// The byte index in `text` of the first ASCII-case-insensitive match of
+/// `needle`. Indices of `text.to_lowercase()` do not address `text` (some
+/// characters change byte length when lowercased, "İ"), so callers that slice
+/// the original text search it with this.
+pub fn find_ignore_ascii_case(text: &str, needle: &str) -> Option<usize> {
+    text.char_indices().map(|(at, _)| at).find(|&at| {
+        text.get(at..at + needle.len())
+            .is_some_and(|window| window.eq_ignore_ascii_case(needle))
+    })
+}
+
 /// A dollar amount in the text as a decimal string ("86", "86.50").
 pub fn amount(text: &str) -> Option<String> {
     let bytes = text.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
+        // Every slice below starts at `i` or after an ASCII byte, so only `i`
+        // must sit on a character boundary (a receipt may say "Café").
+        if !text.is_char_boundary(i) {
+            i += 1;
+            continue;
+        }
         let dollar = bytes[i] == b'$';
         let start = if dollar { i + 1 } else { i };
         let mut end = start;

@@ -321,6 +321,11 @@ export class WidgetCanvas {
   readonly #transientTimers = new Set<number>();
   readonly #resizeObserver: ResizeObserver;
   readonly #abort: AbortController;
+  // Local change (APP-113): one AbortController per mounted item for its
+  // drag-handle listeners, aborted when the item is removed, so a card that
+  // is re-mounted (stacks, unite, focus) does not pile up listeners on the
+  // canvas-wide signal.
+  readonly #dragBindings = new Map<HTMLElement, AbortController>();
   #camera: WidgetCanvasCamera = { ...DEFAULT_CAMERA };
   #focusSession: WidgetFocusSession | null = null;
   #cameraFramingTarget: CameraFramingTarget | null = null;
@@ -447,6 +452,8 @@ export class WidgetCanvas {
     this.#cancelCameraGesture?.();
     this.#cancelLostInputState();
     this.#abort.abort();
+    for (const binding of this.#dragBindings.values()) binding.abort();
+    this.#dragBindings.clear();
     this.#resizeObserver.disconnect();
     this.#window.cancelAnimationFrame(this.#changeFrame);
     this.#window.cancelAnimationFrame(this.#cameraFrame);
@@ -671,6 +678,8 @@ export class WidgetCanvas {
     }
     this.#resizeObserver.unobserve(item);
     if (runtimeHost) this.#resizeObserver.unobserve(runtimeHost);
+    this.#dragBindings.get(item)?.abort();
+    this.#dragBindings.delete(item);
     item.remove();
     if (id === this.#activeId) {
       this.#activeId = null;
@@ -696,6 +705,8 @@ export class WidgetCanvas {
     this.#endFocusMode(true, false);
     for (const item of this.#items.values()) this.#resizeObserver.unobserve(item);
     for (const host of this.#runtimeHosts.values()) this.#resizeObserver.unobserve(host);
+    for (const binding of this.#dragBindings.values()) binding.abort();
+    this.#dragBindings.clear();
     this.#items.clear();
     this.#runtimeHosts.clear();
     this.#virtualizedHosts.clear();
@@ -1643,12 +1654,16 @@ export class WidgetCanvas {
   #bindItemDrag(item: HTMLElement): void {
     // Local change (APP-104): a card's own header (`[data-canvas-drag-handle]`)
     // moves it too, as in Figma; its interactive controls keep their clicks.
+    // Local change (APP-113): the item's listeners share one signal, aborted on removal.
+    this.#dragBindings.get(item)?.abort();
+    const binding = new this.#window.AbortController();
+    this.#dragBindings.set(item, binding);
     for (const handle of item.querySelectorAll<HTMLElement>(".widget-drag-handle, [data-canvas-drag-handle]")) {
-      this.#bindDragHandle(item, handle);
+      this.#bindDragHandle(item, handle, binding.signal);
     }
   }
 
-  #bindDragHandle(item: HTMLElement, handle: HTMLElement): void {
+  #bindDragHandle(item: HTMLElement, handle: HTMLElement, signal: AbortSignal): void {
     const extra = !handle.classList.contains("widget-drag-handle");
     handle.addEventListener("pointerdown", (event) => {
       if (extra && eventOriginatesInInteractiveControl(event)) return;
@@ -1757,7 +1772,7 @@ export class WidgetCanvas {
         this.#window.addEventListener("pointerup", onEnd);
         this.#window.addEventListener("pointercancel", onEnd);
       }
-    }, { signal: this.#abort.signal });
+    }, { signal });
 
     if (extra) return;
     handle.addEventListener("keydown", (event) => {
@@ -1804,7 +1819,7 @@ export class WidgetCanvas {
       this.#moveItem(item, state.x + direction[0] * step, state.y + direction[1] * step);
       this.#requestNavigatorRender();
       this.#scheduleChange();
-    }, { signal: this.#abort.signal });
+    }, { signal });
   }
 
   #bindCameraInteractions(): void {

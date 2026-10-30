@@ -19,7 +19,8 @@ pub const MAX_SKEW_SECONDS: u64 = 300;
 
 /// Refused signature checks since start (the only trace a refusal leaves).
 static REFUSED: AtomicU64 = AtomicU64::new(0);
-/// How many requests were refused by the signature check.
+/// How many requests were refused by the signature check (tests only).
+#[cfg(test)]
 pub fn refused_count() -> u64 {
     REFUSED.load(Ordering::Relaxed)
 }

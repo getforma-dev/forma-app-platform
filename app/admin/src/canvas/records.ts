@@ -13,7 +13,7 @@
 // sequence, version) is the record's own.
 import { postDraft, requestDecision, type Draft } from './actions';
 import { label } from './display';
-import { el, pulseTarget } from './render';
+import { el, isUuid, pulseTarget } from './render';
 
 export type RecordValueJson = { field_id: string; value: unknown; display: string };
 export type RecordJson = {
@@ -45,24 +45,16 @@ export type RecordsCardJson = {
   decide: string; status_field: string; count: string; pending: string; waiting?: string;
 };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
 export function recordsJson(value: unknown): RecordsJson | null {
   if (typeof value !== 'object' || value === null) return null;
   const listing = value as RecordsJson;
-  if (!UUID.test(listing.app_id) || !UUID.test(listing.work_id) || !Array.isArray(listing.records) || !Array.isArray(listing.collections)) return null;
+  if (!isUuid(listing.app_id) || !isUuid(listing.work_id) || !Array.isArray(listing.records) || !Array.isArray(listing.collections)) return null;
   return listing;
 }
 
 /** `sha256:<64 hex>` as its first twelve and last six digits (`query::canvas::short_digest`). */
 function shortDigest(digest: string): string {
   return /^sha256:[0-9a-f]{64}$/.test(digest) ? `sha256:${digest.slice(7, 19)}…${digest.slice(-6)}` : digest;
-}
-
-/** "expense_claim" → "Expense claims" (`query::canvas::schema_title`). */
-export function schemaTitle(schema: string): string {
-  const words = label(schema);
-  return words.endsWith('s') ? words : `${words}s`;
 }
 
 /** The idle shell of a records card the island places (`buildGroup`); `refreshRecords` fills it. */
@@ -78,6 +70,17 @@ export function buildRecordsCard(document_: Document, card: RecordsCardJson): HT
   el(document_, 'p', { class: 'cv-records-provenance', 'data-provenance': '' }),
   el(document_, 'p', { class: 'cv-outcome', role: 'status', 'data-outcome': '' }));
   return node;
+}
+
+/**
+ * APP-113: records with a decision in flight in this page. A live refresh
+ * redraws the rows; their buttons stay disabled until the decision settles,
+ * so a second click cannot send a second decision.
+ */
+const deciding = new Set<string>();
+
+function rowButtons(card: HTMLElement, record: string): HTMLButtonElement[] {
+  return Array.from(card.querySelectorAll<HTMLButtonElement>(`tr[data-record="${CSS.escape(record)}"] button`));
 }
 
 function valueOf(record: RecordJson, field: string): RecordValueJson | undefined {
@@ -164,7 +167,8 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
           for (const to of targets) {
             const rule = record.next?.find((n) => n.to === to)?.rule;
             const button = el(document_, 'button', { type: 'button', class: positive(to) ? 'cv-approve' : 'cv-reject', 'data-decide': to, ...(rule ? { title: `Declared rule: ${rule}` } : {}) }, decisionLabel(to));
-            button.addEventListener('click', () => void decideRecord(card, listing, record, to, button));
+            button.disabled = deciding.has(record.record_id);
+            button.addEventListener('click', () => void decideRecord(card, listing, record, to));
             cell.append(button);
           }
         }
@@ -194,19 +198,20 @@ export async function refreshRecords(card: HTMLElement, live = false): Promise<v
   if (!url.startsWith('/v1/work/')) return;
   const epoch = String(Number(card.dataset.epoch ?? '0') + 1);
   card.dataset.epoch = epoch;
-  let response: Response;
+  let response: Response | null = null;
   try {
     response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
   } catch {
-    return;
+    // APP-113: a network error shows the failed state below, never "Loading…" forever.
   }
   if (card.dataset.epoch !== epoch) return;
-  const body: unknown = await response.json().catch(() => null);
+  const body: unknown = response ? await response.json().catch(() => null) : null;
   if (card.dataset.epoch !== epoch) return;
-  const listing = response.ok ? recordsJson(body) : null;
+  const listing = response?.ok ? recordsJson(body) : null;
   if (!listing) {
-    const message = response.status === 404 ? 'You do not have access to these records. Nothing is shown.' : 'The records could not be read right now.';
-    card.dataset.state = response.status === 404 ? 'denied' : 'failed';
+    const denied = response?.status === 404;
+    const message = denied ? 'You do not have access to these records. Nothing is shown.' : 'The records could not be read right now.';
+    card.dataset.state = denied ? 'denied' : 'failed';
     card.querySelector<HTMLElement>('[data-body]')?.replaceChildren(el(card.ownerDocument, 'p', { class: 'cv-message', role: 'alert' }, message));
     return;
   }
@@ -220,38 +225,47 @@ export async function refreshRecords(card: HTMLElement, live = false): Promise<v
   }
 }
 
-/** Approve or Reject: a server-minted decide draft, then the audited command route. */
-async function decideRecord(card: HTMLElement, listing: RecordsJson, record: RecordJson, to: string, button: HTMLButtonElement): Promise<void> {
+/** Approve or Reject: a server-minted decide draft, then the audited command route (once per record at a time). */
+async function decideRecord(card: HTMLElement, listing: RecordsJson, record: RecordJson, to: string): Promise<void> {
+  const id = record.record_id;
+  if (deciding.has(id)) return;
+  deciding.add(id);
   const outcome = card.querySelector<HTMLElement>('[data-outcome]');
-  const row = button.closest<HTMLElement>('tr');
-  row?.querySelectorAll<HTMLButtonElement>('button').forEach((b) => { b.disabled = true; });
+  for (const button of rowButtons(card, id)) button.disabled = true;
   if (outcome) {
     outcome.setAttribute('role', 'status');
     outcome.textContent = 'Preparing the decision…';
   }
-  let draft: Draft;
   try {
-    draft = await requestDecision(listing.app_id, listing.work_id, record.record_id, to);
-  } catch (error) {
-    if (outcome) {
-      outcome.setAttribute('role', 'alert');
-      outcome.textContent = error instanceof Error && error.message ? error.message : 'The decision could not be prepared. Nothing was changed.';
+    let draft: Draft;
+    try {
+      draft = await requestDecision(listing.app_id, listing.work_id, id, to);
+    } catch (error) {
+      if (outcome) {
+        outcome.setAttribute('role', 'alert');
+        outcome.textContent = error instanceof Error && error.message ? error.message : 'The decision could not be prepared. Nothing was changed.';
+      }
+      return;
     }
-    row?.querySelectorAll<HTMLButtonElement>('button').forEach((b) => { b.disabled = false; });
-    return;
-  }
-  if (outcome) outcome.textContent = `Committing ${label(to)}…`;
-  const result = await postDraft(draft);
-  if (!outcome) return;
-  outcome.replaceChildren();
-  if (result.kind === 'committed') {
-    outcome.setAttribute('role', 'status');
-    outcome.append(el(card.ownerDocument, 'strong', {}, `${label(to)}. `), `Record version ${result.recordVersion}, commit ${result.commit}. Audit event `, el(card.ownerDocument, 'code', {}, result.audit));
-    await refreshRecords(card, true);
-  } else {
-    outcome.setAttribute('role', 'alert');
-    outcome.append(result.message);
-    row?.querySelectorAll<HTMLButtonElement>('button').forEach((b) => { b.disabled = false; });
+    if (outcome) outcome.textContent = `Committing ${label(to)}…`;
+    const result = await postDraft(draft);
+    if (result.kind === 'committed') {
+      if (outcome) {
+        outcome.replaceChildren();
+        outcome.setAttribute('role', 'status');
+        outcome.append(el(card.ownerDocument, 'strong', {}, `${label(to)}. `), `Record version ${result.recordVersion}, commit ${result.commit}. Audit event `, el(card.ownerDocument, 'code', {}, result.audit));
+      }
+      deciding.delete(id);
+      await refreshRecords(card, true);
+    } else if (outcome) {
+      outcome.replaceChildren();
+      outcome.setAttribute('role', 'alert');
+      outcome.append(result.message);
+    }
+  } finally {
+    // The rows may have been redrawn meanwhile: re-enable the current row's buttons.
+    deciding.delete(id);
+    for (const button of rowButtons(card, id)) button.disabled = false;
   }
 }
 
@@ -261,11 +275,4 @@ export function wireRecordsCard(card: HTMLElement): void {
   card.dataset.wired = 'true';
   // Server-rendered rows carry plain buttons; the first refresh rebuilds them wired.
   void refreshRecords(card);
-}
-
-/** Every records card of a group's items. */
-export function recordsCardsOf(items: HTMLElement[]): HTMLElement[] {
-  return items
-    .map((item) => item.querySelector<HTMLElement>('.cv-records'))
-    .filter((card): card is HTMLElement => Boolean(card));
 }

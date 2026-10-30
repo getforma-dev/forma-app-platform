@@ -17,15 +17,35 @@ use crate::{
     actions::resolve,
     events::{self, Kind},
 };
-use std::sync::Arc;
-use tokio::sync::broadcast::error::RecvError;
+use std::{future::Future, sync::Arc};
+use tokio::sync::{broadcast::error::RecvError, Semaphore};
 
 /// Announcements remembered per process before the set is reset.
 const MAX_NOTIFIED: usize = 8192;
+/// Events judged at once (review: one task per event was unbounded; past
+/// this the loop waits, and the hub's buffer then reports a lag).
+const MAX_CONCURRENT: usize = 8;
+
+/// Spawns `task` once one of `permits` is free, holding it until the task
+/// ends; false when the semaphore is closed.
+async fn spawn_bounded<F>(permits: &Arc<Semaphore>, task: F) -> bool
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    let Ok(permit) = permits.clone().acquire_owned().await else {
+        return false;
+    };
+    tokio::spawn(async move {
+        task.await;
+        drop(permit);
+    });
+    true
+}
 
 /// Subscribes to the hub for the life of the process.
 pub fn spawn(state: Arc<Slack>) {
     let mut receiver = events::hub().subscribe();
+    let permits = Arc::new(Semaphore::new(MAX_CONCURRENT));
     tokio::spawn(async move {
         loop {
             match receiver.recv().await {
@@ -33,9 +53,12 @@ pub fn spawn(state: Arc<Slack>) {
                     let event = announcement.event;
                     if matches!(event.kind, Kind::RecordCommitted | Kind::AppShared) {
                         let state = state.clone();
-                        tokio::spawn(async move {
+                        let task = async move {
                             approvers(&state, &event.organization, &event.app, &event.work).await
-                        });
+                        };
+                        if !spawn_bounded(&permits, task).await {
+                            break;
+                        }
                     }
                 }
                 Err(RecvError::Lagged(skipped)) => {
@@ -110,5 +133,39 @@ pub async fn approvers(state: &Slack, organization: &str, app: &str, work: &str)
                 ),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Review: one task per event was unbounded; at most the permits run.
+    #[tokio::test]
+    async fn notifications_run_under_a_bound() {
+        let permits = Arc::new(Semaphore::new(2));
+        let gate = Arc::new(tokio::sync::Notify::new());
+        let running = Arc::new(AtomicUsize::new(0));
+        let task = || {
+            let (gate, running) = (gate.clone(), running.clone());
+            async move {
+                running.fetch_add(1, Ordering::SeqCst);
+                gate.notified().await;
+            }
+        };
+        assert!(spawn_bounded(&permits, task()).await);
+        assert!(spawn_bounded(&permits, task()).await);
+        let third = tokio::time::timeout(
+            std::time::Duration::from_millis(50),
+            spawn_bounded(&permits, task()),
+        )
+        .await;
+        assert!(third.is_err(), "the third waits for a permit");
+        tokio::task::yield_now().await;
+        assert!(running.load(Ordering::SeqCst) <= 2);
+        gate.notify_waiters();
+        assert!(spawn_bounded(&permits, task()).await);
+        gate.notify_waiters();
     }
 }

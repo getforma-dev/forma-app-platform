@@ -166,6 +166,11 @@ fn unix_seconds() -> u64 {
         .map(|d| d.as_secs())
         .unwrap_or(0)
 }
+/// Today in UTC as `YYYY-MM-DD` (the action path's default date, on every
+/// surface).
+pub fn today() -> String {
+    timestamp(unix_seconds())[..10].to_owned()
+}
 /// `YYYY-MM-DDTHH:MM:SSZ` for a Unix second (proleptic Gregorian).
 pub fn timestamp(seconds: u64) -> String {
     let days = (seconds / 86_400) as i64;
