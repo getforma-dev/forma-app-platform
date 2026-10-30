@@ -28,6 +28,8 @@ pub enum Form {
     Resend,
     SignOut,
     SignOutAll,
+    /// APP-012: the work page's run form (`POST /w/{app}/{work}`).
+    Query,
 }
 impl Form {
     fn name(self) -> &'static [u8] {
@@ -35,6 +37,7 @@ impl Form {
             Self::Resend => b"resend",
             Self::SignOut => b"signout",
             Self::SignOutAll => b"signout-all",
+            Self::Query => b"query",
         }
     }
 }

@@ -19,10 +19,12 @@ pub mod provider;
 pub mod routes;
 pub mod vault;
 
+// Crate-visible to the APP-012 query campaign, which signs members in over
+// the same routes; still compiled only into the test executable.
 #[cfg(test)]
-mod synthetic_issuer;
+pub(crate) mod synthetic_issuer;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use crate::{
     http::limits::Limiter,

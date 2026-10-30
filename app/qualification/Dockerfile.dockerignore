@@ -36,7 +36,10 @@
 !app/src/admission/validate.rs
 !app/src/admission/tests.rs
 !app/src/query/mod.rs
+!app/src/query/page.rs
 !app/src/query/receipt.rs
+!app/src/query/route_tests.rs
+!app/src/query/routes.rs
 !app/src/query/tests.rs
 !app/src/query/worker.rs
 !app/src/storage/mod.rs

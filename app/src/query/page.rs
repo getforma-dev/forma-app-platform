@@ -1,0 +1,425 @@
+//! APP-012 work page model (`GET`/`POST /w/{app}/{work}`; plan Task 9 Tier B
+//! surface). Typed presentation props for the Forma 3.2 native page
+//! `app/admin/src/work/app.tsx` and the one place a view's outcome becomes
+//! what the page shows.
+//!
+//! Every view card is in exactly one state: `idle` (not run yet), `loading`
+//! (admitted but not computed: the engine queue is full), `ready`, `empty`
+//! (a released result with no row or only unknown cells), `failed` or
+//! `denied`. Only `ready` and `empty` carry a receipt, and only `ready`
+//! carries a value; a failed or denied card is built from no result at all,
+//! so it can never show a number, a fabricated zero included (design §6.3,
+//! C06). Values are the engine's exact decimal strings with digit grouping;
+//! no arithmetic happens here.
+use super::{receipt::QueryReceipt, worker::WorkerResult};
+use crate::storage::{WorkOutline, WorkView};
+use axum::{
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
+};
+use forma_ir::PageProps;
+use forma_server::{PageHandle, RenderCtx};
+use serde_json::Value;
+
+/// The page's typed props (camelCase in `work/app.tsx`).
+#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+pub struct WorkProps {
+    pub title: String,
+    /// `/w/{app}/{work}`: the run form's own route.
+    pub action: String,
+    /// The synchronizer token of the run form, tied to the session cookie.
+    pub csrf: String,
+    pub window_start: String,
+    pub window_end: String,
+    pub destination: String,
+    /// The submitted parameters were refused (422); nothing ran.
+    pub form_error: bool,
+    pub views: Vec<CardProps>,
+}
+
+#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+pub struct CardProps {
+    pub id: String,
+    pub title: String,
+    pub kind: String,
+    /// One of `idle`, `loading`, `ready`, `empty`, `failed`, `denied`.
+    pub state: String,
+    pub message: String,
+    pub idle: bool,
+    pub loading: bool,
+    pub ready: bool,
+    pub empty: bool,
+    pub failed: bool,
+    pub denied: bool,
+    pub has_summary: bool,
+    pub summary: Vec<PairProps>,
+    pub has_table: bool,
+    pub columns: Vec<CellProps>,
+    pub rows: Vec<RowProps>,
+    pub has_receipt: bool,
+    pub receipt_digest: String,
+    pub receipt: Vec<PairProps>,
+    /// The receipt document exactly as the JSON route returns it.
+    pub receipt_json: String,
+}
+
+#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+pub struct PairProps {
+    pub id: String,
+    pub label: String,
+    pub value: String,
+}
+#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+pub struct CellProps {
+    pub id: String,
+    pub text: String,
+}
+#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+pub struct RowProps {
+    pub id: String,
+    pub cells: Vec<CellProps>,
+}
+
+/// Why a view has no result. None of these carries a number.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Reason {
+    /// Interrupted at the deadline, expired in the queue, or killed.
+    Deadline,
+    /// The engine failed or answered outside the protocol.
+    Engine,
+    /// The bound revision could not be fetched and verified.
+    SourceUnavailable,
+    /// The typed query is outside the qualified operator subset.
+    NotQualified,
+    /// More than one page without pagination.
+    NarrowTheQuery,
+    /// The workspace store is unavailable.
+    Store,
+}
+impl Reason {
+    fn message(self) -> &'static str {
+        match self {
+            Self::Deadline => {
+                "This result could not be computed: the query did not finish within its deadline. No number is shown."
+            }
+            Self::Engine => "This result could not be computed. No number is shown.",
+            Self::SourceUnavailable => {
+                "This result could not be computed: its source revision is not available. No number is shown."
+            }
+            Self::NotQualified => {
+                "This view uses an operation that is not qualified yet. No number is shown."
+            }
+            Self::NarrowTheQuery => {
+                "This result is larger than one page. Narrow the window. No number is shown."
+            }
+            Self::Store => {
+                "This result could not be computed: the workspace store is unavailable. No number is shown."
+            }
+        }
+    }
+}
+
+/// A view's outcome on this request.
+pub enum Outcome<'a> {
+    Idle,
+    Loading,
+    /// A released result with its receipt (`ready` or `empty` by its rows).
+    Released(&'a WorkerResult, &'a QueryReceipt),
+    Failed(Reason),
+    Denied,
+}
+
+/// Exact decimal strings gain digit grouping; anything else is unchanged.
+pub fn display(value: &str) -> String {
+    let (sign, digits) = match value.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", value),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return value.to_owned();
+    }
+    let mut grouped = String::new();
+    for (index, character) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(character);
+    }
+    format!("{sign}{grouped}")
+}
+
+fn cell_text(value: &Value) -> String {
+    match value {
+        Value::String(text) => display(text),
+        Value::Bool(flag) => flag.to_string(),
+        // An unknown cell is shown as unknown, never as zero.
+        _ => "unknown".to_owned(),
+    }
+}
+
+fn pair(id: &str, label: &str, value: String) -> PairProps {
+    PairProps {
+        id: id.to_owned(),
+        label: label.to_owned(),
+        value,
+    }
+}
+
+fn text(document: &Value, key: &str) -> String {
+    match &document[key] {
+        Value::String(value) => value.clone(),
+        Value::Null => String::new(),
+        other => other.to_string(),
+    }
+}
+
+/// The receipt inspector's rows, in a fixed order.
+pub fn receipt_rows(document: &Value) -> Vec<PairProps> {
+    let mut rows = vec![
+        pair("digest", "Receipt digest", text(document, "digest")),
+        pair("result", "Result digest", text(document, "result_digest")),
+        pair("mode", "Mode", text(document, "mode")),
+        pair("app", "App", text(document, "app_id")),
+        pair("work", "Saved work", text(document, "work_id")),
+        pair(
+            "publication",
+            "Publication",
+            text(document, "publication_id"),
+        ),
+        pair(
+            "definition",
+            "Definition digest",
+            text(document, "definition_digest"),
+        ),
+        pair("view", "View", text(document, "view_id")),
+        pair(
+            "operator",
+            "Operator version",
+            text(document, "operator_version"),
+        ),
+    ];
+    for (index, source) in document["source_revisions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        rows.push(pair(
+            &format!("source-{index}"),
+            &format!("Source revision ({})", text(source, "input_id")),
+            format!(
+                "source {} revision {} digest {}",
+                text(source, "source_id"),
+                text(source, "source_revision_id"),
+                text(source, "source_digest")
+            ),
+        ));
+    }
+    for (index, parameter) in document["parameters"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        rows.push(pair(
+            &format!("parameter-{index}"),
+            &format!("Parameter {}", text(parameter, "field_id")),
+            text(&parameter["value"], "value"),
+        ));
+    }
+    rows.extend([
+        pair(
+            "snapshot",
+            "Record snapshot sequence",
+            text(document, "record_snapshot_sequence"),
+        ),
+        pair("principal", "Principal", text(document, "principal_id")),
+        pair(
+            "membership",
+            "Membership epoch",
+            text(document, "membership_epoch"),
+        ),
+        pair("policy", "Policy epoch", text(document, "policy_epoch")),
+        pair("filter", "Filter epoch", text(document, "filter_epoch")),
+        pair(
+            "query",
+            "Query digest",
+            text(&document["provenance"], "query_digest"),
+        ),
+        pair(
+            "predicate",
+            "Effective query digest",
+            text(&document["provenance"], "predicate_digest"),
+        ),
+        pair("scope", "Total scope", text(document, "total_scope")),
+        pair("partial", "Partial", text(document, "partial")),
+        pair(
+            "truncated",
+            "Truncated page",
+            text(document, "truncated_page"),
+        ),
+    ]);
+    rows
+}
+
+/// A result with no row, or whose every cell is unknown (an aggregate over
+/// no input), is empty: it is shown as "no rows matched", never as zero.
+pub fn is_empty(result: &WorkerResult) -> bool {
+    result.rows.iter().all(|row| row.iter().all(Value::is_null))
+}
+
+/// The card of `view` for `outcome`.
+pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
+    let mut card = CardProps {
+        id: view.id.clone(),
+        title: view.title.clone(),
+        kind: view.kind.clone(),
+        ..CardProps::default()
+    };
+    let state = match outcome {
+        Outcome::Idle => {
+            card.idle = true;
+            card.message = "Not run yet. Choose a window and run the views.".into();
+            "idle"
+        }
+        Outcome::Loading => {
+            card.loading = true;
+            card.message =
+                "Waiting: the query engine is busy. Run again in a few seconds. Nothing is shown until the result is computed."
+                    .into();
+            "loading"
+        }
+        Outcome::Failed(reason) => {
+            card.failed = true;
+            card.message = reason.message().into();
+            "failed"
+        }
+        Outcome::Denied => {
+            card.denied = true;
+            card.message = "You do not have access to this result. Nothing is shown.".into();
+            "denied"
+        }
+        Outcome::Released(result, receipt) => {
+            card.has_receipt = true;
+            card.receipt_digest = receipt.digest.clone();
+            card.receipt = receipt_rows(&receipt.document);
+            card.receipt_json = serde_json::to_string_pretty(&receipt.document).unwrap_or_default();
+            if is_empty(result) {
+                card.empty = true;
+                card.message = "No rows matched this window and filter.".into();
+                "empty"
+            } else {
+                card.ready = true;
+                if view.kind == "summary" && result.rows.len() == 1 {
+                    card.has_summary = true;
+                    card.summary = result
+                        .columns
+                        .iter()
+                        .zip(&result.rows[0])
+                        .enumerate()
+                        .map(|(index, (column, value))| {
+                            pair(&format!("m{index}"), column, cell_text(value))
+                        })
+                        .collect();
+                } else {
+                    card.has_table = true;
+                    card.columns = result
+                        .columns
+                        .iter()
+                        .enumerate()
+                        .map(|(index, column)| CellProps {
+                            id: format!("c{index}"),
+                            text: column.clone(),
+                        })
+                        .collect();
+                    card.rows = result
+                        .rows
+                        .iter()
+                        .enumerate()
+                        .map(|(index, row)| RowProps {
+                            id: format!("r{index}"),
+                            cells: row
+                                .iter()
+                                .enumerate()
+                                .map(|(column, value)| CellProps {
+                                    id: format!("r{index}c{column}"),
+                                    text: cell_text(value),
+                                })
+                                .collect(),
+                        })
+                        .collect();
+                }
+                if result.truncated_page {
+                    card.message = "Showing the first page of rows.".into();
+                }
+                "ready"
+            }
+        }
+    };
+    card.state = state.into();
+    card
+}
+
+/// The form values a page shows back.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct FormValues {
+    pub window_start: String,
+    pub window_end: String,
+    pub destination: String,
+}
+
+/// The whole page.
+pub fn props(
+    outline: &WorkOutline,
+    action: String,
+    csrf: String,
+    form: &FormValues,
+    form_error: bool,
+    views: Vec<CardProps>,
+) -> WorkProps {
+    WorkProps {
+        title: outline.title.clone(),
+        action,
+        csrf,
+        window_start: form.window_start.clone(),
+        window_end: form.window_end.clone(),
+        destination: form.destination.clone(),
+        form_error,
+        views,
+    }
+}
+
+/// Renders the work page; the routes decide state and status.
+pub trait WorkPages: Send + Sync {
+    fn work(&self, props: &WorkProps) -> Response;
+}
+
+/// The Forma 3.2 native page (`work` in `admin/build.ts`), bound and
+/// finalized by the binary before it listens.
+pub struct SsrWorkPages {
+    pub page: PageHandle<WorkProps>,
+}
+impl WorkPages for SsrWorkPages {
+    /// A complete `PageResponse` (fresh nonce, CSP, `no-store`); a render
+    /// failure is counted and answered with a plain 500, never a shell.
+    fn work(&self, props: &WorkProps) -> Response {
+        match self
+            .page
+            .render(props, &RenderCtx::new().with_title(&props.title))
+        {
+            Ok(page) => page.into_response(),
+            Err(error) => {
+                tracing::error!(code = error.code(), route = "/w/{app}/{work}", "{error}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    [
+                        (header::CACHE_CONTROL, "no-store"),
+                        (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+                    ],
+                    "Internal Server Error",
+                )
+                    .into_response()
+            }
+        }
+    }
+}
