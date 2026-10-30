@@ -9,6 +9,7 @@ mod authorization;
 mod catalog;
 mod definitions;
 mod pool;
+mod queries;
 mod registry;
 mod sessions;
 
@@ -22,6 +23,9 @@ pub use definitions::{
     PublishResult, RecordSchema, SavedWork, SavedWorkDetail, WorkBinding, MAX_CANONICAL_BYTES,
 };
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
+pub use queries::{
+    parse_parameters, query_digests, Parameters, QueryRun, RunSource, QUERY_HANDLER_DEADLINE,
+};
 pub use registry::RegistryIdentity;
 pub use sessions::{
     capability_organization, capability_shaped, AdmittedMember, Completion, Ended, FlowKind,
@@ -96,5 +100,7 @@ mod managed_qualification;
 pub(crate) mod qualification;
 #[cfg(test)]
 pub(crate) mod qualification_cases;
+#[cfg(test)]
+mod query_qualification;
 #[cfg(test)]
 mod tests;

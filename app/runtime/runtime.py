@@ -1,7 +1,18 @@
 """Credential delivery and managed probes, never an HTTP/business API.
 
-Cloud operations occur only when explicitly invoking serve/refresh/probe/migrate.
-Local unit tests do not run them and cannot qualify a managed environment.
+Cloud operations occur only when explicitly invoking serve/refresh/probe/migrate
+or `cache`. Local unit tests do not run them and cannot qualify a managed
+environment.
+
+Two engine-side modes exist for APP-012 (ADR-007 D7.10), both spawned by the
+Rust binary per request and never by a member: `query` is the confined DuckDB
+engine child (`query_engine.py`: empty environment, its three pipes, one JSON
+request on stdin and one JSON line on stdout; it holds no credential and reads
+only one cached revision of one organization), and `cache` is the separate
+credentialed fetch that copies one source revision's Parquet object from the
+organization's own prefix with that organization's scoped storage credentials,
+verifies its `normalized_digest` and renames it atomically into the read-only
+revision cache. The two never run in one process.
 """
 import argparse
 import hashlib
@@ -621,8 +632,81 @@ def serve(path):
     return 0
 
 
+# --- APP-012 revision cache fetch (ADR-007 D7.10 fetch/execute separation) ---
+CACHE_REQUEST_KEYS = {"organization_id", "source_id", "revision_id", "normalized_digest", "cache_root"}
+# A Phase 1 revision is a few KiB; the design ceiling is about 1 million rows.
+MAX_REVISION_BYTES = 256 * 1024 * 1024
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+
+
+def cache_request(raw):
+    require(len(raw) <= 4096)
+    request = json.loads(raw)
+    require(isinstance(request, dict) and set(request) == CACHE_REQUEST_KEYS)
+    for key in ("organization_id", "source_id", "revision_id"):
+        require(isinstance(request[key], str) and _UUID.fullmatch(request[key]) is not None)
+    require(isinstance(request["normalized_digest"], str) and re.fullmatch(r"sha256:[0-9a-f]{64}", request["normalized_digest"]))
+    require(isinstance(request["cache_root"], str) and Path(request["cache_root"]).is_absolute())
+    return request
+
+
+def revision_key(request):
+    """ADR-009 B1: the normalized object of one revision under its organization's prefix."""
+    return "o/%s/s/%s/r/%s/part.parquet" % (request["organization_id"], request["source_id"], request["revision_id"])
+
+
+def fetch_revision(client, bucket, request):
+    """One bounded GetObject, digest-checked, renamed atomically into the cache."""
+    directory = Path(request["cache_root"]) / "o" / request["organization_id"]
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    metadata = directory.lstat()
+    require(stat.S_ISDIR(metadata.st_mode) and metadata.st_uid == os.geteuid() and metadata.st_mode & 0o077 == 0)
+    target = directory / ("%s.%s.parquet" % (request["source_id"], request["revision_id"]))
+    response = client.get_object(Bucket=bucket, Key=revision_key(request))
+    require(0 < int(response["ContentLength"]) <= MAX_REVISION_BYTES)
+    body = response["Body"]
+    digest = hashlib.sha256()
+    fd, temporary = tempfile.mkstemp(prefix=".fetch-", dir=directory)
+    try:
+        size = 0
+        with os.fdopen(fd, "wb") as stream:
+            while block := body.read(1024 * 1024):
+                size += len(block)
+                require(size <= MAX_REVISION_BYTES)
+                digest.update(block)
+                stream.write(block)
+            stream.flush(); os.fsync(stream.fileno())
+        require(size == int(response["ContentLength"]) and "sha256:" + digest.hexdigest() == request["normalized_digest"])
+        os.chmod(temporary, 0o400)
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary): os.unlink(temporary)
+    return {"cached": True, "bytes": size}
+
+
+def cache(path, stdin=None):
+    request = cache_request((stdin or sys.stdin.buffer).read(4097))
+    value = load(path)
+    tenants = [t for t in value["storage"]["tenants"] if t["organization_id"] == request["organization_id"]]
+    require(len(tenants) == 1)
+    tenant = tenants[0]
+    require(revision_key(request).startswith(tenant["prefix"]))
+    credentials = {"AccessKeyId": tenant["access_key_id"], "SecretAccessKey": tenant["secret_access_key"], "SessionToken": tenant["session_token"]}
+    client = scoped_session(credentials, value["storage"]["region"]).client("s3", config=sdk_config())
+    return fetch_revision(client, value["storage"]["bucket"], request)
+
+
+def query():
+    """The confined engine child; imported by path because `python3 -I` drops the script directory."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("query_engine", Path(__file__).resolve().with_name("query_engine.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.main()
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup")); parser.add_argument("--generation"); parser.add_argument("--report")
+    parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup", "query", "cache")); parser.add_argument("--generation"); parser.add_argument("--report")
     args = parser.parse_args()
     try:
         # Probe helpers launched by Rust inherit only the path and ignore it.
@@ -630,7 +714,10 @@ if __name__ == "__main__":
         # credential refresh, managed probes, migration or qualification runs.
         if args.mode != "serve": take_qualification_json(args.mode)
         path = os.environ.get("GENUI_RUNTIME_CONFIG_FILE", "/run/genui/credentials.json")
+        # The engine child answers every request with its own one JSON line.
+        if args.mode == "query": raise SystemExit(query())
         if args.mode == "refresh": refresh(path)
+        elif args.mode == "cache": print(json.dumps(cache(path)))
         elif args.mode == "probe": print(json.dumps(probe(path, args.generation)))
         elif args.mode == "migrate": migrate()
         elif args.mode == "qualify": qualification(path)

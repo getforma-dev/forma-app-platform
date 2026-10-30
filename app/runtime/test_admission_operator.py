@@ -104,6 +104,44 @@ class PureTests(unittest.TestCase):
             with self.subTest(bad=bad[0]), self.assertRaises(op.Refused):
                 op.validate(parser.parse_args(bad))
 
+    def test_source_revision_record_is_closed_and_content_derived(self):
+        # APP-012: upload-sources' record; the Northstar identity APP-077 prints.
+        northstar = "00000000-0000-4000-8000-000000000001"
+        content = "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647"
+        self.assertEqual(op.revision_id(northstar, content), "9161c1e4-27c0-4cbb-addf-eb7ce504bf45")
+        normalized = "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082"
+        good = {"organization_id": northstar, "source_id": "00000000-0000-4000-8000-00000000006e",
+                "revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45", "content_digest": content,
+                "normalized_digest": normalized, "object_digest": normalized, "row_count": 6,
+                "contract_digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64"}
+        with tempfile.TemporaryDirectory() as directory:
+            def parse(value, organization=northstar):
+                path = Path(directory) / "record.json"
+                path.write_text(json.dumps(value))
+                return op.validate(op.parser().parse_args(["register-source-revision", "--organization", organization, "--record", str(path)]))
+            self.assertEqual(parse(good).revision_record, good)
+            for change, reason in ((dict(good, extra=1), "record_refused"), (dict(good, row_count="6"), "record_refused"),
+                                   (dict(good, object_digest=content), "record_digest_refused"),
+                                   (dict(good, revision_id="00000000-0000-4000-8000-0000000000f1"), "record_revision_refused"),
+                                   (dict(good, content_digest="sha256:" + "0" * 64), "record_revision_refused"),
+                                   (dict(good, normalized_digest="sha256:XYZ"), "record_refused")):
+                with self.assertRaises(op.Refused) as refusal:
+                    parse(change)
+                self.assertEqual(str(refusal.exception), reason)
+            with self.assertRaises(op.Refused) as refusal:
+                parse(good, organization="00000000-0000-4000-8000-000000000002")
+            self.assertEqual(str(refusal.exception), "record_organization_refused")
+        parser = op.parser()
+        base = ["create-bound-work", "--organization", northstar, "--app", ORG, "--from-work", ORG, "--work", ORG,
+                "--creator", ORG, "--input", "events", "--source", ORG, "--revision", ORG]
+        with self.assertRaises(op.Refused):
+            op.validate(parser.parse_args(base))  # the new work must differ from its origin
+        base[8] = "00000000-0000-4000-8000-0000000000a2"
+        op.validate(parser.parse_args(base))
+        base[12] = "Events"
+        with self.assertRaises(op.Refused):
+            op.validate(parser.parse_args(base))
+
     def test_issue_argument_bounds(self):
         parser = op.parser()
         base = ["issue", "--organization", ORG, "--issued-by", "unit", "--grant", "source_read:" + str(uuid.uuid4())]

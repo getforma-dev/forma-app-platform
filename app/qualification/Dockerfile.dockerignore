@@ -35,6 +35,10 @@
 !app/src/admission/digest.rs
 !app/src/admission/validate.rs
 !app/src/admission/tests.rs
+!app/src/query/mod.rs
+!app/src/query/receipt.rs
+!app/src/query/tests.rs
+!app/src/query/worker.rs
 !app/src/storage/mod.rs
 !app/src/storage/admission.rs
 !app/src/storage/admission_qualification.rs
@@ -47,6 +51,8 @@
 !app/src/storage/pool.rs
 !app/src/storage/qualification.rs
 !app/src/storage/qualification_cases.rs
+!app/src/storage/queries.rs
+!app/src/storage/query_qualification.rs
 !app/src/storage/registry.rs
 !app/src/storage/sessions.rs
 !app/src/storage/tests.rs
