@@ -45,8 +45,11 @@ use std::{
 };
 use tokio::{task::JoinHandle, time::timeout};
 
-/// A record of the S05 decision collection per campaign group (client-named,
-/// as the contract's `command_request` carries one).
+/// A record of the S05 decision collection (client-named, as the contract's
+/// `command_request` carries one). Under the APP-013 M1 rule a Spend Review
+/// record takes exactly two commits (its creation, then the declared
+/// `needs_context → reviewed` transition), so each race that needs an
+/// admissible edit uses its own record.
 fn record(group: u32) -> String {
     format!("00000000-0000-4000-8000-{:012x}", 0x1400 + group)
 }
@@ -102,6 +105,14 @@ async fn work_version(fixture: &Fixture, work: &str) -> i64 {
     scalar(
         fixture,
         &format!("SELECT version FROM genui.saved_work WHERE organization_id='{ORG}' AND work_id='{work}'"),
+    )
+    .await
+}
+/// The organization's next commit sequence (D7.7): a refused command leaves it.
+async fn next_sequence(fixture: &Fixture) -> i64 {
+    scalar(
+        fixture,
+        &format!("SELECT next_commit_sequence::bigint FROM genui.organization_sequences WHERE organization_id='{ORG}'"),
     )
     .await
 }
@@ -577,22 +588,93 @@ async fn campaign() {
     assert_eq!(tally(&fixture, &r2).await, [2, 2, 2]);
     group.check("the same key with a changed payload racing an in-flight command waits on its claim, then conflicts (payload_mismatch) with the recovery view naming the committed outcome and the current values; exactly one write");
 
-    // Different keys on the same expected version: the second waits on the
-    // organization sequence, then conflicts on the moved version; its
-    // authorized recovery (a new key on the current version) commits.
-    let c = command(
+    // APP-013 M1 under race: the record has taken its only declared
+    // transition (needs_context → reviewed), so a third commit on version 2
+    // is refused. Two different keys race it: a note-only edit and the
+    // undeclared reverse transition; the second waits on the organization
+    // sequence while the first holds the record row, and both are refused.
+    let claims_before = claims(&fixture).await;
+    let sequence_before = next_sequence(&fixture).await;
+    let note_only = command(
         &s05,
         &r2,
-        &key(12),
+        &key(50),
         2,
+        1,
+        values("reviewed", "note-only third — synthetic"),
+    );
+    let reverse = command(
+        &s05,
+        &r2,
+        &key(51),
+        2,
+        1,
+        values("needs_context", "reverse third — synthetic"),
+    );
+    hooks.arm("record_lock");
+    let first = spawn_command(&stores, AUTHOR, author_epoch, &note_only);
+    paused(&hooks).await;
+    let second = spawn_command(&stores, AUTHOR, author_epoch, &reverse);
+    lock_wait(&fixture, 1).await;
+    hooks.release.notify_one();
+    assert_eq!(first.await.unwrap(), Err(Error::Denied));
+    assert_eq!(second.await.unwrap(), Err(Error::Denied));
+    let resubmitted = command(
+        &s05,
+        &r2,
+        &key(52),
+        2,
+        1,
+        values("reviewed", "B — synthetic"),
+    );
+    for third in [&note_only, &reverse, &resubmitted] {
+        problem(
+            &post(&app, &s05, &author_cookie, third).await,
+            StatusCode::NOT_FOUND,
+            "not_found",
+        );
+    }
+    assert_eq!(tally(&fixture, &r2).await, [2, 2, 2]);
+    assert_eq!(current_version(&fixture, &r2).await, 2);
+    assert_eq!(claims(&fixture).await, claims_before);
+    assert_eq!(next_sequence(&fixture).await, sequence_before);
+    group.check("APP-013 M1 under race: on a record that has taken its only declared transition (version 2, reviewed), two different keys racing a third commit on version 2 (a note-only edit and the undeclared reverse transition) serialize, the second waiting on the organization sequence row (observed) while the first holds the record row, and both are refused (Denied); on the route both and a resubmission of the current values are the uniform 404; the record keeps two revisions, outcomes and events, no claim remains and the organization sequence does not advance");
+
+    // Different keys on the same expected version: the second waits on the
+    // organization sequence, then conflicts on the moved version. A fresh
+    // record opened at version 1 (needs_context) lets both fire the
+    // transition; once the winner has, no recovery commit is admissible.
+    let r6 = record(6);
+    let opened = committed(
+        commit(
+            &stores,
+            AUTHOR,
+            author_epoch,
+            &command(
+                &s05,
+                &r6,
+                &key(53),
+                0,
+                1,
+                values("needs_context", "C/D opened — synthetic"),
+            ),
+        )
+        .await,
+    );
+    assert_eq!(opened.record_version, 1);
+    let c = command(
+        &s05,
+        &r6,
+        &key(12),
+        1,
         1,
         values("reviewed", "C — synthetic"),
     );
     let d = command(
         &s05,
-        &r2,
+        &r6,
         &key(13),
-        2,
+        1,
         1,
         values("reviewed", "D — synthetic"),
     );
@@ -603,81 +685,95 @@ async fn campaign() {
     lock_wait(&fixture, 1).await;
     hooks.release.notify_one();
     let oc = committed(first.await.unwrap());
-    assert_eq!(oc.record_version, 3);
+    assert_eq!(oc.record_version, 2);
     let view = conflict(second.await.unwrap());
     assert_eq!(view.reason, ConflictReason::ExpectedVersion);
     assert_eq!(
         (view.expected_record_version, view.current_record_version),
-        (2, 3)
+        (1, 2)
     );
     assert_eq!(
         view.current_values,
         Some(values("reviewed", "C — synthetic"))
     );
     assert!(view.stored_outcome.is_none());
-    assert_eq!(tally(&fixture, &r2).await, [3, 3, 3]);
+    assert_eq!(tally(&fixture, &r6).await, [2, 2, 2]);
+    let claims_before = claims(&fixture).await;
     let recovered = command(
         &s05,
-        &r2,
+        &r6,
         &key(14),
         view.current_record_version,
         1,
         values("reviewed", "D — synthetic"),
     );
-    let od = committed(commit(&stores, AUTHOR, author_epoch, &recovered).await);
-    assert_eq!(od.record_version, 4);
     assert_eq!(
-        commit(&stores, AUTHOR, author_epoch, &d).await.map(|r| matches!(r, CommandResult::Conflict(v) if v.reason == ConflictReason::ExpectedVersion && v.current_record_version == 4)),
+        commit(&stores, AUTHOR, author_epoch, &recovered).await,
+        Err(Error::Denied)
+    );
+    problem(
+        &post(&app, &s05, &author_cookie, &recovered).await,
+        StatusCode::NOT_FOUND,
+        "not_found",
+    );
+    assert_eq!(
+        commit(&stores, AUTHOR, author_epoch, &d).await.map(|r| matches!(r, CommandResult::Conflict(v) if v.reason == ConflictReason::ExpectedVersion && v.current_record_version == 2)),
         Ok(true)
     );
-    assert_eq!(tally(&fixture, &r2).await, [4, 4, 4]);
-    group.check("two different keys expecting version 2 race: the second waits on the organization sequence row, then conflicts (expected 2, current 3, the winner's values, no stored outcome) without writing; its authorized recovery on version 3 under a new key commits version 4, and the stale edit stays a conflict");
+    assert_eq!(tally(&fixture, &r6).await, [2, 2, 2]);
+    assert_eq!(claims(&fixture).await, claims_before);
+    group.check("two different keys expecting version 1 (needs_context) race to fire the record's transition: the second waits on the organization sequence row (observed), then conflicts (expected 1, current 2, the winner's values, no stored outcome) without writing; the recovery view shows the transition taken, so a recovery on version 2 under a new key is refused (Denied in storage, the uniform 404 on the route; no declared transition is left to fire) and the stale edit stays a conflict; the record keeps two revisions, outcomes and events");
 
     // The same races through the route while the first command holds its
     // locks past lock_timeout: 409 in_flight with Retry-After, never 503.
+    // Each race is on a fresh record (E creates one; F and G race to create
+    // another, and G's recovery fires that record's transition).
+    let r7 = record(7);
     let e = command(
         &s05,
-        &r2,
+        &r7,
         &key(15),
-        4,
+        0,
         1,
-        values("reviewed", "E — synthetic"),
+        values("needs_context", "E — synthetic"),
     );
     hooks.arm("record_lock");
     let first = spawn_command(&stores, AUTHOR, author_epoch, &e);
     paused(&hooks).await;
     let reply = post(&app, &s05, &author_cookie, &e).await;
     problem(&reply, StatusCode::CONFLICT, "in_flight");
-    assert_eq!(tally(&fixture, &r2).await, [4, 4, 4]);
+    assert_eq!(tally(&fixture, &r7).await, [0, 0, 0]);
     hooks.release.notify_one();
     let oe = committed(first.await.unwrap());
-    assert_eq!(oe.record_version, 5);
+    assert_eq!(oe.record_version, 1);
     let retried = ok(&post(&app, &s05, &author_cookie, &e).await);
     assert_eq!(retried, oe.document());
+    let r8 = record(8);
     let f = command(
         &s05,
-        &r2,
+        &r8,
         &key(16),
-        5,
+        0,
         1,
-        values("reviewed", "F — synthetic"),
+        values("needs_context", "F — synthetic"),
     );
     let g = command(
         &s05,
-        &r2,
+        &r8,
         &key(17),
-        5,
+        0,
         1,
-        values("reviewed", "G — synthetic"),
+        values("needs_context", "G — synthetic"),
     );
     hooks.arm("record_lock");
     let first = spawn_command(&stores, AUTHOR, author_epoch, &f);
     paused(&hooks).await;
     let reply = post(&app, &s05, &author_cookie, &g).await;
     problem(&reply, StatusCode::CONFLICT, "in_flight");
+    assert_eq!(tally(&fixture, &r8).await, [0, 0, 0]);
     hooks.release.notify_one();
     let of = committed(first.await.unwrap());
-    assert_eq!(of.record_version, 6);
+    assert_eq!(of.record_version, 1);
     let reply = post(&app, &s05, &author_cookie, &g).await;
     problem(&reply, StatusCode::CONFLICT, "conflict");
     let view = reply.json()["recovery_view"].clone();
@@ -686,22 +782,29 @@ async fn campaign() {
             view["reason"].as_str(),
             view["current_record_version"].as_i64()
         ),
-        (Some("expected_version"), Some(6))
+        (Some("expected_version"), Some(1))
+    );
+    assert_eq!(
+        view["current_values"],
+        values("needs_context", "F — synthetic")
     );
     let recovered = command(
         &s05,
-        &r2,
+        &r8,
         &key(18),
-        6,
+        1,
         1,
         values("reviewed", "G — synthetic"),
     );
     assert_eq!(
         ok(&post(&app, &s05, &author_cookie, &recovered).await)["record_version"],
-        7
+        2
     );
-    assert_eq!(tally(&fixture, &r2).await, [7, 7, 7]);
-    group.check("on the route, the same key behind a command holding its claim and a different key behind its sequence lock each wait past lock_timeout and answer 409 in_flight with Retry-After: 2 (never 503) with nothing written; after the holder commits, the same key returns its outcome (200) and the different key conflicts (409 expected_version) until its authorized recovery commits; seven intended writes, seven revisions, outcomes and events");
+    assert_eq!(tally(&fixture, &r2).await, [2, 2, 2]);
+    assert_eq!(tally(&fixture, &r6).await, [2, 2, 2]);
+    assert_eq!(tally(&fixture, &r7).await, [1, 1, 1]);
+    assert_eq!(tally(&fixture, &r8).await, [2, 2, 2]);
+    group.check("on the route, the same key behind a command holding its claim and a different key behind its sequence lock each wait past lock_timeout and answer 409 in_flight with Retry-After: 2 (never 503) with nothing written; after the holder commits, the same key returns its outcome (200) and the different key conflicts (409 expected_version, current version 1 with the winner's values) until its authorized recovery on version 1 commits the record's transition (version 2); seven intended writes in the group, matched by exactly seven revisions, outcomes and events (two, two, one and two on its four records)");
     group.close(&mut groups);
 
     // ===================================================================
@@ -841,27 +944,29 @@ async fn campaign() {
         ok(&get_outcome(&app, &s05, &author_cookie, &key(20)).await),
         author_document
     );
-    // An in-flight claim of one principal never blocks or answers another's.
+    // An in-flight claim of one principal never blocks or answers another's
+    // (on a fresh record: r3 has taken its transition, APP-013 M1).
+    let r9 = record(9);
     let k21 = command(
         &s05,
-        &r3,
+        &r9,
         &key(21),
-        2,
+        0,
         1,
-        values("reviewed", "author in flight — synthetic"),
+        values("needs_context", "author in flight — synthetic"),
     );
     hooks.arm("outcome");
     let author_in_flight = spawn_command(&stores, AUTHOR, author_epoch, &k21);
     paused(&hooks).await;
     let mut reviewer_k21 = k21.clone();
-    reviewer_k21.values = values("reviewed", "reviewer beside — synthetic");
+    reviewer_k21.values = values("needs_context", "reviewer beside — synthetic");
     let orr = committed(commit(&stores, REVIEWER, reviewer_epoch, &reviewer_k21).await);
-    assert_eq!(orr.record_version, 3);
+    assert_eq!((orr.principal.as_str(), orr.record_version), (REVIEWER, 1));
     hooks.release.notify_one();
     let view = conflict(author_in_flight.await.unwrap());
     assert_eq!(
         (view.reason, view.current_record_version),
-        (ConflictReason::ExpectedVersion, 3)
+        (ConflictReason::ExpectedVersion, 1)
     );
     assert!(view.stored_outcome.is_none());
     assert_eq!(
@@ -890,7 +995,8 @@ async fn campaign() {
         .await,
         1
     );
-    assert_eq!(tally(&fixture, &r3).await, [3, 3, 3]);
+    assert_eq!(tally(&fixture, &r3).await, [2, 2, 2]);
+    assert_eq!(tally(&fixture, &r9).await, [1, 1, 1]);
     group.check("the scope includes the principal: the reviewer's own command under the author's key string commits its own outcome and each principal's lookup returns only its own; while the author's fresh claim is in flight the reviewer's same-key command neither waits nor replays it and commits, and the author's command then conflicts on the moved version with its claim released");
     group.close(&mut groups);
 
@@ -1025,14 +1131,16 @@ async fn campaign() {
     group.check("command first: while the command holds the work FOR SHARE (paused at its record lock) the adoption writer waits (observed); the command commits version 1 on work version 3, then the adoption commits version 4; the committed outcome stays recorded and its identical retry replays it (200, work_version 3), a new edit on work version 3 is 412 stale naming 4, and its recovery on version 4 commits record version 2");
 
     // The claim is the earliest fence: a command that has only claimed its key
-    // already holds the saved work's key share, so the adoption waits for it.
+    // already holds the saved work's key share, so the adoption waits for it
+    // (on a fresh record: r4 has taken its transition, APP-013 M1).
+    let r10 = record(10);
     let k37 = command(
         &s05,
-        &r4,
+        &r10,
         &key(37),
-        2,
+        0,
         4,
-        values("reviewed", "claim first — synthetic"),
+        values("needs_context", "claim first — synthetic"),
     );
     hooks.arm("outcome");
     let first = spawn_command(&stores, AUTHOR, author_epoch, &k37);
@@ -1041,13 +1149,14 @@ async fn campaign() {
     lock_wait(&fixture, 1).await;
     hooks.release.notify_one();
     let o37 = committed(first.await.unwrap());
-    assert_eq!((o37.record_version, o37.work_version), (3, 4));
+    assert_eq!((o37.record_version, o37.work_version), (1, 4));
     timeout(Duration::from_secs(5), adoption)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(work_version(&fixture, &work).await, 5);
-    assert_eq!(tally(&fixture, &r4).await, [3, 3, 3]);
+    assert_eq!(tally(&fixture, &r4).await, [2, 2, 2]);
+    assert_eq!(tally(&fixture, &r10).await, [1, 1, 1]);
     group.check("a command paused right after its claim already holds the saved work's key share: the adoption writer's FOR UPDATE waits on it (observed), the command's work fence then takes FOR SHARE ahead of the queued writer without deadlock and commits on work version 4, and the adoption commits version 5 afterwards");
     group.close(&mut groups);
     let work_now = work_version(&fixture, &work).await;
