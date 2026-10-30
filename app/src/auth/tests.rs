@@ -21,7 +21,11 @@ use super::{
     vault::AccessFailure,
     *,
 };
-use crate::http;
+use crate::{
+    commands::{self, RecordPage, RecordView},
+    http,
+    query::{self, page::WorkPages, page::WorkProps},
+};
 use axum::{
     body::{to_bytes, Body},
     extract::ConnectInfo,
@@ -64,8 +68,10 @@ fn page(text: String) -> Response {
 impl Pages for TestPages {
     fn invite(&self, v: &InviteView) -> Response {
         page(format!(
-            "page=invite;failed={};limited={}",
-            v.failed, v.limited
+            "page=invite;failed={};limited={}{}",
+            v.failed,
+            v.limited.map_or("false", |w| w.as_str()),
+            if v.unavailable { ";unavailable" } else { "" }
         ))
     }
     fn signin(&self, v: &SigninView) -> Response {
@@ -126,6 +132,127 @@ pub(crate) fn config(origin: &str) -> AuthConfig {
         ],
     }
 }
+/// APP-078 B1: the AuthConfiguration secret value the window composer writes
+/// (`window_requests.py auth-configuration`), with this fixture's identifiers:
+/// the synthetic token issuer and audience, both organizations' routes and
+/// their `ten_` bindings. The auth origin is a synthetic https origin: the
+/// cfg(test) loopback issuer speaks plain HTTP on 127.0.0.1, so the campaign
+/// substitutes its origin after loading (the one field it does not take from
+/// the delivered file).
+pub(crate) const SYNTHETIC_AUTH_ORIGIN: &str = "https://auth-synthetic.invalid";
+pub(crate) fn auth_configuration_document(registry_version: &str) -> Value {
+    json!({
+        "format": "forma:genui-auth-configuration:v1",
+        "auth_config": {
+            "schema_version": 1, "auth_origin": SYNTHETIC_AUTH_ORIGIN, "app_origin": APP_ORIGIN,
+            "issuer": ISSUER, "audience": AUDIENCE, "max_access_lifetime_seconds": 900,
+            "organizations": [
+                {"organization_id": ORG, "tenant_slug": "northstar", "client_id": "northstar-platform"},
+                {"organization_id": OTHER, "tenant_slug": "canary", "client_id": "canary-platform"},
+            ],
+        },
+        "identity_registry": {
+            "schema_version": 1, "registry_version": registry_version,
+            "bindings": [
+                {"issuer": ISSUER, "provider_tenant_id": NORTHSTAR_TENANT, "organization_id": ORG},
+                {"issuer": ISSUER, "provider_tenant_id": CANARY_TENANT, "organization_id": OTHER},
+            ],
+        },
+    })
+}
+/// The configuration as the deployment delivers it: the operator's
+/// `bind-provider-tenant` rows, the composed secret value put into the
+/// loopback Secrets Manager stand-in, materialized by the supervisor's own
+/// writer as the two private files, which the campaign's `Stores` (registry)
+/// and `AuthConfig::load` then read. Returns the loaded configuration with
+/// the loopback issuer's origin substituted, and the registry file path.
+pub(crate) fn deliver_auth_configuration(
+    fixture: &Fixture,
+    issuer_origin: &str,
+    registry_version: &str,
+) -> (
+    AuthConfig,
+    std::path::PathBuf,
+    crate::storage::admission_qualification::FakeSecret,
+) {
+    use crate::storage::admission_qualification::{operator, FakeSecret};
+    use std::os::unix::fs::PermissionsExt;
+    for (org, tenant) in [(ORG, NORTHSTAR_TENANT), (OTHER, CANARY_TENANT)] {
+        let bound = operator(
+            fixture,
+            &[
+                "bind-provider-tenant",
+                "--organization",
+                org,
+                "--issuer",
+                ISSUER,
+                "--provider-tenant",
+                tenant,
+            ],
+        );
+        assert_eq!(bound["binding"], "created", "{org}");
+        assert_eq!(
+            bound["audit_event"],
+            Value::Null,
+            "D7.8 names no binding kind"
+        );
+        // Idempotent: the same binding again is reported, never duplicated.
+        let again = operator(
+            fixture,
+            &[
+                "bind-provider-tenant",
+                "--organization",
+                org,
+                "--issuer",
+                ISSUER,
+                "--provider-tenant",
+                tenant,
+            ],
+        );
+        assert_eq!(again["binding"], "existing", "{org}");
+    }
+    let secret = FakeSecret::start_at(FakeSecret::AUTH_ARN);
+    assert_eq!(
+        secret.value(),
+        "{}",
+        "the stack's initial value: not configured"
+    );
+    secret.put(&auth_configuration_document(registry_version).to_string());
+    let directory = fixture.directory.0.join("auth-configuration");
+    std::fs::create_dir(&directory).unwrap();
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
+    secret.materialize_auth(&directory);
+    let loaded = AuthConfig::load(&directory.join("auth-config.json"))
+        .expect("the materialized file is the service's own format");
+    assert_eq!(
+        (
+            loaded.auth_origin.as_str(),
+            loaded.app_origin.as_str(),
+            loaded.callback.as_str(),
+            loaded.issuer.as_str(),
+            loaded.audience.as_str(),
+            loaded.max_access_lifetime
+        ),
+        (
+            SYNTHETIC_AUTH_ORIGIN,
+            APP_ORIGIN,
+            CALLBACK,
+            ISSUER,
+            AUDIENCE,
+            Duration::from_secs(900)
+        )
+    );
+    let expected = config(issuer_origin);
+    assert_eq!(
+        loaded.routes, expected.routes,
+        "both routes come from the delivered file"
+    );
+    let configured = AuthConfig {
+        auth_origin: issuer_origin.to_owned(),
+        ..loaded
+    };
+    (configured, directory.join("identity-registry.json"), secret)
+}
 pub(crate) fn tenants() -> Vec<Tenant> {
     vec![
         Tenant {
@@ -140,8 +267,36 @@ pub(crate) fn tenants() -> Vec<Tenant> {
         },
     ]
 }
-/// The same composition as the binary: ADR-006 routes, the uniform 404 for
-/// unknown paths and methods, the 5 s handler deadline.
+impl WorkPages for TestPages {
+    fn work(&self, v: &WorkProps) -> Response {
+        page(format!("page=work;views={}", v.views.len()))
+    }
+}
+impl RecordPage for TestPages {
+    fn record(&self, v: &RecordView) -> Response {
+        page(format!("page=record;version={}", v.version))
+    }
+}
+/// The binary's whole product router (`main.rs`): the ADR-006 routes, the
+/// APP-013 command route and record page, and the APP-012 query route and
+/// work page (no engine: a run that reaches execution answers 503), then the
+/// uniform 404 for unknown paths and methods and the 5 s handler deadline.
+pub(crate) fn full_app(auth: Arc<Auth>) -> Router {
+    let pages = Arc::new(TestPages);
+    let command_routes = Arc::new(commands::routes::Commands {
+        auth: auth.clone(),
+        page: pages.clone(),
+    });
+    let work = Arc::new(query::routes::Work::new(auth.clone(), None, pages));
+    routes::router(auth)
+        .merge(commands::routes::router(command_routes))
+        .merge(query::routes::router(work))
+        .fallback(http::fallback)
+        .method_not_allowed_fallback(http::fallback)
+        .layer(middleware::from_fn(http::deadline))
+}
+/// The ADR-006 routes alone: the uniform 404 for unknown paths and methods,
+/// the 5 s handler deadline.
 pub(crate) fn app(auth: Arc<Auth>) -> Router {
     routes::router(auth)
         .fallback(http::fallback)
@@ -1029,26 +1184,25 @@ async fn campaign() {
     assert_eq!(handles[0]["handle"], NORTHSTAR_HANDLE);
     assert_eq!(handles[1]["handle"], CANARY_HANDLE);
     check(&mut checks, "operator issue-handle installs the two recorded fixture handles (digest only) with one handle.rotated event each");
-    // Fixture-only operator SQL: synthetic gatewasm bindings for both
-    // organizations, and the private registry naming the same pairs.
-    fixture.sql(&format!("INSERT INTO genui.provider_tenant_bindings VALUES ('{ORG}','{ISSUER}','{NORTHSTAR_TENANT}',true),('{OTHER}','{ISSUER}','{CANARY_TENANT}',true)"), "genui");
-    fixture.write_registry(&json!({"schema_version":1,"registry_version":"00000000-0000-4000-8000-000000000a09","bindings":[
-        {"issuer":ISSUER,"provider_tenant_id":NORTHSTAR_TENANT,"organization_id":ORG},
-        {"issuer":ISSUER,"provider_tenant_id":CANARY_TENANT,"organization_id":OTHER}]}));
-    let settings = fixture.settings();
+    // APP-078 B1: the synthetic gatewasm bindings for both organizations
+    // through the operator's own `bind-provider-tenant`, and the provider
+    // routing and registry as the deployment delivers them (the composed
+    // AuthConfiguration secret, materialized by the supervisor's writer).
+    let issuer = Issuer::start(tenants()).await;
+    let (auth_config, registry, _auth_secret) = deliver_auth_configuration(
+        &fixture,
+        &issuer.origin,
+        "00000000-0000-4000-8000-000000000a09",
+    );
+    let settings = fixture.settings_with_registry(registry);
     let hooks = settings.hooks.clone();
     let stores = Arc::new(Stores::new(settings).unwrap());
-    let issuer = Issuer::start(tenants()).await;
-    let provider = FakeProvider::start_at(&fixture, NORTHSTAR_TENANT, "provider", None);
+    check(&mut checks, "APP-078 B1: both organizations' provider tenant bindings come from `admission_operator.py bind-provider-tenant` (created once, `existing` on repeat, no audit event: D7.8's operator kinds name none), and the provider routing and closed registry come from the composed AuthConfiguration secret value put into the loopback Secrets Manager stand-in and materialized by runtime.write_auth_configuration as the two 0600 files that AuthConfig::load and the storage registry read; only the auth origin is the cfg(test) loopback issuer's (plain HTTP on 127.0.0.1) in place of the file's https origin");
+    let provider = FakeProvider::start_at(&fixture, NORTHSTAR_TENANT, "provider", None, None);
     let auth = Arc::new(
-        Auth::loopback(
-            config(&issuer.origin),
-            Some(stores.clone()),
-            Arc::new(TestPages),
-        )
-        .with_invitations(Some(
-            invite::Invitations::open(&provider.capabilities).unwrap(),
-        )),
+        Auth::loopback(auth_config, Some(stores.clone()), Arc::new(TestPages)).with_invitations(
+            Some(invite::Invitations::open(&provider.capabilities).unwrap()),
+        ),
     );
     let mut c = Campaign {
         app: app(auth.clone()),

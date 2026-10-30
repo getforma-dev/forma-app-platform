@@ -70,6 +70,72 @@ class Composer(unittest.TestCase):
         code, out, err = run('operator-task', '--outputs', str(self.outputs), '--window-id', WINDOW, '--output', str(output), *extra)
         return code, (json.loads(output.read_text()) if code == 0 else None), err
 
+    def synthetic_identifiers(self, **changes):
+        """FormaStack's private file by field name only; every value here is synthetic."""
+        origin = 'https://auth-synthetic.invalid'
+        document = {'purpose': 'synthetic test fixture', 'issuer_origin': origin, 'jwt_iss': 'syn-iss', 'jwt_aud': 'syn-audience',
+                    'access_jwks': origin + '/auth/jwks', 'ssf_jwks': origin + '/ssf/jwks', 'access_kids': ['kid-a'], 'ssf_kids': ['kid-s'],
+                    'current_signing_kid': 'kid-a', 'callback': wr.APP_ORIGIN + '/auth/callback', 'pkce': 'S256', 'par': 'required',
+                    'tenants': [{'slug': 'northstar', 'tenant_id': 'ten_00000000-0000-4000-8000-00000000a001', 'client_id': 'northstar-platform',
+                                 'genui_org_uuid': NORTHSTAR, 'users': [{'name': 'demo', 'subject': 'usr_00000000-0000-4000-8000-00000000b001', 'role': 'owner'}]},
+                                {'slug': 'canary', 'tenant_id': 'ten_00000000-0000-4000-8000-00000000a002', 'client_id': 'canary-platform',
+                                 'genui_org_uuid': CANARY, 'users': []}],
+                    'demo_passwords': 'never-read-by-the-composer', 'mail': 'never-read-by-the-composer'}
+        document.update(changes)
+        path = self.root / 'identifiers.json'
+        path.write_text(json.dumps(document))
+        return path, document
+
+    def test_auth_configuration_is_composed_from_the_identifiers_and_accepted_by_the_supervisor(self):
+        identifiers, document = self.synthetic_identifiers()
+        output = self.private / 'auth-configuration.json'
+        code, out, err = run('auth-configuration', '--identifiers', str(identifiers), '--output', str(output))
+        self.assertEqual((code, err), (0, ''), err)
+        result = json.loads(out)
+        self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+        self.assertEqual(result['organizations'], [NORTHSTAR, CANARY])
+        self.assertEqual(result['tenant_slugs'], ['northstar', 'canary'])
+        self.assertEqual(result['sha256'], hashlib.sha256(output.read_bytes()).hexdigest())
+        # Only organization ids, slugs and the digest are printed: no tenant id, client id, issuer or secret-only field.
+        for hidden in ('ten_', 'northstar-platform', 'syn-iss', 'syn-audience', 'demo_passwords', 'never-read', 'auth-synthetic.invalid'):
+            self.assertNotIn(hidden, out, hidden)
+        value = json.loads(output.read_text())
+        rt = wr.runtime_module()
+        files = rt.auth_configuration(output.read_text())
+        self.assertEqual(sorted(files), ['auth-config.json', 'identity-registry.json'])
+        config = json.loads(files['auth-config.json']); registry = json.loads(files['identity-registry.json'])
+        self.assertEqual(config, {'schema_version': 1, 'auth_origin': document['issuer_origin'], 'app_origin': wr.APP_ORIGIN, 'issuer': 'syn-iss',
+                                  'audience': 'syn-audience', 'max_access_lifetime_seconds': 900,
+                                  'organizations': [{'organization_id': NORTHSTAR, 'tenant_slug': 'northstar', 'client_id': 'northstar-platform'},
+                                                    {'organization_id': CANARY, 'tenant_slug': 'canary', 'client_id': 'canary-platform'}]})
+        self.assertEqual(registry['bindings'], [{'issuer': 'syn-iss', 'provider_tenant_id': 'ten_00000000-0000-4000-8000-00000000a001', 'organization_id': NORTHSTAR},
+                                                {'issuer': 'syn-iss', 'provider_tenant_id': 'ten_00000000-0000-4000-8000-00000000a002', 'organization_id': CANARY}])
+        self.assertEqual(registry['registry_version'], value['identity_registry']['registry_version'])
+        # Nothing beyond the routing fields reaches the output.
+        self.assertNotIn('users', output.read_text()); self.assertNotIn('demo_passwords', output.read_text()); self.assertNotIn('kid-', output.read_text())
+        # A second composition refuses to overwrite the private file.
+        self.assertEqual(run('auth-configuration', '--identifiers', str(identifiers), '--output', str(output))[0], 1)
+
+    def test_auth_configuration_refuses_disagreeing_identifiers_and_loose_directories(self):
+        cases = [dict(access_jwks='https://auth-synthetic.invalid/jwks'), dict(callback='https://beta.getforma.dev/callback'),
+                 dict(issuer_origin='http://auth-synthetic.invalid'), dict(jwt_iss=''),
+                 dict(tenants=[{'slug': 'other', 'tenant_id': 'ten_x', 'client_id': 'other', 'genui_org_uuid': '00000000-0000-4000-8000-0000000000ff'}]),
+                 dict(tenants=[{'slug': 'Northstar', 'tenant_id': 'ten_x', 'client_id': 'northstar-platform', 'genui_org_uuid': NORTHSTAR}]),
+                 dict(tenants=[{'slug': 'northstar', 'tenant_id': 'ten_x', 'client_id': 'northstar-hosted', 'genui_org_uuid': NORTHSTAR}]),
+                 dict(tenants=[])]
+        for changes in cases:
+            with self.subTest(changes=sorted(changes)):
+                identifiers, _ = self.synthetic_identifiers(**changes)
+                output = self.private / ('refused-%d.json' % len(list(self.private.iterdir())))
+                code, out, err = run('auth-configuration', '--identifiers', str(identifiers), '--output', str(output))
+                self.assertEqual((code, out), (1, ''))
+                self.assertIn('refused', err)
+                self.assertFalse(output.exists())
+        identifiers, _ = self.synthetic_identifiers()
+        loose = self.root / 'loose'; loose.mkdir(mode=0o755); loose.chmod(0o755)
+        code, _, err = run('auth-configuration', '--identifiers', str(identifiers), '--output', str(loose / 'auth.json'))
+        self.assertEqual(code, 1); self.assertIn('private directory', err)
+
     def test_issue_handle_installs_the_app009_handles(self):
         for entry in HANDLES:
             code, request, err = self.operator('--step', 'handle-' + entry['organization_id'][-1], '--override', 'admission-issue-handle',

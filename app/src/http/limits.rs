@@ -37,6 +37,27 @@ pub const INVITE_GLOBAL: &[Window] = &[per(200, 86_400)];
 /// ADR-006 resend: a 60-second per-account cooldown mirrored ahead of fAuth's
 /// own, and at most 5 per pending identity per 24 hours (D7.17).
 pub const RESEND_ACCOUNT: &[Window] = &[per(1, 60), per(5, 86_400)];
+/// APP-074 review M2 (ADR-006 amendment, callback row): `GET /auth/callback`
+/// per address class, sized at the sum of the starts that precede a
+/// legitimate return (sign-in 10/minute + invitation 5/minute; sign-in
+/// 60/hour + invitation 20/day), so no real return is refused.
+pub const CALLBACK_ADDRESS: &[Window] = &[per(15, 60), per(80, 3600)];
+/// The callback across the service: sign-in 600/hour + invitation 200/day.
+pub const CALLBACK_GLOBAL: &[Window] = &[per(800, 3600)];
+/// Failed cookie lookups (no record, an unregistered organization) on
+/// `GET /workspace` and `GET /auth/pending` per address class, at the
+/// callback's size: a legitimate browser fails a lookup at most once per
+/// arrival before its cookie is replaced.
+pub const LOOKUP_FAILURE_ADDRESS: &[Window] = &[per(15, 60), per(80, 3600)];
+
+/// Which check refused (APP-074 review m4): the index of its key in the
+/// checks, the blocking window's period, and when that window frees a slot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Blocked {
+    pub retry_after: u64,
+    pub key: usize,
+    pub period: Duration,
+}
 
 /// One key's recorded events and its retention (its longest window).
 struct Log {
@@ -54,6 +75,10 @@ impl Limiter {
     pub fn admit(&self, checks: &[(&str, &[Window])]) -> Result<(), u64> {
         self.admit_at(checks, Instant::now())
     }
+    /// `admit`, naming which key and window refused.
+    pub fn admit_blocked(&self, checks: &[(&str, &[Window])]) -> Result<(), Blocked> {
+        self.admit_blocked_at(checks, Instant::now())
+    }
     /// Test-only: forget every window (a campaign drives many outcomes for
     /// one account inside one cooldown period).
     #[cfg(test)]
@@ -64,15 +89,16 @@ impl Limiter {
     pub fn would_admit(&self, checks: &[(&str, &[Window])]) -> Result<(), u64> {
         let now = Instant::now();
         let events = self.events.lock().map_err(|_| 60u64)?;
-        Self::judge(&events, checks, now)
+        Self::judge(&events, checks, now).map_err(|blocked| blocked.retry_after)
     }
+    /// The refusal whose window frees last (the one the caller must wait for).
     fn judge(
         events: &HashMap<String, Log>,
         checks: &[(&str, &[Window])],
         now: Instant,
-    ) -> Result<(), u64> {
-        let mut wait: Option<Duration> = None;
-        for (key, windows) in checks {
+    ) -> Result<(), Blocked> {
+        let mut wait: Option<(Duration, usize, Duration)> = None;
+        for (index, (key, windows)) in checks.iter().enumerate() {
             let Some(log) = events.get(*key) else {
                 continue;
             };
@@ -85,17 +111,32 @@ impl Limiter {
                 if recent.len() >= window.limit {
                     // The oldest counted event leaves the window first.
                     let free = window.period - now.saturating_duration_since(*recent[0]);
-                    wait = Some(wait.map_or(free, |w| w.max(free)));
+                    if wait.is_none_or(|(longest, _, _)| free > longest) {
+                        wait = Some((free, index, window.period));
+                    }
                 }
             }
         }
         match wait {
-            Some(wait) => Err(wait.as_secs().max(1)),
+            Some((wait, key, period)) => Err(Blocked {
+                retry_after: wait.as_secs().max(1),
+                key,
+                period,
+            }),
             None => Ok(()),
         }
     }
     fn admit_at(&self, checks: &[(&str, &[Window])], now: Instant) -> Result<(), u64> {
-        let mut events = self.events.lock().map_err(|_| 60u64)?;
+        self.admit_blocked_at(checks, now)
+            .map_err(|blocked| blocked.retry_after)
+    }
+    fn admit_blocked_at(&self, checks: &[(&str, &[Window])], now: Instant) -> Result<(), Blocked> {
+        let full = |key: usize| Blocked {
+            retry_after: 60,
+            key,
+            period: Duration::from_secs(60),
+        };
+        let mut events = self.events.lock().map_err(|_| full(0))?;
         Self::judge(&events, checks, now)?;
         let longest =
             |windows: &[Window]| windows.iter().map(|w| w.period).max().unwrap_or_default();
@@ -106,9 +147,9 @@ impl Limiter {
                     .is_some_and(|t| now.saturating_duration_since(*t) < log.keep)
             });
         }
-        for (key, _) in checks {
+        for (index, (key, _)) in checks.iter().enumerate() {
             if !events.contains_key(*key) && events.len() >= MAX_KEYS {
-                return Err(60);
+                return Err(full(index));
             }
         }
         for (key, windows) in checks {
@@ -203,6 +244,66 @@ mod tests {
                 start + Duration::from_secs(61 * 5)
             )
             .is_err());
+    }
+
+    /// APP-074 review m4: a refusal names its key and window, the one that
+    /// frees last.
+    #[test]
+    fn a_refusal_names_the_window_that_blocked() {
+        let limiter = Limiter::default();
+        let start = Instant::now();
+        let checks = |class: &'static str| [(class, INVITE_ADDRESS), ("global", INVITE_GLOBAL)];
+        for _ in 0..5 {
+            assert!(limiter.admit_blocked_at(&checks("a"), start).is_ok());
+        }
+        let minute = limiter.admit_blocked_at(&checks("a"), start).unwrap_err();
+        assert_eq!((minute.key, minute.period), (0, Duration::from_secs(60)));
+        let mut at = start;
+        for _ in 0..3 {
+            at += Duration::from_secs(61);
+            for _ in 0..5 {
+                assert!(limiter.admit_blocked_at(&checks("a"), at).is_ok());
+            }
+        }
+        let day = limiter
+            .admit_blocked_at(&checks("a"), at + Duration::from_secs(61))
+            .unwrap_err();
+        assert_eq!((day.key, day.period), (0, Duration::from_secs(86_400)));
+        assert!(day.retry_after > 80_000);
+        // The service window: 200 a day across classes.
+        let global = Limiter::default();
+        for i in 0..200 {
+            let class = format!("c{}", i / 5);
+            assert!(global
+                .admit_blocked_at(
+                    &[(&class, INVITE_ADDRESS), ("global", INVITE_GLOBAL)],
+                    start
+                )
+                .is_ok());
+        }
+        let service = global
+            .admit_blocked_at(
+                &[("fresh", INVITE_ADDRESS), ("global", INVITE_GLOBAL)],
+                start,
+            )
+            .unwrap_err();
+        assert_eq!(
+            (service.key, service.period),
+            (1, Duration::from_secs(86_400))
+        );
+        // The callback windows hold the sum of the starts before them.
+        assert_eq!(
+            (
+                CALLBACK_ADDRESS[0].limit,
+                CALLBACK_ADDRESS[1].limit,
+                CALLBACK_GLOBAL[0].limit
+            ),
+            (
+                SIGNIN_ADDRESS[0].limit + INVITE_ADDRESS[0].limit,
+                SIGNIN_ADDRESS[1].limit + INVITE_ADDRESS[1].limit,
+                SIGNIN_GLOBAL[0].limit + INVITE_GLOBAL[0].limit
+            )
+        );
     }
 
     /// APP-009 review m4: with `MAX_KEYS` sign-in classes recorded, a new

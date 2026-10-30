@@ -7,7 +7,17 @@ import { h, mount } from '@getforma/core';
 // rendered back, and a code is never read from a URL.
 // `describedBy` names the element that explains the field: the refusal when
 // one is shown, else the help text (computed by the handler).
-type InviteProps = { failed: boolean; limited: boolean; describedBy: string };
+// APP-074 review m4: a limit names the ADR-006 window that refused it (this
+// network's minute or day, or the service's day), and an outage before any
+// code is judged (`unavailable`, status 503) is this page, never raw JSON.
+type InviteProps = {
+  failed: boolean;
+  limitMinute: boolean;
+  limitDay: boolean;
+  limitService: boolean;
+  unavailable: boolean;
+  describedBy: string;
+};
 
 function Invite(props: InviteProps) {
   return (
@@ -24,9 +34,27 @@ function Invite(props: InviteProps) {
           you for a new code.
         </p>
       ) : null}
-      {props.limited ? (
+      {props.limitMinute ? (
         <p class="notice" role="alert" id="invite-error">
-          Too many attempts from your network. Wait a few minutes, then try again.
+          Too many attempts from your network in the last minute. Wait a
+          minute, then try again.
+        </p>
+      ) : null}
+      {props.limitDay ? (
+        <p class="notice" role="alert" id="invite-error">
+          Too many attempts from your network today. Try again tomorrow, or ask
+          the person who invited you for help.
+        </p>
+      ) : null}
+      {props.limitService ? (
+        <p class="notice" role="alert" id="invite-error">
+          Too many attempts across the service today. Try again later.
+        </p>
+      ) : null}
+      {props.unavailable ? (
+        <p class="notice" role="alert" id="invite-error">
+          The invitation entry is unavailable right now. Try again in a few
+          minutes.
         </p>
       ) : null}
       <form method="post" action="/invite/validate" class="entry">
@@ -56,4 +84,7 @@ function Invite(props: InviteProps) {
 }
 
 // The native build uses Invite as its typed root and publishes no JS.
-mount(() => Invite({ failed: false, limited: false, describedBy: 'invite-help' }), '#app');
+mount(
+  () => Invite({ failed: false, limitMinute: false, limitDay: false, limitService: false, unavailable: false, describedBy: 'invite-help' }),
+  '#app',
+);

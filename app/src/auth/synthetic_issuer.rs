@@ -178,8 +178,12 @@ pub struct Counters {
     pub par_refused: AtomicUsize,
     /// Hosted registrations that created an identity.
     pub register: AtomicUsize,
-    /// Hosted registrations refused (no, foreign, used or wrong-email invitation).
+    /// Hosted registrations refused (no, foreign, used or wrong-email
+    /// invitation, or an existing account for the email).
     pub register_refused: AtomicUsize,
+    /// Hosted sign-ins refused on an invitation-bound request (not pending,
+    /// another tenant, or another email than the account's).
+    pub login_refused: AtomicUsize,
     pub exchange: AtomicUsize,
     pub refresh: AtomicUsize,
     pub logout: AtomicUsize,
@@ -341,14 +345,23 @@ impl Issuer {
         {
             return refused();
         }
+        // APP-074 review m1(b): an existing account for this email is a 409
+        // at fAuth (hosted_code.rs:407-415) with the invitation and the
+        // request untouched; it is never overwritten.
+        // (fAuth draws the subject; a test that pre-seeds one may reuse it.)
+        let mut users = self.state.users.lock().unwrap();
+        if users
+            .values()
+            .any(|(existing, _)| *existing == email.trim().to_lowercase())
+        {
+            drop(users);
+            return refused();
+        }
         invitation.state = InvitationState::Accepted;
         let par = pars.remove(&request_uri).unwrap();
         drop((pars, invitations));
-        self.state
-            .users
-            .lock()
-            .unwrap()
-            .insert(subject.into(), (email.trim().to_lowercase(), false));
+        users.insert(subject.into(), (email.trim().to_lowercase(), false));
+        drop(users);
         self.state.counters.register.fetch_add(1, Ordering::SeqCst);
         Some(self.grant(slug, par, subject))
     }
@@ -399,13 +412,45 @@ impl Issuer {
     }
     /// The hosted page: consumes the PAR handle named by an authorize URL and,
     /// for `subject`, returns the callback query `code=…&state=…`. None when
-    /// the handle is unknown, consumed, expired or for another client.
+    /// the handle is unknown, consumed, expired or for another client. On an
+    /// invitation-bound request (APP-074 review m1(a); fAuth hosted sign-in,
+    /// `hosted_code.rs:309-330` with `invitation()` at `:239-258`) the
+    /// invitation must be pending, of this tenant and for this account's
+    /// email; it is then consumed with the code. A refusal leaves the request
+    /// and the invitation untouched and is counted.
     pub fn login(&self, authorize_url: &str, subject: &str) -> Option<String> {
         let (slug, request_uri) = self.authorize_target(authorize_url)?;
-        let par = self.state.pars.lock().unwrap().remove(&request_uri)?;
+        let mut invitations = self.state.invitations.lock().unwrap();
+        let mut pars = self.state.pars.lock().unwrap();
+        let par = pars.get(&request_uri)?;
         if par.slug != slug || par.created.elapsed() > Duration::from_secs(60) {
+            pars.remove(&request_uri);
             return None;
         }
+        if let Some(token) = par.invitation.clone() {
+            let email = self
+                .state
+                .users
+                .lock()
+                .unwrap()
+                .get(subject)
+                .map(|(email, _)| email.clone());
+            let usable = invitations.get(&token).is_some_and(|invitation| {
+                invitation.slug == slug
+                    && invitation.state == InvitationState::Pending
+                    && email.as_deref() == Some(invitation.email.as_str())
+            });
+            if !usable {
+                self.state
+                    .counters
+                    .login_refused
+                    .fetch_add(1, Ordering::SeqCst);
+                return None;
+            }
+            invitations.get_mut(&token).unwrap().state = InvitationState::Accepted;
+        }
+        let par = pars.remove(&request_uri).unwrap();
+        drop((pars, invitations));
         Some(self.grant(slug, par, subject))
     }
     /// The live (unused, unrevoked) refresh tokens issued to a subject.
@@ -514,7 +559,7 @@ async fn par(
             .is_some_and(|i| i.slug == slug && i.state == InvitationState::Pending);
         if !pending {
             state.counters.par_refused.fetch_add(1, Ordering::SeqCst);
-            return error(StatusCode::BAD_REQUEST, "invalid_invitation");
+            return error(StatusCode::BAD_REQUEST, "invalid_invite_token");
         }
         state.counters.par_invited.fetch_add(1, Ordering::SeqCst);
     }

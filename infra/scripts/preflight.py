@@ -54,7 +54,7 @@ DIGEST_RE = r'877573132739\.dkr\.ecr\.us-east-1\.amazonaws\.com/[a-z0-9]+(?:[._-
 # their hashes.
 OPTIONAL_INPUTS = ('qualification_config_secret_arn', 'qualification_image_digest', 'operator_image_digest', 'operating_plan')
 # Stack parameters an older deployed template may lack; absent means disabled.
-OPTIONAL_PARAMETERS = ('QualificationConfigSecretArn', 'QualificationImageDigest', 'OperatorImageDigest')
+OPTIONAL_PARAMETERS = ('QualificationImageDigest', 'OperatorImageDigest')
 # Conservative Linux x86 price even when deploying an ARM64 image.
 TASK_HOURLY = Decimal('0.1215248')  # 2 CPU + 8 GiB + task IPv4
 FIXED_HOURLY = Decimal('0.0645')   # RDS + ALB + two ALB IPv4
@@ -104,8 +104,10 @@ def reserve(config, ledger, now):
     exact_keys(config, ['window_id', 'account', 'region', 'hostname', 'operator', 'ingress_mode', 'operator_ipv4_cidr', 'deployment_expires_at_utc', 'tls_certificate_arn', 'image_digest', 'image_architecture', 'service_desired_count', 'extra_task_hours'] + optional, 'deployment')
     plan = plan_of(config)
     rules = PLANS[plan]
-    qualification_arn = config.get('qualification_config_secret_arn', '')
-    require(isinstance(qualification_arn, str) and re.fullmatch(r'(?:|arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-[a-z0-9][a-z0-9-]{0,79}-[A-Za-z0-9]{6})', qualification_arn), 'qualification configuration must be empty or an exact approved secret ARN')
+    # APP-074 review m11: the qualification secret injection is retired (the
+    # runtime refuses it in every mode). The key is accepted only empty, so
+    # earlier disabled windows keep their exact binding.
+    require(config.get('qualification_config_secret_arn', '') == '', 'qualification configuration secret is retired; leave it empty')
     require(isinstance(config['image_digest'], str) and re.fullmatch(DIGEST_RE, config['image_digest']), 'reviewed same-account/region ECR digest required')
     # APP-075/APP-077 standalone task images: empty (no task definition) or a
     # reviewed same-account digest that is never the service image.
@@ -195,7 +197,6 @@ def reserve(config, ledger, now):
                   'OperatorIpv4Cidr': config['operator_ipv4_cidr'], 'DeploymentExpiresAtUtc': config['deployment_expires_at_utc'],
                   'TlsCertificateArn': config['tls_certificate_arn'], 'ImageDigest': config['image_digest'],
                   'ImageArchitecture': config['image_architecture'], 'ServiceDesiredCount': '0',
-                  'QualificationConfigSecretArn': qualification_arn,
                   'QualificationImageDigest': task_images['qualification_image_digest'],
                   'OperatorImageDigest': task_images['operator_image_digest']}
     return updated, {'status': 'reserved_local_plan_only', 'window_id': config['window_id'], 'input_sha256': binding,
@@ -219,7 +220,8 @@ def activate(config, report, call, clock):
     require(stack['StackStatus'] in ('CREATE_COMPLETE', 'UPDATE_COMPLETE'), 'stack must be complete before activation')
     parameters = {v['ParameterKey']: v['ParameterValue'] for v in stack['Parameters']}
     expected = report['cloudformation_parameters']
-    require(parameters.get('QualificationConfigSecretArn', '') == config.get('qualification_config_secret_arn', ''), 'deployed qualification secret differs from the reserved plan')
+    # An older deployed template may still carry the retired parameter: only empty.
+    require(parameters.get('QualificationConfigSecretArn', '') == '', 'deployed qualification secret parameter must be empty or absent')
     require(all(parameters.get(k, '' if k in OPTIONAL_PARAMETERS else None) == str(v) for k, v in expected.items()), 'deployed parameters differ from the reserved plan')
     outputs = {v['OutputKey']: v['OutputValue'] for v in stack['Outputs']}
     arn = outputs['DeploymentExpiryScheduleArn']
@@ -247,11 +249,16 @@ def activate(config, report, call, clock):
     require(containers[0]['image'] == config['image_digest'] and definition['runtimePlatform']['cpuArchitecture'] == config['image_architecture'], 'live image or architecture differs from the reserved plan')
     require(containers[0].get('entryPoint', []) == [] and containers[0].get('command', []) == [], 'live service must use the reviewed image startup')
     require(containers[0].get('environmentFiles', []) == [] and
-            not any(item['name'].startswith('GENUI_AUTH_QUALIFICATION_') for item in containers[0].get('environment', [])),
-            'live qualification configuration cannot bypass the reviewed secret channel')
-    qualification_arn = config.get('qualification_config_secret_arn', '')
-    expected_secrets = [{'name': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'valueFrom': qualification_arn}] if qualification_arn else []
-    require(containers[0].get('secrets', []) == expected_secrets, 'live qualification secret injection differs from the reserved plan')
+            not any(item['name'].startswith(('GENUI_AUTH_QUALIFICATION_', 'GENUI_PROVIDER_CAPABILIT', 'GENUI_AUTH_CONFIG', 'GENUI_IDENTITY_REGISTRY'))
+                    for item in containers[0].get('environment', [])),
+            'live qualification, capability or sign-in configuration cannot bypass the reviewed secret channel')
+    # ADR-003 amendment 2026-10-30 and APP-078 B1: exactly two injected secrets, the
+    # stack's provider capability secret and its hosted sign-in configuration, under
+    # the names runtime.py serve() consumes.
+    expected_secrets = [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': outputs['ProviderCapabilitySecretArn']},
+                        {'name': 'GENUI_AUTH_CONFIGURATION_JSON', 'valueFrom': outputs['AuthConfigurationSecretArn']}]
+    by_name = lambda entries: sorted(entries, key=lambda entry: entry['name'])
+    require(by_name(containers[0].get('secrets', [])) == by_name(expected_secrets), 'live secret injection differs from the reviewed stack')
     def current_service():
         result = call('ecs', 'describe-services', '--cluster', cluster_arn, '--services', service_arn)
         require(not result.get('failures') and len(result['services']) == 1, 'intended service is unavailable')

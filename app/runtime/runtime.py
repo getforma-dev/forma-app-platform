@@ -169,6 +169,332 @@ class EmptyIdentityRegistryFile(QualificationFile):
         super().__init__(runtime_path, payload)
 
 
+# --- provider invitation capabilities (ADR-003 amendment 2026-10-30; APP-074 review M1) ---
+#
+# The operator writes every live capability of the environment into one Secrets
+# Manager secret (provider_management.CapabilitySecret); ECS injects it into the
+# service container only, as CAPABILITIES_JSON_ENV. serve() removes it from its
+# own environment before anything else, validates it whole, writes each entry as
+# a 0600 `{organization}.{invitation}.capability` file into a fresh 0700
+# directory under the private /run/genui volume, and hands only that directory's
+# path (CAPABILITY_DIR_ENV) to the service child, whose invitation entry
+# (app/src/auth/invite.rs) reads it. The directory is removed when serve() ends.
+# A new or removed capability reaches the service at its next task start.
+CAPABILITIES_JSON_ENV = "GENUI_PROVIDER_CAPABILITIES_JSON"
+CAPABILITY_DIR_ENV = "GENUI_PROVIDER_CAPABILITY_DIR"
+CAPABILITY_FORMAT = "forma:fauth-invite-capability:v1"
+# Secrets Manager's SecretString bound; each record within the service's
+# per-file bound (invite.rs CAPABILITY_LIMIT); at most this many per environment.
+CAPABILITY_SECRET_BYTES_MAX = 65536
+CAPABILITY_RECORD_BYTES_MAX = 4096
+CAPABILITIES_MAX = 128
+CAPABILITY_RECORD_KEYS = frozenset({"format", "organization_id", "invitation_id", "remote_invitation_id", "provider_expires_at",
+                                    "invite_token"})
+_CAPABILITY_UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+_CAPABILITY_ID = re.compile(r"(%s)\.(%s)" % (_CAPABILITY_UUID, _CAPABILITY_UUID))
+_PROVIDER_ID = re.compile(r"tinv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+_CAPABILITY_EXPIRY = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+_CODE_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def capability_record_bytes(record):
+    """One capability's file bytes, exactly as the service reads them."""
+    return json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def check_capability(capability_id, record):
+    """One entry of the capability map: its id names the record's organization and invitation."""
+    match = _CAPABILITY_ID.fullmatch(capability_id) if isinstance(capability_id, str) else None
+    require(match is not None and isinstance(record, dict))
+    require(set(record) in (CAPABILITY_RECORD_KEYS, CAPABILITY_RECORD_KEYS | {"code_digest"}))
+    require(record["format"] == CAPABILITY_FORMAT and record["organization_id"] == match.group(1)
+            and record["invitation_id"] == match.group(2))
+    for name in ("remote_invitation_id", "invite_token"):
+        require(isinstance(record[name], str) and _PROVIDER_ID.fullmatch(record[name]) is not None)
+    require(record["remote_invitation_id"] != record["invite_token"])
+    require(isinstance(record["provider_expires_at"], str) and _CAPABILITY_EXPIRY.fullmatch(record["provider_expires_at"]) is not None)
+    require("code_digest" not in record
+            or (isinstance(record["code_digest"], str) and _CODE_DIGEST.fullmatch(record["code_digest"]) is not None))
+    require(len(capability_record_bytes(record)) <= CAPABILITY_RECORD_BYTES_MAX)
+    return record
+
+
+def _unique_object(pairs):
+    require(len({key for key, _ in pairs}) == len(pairs))
+    return dict(pairs)
+
+
+def capability_map(text):
+    """The whole secret, validated whole: a JSON object of at most CAPABILITIES_MAX entries keyed by
+    `{organization}.{invitation}`. Any malformed entry refuses the whole map (never a partial set)."""
+    require(isinstance(text, str) and len(text.encode("utf-8")) <= CAPABILITY_SECRET_BYTES_MAX)
+    value = json.loads(text, object_pairs_hook=_unique_object)
+    require(isinstance(value, dict) and len(value) <= CAPABILITIES_MAX)
+    return {key: check_capability(key, record) for key, record in value.items()}
+
+
+def write_capabilities(directory, text):
+    """Write each entry of the capability map as a 0600 file into `directory`, an existing 0700
+    directory of this user (never a link), refusing any existing name. Returns the names written."""
+    capabilities = capability_map(text)
+    directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    written = []
+    try:
+        info = os.fstat(directory_fd)
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) == 0o700)
+        for capability_id, record in sorted(capabilities.items()):
+            name = capability_id + ".capability"
+            descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600,
+                                 dir_fd=directory_fd)
+            written.append(name)
+            try:
+                os.fchmod(descriptor, 0o600)
+                os.write(descriptor, capability_record_bytes(record))
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+    return written
+
+
+class CapabilityDirectory:
+    """A fresh 0700 directory under the private runtime volume holding the injected capabilities;
+    close() removes it and the capability files in it."""
+    PREFIX = "provider-capabilities-"
+
+    def __init__(self, runtime_path, text):
+        parent = Path(runtime_path).parent
+        info = parent.lstat()
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and info.st_mode & 0o077 == 0)
+        self.path = Path(tempfile.mkdtemp(prefix=self.PREFIX, dir=parent))
+        try:
+            os.chmod(self.path, 0o700)
+            write_capabilities(str(self.path), text)
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        if self.path is None:
+            return
+        try:
+            for name in os.listdir(self.path):
+                if name.endswith(".capability"):
+                    Path(self.path, name).unlink(missing_ok=True)
+            self.path.rmdir()
+        except FileNotFoundError:
+            pass
+        finally:
+            self.path = None
+
+
+def take_capability_injection():
+    """Remove the injected capability secret from this process's environment (every mode), so no
+    later child can inherit it. Only serve() uses the value."""
+    return os.environ.pop(CAPABILITIES_JSON_ENV, None)
+
+
+# --- hosted sign-in configuration (APP-078 B1; ADR-006 routing, ADR-007 D7.2) ---
+#
+# The service reads its provider routing (AUTH_CONFIG_FILE_ENV, app/src/auth/mod.rs)
+# and the closed identity registry (IDENTITY_REGISTRY_FILE_ENV, app/src/storage/
+# registry.rs) from private files, and the task's root filesystem is read-only, so
+# the deployment delivers both through one Secrets Manager secret per environment
+# (`AuthConfiguration` in infra/src/stack.ts), injected into the service container
+# only as AUTH_CONFIGURATION_JSON_ENV. Nothing in it is secret beyond what ADR-006
+# allows in a client configuration: the auth origin, the token issuer and audience,
+# per-organization tenant slugs and public client ids, and the `ten_` -> organization
+# bindings. serve() removes it from its own environment first, validates the whole
+# document with the service's own bounds, writes `auth-config.json` and
+# `identity-registry.json` as 0600 files into a fresh 0700 directory under the
+# private /run/genui volume, and hands only those two paths to the service child.
+# The initial value `{}` means "not configured": the child starts as before, with
+# no routing and the private deny-all registry. A new value reaches the service at
+# its next task start (force a new deployment after PutSecretValue).
+AUTH_CONFIGURATION_JSON_ENV = "GENUI_AUTH_CONFIGURATION_JSON"
+AUTH_CONFIG_FILE_ENV = "GENUI_AUTH_CONFIG_FILE"
+AUTH_CONFIGURATION_FORMAT = "forma:genui-auth-configuration:v1"
+AUTH_CONFIG_FILE_NAME = "auth-config.json"
+IDENTITY_REGISTRY_FILE_NAME = "identity-registry.json"
+# Secrets Manager's SecretString bound; each document within the service's own
+# 16 KiB file limit (auth CONFIG_LIMIT, registry private_bytes); at most 32
+# organizations and 32 bindings, as the service decodes.
+AUTH_CONFIGURATION_BYTES_MAX = 65536
+AUTH_DOCUMENT_BYTES_MAX = 16384
+AUTH_ORGANIZATIONS_MAX = 32
+AUTH_CONFIG_KEYS = frozenset({"schema_version", "auth_origin", "app_origin", "issuer", "audience",
+                              "max_access_lifetime_seconds", "organizations"})
+AUTH_ROUTE_KEYS = frozenset({"organization_id", "tenant_slug", "client_id"})
+IDENTITY_REGISTRY_KEYS = frozenset({"schema_version", "registry_version", "bindings"})
+IDENTITY_BINDING_KEYS = frozenset({"issuer", "provider_tenant_id", "organization_id"})
+_TENANT_SLUG = re.compile(r"[a-z0-9-]{1,64}")
+_CLIENT_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
+_VALID_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+def _graphic(value, bound):
+    """`bounded`/`label` in the service: 1..bound bytes, every one printable ASCII, no space."""
+    return isinstance(value, str) and 1 <= len(value) <= bound and all(0x21 <= ord(ch) <= 0x7E for ch in value)
+
+
+def _exact_origin(value):
+    """The service's `exact_origin`: an https origin whose ASCII serialization is the value itself."""
+    if not isinstance(value, str) or not value.isascii():
+        return False
+    from urllib.parse import urlsplit
+    try:
+        url = urlsplit(value)
+        port = url.port
+    except ValueError:
+        return False
+    if url.scheme != "https" or not url.hostname or url.username is not None or url.password is not None \
+            or url.path or url.query or url.fragment:
+        return False
+    return value == "https://%s%s" % (url.hostname, "" if port in (None, 443) else ":%d" % port)
+
+
+def _organizations_of(entries, keys):
+    seen = []
+    for entry in entries:
+        require(isinstance(entry, dict) and set(entry) == keys)
+        require(isinstance(entry["organization_id"], str) and _VALID_ID.fullmatch(entry["organization_id"]) is not None)
+        seen.append(entry["organization_id"])
+    return seen
+
+
+def auth_config_document(value):
+    """The service's auth configuration file (`AuthConfig::decode`), checked with its bounds."""
+    require(isinstance(value, dict) and set(value) == AUTH_CONFIG_KEYS)
+    require(value["schema_version"] == 1 and _exact_origin(value["auth_origin"]) and _exact_origin(value["app_origin"]))
+    require(_graphic(value["issuer"], 512) and _graphic(value["audience"], 512))
+    lifetime = value["max_access_lifetime_seconds"]
+    require(type(lifetime) is int and 1 <= lifetime <= 86400)
+    routes = value["organizations"]
+    require(isinstance(routes, list) and 1 <= len(routes) <= AUTH_ORGANIZATIONS_MAX)
+    organizations = _organizations_of(routes, AUTH_ROUTE_KEYS)
+    require(len(set(organizations)) == len(organizations))
+    for route in routes:
+        require(isinstance(route["tenant_slug"], str) and _TENANT_SLUG.fullmatch(route["tenant_slug"]) is not None)
+        require(isinstance(route["client_id"], str) and _CLIENT_ID.fullmatch(route["client_id"]) is not None
+                and not route["client_id"].endswith("-hosted"))
+    return value
+
+
+def identity_registry_document(value):
+    """The service's closed identity registry (`Registry::load`), checked with its bounds."""
+    require(isinstance(value, dict) and set(value) == IDENTITY_REGISTRY_KEYS)
+    require(value["schema_version"] == 1)
+    require(isinstance(value["registry_version"], str) and _VALID_ID.fullmatch(value["registry_version"]) is not None)
+    bindings = value["bindings"]
+    require(isinstance(bindings, list) and len(bindings) <= AUTH_ORGANIZATIONS_MAX)
+    _organizations_of(bindings, IDENTITY_BINDING_KEYS)
+    pairs = set()
+    for binding in bindings:
+        require(_graphic(binding["issuer"], 256) and _graphic(binding["provider_tenant_id"], 128))
+        pair = (binding["issuer"], binding["provider_tenant_id"])
+        require(pair not in pairs)
+        pairs.add(pair)
+    return value
+
+
+def document_bytes(document):
+    """One file's bytes, exactly as the service reads them."""
+    return json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def auth_configuration(text):
+    """The whole injected secret, validated whole: `{}` (not configured) gives None; otherwise the
+    two documents the service reads, consistent with each other (the registry binds exactly the
+    routed organizations, every binding under the configured token issuer), as file bytes."""
+    require(isinstance(text, str) and len(text.encode("utf-8")) <= AUTH_CONFIGURATION_BYTES_MAX)
+    value = json.loads(text, object_pairs_hook=_unique_object)
+    require(isinstance(value, dict))
+    if not value:
+        return None
+    require(set(value) == {"format", "auth_config", "identity_registry"} and value["format"] == AUTH_CONFIGURATION_FORMAT)
+    config = auth_config_document(value["auth_config"])
+    registry = identity_registry_document(value["identity_registry"])
+    routed = {route["organization_id"] for route in config["organizations"]}
+    require({binding["organization_id"] for binding in registry["bindings"]} == routed)
+    require(all(binding["issuer"] == config["issuer"] for binding in registry["bindings"]))
+    files = {AUTH_CONFIG_FILE_NAME: document_bytes(config), IDENTITY_REGISTRY_FILE_NAME: document_bytes(registry)}
+    require(all(len(data) <= AUTH_DOCUMENT_BYTES_MAX for data in files.values()))
+    return files
+
+
+def write_auth_configuration(directory, text):
+    """Write the two documents as 0600 files into `directory`, an existing 0700 directory of this
+    user (never a link), refusing any existing name. Returns the names written ([] when `{}`)."""
+    files = auth_configuration(text)
+    if files is None:
+        return []
+    directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    written = []
+    try:
+        info = os.fstat(directory_fd)
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) == 0o700)
+        for name, data in sorted(files.items()):
+            descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600,
+                                 dir_fd=directory_fd)
+            written.append(name)
+            try:
+                os.fchmod(descriptor, 0o600)
+                os.write(descriptor, data)
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+    return written
+
+
+class AuthConfigurationDirectory:
+    """A fresh 0700 directory under the private runtime volume holding the two configuration files;
+    close() removes them and it."""
+    PREFIX = "auth-configuration-"
+
+    def __init__(self, runtime_path, text):
+        parent = Path(runtime_path).parent
+        info = parent.lstat()
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and info.st_mode & 0o077 == 0)
+        self.path = Path(tempfile.mkdtemp(prefix=self.PREFIX, dir=parent))
+        try:
+            os.chmod(self.path, 0o700)
+            require(write_auth_configuration(str(self.path), text) == sorted([AUTH_CONFIG_FILE_NAME, IDENTITY_REGISTRY_FILE_NAME]))
+        except BaseException:
+            self.close()
+            raise
+
+    @property
+    def config_path(self):
+        return self.path / AUTH_CONFIG_FILE_NAME
+
+    @property
+    def registry_path(self):
+        return self.path / IDENTITY_REGISTRY_FILE_NAME
+
+    def close(self):
+        if self.path is None:
+            return
+        try:
+            for name in (AUTH_CONFIG_FILE_NAME, IDENTITY_REGISTRY_FILE_NAME):
+                Path(self.path, name).unlink(missing_ok=True)
+            self.path.rmdir()
+        except FileNotFoundError:
+            pass
+        finally:
+            self.path = None
+
+
+def take_auth_configuration_injection():
+    """Remove the injected auth configuration from this process's environment (every mode), so no
+    later child can inherit it. Only serve() uses the value."""
+    return os.environ.pop(AUTH_CONFIGURATION_JSON_ENV, None)
+
+
 def load(path, now=None):
     now = int(time.time()) if now is None else now
     path = Path(path)
@@ -562,19 +888,43 @@ def cleanup(report_path):
     print(json.dumps({"run_id": run_id, "deleted_versions": len(report["cleanup"])}))
 
 
-def serve(path):
+def serve(path, capabilities=None, auth_configuration_text=None):
+    # ADR-003 amendment 2026-10-30: out of this process's environment before anything else.
+    injected = take_capability_injection()
+    capabilities = capabilities if capabilities is not None else injected
+    # APP-078 B1: the hosted sign-in configuration leaves the environment the same way.
+    injected_auth = take_auth_configuration_injection()
+    auth_configuration_text = auth_configuration_text if auth_configuration_text is not None else injected_auth
     refuse_qualification_injection()
+    # Only serve() names the capability directory, and only for the injected secret.
+    require(CAPABILITY_DIR_ENV not in os.environ)
+    # Validated whole before any file, credential or child: a malformed secret never launches.
+    auth_files = auth_configuration(auth_configuration_text) if auth_configuration_text is not None else None
+    # A configured secret is the only source of both files: a plain environment
+    # entry naming either file beside it is refused, never preferred or merged.
+    require(auth_files is None or (AUTH_CONFIG_FILE_ENV not in os.environ and IDENTITY_REGISTRY_FILE_ENV not in os.environ))
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT): signal.signal(sig, lambda *_: stop.set())
     child = None
     registry_file = None
+    capability_directory = None
+    auth_directory = None
     credentials_started = False
     try:
         Path(path).parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         child_environment = os.environ.copy()
+        if auth_files is not None:
+            auth_directory = AuthConfigurationDirectory(path, auth_configuration_text)
+            child_environment[AUTH_CONFIG_FILE_ENV] = str(auth_directory.config_path)
+            child_environment[IDENTITY_REGISTRY_FILE_ENV] = str(auth_directory.registry_path)
         if IDENTITY_REGISTRY_FILE_ENV not in child_environment:
             registry_file = EmptyIdentityRegistryFile(path)
             child_environment[IDENTITY_REGISTRY_FILE_ENV] = str(registry_file.path)
+        if capabilities is not None:
+            # A malformed secret is a terminal refusal: never a partial set, never a launch.
+            capability_directory = CapabilityDirectory(path, capabilities)
+            child_environment[CAPABILITY_DIR_ENV] = str(capability_directory.path)
+        capabilities = injected = auth_configuration_text = injected_auth = auth_files = None
         while not stop.is_set():
             try:
                 credentials_started = True
@@ -606,8 +956,16 @@ def serve(path):
                 if registry_file is not None:
                     registry_file.close()
             finally:
-                if credentials_started:
-                    Path(path).unlink(missing_ok=True)
+                try:
+                    if capability_directory is not None:
+                        capability_directory.close()
+                finally:
+                    try:
+                        if auth_directory is not None:
+                            auth_directory.close()
+                    finally:
+                        if credentials_started:
+                            Path(path).unlink(missing_ok=True)
     return 0
 
 
@@ -685,6 +1043,10 @@ def query():
 
 
 if __name__ == "__main__":
+    # ADR-003 amendment 2026-10-30: the capability secret leaves the environment in every
+    # mode, first; only serve() writes it out, for its service child alone.
+    capabilities = take_capability_injection()
+    auth_configuration_text = take_auth_configuration_injection()
     parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup", "query", "cache")); parser.add_argument("--generation"); parser.add_argument("--report")
     args = parser.parse_args()
     try:
@@ -701,7 +1063,7 @@ if __name__ == "__main__":
         elif args.mode == "migrate": migrate()
         elif args.mode == "qualify": qualification(path)
         elif args.mode == "cleanup": cleanup(args.report)
-        else: raise SystemExit(serve(path))
+        else: raise SystemExit(serve(path, capabilities, auth_configuration_text))
     except Exception:
         print("managed_dependency_operation_refused", file=sys.stderr)
         raise SystemExit(1)

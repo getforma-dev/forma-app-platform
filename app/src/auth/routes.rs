@@ -83,6 +83,48 @@ pub(crate) fn neutral_failure(auth: &Auth) -> Response {
     signin(auth, None, true)
 }
 
+/// APP-074 review M2: a cookie capability names an organization (its first
+/// 16 bytes, not a secret) that the closed registry binds for the configured
+/// issuer; anything else is refused before any database transaction.
+pub(crate) fn registered(auth: &Auth, cookie: &str) -> bool {
+    let (Some(provider), Some(stores)) = (&auth.provider, &auth.stores) else {
+        return false;
+    };
+    crate::storage::capability_organization(cookie).is_some_and(|organization| {
+        stores
+            .workspace
+            .provider_tenant(&organization, &provider.config.issuer)
+            .is_some()
+    })
+}
+/// Before a cookie lookup on `GET /workspace` or `GET /auth/pending`: the
+/// class's failed-lookup budget (429) and the registry (the uniform 404,
+/// counted as a failure), with no database work. A global budget is not
+/// applied here: checked before the lookup it would refuse every member's
+/// entry once anonymous failures spent it. `Some` is the refusal to answer.
+pub(crate) fn before_lookup(auth: &Auth, class: &str, cookie: &str) -> Option<Response> {
+    let key = format!("lookup:{class}");
+    if let Err(retry) = auth
+        .limits
+        .would_admit(&[(&key, limits::LOOKUP_FAILURE_ADDRESS)])
+    {
+        tracing::info!(outcome = "limited", "auth.cookie_lookup");
+        return Some(http::too_many_requests(retry));
+    }
+    if !registered(auth, cookie) {
+        lookup_failed(auth, class);
+        return Some(http::not_found());
+    }
+    None
+}
+/// One failed cookie lookup (no record, an unregistered organization)
+/// counted against the class.
+pub(crate) fn lookup_failed(auth: &Auth, class: &str) {
+    let _ = auth
+        .limits
+        .admit(&[(&format!("lookup:{class}"), limits::LOOKUP_FAILURE_ADDRESS)]);
+}
+
 async fn signin_page(State(auth): State<Arc<Auth>>, request: Request) -> Response {
     let hint = cookies::read(request.headers(), cookies::ORGANIZATION_HINT);
     signin(&auth, hint.as_deref().and_then(handle_action), false)
@@ -344,6 +386,29 @@ async fn arrive(auth: &Auth, cookie: &str, code: &str, state: &str) -> Result<Ar
 
 async fn callback(State(auth): State<Arc<Auth>>, request: Request) -> Response {
     let (parts, _) = request.into_parts();
+    // APP-074 review M2: redemption (ADR-003 §public entry) is limited per
+    // address class and across the service before the query, the cookie or
+    // any database work; a refusal consumes no flow, so the return can be
+    // retried after `Retry-After`.
+    let class = auth.address_class(&parts);
+    if let Err(retry) = auth.limits.admit(&[
+        (&format!("callback:{class}"), limits::CALLBACK_ADDRESS),
+        ("callback:global", limits::CALLBACK_GLOBAL),
+    ]) {
+        tracing::info!(outcome = "limited", "auth.callback");
+        let mut response = with_status(
+            auth.pages.signin(&SigninView {
+                action: None,
+                failed: true,
+            }),
+            StatusCode::TOO_MANY_REQUESTS,
+        );
+        response.headers_mut().insert(
+            header::RETRY_AFTER,
+            HeaderValue::from_str(&retry.max(1).to_string()).expect("decimal"),
+        );
+        return response;
+    }
     let failed = |auth: &Auth| {
         let mut response = neutral_failure(auth);
         add_cookie(&mut response, cookies::clear(cookies::PRELOGIN));
@@ -355,6 +420,10 @@ async fn callback(State(auth): State<Arc<Auth>>, request: Request) -> Response {
     ) else {
         return failed(&auth);
     };
+    // An organization the closed registry does not bind has no flow.
+    if !registered(&auth, &cookie) {
+        return failed(&auth);
+    }
     let arrival = arrive(&auth, &cookie, &code, &state).await;
     // One pre-access record and one workspace session per browser: a new
     // arrival replaces (destroys and revokes) the records the browser's
@@ -418,9 +487,14 @@ pub(crate) fn denied(auth: &Auth, pre_cookie: &str) -> Response {
 /// workspace store itself is unavailable or saturated (D7.9; the APP-012
 /// query routes answer the same).
 async fn workspace(State(auth): State<Arc<Auth>>, request: Request) -> Response {
-    let Some(cookie) = cookies::read(request.headers(), cookies::SESSION) else {
+    let (parts, _) = request.into_parts();
+    let Some(cookie) = cookies::read(&parts.headers, cookies::SESSION) else {
         return http::not_found();
     };
+    let class = auth.address_class(&parts);
+    if let Some(refused) = before_lookup(&auth, &class, &cookie) {
+        return refused;
+    }
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };
@@ -434,7 +508,11 @@ async fn workspace(State(auth): State<Arc<Auth>>, request: Request) -> Response 
             auth.revoke(&ended).await;
             http::not_found()
         }
-        Ok(Lookup::Absent) | Err(Error::Denied) => http::not_found(),
+        Ok(Lookup::Absent) => {
+            lookup_failed(&auth, &class);
+            http::not_found()
+        }
+        Err(Error::Denied) => http::not_found(),
         Err(_) => http::unavailable(),
     }
 }
