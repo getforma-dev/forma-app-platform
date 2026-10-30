@@ -6,6 +6,13 @@ AWS spending cap. Reservations survive failed/lost deployments and are never
 released automatically. Keep this file outside Git with the deployment inputs.
 Default mode calls no AWS API. Explicit --activate verifies the live stack and
 future stop schedule, then requests ECS desiredCount one. It never provisions.
+
+Two operating plans exist. `bounded-window` (the default; ledger schema 1) is
+ADR-003's $100/month 48-hour qualification window. `always-on-beta` (ledger
+schema 2) is Victor's approval of 2026-10-29 recorded in ADR-008: GenUI's
+always-on synthetic beta at about $150-170/month, with FormaStack's lean fAuth
+(about $33, up to $38) reserved separately. The always-on stop schedule is a
+backstop at most 32 days away, renewed with a fresh reconciled reservation.
 """
 import argparse
 import calendar
@@ -28,6 +35,26 @@ UTC = timezone.utc
 CAP = 10000
 GENUI_CAP = 7000
 MIN_VARIABLE_RESERVE = 1000
+BOUNDED, ALWAYS_ON = 'bounded-window', 'always-on-beta'
+# Closed operating plans. Caps are code, never ledger input: a ledger names its
+# plan and the plan's figures come only from the decision they cite.
+PLANS = {
+    BOUNDED: {'ledger_schema': 1, 'monthly_budget_usd': '100', 'genui_cap_cents': GENUI_CAP, 'project_cap_cents': CAP,
+              'max_expiry': timedelta(hours=48), 'decision': 'ADR-003 $100/month bounded 48-hour window'},
+    # ADR-008, "Victor's decisions of 2026-10-29 (evening)": about $150-170/month
+    # for GenUI (x86-priced) on top of FormaStack's lean fAuth (about $33, up to
+    # $38). The project cap is exactly those two approved upper figures.
+    ALWAYS_ON: {'ledger_schema': 2, 'monthly_budget_usd': '170', 'genui_cap_cents': 17000, 'project_cap_cents': 17000 + 3800,
+                'max_expiry': timedelta(days=32), 'auth_min_cents': 3300, 'auth_max_cents': 3800,
+                'decision': 'ADR-008 always-on beta: GenUI about $150-170/month plus FormaStack lean fAuth about $33 (up to $38)'},
+}
+DIGEST_RE = r'877573132739\.dkr\.ecr\.us-east-1\.amazonaws\.com/[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}'
+# Optional inputs: missing and explicitly empty (or the default plan) mean
+# disabled and are left out of the window binding, so earlier windows keep
+# their hashes.
+OPTIONAL_INPUTS = ('qualification_config_secret_arn', 'qualification_image_digest', 'operator_image_digest', 'operating_plan')
+# Stack parameters an older deployed template may lack; absent means disabled.
+OPTIONAL_PARAMETERS = ('QualificationConfigSecretArn', 'QualificationImageDigest', 'OperatorImageDigest')
 # Conservative Linux x86 price even when deploying an ARM64 image.
 TASK_HOURLY = Decimal('0.1215248')  # 2 CPU + 8 GiB + task IPv4
 FIXED_HOURLY = Decimal('0.0645')   # RDS + ALB + two ALB IPv4
@@ -66,11 +93,29 @@ def months_between(start, end):
     return result
 
 
+def plan_of(config):
+    plan = config.get('operating_plan', BOUNDED) if isinstance(config, dict) else BOUNDED
+    require(isinstance(plan, str) and plan in PLANS, 'unknown operating plan')
+    return plan
+
+
 def reserve(config, ledger, now):
-    optional = ['qualification_config_secret_arn'] if isinstance(config, dict) and 'qualification_config_secret_arn' in config else []
+    optional = [k for k in OPTIONAL_INPUTS if isinstance(config, dict) and k in config]
     exact_keys(config, ['window_id', 'account', 'region', 'hostname', 'operator', 'ingress_mode', 'operator_ipv4_cidr', 'deployment_expires_at_utc', 'tls_certificate_arn', 'image_digest', 'image_architecture', 'service_desired_count', 'extra_task_hours'] + optional, 'deployment')
+    plan = plan_of(config)
+    rules = PLANS[plan]
     qualification_arn = config.get('qualification_config_secret_arn', '')
     require(isinstance(qualification_arn, str) and re.fullmatch(r'(?:|arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-[a-z0-9][a-z0-9-]{0,79}-[A-Za-z0-9]{6})', qualification_arn), 'qualification configuration must be empty or an exact approved secret ARN')
+    require(isinstance(config['image_digest'], str) and re.fullmatch(DIGEST_RE, config['image_digest']), 'reviewed same-account/region ECR digest required')
+    # APP-075/APP-077 standalone task images: empty (no task definition) or a
+    # reviewed same-account digest that is never the service image.
+    task_images = {}
+    for key in ('qualification_image_digest', 'operator_image_digest'):
+        value = config.get(key, '')
+        require(isinstance(value, str) and re.fullmatch('(?:' + DIGEST_RE + ')?', value) is not None, key + ' must be empty or a reviewed same-account/region ECR digest')
+        require(value != config['image_digest'], key + ' must never be the service image')
+        task_images[key] = value
+    require(not task_images['qualification_image_digest'] or task_images['qualification_image_digest'] != task_images['operator_image_digest'], 'qualification and operator images must be distinct artifacts')
     require(str(uuid.UUID(config['window_id'])) == config['window_id'], 'window_id must be a canonical UUID retained across retry')
     require(config['account'] == '877573132739' and config['region'] == 'us-east-1', 'unexpected account or region')
     require(config['hostname'] == 'beta.getforma.dev', 'unexpected beta hostname')
@@ -79,14 +124,17 @@ def reserve(config, ledger, now):
     address = ipaddress.ip_network(config['operator_ipv4_cidr'], strict=True)
     require(address.version == 4 and address.prefixlen == 32 and address.network_address.is_global, 'operator address must be a real public IPv4 /32')
     expires = timestamp(config['deployment_expires_at_utc'])
-    require(now + timedelta(minutes=10) <= expires <= now + timedelta(hours=48), 'expiry must be 10 minutes to 48 hours in the future')
+    require(now + timedelta(minutes=10) <= expires <= now + rules['max_expiry'], 'expiry must be 10 minutes to %s in the future' % ('48 hours' if plan == BOUNDED else '32 days'))
     require(re.fullmatch(r'arn:aws:acm:us-east-1:877573132739:certificate/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', config['tls_certificate_arn']), 'certificate must belong to the selected account/region')
-    require(re.fullmatch(r'877573132739\.dkr\.ecr\.us-east-1\.amazonaws\.com/[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}', config['image_digest']), 'reviewed same-account/region ECR digest required')
     require(config['image_architecture'] in ('ARM64', 'X86_64'), 'invalid image architecture')
     require(type(config['service_desired_count']) is int and config['service_desired_count'] in (0, 1), 'desired count must be zero or one')
     require(integer(config['extra_task_hours'], 2), 'reserve at least two additional task-hours for migration, qualification and deployment overlap')
-    exact_keys(ledger, ['schema_version', 'scope', 'months', 'windows'], 'ledger')
-    require(ledger['schema_version'] == 1 and ledger['scope'] == 'genui-beta-incremental', 'unexpected ledger scope/version')
+    if plan == BOUNDED:
+        exact_keys(ledger, ['schema_version', 'scope', 'months', 'windows'], 'ledger')
+    else:
+        exact_keys(ledger, ['schema_version', 'scope', 'operating_plan', 'months', 'windows'], 'ledger')
+        require(ledger['operating_plan'] == plan, 'ledger operating plan differs from the deployment input')
+    require(ledger['schema_version'] == rules['ledger_schema'] and ledger['scope'] == 'genui-beta-incremental', 'unexpected ledger scope/version for the operating plan')
     require(isinstance(ledger['months'], dict) and isinstance(ledger['windows'], dict), 'invalid ledger collections')
     # The same prepaid window covers migration at count zero, its /32 trial,
     # and public/count-one operation. Neither transition extends its deadline.
@@ -94,7 +142,7 @@ def reserve(config, ledger, now):
     # binding of earlier disabled windows; enabling/changing a secret is a new
     # immutable input and cannot repurpose an already reserved window.
     immutable = {k: v for k, v in config.items() if k not in ('ingress_mode', 'service_desired_count')
-                 and not (k == 'qualification_config_secret_arn' and v == '')}
+                 and not (k in OPTIONAL_INPUTS and v in ('', BOUNDED))}
     encoded = json.dumps(immutable, sort_keys=True, separators=(',', ':')).encode()
     binding = hashlib.sha256(encoded).hexdigest()
     for key, old in ledger['windows'].items():
@@ -127,28 +175,37 @@ def reserve(config, ledger, now):
         require(isinstance(entry['basis'], str) and 0 < len(entry['basis'].strip()) <= 1000, 'ledger reconciliation basis required')
         require(all(integer(entry[k]) for k in ['prior_extra_spend_cents', 'variable_reserve_cents', 'auth_spent_or_reserved_cents', 'unallocated_cents']), 'ledger cents must be nonnegative integers')
         require(entry['variable_reserve_cents'] >= MIN_VARIABLE_RESERVE, 'retain at least $10 for probes, secrets, storage, logs and requests')
-        require(entry['auth_spent_or_reserved_cents'] >= 500 and entry['unallocated_cents'] == 2500, 'retain the separate $5 auth allowance and $25 unallocated')
+        if plan == BOUNDED:
+            require(entry['auth_spent_or_reserved_cents'] >= 500 and entry['unallocated_cents'] == 2500, 'retain the separate $5 auth allowance and $25 unallocated')
+        else:
+            # FormaStack's approved lean fAuth is reserved at its quoted figure,
+            # never below "about $33" and never above its quoted $38.
+            require(rules['auth_min_cents'] <= entry['auth_spent_or_reserved_cents'] <= rules['auth_max_cents'], 'reserve FormaStack lean fAuth at its approved $33-38 figure')
         year, number = (int(x) for x in month.split('-'))
         retained = cents(FIXED_HOURLY * calendar.monthrange(year, number)[1] * 24 + FIXED_STORAGE_KEYS)
         windows = sum(w['reserved_compute_cents_by_month'].get(month, 0) for w in updated['windows'].values())
         genui = retained + windows + entry['prior_extra_spend_cents'] + entry['variable_reserve_cents']
         total = genui + entry['auth_spent_or_reserved_cents'] + entry['unallocated_cents']
-        require(genui <= GENUI_CAP and total <= CAP, 'budget exceeded for ' + month + '; reconcile prior reservations or change the reviewed operating plan')
+        require(genui <= rules['genui_cap_cents'] and total <= rules['project_cap_cents'], 'budget exceeded for ' + month + '; reconcile prior reservations or change the reviewed operating plan')
         reports[month] = {'retained_core_full_month_cents': retained, 'all_window_compute_reservations_cents': windows,
                           'prior_extra_spend_cents': entry['prior_extra_spend_cents'], 'variable_reserve_cents': entry['variable_reserve_cents'],
                           'genui_total_cents': genui, 'auth_spent_or_reserved_cents': entry['auth_spent_or_reserved_cents'],
                           'unallocated_cents': entry['unallocated_cents'], 'project_total_cents': total}
-    parameters = {'Operator': config['operator'], 'MonthlyBudgetUsd': '100', 'IngressMode': config['ingress_mode'],
+    parameters = {'Operator': config['operator'], 'MonthlyBudgetUsd': rules['monthly_budget_usd'], 'IngressMode': config['ingress_mode'],
                   'OperatorIpv4Cidr': config['operator_ipv4_cidr'], 'DeploymentExpiresAtUtc': config['deployment_expires_at_utc'],
                   'TlsCertificateArn': config['tls_certificate_arn'], 'ImageDigest': config['image_digest'],
                   'ImageArchitecture': config['image_architecture'], 'ServiceDesiredCount': '0',
-                  'QualificationConfigSecretArn': qualification_arn}
+                  'QualificationConfigSecretArn': qualification_arn,
+                  'QualificationImageDigest': task_images['qualification_image_digest'],
+                  'OperatorImageDigest': task_images['operator_image_digest']}
     return updated, {'status': 'reserved_local_plan_only', 'window_id': config['window_id'], 'input_sha256': binding,
                      'observed_at_utc': now.strftime('%Y-%m-%dT%H:%M:%SZ'), 'reused_reservation': existing is not None,
-                     'monthly_budget_cents': CAP, 'genui_allocation_cents': GENUI_CAP, 'cost_by_month': reports,
+                     'operating_plan': plan, 'decision': rules['decision'],
+                     'monthly_budget_cents': rules['project_cap_cents'], 'genui_allocation_cents': rules['genui_cap_cents'], 'cost_by_month': reports,
                      'cloudformation_parameters': parameters,
                      'limits': ['No AWS resource, certificate, image, account state or billing feed was queried.',
-                                'Scheduler requests ECS desiredCount zero; it is not a billing cap, teardown or a guarantee of timely delivery.',
+                                'Scheduler requests ECS desiredCount zero; it is not a billing cap, teardown or a guarantee of timely delivery.'
+                                + (' For the always-on beta it is a backstop that must be renewed, with a new reconciled reservation, before it fires.' if plan == ALWAYS_ON else ''),
                                 'RDS, ALB, two ALB IPv4 addresses, storage and keys remain charged after ECS stops.',
                                 'Retain this ledger across failed deployments, retries and renewed windows; never reset known spending to zero.',
                                 'Renewals, standalone tasks, actual charges above reserves and every later month need reconciliation; model spending remains zero.']}
@@ -163,7 +220,7 @@ def activate(config, report, call, clock):
     parameters = {v['ParameterKey']: v['ParameterValue'] for v in stack['Parameters']}
     expected = report['cloudformation_parameters']
     require(parameters.get('QualificationConfigSecretArn', '') == config.get('qualification_config_secret_arn', ''), 'deployed qualification secret differs from the reserved plan')
-    require(all(parameters.get(k, '' if k == 'QualificationConfigSecretArn' else None) == str(v) for k, v in expected.items()), 'deployed parameters differ from the reserved plan')
+    require(all(parameters.get(k, '' if k in OPTIONAL_PARAMETERS else None) == str(v) for k, v in expected.items()), 'deployed parameters differ from the reserved plan')
     outputs = {v['OutputKey']: v['OutputValue'] for v in stack['Outputs']}
     arn = outputs['DeploymentExpiryScheduleArn']
     prefix = 'arn:aws:scheduler:us-east-1:877573132739:schedule/'
@@ -205,7 +262,7 @@ def activate(config, report, call, clock):
         return service
     current_service()
     observed = clock()
-    require(observed + timedelta(minutes=10) <= timestamp(config['deployment_expires_at_utc']) <= observed + timedelta(hours=48), 'live expiry is too close, past or beyond the bounded window')
+    require(observed + timedelta(minutes=10) <= timestamp(config['deployment_expires_at_utc']) <= observed + PLANS[plan_of(config)]['max_expiry'], 'live expiry is too close, past or beyond the bounded window')
     # UpdateService is an immediate control-plane call after the live check,
     # never a count-one request hidden behind a slow CloudFormation deployment.
     result = call('ecs', 'update-service', '--cluster', cluster_arn, '--service', service_arn, '--desired-count', '1')
