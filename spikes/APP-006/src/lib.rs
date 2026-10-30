@@ -169,6 +169,15 @@ impl Verifier {
         Self::construct(config, false, unix_time)
     }
 
+    /// The same verifier against a plain-HTTP issuer on a loopback address
+    /// only (APP-009's synthetic issuer). Compiled solely with the non-default
+    /// `loopback-http` feature, which consumers enable as a dev-dependency
+    /// feature: release builds never contain it.
+    #[cfg(feature = "loopback-http")]
+    pub fn new_loopback_for_tests(config: Config) -> Result<Self, Refusal> {
+        Self::construct(config, true, unix_time)
+    }
+
     /// Observe counters without fetching, changing freshness or resetting the
     /// attempt budget. A concurrent operation cannot expose a partial snapshot.
     pub async fn diagnostics(&self) -> Result<Diagnostics, Refusal> {

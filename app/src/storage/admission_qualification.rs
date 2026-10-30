@@ -66,7 +66,7 @@ fn member(stores: &Stores, label: &str, principal: &str, epoch: i64) -> TrustedR
 
 /// The operator command as an operator runs it: environment-only connection
 /// settings, genui_migration (or a forged identity) over verify-full TLS.
-fn cli_command(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> Command {
+pub(crate) fn cli_command(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> Command {
     let app = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut cmd = Command::new(fixture_python());
     cmd.current_dir(app.join("runtime"))
@@ -83,7 +83,7 @@ fn cli_command(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> 
         .stderr(Stdio::piped());
     cmd
 }
-fn wait(child: Child, label: &str) -> Output {
+pub(crate) fn wait(child: Child, label: &str) -> Output {
     let end = WallInstant::now() + Duration::from_secs(45);
     let mut child = child;
     while child.try_wait().expect("operator command status").is_none() {
@@ -104,7 +104,7 @@ fn operator_as(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> 
         args[0],
     )
 }
-fn accepted(output: Output, label: &str) -> Value {
+pub(crate) fn accepted(output: Output, label: &str) -> Value {
     assert!(
         output.status.success(),
         "operator command refused: {label}: {}",
@@ -118,7 +118,7 @@ fn accepted(output: Output, label: &str) -> Value {
     assert_eq!(text.matches('\n').count(), 1, "one JSON line: {label}");
     serde_json::from_str(&text).expect("operator JSON")
 }
-pub(super) fn operator(fixture: &Fixture, args: &[&str]) -> Value {
+pub(crate) fn operator(fixture: &Fixture, args: &[&str]) -> Value {
     accepted(
         operator_as(fixture, "genui_migration", "synthetic-migration", args),
         args[0],
@@ -166,7 +166,7 @@ async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
     superuser(fixture, sql).await[0].get::<_, i64>(0)
 }
 /// Observe an actual PostgreSQL lock wait, not a sleep.
-async fn lock_wait(fixture: &Fixture, waiters: i64) {
+pub(crate) async fn lock_wait(fixture: &Fixture, waiters: i64) {
     let operator = fixture.operator().await;
     timeout(Duration::from_secs(10), async {
         loop {

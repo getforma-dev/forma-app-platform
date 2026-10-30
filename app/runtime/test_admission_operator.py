@@ -313,6 +313,48 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.cli("provision", "--organization", org, "--display-name", "again", "--issuer", ISSUER, "--provider-tenant", "ten_x", expect=1)
         self.assertEqual(self.dump(), before)
 
+    def test_handles_issue_rotate_and_retire_route_through_resolve_handle(self):
+        """APP-009 (ADR-006 §handle): only digests are stored; both handles route
+        during a rotation; the last live handle never retires; one handle.rotated
+        event per change; refusals echo no value and write nothing."""
+        org = str(uuid.uuid4())
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui.organizations VALUES (%s,'Handle test','active')", (org,))
+        self.cli("backfill", "--organization", org)
+
+        def routes(handle):
+            raw = op.normalize_handle(handle)
+            with self.connect("genui_workspace") as c:
+                found = c.execute("SELECT genui_private.resolve_handle(%s)::text", (op.handle_digest(raw),)).fetchone()[0]
+            return found
+        fixed = op.encode_handle(bytes(range(1, 17)))
+        first = self.cli("issue-handle", "--organization", org, "--handle", fixed)
+        self.assertEqual(first, {"organization_id": org, "handle": fixed, "live_handles": 1})
+        self.assertEqual(routes(fixed), org)
+        self.assertNotIn(fixed, self.dump())
+        before = self.dump()
+        p = self.cli("issue-handle", "--organization", org, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "handle_exists"})
+        p = self.cli("issue-handle", "--organization", str(uuid.uuid4()), "--handle", "NOT-A-HANDLE", expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "malformed_handle"})
+        self.assertNotIn("NOT-A-HANDLE", p.stderr)
+        self.cli("retire-handle", "--organization", org, "--handle", fixed, expect=1)
+        self.assertEqual(self.dump(), before)
+        second = self.cli("rotate-handle", "--organization", org)
+        self.assertEqual(second["live_handles"], 2)
+        self.assertEqual((routes(fixed), routes(second["handle"])), (org, org))
+        p = self.cli("rotate-handle", "--organization", org, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "rotation_in_progress"})
+        self.assertEqual(self.cli("retire-handle", "--organization", org, "--handle", fixed),
+                         {"organization_id": org, "retired": True, "live_handles": 1})
+        self.assertIsNone(routes(fixed))
+        self.assertEqual(routes(second["handle"]), org)
+        p = self.cli("retire-handle", "--organization", org, "--handle", fixed, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "handle_retired"})
+        p = self.cli("issue-handle", "--organization", str(uuid.uuid4()), "--handle", fixed, expect=1)
+        self.assertEqual(self.operator_events(org), [("handle.rotated",)] * 3)
+        self.assertEqual(self.cli("verify", "--organization", org)["verified"], True)
+
     def test_issue_prints_the_secret_once_and_stores_only_its_digest(self):
         out = self.issue("--max-redemptions", "2", "--expires-days", "7")
         code = out["code"]

@@ -1,7 +1,8 @@
-//! Tenant storage primitives, the APP-073 admission operations and the APP-010
-//! definition, publication and saved-work operations. No session
-//! adapter is implemented here; APP-009 constructs `VerifiedNonmember` inside
-//! this module from a verified provider exchange.
+//! Tenant storage primitives, the APP-073 admission operations, the APP-010
+//! definition, publication and saved-work operations and the APP-009 session
+//! records. `sessions` constructs `VerifiedNonmember` from a verified provider
+//! exchange and is the only constructor of a `TrustedRequest`, from the
+//! session row, the member's current epoch and the registry identity.
 //! A caller cannot construct a trusted request from headers or verifier strings.
 mod admission;
 mod authorization;
@@ -9,6 +10,7 @@ mod catalog;
 mod definitions;
 mod pool;
 mod registry;
+mod sessions;
 
 pub use admission::{
     code_digest, handle_digest, Admission, PendingAdmission, PendingReason, Reservation, SignOut,
@@ -21,6 +23,12 @@ pub use definitions::{
 };
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use registry::RegistryIdentity;
+pub use sessions::{
+    capability_organization, capability_shaped, AdmittedMember, Completion, Ended, FlowKind,
+    FlowRecord, FlowStart, Lookup, PreAccess, PreAccessStart, SignedOut, PRELOGIN_SECONDS,
+    PRE_ACCESS_ABSOLUTE_SECONDS, PRE_ACCESS_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS,
+    SESSION_IDLE_SECONDS,
+};
 
 use std::fmt;
 
@@ -57,6 +65,11 @@ fn require(condition: bool) -> Result<()> {
     }
 }
 
+/// A canonical contract organization identifier (configuration validation).
+pub fn valid_organization(value: &str) -> bool {
+    valid_id(value)
+}
+
 /// Canonical contract UUIDs: lowercase, RFC variant, version4 or7.
 fn valid_id(value: &str) -> bool {
     value.len() == 36
@@ -71,15 +84,17 @@ fn valid_id(value: &str) -> bool {
         && matches!(value.as_bytes()[19], b'8' | b'9' | b'a' | b'b')
 }
 
+// The Docker fixtures are crate-visible to the APP-009 session campaign
+// (`auth::tests`); still compiled only into the test executable.
 #[cfg(test)]
-mod admission_qualification;
+pub(crate) mod admission_qualification;
 #[cfg(test)]
 mod definition_qualification;
 #[cfg(test)]
 mod managed_qualification;
 #[cfg(test)]
-mod qualification;
+pub(crate) mod qualification;
 #[cfg(test)]
-mod qualification_cases;
+pub(crate) mod qualification_cases;
 #[cfg(test)]
 mod tests;

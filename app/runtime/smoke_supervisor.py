@@ -139,8 +139,10 @@ def run_mode(mode, binary, directory):
         forced = False
         status = None
         try:
-            if mode == 'malformed':
-                assert process.wait(timeout=10) != 0, 'malformed configuration was accepted'
+            if mode != 'disabled':
+                # ADR-007 D7.13 (APP-009): the release binary refuses any operator
+                # qualification configuration, valid or malformed, before binding.
+                assert process.wait(timeout=10) != 0, 'qualification configuration was accepted'
             else:
                 deadline = time.monotonic() + 15
                 while True:
@@ -157,11 +159,10 @@ def run_mode(mode, binary, directory):
                     response = error
                 with response:
                     status = response.code
-                    assert status == (303 if mode == 'injected' else 404)
+                    # The product callback without a flow: the neutral failure.
+                    assert status == 400 and response.headers.get('Location') is None
                     body = response.read()
                     assert all(value.encode() not in body for value in secret_values)
-                    if mode == 'injected':
-                        assert response.headers['Location'] == '/auth/qualification/result'
                 try:
                     opener.open(origin+'/health/ready', timeout=3)
                 except urllib.error.HTTPError as error:
@@ -185,9 +186,9 @@ def run_mode(mode, binary, directory):
         assert all(value.encode() not in output for value in secret_values), 'synthetic secret output'
         assert not any(Path(f'/proc/{pid}').exists() for pid in native_pids), 'native child remains'
         assert not list(private.iterdir()), 'owned auth/registry/credential files remain'
-        if mode == 'malformed':
-            assert b'FORMA_LISTENING' not in output and b'auth qualification configuration refused' in output
-        return {'mode':mode,'callback_status':status,'refused_before_bind':mode == 'malformed',
+        if mode != 'disabled':
+            assert b'FORMA_LISTENING' not in output and b'not part of this binary' in output
+        return {'mode':mode,'callback_status':status,'refused_before_bind':mode != 'disabled',
                 'native_environment_observed':True,'raw_secret_in_child_environment':False,
                 'private_file_modes':'0600','empty_registry_observed':True,'secret_output':False,
                 'owned_files_removed':True,'native_child_removed':True,'passed':True}

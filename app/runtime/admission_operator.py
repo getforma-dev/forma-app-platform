@@ -36,6 +36,12 @@ the provider, one run per organization at a time, attributing each remote
 invitation to at most one create (see judge_creates). Provider settings come only
 from the environment (GENUI_PROVIDER_*; the management key from a 0600 file or the
 environment, never argv).
+
+Sign-in handles (APP-009, ADR-006 §handle): `issue-handle` gives an organization
+without one its first live handle (fresh, or an exact already-issued `--handle`
+so one routing value serves every environment); `rotate-handle` adds a second
+live handle; `retire-handle` stops the old one after FormaStack re-registers the
+client's return_entry_url. Handles are non-secret routing and are printed.
 """
 import argparse
 import base64
@@ -238,6 +244,11 @@ def parser():
     q = sub.add_parser("revoke-creator-authority")
     for arg in ("--organization", "--app", "--work"):
         q.add_argument(arg, required=True)
+    # ADR-006 sign-in handles (D7.19 operator channel; APP-009).
+    for name in ("issue-handle", "rotate-handle", "retire-handle"):
+        q = sub.add_parser(name)
+        q.add_argument("--organization", required=True)
+        q.add_argument("--handle", required=(name == "retire-handle"))
     return p
 
 
@@ -276,6 +287,11 @@ def validate(args):
             require(1 <= len(args.provider_issuer) <= 512 and 1 <= len(args.provider_tenant) <= 256, "malformed_provider_tenant")
     if args.command == "extend":
         require(1 <= args.expires_days <= DEFAULTS["code_expiry_days_max"], "expiry_out_of_range")
+    if args.command in ("issue-handle", "rotate-handle", "retire-handle"):
+        args.raw_handle = None
+        if args.handle is not None:
+            args.raw_handle = normalize_handle(args.handle)
+            require(args.raw_handle is not None, "malformed_handle")
     return args
 
 
@@ -1231,10 +1247,86 @@ def _reconcile(c, org, config):
     return result
 
 
+# --- sign-in handles (ADR-006 §handle; D7.2, D7.19; APP-009) ----------------------
+#
+# A handle is 16 CSPRNG bytes shown as 26 lowercase base32 characters; only its
+# domain-separated digest is stored, in genui_private.handle_index. It is
+# non-secret routing (it appears in https://beta.getforma.dev/signin/{handle}
+# and in fAuth's client return_entry_url) and grants nothing. Every handle
+# operation locks the organization FOR SHARE and then the organization's
+# operator audit head FOR UPDATE, which serializes handle changes per
+# organization, and appends one `handle.rotated` event (D7.8's only handle kind).
+
+def live_handles(c, org):
+    return c.execute("""SELECT count(*) FROM genui_private.handle_index WHERE organization_id=%s
+          AND (retired_at IS NULL OR retired_at>now())""", (org,)).fetchone()[0]
+
+
+def lock_handles(c, org):
+    lock_organization(c, org, active=True)
+    require(c.execute("SELECT 1 FROM genui.audit_heads WHERE organization_id=%s AND writer_role='operator' FOR UPDATE",
+                      (org,)).fetchone() is not None, "audit_chain_not_provisioned")
+
+
+def add_handle(c, org, raw):
+    raw = raw if raw is not None else secrets.token_bytes(DEFAULTS["handle_bytes"])
+    require(c.execute("SELECT count(*) FROM genui_private.handle_index WHERE handle_digest=%s",
+                      (handle_digest(raw),)).fetchone() == (0,), "handle_taken")
+    c.execute("INSERT INTO genui_private.handle_index(handle_digest,organization_id,retired_at) VALUES (%s,%s,NULL)",
+              (handle_digest(raw), org))
+    append(c, org, "handle.rotated")
+    return raw
+
+
+def issue_handle(c, args):
+    """The first live handle of an organization that has none (one created before
+    handles existed, such as the two fixture organizations). `--handle` installs an
+    exact, already-issued handle, so one routing value can be registered with fAuth
+    once and installed in each environment; otherwise a fresh handle is drawn."""
+    org = args.organization
+    begin(c, org)
+    lock_handles(c, org)
+    require(live_handles(c, org) == 0, "handle_exists")
+    raw = add_handle(c, org, args.raw_handle)
+    c.commit()
+    return {"organization_id": org, "handle": encode_handle(raw), "live_handles": 1}
+
+
+def rotate_handle(c, args):
+    """Rotation step 1: a new live handle beside the current one; both route
+    until FormaStack re-registers return_entry_url and `retire-handle` runs."""
+    org = args.organization
+    begin(c, org)
+    lock_handles(c, org)
+    live = live_handles(c, org)
+    require(live == 1, "handle_missing" if live == 0 else "rotation_in_progress")
+    raw = add_handle(c, org, args.raw_handle)
+    c.commit()
+    return {"organization_id": org, "handle": encode_handle(raw), "live_handles": 2}
+
+
+def retire_handle(c, args):
+    """Rotation step 2: the named handle stops routing; never the last live one."""
+    org = args.organization
+    begin(c, org)
+    lock_handles(c, org)
+    row = c.execute("""SELECT organization_id::text,retired_at IS NULL OR retired_at>now() FROM genui_private.handle_index
+          WHERE handle_digest=%s FOR UPDATE""", (handle_digest(args.raw_handle),)).fetchone()
+    require(row is not None and row[0] == org, "handle_unknown")
+    require(row[1], "handle_retired")
+    live = live_handles(c, org)
+    require(live >= 2, "last_live_handle")
+    c.execute("UPDATE genui_private.handle_index SET retired_at=now() WHERE handle_digest=%s", (handle_digest(args.raw_handle),))
+    append(c, org, "handle.rotated")
+    c.commit()
+    return {"organization_id": org, "retired": True, "live_handles": live - 1}
+
+
 COMMANDS = {"provision": provision, "backfill": backfill, "issue": issue, "list": list_codes, "revoke": revoke,
             "extend": extend, "revoke-entitlement": revoke_entitlement, "revoke-membership": revoke_membership, "verify": verify,
             "reconcile": reconcile, "grant-permission": grant_permission, "revoke-permission": revoke_permission,
-            "create-app": create_app, "revoke-creator-authority": revoke_creator_authority}
+            "create-app": create_app, "revoke-creator-authority": revoke_creator_authority,
+            "issue-handle": issue_handle, "rotate-handle": rotate_handle, "retire-handle": retire_handle}
 
 
 def provider_configuration(args):

@@ -1,16 +1,21 @@
 use axum::{
     extract::State,
     http::{header, StatusCode},
+    middleware,
     response::{IntoResponse, Response},
     routing::get,
     Router,
 };
 use forma_ir::PageProps;
 use forma_server::{
-    assets, load_ir_modules, render_browser_shell, sw, PageConfig, PageHandle, RenderCtx, RouteMode,
+    assets, load_ir_modules, render_browser_shell, sw, PageConfig, PageHandle, PageResponse,
+    RenderCtx, RenderError, RouteMode,
+};
+use genui::auth::{
+    self, Auth, AuthConfig, DeniedView, PendingView, ResendResult, SigninView, WorkspaceView,
 };
 use rust_embed::Embed;
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 #[derive(Embed)]
 #[folder = "admin/dist/"]
@@ -22,12 +27,158 @@ struct HomeProps {
 }
 #[derive(PageProps)]
 struct AboutProps {}
+// APP-009 (ADR-006) pages: typed props only; no page reads a request value.
+#[derive(PageProps)]
+struct SigninProps {
+    action: String,
+    has_action: bool,
+    failed: bool,
+}
+#[derive(PageProps)]
+struct PendingProps {
+    csrf_resend: String,
+    csrf_signout: String,
+    resend_available: bool,
+    cooldown_seconds: u32,
+    held: bool,
+    hours_remaining: u32,
+    requested: bool,
+    unavailable: bool,
+}
+#[derive(PageProps)]
+struct DeniedProps {
+    csrf_signout: String,
+}
+#[derive(PageProps)]
+struct WorkspaceProps {
+    csrf_signout: String,
+    csrf_signout_all: String,
+}
 
 struct AppState {
     manifest: forma_server::AssetManifest,
     readiness: Arc<genui::readiness::Readiness>,
     home: Option<PageHandle<HomeProps>>,
     about: Option<PageHandle<AboutProps>>,
+}
+
+/// The APP-009 pages, rendered as complete `PageResponse`s (fresh nonce,
+/// CSP and `no-store` together). The auth module decides status and cookies.
+struct SsrPages {
+    signin: PageHandle<SigninProps>,
+    pending: PageHandle<PendingProps>,
+    denied: PageHandle<DeniedProps>,
+    workspace: PageHandle<WorkspaceProps>,
+}
+impl auth::Pages for SsrPages {
+    fn signin(&self, view: &SigninView) -> Response {
+        respond(
+            "/signin",
+            self.signin.render(
+                &SigninProps {
+                    action: view.action.clone().unwrap_or_default(),
+                    has_action: view.action.is_some(),
+                    failed: view.failed,
+                },
+                &RenderCtx::new().with_title("Sign in"),
+            ),
+        )
+    }
+    fn pending(&self, view: &PendingView) -> Response {
+        respond(
+            "/auth/pending",
+            self.pending.render(
+                &PendingProps {
+                    csrf_resend: view.csrf_resend.clone(),
+                    csrf_signout: view.csrf_signout.clone(),
+                    resend_available: view.resend_available,
+                    cooldown_seconds: view.cooldown_seconds,
+                    held: view.hours_remaining > 0,
+                    hours_remaining: view.hours_remaining,
+                    requested: view.result == Some(ResendResult::Requested),
+                    unavailable: view.result == Some(ResendResult::Unavailable),
+                },
+                &RenderCtx::new().with_title("Confirm your email address"),
+            ),
+        )
+    }
+    fn denied(&self, view: &DeniedView) -> Response {
+        respond(
+            "/auth/callback",
+            self.denied.render(
+                &DeniedProps {
+                    csrf_signout: view.csrf_signout.clone(),
+                },
+                &RenderCtx::new().with_title("No access"),
+            ),
+        )
+    }
+    fn workspace(&self, view: &WorkspaceView) -> Response {
+        respond(
+            "/workspace",
+            self.workspace.render(
+                &WorkspaceProps {
+                    csrf_signout: view.csrf_signout.clone(),
+                    csrf_signout_all: view.csrf_signout_all.clone(),
+                },
+                &RenderCtx::new().with_title("Workspace"),
+            ),
+        )
+    }
+}
+
+/// A `PageResponse` sends the HTML with the policy for its nonce,
+/// `Cache-Control: no-store` and the document security headers. Forma logs
+/// nothing: a failure is counted here by code and route and answered with our
+/// own error, never an empty shell.
+fn respond(route: &str, rendered: Result<PageResponse, RenderError>) -> Response {
+    match rendered {
+        Ok(page) => page.into_response(),
+        Err(error) => {
+            tracing::error!(code = error.code(), route, "{error}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [
+                    (header::CACHE_CONTROL, "no-store"),
+                    (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+                ],
+                "Internal Server Error",
+            )
+                .into_response()
+        }
+    }
+}
+
+fn refuse(message: impl std::fmt::Display) -> ! {
+    eprintln!("{message}");
+    std::process::exit(1);
+}
+fn bind_errors<T>(errors: Vec<forma_server::PropsError>) -> T {
+    for error in errors {
+        eprintln!("{error}");
+    }
+    std::process::exit(1);
+}
+
+/// ADR-007 D7.13: the operator qualification harness exists only in the
+/// isolated qualification executable (`--features qualification-harness`);
+/// a release binary refuses its configuration instead of starting.
+#[cfg(not(feature = "qualification-harness"))]
+fn qualification_router() -> Option<Router> {
+    if std::env::var_os("GENUI_AUTH_QUALIFICATION_CONFIG_FILE").is_some() {
+        refuse("auth qualification harness is not part of this binary (ADR-007 D7.13)");
+    }
+    None
+}
+#[cfg(feature = "qualification-harness")]
+fn qualification_router() -> Option<Router> {
+    std::env::var_os("GENUI_AUTH_QUALIFICATION_CONFIG_FILE").map(|_| {
+        genui::auth_qualification::from_environment().unwrap_or_else(|reason| {
+            refuse(format!(
+                "auth qualification configuration refused: {reason}"
+            ))
+        })
+    })
 }
 
 #[tokio::main]
@@ -37,17 +188,13 @@ async fn main() {
     // D9.1, integrity only). Without it no parse can run.
     if std::env::var_os(genui::imports::sandbox::MANIFEST_ENV).is_some() {
         if let Err(reason) = genui::imports::sandbox::verify_manifest() {
-            eprintln!("parser manifest refused: {reason}");
-            std::process::exit(1);
+            refuse(format!("parser manifest refused: {reason}"));
         }
     }
     let credential_path =
         std::env::var("GENUI_RUNTIME_CONFIG_FILE").expect("GENUI_RUNTIME_CONFIG_FILE is required");
     let config = genui::config::Config::load(std::path::Path::new(&credential_path))
-        .unwrap_or_else(|reason| {
-            eprintln!("configuration refused: {reason}");
-            std::process::exit(1);
-        });
+        .unwrap_or_else(|reason| refuse(format!("configuration refused: {reason}")));
     // A missing registry permits the inert public shell, but never readiness or
     // private data. The managed launcher supplies an explicit empty deny-all
     // registry until real provider bindings are provisioned and reviewed.
@@ -64,19 +211,22 @@ async fn main() {
             Some(Arc::new(
                 settings
                     .and_then(genui::storage::Stores::new)
-                    .unwrap_or_else(|_| {
-                        eprintln!("tenant storage configuration refused");
-                        std::process::exit(1);
-                    }),
+                    .unwrap_or_else(|_| refuse("tenant storage configuration refused")),
             ))
         }
         Err(std::env::VarError::NotPresent) => None,
-        Err(_) => {
-            eprintln!("tenant storage configuration refused");
-            std::process::exit(1);
-        }
+        Err(_) => refuse("tenant storage configuration refused"),
     };
     drop(config);
+    // ADR-006 provider routing; absent: sign-in fails neutrally and every
+    // protected route stays the uniform 404.
+    let auth_config = match std::env::var(auth::CONFIG_ENV) {
+        Ok(path) => Some(
+            AuthConfig::load(std::path::Path::new(&path)).unwrap_or_else(|reason| refuse(reason)),
+        ),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(_) => refuse("auth configuration file refused"),
+    };
     // A render that fails comes back to `home` as a coded error, which `home`
     // logs through `tracing`; forma-server's own security events go there too.
     // Without a subscriber those lines go nowhere. Keep this.
@@ -92,11 +242,16 @@ async fn main() {
         std::process::exit(1);
     }
 
-    let manifest = assets::try_load_manifest::<Assets>().unwrap_or_else(|error| {
-        eprintln!("\n  Error: admin/dist/manifest.json: {error}\n");
-        std::process::exit(1);
-    });
-    for route in ["/", "/about"] {
+    let manifest = assets::try_load_manifest::<Assets>()
+        .unwrap_or_else(|error| refuse(format!("\n  Error: admin/dist/manifest.json: {error}\n")));
+    for route in [
+        "/",
+        "/about",
+        "/signin",
+        "/auth/pending",
+        "/auth/callback",
+        "/workspace",
+    ] {
         require_ssr(manifest.route(route).map(|entry| entry.mode))
             .unwrap_or_else(|reason| panic!("required SSR route {route}: {reason}"));
     }
@@ -111,31 +266,33 @@ async fn main() {
     });
     // Compare the declared page props once, then finalize before opening a listener.
     let home_page = match manifest.route("/").map(|route| route.mode) {
-        Some(RouteMode::Ssr) => Some(pages.bind::<HomeProps>("home").unwrap_or_else(|errors| {
-            for error in errors {
-                eprintln!("{error}");
-            }
-            std::process::exit(1);
-        })),
+        Some(RouteMode::Ssr) => Some(pages.bind::<HomeProps>("home").unwrap_or_else(bind_errors)),
         Some(RouteMode::Browser) => None,
-        None => {
-            eprintln!("missing declared route /");
-            std::process::exit(1);
-        }
+        None => refuse("missing declared route /"),
     };
     let about_page = match manifest.route("/about").map(|route| route.mode) {
-        Some(RouteMode::Ssr) => Some(pages.bind::<AboutProps>("about").unwrap_or_else(|errors| {
-            for error in errors {
-                eprintln!("{error}");
-            }
-            std::process::exit(1);
-        })),
+        Some(RouteMode::Ssr) => Some(
+            pages
+                .bind::<AboutProps>("about")
+                .unwrap_or_else(bind_errors),
+        ),
         Some(RouteMode::Browser) => None,
-        None => {
-            eprintln!("missing declared route /about");
-            std::process::exit(1);
-        }
+        None => refuse("missing declared route /about"),
     };
+    let auth_pages = Arc::new(SsrPages {
+        signin: pages
+            .bind::<SigninProps>("signin")
+            .unwrap_or_else(bind_errors),
+        pending: pages
+            .bind::<PendingProps>("pending")
+            .unwrap_or_else(bind_errors),
+        denied: pages
+            .bind::<DeniedProps>("denied")
+            .unwrap_or_else(bind_errors),
+        workspace: pages
+            .bind::<WorkspaceProps>("workspace")
+            .unwrap_or_else(bind_errors),
+    });
     pages.finalize().unwrap_or_else(|errors| {
         for error in errors {
             eprintln!("{error}");
@@ -149,6 +306,13 @@ async fn main() {
     // worker on, see `forma_server::sw`.
     sw::configure(sw::ServiceWorker::off()).expect("configured once, before the first page");
 
+    // D7.13: decided once startup state exists and always before the listener
+    // binds (where the APP-006 harness was constructed): a release binary
+    // refuses the operator qualification configuration here.
+    let qualification = qualification_router();
+    let auth = Arc::new(
+        Auth::new(auth_config, stores.clone(), auth_pages).unwrap_or_else(|reason| refuse(reason)),
+    );
     let readiness = genui::readiness::Readiness::start(
         credential_path.into(),
         std::env::var("GENUI_HELPER_PATH")
@@ -165,12 +329,6 @@ async fn main() {
         about: about_page,
     });
 
-    // Disabled unless an explicit private rehearsal configuration is supplied.
-    // This router can qualify external identity only; it never grants app access.
-    let qualification = genui::auth_qualification::from_environment().unwrap_or_else(|reason| {
-        eprintln!("auth qualification configuration refused: {reason}");
-        std::process::exit(1);
-    });
     let app = Router::new()
         .route("/", get(home))
         .route("/health/live", get(|| async { StatusCode::OK }))
@@ -188,37 +346,53 @@ async fn main() {
         .route("/favicon.ico", get(favicon))
         .route("/sw.js", get(sw::serve_sw::<Assets>))
         .route("/_assets/{*filename}", get(assets::serve_asset::<Assets>))
-        .with_state(state)
-        .merge(qualification);
+        .with_state(state);
+    // The operator harness (feature builds only) replaces the product routes
+    // for its isolated run; the two never share a router.
+    let app = match qualification {
+        Some(harness) => app.merge(harness),
+        None => app.merge(auth::routes::router(auth.clone())),
+    }
+    .fallback(genui::http::fallback)
+    .method_not_allowed_fallback(genui::http::fallback)
+    .layer(middleware::from_fn(genui::http::deadline));
+
+    // ADR-006 expiry sweep: idle and expired records are destroyed and their
+    // provider refresh tokens revoked.
+    let sweeper = auth.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            sweeper.sweep().await;
+        }
+    });
 
     // Port zero asks the OS for an available port; useful for isolated tests.
     let port = match std::env::var("FORMA_PORT") {
-        Ok(value) if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) => {
-            value.parse::<u16>().unwrap_or_else(|_| {
-                eprintln!("FORMA_PORT must be an integer from 0 to 65535");
-                std::process::exit(1);
-            })
-        }
+        Ok(value) if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) => value
+            .parse::<u16>()
+            .unwrap_or_else(|_| refuse("FORMA_PORT must be an integer from 0 to 65535")),
         Err(std::env::VarError::NotPresent) => 3000,
-        _ => {
-            eprintln!("FORMA_PORT must be an integer from 0 to 65535");
-            std::process::exit(1);
-        }
+        _ => refuse("FORMA_PORT must be an integer from 0 to 65535"),
     };
     let bind_address = match std::env::var("FORMA_BIND_ADDRESS").as_deref() {
         Ok("0.0.0.0") => std::net::Ipv4Addr::UNSPECIFIED,
         Ok("127.0.0.1") | Err(_) => std::net::Ipv4Addr::LOCALHOST,
-        _ => {
-            eprintln!("FORMA_BIND_ADDRESS must be 127.0.0.1 or 0.0.0.0");
-            std::process::exit(1);
-        }
+        _ => refuse("FORMA_BIND_ADDRESS must be 127.0.0.1 or 0.0.0.0"),
     };
     let listener = tokio::net::TcpListener::bind((bind_address, port))
         .await
         .unwrap();
     // Emit readiness only while this process owns the successfully bound socket.
     println!("FORMA_LISTENING http://{}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
+    // D7.14: the peer address reaches the trusted-proxy extraction.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }
 
 async fn home(State(state): State<Arc<AppState>>) -> Response {
@@ -240,27 +414,7 @@ async fn home(State(state): State<Arc<AppState>>) -> Response {
             &ctx,
         ),
     };
-    match rendered {
-        // A `PageResponse` sends the HTML with the policy for its nonce,
-        // `Cache-Control: no-store` (the nonce is this response's alone) and
-        // the document security headers.
-        Ok(page) => page.into_response(),
-        // Forma logs nothing: count failures by code and route here, and
-        // answer with your own error page. The error stays in the log, never
-        // in the response, and no empty shell takes the page's place.
-        Err(error) => {
-            tracing::error!(code = error.code(), route = error.route(), "{error}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [
-                    (header::CACHE_CONTROL, "no-store"),
-                    (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
-                ],
-                "Internal Server Error",
-            )
-                .into_response()
-        }
-    }
+    respond(route, rendered)
 }
 
 async fn about(State(state): State<Arc<AppState>>) -> Response {
@@ -282,27 +436,7 @@ async fn about(State(state): State<Arc<AppState>>) -> Response {
             &ctx,
         ),
     };
-    match rendered {
-        // A `PageResponse` sends the HTML with the policy for its nonce,
-        // `Cache-Control: no-store` (the nonce is this response's alone) and
-        // the document security headers.
-        Ok(page) => page.into_response(),
-        // Forma logs nothing: count failures by code and route here, and
-        // answer with your own error page. The error stays in the log, never
-        // in the response, and no empty shell takes the page's place.
-        Err(error) => {
-            tracing::error!(code = error.code(), route = error.route(), "{error}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [
-                    (header::CACHE_CONTROL, "no-store"),
-                    (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
-                ],
-                "Internal Server Error",
-            )
-                .into_response()
-        }
-    }
+    respond(route, rendered)
 }
 
 async fn favicon() -> StatusCode {
@@ -321,6 +455,9 @@ fn require_ssr(mode: Option<RouteMode>) -> Result<(), &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use auth::Pages as _;
+    use axum::body::to_bytes;
+
     #[test]
     fn required_native_routes_refuse_browser_and_missing_outputs() {
         assert!(require_ssr(Some(RouteMode::Ssr)).is_ok());
@@ -329,5 +466,95 @@ mod tests {
             Err("unexpected Browser output")
         );
         assert_eq!(require_ssr(None), Err("missing route"));
+    }
+
+    fn pages() -> SsrPages {
+        let manifest = assets::try_load_manifest::<Assets>().expect("admin/dist built");
+        for route in ["/signin", "/auth/pending", "/auth/callback", "/workspace"] {
+            require_ssr(manifest.route(route).map(|entry| entry.mode)).unwrap();
+        }
+        let pages = load_ir_modules::<Assets>(&manifest).unwrap();
+        let ssr = SsrPages {
+            signin: pages.bind::<SigninProps>("signin").unwrap(),
+            pending: pages.bind::<PendingProps>("pending").unwrap(),
+            denied: pages.bind::<DeniedProps>("denied").unwrap(),
+            workspace: pages.bind::<WorkspaceProps>("workspace").unwrap(),
+        };
+        // Home and about stay unbound here; finalize judges only bound routes.
+        let _ = pages.bind::<HomeProps>("home");
+        let _ = pages.bind::<AboutProps>("about");
+        pages.finalize().unwrap();
+        ssr
+    }
+    async fn html(response: Response) -> (StatusCode, axum::http::HeaderMap, String) {
+        let status = response.status();
+        let headers = response.headers().clone();
+        let body = to_bytes(response.into_body(), 1 << 20).await.unwrap();
+        (status, headers, String::from_utf8(body.to_vec()).unwrap())
+    }
+
+    /// The four APP-009 pages render natively with their typed props, no
+    /// script, a fresh nonce policy and `no-store`; forms carry exactly the
+    /// synchronizer token and post to the ADR-006 routes.
+    #[tokio::test]
+    async fn auth_pages_render_typed_props_without_javascript() {
+        let pages = pages();
+        let (status, headers, body) = html(pages.signin(&SigninView {
+            action: Some("/signin/mrswmz3infvgw3dnnzxxa4lsom".into()),
+            failed: false,
+        }))
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(headers[header::CACHE_CONTROL]
+            .to_str()
+            .unwrap()
+            .contains("no-store"));
+        assert!(headers.contains_key(header::CONTENT_SECURITY_POLICY));
+        assert!(body.contains("action=\"/signin/mrswmz3infvgw3dnnzxxa4lsom\""));
+        assert!(body.contains("method=\"post\""));
+        assert!(!body.contains("<script src"));
+        assert!(!body.contains("could not continue"));
+        let (_, _, body) = html(pages.signin(&SigninView {
+            action: None,
+            failed: true,
+        }))
+        .await;
+        assert!(body.contains("could not continue") && !body.contains("<form"));
+        let (_, _, body) = html(pages.pending(&PendingView {
+            csrf_resend: "R".repeat(43),
+            csrf_signout: "S".repeat(43),
+            resend_available: true,
+            cooldown_seconds: 0,
+            hours_remaining: 23,
+            result: Some(ResendResult::Requested),
+        }))
+        .await;
+        assert!(body.contains("action=\"/auth/pending/resend\""));
+        assert!(body.contains(&format!("value=\"{}\"", "R".repeat(43))));
+        assert!(body.contains(&format!("value=\"{}\"", "S".repeat(43))));
+        assert!(body.contains(">23<") && body.contains("was requested"));
+        assert!(!body.contains("could not be requested"));
+        let (_, _, body) = html(pages.pending(&PendingView {
+            csrf_resend: "R".repeat(43),
+            csrf_signout: "S".repeat(43),
+            resend_available: false,
+            cooldown_seconds: 41,
+            hours_remaining: 0,
+            result: Some(ResendResult::Unavailable),
+        }))
+        .await;
+        assert!(body.contains(">41<") && body.contains("could not be requested"));
+        assert!(!body.contains("/auth/pending/resend") && !body.contains("is held"));
+        let (_, _, body) = html(pages.denied(&DeniedView {
+            csrf_signout: "D".repeat(43),
+        }))
+        .await;
+        assert!(body.contains("action=\"/auth/signout\"") && body.contains(&"D".repeat(43)));
+        let (_, _, body) = html(pages.workspace(&WorkspaceView {
+            csrf_signout: "W".repeat(43),
+            csrf_signout_all: "A".repeat(43),
+        }))
+        .await;
+        assert!(body.contains("action=\"/auth/signout-all\"") && body.contains(&"A".repeat(43)));
     }
 }

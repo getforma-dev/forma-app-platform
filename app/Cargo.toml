@@ -34,6 +34,14 @@ rustls-pki-types = { version = "=1.15.1", features = ["std"] }
 
 [dev-dependencies]
 tower = { version = "=0.5.3", features = ["util"] }
+# APP-009: the same reviewed verifier against the cfg(test) loopback issuer;
+# a dev-dependency feature, so release builds never contain the constructor.
+genui-auth-verifier = { path = "../spikes/APP-006", features = ["loopback-http"] }
+
+[features]
+# ADR-007 D7.13: the APP-006 operator qualification harness compiles only in
+# the isolated qualification executable; release builds never enable it.
+qualification-harness = []
 
 [lib]
 name = "genui"
