@@ -259,9 +259,10 @@
         "APP-106",
         "APP-107",
         "APP-108",
-        "APP-109"
+        "APP-109",
+        "APP-110"
       ],
-      "ticket_count": 19,
+      "ticket_count": 20,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -3493,6 +3494,35 @@
       "dependencies": [
         "APP-103",
         "APP-104"
+      ]
+    },
+    {
+      "id": "APP-110",
+      "title": "Pitch scope ledger: what the demo ships, what is deferred, and what needs enterprise refinement",
+      "path": "0-backlog/APP-110.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "FND",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "110",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md): the November 2 emergency pivot. No dedicated phase existed, so the board's new phase PH08 / sprint S14 (order 8, no phase dependency; added to `plan.json`) holds the pitch tickets. Invariants of ADR-011 \u00a73 that bind this ticket: I1 verified identity; I2 tenant isolation (RLS, uniform 404); I3 receipts on every governed number; I4 transactional, idempotent, audited commands; I5 model output is data, never code, SQL, markup or grants (typed definitions through admission; every AI result labeled); I6 no credential, address or code in public evidence (I1\u2013I6 number the six invariants in \u00a73 in order).",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-098, APP-105",
+      "External dependencies": "None beyond listed local predecessors",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "`pivot/pitch-mvp` (ledger only)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-098",
+        "APP-105"
       ]
     }
   ]

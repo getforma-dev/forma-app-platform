@@ -115,3 +115,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 107 | [APP-107: Workflow library: the approval processes real companies run, end to end](0-backlog/APP-107.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095, APP-099, APP-100 |
 | 108 | [APP-108: Boxes: file cards with a viewer, real CSV data, and apps built from a box that trace back to it](0-backlog/APP-108.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095, APP-104, APP-106 |
 | 109 | [APP-109: Quick notes: /note saves a note as a card](0-backlog/APP-109.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-103, APP-104 |
+| 110 | [APP-110: Pitch scope ledger: what the demo ships, what is deferred, and what needs enterprise refinement](0-backlog/APP-110.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-098, APP-105 |
