@@ -45,7 +45,7 @@ import {
   placeWork, unmountWidget, widgetSpot,
 } from './board';
 import { setFileRouter } from './receipt';
-import { el, isUuid } from './render';
+import { announce, el, isUuid } from './render';
 import { registerCommands, registerCompleter, type Completion } from './slash';
 
 type Report = (message: string) => void;
@@ -58,11 +58,6 @@ let boxes: Box[] = [];
 let started = false;
 /** The folder card opened (or brought forward) last. */
 let lastOpened: string | null = null;
-
-function announce(message: string): void {
-  const status = document.getElementById('cv-activity');
-  if (status) status.textContent = message;
-}
 
 // --- The notice (non-blocking status with actions) ---
 
@@ -270,7 +265,7 @@ function buildBoxCard(initial: BoxContents) {
     const item = open.get(boxId)?.item ?? null;
     void openBrief(boxId, boxLabel(contents.box), false, item).then(announce);
   });
-  const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'aria-label': `Remove the ${noun} from the canvas`, title: 'Remove from canvas (the files stay)' }, '×');
+  const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'data-widget-close': '', 'aria-label': `Remove the ${noun} from the canvas`, title: 'Remove from canvas (the files stay)' }, '×');
   const picker = el(document_, 'input', { type: 'file', multiple: '', accept: ACCEPT, hidden: '' });
   const pick = el(document_, 'button', { type: 'button', class: 'bx-pick' }, 'Add files');
   const drop = el(document_, 'div', { class: 'bx-drop', 'data-dragging': 'false' },

@@ -16,18 +16,22 @@
 // - L opens the library, `?` this sheet of shortcuts;
 // - APP-106: F focuses the selected card (`focus.ts`), U unites its app and
 //   Shift + U breaks it apart (`unite.ts`); the toolbar menu has both;
+// - a selected stack: ← / → leaf through it, Enter fans it out;
 // - touch: one finger on the empty canvas pans (the vendor's), two fingers
 //   pinch to zoom; Safari's trackpad gesture events zoom too.
 //
 // No shortcut fires while the member types in the intent bar, a card's form,
-// or any input, textarea, select or contenteditable.
+// or any input, textarea, select or contenteditable, nor while a modal (the
+// file viewer, the data sheet, the agents panel, focus mode) is open.
+import { eventOriginatesInInteractiveControl, eventOriginatesInTextEntry } from '../canvas-vendor/index';
 import { canvasApi, itemKind, nudgeItems, refreshZoomLabel, removeCards, removeUtilityItem, resetLayout } from './board';
 import { closeLibrary, isLibraryOpen, toggleLibrary } from './library';
-import { el } from './render';
+import { announce, el } from './render';
 import { registerCommands } from './slash';
 import { removeWidgets } from './widgets/index';
 import { collapseAll, dissolve, expand, isStackItem, shuffle, stackOfItem, stackSelection } from './stacks';
-import { focusFromItem, isFocusOpen } from './focus';
+import { focusFromItem, isFocusOpen, trapTab } from './focus';
+import { isModalOpen } from './box-viewer';
 import { isNoteItem, removeNoteItem } from './notes';
 import { frameCardsOfItem, isUniteItem, splitFromItem, uniteFromItem } from './unite';
 
@@ -35,17 +39,24 @@ const selection = new Set<HTMLElement>();
 let tool: 'move' | 'hand' = 'move';
 let documentRef: Document | null = null;
 let sheet: HTMLElement | null = null;
+let sheetOpener: HTMLElement | null = null;
 const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const MOD = mac ? '⌘' : 'Ctrl';
 
-function editable(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
-  return Boolean(target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]'));
-}
-
-function announce(message: string): void {
-  const status = documentRef?.getElementById('cv-activity');
-  if (status) status.textContent = message;
+/**
+ * APP-113: a modal other than this module's own sheet and focus mode (the
+ * file viewer, the data sheet, the agents panel, any `<dialog open>` or
+ * `aria-modal` layer) owns the keyboard: no canvas shortcut fires behind it,
+ * and none fires from inside one.
+ */
+export function modalOwnsKeys(event: Event, document_: Document): boolean {
+  if (isModalOpen() || document_.querySelector('dialog[open], [data-modal-above]')) return true;
+  for (const node of document_.querySelectorAll<HTMLElement>('[aria-modal="true"]')) {
+    if (node === sheet || node.id === 'cv-focus' || node.hidden || node.closest('[hidden]')) continue;
+    return true;
+  }
+  const target = event.target as Element | null;
+  return Boolean(target?.closest?.('dialog[open], [aria-modal="true"]:not(#cv-shortcuts):not(#cv-focus)'));
 }
 
 function renderSelection(): void {
@@ -98,7 +109,11 @@ function removeSelected(): void {
   for (const item of items) {
     const kind = itemKind(item);
     if (isNoteItem(item)) removeNoteItem(item);
-    else if (kind === 'widget') removeWidgets(item);
+    // APP-113: a folder, brief or summary card is a widget item with its own
+    // close (`data-widget-close`); the utility widgets go through `removeWidgets`.
+    else if (kind === 'widget') {
+      if (!removeWidgets(item)) item.querySelector<HTMLElement>('[data-widget-close]')?.click();
+    }
     else if (kind === 'utility') removeUtilityItem(item);
     else if (kind === 'card' && item.dataset.instanceId) cards.push(item.dataset.instanceId);
     else if (isStackItem(item)) cards.push(...(stackOfItem(item)?.cards ?? []));
@@ -209,21 +224,33 @@ function showSheet(): void {
     });
     (document_.getElementById('cv-shell') ?? document_.body).append(sheet);
   }
+  if (sheet.hidden) sheetOpener = documentRef.activeElement as HTMLElement | null;
   sheet.hidden = false;
   sheet.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
 }
 function hideSheet(): void {
-  if (sheet) sheet.hidden = true;
+  if (!sheet || sheet.hidden) return;
+  sheet.hidden = true;
+  // APP-113: focus returns to what opened the sheet.
+  if (sheetOpener?.isConnected) sheetOpener.focus({ preventScroll: true });
+  sheetOpener = null;
 }
 
 function onKey(event: KeyboardEvent): void {
-  if (event.defaultPrevented || event.isComposing) return;
-  // Focus mode owns the keyboard while it is open (`focus.ts`).
-  if (isFocusOpen()) return;
+  if (event.defaultPrevented || event.isComposing || !documentRef) return;
+  // Focus mode owns the keyboard while it is open (`focus.ts`), and so does
+  // any other modal (APP-113: Delete behind the file viewer removed cards).
+  if (isFocusOpen() || modalOwnsKeys(event, documentRef)) return;
+  const typing = eventOriginatesInTextEntry(event);
+  // The shortcut sheet is modal: Tab stays inside it.
+  if (sheet && !sheet.hidden && event.key === 'Tab') {
+    trapTab(event, sheet);
+    return;
+  }
   const mod = event.metaKey || event.ctrlKey;
   // The browser's page zoom keys zoom the canvas instead (outside text fields).
   // Cmd/Ctrl+G stacks the selection; with Shift, spreads the selected stacks.
-  if (mod && !event.altKey && event.code === 'KeyG' && !editable(event.target)) {
+  if (mod && !event.altKey && event.code === 'KeyG' && !typing) {
     event.preventDefault();
     const chosen = [...selection].filter((item) => item.isConnected);
     if (event.shiftKey) {
@@ -239,13 +266,13 @@ function onKey(event: KeyboardEvent): void {
     return;
   }
   if (mod && !event.altKey && ['=', '+', '-', '_'].includes(event.key)) {
-    if (editable(event.target)) return;
+    if (typing) return;
     event.preventDefault();
     action(event.key === '-' || event.key === '_' ? 'zoom-out' : 'zoom-in');
     return;
   }
   if (event.key === 'Escape') {
-    if (!editable(event.target) && collapseAll()) {
+    if (!typing && collapseAll()) {
       event.preventDefault();
       return;
     }
@@ -260,7 +287,7 @@ function onKey(event: KeyboardEvent): void {
       zoomMenu(false);
       return;
     }
-    if (editable(event.target)) return;
+    if (typing) return;
     if (isLibraryOpen()) {
       event.preventDefault();
       closeLibrary();
@@ -272,7 +299,7 @@ function onKey(event: KeyboardEvent): void {
     }
     return;
   }
-  if (editable(event.target) || mod || event.altKey) return;
+  if (typing || mod || event.altKey) return;
   if (sheet && !sheet.hidden) return;
   // Shift + digit: the browser reports `)`, `!`, `@` on US layouts; read the code.
   if (event.shiftKey && (event.code === 'Digit0' || event.code === 'Digit1' || event.code === 'Digit2')) {
@@ -319,7 +346,9 @@ function onKey(event: KeyboardEvent): void {
     shuffle(stack, event.key === 'ArrowRight' ? 1 : -1);
     return;
   }
-  if (stack && (event.key === 'Enter' || event.key === ' ')) {
+  // Enter fans a selected stack out, unless a control has the key (a button
+  // or link keeps its own activation). Space stays Space + drag panning.
+  if (stack && event.key === 'Enter' && !eventOriginatesInInteractiveControl(event)) {
     event.preventDefault();
     event.stopImmediatePropagation();
     expand(stack);

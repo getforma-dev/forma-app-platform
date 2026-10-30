@@ -9,7 +9,7 @@
 //   app; double-click to rename), "+N" and the position ("2/5").
 // - Shuffle: horizontal scroll or Shift + scroll over it, ←/→ when it is
 //   selected, a swipe on touch: the top card leafs to the next one.
-// - Expand: the "+N" badge, Enter/Space on the selected stack, or a
+// - Expand: the "+N" badge, Enter on the selected stack, or a
 //   double-click fans its cards out in a grid next to it; Esc or a click
 //   outside folds them back; a card dragged out of the fan leaves the stack.
 //   Cmd/Ctrl+Shift+G spreads a stack onto the canvas.
@@ -20,7 +20,7 @@
 // hidden board (their views run when they reach the top). Stacks are kept
 // per member in this browser (DS-67), card ids and a text title only.
 import { createCanvasItem } from '../canvas-vendor/index';
-import { setStackHooks, stackBoard as board } from './board';
+import { FAN_ROW_HEIGHT, GAP, SLOT_WIDTH as WIDTH, setStackHooks, stackBoard as board } from './board';
 import { loadStacks, saveStacks, type StoredStack } from './layout';
 import { el } from './render';
 import { refreshRecords } from './records';
@@ -37,8 +37,6 @@ type Stack = {
 };
 
 const stacks = new Map<string, Stack>();
-const WIDTH = 460;
-const GAP = 28;
 const HOLD_MS = 400;
 let documentRef: Document | null = null;
 
@@ -137,7 +135,8 @@ export function createStack(ids: string[], options: { title?: string; at?: { x: 
     const inStack = [...stacks.values()].find((stack) => stack.cards.includes(id));
     if (inStack) {
       inStack.cards = inStack.cards.filter((card) => card !== id);
-      if (inStack.cards.length < 1) removeStack(inStack, 'empty');
+      // APP-113: a stack left with one card spreads it (no "+0" stack).
+      if (inStack.cards.length < 2) dissolve(inStack);
       else {
         inStack.top = Math.min(inStack.top, inStack.cards.length - 1);
         showTop(inStack);
@@ -208,7 +207,7 @@ export function dissolve(stack: Stack): void {
   cards.forEach((id, index) => board.drop(id, { x: at.x + index * (WIDTH + GAP), y: at.y }));
   board.changed();
   save();
-  board.announce(`${cards.length} cards spread onto the canvas.`);
+  board.announce(`${cards.length} ${cards.length === 1 ? 'card' : 'cards'} spread onto the canvas.`);
 }
 
 /** Fans a stack's cards out in a grid beside it (macOS Stacks' grid). */
@@ -223,7 +222,7 @@ export function expand(stack: Stack): void {
   stack.fanned = [];
   stack.cards.forEach((id, index) => {
     const x = at.x + WIDTH + GAP * 2 + (index % columns) * (WIDTH + GAP);
-    const y = at.y + Math.floor(index / columns) * 380;
+    const y = at.y + Math.floor(index / columns) * FAN_ROW_HEIGHT;
     const item = board.drop(id, { x, y }, true);
     if (item) {
       item.classList.add('is-fanned');

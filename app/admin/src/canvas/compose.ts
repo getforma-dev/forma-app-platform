@@ -21,7 +21,9 @@ const ORIGINS: readonly ComposeOrigin[] = ['retrieved', 'adapted', 'generated'];
 export type Tailoring = 'none' | 'pending' | 'kept' | 'adapted';
 const TAILORINGS: readonly Tailoring[] = ['none', 'pending', 'kept', 'adapted'];
 export type ComposeResult = {
-  kind: 'placed'; app_id: string; work_id: string; origin: ComposeOrigin; title: string; labels: string[]; tailoring: Tailoring;
+  kind: 'placed'; app_id: string; work_id: string; origin: ComposeOrigin; title: string;
+  /** The assembly chips the card shows: the server's origin label, verbatim and closed. */
+  labels: string[]; tailoring: Tailoring;
 };
 /** APP-101: a near tie; the member chooses (nothing was written). */
 export type Choice = { app_id: string; title: string; purpose: string };
@@ -36,11 +38,6 @@ export class ComposeError extends Error {
   ) {
     super(code);
   }
-}
-
-/** The assembly chips the card shows for an origin (the server's label, verbatim and closed). */
-export function labelsFor(origin: ComposeOrigin): string[] {
-  return [origin];
 }
 
 /** The server's `Retry-After` in seconds, bounded; `null` when absent or malformed. */
@@ -94,7 +91,7 @@ export async function composeIntent(text: string, pin: Pin = null): Promise<Comp
   const origin = body.origin as ComposeOrigin;
   const title = typeof body.title === 'string' ? body.title.slice(0, 120) : '';
   const tailoring = TAILORINGS.includes(body.tailoring as Tailoring) ? (body.tailoring as Tailoring) : 'none';
-  return { kind: 'placed', app_id: body.app_id, work_id: body.work_id, origin, title, labels: labelsFor(origin), tailoring };
+  return { kind: 'placed', app_id: body.app_id, work_id: body.work_id, origin, title, labels: [origin], tailoring };
 }
 
 const MESSAGES: Record<ComposeCode, string> = {

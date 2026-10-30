@@ -14,7 +14,7 @@
 import { addCards, boardWorks, isOnBoard, onBoardChange, removeCards } from './board';
 import { stackCards } from './stacks';
 import { registerCommands, registerCompleter, type Completion } from './slash';
-import { el, isUuid } from './render';
+import { announce, el, isUuid } from './render';
 import { removeWidgets, runWidget, widgetCount, WIDGET_COMMANDS } from './widgets/index';
 import type { WidgetKind } from './widgets/state';
 import { newNote, noteEntries, onNotesChange, toggleNote } from './notes';
@@ -242,11 +242,6 @@ function notesClick(target: Element | null): boolean {
   const id = target?.closest<HTMLElement>('[data-note]')?.dataset.note;
   if (id && target?.closest('[data-lib-toggle]')) announce(toggleNote(id));
   return true;
-}
-
-function announce(message: string): void {
-  const status = documentRef?.getElementById('cv-activity');
-  if (status) status.textContent = message;
 }
 
 /**
@@ -500,7 +495,7 @@ export function startLibrary(document_: Document): void {
     }
   });
   pane.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
+    if (event.key === 'Escape' && !event.defaultPrevented) {
       event.preventDefault();
       event.stopPropagation();
       if (search && search.value) {

@@ -38,7 +38,15 @@ export function liveEvent(data: unknown): LiveEvent | null {
   return { kind: event.kind as 'record.committed' | 'app.shared' | 'app.placed' | 'app.kept', app_id: event.app_id, work_id: event.work_id };
 }
 
-/** Subscribes to `url` (same origin, `/v1/` only); returns the unsubscribe. */
+/** Reconnect delays after the browser gave up on the stream (an HTTP error closes an EventSource for good). */
+const BACKOFF_MS = [1000, 2000, 5000, 10000, 30000];
+
+/**
+ * Subscribes to `url` (same origin, `/v1/` only); returns the unsubscribe.
+ * APP-113: hints sent while the stream was down are lost, so every re-open
+ * after the first is reported as `stream.lagged` (the board re-runs what it
+ * shows); a stream the browser closed (an HTTP error) is reopened with backoff.
+ */
 export function subscribeLive(
   url: string,
   onEvent: (event: LiveEvent) => void,
@@ -48,17 +56,46 @@ export function subscribeLive(
     onState('off');
     return () => undefined;
   }
-  const source = new EventSource(url);
+  let source: EventSource | null = null;
+  let opened = false;
+  let failures = 0;
+  let timer = 0;
+  let stopped = false;
   const handle = (message: MessageEvent) => {
     const event = liveEvent(message.data);
     if (event) onEvent(event);
   };
-  source.addEventListener('open', () => onState('live'));
-  source.addEventListener('error', () => onState(source.readyState === EventSource.CLOSED ? 'off' : 'reconnecting'));
-  source.addEventListener('message', handle);
-  for (const kind of KINDS) source.addEventListener(kind, handle as EventListener);
+  const connect = () => {
+    timer = 0;
+    if (stopped) return;
+    const next = new EventSource(url);
+    source = next;
+    next.addEventListener('open', () => {
+      onState('live');
+      failures = 0;
+      if (opened) onEvent({ kind: 'stream.lagged' });
+      opened = true;
+    });
+    next.addEventListener('error', () => {
+      if (next.readyState !== EventSource.CLOSED) {
+        onState('reconnecting');
+        return;
+      }
+      // The browser will not retry this one: reopen it ourselves, slower each time.
+      next.close();
+      if (stopped || timer) return;
+      onState('reconnecting');
+      timer = window.setTimeout(connect, BACKOFF_MS[Math.min(failures, BACKOFF_MS.length - 1)]);
+      failures += 1;
+    });
+    next.addEventListener('message', handle);
+    for (const kind of KINDS) next.addEventListener(kind, handle as EventListener);
+  };
+  connect();
   return () => {
-    source.close();
+    stopped = true;
+    window.clearTimeout(timer);
+    source?.close();
     onState('off');
   };
 }

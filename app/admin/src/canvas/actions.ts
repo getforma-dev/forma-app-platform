@@ -12,9 +12,11 @@
 // only in a JSON body, never in a URL; the card shows typed values the
 // server composed, never the model's text.
 import { focusCard, placeWork, refreshGroupRecords } from './board';
+import { postCommand, type CommandOutcome } from './commands';
 import { submitIntent } from './compose';
 import { runSlash } from './slash';
 import { label } from './display';
+import { isDismissKey, showDockCard } from './dock-card';
 import { ledgerCardFor, setLedgerRange } from './ledger';
 import { RECEIPT_PROMPT, restoreReceipt, takeReceipt, type PendingReceipt } from './receipt';
 import { el, isUuid } from './render';
@@ -53,9 +55,7 @@ export type ActAnswer =
   | { action: 'open'; app_id: string; work_id: string; title: string; placed: boolean; view: 'ledger' | 'records'; range: LedgerRange | null }
   | { action: 'place' };
 
-export type Posted =
-  | { kind: 'committed'; recordVersion: string; workVersion: string; commit: string; audit: string }
-  | { kind: 'conflict' | 'stale' | 'refused' | 'unconfirmed' | 'busy' | 'failed'; message: string };
+export type Posted = CommandOutcome;
 
 const MESSAGES: Record<string, string> = {
   not_connected: 'The action path is not connected on this server yet.',
@@ -136,68 +136,20 @@ export async function requestDecision(app: string, work: string, record: string,
   return answer.draft;
 }
 
-function committed(body: unknown): Posted | null {
-  if (typeof body !== 'object' || body === null) return null;
-  const outcome = body as Record<string, unknown>;
-  if (outcome.kind !== 'command_outcome' || outcome.state !== 'committed') return null;
-  return {
-    kind: 'committed',
-    recordVersion: String(outcome.record_version),
-    workVersion: String(outcome.work_version),
-    commit: String(outcome.commit_sequence),
-    audit: String(outcome.audit_event_id),
-  };
-}
-const sleep = (seconds: number) => new Promise((resolve) => setTimeout(resolve, seconds * 1000));
-
 /**
  * Confirm: the draft, exactly as the server minted it, through the audited
- * command route with its idempotency key (`commands.ts`'s protocol; a retry
- * reuses the key and can only return the stored outcome).
+ * command route with its idempotency key (`commands.ts` `postCommand`; a
+ * retry reuses the key and can only return the stored outcome).
  */
-export async function postDraft(draft: Draft): Promise<Posted> {
+export function postDraft(draft: Draft): Promise<Posted> {
   const key = String(draft.command_request.idempotency_key);
   const path = `/v1/work/${draft.app_id}/${draft.work_id}/commands/${draft.command_id}`;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    let response: Response;
-    try {
-      response = await fetch(path, {
-        method: 'POST',
-        credentials: 'same-origin',
-        cache: 'no-store',
-        headers: { 'content-type': 'application/json', 'idempotency-key': key },
-        body: JSON.stringify(draft.command_request),
-      });
-    } catch {
-      return lookUp(path, key);
-    }
-    const body: unknown = await response.json().catch(() => null);
-    const code = typeof body === 'object' && body !== null ? String((body as { code?: unknown }).code ?? '') : '';
-    if (response.ok) return committed(body) ?? { kind: 'unconfirmed', message: 'The result of the command could not be confirmed.' };
-    if (response.status === 409 && (code === 'in_flight' || code === 'busy')) {
-      await sleep(Math.min(10, Math.max(1, Number(response.headers.get('retry-after')) || 2)));
-      continue;
-    }
-    if (response.status === 409) return { kind: 'conflict', message: 'The record changed before your command. Nothing was changed by this submission.' };
-    if (response.status === 412) return { kind: 'stale', message: 'The saved work moved to a newer revision. Try again.' };
-    if (response.status === 503 && code === 'unknown_outcome') return lookUp(path, key);
-    if (response.status === 400 || response.status === 404) return { kind: 'refused', message: 'The command was refused: a value is not one this command accepts. Nothing was changed.' };
-    return { kind: 'failed', message: 'The command could not be committed right now. Nothing was changed.' };
-  }
-  return { kind: 'busy', message: 'The record was busy. Try again in a moment.' };
-}
-
-async function lookUp(path: string, key: string): Promise<Posted> {
-  try {
-    const response = await fetch(`${path}/outcomes/${key}`, { credentials: 'same-origin', cache: 'no-store' });
-    if (response.ok) {
-      const outcome = committed(await response.json().catch(() => null));
-      if (outcome) return outcome;
-    }
-  } catch {
-    // unconfirmed
-  }
-  return { kind: 'unconfirmed', message: 'The result of your command could not be confirmed. Confirming again is safe: it can only return the stored outcome.' };
+  return postCommand(path, draft.command_request, key, {
+    conflict: 'The record changed before your command. Nothing was changed by this submission.',
+    stale: 'The saved work moved to a newer revision. Try again.',
+    busy: 'The record was busy. Try again in a moment.',
+    unconfirmed: 'The result of your command could not be confirmed. Confirming again is safe: it can only return the stored outcome.',
+  });
 }
 
 /** The share step: the existing share route, record_write so the approver can decide. */
@@ -221,19 +173,12 @@ async function shareWith(draft: Draft): Promise<string> {
   return notes.join(' ');
 }
 
-function host(document_: Document): HTMLElement {
-  let node = document_.getElementById('cv-confirm');
-  if (!node) {
-    node = el(document_, 'div', { id: 'cv-confirm', class: 'cv-confirm-host' });
-    (document_.querySelector('.cv-dock') ?? document_.body).prepend(node);
-  }
-  return node;
-}
-
-/** Shows the confirmation card; resolves with the member's choice. */
-function confirmCard(document_: Document, draft: Draft, utterance: string, receipt: PendingReceipt | null = null): Promise<'confirm' | 'edit' | 'cancel'> {
+/**
+ * Shows the confirmation card; resolves with the member's choice, or
+ * `replaced` when another dock card (the chooser) took its place.
+ */
+function confirmCard(document_: Document, draft: Draft, utterance: string, receipt: PendingReceipt | null = null): Promise<'confirm' | 'edit' | 'cancel' | 'replaced'> {
   return new Promise((resolve) => {
-    const container = host(document_);
     const list = el(document_, 'dl', { class: 'cv-confirm-values' });
     for (const value of draft.values) {
       const numeric = typeof value.value === 'object' && value.value !== null && (value.value as { type?: string }).type === 'money';
@@ -270,17 +215,21 @@ function confirmCard(document_: Document, draft: Draft, utterance: string, recei
       ...(draft.flags ?? []).map((flag) => el(document_, 'p', { class: 'cv-flag', 'data-state': flag.state }, flag.label)),
       el(document_, 'p', { class: 'cv-confirm-note' }, 'Nothing is written until you confirm. The command is committed through the audited path with a server-minted key.'),
       el(document_, 'div', { class: 'cv-confirm-actions' }, confirm, edit, cancel));
+    let close = () => undefined as void;
     const done = (choice: 'confirm' | 'edit' | 'cancel') => {
-      card.remove();
+      close();
       resolve(choice);
     };
     confirm.addEventListener('click', () => done('confirm'));
     edit.addEventListener('click', () => done('edit'));
     cancel.addEventListener('click', () => done('cancel'));
     card.addEventListener('keydown', (event) => {
-      if ((event as KeyboardEvent).key === 'Escape') done('cancel');
+      if (isDismissKey(event)) {
+        event.preventDefault();
+        done('cancel');
+      }
     });
-    container.replaceChildren(card);
+    close = showDockCard(document_, card, () => resolve('replaced'));
     confirm.focus();
   });
 }
@@ -376,6 +325,8 @@ export async function submitAction(text: string, report: (message: string) => vo
     report('Cancelled. Nothing was changed.');
     return;
   }
+  // Another dock card (the chooser) took its place: that card reports now.
+  if (choice === 'replaced') return;
   report('Committing through the audited command path…');
   const result = await postDraft(draft);
   if (result.kind !== 'committed') {

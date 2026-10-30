@@ -7,6 +7,7 @@
 // a placeholder only, never a live token. Nothing here grants anything: a
 // token acts as this member, with this member's permissions, receipts and
 // audit, and the server re-judges every call.
+import { when as displayWhen } from './display';
 import { el, isUuid } from './render';
 
 export const TOKENS_URL = '/v1/agent-tokens';
@@ -51,10 +52,13 @@ function copyable(document_: Document, label: string, text: string, multiline = 
   return el(document_, 'div', { class: 'cv-agent-copyable' }, el(document_, 'span', { class: 'cv-agent-copy-label' }, label), field, button);
 }
 
+/** A token's time as the rest of the canvas shows times: `Oct 22, 10:03 UTC` (`display.ts`). */
 function when(stamp: string | null): string {
   if (!stamp) return 'never used';
   const date = new Date(stamp);
-  return Number.isNaN(date.getTime()) ? stamp : date.toLocaleString();
+  if (Number.isNaN(date.getTime())) return stamp;
+  const shown = displayWhen(date.toISOString());
+  return shown ? `${shown} UTC` : stamp;
 }
 
 async function listTokens(): Promise<{ tokens: TokenJson[]; url: string } | null> {

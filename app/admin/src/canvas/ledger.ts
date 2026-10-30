@@ -7,14 +7,14 @@
 // at most 200, newest first: labeled "live records, last 200", DS-58). It
 // re-reads the listing on every `record.committed` of its work (`board.ts`),
 // so a newly confirmed claim appears without a reload. Nothing here writes;
-// every amount is a record's own typed money value, summed in cents.
-import { label } from './display';
+// every amount is a record's own typed money value, summed exactly in its
+// minor units (BigInt), per currency.
+import { label, money } from './display';
 import { recordsJson, type RecordJson, type RecordsJson } from './records';
 import { el, pulseTarget } from './render';
 
 export const LEDGER_SCOPE = 'live records, last 200';
 
-export type LedgerRowJson = { id: string; label: string; count: string; total: string };
 /** The server's ledger card JSON (`GET /v1/canvas/works/{app}/{work}` → `ledger[]`). */
 export type LedgerCardJson = {
   id: string; title: string; url: string; collection: string; amount_field: string; date_field: string;
@@ -28,12 +28,27 @@ const PRESETS: [Preset, string][] = [
 
 const listings = new WeakMap<HTMLElement, RecordsJson>();
 
-/** Cents as dollars, as a record cell shows money (`resolve::display`). */
-export function dollars(cents: number): string {
-  const negative = cents < 0;
-  const abs = Math.abs(Math.trunc(cents));
-  const whole = String(Math.floor(abs / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${negative ? '-' : ''}$${whole}.${String(abs % 100).padStart(2, '0')}`;
+/**
+ * Sums of typed money, exact (BigInt minor units), one per currency and
+ * minor-unit exponent (`USD:2`): a ledger never adds two currencies.
+ */
+export type Amounts = Map<string, bigint>;
+
+/** Amounts as a person reads them, exact (`display.money`): `$1,234.50`, or `$10.00 + €5.00`. */
+export function formatAmounts(amounts: Amounts): string {
+  const parts = [...amounts].map(([key, minor]) => {
+    const [currency = 'USD', exponent = '2'] = key.split(':');
+    return money(minor < 0n, minor < 0n ? -minor : minor, currency, Number(exponent))[1];
+  });
+  return parts.length ? parts.join(' + ') : money(false, 0n, 'USD', 2)[1];
+}
+
+function add(amounts: Amounts, key: string, minor: bigint): void {
+  amounts.set(key, (amounts.get(key) ?? 0n) + minor);
+}
+/** The first amount (the ledger's main currency), for ordering. */
+function lead(amounts: Amounts): bigint {
+  return amounts.values().next().value ?? 0n;
 }
 
 function iso(date: Date): string {
@@ -56,9 +71,15 @@ function field(record: RecordJson, id: string): Record<string, unknown> | undefi
   const value = record.values.find((v) => v.field_id === id)?.value;
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
 }
-function cents(record: RecordJson, id: string): number {
-  const minor = Number(field(record, id)?.minor_units ?? 0);
-  return Number.isFinite(minor) ? minor : 0;
+/** A record's money value: minor units exactly, keyed by currency and exponent; null when absent or malformed. */
+function amountOf(record: RecordJson, id: string): { key: string; minor: bigint } | null {
+  const value = field(record, id);
+  const minor = value?.minor_units;
+  const currency = typeof value?.currency === 'string' && /^[A-Z]{3}$/.test(value.currency) ? value.currency : 'USD';
+  const exponent = Number.isInteger(value?.minor_unit_exponent) && Number(value?.minor_unit_exponent) >= 0 && Number(value?.minor_unit_exponent) <= 6
+    ? Number(value?.minor_unit_exponent) : 2;
+  if (typeof minor !== 'string' || !/^-?[0-9]{1,36}$/.test(minor)) return null;
+  return { key: `${currency}:${exponent}`, minor: BigInt(minor) };
 }
 function text(record: RecordJson, id: string): string {
   const value = field(record, id)?.value;
@@ -66,13 +87,13 @@ function text(record: RecordJson, id: string): string {
 }
 
 export type LedgerFilter = { from: string; to: string; status: string };
-export type LedgerTotals = { total: number; count: number; people: [string, number, number][]; categories: [string, number, number][] };
+export type LedgerTotals = { total: Amounts; count: number; people: [string, number, Amounts][]; categories: [string, number, Amounts][] };
 
-/** The ledger's arithmetic over a listing: records in range and status, summed in cents. */
+/** The ledger's arithmetic over a listing: records in range and status, summed exactly in minor units. */
 export function totals(listing: RecordsJson, card: { collection: string; amount: string; date: string; category: string; status: string }, filter: LedgerFilter): LedgerTotals {
-  const people = new Map<string, [number, number]>();
-  const categories = new Map<string, [number, number]>();
-  let total = 0;
+  const people = new Map<string, [number, Amounts]>();
+  const categories = new Map<string, [number, Amounts]>();
+  const total: Amounts = new Map();
   let count = 0;
   for (const record of listing.records) {
     if (card.collection && record.collection_id !== card.collection) continue;
@@ -80,19 +101,25 @@ export function totals(listing: RecordsJson, card: { collection: string; amount:
     if (filter.from && (!day || day < filter.from)) continue;
     if (filter.to && (!day || day > filter.to)) continue;
     if (filter.status && card.status && text(record, card.status) !== filter.status) continue;
-    const amount = cents(record, card.amount);
-    total += amount;
+    const amount = amountOf(record, card.amount);
     count += 1;
-    const person = people.get(record.creator.label) ?? [0, 0];
-    people.set(record.creator.label, [person[0] + 1, person[1] + amount]);
-    if (card.category) {
-      const name = text(record, card.category) || '—';
-      const entry = categories.get(name) ?? [0, 0];
-      categories.set(name, [entry[0] + 1, entry[1] + amount]);
+    const person = people.get(record.creator.label) ?? [0, new Map()];
+    person[0] += 1;
+    people.set(record.creator.label, person);
+    const name = card.category ? text(record, card.category) || '—' : '';
+    const entry = card.category ? categories.get(name) ?? [0, new Map()] : null;
+    if (entry) {
+      entry[0] += 1;
+      categories.set(name, entry);
     }
+    if (!amount) continue;
+    add(total, amount.key, amount.minor);
+    add(person[1], amount.key, amount.minor);
+    if (entry) add(entry[1], amount.key, amount.minor);
   }
-  const sorted = (map: Map<string, [number, number]>) =>
-    Array.from(map, ([name, [n, sum]]) => [name, n, sum] as [string, number, number]).sort((a, b) => b[2] - a[2] || a[0].localeCompare(b[0]));
+  const sorted = (map: Map<string, [number, Amounts]>) =>
+    Array.from(map, ([name, [n, sum]]) => [name, n, sum] as [string, number, Amounts])
+      .sort((a, b) => (lead(b[2]) > lead(a[2]) ? 1 : lead(b[2]) < lead(a[2]) ? -1 : a[0].localeCompare(b[0])));
   return { total, count, people: sorted(people), categories: sorted(categories) };
 }
 
@@ -121,10 +148,10 @@ function rangeText(filter: LedgerFilter): string {
   return `${filter.from || 'start'} to ${filter.to || 'today'}`;
 }
 
-function table(document_: Document, caption: string, rows: [string, number, number][]): HTMLElement {
+function table(document_: Document, caption: string, rows: [string, number, Amounts][]): HTMLElement {
   const body = el(document_, 'tbody', {});
   for (const [name, n, sum] of rows) {
-    body.append(el(document_, 'tr', {}, el(document_, 'th', { scope: 'row' }, name), el(document_, 'td', { class: 'num' }, String(n)), el(document_, 'td', { class: 'num' }, dollars(sum))));
+    body.append(el(document_, 'tr', {}, el(document_, 'th', { scope: 'row' }, name), el(document_, 'td', { class: 'num' }, String(n)), el(document_, 'td', { class: 'num' }, formatAmounts(sum))));
   }
   return el(document_, 'table', { class: 'cv-ledger-table' }, el(document_, 'caption', {}, caption), body);
 }
@@ -142,7 +169,7 @@ export function renderLedger(card: HTMLElement): void {
   }, filter);
   const scope = [rangeText(filter), filter.status ? filter.status : 'every status'].join(' · ');
   const total = el(document_, 'p', { class: 'cv-ledger-total' },
-    el(document_, 'span', { class: 'cv-ledger-total-value num', 'data-total-cents': String(sums.total) }, dollars(sums.total)), ' ',
+    el(document_, 'span', { class: 'cv-ledger-total-value num', 'data-total-cents': String(lead(sums.total)) }, formatAmounts(sums.total)), ' ',
     el(document_, 'span', { class: 'cv-muted' }, `across ${sums.count} ${sums.count === 1 ? 'record' : 'records'} · ${scope}`));
   if (!sums.count) {
     body.replaceChildren(total, el(document_, 'p', { class: 'cv-message', role: 'status' }, 'No records in this range.'));
@@ -218,20 +245,21 @@ export async function refreshLedger(card: HTMLElement, live = false): Promise<vo
   if (!url.startsWith('/v1/work/')) return;
   const epoch = String(Number(card.dataset.epoch ?? '0') + 1);
   card.dataset.epoch = epoch;
-  let response: Response;
+  let response: Response | null = null;
   try {
     response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
   } catch {
-    return;
+    // APP-113: a network error shows the failed state below, never "Loading…" forever.
   }
-  const body: unknown = await response.json().catch(() => null);
+  const body: unknown = response ? await response.json().catch(() => null) : null;
   if (card.dataset.epoch !== epoch) return;
-  const listing = response.ok ? recordsJson(body) : null;
+  const listing = response?.ok ? recordsJson(body) : null;
   if (!listing) {
     listings.delete(card);
-    card.dataset.state = response.status === 404 ? 'denied' : 'failed';
+    const denied = response?.status === 404;
+    card.dataset.state = denied ? 'denied' : 'failed';
     card.querySelector<HTMLElement>('[data-body]')?.replaceChildren(el(card.ownerDocument, 'p', { class: 'cv-message', role: 'alert' },
-      response.status === 404 ? 'You do not have access to these records. Nothing is shown.' : 'The ledger could not be read right now.'));
+      denied ? 'You do not have access to these records. Nothing is shown.' : 'The ledger could not be read right now.'));
     return;
   }
   listings.set(card, listing);
@@ -270,11 +298,4 @@ export function setLedgerRange(card: HTMLElement, range: { from: string; to: str
 /** The ledger card of a work, wherever the canvas moved it. */
 export function ledgerCardFor(app: string, work: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(`.cv-ledger[data-records="/v1/work/${app}/${work}/records"]`);
-}
-
-/** Every ledger card of a group's items. */
-export function ledgerCardsOf(items: HTMLElement[]): HTMLElement[] {
-  return items
-    .map((item) => item.querySelector<HTMLElement>('.cv-ledger'))
-    .filter((card): card is HTMLElement => Boolean(card));
 }
