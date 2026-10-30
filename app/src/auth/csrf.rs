@@ -32,6 +32,8 @@ pub enum Form {
     SignOutAll,
     /// APP-013: the record command form (D7.16), tied to the workspace session.
     Command,
+    /// APP-012: the work page's run form (`POST /w/{app}/{work}`).
+    Query,
 }
 impl Form {
     fn name(self) -> &'static [u8] {
@@ -40,6 +42,7 @@ impl Form {
             Self::SignOut => b"signout",
             Self::SignOutAll => b"signout-all",
             Self::Command => b"command",
+            Self::Query => b"query",
         }
     }
 }

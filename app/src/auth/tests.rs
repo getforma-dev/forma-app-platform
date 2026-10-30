@@ -41,21 +41,21 @@ use tower::ServiceExt;
 
 /// The two fixture organizations (tenant_seed.py) and their synthetic fAuth
 /// tenants. The live identifiers are APP-076's; these are local only.
-pub(super) const ORG: &str = "00000000-0000-4000-8000-000000000001";
-pub(super) const OTHER: &str = "00000000-0000-4000-8000-000000000002";
-pub(super) const APP: &str = "00000000-0000-4000-8000-000000000065";
-pub(super) const NORTHSTAR_TENANT: &str = "ten_00000000-0000-4000-8000-00000000a001";
-pub(super) const CANARY_TENANT: &str = "ten_00000000-0000-4000-8000-00000000a002";
+pub(crate) const ORG: &str = "00000000-0000-4000-8000-000000000001";
+pub(crate) const OTHER: &str = "00000000-0000-4000-8000-000000000002";
+pub(crate) const APP: &str = "00000000-0000-4000-8000-000000000065";
+pub(crate) const NORTHSTAR_TENANT: &str = "ten_00000000-0000-4000-8000-00000000a001";
+pub(crate) const CANARY_TENANT: &str = "ten_00000000-0000-4000-8000-00000000a002";
 /// The sign-in handles this slice issued for the two fixture organizations
 /// (non-secret routing; evidence/APP-009/handles.json). The campaign installs
 /// them with `admission_operator.py issue-handle --handle`.
 pub(crate) const NORTHSTAR_HANDLE: &str = "se45m37vabqrfvbh3gbwn22qkm";
 pub(crate) const CANARY_HANDLE: &str = "z33gibxjspwxcnopbsdxqtijey";
 /// Well formed, never issued.
-pub(super) const UNKNOWN_HANDLE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaa";
-pub(super) const APP_ORIGIN: &str = "https://beta.getforma.dev";
+pub(crate) const UNKNOWN_HANDLE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaa";
+pub(crate) const APP_ORIGIN: &str = "https://beta.getforma.dev";
 
-pub(super) struct TestPages;
+pub(crate) struct TestPages;
 fn page(text: String) -> Response {
     let mut response = (StatusCode::OK, text).into_response();
     http::secure(response.headers_mut());
@@ -96,7 +96,7 @@ impl Pages for TestPages {
         ))
     }
 }
-pub(super) fn field(body: &str, name: &str) -> String {
+pub(crate) fn field(body: &str, name: &str) -> String {
     let prefix = format!("{name}=");
     body.split(';')
         .find_map(|part| part.strip_prefix(&prefix))
@@ -104,7 +104,7 @@ pub(super) fn field(body: &str, name: &str) -> String {
         .to_owned()
 }
 
-pub(super) fn config(origin: &str) -> AuthConfig {
+pub(crate) fn config(origin: &str) -> AuthConfig {
     AuthConfig {
         auth_origin: origin.into(),
         app_origin: APP_ORIGIN.into(),
@@ -126,7 +126,7 @@ pub(super) fn config(origin: &str) -> AuthConfig {
         ],
     }
 }
-pub(super) fn tenants() -> Vec<Tenant> {
+pub(crate) fn tenants() -> Vec<Tenant> {
     vec![
         Tenant {
             slug: "northstar",
@@ -142,7 +142,7 @@ pub(super) fn tenants() -> Vec<Tenant> {
 }
 /// The same composition as the binary: ADR-006 routes, the uniform 404 for
 /// unknown paths and methods, the 5 s handler deadline.
-pub(super) fn app(auth: Arc<Auth>) -> Router {
+pub(crate) fn app(auth: Arc<Auth>) -> Router {
     routes::router(auth)
         .fallback(http::fallback)
         .method_not_allowed_fallback(http::fallback)
@@ -150,32 +150,32 @@ pub(super) fn app(auth: Arc<Auth>) -> Router {
 }
 
 #[derive(Clone)]
-pub(super) struct Reply {
-    pub(super) status: StatusCode,
-    pub(super) headers: HeaderMap,
-    pub(super) body: String,
+pub(crate) struct Reply {
+    pub(crate) status: StatusCode,
+    pub(crate) headers: HeaderMap,
+    pub(crate) body: String,
 }
 impl Reply {
-    pub(super) fn location(&self) -> String {
+    pub(crate) fn location(&self) -> String {
         match self.headers.get(header::LOCATION) {
             Some(value) => value.to_str().unwrap().to_owned(),
             None => panic!("no Location: {} {}", self.status, self.body),
         }
     }
-    pub(super) fn set_cookies(&self) -> Vec<String> {
+    pub(crate) fn set_cookies(&self) -> Vec<String> {
         self.headers
             .get_all(header::SET_COOKIE)
             .iter()
             .map(|v| v.to_str().unwrap().to_owned())
             .collect()
     }
-    pub(super) fn sets(&self, name: &str) -> Option<String> {
+    pub(crate) fn sets(&self, name: &str) -> Option<String> {
         self.set_cookies()
             .into_iter()
             .find(|c| c.starts_with(&format!("{name}=")))
     }
     /// The uniform refusal, header for header (dates excluded: none are set).
-    pub(super) fn uniform_404(&self) -> bool {
+    pub(crate) fn uniform_404(&self) -> bool {
         self.status == StatusCode::NOT_FOUND
             && self.body == "{\"code\":\"not_found\"}"
             && self.headers[header::CONTENT_TYPE] == "application/problem+json"
@@ -185,26 +185,26 @@ impl Reply {
     }
 }
 
-pub(super) type Log = Arc<Mutex<Vec<Reply>>>;
+pub(crate) type Log = Arc<Mutex<Vec<Reply>>>;
 /// A browser: a cookie jar that obeys Set-Cookie (Max-Age=0 removes), a peer
 /// address, and same-origin fetch metadata on every POST unless overridden.
-pub(super) struct Browser {
-    pub(super) jar: HashMap<String, String>,
-    pub(super) peer: SocketAddr,
-    pub(super) log: Log,
+pub(crate) struct Browser {
+    pub(crate) jar: HashMap<String, String>,
+    pub(crate) peer: SocketAddr,
+    pub(crate) log: Log,
 }
 impl Browser {
-    pub(super) fn new(peer: &str, log: &Log) -> Self {
+    pub(crate) fn new(peer: &str, log: &Log) -> Self {
         Self {
             jar: HashMap::new(),
             peer: peer.parse().unwrap(),
             log: log.clone(),
         }
     }
-    pub(super) fn cookie(&self, name: &str) -> Option<String> {
+    pub(crate) fn cookie(&self, name: &str) -> Option<String> {
         self.jar.get(name).cloned()
     }
-    pub(super) async fn send(
+    pub(crate) async fn send(
         &mut self,
         app: &Router,
         method: &str,
@@ -246,10 +246,10 @@ impl Browser {
         self.log.lock().unwrap().push(reply.clone());
         reply
     }
-    pub(super) async fn get(&mut self, app: &Router, uri: &str) -> Reply {
+    pub(crate) async fn get(&mut self, app: &Router, uri: &str) -> Reply {
         self.send(app, "GET", uri, "", &[]).await
     }
-    pub(super) async fn post(&mut self, app: &Router, uri: &str, body: &str) -> Reply {
+    pub(crate) async fn post(&mut self, app: &Router, uri: &str, body: &str) -> Reply {
         self.send(app, "POST", uri, body, &[("sec-fetch-site", "same-origin")])
             .await
     }
@@ -781,7 +781,7 @@ use crate::storage::{
     Lookup, SignOut, Stores,
 };
 
-fn check(checks: &mut Vec<Value>, name: &str) {
+pub(crate) fn check(checks: &mut Vec<Value>, name: &str) {
     checks.push(json!({"name": name, "passed": true}));
     println!("APP009 check: {name}");
 }
@@ -805,26 +805,35 @@ async fn superuser(fixture: &Fixture, sql: &str) {
         .unwrap();
 }
 
-struct Campaign {
-    fixture: Fixture,
-    stores: Arc<Stores>,
-    issuer: Issuer,
-    auth: Arc<Auth>,
-    app: Router,
-    log: Log,
-    checks: Vec<Value>,
+pub(crate) struct Campaign {
+    pub(crate) fixture: Fixture,
+    pub(crate) stores: Arc<Stores>,
+    pub(crate) issuer: Issuer,
+    pub(crate) auth: Arc<Auth>,
+    pub(crate) app: Router,
+    pub(crate) log: Log,
+    pub(crate) checks: Vec<Value>,
     /// The loopback management stand-in for the Northstar tenant; the
     /// operator writes each code's capability where the route reads it.
-    provider: FakeProvider,
+    pub(crate) provider: FakeProvider,
+    /// APP-012: the Canary tenant's stand-in, sharing the Northstar
+    /// stand-in's capability directory (as `invite_tests`), when a campaign
+    /// signs Canary members in. None in the session campaign.
+    pub(crate) canary: Option<FakeProvider>,
     /// digest → (raw code, invitation email), kept by the test only.
-    codes: Mutex<HashMap<String, (String, String)>>,
+    pub(crate) codes: Mutex<HashMap<String, (String, String)>>,
 }
 impl Campaign {
-    fn browser(&self, peer: &str) -> Browser {
+    pub(crate) fn browser(&self, peer: &str) -> Browser {
         Browser::new(peer, &self.log)
     }
     /// Ordinary sign-in: `POST /signin/{handle}` → hosted login → callback.
-    async fn sign_in(&self, browser: &mut Browser, handle: &str, subject: &str) -> Reply {
+    pub(crate) async fn sign_in(
+        &self,
+        browser: &mut Browser,
+        handle: &str,
+        subject: &str,
+    ) -> Reply {
         let start = browser
             .post(&self.app, &format!("/signin/{handle}"), "")
             .await;
@@ -842,16 +851,30 @@ impl Campaign {
     /// management stand-in, which writes the capability file the invitation
     /// route reads; the synthetic issuer learns the same invitation (one
     /// simulated provider). Returns (code id, digest).
-    fn issue_code(&self) -> (String, String) {
+    pub(crate) fn issue_code(&self) -> (String, String) {
+        self.issue_code_in(ORG)
+    }
+    /// APP-012 reuses the harness for both fixture organizations: a Canary
+    /// code goes through the Canary stand-in and tenant.
+    pub(crate) fn issue_code_in(&self, organization: &str) -> (String, String) {
+        let (provider, tenant, slug) = if organization == OTHER {
+            (
+                self.canary.as_ref().expect("a Canary stand-in"),
+                CANARY_TENANT,
+                "canary",
+            )
+        } else {
+            (&self.provider, NORTHSTAR_TENANT, "northstar")
+        };
         let mut codes = self.codes.lock().unwrap();
         let email = format!("code-{}@invite.example.test", codes.len());
         let out = operator_with(
             &self.fixture,
-            &self.provider,
+            provider,
             &[
                 "issue",
                 "--organization",
-                ORG,
+                organization,
                 "--issued-by",
                 "session-campaign",
                 "--grant",
@@ -865,21 +888,18 @@ impl Campaign {
                 "--provider-issuer",
                 ISSUER,
                 "--provider-tenant",
-                NORTHSTAR_TENANT,
+                tenant,
             ],
         );
         let invitation = &out["provider_invitation"];
         assert_eq!(invitation["capability_stored"], true, "{invitation}");
-        let path = self.provider.capabilities.join(format!(
-            "{ORG}.{}.capability",
+        let path = provider.capabilities.join(format!(
+            "{organization}.{}.capability",
             invitation["invitation_id"].as_str().unwrap()
         ));
         let record: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
-        self.issuer.invitation(
-            record["invite_token"].as_str().unwrap(),
-            "northstar",
-            &email,
-        );
+        self.issuer
+            .invitation(record["invite_token"].as_str().unwrap(), slug, &email);
         let code = out["code"].as_str().unwrap();
         let digest = code_digest(code).unwrap();
         assert_eq!(record["code_digest"], digest.as_str());
@@ -891,7 +911,13 @@ impl Campaign {
     /// capability's `invite_token`), then the hosted registration of
     /// `subject` for the invitation's email, then the callback. The test
     /// clears the in-process limits first (many invited signups per minute).
-    async fn invited_signup(&self, browser: &mut Browser, digest: &str, subject: &str) -> Reply {
+    /// The code names its organization, so one route serves both.
+    pub(crate) async fn invited_signup(
+        &self,
+        browser: &mut Browser,
+        digest: &str,
+        subject: &str,
+    ) -> Reply {
         let (code, email) = self.codes.lock().unwrap()[digest].clone();
         self.auth.limits.clear();
         let entry = browser
@@ -908,20 +934,28 @@ impl Campaign {
     }
     /// A fresh member through the whole product path: invited signup (pending),
     /// mailbox verification, then an ordinary sign-in that redeems and mints.
-    async fn member(&self, label: &str) -> (String, Browser) {
+    pub(crate) async fn member(&self, label: &str) -> (String, Browser) {
+        self.member_in(ORG, label).await
+    }
+    pub(crate) async fn member_in(&self, organization: &str, label: &str) -> (String, Browser) {
         let subject = format!("usr_00000000-0000-4000-8000-{:0>12}", label);
         self.issuer
             .user(&subject, &format!("{label}@example.test"), false);
-        let (_, digest) = self.issue_code();
+        let (_, digest) = self.issue_code_in(organization);
         let mut browser = self.browser("192.0.2.30:5000");
         let pending = self.invited_signup(&mut browser, &digest, &subject).await;
         assert_eq!(pending.location(), "/auth/pending");
         self.issuer.set_verified(&subject, true);
-        let arrived = self.sign_in(&mut browser, NORTHSTAR_HANDLE, &subject).await;
+        let handle = if organization == OTHER {
+            CANARY_HANDLE
+        } else {
+            NORTHSTAR_HANDLE
+        };
+        let arrived = self.sign_in(&mut browser, handle, &subject).await;
         assert_eq!(arrived.location(), "/workspace", "{label}");
         (subject, browser)
     }
-    async fn principal(&self, subject: &str) -> String {
+    pub(crate) async fn principal(&self, subject: &str) -> String {
         self.fixture
             .operator()
             .await
@@ -934,7 +968,7 @@ impl Campaign {
             .unwrap()
             .get(0)
     }
-    async fn epoch(&self, principal: &str) -> i64 {
+    pub(crate) async fn epoch(&self, principal: &str) -> i64 {
         scalar(
             &self.fixture,
             &format!(
@@ -943,7 +977,7 @@ impl Campaign {
         )
         .await
     }
-    fn record(&mut self, name: &str) {
+    pub(crate) fn record(&mut self, name: &str) {
         check(&mut self.checks, name);
     }
 }
@@ -1019,6 +1053,7 @@ async fn campaign() {
         log: Arc::default(),
         checks,
         provider,
+        canary: None,
         codes: Mutex::default(),
     };
 

@@ -518,6 +518,92 @@ impl Data {
     }
 }
 
+/// One view of a saved work's pinned definition that the Phase 1 query path
+/// can run: it carries a typed query over exactly one input (APP-005's
+/// qualified subset). Forms, notes and multi-input views are not listed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkView {
+    pub id: String,
+    pub title: String,
+    pub kind: String,
+}
+/// What the work page shows before any run: the pinned definition's title
+/// and its runnable views, in definition order.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkOutline {
+    pub title: String,
+    pub views: Vec<WorkView>,
+}
+
+/// The runnable views of re-admitted definition content.
+fn outline(content: &[u8]) -> Result<WorkOutline> {
+    let content = admission::decode(content).map_err(|_| Error::Unavailable)?;
+    let label = |value: Option<&Value>| -> Result<String> {
+        value
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or(Error::Unavailable)
+    };
+    let title = label(content.get("title"))?;
+    let mut views = Vec::new();
+    for view in content
+        .get("views")
+        .and_then(Value::as_array)
+        .ok_or(Error::Unavailable)?
+    {
+        let single_input = view
+            .get("query")
+            .and_then(|q| q.get("inputs"))
+            .and_then(Value::as_array)
+            .is_some_and(|inputs| inputs.len() == 1);
+        if single_input {
+            views.push(WorkView {
+                id: label(view.get("id"))?,
+                title: label(view.get("title"))?,
+                kind: label(view.get("kind"))?,
+            });
+        }
+    }
+    Ok(WorkOutline { title, views })
+}
+
+impl Data {
+    /// APP-012 work page: the same precheck and fence as [`Data::run_query`]
+    /// (`record_read` on the work, which includes `run` on its app and live
+    /// `source_read` on every dependency), the pinned publication under
+    /// `lock_work_revision` and its stored definition re-admitted; returns the
+    /// runnable views. Nothing executes and nothing is written. Every refusal
+    /// is `Denied`, so the page answers the uniform 404.
+    pub async fn work_outline(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        work: &str,
+    ) -> Result<WorkOutline> {
+        require(valid_id(app) && valid_id(work))?;
+        let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
+        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
+        let result = async {
+            let precheck = transaction
+                .precheck(Action::RecordRead, Resource::Work { app, work })
+                .await?;
+            let permit = transaction.fence(precheck).await?;
+            let transaction = permit.transaction();
+            let org = &request.organization;
+            let premise = premise(transaction, org, app, work).await?;
+            let (admitted, content) =
+                stored_content(transaction, org, app, &premise.definition_revision).await?;
+            if admitted != premise.definition_digest {
+                return Err(Error::Unavailable);
+            }
+            outline(&content)
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+}
+
 /// The receipt's stored-view and effective-query identities (`forma:query:v1`).
 pub fn query_digests(run: &QueryRun) -> Option<(String, String)> {
     let view = admission::encode(&run.view_query).ok()?;
@@ -557,6 +643,31 @@ mod tests {
         ] {
             assert_eq!(parse_parameters(&bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn outline_lists_only_single_input_query_views() {
+        let content = json!({"title": "Northstar", "views": [
+            {"id": "total", "title": "total", "kind": "summary", "query": {"inputs": ["events"]}},
+            {"id": "destinations", "title": "destinations", "kind": "table", "query": {"inputs": ["events", "inventory"]}},
+            {"id": "record_observation", "title": "record observation", "kind": "form"},
+            {"id": "timeline", "title": "timeline", "kind": "timeline", "query": {"inputs": ["events"]}}
+        ]});
+        let listed = outline(&admission::encode(&content).unwrap()).unwrap();
+        assert_eq!(listed.title, "Northstar");
+        assert_eq!(
+            listed
+                .views
+                .iter()
+                .map(|v| v.id.as_str())
+                .collect::<Vec<_>>(),
+            ["total", "timeline"]
+        );
+        assert_eq!(listed.views[1].kind, "timeline");
+        assert_eq!(
+            outline(&admission::encode(&json!({"views": []})).unwrap()),
+            Err(Error::Unavailable)
+        );
     }
 
     #[test]
