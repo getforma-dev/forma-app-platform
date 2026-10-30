@@ -32,6 +32,10 @@
 !app/src/http/proxy.rs
 !app/src/auth_qualification.rs
 !app/src/auth_qualification/tests.rs
+!app/src/events/mod.rs
+!app/src/events/routes.rs
+!app/src/events/tests.rs
+!app/src/sharing/mod.rs
 !app/src/commands/mod.rs
 !app/src/commands/payload.rs
 !app/src/commands/routes.rs
@@ -67,10 +71,13 @@
 !app/src/storage/race_qualification.rs
 !app/src/storage/registry.rs
 !app/src/storage/sessions.rs
+!app/src/storage/sharing.rs
+!app/src/storage/sharing_qualification.rs
 !app/src/storage/tests.rs
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
 !app/migrations/catalog-v7.json
+!app/migrations/catalog-v8.json
 !app/certs/rds-global-bundle.pem
 !app/runtime/runtime.py
 !app/runtime/qualification_supervisor.py
