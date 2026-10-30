@@ -214,6 +214,8 @@ app/admin/src/canvas/**
 # APP-106: focus mode and unite.
 !app/admin/src/canvas/focus.ts
 !app/admin/src/canvas/unite.ts
+# APP-109: quick notes.
+!app/admin/src/canvas/notes.ts
 !app/admin/src/canvas/widgets/
 app/admin/src/canvas/widgets/**
 !app/admin/src/canvas/widgets/index.ts

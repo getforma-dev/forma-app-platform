@@ -7,6 +7,7 @@ import { startControls } from './controls';
 import { startStacks } from './stacks';
 import { startUnite } from './unite';
 import { startFocus } from './focus';
+import { NOTE_COMMAND, startNotes } from './notes';
 import { registerCommands, startSlash } from './slash';
 // APP-103 utility widgets, registered as canvas slash commands (APP-101):
 // `/weather`, `/calculator`, `/clock` in the `/` list and `/apps`; a command
@@ -781,6 +782,9 @@ startControls(document);
 startStacks(document);
 startUnite(document);
 startFocus(document);
+// APP-109: `/note`, saved as the member's own records.
+registerCommands([NOTE_COMMAND]);
+startNotes(document);
 
 mount(
   () =>

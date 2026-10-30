@@ -17,6 +17,7 @@ import { registerCommands, registerCompleter, type Completion } from './slash';
 import { el, isUuid } from './render';
 import { removeWidgets, runWidget, widgetCount, WIDGET_COMMANDS } from './widgets/index';
 import type { WidgetKind } from './widgets/state';
+import { newNote, noteEntries, onNotesChange, toggleNote } from './notes';
 
 type Report = (message: string) => void;
 type CardRow = { id: string; number: string; title: string; kind: string; row: HTMLElement; button: HTMLButtonElement; app: AppRow };
@@ -149,7 +150,7 @@ function category(document_: Document, id: string, title: string): HTMLElement {
 }
 
 function recount(section: HTMLElement): void {
-  const count = section.querySelectorAll('.cv-lib-app').length;
+  const count = section.querySelectorAll('.cv-lib-app:not([hidden])').length;
   const label = section.querySelector('.cv-lib-count');
   if (label) label.textContent = `${count} ${count === 1 ? 'app' : 'apps'}`;
 }
@@ -188,7 +189,82 @@ function utilities(document_: Document): void {
     const indexed = index(row);
     if (indexed) apps.push(indexed);
   }
+  notesRow(document_, section);
   recount(section);
+}
+
+// --- APP-109: Utilities → Notes (the member's notes, `notes.ts`) ---
+let notes: HTMLElement | null = null;
+
+function notesRow(document_: Document, section: HTMLElement): void {
+  notes = buildAppRow(document_, { app: '', work: '', number: '', title: 'Notes', slug: 'note', cards: [] });
+  notes.classList.add('is-utility');
+  notes.dataset.notes = 'true';
+  notes.querySelector('[data-lib-all]')!.textContent = 'New note';
+  for (const button of notes.querySelectorAll('[data-lib-stack], [data-lib-unite]')) button.remove();
+  section.querySelector('.cv-lib-apps')?.append(notes);
+}
+
+/** Rebuilds the Notes row's cards: every note, Add or On canvas. */
+function syncNotes(): void {
+  if (!notes || !documentRef) return;
+  const document_ = documentRef;
+  const entries = noteEntries();
+  notes.querySelector('.cv-lib-cards')?.replaceChildren(...entries.map((entry) => el(document_, 'li', {
+    class: `cv-lib-card${entry.on ? ' is-on' : ''}`, 'data-note': entry.id, 'data-search': `note ${entry.title.toLowerCase()}`,
+  },
+  el(document_, 'button', { type: 'button', class: 'cv-lib-toggle', 'aria-pressed': String(entry.on), 'data-lib-toggle': '', title: entry.on ? 'On your canvas. Click to take it off (no data changes).' : 'Bring onto the canvas' },
+    el(document_, 'span', { class: 'cv-lib-num' }, ''),
+    el(document_, 'span', { class: 'cv-lib-card-title' }, entry.title),
+    el(document_, 'span', { class: 'cv-lib-kind', 'data-kind': 'note' }, 'note'),
+    el(document_, 'span', { class: 'cv-lib-action', 'data-lib-action': '' }, entry.on ? 'On canvas' : 'Add')))));
+  const on = entries.filter((entry) => entry.on).length;
+  const label = notes.querySelector('[data-lib-on]');
+  if (label) label.textContent = entries.length ? `${on} of ${entries.length} on canvas` : '';
+  notes.classList.toggle('has-on', on > 0);
+}
+
+/** A click inside the Notes row; true when it was one. */
+function notesClick(target: Element | null): boolean {
+  const row = target?.closest<HTMLElement>('.cv-lib-app[data-notes]');
+  if (!row) return false;
+  if (target?.closest('[data-lib-expand]')) {
+    const open = !row.classList.contains('is-expanded');
+    row.classList.toggle('is-expanded', open);
+    row.querySelector('[data-lib-expand]')?.setAttribute('aria-expanded', String(open));
+    return true;
+  }
+  if (target?.closest('[data-lib-all]')) {
+    void newNote('').then(announce);
+    if (phone()) closeLibrary();
+    return true;
+  }
+  const id = target?.closest<HTMLElement>('[data-note]')?.dataset.note;
+  if (id && target?.closest('[data-lib-toggle]')) announce(toggleNote(id));
+  return true;
+}
+
+function announce(message: string): void {
+  const status = documentRef?.getElementById('cv-activity');
+  if (status) status.textContent = message;
+}
+
+/**
+ * The Notes library app is shown as Utilities → Notes: its own rows (the
+ * library entry and the member's notes work under "My apps") step aside.
+ */
+function replaceNotesApp(): void {
+  const entry = apps.find((app) => app.slug === 'note' && !app.widget);
+  if (!entry) return;
+  for (const app of apps.filter((candidate) => candidate.app === entry.app && !candidate.widget)) {
+    app.row.hidden = true;
+    app.row.classList.add('is-replaced');
+    apps.splice(apps.indexOf(app), 1);
+  }
+  for (const section of pane?.querySelectorAll<HTMLElement>('.cv-lib-cat') ?? []) {
+    recount(section);
+    if (!section.querySelector('.cv-lib-app:not([hidden])')) section.hidden = true;
+  }
 }
 
 const onBoard = (card: CardRow): boolean => (card.app.widget ? widgetCount(card.app.widget) > 0 : isOnBoard(card.id));
@@ -373,11 +449,13 @@ export function startLibrary(document_: Document): void {
     if (app) apps.push(app);
   }
   utilities(document_);
+  replaceNotesApp();
   // Small libraries open expanded; a large one shows its apps first.
   if (apps.filter((app) => !app.widget).length <= 3) for (const app of apps) if (!app.widget) expand(app, true);
   toggle?.addEventListener('click', () => toggleLibrary());
   document_.addEventListener('click', (event) => {
     const target = event.target as Element | null;
+    if (notesClick(target)) return;
     if (target?.closest('[data-lib-open]')) {
       openLibrary();
       return;
@@ -432,6 +510,7 @@ export function startLibrary(document_: Document): void {
     }
   });
   onBoardChange(sync);
+  onNotesChange(syncNotes);
   registerCommands([CARD_COMMAND, APP_COMMAND]);
   registerCompleter('card', cardCompletions);
   registerCompleter('app', appCompletions);

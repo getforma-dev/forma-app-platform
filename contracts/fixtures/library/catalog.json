@@ -6136,6 +6136,255 @@
         }
       ],
       "fixture_sha256": "fa791f1bcd23cc315f989b34a86dea39c98eb2a671e16dbdf64a7552115a3ca1"
+    },
+    {
+      "library_id": "notes",
+      "fixture": "notes.json",
+      "title": "Notes",
+      "purpose": "Quick notes: type /note and a sentence to keep a note as a card on your canvas; each note is a typed record of your own.",
+      "routing": {
+        "description": "Quick personal notes: write a short note with a title and a body and keep it as a card on the canvas.",
+        "intent_examples": [
+          "take a note",
+          "note to self",
+          "remember to call the auditor Friday",
+          "jot this down"
+        ],
+        "negative_examples": [
+          "expense claims",
+          "approve the Nobu dinner",
+          "sales pipeline",
+          "incident timeline",
+          "budget vs actual",
+          "outbound traffic"
+        ],
+        "capabilities": [
+          "utilities.notes",
+          "records.create"
+        ]
+      },
+      "command": {
+        "slug": "note",
+        "aliases": [
+          "notes"
+        ]
+      },
+      "app_id": "00000000-0000-4000-8000-000000001981",
+      "definition_revision_id": "00000000-0000-4000-8000-000000001982",
+      "definition_digest": "sha256:c0a637a28559a80809d79111cad208c7fb92e26c385564caa9fab26756247741",
+      "publication_id": "00000000-0000-4000-8000-000000001983",
+      "work_id": "00000000-0000-4000-8000-000000001984",
+      "collection_id": "00000000-0000-4000-8000-000000001985",
+      "inputs": [
+        {
+          "id": "team_notes",
+          "kind": "source",
+          "contract_id": "team_notes_v1",
+          "fields": [
+            {
+              "id": "note_id",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "type": "timestamp",
+              "nullable": false
+            },
+            {
+              "id": "author",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "title",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "topic",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "planning",
+                "follow_up",
+                "decision",
+                "reminder",
+                "idea"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "notes",
+          "kind": "records",
+          "contract_id": "note_v1",
+          "fields": [
+            {
+              "id": "title",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "body",
+              "type": "text",
+              "nullable": true
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "count",
+          "kind": "summary",
+          "title": "Team notes",
+          "input": "team_notes",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "by_topic",
+          "kind": "status",
+          "title": "Team notes by topic",
+          "input": "team_notes",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "pinned",
+          "kind": "table",
+          "title": "Recent team notes",
+          "input": "team_notes",
+          "operators": [
+            "limit",
+            "project",
+            "sort"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "add",
+          "kind": "form",
+          "title": "New note",
+          "runnable": false,
+          "command_id": "add"
+        }
+      ],
+      "commands": [
+        {
+          "id": "add",
+          "record_schema_id": "note",
+          "operation": "create",
+          "writable_fields": [
+            "title",
+            "body"
+          ],
+          "transitions": []
+        },
+        {
+          "id": "edit",
+          "record_schema_id": "note",
+          "operation": "update",
+          "writable_fields": [
+            "title",
+            "body"
+          ],
+          "transitions": []
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "note",
+          "version": 1,
+          "fields": [
+            {
+              "id": "title",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "body",
+              "type": "text",
+              "nullable": true
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "input_id": "team_notes",
+          "source_id": "00000000-0000-4000-8000-000000003024",
+          "revision_id": "00000000-0000-4000-8000-000000003025",
+          "csv": "data/team_notes.csv",
+          "content_digest": "sha256:be5e69f59808bc756e517e0fe86f5e60317d4651196e5ea8918dcf497e3d01e0",
+          "normalized_digest": "sha256:18eef7f4d04c6d77095f59f3ebcfbdab65b6ea0ecb870f233ccf4f577188addd",
+          "row_count": 30,
+          "input_contract": {
+            "id": "team_notes",
+            "contract_id": "team_notes_v1",
+            "contract_version": 1,
+            "kind": "source",
+            "fields": [
+              {
+                "id": "note_id",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "time",
+                "value_type": {
+                  "type": "timestamp"
+                },
+                "nullable": false
+              },
+              {
+                "id": "author",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "title",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "topic",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "planning",
+                    "follow_up",
+                    "decision",
+                    "reminder",
+                    "idea"
+                  ]
+                },
+                "nullable": false
+              }
+            ]
+          }
+        }
+      ],
+      "fixture_sha256": "d817970247671f8a8aa825fb854ec2e4a8de8735213004f64a8ab9fd23017314"
     }
   ]
 }

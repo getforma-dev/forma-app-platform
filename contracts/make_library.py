@@ -310,6 +310,7 @@ def generate_sources():
         field("subscription_id", "text"), field("customer", "text"), enum("plan", "starter", "growth", "enterprise"), money("mrr"), field("started", "date"),
         enum("status", "active", "churned", "trial")]}, rows, "none")
     workflow_sources(sources)
+    notes_source(sources)
     return sources
 
 
@@ -390,6 +391,21 @@ def workflow_sources(sources):
         field("request_id", "text"), field("time", "timestamp"), field("account", "text"), field("owner", "text"), money("deal_amount"),
         integer("discount_pct", "percent"), enum("status", "submitted", "approved", "rejected"), field("auto_approved", "boolean")]}, rows, "event")
 
+# APP-109: the notes app's history (the team's pinned notes). A generator of its own, so every source above keeps its exact bytes.
+NOTE_TOPICS = ["planning", "follow_up", "decision", "reminder", "idea"]
+NOTE_TITLES = ["Quarter planning dates", "Send the auditor the Q3 ledger", "Vendor renewal decided", "Offsite headcount", "Try weekly demo hour",
+               "Close the books by the 5th", "Hiring loop feedback due", "Laptop refresh order", "Customer call recap", "Security review booked"]
+
+
+def notes_source(sources):
+    rng = random.Random(20261109)
+    rows = []
+    moments = sorted(stamp(rng.randrange(30), rng.randrange(7, 20), rng.randrange(60), rng.randrange(60)) for _ in range(30))
+    for n, t in enumerate(moments, 1):
+        rows.append([f"NOTE-{300 + n}", t, rng.choice(PEOPLE), rng.choice(NOTE_TITLES), rng.choice(NOTE_TOPICS)])
+    sources["team_notes"] = ({"id": "team_notes", "contract_id": "team_notes_v1", "contract_version": 1, "kind": "source", "fields": [
+        field("note_id", "text"), field("time", "timestamp"), field("author", "text"), field("title", "text"), enum("topic", *NOTE_TOPICS)]}, rows, "event")
+
 
 # --- the apps ---------------------------------------------------------------------------------
 
@@ -425,6 +441,21 @@ EXPENSE_CLAIMS_RECORDS = {
         {"field_id": "spent_on", "value": {"type": "date", "value": "2026-10-21"}},
         {"field_id": "note", "value": {"type": "text", "value": "Team coffee; synthetic only"}},
         {"field_id": "status", "value": {"type": "enum", "value": "approved"}}]},
+}
+
+# APP-109: quick notes. One note per record (a title and a plain-text body, at most 2,000 characters each, storage's text
+# bound); `add` creates it, `edit` rewrites its title and body (an `update`: no status, no transition). Each member writes
+# notes in a saved work of their own (`/v1/notes`), so a note is private to its author unless the work is shared.
+NOTES_RECORDS = {
+    "input_id": "notes", "contract_id": "note_v1", "schema_id": "note",
+    "fields": [field("title", "text"), field("body", "text", nullable=True)],
+    "commands": [
+        {"id": "add", "record_schema_id": "note", "operation": "create", "writable_fields": ["title", "body"], "transitions": []},
+        {"id": "edit", "record_schema_id": "note", "operation": "update", "writable_fields": ["title", "body"], "transitions": []},
+    ],
+    "seed": {"command_id": "add", "values": [
+        {"field_id": "title", "value": {"type": "text", "value": "Welcome to notes"}},
+        {"field_id": "body", "value": {"type": "text", "value": "Type /note and a sentence to keep a note on your canvas; synthetic only."}}]},
 }
 
 
@@ -540,6 +571,7 @@ COMMANDS = {
     "vendor-invoices": ("invoice", ["invoices", "payables"]),
     "access-requests": ("access", ["access-request"]),
     "deal-desk": ("discount", ["deal-desk", "discounts"]),
+    "notes": ("note", ["notes"]),
 }
 
 
@@ -790,6 +822,18 @@ def apps():
                ["build an app", "sales pipeline by stage", "coupon code", "stock price", "expense claims"],
                ["sales.dealdesk.discount", "sales.dealdesk.approve", "records.create", "records.transition"]),
            DEAL_DESK_RECORDS)
+    # APP-109: quick notes. The canvas shows each note as its own card (`/note`); the views give the team's pinned notes.
+    s = "team_notes"
+    yield ("notes", "Notes", "Quick notes: type /note and a sentence to keep a note as a card on your canvas; each note is a typed record of your own.", s, [
+        view("count", "summary", "Team notes", query([s], [aggregate(s, [], [measure("notes", "count", s, "note_id")])])),
+        view("by_topic", "status", "Team notes by topic", query([s], [aggregate(s, ["topic"], [measure("notes", "count", s, "note_id")])])),
+        view("pinned", "table", "Recent team notes", query([s], [{"type": "project", "fields": [f(s, "note_id"), f(s, "time"), f(s, "author"), f(s, "title"), f(s, "topic")]}, sort(s, [("time", "desc")], "note_id"), limit(15)])),
+        view("add", "form", "New note", command_id="add"),
+    ], routing("Quick personal notes: write a short note with a title and a body and keep it as a card on the canvas.",
+               ["take a note", "note to self", "remember to call the auditor Friday", "jot this down"],
+               ["expense claims", "approve the Nobu dinner", "sales pipeline", "incident timeline", "budget vs actual", "outbound traffic"],
+               ["utilities.notes", "records.create"]),
+           NOTES_RECORDS)
 
 
 def csv_bytes(contract, rows):

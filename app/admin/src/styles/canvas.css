@@ -1676,3 +1676,40 @@
   .cv-focus-thumb { width: 96px; grid-template-rows: 34px auto; }
 }
 @keyframes cv-sheet-in { from { transform: translateY(24px); opacity: 0; } }
+
+/* --- APP-109: quick notes (a typed record of the member's own, edited in place) --- */
+.cv-note {
+  --cv-note: color-mix(in srgb, #f5c542 16%, var(--cv-surface));
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: var(--cv-note);
+  border-color: color-mix(in srgb, #d9a514 30%, var(--cv-line));
+}
+.cv-canvas [data-forma-canvas] .widget-instance > .cv-note { min-height: 0; }
+.cv-note-head { margin-bottom: 0.15rem; }
+.cv-note-mark { width: 10px; height: 10px; flex: none; border-radius: 3px; background: #d9a514; }
+.cv-note-label { flex: 1; color: var(--cv-muted); font-size: 0.75rem; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; }
+.cv-note-title,
+.cv-note-body {
+  width: 100%;
+  margin: 0;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--cv-text);
+  font: inherit;
+  resize: none;
+}
+.cv-note-title { font-family: var(--cv-display); font-size: 1.05rem; font-weight: 660; letter-spacing: -0.01em; }
+.cv-note-body { min-height: 72px; font-size: 0.875rem; line-height: 1.5; white-space: pre-wrap; }
+.cv-note-title:hover,
+.cv-note-body:hover { border-color: var(--cv-line); }
+.cv-note-title:focus-visible,
+.cv-note-body:focus-visible { outline: none; border-color: var(--cv-accent); background: var(--cv-surface); }
+.cv-note-status { min-height: 1.1em; margin: 0; color: var(--cv-faint); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.cv-note-status.is-alert { color: var(--cv-bad); }
+@media (prefers-color-scheme: dark) {
+  .cv-note { --cv-note: color-mix(in srgb, #f5c542 9%, var(--cv-surface)); }
+}

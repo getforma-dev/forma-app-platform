@@ -387,7 +387,7 @@ async fn campaign() {
     for org in [ORG, OTHER] {
         operator(&fixture, &["backfill", "--organization", org]);
     }
-    // The library (14 apps, the expense claims app among them) in Northstar.
+    // The library (20 apps, the expense claims, workflow and notes apps among them) in Northstar.
     let seeded = operator(&fixture, &["seed-library", "--organization", ORG]);
     assert!(seeded["apps"]
         .as_array()
