@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "scope": "local catalog review candidates; not automatic baseline adoption",
+  "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "server_version": "16.13",
+  "container_removed": true,
+  "source_sha256": {
+    "0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
+    "0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
+    "0005_definition_work_grants.sql": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+    "0006_sessions.sql": "0372a295771eda11ee5f73472c991a4b1d6955db63d68519612fb6cfa30d07ed",
+    "catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+    "generate_schema_catalog.py": "f6802d633a695202c28cb6d5b604ee4a14462fe57d50f48f647b3f8246783b24",
+    "qualify_tenant_schema.py": "e90d7e7ad45a859494e3e18a3ea39b291fbeb2329f59bc7477b5633e3919f9a6",
+    "runtime.py": "c34609bfa4352ba905e23800ee815f4605e80453099c18e3fa8982ebef8b14b3"
+  },
+  "candidate_sha256": {
+    "catalog-v6.json": "14ef47cf04643b46386e239c65ee1beaa4d06b97d176796ec40aac4203e25701",
+    "catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
+    "catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+    "catalog-v5.json": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+    "catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6"
+  },
+  "body_bytes": {
+    "catalog-v1.json": 3829,
+    "catalog-v2.json": 125966,
+    "catalog-v3.json": 205463,
+    "catalog-v4.json": 206604,
+    "catalog-v5.json": 218213,
+    "catalog-v6.json": 244388
+  },
+  "file_bytes": {
+    "catalog-v1.json": 3905,
+    "catalog-v2.json": 123415,
+    "catalog-v3.json": 201584,
+    "catalog-v4.json": 202710,
+    "catalog-v5.json": 214169,
+    "catalog-v6.json": 239742
+  },
+  "guard_bytes": 419430
+}

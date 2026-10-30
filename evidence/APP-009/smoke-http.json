@@ -1,0 +1,22 @@
+[
+  {
+    "scope": "synthetic local HTTP denial smoke; not managed acceptance",
+    "live": 200,
+    "ready_without_native_registry": 503,
+    "positive_mock_helper_not_launched": true,
+    "native_html_count": 7,
+    "fresh_csp_nonces": true,
+    "no_store": true,
+    "signin_page": 200,
+    "protected_uniform_404": true
+  },
+  {
+    "scope": "startup credential permission failure",
+    "passed": true,
+    "credential_values_disclosed": false
+  },
+  {
+    "scope": "accepted RDS hostname with missing private registry cannot bind a listener",
+    "passed": true
+  }
+]
