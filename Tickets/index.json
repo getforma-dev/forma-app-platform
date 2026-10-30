@@ -248,9 +248,11 @@
         "APP-095",
         "APP-096",
         "APP-097",
-        "APP-098"
+        "APP-098",
+        "APP-099",
+        "APP-100"
       ],
-      "ticket_count": 8,
+      "ticket_count": 10,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -3153,6 +3155,65 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-091"
+      ]
+    },
+    {
+      "id": "APP-099",
+      "title": "Forma as an MCP server: any agent (Claude, OpenAI, others) works through the governed canvas",
+      "path": "0-backlog/APP-099.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "AI",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "099",
+      "Size": "L",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md): the November 2 emergency pivot. No dedicated phase existed, so the board's new phase PH08 / sprint S14 (order 8, no phase dependency; added to `plan.json`) holds the pitch tickets. Invariants of ADR-011 \u00a73 that bind this ticket: I1 verified identity; I2 tenant isolation (RLS, uniform 404); I3 receipts on every governed number; I4 transactional, idempotent, audited commands; I5 model output is data, never code, SQL, markup or grants (typed definitions through admission; every AI result labeled); I6 no credential, address or code in public evidence (I1\u2013I6 number the six invariants in \u00a73 in order).",
+      "Requirements": "C01, C06, C11, SR1",
+      "Depends on": "APP-093, APP-095",
+      "External dependencies": "None for the server; a Claude client (Claude Code or Claude Desktop) and an OpenAI API key for the cross-vendor rehearsal",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started (`pivot/mcp`, from `pivot/pitch-mvp` 4825e7f)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-093",
+        "APP-095"
+      ]
+    },
+    {
+      "id": "APP-100",
+      "title": "Slack: file, approve and get notified in Slack through the governed action path",
+      "path": "0-backlog/APP-100.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "AI",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "100",
+      "Size": "L",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md): the November 2 emergency pivot. No dedicated phase existed, so the board's new phase PH08 / sprint S14 (order 8, no phase dependency; added to `plan.json`) holds the pitch tickets. Invariants of ADR-011 \u00a73 that bind this ticket: I1 verified identity; I2 tenant isolation (RLS, uniform 404); I3 receipts on every governed number; I4 transactional, idempotent, audited commands; I5 model output is data, never code, SQL, markup or grants (typed definitions through admission; every AI result labeled); I6 no credential, address or code in public evidence (I1\u2013I6 number the six invariants in \u00a73 in order).",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-093, APP-095, APP-099",
+      "External dependencies": "A Slack workspace and a Slack app created by Victor from `docs/pitch/slack-app-manifest.json` (steps in `docs/pitch/SLACK-SETUP.md`); the bot token and signing secret placed by Victor in the clone's gitignored `.env` and in the `SlackApp` secret",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started (`pivot/slack`, from `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-093",
+        "APP-095",
+        "APP-099"
       ]
     }
   ]
