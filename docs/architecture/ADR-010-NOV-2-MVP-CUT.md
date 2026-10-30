@@ -1,6 +1,6 @@
 # ADR-010 — The November 2 MVP cut
 
-Date: 2026-10-29. Owner: GenUI (Claude, planning lead). Status: founder direction plus GenUI's application of it, recorded for Victor's veto; the judgment calls he should confirm are listed in §8. This record changes no behavior contract in ADR-003, ADR-004, ADR-006, ADR-007 or ADR-009. It amends the acceptance ownership of two Phase 1 tickets (APP-074, APP-076), adds a completion phase (PH07) and seven tickets (APP-082–088), and sets the review and landing process until the deadline. Every acceptance sentence it moves is reproduced verbatim in its new owner with a "(Moved from APP-xxx by ADR-010.)" marker; nothing is deleted or softened.
+Date: 2026-10-29. Owner: GenUI (Claude, planning lead). Status: accepted. Victor accepted the scope and every §8 judgment call on 2026-10-29 ("Accept"), including the Nov 1 RDS window and the Nov 2 go-live trial with him as the viewer. This record changes no behavior contract in ADR-003, ADR-004, ADR-006, ADR-007 or ADR-009. It amends the acceptance ownership of two Phase 1 tickets (APP-074, APP-076), adds a completion phase (PH07) and seven tickets (APP-082–088), and sets the review and landing process until the deadline. Every acceptance sentence it moves is reproduced verbatim in its new owner with a "(Moved from APP-xxx by ADR-010.)" marker; nothing is deleted or softened.
 
 Victor's words (2026-10-29): "move with the plan. However don't lose any work that needed to be done, cut tickets, mark defer for after Nov 2 and in order of pick-up and strategy. Also cut new follow-up tickets if needed, follow-ups, tests, open questions, etc. We don't want to lose sight of the main product. We will revisit all of it 100% after the Nov 2 deadline for the MVP." Earlier: "we want to show the product working. But we also need the most viable product ASAP ... Not saying to cut corners that can be dangerous. But find shortcuts that can save us time."
 
@@ -141,6 +141,9 @@ Strategy: first the small items that harden the live beta or unblock Phase 2 (po
 - `Tickets/external-dependencies.json` is unchanged.
 
 ## 8. Judgment calls for Victor to confirm
+
+*Accepted by Victor on 2026-10-29 ("Accept"), all items as written.*
+
 
 1. The MVP definition in §1: Phase 1 live, acts 2/3/5 not shown and not simulated, seeded sources and definitions labeled as seeded.
 2. Trimming APP-074 items 4 and 7 and APP-076 item 7 to APP-082/APP-083 (§3, "Why these two trims are safe").
