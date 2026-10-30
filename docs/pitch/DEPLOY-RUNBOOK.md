@@ -180,6 +180,9 @@ python3 -I app/scripts/read_env.py --object bot_token=SLACK_BOT_TOKEN signing_se
 
 A new value reaches the service at its next task start. Here that is the activation in 6.1. On a live service it takes `aws ecs update-service --cluster $CLUSTER --service $SERVICE --force-new-deployment` **[MUTATION]**.
 
+
+> **Beta note (APP-113, 2026-10-30):** do not rerun `seed-library` on the existing beta organization after the expense fixture gained `initial: submitted` — the exact-match seed refuses the whole run ("existing seed differs"). Beta is protected by the storage rule that refuses a create starting at another command's transition target. Re-seeding needs a fresh organization.
+
 ## 5. Database [MUTATION]
 
 Skip 5.1–5.2 if 0.6 found no schema change.
