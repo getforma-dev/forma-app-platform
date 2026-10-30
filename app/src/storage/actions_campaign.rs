@@ -275,11 +275,11 @@ async fn stub_server() -> (String, Arc<Stub>) {
 
 // --- The event stream as a body ---
 
-struct Stream {
+pub(super) struct Stream {
     body: BodyDataStream,
 }
 impl Stream {
-    async fn frame(&mut self, within: Duration) -> Option<String> {
+    pub(super) async fn frame(&mut self, within: Duration) -> Option<String> {
         loop {
             let next = timeout(
                 within,
@@ -297,7 +297,7 @@ impl Stream {
         }
     }
     /// The next event (kind, app, work).
-    async fn expect(&mut self, kind: &str, app: &str, work: &str) {
+    pub(super) async fn expect(&mut self, kind: &str, app: &str, work: &str) {
         let frame = self
             .frame(Duration::from_secs(5))
             .await
@@ -316,7 +316,7 @@ impl Stream {
         assert_eq!(data["app_id"], app);
         assert_eq!(data["work_id"], work);
     }
-    async fn silent(&mut self, within: Duration) {
+    pub(super) async fn silent(&mut self, within: Duration) {
         let next = timeout(
             within,
             std::future::poll_fn(|cx| {
@@ -331,7 +331,7 @@ impl Stream {
         }
     }
 }
-async fn open_stream(app: &Router, cookie: &str) -> Stream {
+pub(super) async fn open_stream(app: &Router, cookie: &str) -> Stream {
     let mut request = Request::builder()
         .uri("/v1/events")
         .header(header::COOKIE, format!("{}={cookie}", cookies::SESSION))
@@ -347,7 +347,7 @@ async fn open_stream(app: &Router, cookie: &str) -> Stream {
     }
 }
 
-struct NoCanvas;
+pub(super) struct NoCanvas;
 impl canvas::CanvasPages for NoCanvas {
     fn canvas(&self, _: &CanvasProps) -> axum::response::Response {
         use axum::response::IntoResponse;
@@ -355,17 +355,17 @@ impl canvas::CanvasPages for NoCanvas {
     }
 }
 
-const SAME_ORIGIN: [(&str, &str); 2] = [
+pub(super) const SAME_ORIGIN: [(&str, &str); 2] = [
     ("sec-fetch-site", "same-origin"),
     ("content-type", "application/json"),
 ];
 
-fn ms(started: Instant) -> u64 {
+pub(super) fn ms(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
 /// The value of `field` in a records-route record.
-fn value_of<'a>(record: &'a Value, field: &str) -> &'a Value {
+pub(super) fn value_of<'a>(record: &'a Value, field: &str) -> &'a Value {
     record["values"]
         .as_array()
         .unwrap()

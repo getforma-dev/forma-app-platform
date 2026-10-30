@@ -282,6 +282,8 @@ pub struct RecordCommand {
     pub writable_fields: Vec<String>,
     /// The declared transitions, `(field_id, from, to)`.
     pub transitions: Vec<(String, String, String)>,
+    /// APP-107: the declared guards and initial values (`storage::rules`).
+    pub rules: super::rules::Rules,
 }
 /// A record read back for its page: current version (0 when absent), its
 /// fields and the commands its schema declares.
@@ -340,6 +342,8 @@ pub(super) struct Declaration {
     pub(super) writable: Vec<String>,
     /// `(field_id, from, to)`.
     pub(super) transitions: Vec<(String, String, String)>,
+    /// APP-107: the declared guards and initial values.
+    pub(super) rules: super::rules::Rules,
 }
 /// The published definition's record schema `schema` at `version` and the
 /// commands declared on it (stored content is admitted content: a shape that
@@ -437,6 +441,7 @@ pub(super) async fn published(
                     .to_owned(),
                 writable: string_list(declared.get("writable_fields"))?,
                 transitions,
+                rules: super::rules::Rules::from_declaration(declared).ok_or(Error::Unavailable)?,
             },
         );
     }
@@ -718,7 +723,9 @@ pub(super) fn compose(
     }
     let null = json!({"type": "null"});
     let mut state = Vec::with_capacity(spec.len());
-    let (mut changed, mut fired) = (false, false);
+    let mut composed = Map::new();
+    let mut moves = Vec::new();
+    let mut changed = false;
     for field in spec {
         let value = supplied
             .get(&field.id)
@@ -734,15 +741,41 @@ pub(super) fn compose(
                 if is_enum {
                     let from = before.get("value").and_then(Value::as_str);
                     let to = value.get("value").and_then(Value::as_str);
-                    let declared = declaration.transitions.iter().any(|(f, a, b)| {
-                        f == &field.id && Some(a.as_str()) == from && Some(b.as_str()) == to
-                    });
-                    require(declared || declaration.operation == "update")?;
-                    fired |= declared;
+                    moves.push((
+                        field.id.as_str(),
+                        from.map(str::to_owned),
+                        to.map(str::to_owned),
+                    ));
                 }
             }
         }
+        composed.insert(field.id.clone(), value.clone());
         state.push(json!({"field_id": field.id, "value": value}));
+    }
+    // APP-107: a declared transition fires only when its guard holds on the
+    // record as composed; a create carries the declared initial value of
+    // every field the command names one for.
+    let mut fired = false;
+    for (field, from, to) in moves {
+        let declared = declaration
+            .transitions
+            .iter()
+            .any(|(f, a, b)| f == field && Some(a) == from.as_ref() && Some(b) == to.as_ref())
+            && match (&from, &to) {
+                (Some(from), Some(to)) => declaration.rules.allows(field, from, to, &composed),
+                _ => false,
+            };
+        require(declared || declaration.operation == "update")?;
+        fired |= declared;
+    }
+    if creating {
+        for field in declaration.rules.initial_fields() {
+            let (value, _) = declaration
+                .rules
+                .initial_value(field, &composed)
+                .ok_or(Error::Denied)?;
+            require(composed.get(field) == Some(&json!({"type": "enum", "value": value})))?;
+        }
     }
     if !creating {
         require(changed && (fired || declaration.operation == "update"))?;
@@ -919,6 +952,7 @@ impl Data {
                         operation: declaration.operation.clone(),
                         writable_fields: declaration.writable.clone(),
                         transitions: declaration.transitions.clone(),
+                            rules: declaration.rules.clone(),
                     })
                     .collect(),
                 can_write,
@@ -1204,6 +1238,7 @@ mod tests {
             operation: "create".into(),
             writable: vec!["status".into(), "note".into()],
             transitions: vec![("status".into(), "needs_context".into(), "reviewed".into())],
+            rules: Default::default(),
         }
     }
     fn values(status: &str, note: &str) -> Value {

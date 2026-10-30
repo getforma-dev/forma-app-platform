@@ -58,6 +58,7 @@ app/src/actions/**
 !app/src/actions/receipt.rs
 !app/src/actions/receipt_tests.rs
 !app/src/actions/rehearsed.rs
+!app/src/actions/workflows.rs
 !app/src/actions/resolve.rs
 !app/src/actions/routes.rs
 !app/src/actions/tests.rs
@@ -79,7 +80,7 @@ app/src/slack/**
 !app/src/slack/notify.rs
 !app/src/slack/signature.rs
 !app/src/slack/text.rs
-# slack/tests.rs and storage/slack_campaign.rs are cfg(test) only; the qualification context lists them.
+# slack/tests.rs, storage/slack_campaign.rs and storage/workflows_campaign.rs are cfg(test) only; the qualification context lists them.
 # APP-103: canvas widgets (weather, customize in words).
 !app/src/widgets/
 app/src/widgets/**
@@ -113,6 +114,7 @@ app/src/storage/**
 !app/src/storage/admission.rs
 !app/src/storage/pool.rs
 !app/src/storage/registry.rs
+!app/src/storage/rules.rs
 !app/src/storage/authorization.rs
 !app/src/storage/catalog.rs
 !app/src/storage/command_qualification.rs

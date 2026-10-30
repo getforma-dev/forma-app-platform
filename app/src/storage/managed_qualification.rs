@@ -118,14 +118,14 @@ const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "seed_validator_sha256",
         "contracts/validate.py",
-        "7c9492bc55d12c818f984f7889ab5e95024699cfda11222ebafc84d982e973d5",
+        "f4bc08407c9575691e2543e696be36f2e936297f882692f9b48848060f4d4c29",
     ),
     // ADR-011 library (APP-094): the catalog pins every library fixture the
     // `seed-library` command places (each entry's `fixture_sha256`).
     (
         "seed_library_sha256",
         "contracts/fixtures/library/catalog.json",
-        "70530b2141972d2b6697154e4d90883745b93b00c447205570519f2020fd98d6",
+        "7f53b2351ba99f0a6701c8b0e0938c103f188cff31814eb617c7b8bede3ab55f",
     ),
 ];
 /// The shared cases' checks a pass requires, in order (`qualification_cases`).
@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 142] = [
+const SOURCES: [(&str, &[u8]); 145] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -201,6 +201,10 @@ const SOURCES: [(&str, &[u8]); 142] = [
     (
         "app/src/actions/tests.rs",
         include_bytes!("../actions/tests.rs"),
+    ),
+    (
+        "app/src/actions/workflows.rs",
+        include_bytes!("../actions/workflows.rs"),
     ),
     (
         "app/src/admission/canonical.rs",
@@ -497,6 +501,7 @@ const SOURCES: [(&str, &[u8]); 142] = [
         include_bytes!("race_qualification.rs"),
     ),
     ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
+    ("app/src/storage/rules.rs", include_bytes!("rules.rs")),
     ("app/src/storage/sessions.rs", include_bytes!("sessions.rs")),
     ("app/src/storage/sharing.rs", include_bytes!("sharing.rs")),
     (
@@ -508,6 +513,10 @@ const SOURCES: [(&str, &[u8]); 142] = [
         include_bytes!("slack_campaign.rs"),
     ),
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
+    (
+        "app/src/storage/workflows_campaign.rs",
+        include_bytes!("workflows_campaign.rs"),
+    ),
     ("app/src/supervise.rs", include_bytes!("../supervise.rs")),
     (
         "app/src/widgets/customize.rs",

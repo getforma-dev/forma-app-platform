@@ -1,0 +1,728 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "principal_id": "00000000-0000-4000-8000-000000000066"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001881",
+    "revision_id": "00000000-0000-4000-8000-000000001882",
+    "content": {
+      "title": "Access requests",
+      "description": "Ask for access to a system with a role, a reason and an end date; the system owner grants or denies it, and grants expire. Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
+      "inputs": [
+        {
+          "id": "access_grants",
+          "contract_id": "access_grants_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "request_id",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            },
+            {
+              "id": "requester",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "system",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "role",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "read",
+                  "write",
+                  "admin"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "requested",
+                  "granted",
+                  "denied"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "expires_on",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "requests",
+          "contract_id": "access_request_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "system",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "role",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "read",
+                  "write",
+                  "admin"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "reason",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "expires_on",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "requested",
+                  "granted",
+                  "denied"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "expiring",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "Grants expiring in November",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "access_grants"
+            ],
+            "operations": [
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "access_grants",
+                  "field_id": "status"
+                },
+                "comparison": "eq",
+                "value": {
+                  "type": "enum",
+                  "value": "granted"
+                }
+              },
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "access_grants",
+                  "field_id": "expires_on"
+                },
+                "comparison": "gte",
+                "value": {
+                  "type": "date",
+                  "value": "2026-11-01"
+                }
+              },
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "access_grants",
+                  "field_id": "expires_on"
+                },
+                "comparison": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2026-12-01"
+                }
+              },
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "access_grants",
+                    "field_id": "request_id"
+                  },
+                  {
+                    "input_id": "access_grants",
+                    "field_id": "requester"
+                  },
+                  {
+                    "input_id": "access_grants",
+                    "field_id": "system"
+                  },
+                  {
+                    "input_id": "access_grants",
+                    "field_id": "role"
+                  },
+                  {
+                    "input_id": "access_grants",
+                    "field_id": "expires_on"
+                  }
+                ]
+              },
+              {
+                "type": "sort",
+                "fields": [
+                  {
+                    "field": {
+                      "input_id": "access_grants",
+                      "field_id": "expires_on"
+                    },
+                    "direction": "asc"
+                  }
+                ],
+                "stable_tiebreak": {
+                  "input_id": "access_grants",
+                  "field_id": "request_id"
+                }
+              },
+              {
+                "type": "limit",
+                "rows": 50
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "by_system",
+          "kind": "chart",
+          "renderer_version": 1,
+          "title": "Requests by system",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "access_grants"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "access_grants",
+                    "field_id": "system"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "requests",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "access_grants",
+                      "field_id": "request_id"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "renderer_version": 1,
+          "title": "Requests by status",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "access_grants"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "access_grants",
+                    "field_id": "status"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "requests",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "access_grants",
+                      "field_id": "request_id"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "Request access",
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "renderer_version": 1,
+          "title": "How approval works",
+          "text": "A request is filed as requested; the system owner grants or denies it as an audited command. History is labeled synthetic."
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "access_request",
+          "version": 1,
+          "fields": [
+            {
+              "id": "system",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "role",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "read",
+                  "write",
+                  "admin"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "reason",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "expires_on",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "requested",
+                  "granted",
+                  "denied"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "access_request",
+          "operation": "create",
+          "writable_fields": [
+            "system",
+            "role",
+            "reason",
+            "expires_on",
+            "status"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "requested"
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "access_request",
+          "operation": "create",
+          "writable_fields": [
+            "status"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "requested",
+              "to": "granted"
+            },
+            {
+              "field_id": "status",
+              "from": "requested",
+              "to": "denied"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "expiring",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "by_system",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "by_status",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "request",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "how",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:db02ad5e10f519d86ae2c430a74c9114c6542f10b3b9d271efee66935a919c38"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001881",
+    "publication_id": "00000000-0000-4000-8000-000000001883",
+    "definition_revision_id": "00000000-0000-4000-8000-000000001882",
+    "definition_digest": "sha256:db02ad5e10f519d86ae2c430a74c9114c6542f10b3b9d271efee66935a919c38",
+    "input_contract_digests": [
+      {
+        "input_id": "access_grants",
+        "digest": "sha256:1dd9677018ad41c8718f9393166f75af64020e23e78eec355b3e47b33825bd7e"
+      },
+      {
+        "input_id": "requests",
+        "digest": "sha256:5526decbc896c2b70c56b4f1701f5e07f82ac41dc1800c57143a79817d67e38c"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "access_request",
+        "digest": "sha256:84864b7058e4515b070b62e0ca7a5060009ca3965e0674b43a4553ad9db9fd89"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "admission_digest": "sha256:403a0ca62e06fc43a6cceaefefe12044185a8e4579af9eb3d559707db430a0d7",
+    "policy": {
+      "id": "00000000-0000-4000-8000-0000000000e0",
+      "version": 1,
+      "kind": "owner_publish"
+    },
+    "author_id": "00000000-0000-4000-8000-000000000066",
+    "approver_id": "00000000-0000-4000-8000-000000000066",
+    "approver_epoch": 1,
+    "published_at": "2026-10-30T09:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001881",
+    "work_id": "00000000-0000-4000-8000-000000001884",
+    "publication_id": "00000000-0000-4000-8000-000000001883",
+    "version": 1,
+    "context": "Prebuilt library: Access requests",
+    "bindings": [
+      {
+        "input_id": "access_grants",
+        "source_id": "00000000-0000-4000-8000-000000003020",
+        "source_revision_id": "00000000-0000-4000-8000-000000003021",
+        "source_digest": "sha256:6ce1bba56b4f1158dbb313146cafb886e596ddc5f1a076638c3c583b5735afe0",
+        "kind": "source",
+        "contract_digest": "sha256:1dd9677018ad41c8718f9393166f75af64020e23e78eec355b3e47b33825bd7e"
+      },
+      {
+        "input_id": "requests",
+        "kind": "records",
+        "contract_digest": "sha256:5526decbc896c2b70c56b4f1701f5e07f82ac41dc1800c57143a79817d67e38c",
+        "collection_id": "00000000-0000-4000-8000-000000001885",
+        "schema_id": "access_request",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-000000001885",
+        "schema_id": "access_request",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "access_grants",
+        "source_id": "00000000-0000-4000-8000-000000003020",
+        "source_revision_id": "00000000-0000-4000-8000-000000003021",
+        "source_digest": "sha256:6ce1bba56b4f1158dbb313146cafb886e596ddc5f1a076638c3c583b5735afe0"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "source_id": "00000000-0000-4000-8000-000000003020",
+      "revision_id": "00000000-0000-4000-8000-000000003021",
+      "content_digest": "sha256:f074281a852284e3834a96e53837ff74907879a7d4857eba8bc2072b674d82ac",
+      "normalized_digest": "sha256:6ce1bba56b4f1158dbb313146cafb886e596ddc5f1a076638c3c583b5735afe0",
+      "input_contract": {
+        "id": "access_grants",
+        "contract_id": "access_grants_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "request_id",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "time",
+            "value_type": {
+              "type": "timestamp"
+            },
+            "nullable": false
+          },
+          {
+            "id": "requester",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "system",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "role",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "read",
+                "write",
+                "admin"
+              ]
+            },
+            "nullable": false
+          },
+          {
+            "id": "status",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "requested",
+                "granted",
+                "denied"
+              ]
+            },
+            "nullable": false
+          },
+          {
+            "id": "expires_on",
+            "value_type": {
+              "type": "date"
+            },
+            "nullable": false
+          }
+        ]
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 130,
+      "timezone": "UTC",
+      "time_semantics": "event",
+      "units_confirmed": true,
+      "created_at": "2026-10-30T09:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001881",
+    "work_id": "00000000-0000-4000-8000-000000001884",
+    "mode": "published",
+    "definition_digest": "sha256:db02ad5e10f519d86ae2c430a74c9114c6542f10b3b9d271efee66935a919c38",
+    "publication_id": "00000000-0000-4000-8000-000000001883",
+    "view_id": "expiring",
+    "operator_version": 1,
+    "source_revisions": [
+      {
+        "input_id": "access_grants",
+        "source_id": "00000000-0000-4000-8000-000000003020",
+        "source_revision_id": "00000000-0000-4000-8000-000000003021",
+        "source_digest": "sha256:6ce1bba56b4f1158dbb313146cafb886e596ddc5f1a076638c3c583b5735afe0"
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:844c067db319827e4b48f67bdd6b0a0ee39f5a6dadb2e3fc53ac3aa46308a635",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:36318edb6d363adb74e6d3f6d3c970c6e06a569bfd4d6a25531aecadc32f1ea5",
+      "predicate_digest": "sha256:36318edb6d363adb74e6d3f6d3c970c6e06a569bfd4d6a25531aecadc32f1ea5"
+    },
+    "digest": "sha256:da4c9f4ccd870cad9a354c2bad7458d49b8a3a06aa009a0ccaaa247f534a40ec"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-000000001881",
+    "work_id": "00000000-0000-4000-8000-000000001884",
+    "publication_id": "00000000-0000-4000-8000-000000001883",
+    "command_id": "submit",
+    "schema_id": "access_request",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-000000001886",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "system",
+        "value": {
+          "type": "text",
+          "value": "data-warehouse"
+        }
+      },
+      {
+        "field_id": "role",
+        "value": {
+          "type": "enum",
+          "value": "read"
+        }
+      },
+      {
+        "field_id": "reason",
+        "value": {
+          "type": "text",
+          "value": "Quarterly reporting; synthetic only"
+        }
+      },
+      {
+        "field_id": "expires_on",
+        "value": {
+          "type": "date",
+          "value": "2026-11-30"
+        }
+      },
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "requested"
+        }
+      }
+    ],
+    "idempotency_key": "00000000000000000000000000001880"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001881",
+    "work_id": "00000000-0000-4000-8000-000000001884",
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "command_id": "submit",
+    "idempotency_key": "00000000000000000000000000001880",
+    "payload_digest": "sha256:176aa75aa8385d89f14899dd45cc3b630a39e03fd7d97ec9ce7a8bc4edd2f40a",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-000000001886",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-000000001887",
+    "committed_at": "2026-10-30T09:05:00Z",
+    "retry_expires_at": "2026-10-31T09:05:00Z"
+  }
+}

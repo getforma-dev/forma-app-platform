@@ -37,6 +37,7 @@ pub mod receipt;
 pub mod rehearsed;
 pub mod resolve;
 pub mod routes;
+pub mod workflows;
 
 #[cfg(test)]
 mod receipt_tests;

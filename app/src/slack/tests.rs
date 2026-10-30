@@ -373,3 +373,54 @@ async fn commands_answer_help_and_link_at_once_and_refuse_foreign_response_urls(
     let (_, working) = send("I spent $86 at Nobu", "http://127.0.0.1:9/hook").await;
     assert!(working.contains("Working on it"), "{working}");
 }
+
+/// APP-107: the approver's DM is generic over any record app: a purchase
+/// request reads as one (its values, its status aside, the filer) with the
+/// same Approve / Reject buttons; an expense claim keeps its claim wording.
+#[test]
+fn the_approver_dm_names_any_record_app() {
+    use crate::storage::RecordRow;
+    use serde_json::json;
+    let state = slack_state("http://127.0.0.1:9");
+    let record = RecordRow {
+        record_id: "3fa9c21b-0000-4000-8000-000000000001".into(),
+        collection: "00000000-0000-4000-8000-000000000002".into(),
+        schema: "purchase_request".into(),
+        version: 1,
+        commit_sequence: 9,
+        committed_at: "2026-10-30T12:00:00Z".into(),
+        creator: "00000000-0000-4000-8000-00000000006f".into(),
+        updater: "00000000-0000-4000-8000-00000000006f".into(),
+        values: json!([
+            {"field_id": "item", "value": {"type": "text", "value": "Figma seats"}},
+            {"field_id": "vendor", "value": {"type": "text", "value": "Figma"}},
+            {"field_id": "amount", "value": {"type": "money", "minor_units": "720000", "currency": "USD", "minor_unit_exponent": 2}},
+            {"field_id": "justification", "value": {"type": "null"}},
+            {"field_id": "status", "value": {"type": "enum", "value": "submitted"}},
+        ]),
+    };
+    let (text, blocks) = super::flows::approval_request(&record, &state);
+    assert!(
+        text.ends_with("filed a purchase request for your approval"),
+        "{text}"
+    );
+    let rendered = serde_json::to_string(&blocks).unwrap();
+    for shown in [
+        "Item",
+        "Figma seats",
+        "Vendor",
+        "Amount",
+        "$7,200.00",
+        "Filed by",
+        "Approve",
+        "Reject",
+    ] {
+        assert!(rendered.contains(shown), "{shown}: {rendered}");
+    }
+    assert!(!rendered.contains("submitted") && !rendered.contains("Justification"));
+    let mut claim = record;
+    claim.schema = "expense_claim".into();
+    assert!(super::flows::approval_request(&claim, &state)
+        .0
+        .ends_with("filed a claim for your approval"));
+}

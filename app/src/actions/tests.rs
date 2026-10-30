@@ -43,6 +43,7 @@ pub(super) fn expense_app() -> CatalogApp {
                 .map(|s| s.to_string())
                 .collect(),
                 transitions: vec![],
+                rules: Default::default(),
             },
             CatalogCommand {
                 id: "decide".into(),
@@ -52,6 +53,7 @@ pub(super) fn expense_app() -> CatalogApp {
                     ("status".into(), "submitted".into(), "approved".into()),
                     ("status".into(), "submitted".into(), "rejected".into()),
                 ],
+                rules: Default::default(),
             },
         ],
     }

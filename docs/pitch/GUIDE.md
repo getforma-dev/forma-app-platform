@@ -42,6 +42,16 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 | `/weather <place>`, `/calculator`, `/clock <zone>` | Utility widgets; restyle them in words. |
 | Any other sentence | The instant pick and live reshape; a short chooser when two apps fit equally; "Build something new" generates one. |
 
+**Workflow commands (APP-107).** Each opens its app; with text after it, files or decides in that app.
+
+| Command | Does |
+| --- | --- |
+| `/pto` (`/time-off`, `/leave`, `/vacation`) | Time off: "Nov 24–26 for Thanksgiving, Sarah approves". |
+| `/purchase` (`/purchases`, `/po`) | Purchase requests; over $5,000 the manager approves, then finance. |
+| `/invoice` (`/invoices`, `/payables`) | Vendor invoices; a PO that does not match its purchase request is flagged. |
+| `/access` (`/access-request`) | Access requests; the system owner grants or denies. The access review tracker is now `/access-review`. |
+| `/discount` (`/deal-desk`, `/discounts`) | Deal desk; 10% or less approves itself by the app's rule. |
+
 **Library pane (right, `L`).**
 - Organized as Category → App → numbered cards.
 - Click to add or remove a card. "Add all" brings a whole app, "Stack" brings it as a stack, and search finds by name or number.

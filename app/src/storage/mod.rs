@@ -16,6 +16,7 @@ mod definitions;
 mod pool;
 mod queries;
 mod registry;
+pub mod rules;
 mod sessions;
 mod sharing;
 
@@ -151,3 +152,5 @@ mod sharing_qualification;
 mod slack_campaign;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod workflows_campaign;
