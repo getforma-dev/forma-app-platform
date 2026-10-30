@@ -23,14 +23,13 @@
       "uniform": true
     },
     "not_found": {
-      "distinct_bodies": 2,
-      "distinct_header_sets": 4,
+      "distinct_bodies": 1,
+      "distinct_header_sets": 1,
       "rows": 211,
       "statuses": [
-        400,
         404
       ],
-      "uniform": false
+      "uniform": true
     }
   },
   "controls": [],
@@ -39,51 +38,7 @@
     "cross_site": "68a96df7f7b651998cd4a7d1461c84628fa5ae635e0e831678445b946714a4b6",
     "not_found": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1"
   },
-  "failures": [
-    "anonymous.invite_validate_get",
-    "anonymous.query_route_get",
-    "anonymous.command_route_get",
-    "anonymous.signout_all_get",
-    "anonymous.workspace_post",
-    "anonymous.command_undecodable_segment",
-    "anonymous.record_page_undecodable_segment",
-    "forged_session_cookie.invite_validate_get",
-    "forged_session_cookie.query_route_get",
-    "forged_session_cookie.command_route_get",
-    "forged_session_cookie.signout_all_get",
-    "forged_session_cookie.workspace_post",
-    "forged_session_cookie.command_undecodable_segment",
-    "forged_session_cookie.record_page_undecodable_segment",
-    "forged_pre_access_cookie.invite_validate_get",
-    "forged_pre_access_cookie.query_route_get",
-    "forged_pre_access_cookie.command_route_get",
-    "forged_pre_access_cookie.signout_all_get",
-    "forged_pre_access_cookie.workspace_post",
-    "forged_pre_access_cookie.command_undecodable_segment",
-    "forged_pre_access_cookie.record_page_undecodable_segment",
-    "forged_bearer.invite_validate_get",
-    "forged_bearer.query_route_get",
-    "forged_bearer.command_route_get",
-    "forged_bearer.signout_all_get",
-    "forged_bearer.workspace_post",
-    "forged_bearer.command_undecodable_segment",
-    "forged_bearer.record_page_undecodable_segment",
-    "forged_organization_headers.invite_validate_get",
-    "forged_organization_headers.query_route_get",
-    "forged_organization_headers.command_route_get",
-    "forged_organization_headers.signout_all_get",
-    "forged_organization_headers.workspace_post",
-    "forged_organization_headers.command_undecodable_segment",
-    "forged_organization_headers.record_page_undecodable_segment",
-    "forged_both_cookies.invite_validate_get",
-    "forged_both_cookies.query_route_get",
-    "forged_both_cookies.command_route_get",
-    "forged_both_cookies.signout_all_get",
-    "forged_both_cookies.workspace_post",
-    "forged_both_cookies.command_undecodable_segment",
-    "forged_both_cookies.record_page_undecodable_segment",
-    "class:not_found"
-  ],
+  "failures": [],
   "inputs": {
     "canary_revoked": false,
     "identifiers": {
@@ -104,7 +59,7 @@
     "canary replay: no canary_session in the private input",
     "real pre-access rows: no pre_access in the private input (forged pre-access rows ran)"
   ],
-  "passed": false,
+  "passed": true,
   "python": "3.11.0",
   "rows": [
     {
@@ -308,7 +263,7 @@
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "passed": true,
-      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/93dcb56b32e66152a8eedbfc6cc1a60c",
+      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/c6e7cb64f8bbe4d501f3a5ee2df9553a",
       "request_header_names": [],
       "set_cookie_names": [],
       "sets_cookie_value": false,
@@ -663,9 +618,8 @@
       "class": "not_found",
       "context": "anonymous",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -674,7 +628,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -685,7 +638,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/invite/validate",
       "request_header_names": [],
       "set_cookie_names": [],
@@ -698,9 +651,8 @@
       "class": "not_found",
       "context": "anonymous",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -709,7 +661,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -720,7 +671,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/queries/total",
       "request_header_names": [],
       "set_cookie_names": [],
@@ -733,9 +684,8 @@
       "class": "not_found",
       "context": "anonymous",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -744,7 +694,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -755,7 +704,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [],
       "set_cookie_names": [],
@@ -768,9 +717,8 @@
       "class": "not_found",
       "context": "anonymous",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -779,7 +727,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -790,7 +737,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/auth/signout-all",
       "request_header_names": [],
       "set_cookie_names": [],
@@ -803,9 +750,8 @@
       "class": "not_found",
       "context": "anonymous",
       "expected": "not_found",
-      "header_fingerprint": "2a79a818461e2c7ef86328395ffe42f8ade8139d229338d4b0783540bc194a99",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -814,7 +760,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "GET,HEAD",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -825,7 +770,7 @@
       "location": null,
       "method": "POST",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/workspace",
       "request_header_names": [
         "content-type",
@@ -872,26 +817,32 @@
       "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "anonymous",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "anonymous.command_undecodable_segment",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/v1/work/%FF/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [
         "content-type",
@@ -899,34 +850,40 @@
       ],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "anonymous",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "anonymous.record_page_undecodable_segment",
       "location": null,
       "method": "GET",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/work/%FF/00000000-0000-4000-8000-0000000000f2/records/00000000-0000-4000-8000-00000000006a/00000000-0000-4000-8000-0000000000f0",
       "request_header_names": [],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
       "body_length": 33,
@@ -1546,7 +1503,7 @@
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "passed": true,
-      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/85dfc512229a29fcfd7db3cca63fb6c6",
+      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/bb71337c7ecb8e7a33bb82bbfcdf446d",
       "request_header_names": [
         "cookie"
       ],
@@ -1920,9 +1877,8 @@
       "class": "not_found",
       "context": "forged_session_cookie",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -1931,7 +1887,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -1942,7 +1897,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/invite/validate",
       "request_header_names": [
         "cookie"
@@ -1957,9 +1912,8 @@
       "class": "not_found",
       "context": "forged_session_cookie",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -1968,7 +1922,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -1979,7 +1932,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/queries/total",
       "request_header_names": [
         "cookie"
@@ -1994,9 +1947,8 @@
       "class": "not_found",
       "context": "forged_session_cookie",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -2005,7 +1957,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -2016,7 +1967,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [
         "cookie"
@@ -2031,9 +1982,8 @@
       "class": "not_found",
       "context": "forged_session_cookie",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -2042,7 +1992,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -2053,7 +2002,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/auth/signout-all",
       "request_header_names": [
         "cookie"
@@ -2068,9 +2017,8 @@
       "class": "not_found",
       "context": "forged_session_cookie",
       "expected": "not_found",
-      "header_fingerprint": "2a79a818461e2c7ef86328395ffe42f8ade8139d229338d4b0783540bc194a99",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -2079,7 +2027,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "GET,HEAD",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -2090,7 +2037,7 @@
       "location": null,
       "method": "POST",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/workspace",
       "request_header_names": [
         "content-type",
@@ -2139,26 +2086,32 @@
       "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "forged_session_cookie",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "forged_session_cookie.command_undecodable_segment",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/v1/work/%FF/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [
         "content-type",
@@ -2167,36 +2120,42 @@
       ],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "forged_session_cookie",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "forged_session_cookie.record_page_undecodable_segment",
       "location": null,
       "method": "GET",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/work/%FF/00000000-0000-4000-8000-0000000000f2/records/00000000-0000-4000-8000-00000000006a/00000000-0000-4000-8000-0000000000f0",
       "request_header_names": [
         "cookie"
       ],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
       "body_length": 33,
@@ -2836,7 +2795,7 @@
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "passed": true,
-      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/53f1ba536feccaa6dbf074f5c442523a",
+      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/5436bfa31373c68fb4c90f09dca31e77",
       "request_header_names": [
         "cookie"
       ],
@@ -3210,9 +3169,8 @@
       "class": "not_found",
       "context": "forged_pre_access_cookie",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -3221,7 +3179,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -3232,7 +3189,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/invite/validate",
       "request_header_names": [
         "cookie"
@@ -3247,9 +3204,8 @@
       "class": "not_found",
       "context": "forged_pre_access_cookie",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -3258,7 +3214,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -3269,7 +3224,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/queries/total",
       "request_header_names": [
         "cookie"
@@ -3284,9 +3239,8 @@
       "class": "not_found",
       "context": "forged_pre_access_cookie",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -3295,7 +3249,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -3306,7 +3259,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [
         "cookie"
@@ -3321,9 +3274,8 @@
       "class": "not_found",
       "context": "forged_pre_access_cookie",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -3332,7 +3284,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -3343,7 +3294,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/auth/signout-all",
       "request_header_names": [
         "cookie"
@@ -3358,9 +3309,8 @@
       "class": "not_found",
       "context": "forged_pre_access_cookie",
       "expected": "not_found",
-      "header_fingerprint": "2a79a818461e2c7ef86328395ffe42f8ade8139d229338d4b0783540bc194a99",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -3369,7 +3319,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "GET,HEAD",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -3380,7 +3329,7 @@
       "location": null,
       "method": "POST",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/workspace",
       "request_header_names": [
         "content-type",
@@ -3429,26 +3378,32 @@
       "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "forged_pre_access_cookie",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "forged_pre_access_cookie.command_undecodable_segment",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/v1/work/%FF/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [
         "content-type",
@@ -3457,36 +3412,42 @@
       ],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "forged_pre_access_cookie",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "forged_pre_access_cookie.record_page_undecodable_segment",
       "location": null,
       "method": "GET",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/work/%FF/00000000-0000-4000-8000-0000000000f2/records/00000000-0000-4000-8000-00000000006a/00000000-0000-4000-8000-0000000000f0",
       "request_header_names": [
         "cookie"
       ],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
       "body_length": 33,
@@ -4126,7 +4087,7 @@
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "passed": true,
-      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/9471afc73d4d3baf10b5b5570da43e6d",
+      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/1459212d42f38e7e3c3351c575e1dfa4",
       "request_header_names": [
         "authorization"
       ],
@@ -4499,9 +4460,8 @@
       "class": "not_found",
       "context": "forged_bearer",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -4510,7 +4470,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -4521,7 +4480,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/invite/validate",
       "request_header_names": [
         "authorization"
@@ -4536,9 +4495,8 @@
       "class": "not_found",
       "context": "forged_bearer",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -4547,7 +4505,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -4558,7 +4515,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/queries/total",
       "request_header_names": [
         "authorization"
@@ -4573,9 +4530,8 @@
       "class": "not_found",
       "context": "forged_bearer",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -4584,7 +4540,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -4595,7 +4550,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [
         "authorization"
@@ -4610,9 +4565,8 @@
       "class": "not_found",
       "context": "forged_bearer",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -4621,7 +4575,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -4632,7 +4585,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/auth/signout-all",
       "request_header_names": [
         "authorization"
@@ -4647,9 +4600,8 @@
       "class": "not_found",
       "context": "forged_bearer",
       "expected": "not_found",
-      "header_fingerprint": "2a79a818461e2c7ef86328395ffe42f8ade8139d229338d4b0783540bc194a99",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -4658,7 +4610,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "GET,HEAD",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -4669,7 +4620,7 @@
       "location": null,
       "method": "POST",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/workspace",
       "request_header_names": [
         "authorization",
@@ -4718,26 +4669,32 @@
       "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "forged_bearer",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "forged_bearer.command_undecodable_segment",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/v1/work/%FF/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [
         "authorization",
@@ -4746,36 +4703,42 @@
       ],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "forged_bearer",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "forged_bearer.record_page_undecodable_segment",
       "location": null,
       "method": "GET",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/work/%FF/00000000-0000-4000-8000-0000000000f2/records/00000000-0000-4000-8000-00000000006a/00000000-0000-4000-8000-0000000000f0",
       "request_header_names": [
         "authorization"
       ],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
       "body_length": 33,
@@ -5435,7 +5398,7 @@
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "passed": true,
-      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/a1c4343e9d444f8d28bab71ffb45f717",
+      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/d64e5a3373feda35ffb0883217f5093c",
       "request_header_names": [
         "cookie",
         "x-forma-organization",
@@ -5853,9 +5816,8 @@
       "class": "not_found",
       "context": "forged_organization_headers",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -5864,7 +5826,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -5875,7 +5836,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/invite/validate",
       "request_header_names": [
         "cookie",
@@ -5894,9 +5855,8 @@
       "class": "not_found",
       "context": "forged_organization_headers",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -5905,7 +5865,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -5916,7 +5875,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/queries/total",
       "request_header_names": [
         "cookie",
@@ -5935,9 +5894,8 @@
       "class": "not_found",
       "context": "forged_organization_headers",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -5946,7 +5904,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -5957,7 +5914,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [
         "cookie",
@@ -5976,9 +5933,8 @@
       "class": "not_found",
       "context": "forged_organization_headers",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -5987,7 +5943,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -5998,7 +5953,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/auth/signout-all",
       "request_header_names": [
         "cookie",
@@ -6017,9 +5972,8 @@
       "class": "not_found",
       "context": "forged_organization_headers",
       "expected": "not_found",
-      "header_fingerprint": "2a79a818461e2c7ef86328395ffe42f8ade8139d229338d4b0783540bc194a99",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -6028,7 +5982,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "GET,HEAD",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -6039,7 +5992,7 @@
       "location": null,
       "method": "POST",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/workspace",
       "request_header_names": [
         "content-type",
@@ -6096,26 +6049,32 @@
       "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "forged_organization_headers",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "forged_organization_headers.command_undecodable_segment",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/v1/work/%FF/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [
         "content-type",
@@ -6128,29 +6087,35 @@
       ],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "forged_organization_headers",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "forged_organization_headers.record_page_undecodable_segment",
       "location": null,
       "method": "GET",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/work/%FF/00000000-0000-4000-8000-0000000000f2/records/00000000-0000-4000-8000-00000000006a/00000000-0000-4000-8000-0000000000f0",
       "request_header_names": [
         "cookie",
@@ -6161,7 +6126,7 @@
       ],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
       "body_length": 33,
@@ -6849,7 +6814,7 @@
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "passed": true,
-      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/302a14977dbdccff271f949f65e79e5b",
+      "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision/outcomes/7f1937992c65e80d18927fa03f722c32",
       "request_header_names": [
         "cookie"
       ],
@@ -7224,9 +7189,8 @@
       "class": "not_found",
       "context": "forged_both_cookies",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -7235,7 +7199,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -7246,7 +7209,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/invite/validate",
       "request_header_names": [
         "cookie"
@@ -7261,9 +7224,8 @@
       "class": "not_found",
       "context": "forged_both_cookies",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -7272,7 +7234,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -7283,7 +7244,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/queries/total",
       "request_header_names": [
         "cookie"
@@ -7298,9 +7259,8 @@
       "class": "not_found",
       "context": "forged_both_cookies",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -7309,7 +7269,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -7320,7 +7279,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/v1/work/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [
         "cookie"
@@ -7335,9 +7294,8 @@
       "class": "not_found",
       "context": "forged_both_cookies",
       "expected": "not_found",
-      "header_fingerprint": "98581adf95ff2e3163bcd09d674e81c2a5b3eb68967a7ed759881348c107e618",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -7346,7 +7304,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "POST",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -7357,7 +7314,7 @@
       "location": null,
       "method": "GET",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/auth/signout-all",
       "request_header_names": [
         "cookie"
@@ -7372,9 +7329,8 @@
       "class": "not_found",
       "context": "forged_both_cookies",
       "expected": "not_found",
-      "header_fingerprint": "2a79a818461e2c7ef86328395ffe42f8ade8139d229338d4b0783540bc194a99",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
-        "allow",
         "cache-control",
         "content-length",
         "content-type",
@@ -7383,7 +7339,6 @@
         "x-content-type-options"
       ],
       "headers": {
-        "allow": "GET,HEAD",
         "cache-control": "no-store",
         "content-length": "33",
         "content-type": "application/problem+json",
@@ -7394,7 +7349,7 @@
       "location": null,
       "method": "POST",
       "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
-      "passed": false,
+      "passed": true,
       "path": "/workspace",
       "request_header_names": [
         "content-type",
@@ -7443,26 +7398,32 @@
       "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "forged_both_cookies",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "forged_both_cookies.command_undecodable_segment",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/v1/work/%FF/00000000-0000-4000-8000-0000000000f2/commands/record_decision",
       "request_header_names": [
         "content-type",
@@ -7471,36 +7432,42 @@
       ],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
-      "body_length": 35,
-      "body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
+      "body_length": 33,
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
       "class": "not_found",
       "context": "forged_both_cookies",
       "expected": "not_found",
-      "header_fingerprint": "41da14d609ff7126f3dbe83d8a10ac1ce62d52d3a4ac9523a645c8c258b2c58e",
+      "header_fingerprint": "df412dc3d576cd671cd575fb9e39734bee3bd3d5cdd255013d6d170780b256f3",
       "header_names": [
+        "cache-control",
         "content-length",
         "content-type",
-        "date"
+        "date",
+        "referrer-policy",
+        "x-content-type-options"
       ],
       "headers": {
-        "content-length": "35",
-        "content-type": "text/plain; charset=utf-8"
+        "cache-control": "no-store",
+        "content-length": "33",
+        "content-type": "application/problem+json",
+        "referrer-policy": "no-referrer",
+        "x-content-type-options": "nosniff"
       },
       "id": "forged_both_cookies.record_page_undecodable_segment",
       "location": null,
       "method": "GET",
-      "normalized_body_sha256": "0be83454947071155d77ce7bea85e5810eab097cb1b54b6a37005cf62eba8371",
-      "passed": false,
+      "normalized_body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1",
+      "passed": true,
       "path": "/work/%FF/00000000-0000-4000-8000-0000000000f2/records/00000000-0000-4000-8000-00000000006a/00000000-0000-4000-8000-0000000000f0",
       "request_header_names": [
         "cookie"
       ],
       "set_cookie_names": [],
       "sets_cookie_value": false,
-      "status": 400
+      "status": 404
     },
     {
       "body_length": 33,
@@ -10351,7 +10318,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "callback",
       "context": "anonymous",
       "expected": "neutral_signin",
@@ -10381,7 +10348,7 @@
       "id": "callback.forged_code_no_cookie",
       "location": null,
       "method": "GET",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "note": "forged code/state; a replay of a real, consumed code is never handled by this script",
       "passed": true,
       "path": "/auth/callback?<forged code/state>",
@@ -10394,7 +10361,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "callback",
       "context": "anonymous",
       "expected": "neutral_signin",
@@ -10424,7 +10391,7 @@
       "id": "callback.forged_code_forged_prelogin",
       "location": null,
       "method": "GET",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "note": "forged code/state; a replay of a real, consumed code is never handled by this script",
       "passed": true,
       "path": "/auth/callback?<forged code/state>",
@@ -10439,7 +10406,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "callback",
       "context": "anonymous",
       "expected": "neutral_signin",
@@ -10469,7 +10436,7 @@
       "id": "callback.repeated_code",
       "location": null,
       "method": "GET",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "note": "forged code/state; a replay of a real, consumed code is never handled by this script",
       "passed": true,
       "path": "/auth/callback?<forged code/state>",
@@ -10484,7 +10451,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "callback",
       "context": "anonymous",
       "expected": "neutral_signin",
@@ -10514,7 +10481,7 @@
       "id": "callback.extra_parameter",
       "location": null,
       "method": "GET",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "note": "forged code/state; a replay of a real, consumed code is never handled by this script",
       "passed": true,
       "path": "/auth/callback?<forged code/state>",
@@ -10527,7 +10494,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "callback",
       "context": "anonymous",
       "expected": "neutral_signin",
@@ -10557,7 +10524,7 @@
       "id": "callback.no_parameters",
       "location": null,
       "method": "GET",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "note": "forged code/state; a replay of a real, consumed code is never handled by this script",
       "passed": true,
       "path": "/auth/callback?",
@@ -10570,7 +10537,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "forwarded_ip",
       "context": "anonymous",
       "expected": "400 then 429",
@@ -10599,7 +10566,7 @@
       "id": "forwarded_ip.attempt_1",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "passed": true,
       "path": "/signin/aaaaaaaaaaaaaaaaaaaaaaaaaa",
       "request_header_names": [
@@ -10613,7 +10580,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "forwarded_ip",
       "context": "anonymous",
       "expected": "400 then 429",
@@ -10642,7 +10609,7 @@
       "id": "forwarded_ip.attempt_2",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "passed": true,
       "path": "/signin/aaaaaaaaaaaaaaaaaaaaaaaaaa",
       "request_header_names": [
@@ -10656,7 +10623,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "forwarded_ip",
       "context": "anonymous",
       "expected": "400 then 429",
@@ -10685,7 +10652,7 @@
       "id": "forwarded_ip.attempt_3",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "passed": true,
       "path": "/signin/aaaaaaaaaaaaaaaaaaaaaaaaaa",
       "request_header_names": [
@@ -10699,7 +10666,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "forwarded_ip",
       "context": "anonymous",
       "expected": "400 then 429",
@@ -10728,7 +10695,7 @@
       "id": "forwarded_ip.attempt_4",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "passed": true,
       "path": "/signin/aaaaaaaaaaaaaaaaaaaaaaaaaa",
       "request_header_names": [
@@ -10742,7 +10709,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "forwarded_ip",
       "context": "anonymous",
       "expected": "400 then 429",
@@ -10771,7 +10738,7 @@
       "id": "forwarded_ip.attempt_5",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "passed": true,
       "path": "/signin/aaaaaaaaaaaaaaaaaaaaaaaaaa",
       "request_header_names": [
@@ -10785,7 +10752,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "forwarded_ip",
       "context": "anonymous",
       "expected": "400 then 429",
@@ -10814,7 +10781,7 @@
       "id": "forwarded_ip.attempt_6",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "passed": true,
       "path": "/signin/aaaaaaaaaaaaaaaaaaaaaaaaaa",
       "request_header_names": [
@@ -10828,7 +10795,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "forwarded_ip",
       "context": "anonymous",
       "expected": "400 then 429",
@@ -10857,7 +10824,7 @@
       "id": "forwarded_ip.attempt_7",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "passed": true,
       "path": "/signin/aaaaaaaaaaaaaaaaaaaaaaaaaa",
       "request_header_names": [
@@ -10871,7 +10838,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "forwarded_ip",
       "context": "anonymous",
       "expected": "400 then 429",
@@ -10900,7 +10867,7 @@
       "id": "forwarded_ip.attempt_8",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "passed": true,
       "path": "/signin/aaaaaaaaaaaaaaaaaaaaaaaaaa",
       "request_header_names": [
@@ -10914,7 +10881,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "forwarded_ip",
       "context": "anonymous",
       "expected": "400 then 429",
@@ -10943,7 +10910,7 @@
       "id": "forwarded_ip.attempt_9",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "passed": true,
       "path": "/signin/aaaaaaaaaaaaaaaaaaaaaaaaaa",
       "request_header_names": [
@@ -10957,7 +10924,7 @@
     },
     {
       "body_length": 640,
-      "body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "class": "forwarded_ip",
       "context": "anonymous",
       "expected": "400 then 429",
@@ -10986,7 +10953,7 @@
       "id": "forwarded_ip.attempt_10",
       "location": null,
       "method": "POST",
-      "normalized_body_sha256": "ed76f9acb146c83b42eca1519a1516438e254c367dd6340cb07d747a50ae9f13",
+      "normalized_body_sha256": "e23503d0b2bbfdc718d946a79c80e4df3d883de6fac77ef58c7dfb5428a3dfbe",
       "passed": true,
       "path": "/signin/aaaaaaaaaaaaaaaaaaaaaaaaaa",
       "request_header_names": [
@@ -11041,6 +11008,6 @@
   "schema": "forma:app076-trial-checks:v1",
   "scope": "APP-076 scripted HTTP checks; sanitized (no cookie, token, code or full callback URL)",
   "script_sha256": "5d17bbd9ff56e7e883ece129e674f82ec8d500a3ab9d39ec59902becc6af5642",
-  "started_at_utc": "2026-10-30T04:35:38Z",
-  "target": "http://127.0.0.1:63241"
+  "started_at_utc": "2026-10-30T05:14:05Z",
+  "target": "http://127.0.0.1:60242"
 }
