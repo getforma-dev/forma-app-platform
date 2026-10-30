@@ -169,3 +169,33 @@ Stacks (after macOS Stacks and BumpTop's piles): drag a card onto another and ho
 ## Evidence
 
 `evidence/APP-093/scenarios/`: `actions-campaign.json` (the Docker campaign's 10 checks and timings), `two-window-shoot-notes.json` (the Playwright two-window run's measurements), `README.md`. The screenshots of the two-window run stay in the session scratch (synthetic data; not retained in the repository).
+
+## Workflows (APP-107): the approval processes real companies run
+
+Five more record apps join the library, each the same governed pattern as Expense claims: a typed request, a named approver, an audited decision, live for everyone, reachable from the canvas, Slack and any MCP agent. Victor picks one for the demo; all five are rehearsed. History cards run over labeled synthetic CSV data; the requests filed on stage are live records.
+
+| App (slash) | Category | Request | Decisions | Declared rule (server-enforced) |
+| --- | --- | --- | --- | --- |
+| Time off (`/pto`) | People | leave type, start, end, days, note | submitted → approved / rejected | — |
+| Purchase requests (`/purchase`) | Finance | item, vendor, amount, cost center, justification | submitted → approved (≤ $5,000) or → manager_approved → approved (> $5,000); any step → rejected | guards on `amount`; finance cannot approve before the manager |
+| Vendor invoices (`/invoice`) | Finance | vendor, invoice number, amount, PO, due date | received → approved → paid, or → disputed | PO match flag (display only, DS-72) |
+| Access requests (`/access`) | Security | system, role, reason, expires on | requested → granted / denied | — |
+| Deal desk (`/discount`) | Sales | account, deal amount, discount %, reason | submitted → approved / rejected | ≤ 10% approves on create (one audited command) |
+
+`/access` now opens Access requests; the Access review tracker keeps `/access-review` (alias `/access-audit`).
+
+**Personas.** Diego Ramos files; Sarah Chen is the manager; Priya Natarajan decides the purchase's finance step on the local stand. On beta, until a third account exists, Sarah decides both purchase steps (say so: "on stage Sarah plays both roles"; DS-71).
+
+**Setup (operator, beta).** Re-run `seed-library --organization <Northstar>` (adds the five apps; the 14 existing ones exact-match). Re-run `admission grant-library-access --organization <Northstar> --principal <persona>` for each persona (it covers every seeded library app, the five new ones included, with their sources; idempotent; `--record-write` as before). Upload the five new history sources like the others (`library_sources.py plan` lists their B1 keys: `leave_requests`, `purchase_requests`, `ap_invoices`, `access_grants`, `discount_requests`).
+
+**Rehearsed sentences** (demo organization: no model call, DS-69; outside it the model parses them):
+
+1. Time off. Diego: *"Book me off Nov 24–26 for Thanksgiving, Sarah approves"* → card: Leave type vacation · Start 2026-11-24 · End 2026-11-26 · Days 3 · Note Thanksgiving · Status submitted · Approver Sarah Chen. Confirm. Sarah: Approve on the row (or *"approve Diego's Thanksgiving time off"*). Diego's row turns approved live.
+2. Purchase, two steps. Diego: *"Buy 12 Figma Enterprise seats from Figma for $7,200, cost center design, Sarah and Priya approve"* → card with Approver 1 Sarah Chen, Approver 2 Priya Natarajan; Confirm shares with both. The row carries its PO reference (`PO-XXXXXXXX`). Sarah's row offers **Approve (manager)** and Reject only; her Approve drafts `manager_approved` with "Manager approved by the app's declared rule: amount > $5,000.00". Priya's row then offers Approve / Reject; her Approve commits `approved` (version 3). A finance approval posted before the manager's is refused by storage. Under $5,000 (*"Buy a monitor arm from Atlas Office Supply for $180, cost center engineering, Sarah approves"*) one approval completes it.
+3. Vendor invoice. Priya: *"Log invoice FIG-2207 from Figma for $7,450, PO-XXXXXXXX, due Nov 30, Sarah approves"* (the PO from step 2) → status received and the flag **"PO mismatch: PO-XXXXXXXX is $7,200.00, this invoice is $7,450.00"** on the card and on the row; it never blocks. Sarah approves, then *"mark the Figma invoice paid"*.
+4. Access. Diego: *"I need admin access to the production database until Nov 30 for the billing migration, Sarah approves"* → status requested; Sarah **Grant** (or *"grant the production database access"*). The history card lists grants expiring in November.
+5. Deal desk. Diego: *"Request an 8% discount for Quill Education on a $48,000 renewal, multi-year commitment"* → status **approved** with "Approved by the app's declared rule: discount pct ≤ 10%": one audited command, no approver. *"Request a 15% discount for Kestrel Logistics on a $120,000 deal, competitive pressure, Sarah approves"* waits for Sarah.
+
+**The second vendor, mocked (DS-70).** On the local stand, `app/scripts/mcp_haiku_agent.py --stand-file <stand>` gives Claude Haiku Forma's MCP tools with Sarah's agent token and asks "what's waiting for my approval? approve the Figma seat purchase": `forma_list_pending` → `forma_draft_decision` → `forma_commit`; Diego's row shows **approved · via Haiku**. With the OpenAI key added, `mcp_openai_smoke.py` against beta does the same as OpenAI.
+
+**Measured** (`storage::workflows_campaign::native_workflows_campaign`, Docker PostgreSQL, loopback model stub, debug build): card 0.8–1.1 s on first use (the app is placed for the member), Confirm ~0.11 s, a decision (draft + commit) 0.5–0.6 s, the two-step purchase 2.1 s, the auto-approved discount 0.6 s, an MCP decision 0.9 s.

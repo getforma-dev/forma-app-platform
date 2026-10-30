@@ -919,4 +919,67 @@ mod tests {
         );
         assert_eq!(approvers("send it to Sarah").as_deref(), Some("Sarah"));
     }
+
+    /// The real Haiku parse of one unrehearsed sentence per workflow app
+    /// (ADR-011 §4: the key from the file named by `GENUI_ACT_SMOKE_KEY_FILE`,
+    /// read into memory only; never printed). Prints decisions and latencies.
+    #[tokio::test]
+    #[ignore = "calls the real Anthropic endpoint with the key file named by GENUI_ACT_SMOKE_KEY_FILE"]
+    async fn real_haiku_workflow_smoke() {
+        use crate::composer::model::{Anthropic, Model, DEFAULT_ENDPOINT, DEFAULT_ROUTER_MODEL};
+        use std::sync::Arc;
+        let Some(path) = std::env::var_os("GENUI_ACT_SMOKE_KEY_FILE") else {
+            eprintln!("skipped: GENUI_ACT_SMOKE_KEY_FILE not set");
+            return;
+        };
+        let text = std::fs::read_to_string(path).expect("the key file");
+        let key = text
+            .lines()
+            .find_map(|line| {
+                line.trim()
+                    .strip_prefix("ANTHROPIC_API_KEY=")
+                    .map(|k| k.trim().trim_matches('"').to_owned())
+            })
+            .expect("an ANTHROPIC_API_KEY line");
+        let client = Anthropic::new(&key, DEFAULT_ENDPOINT).expect("a usable key");
+        drop(text);
+        let parser = super::super::Parser::new(
+            Some(Arc::new(client) as Arc<dyn Model>),
+            DEFAULT_ROUTER_MODEL,
+        );
+        let catalog = workflow_catalog();
+        let schema = |app: &str| {
+            catalog
+                .iter()
+                .find(|a| a.app == app)
+                .map(|a| a.schema.clone())
+                .unwrap_or_else(|| "-".into())
+        };
+        let mut right = 0;
+        for (utterance, wanted) in [
+            ("I'm out sick tomorrow, letting Sarah know", "leave_request"),
+            ("We need a new label printer from Atlas Office Supply, about 320 dollars, ops budget; Sarah approves", "purchase_request"),
+            ("Atlas Office Supply sent bill A-99 for $120 against PO-3FA9C21B, due end of November", "vendor_invoice"),
+            ("Give me read rights on hr-records till December 15 for the benefits audit, Sarah signs off", "access_request"),
+            ("Brightwater Foods wants 25% off their $90,000 renewal because of a competitor bid; Sarah decides", "discount_request"),
+        ] {
+            let started = std::time::Instant::now();
+            let parse = parser.parse(utterance, &catalog, false, "2026-10-30").await;
+            let ms = started.elapsed().as_millis();
+            match parse {
+                Ok(parse) => {
+                    let got = schema(&parse.parsed.app_hint);
+                    right += usize::from(got == wanted && parse.parsed.kind == Kind::Create);
+                    eprintln!(
+                        "HAIKU_WORKFLOW {ms} ms  {:?}  app={got}  values={}  approver={:?}",
+                        parse.parsed.kind,
+                        Value::Object(parse.parsed.values.clone()),
+                        parse.parsed.approver_name
+                    );
+                }
+                Err(error) => eprintln!("HAIKU_WORKFLOW {ms} ms  refused {error:?}"),
+            }
+        }
+        assert!(right >= 4, "{right} of 5 parsed into the right app");
+    }
 }

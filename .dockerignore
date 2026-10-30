@@ -80,7 +80,7 @@ app/src/slack/**
 !app/src/slack/notify.rs
 !app/src/slack/signature.rs
 !app/src/slack/text.rs
-# slack/tests.rs and storage/slack_campaign.rs are cfg(test) only; the qualification context lists them.
+# slack/tests.rs, storage/slack_campaign.rs and storage/workflows_campaign.rs are cfg(test) only; the qualification context lists them.
 # APP-103: canvas widgets (weather, customize in words).
 !app/src/widgets/
 app/src/widgets/**

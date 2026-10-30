@@ -127,6 +127,7 @@
 !app/src/storage/sharing.rs
 !app/src/storage/sharing_qualification.rs
 !app/src/storage/slack_campaign.rs
+!app/src/storage/workflows_campaign.rs
 !app/src/storage/actions.rs
 !app/src/storage/actions_campaign.rs
 !app/src/storage/tests.rs

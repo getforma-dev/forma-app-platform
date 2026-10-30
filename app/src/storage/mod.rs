@@ -152,3 +152,5 @@ mod sharing_qualification;
 mod slack_campaign;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod workflows_campaign;

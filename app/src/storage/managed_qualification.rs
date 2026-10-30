@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 144] = [
+const SOURCES: [(&str, &[u8]); 145] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -513,6 +513,10 @@ const SOURCES: [(&str, &[u8]); 144] = [
         include_bytes!("slack_campaign.rs"),
     ),
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
+    (
+        "app/src/storage/workflows_campaign.rs",
+        include_bytes!("workflows_campaign.rs"),
+    ),
     ("app/src/supervise.rs", include_bytes!("../supervise.rs")),
     (
         "app/src/widgets/customize.rs",
