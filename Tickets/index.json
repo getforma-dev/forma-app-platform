@@ -253,9 +253,10 @@
         "APP-100",
         "APP-101",
         "APP-102",
-        "APP-103"
+        "APP-103",
+        "APP-104"
       ],
-      "ticket_count": 13,
+      "ticket_count": 14,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -3304,6 +3305,36 @@
       "dependencies": [
         "APP-094",
         "APP-101"
+      ]
+    },
+    {
+      "id": "APP-104",
+      "title": "Canvas library pane, a clean board, and Figma-style controls",
+      "path": "0-backlog/APP-104.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "104",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md): the November 2 emergency pivot. No dedicated phase existed, so the board's new phase PH08 / sprint S14 (order 8, no phase dependency; added to `plan.json`) holds the pitch tickets. Invariants of ADR-011 \u00a73 that bind this ticket: authorization and RLS paths unchanged; a receipt on every governed number; I5 model output is data, never code, SQL, markup or grants (I1\u2013I6 number the six invariants in \u00a73 in order).",
+      "Requirements": "C01, SR1",
+      "Depends on": "APP-094, APP-101, APP-103",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "`pivot/library-pane` (from `pivot/pitch-mvp` 8add820)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-094",
+        "APP-101",
+        "APP-103"
       ]
     }
   ]

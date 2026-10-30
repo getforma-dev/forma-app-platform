@@ -351,3 +351,85 @@ fn the_summary_counts_apps_and_cards() {
     assert_eq!(summary(&[group(1, 0)]), "1 app · 1 card");
     assert_eq!(summary(&[group(2, 0), group(0, 1)]), "2 apps · 3 cards");
 }
+
+/// APP-104: the library pane groups library apps by their first capability
+/// prefix in the fixed category order (sidecar order within), puts every
+/// other work under "My apps" last, and numbers apps and cards stably.
+#[test]
+fn the_library_pane_groups_numbers_and_counts() {
+    let source = |work: &str, title: &str, grouping: Option<(usize, &str, &str)>, cards: usize| {
+        LibrarySource {
+            app: "a".repeat(8),
+            work: work.into(),
+            title: title.into(),
+            grouping: grouping.map(|(position, prefix, slug)| {
+                (
+                    position,
+                    format!("lib-{position}"),
+                    prefix.into(),
+                    slug.into(),
+                )
+            }),
+            cards: (0..cards)
+                .map(|index| {
+                    (
+                        format!("c-{work}-{index}"),
+                        format!("Card {index}"),
+                        "number".into(),
+                    )
+                })
+                .collect(),
+        }
+    };
+    let library = library(vec![
+        source("w-mine", "Spend Review", None, 2),
+        source(
+            "w-traffic",
+            "Outbound traffic",
+            Some((2, "security", "traffic")),
+            3,
+        ),
+        source(
+            "w-claims",
+            "Expense claims",
+            Some((13, "finance", "expense")),
+            2,
+        ),
+        source(
+            "w-review",
+            "Expense review queue",
+            Some((0, "finance", "expense-review")),
+            1,
+        ),
+        source(
+            "w-stock",
+            "Inventory",
+            Some((6, "operations", "inventory")),
+            1,
+        ),
+        source("w-incidents", "Incidents", Some((3, "ops", "incidents")), 1),
+    ]);
+    let titles: Vec<&str> = library.iter().map(|c| c.title.as_str()).collect();
+    assert_eq!(titles, ["Finance", "Security", "Operations", "My apps"]);
+    let finance = &library[0];
+    assert_eq!(finance.count, "2 apps");
+    assert_eq!(finance.apps[0].title, "Expense review queue");
+    assert_eq!(finance.apps[0].number, "1");
+    assert_eq!(finance.apps[1].slug, "/expense");
+    assert_eq!(finance.apps[1].cards[1].number, "2.1");
+    assert_eq!(finance.apps[1].cards[1].id, "c-w-claims-1");
+    // ops.* and operations.* are one category, in sidecar order.
+    let operations: Vec<&str> = library[2].apps.iter().map(|a| a.title.as_str()).collect();
+    assert_eq!(operations, ["Incidents", "Inventory"]);
+    let mine = &library[3];
+    assert_eq!(
+        (mine.apps[0].number.as_str(), mine.apps[0].has_slug),
+        ("6", false)
+    );
+    assert_eq!(library_summary(&library), "6 apps · 10 cards");
+    assert_eq!(card_kind("summary"), "number");
+    assert_eq!(card_kind("timeline"), "chart");
+    assert_eq!(card_kind("table"), "table");
+    assert_eq!(member_key("org", "p").len(), 16);
+    assert_ne!(member_key("org", "p"), member_key("org", "q"));
+}

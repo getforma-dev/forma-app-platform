@@ -362,6 +362,53 @@ pub fn command(app: &LibraryApp) -> Option<(String, Vec<String>)> {
     ))
 }
 
+/// APP-104: the library pane's grouping of a library app, by its pinned
+/// definition digest: its position in the sidecar, the sidecar's `library_id`, the first routing
+/// capability's prefix (`finance.expenses.claim` → `finance`) and its
+/// command slug; `None` for a definition outside the sidecar (a composed,
+/// adapted or team-published app).
+pub fn library_grouping(digest: &str) -> Option<(usize, String, String, String)> {
+    static ORDER: OnceLock<Vec<String>> = OnceLock::new();
+    let order = ORDER.get_or_init(|| {
+        crate::storage::library_sidecar()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|entry| entry.get("definition_digest")?.as_str().map(str::to_owned))
+            .collect()
+    });
+    let position = order.iter().position(|known| known == digest)?;
+    let entry = sidecar().get(digest)?;
+    let library_id = entry.get("library_id")?.as_str()?.to_owned();
+    let prefix = strings(entry.get("routing").and_then(|r| r.get("capabilities")))
+        .next()
+        .and_then(|capability| capability.split('.').next())
+        .unwrap_or_default()
+        .to_owned();
+    let slug = entry
+        .get("command")
+        .and_then(|c| c.get("slug"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    Some((position, library_id, prefix, slug))
+}
+
+/// APP-104: whether `work` is a library app's seeded work (the sidecar's
+/// `work_id`): its seeded records are sample data, never a request waiting
+/// for a member.
+pub fn seeded_work(work: &str) -> bool {
+    static SEEDED: OnceLock<BTreeSet<String>> = OnceLock::new();
+    SEEDED
+        .get_or_init(|| {
+            crate::storage::library_sidecar()
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|entry| entry.get("work_id")?.as_str().map(str::to_owned))
+                .collect()
+        })
+        .contains(work)
+}
+
 /// Every library slug and alias (reserved: a saved work cannot take one).
 pub fn library_slugs() -> std::collections::BTreeSet<String> {
     sidecar()

@@ -256,14 +256,14 @@ async fn campaign() {
         .unwrap()
         .contains("no-store"));
     let body = &page.body;
-    assert!(body.contains(&format!("id=\"g-{CANVAS_WORK}\"")), "{body}");
+    // APP-104: the library pane lists the work and its cards (metadata only).
+    assert!(
+        body.contains(&format!("id=\"lib-{CANVAS_WORK}\"")),
+        "{body}"
+    );
     assert!(!body.contains(&spend.work), "not shared yet");
-    assert!(body.contains(&format!(
-        "data-query=\"/v1/work/{APP}/{CANVAS_WORK}/queries/total\""
-    )));
-    assert!(body.contains(&format!(
-        "data-query=\"/v1/work/{APP}/{CANVAS_WORK}/queries/timeline\""
-    )));
+    assert!(body.contains(&format!("data-card=\"c-{CANVAS_WORK}-total\"")));
+    assert!(body.contains(&format!("data-card=\"c-{CANVAS_WORK}-timeline\"")));
     assert!(!body.contains("class=\"value\""), "nothing ran on GET");
     assert_eq!(counting.calls(), 0);
     let group = maya.get(&routes, &group_path).await;
@@ -374,15 +374,18 @@ async fn campaign() {
     }
     let page = maya.get(&routes, "/canvas").await;
     assert_eq!(page.status, StatusCode::OK);
-    assert!(page.body.contains(&format!("id=\"g-{}\"", spend.work)));
-    assert!(page.body.contains(&format!(
-        "action=\"/v1/work/{SPEND_APP}/{}/commands/record_decision\"",
-        spend.work
-    )));
+    assert!(page.body.contains(&format!("id=\"lib-{}\"", spend.work)));
     let placed = maya.get(&routes, &spend_path).await;
     assert_eq!(placed.status, StatusCode::OK, "{}", placed.body);
     let placed: Value = serde_json::from_str(&placed.body).unwrap();
     assert_eq!(placed["forms"][0]["command"], "record_decision");
+    assert_eq!(
+        placed["forms"][0]["action"],
+        format!(
+            "/v1/work/{SPEND_APP}/{}/commands/record_decision",
+            spend.work
+        )
+    );
     check(
         &mut checks,
         "sharing: once Spend Review is shared with the member (discover, run, source_read, record_read, record_write), her canvas renders it with its record form posting to the audited command route, and its group JSON (the island's placement seam) answers with the form",

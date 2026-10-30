@@ -331,6 +331,8 @@ export class WidgetCanvas {
   #cancelCameraGesture: (() => void) | null = null;
   #topZ = 0;
   #spacePressed = false;
+  // Local change (APP-104): the hand tool, a persistent Space.
+  #panMode = false;
   #changeFrame = 0;
   #cameraFrame = 0;
   #navigatorFrame = 0;
@@ -587,6 +589,7 @@ export class WidgetCanvas {
       if (
         event.button !== 0 ||
         this.#spacePressed ||
+        this.#panMode ||
         this.#widgetDragPointerId !== null ||
         this.#cameraGesturePointerId !== null ||
         (event.pointerType !== "" && !event.isPrimary)
@@ -994,6 +997,34 @@ export class WidgetCanvas {
       rect.left + rect.width / 2,
       rect.top + rect.height / 2,
     );
+  }
+
+  /** Local change (APP-104): zoom by `factor` toward a client point. */
+  zoomAt(factor: number, clientX: number, clientY: number): void {
+    this.#stopCameraAnimation();
+    this.#zoomAtPoint(this.#camera.zoom * factor, clientX, clientY);
+  }
+
+  /** Local change (APP-104): pan the camera by screen pixels. */
+  panBy(deltaX: number, deltaY: number): void {
+    this.#stopCameraAnimation();
+    this.#cameraFramingTarget = null;
+    this.#camera.panX += deltaX;
+    this.#camera.panY += deltaY;
+    this.#requestCameraRender();
+    this.#scheduleChange();
+  }
+
+  /** Local change (APP-104): ends a pan or drag in progress (a pinch takes over). */
+  cancelGestures(): void {
+    this.#cancelWidgetDragGesture?.();
+    this.#cancelCameraGesture?.();
+  }
+
+  /** Local change (APP-104): the hand tool; a primary drag anywhere pans. */
+  setPanMode(on: boolean): void {
+    this.#panMode = on;
+    this.#viewport.classList.toggle("is-hand-tool", on);
   }
 
   resetZoom(): void {
@@ -1486,7 +1517,9 @@ export class WidgetCanvas {
     item.dataset.canvasY = String(Math.round(y));
     item.style.left = `${x}px`;
     item.style.top = `${y}px`;
-    this.#updateItemVisibility();
+    // Local change (APP-104): honor deferDerivedUpdates so a batch of moves
+    // runs one visibility pass, not one per item.
+    this.#requestVisibilityUpdate();
   }
 
   #updateItemChromePlacement(
@@ -1606,11 +1639,20 @@ export class WidgetCanvas {
   }
 
   #bindItemDrag(item: HTMLElement): void {
-    const handle = item.querySelector<HTMLElement>(".widget-drag-handle");
-    if (!handle) return;
+    // Local change (APP-104): a card's own header (`[data-canvas-drag-handle]`)
+    // moves it too, as in Figma; its interactive controls keep their clicks.
+    for (const handle of item.querySelectorAll<HTMLElement>(".widget-drag-handle, [data-canvas-drag-handle]")) {
+      this.#bindDragHandle(item, handle);
+    }
+  }
+
+  #bindDragHandle(item: HTMLElement, handle: HTMLElement): void {
+    const extra = !handle.classList.contains("widget-drag-handle");
     handle.addEventListener("pointerdown", (event) => {
+      if (extra && eventOriginatesInInteractiveControl(event)) return;
       if (
         this.#spacePressed ||
+        this.#panMode ||
         event.button !== 0 ||
         (event.pointerType !== "" && !event.isPrimary) ||
         this.#widgetDragPointerId !== null ||
@@ -1711,6 +1753,7 @@ export class WidgetCanvas {
       }
     }, { signal: this.#abort.signal });
 
+    if (extra) return;
     handle.addEventListener("keydown", (event) => {
       if (
         (event.key === "Enter" || event.key === " ") &&
@@ -1800,8 +1843,10 @@ export class WidgetCanvas {
       const activeElement = this.#document.activeElement;
       const canvasOwnsFocus = activeElement === this.#viewport ||
         (activeElement !== null && this.#viewport.contains(activeElement));
+      // Local change (APP-104): Space pans when nothing else holds focus too.
+      const nothingFocused = activeElement === null || activeElement === this.#document.body;
       if (
-        canvasOwnsFocus &&
+        (canvasOwnsFocus || nothingFocused) &&
         event.code === "Space" &&
         !event.repeat &&
         !event.defaultPrevented &&
@@ -1830,7 +1875,8 @@ export class WidgetCanvas {
     this.#viewport.addEventListener("pointerdown", (event) => {
       const target = event.target as HTMLElement;
       const onBackground = target === this.#viewport || target === this.#stage;
-      const shouldPan = event.button === 1 || this.#spacePressed || (event.button === 0 && onBackground);
+      const shouldPan = event.button === 1 || this.#spacePressed ||
+        (event.button === 0 && (onBackground || this.#panMode));
       if (
         !shouldPan ||
         (event.pointerType !== "" && !event.isPrimary) ||
@@ -1843,7 +1889,7 @@ export class WidgetCanvas {
       const startX = event.clientX;
       const startY = event.clientY;
       const origin = { ...this.#camera };
-      const clearsSelection = event.button === 0 && onBackground && !this.#spacePressed;
+      const clearsSelection = event.button === 0 && onBackground && !this.#spacePressed && !this.#panMode;
       let moved = false;
 
       const onMove = (moveEvent: PointerEvent): void => {
@@ -1881,13 +1927,34 @@ export class WidgetCanvas {
       this.#window.addEventListener("pointercancel", onEnd);
     }, { signal: this.#abort.signal });
 
+    // Local change (APP-104): Figma's mapping. A plain wheel or two-finger
+    // scroll pans (Shift: horizontally); Ctrl/Cmd + wheel and a trackpad
+    // pinch (delivered as wheel with ctrlKey) zoom toward the cursor. Over a
+    // card, a scrollable region that can still scroll that way keeps the
+    // wheel.
     this.#viewport.addEventListener("wheel", (event) => {
-      const target = event.target as HTMLElement;
-      const overWidget = Boolean(target.closest(".widget-instance"));
-      if (overWidget && !event.ctrlKey && !event.metaKey) return;
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? this.#viewport.clientHeight : 1;
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        const delta = clamp(event.deltaY * unit, -60, 60);
+        this.#stopCameraAnimation();
+        this.#zoomAtPoint(this.#camera.zoom * Math.exp(-delta * 0.006), event.clientX, event.clientY);
+        return;
+      }
+      let deltaX = event.deltaX * unit;
+      let deltaY = event.deltaY * unit;
+      if (event.shiftKey && Math.abs(deltaX) < Math.abs(deltaY)) {
+        deltaX = deltaY;
+        deltaY = 0;
+      }
+      if (scrollsNatively(event.target, this.#viewport, deltaX, deltaY)) return;
       event.preventDefault();
-      const factor = event.deltaY < 0 ? 1.08 : 1 / 1.08;
-      this.#zoomAtPoint(this.#camera.zoom * factor, event.clientX, event.clientY);
+      this.#stopCameraAnimation();
+      this.#cameraFramingTarget = null;
+      this.#camera.panX -= deltaX;
+      this.#camera.panY -= deltaY;
+      this.#requestCameraRender();
+      this.#scheduleChange();
     }, { passive: false, signal: this.#abort.signal });
   }
 
@@ -2471,4 +2538,26 @@ function compareRuntimeAdmission(
     right.z - left.z ||
     left.distance - right.distance ||
     left.id.localeCompare(right.id);
+}
+
+/**
+ * Local change (APP-104): whether an element between the wheel's target and
+ * the viewport can still scroll in the wheel's direction (a card's table or
+ * receipt), so the wheel scrolls it instead of panning.
+ */
+function scrollsNatively(target: EventTarget | null, viewport: HTMLElement, deltaX: number, deltaY: number): boolean {
+  let node = target instanceof Element ? target : null;
+  while (node && node !== viewport) {
+    if (node instanceof HTMLElement) {
+      const style = getComputedStyle(node);
+      if (deltaY !== 0 && /(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1) {
+        if (deltaY < 0 ? node.scrollTop > 0 : node.scrollTop + node.clientHeight < node.scrollHeight - 1) return true;
+      }
+      if (deltaX !== 0 && /(auto|scroll)/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 1) {
+        if (deltaX < 0 ? node.scrollLeft > 0 : node.scrollLeft + node.clientWidth < node.scrollWidth - 1) return true;
+      }
+    }
+    node = node.parentElement;
+  }
+  return false;
 }

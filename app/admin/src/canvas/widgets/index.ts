@@ -195,6 +195,27 @@ export const WIDGET_COMMANDS: WidgetCommand[] = [
   },
 ];
 
+/** APP-104: how many widgets of `kind` are on the canvas (the library pane's indicator). */
+export function widgetCount(kind: WidgetKind): number {
+  let count = 0;
+  for (const entry of placed.values()) if (entry.widget.kind === kind) count += 1;
+  return count;
+}
+
+/** APP-104: removes widgets from the canvas: every one of `kind`, or the one whose canvas item is `item`. */
+export function removeWidgets(match: WidgetKind | HTMLElement): number {
+  let removed = 0;
+  for (const [id, entry] of [...placed.entries()]) {
+    if (typeof match === 'string' ? entry.widget.kind !== match : entry.item !== match) continue;
+    entry.stop?.();
+    unmountWidget(entry.item);
+    placed.delete(id);
+    removed += 1;
+  }
+  if (removed) save();
+  return removed;
+}
+
 /** Restores this browser's widgets (not in demo mode) and keeps their layout saved. */
 export function restoreWidgets(): void {
   if (restored || !canvasHost()) return;

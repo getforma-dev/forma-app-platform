@@ -11,7 +11,7 @@ import {
   type WidgetCanvasItemState,
 } from '../canvas-vendor/index';
 import { submitCommand } from './commands';
-import { clearLayouts, loadCamera, loadLayout, saveCamera, saveLayout, type ItemLayout } from './layout';
+import { clearLayouts, loadCamera, loadLayout, loadPlaced, saveCamera, saveLayout, savePlaced, type ItemLayout, type PlacedWork } from './layout';
 import { subscribeLive, type LiveEvent } from './live';
 import { parametersOf, runView } from './queries';
 import { buildForm, buildGroup, el, groupJson, isUuid, renderNoValue, type FormJson } from './render';
@@ -23,10 +23,16 @@ import { wireReceiptAttach } from './receipt';
 type Group = {
   app: string;
   work: string;
+  title: string;
   section: HTMLElement;
+  /** Every card of the work, in canvas order, on the board or not (APP-104). */
+  cards: HTMLElement[];
+  /** The canvas items of the cards on the board, in canvas order. */
   items: HTMLElement[];
   /** The member arranged this group (now or in an earlier visit): its layout is kept. */
   pinned: boolean;
+  /** Saved positions by card id (DS-06). */
+  saved: Map<string, Partial<WidgetCanvasItemState>>;
 };
 
 const WIDTH: Record<string, number> = { app: 340, summary: 400, timeline: 620, form: 360, records: 680, ledger: 520 };
@@ -41,7 +47,24 @@ const groups = new Map<string, Group>();
 let saveTimer = 0;
 let reflowFrame = 0;
 let fitPending = false;
-const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => scheduleReflow());
+// A card's last laid-out height, kept as `--cv-card-height` so a parked card
+// (content-visibility: hidden) keeps its size for the re-flow.
+const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const height = Math.round(entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height);
+    const item = entry.target as HTMLElement;
+    if (height > 0 && item.dataset.attentionState !== 'parked') item.style.setProperty('--cv-card-height', `${height}px`);
+  }
+  scheduleReflow();
+});
+// APP-104: the member's placed cards (DS-67), the records cards shown only
+// because a record waits for the member (not kept), and what this session
+// took off the board on purpose (an auto card stays off until reload).
+let member = '';
+let placed = new Map<string, PlacedWork>();
+const dismissed = new Set<string>();
+const changeListeners: Array<() => void> = [];
+const utilityItems = new Set<HTMLElement>();
 // APP-101: placements in flight (an `app.adapted` for a standard work still
 // being placed waits for it), works whose transform is pending, adapted ⇄
 // standard pairs ("back to standard"), and adaptations that arrived before
@@ -64,23 +87,33 @@ const TAILOR_WAIT_MS = 15000;
 function reflow(): void {
   reflowFrame = 0;
   if (!canvas) return;
+  // Read every size first (one layout), then write every position, with the
+  // canvas's visibility pass deferred to one at the end.
+  const sizes = new Map<HTMLElement, [number, number]>();
+  for (const group of groups.values()) {
+    for (const item of group.items) sizes.set(item, [item.offsetWidth, item.offsetHeight]);
+  }
+  const flush = canvas.deferDerivedUpdates(false);
   let y = ORIGIN;
   for (const group of groups.values()) {
+    if (!group.items.length) continue;
     let bottom = y;
     if (group.pinned) {
       for (const item of group.items) {
-        bottom = Math.max(bottom, Number(item.dataset.canvasY ?? 0) + item.offsetHeight);
+        bottom = Math.max(bottom, Number(item.dataset.canvasY ?? 0) + (sizes.get(item)?.[1] ?? 0));
       }
     } else {
       let x = ORIGIN;
       for (const item of group.items) {
-        canvas.moveItemTo(item, x, y);
-        x += item.offsetWidth + GAP;
-        bottom = Math.max(bottom, y + item.offsetHeight);
+        const [width, height] = sizes.get(item) ?? [0, 0];
+        if (Number(item.dataset.canvasX) !== x || Number(item.dataset.canvasY) !== y) canvas.moveItemTo(item, x, y);
+        x += width + GAP;
+        bottom = Math.max(bottom, y + height);
       }
     }
     y = bottom + ROW_GAP;
   }
+  flush();
   if (fitPending) canvas.fitAll();
 }
 function scheduleReflow(): void {
@@ -189,8 +222,7 @@ export function mountWidget(
   } else {
     item.dataset.widgetPinned = 'true';
   }
-  host.classList.add('has-groups');
-  host.ownerDocument.getElementById('cv-empty')?.setAttribute('hidden', '');
+  updateSummary();
   if (options.focus !== false) {
     canvas.setActive(item);
     canvas.centerItem(item);
@@ -203,6 +235,7 @@ export function unmountWidget(item: HTMLElement): void {
   if (!canvas || !widgetItems.delete(item)) return;
   widgetAnchor?.unobserve(item);
   canvas.removeItem(item, { selectFallback: false });
+  updateSummary();
 }
 
 /** A widget item's position on the canvas. */
@@ -235,16 +268,88 @@ function saveSoon(): void {
 
 function updateSummary(): void {
   const chip = host?.ownerDocument.getElementById('cv-summary');
-  if (!chip) return;
-  let cards = 0;
-  for (const group of groups.values()) cards += group.items.filter((item) => !item.querySelector('.cv-app')).length;
-  const apps = groups.size;
-  chip.textContent = `${apps} ${apps === 1 ? 'app' : 'apps'} · ${cards} ${cards === 1 ? 'card' : 'cards'}`;
+  if (chip) {
+    let cards = widgetItems.size;
+    let apps = 0;
+    for (const group of groups.values()) {
+      if (group.items.length) apps += 1;
+      cards += group.items.length;
+    }
+    chip.textContent = cards
+      ? `${apps} ${apps === 1 ? 'app' : 'apps'} · ${cards} ${cards === 1 ? 'card' : 'cards'} on canvas`
+      : 'Empty canvas';
+  }
+  updateEmpty();
+  for (const listener of changeListeners) listener();
+}
+
+/** The empty state shows exactly when nothing is on the board. */
+function updateEmpty(): void {
+  if (!host) return;
+  let any = widgetItems.size > 0 || utilityItems.size > 0;
+  for (const group of groups.values()) any ||= group.items.length > 0;
+  host.classList.toggle('has-groups', any);
+  const empty = host.ownerDocument.getElementById('cv-empty');
+  if (any) empty?.setAttribute('hidden', '');
+  else empty?.removeAttribute('hidden');
+}
+
+/** Calls `listener` whenever cards arrive on or leave the board (the library pane's indicators). */
+export function onBoardChange(listener: () => void): void {
+  changeListeners.push(listener);
+}
+
+/** The canvas, once the board is started (the controls module's camera and selection). */
+export function canvasApi(): WidgetCanvas | null {
+  return canvas;
+}
+
+/** Whether the card `id` is on the board now. */
+export function isOnBoard(id: string): boolean {
+  for (const group of groups.values()) {
+    if (group.items.some((item) => item.dataset.instanceId === id)) return true;
+  }
+  return false;
+}
+
+/** A card kind as the library pane names it (`query::canvas::card_kind`). */
+export function paneKind(kind: string): string {
+  if (kind === 'summary' || kind === 'status') return 'number';
+  if (kind === 'timeline' || kind === 'chart') return 'chart';
+  if (['app', 'form', 'records', 'ledger'].includes(kind)) return kind;
+  return 'table';
+}
+
+/** APP-104: every work the board has in hand, with its cards (the pane lists new ones under "My apps"). */
+export function boardWorks(): { app: string; work: string; title: string; cards: { id: string; title: string; kind: string }[] }[] {
+  return Array.from(groups.values(), (group) => ({
+    app: group.app,
+    work: group.work,
+    title: group.title,
+    cards: group.cards.map((card) => ({
+      id: card.dataset.card ?? '',
+      title: card.dataset.kind === 'app' ? 'App card' : (card.getAttribute('aria-label') ?? 'Card'),
+      kind: paneKind(card.dataset.kind ?? ''),
+    })),
+  }));
+}
+
+function keepPlaced(): void {
+  if (member) savePlaced(member, placed);
+}
+function notePlaced(group: Group, ids: string[]): void {
+  const entry = placed.get(group.work) ?? { app: group.app, cards: [] };
+  for (const id of ids) {
+    dismissed.delete(id);
+    if (!entry.cards.includes(id)) entry.cards.push(id);
+  }
+  placed.set(group.work, entry);
+  keepPlaced();
 }
 
 function updateZoomLabel(): void {
-  const button = host?.ownerDocument.querySelector<HTMLElement>('[data-tool="zoom-reset"]');
-  if (button && canvas) button.textContent = `${Math.round(canvas.getCamera().zoom * 100)}%`;
+  const label = host?.ownerDocument.querySelector<HTMLElement>('[data-zoom-label]');
+  if (label && canvas) label.textContent = `${Math.round(canvas.getCamera().zoom * 100)}%`;
 }
 
 /** A short glow on a card a live event just updated (CSS honors reduced motion). */
@@ -263,10 +368,7 @@ function pulse(card: HTMLElement): void {
 export function runGroup(work: string, live = false): void {
   const group = groups.get(work);
   if (!group) return;
-  const form = group.items
-    .map((item) => item.querySelector<HTMLFormElement>('form[data-window]'))
-    .find((found): found is HTMLFormElement => Boolean(found)) ?? null;
-  const parameters = parametersOf(form);
+  const parameters = parametersOf(windowForm(group));
   // ADR-011 scenarios: the group's records cards re-read their listing too.
   for (const card of recordsCardsOf(group.items)) void refreshRecords(card, live);
   for (const card of ledgerCardsOf(group.items)) void refreshLedger(card, live);
@@ -342,8 +444,27 @@ async function freshForm(group: Group, card: HTMLElement): Promise<void> {
   node.querySelector<HTMLElement>('select, input[type="text"]')?.focus();
 }
 
-/** Lifts a server-rendered (or island-built) group onto the canvas at row `y`. */
-function adopt(section: HTMLElement, y: number, animate: boolean): Group | null {
+/** The group's run window (its app card's form), on the board or not. */
+function windowForm(group: Group): HTMLFormElement | null {
+  for (const card of group.cards) {
+    const form = card.querySelector<HTMLFormElement>('form[data-window]');
+    if (form) return form;
+  }
+  return null;
+}
+
+/** A records card the server marked as holding a record that waits for this member. */
+function waiting(card: HTMLElement): boolean {
+  return card.dataset.kind === 'records' && Number(card.dataset.waiting ?? '0') > 0 && !dismissed.has(card.dataset.card ?? '');
+}
+
+/**
+ * Takes a server-rendered (or island-built) group's cards in hand and puts
+ * on the board those `include` admits (APP-104: the member's placed cards,
+ * an auto card; everything when omitted), from row `y`. The other cards
+ * stay in the hidden board, ready for the library pane.
+ */
+function adopt(section: HTMLElement, y: number, animate: boolean, include: (card: HTMLElement) => boolean = () => true): Group | null {
   if (!canvas) return null;
   const app = section.dataset.app ?? '';
   const work = section.dataset.work ?? '';
@@ -351,45 +472,193 @@ function adopt(section: HTMLElement, y: number, animate: boolean): Group | null 
   // APP-098 demo shortcut (GENUI_DEMO_MODE): every load starts from the
   // default arrangement, so two windows of the pitch show the same canvas.
   const saved = demo() ? new Map<string, Partial<WidgetCanvasItemState>>() : loadLayout(app, work);
-  const group: Group = { app, work, section, items: [], pinned: saved.size > 0 };
-  groups.set(work, group);
-  let x = ORIGIN;
   const cards = Array.from(section.querySelectorAll<HTMLElement>(':scope > .cv-card'));
-  cards.forEach((card, index) => {
-    const id = card.dataset.card ?? '';
-    const kind = card.dataset.kind ?? '';
-    const width = WIDTH[kind] ?? 440;
-    const item = createCanvasItem({
-      instanceId: id,
-      displayName: card.getAttribute('aria-label') ?? 'Card',
-      preferredWidth: width,
-      minHeight: HEIGHT[kind] ?? 300,
-      content: card,
-    });
-    item.classList.add('cv-item', `cv-item-${kind || 'view'}`);
-    item.dataset.group = work;
-    if (animate) {
-      item.classList.add('is-placing');
-      item.style.setProperty('--place-delay', `${index * 70}ms`);
-    }
-    const restored: Partial<WidgetCanvasItemState> = saved.get(id) ?? { x, y };
-    canvas?.mountItem(item, restored, { focus: false });
-    resized?.observe(item);
-    group.items.push(item);
-    x += width + GAP;
-  });
+  const title = section.getAttribute('aria-label') ?? 'App';
+  const group: Group = { app, work, title, section, cards, items: [], pinned: saved.size > 0, saved };
+  groups.set(work, group);
   const window_ = section.querySelector<HTMLFormElement>('form[data-window]');
   window_?.addEventListener('submit', (event) => {
     event.preventDefault();
     runGroup(work);
   });
+  let x = ORIGIN;
+  let index = 0;
   for (const card of cards) {
-    const form = card.querySelector<HTMLFormElement>('form.cv-command');
-    if (form) wireCommand(form, group, card);
-    if (card.dataset.kind === 'records') wireRecordsCard(card);
-    if (card.dataset.kind === 'ledger') wireLedgerCard(card);
+    if (!include(card)) continue;
+    const item = mountCard(group, card, { x, y }, animate ? index : -1);
+    if (item) x += (WIDTH[card.dataset.kind ?? ''] ?? 440) + GAP;
+    index += 1;
   }
   return group;
+}
+
+/**
+ * Puts one card of `group` on the board at `at` (or its saved position);
+ * `delay` ≥ 0 animates it into place. Wires the card the first time.
+ */
+function mountCard(group: Group, card: HTMLElement, at: { x: number; y: number }, delay: number): HTMLElement | null {
+  if (!canvas) return null;
+  const id = card.dataset.card ?? '';
+  if (!id || group.items.some((item) => item.dataset.instanceId === id)) return null;
+  const kind = card.dataset.kind ?? '';
+  // Figma's convention: a card moves by its header.
+  (card.querySelector<HTMLElement>(':scope > .cv-card-head') ?? card.querySelector<HTMLElement>(':scope > h2'))
+    ?.setAttribute('data-canvas-drag-handle', '');
+  const width = WIDTH[kind] ?? 440;
+  const item = createCanvasItem({
+    instanceId: id,
+    displayName: card.getAttribute('aria-label') ?? 'Card',
+    preferredWidth: width,
+    minHeight: HEIGHT[kind] ?? 300,
+    content: card,
+  });
+  item.classList.add('cv-item', `cv-item-${kind || 'view'}`);
+  item.dataset.group = group.work;
+  if (delay >= 0) {
+    item.classList.add('is-placing');
+    item.style.setProperty('--place-delay', `${delay * 70}ms`);
+  }
+  canvas.mountItem(item, group.saved.get(id) ?? at, { focus: false });
+  resized?.observe(item);
+  const order = group.cards.indexOf(card);
+  const before = group.items.findIndex((other) => group.cards.indexOf(other.querySelector<HTMLElement>(':scope > .cv-card') ?? other) > order);
+  if (before < 0) group.items.push(item);
+  else group.items.splice(before, 0, item);
+  if (card.dataset.wired !== 'true') {
+    const form = card.querySelector<HTMLFormElement>('form.cv-command');
+    if (form) {
+      card.dataset.wired = 'true';
+      wireCommand(form, group, card);
+    }
+    if (kind === 'records') wireRecordsCard(card);
+    if (kind === 'ledger') wireLedgerCard(card);
+  } else if (kind === 'records') {
+    void refreshRecords(card);
+  } else if (kind === 'ledger') {
+    void refreshLedger(card);
+  }
+  return item;
+}
+
+/** Takes a card off the board (it goes back to the library pane; no data changes). */
+function unmountCard(group: Group, item: HTMLElement): void {
+  if (!canvas) return;
+  const card = item.querySelector<HTMLElement>(':scope > .cv-card');
+  resized?.unobserve(item);
+  canvas.removeItem(item, { selectFallback: false });
+  group.items = group.items.filter((other) => other !== item);
+  if (card) group.section.append(card);
+}
+
+/** Runs the view cards among `cards` (the group's window), refreshing records and ledgers. */
+function runCards(group: Group, cards: HTMLElement[]): void {
+  const parameters = parametersOf(windowForm(group));
+  for (const card of cards) {
+    if (!card.classList.contains('cv-view')) continue;
+    if (card.dataset.state === 'ready' || card.dataset.state === 'empty') continue;
+    if (parameters === null) {
+      renderNoValue(card, 'failed', 'failed', 'The window was not accepted. Give a start before the end, as UTC date and time. Nothing ran.');
+    } else {
+      void runView(card, parameters);
+    }
+  }
+}
+
+/**
+ * APP-104: brings cards of a work onto the board (the library pane, `/card`,
+ * `/app`): `ids` null means every card. The work is fetched through the
+ * group route (which re-authorizes) when the board has not seen it yet. The
+ * new cards animate into place, run through the governed query route, and
+ * the camera goes to the first. Returns a status line.
+ */
+export async function addCards(app: string, work: string, ids: string[] | null, options: { keep?: boolean; focus?: boolean } = {}): Promise<string> {
+  if (!canvas || !host || !isUuid(app) || !isUuid(work)) return 'Nothing was placed.';
+  let group = groups.get(work);
+  if (!group) {
+    const json = await fetchGroup(app, work);
+    if (!json) return 'That app could not be opened. Nothing was placed.';
+    if (!groups.has(work)) {
+      const section = buildGroup(host.ownerDocument, json, []);
+      host.ownerDocument.getElementById('cv-board')?.append(section);
+      adopt(section, nextRow(), false, () => false);
+    }
+    group = groups.get(work);
+    if (!group) return 'Nothing was placed.';
+  }
+  const wanted = group.cards.filter((card) => ids === null || ids.includes(card.dataset.card ?? ''));
+  if (!wanted.length) return 'That card is not available to you right now.';
+  const fresh: HTMLElement[] = [];
+  const rowY = group.items.length ? Math.min(...group.items.map((item) => Number(item.dataset.canvasY ?? 0))) : nextRow();
+  let x = group.items.reduce((right, item) => Math.max(right, Number(item.dataset.canvasX ?? 0) + item.offsetWidth + GAP), ORIGIN);
+  wanted.forEach((card) => {
+    const item = mountCard(group!, card, { x, y: rowY }, fresh.length);
+    if (!item) return;
+    x += (WIDTH[card.dataset.kind ?? ''] ?? 440) + GAP;
+    fresh.push(card);
+  });
+  if (options.keep !== false) notePlaced(group, wanted.map((card) => card.dataset.card ?? '').filter(Boolean));
+  const first = (fresh[0] ?? wanted[0])?.closest<HTMLElement>('.cv-item');
+  if (fresh.length) {
+    runCards(group, fresh);
+    scheduleReflow();
+    updateSummary();
+    saveSoon();
+  }
+  if (first && options.focus !== false) {
+    // After the re-flow has placed it.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!canvas || !first.isConnected) return;
+      canvas.centerItem(first);
+      flash(first);
+    }));
+  }
+  const count = fresh.length;
+  const message = count
+    ? `${count === 1 ? (fresh[0]?.getAttribute('aria-label') ?? 'The card') : `${count} cards`} from ${group.title} ${count === 1 ? 'is' : 'are'} on your canvas.`
+    : `${wanted.length === 1 ? 'That card is' : 'Those cards are'} already on your canvas.`;
+  announce(message);
+  return message;
+}
+
+/** APP-104: takes cards off the board (back to the library pane; never deletes data). */
+export function removeCards(ids: string[]): number {
+  let removed = 0;
+  for (const group of groups.values()) {
+    for (const item of [...group.items]) {
+      const id = item.dataset.instanceId ?? '';
+      if (!ids.includes(id)) continue;
+      unmountCard(group, item);
+      removed += 1;
+      dismissed.add(id);
+      const entry = placed.get(group.work);
+      if (entry) entry.cards = entry.cards.filter((card) => card !== id);
+    }
+  }
+  if (removed) {
+    keepPlaced();
+    scheduleReflow();
+    updateSummary();
+    saveSoon();
+    announce(`${removed} ${removed === 1 ? 'card' : 'cards'} back in the library.`);
+  }
+  return removed;
+}
+
+/**
+ * A record changed in a work whose waiting records card is not on the board:
+ * shows that card when a record now waits for this member (not kept).
+ */
+const checking = new Set<string>();
+async function showWaiting(app: string, work: string): Promise<void> {
+  if (checking.has(work) || !host?.ownerDocument.getElementById(`lib-${work}`)) return;
+  checking.add(work);
+  try {
+    const json = await fetchGroup(app, work);
+    const ids = (json?.records ?? []).filter((card) => Number(card.waiting ?? '0') > 0 && !dismissed.has(card.id)).map((card) => card.id);
+    if (ids.length && !ids.every(isOnBoard)) await addCards(app, work, ids, { keep: false, focus: false });
+  } finally {
+    checking.delete(work);
+  }
 }
 
 /** ADR-011 scenarios: re-reads a work's records cards (after a command this browser confirmed). */
@@ -444,6 +713,10 @@ async function placeWorkNow(app: string, work: string, labels: string[]): Promis
   if (!canvas || !host || !isUuid(app) || !isUuid(work)) return 'Nothing was placed.';
   const existing = groups.get(work);
   if (existing) {
+    // APP-104: a work the board has seen keeps its unplaced cards in hand;
+    // placing it brings them all.
+    if (existing.items.length < existing.cards.length) return addCards(app, work, null);
+    notePlaced(existing, existing.cards.map((card) => card.dataset.card ?? '').filter(Boolean));
     const first = existing.items[0];
     if (first) {
       canvas.centerItem(first);
@@ -479,12 +752,11 @@ async function placeWorkNow(app: string, work: string, labels: string[]): Promis
   const section = buildGroup(document_, group, labels);
   if (nameable(labels, group.origins)) section.dataset.nameable = 'true';
   document_.getElementById('cv-board')?.append(section);
-  const placed = adopt(section, y, true);
-  if (!placed) return 'Nothing was placed.';
-  decorate(placed);
+  const adopted = adopt(section, y, true);
+  if (!adopted) return 'Nothing was placed.';
+  notePlaced(adopted, adopted.cards.map((card) => card.dataset.card ?? '').filter(Boolean));
+  decorate(adopted);
   scheduleReflow();
-  host.classList.add('has-groups');
-  document_.getElementById('cv-empty')?.setAttribute('hidden', '');
   const elapsed = Math.round(performance.now() - started);
   host.dataset.lastPlaceMs = String(elapsed);
   runGroup(work);
@@ -649,6 +921,8 @@ async function swapGroup(fromWork: string, toApp: string, toWork: string, labels
     else groups.set(key, group);
   }
   if (!fresh) return false;
+  placed.delete(fromWork);
+  notePlaced(fresh, fresh.cards.map((card) => card.dataset.card ?? '').filter(Boolean));
   const pair = pairs.get(fromWork);
   if (pair && keepPair) pairs.set(toWork, pair);
   if (!keepPair) pairs.delete(fromWork);
@@ -747,7 +1021,10 @@ export function placeUtilityCard(id: string, title: string, body: HTMLElement): 
   const document_ = host.ownerDocument;
   const instance = `utility-${id}`;
   const existing = document_.querySelector<HTMLElement>(`[data-utility="${instance}"]`);
-  if (existing) canvas.removeItem(existing, { selectFallback: false });
+  if (existing) {
+    canvas.removeItem(existing, { selectFallback: false });
+    utilityItems.delete(existing);
+  }
   const card = el(document_, 'article', { class: 'cv-card cv-utility', 'data-card': instance, 'aria-label': title },
     el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, title)),
     body);
@@ -756,8 +1033,16 @@ export function placeUtilityCard(id: string, title: string, body: HTMLElement): 
   item.dataset.utility = instance;
   canvas.mountItem(item, { x: ORIGIN, y: nextRow() }, { focus: false });
   canvas.centerItem(item);
-  host.classList.add('has-groups');
-  document_.getElementById('cv-empty')?.setAttribute('hidden', '');
+  utilityItems.add(item);
+  updateSummary();
+}
+
+/** Removes a utility card (`/apps`), a widget-like card with no data. */
+export function removeUtilityItem(item: HTMLElement): boolean {
+  if (!canvas || !utilityItems.delete(item)) return false;
+  canvas.removeItem(item, { selectFallback: false });
+  updateSummary();
+  return true;
 }
 
 function onLive(event: LiveEvent): void {
@@ -767,7 +1052,10 @@ function onLive(event: LiveEvent): void {
     return;
   }
   if (event.kind === 'record.committed') {
-    if (groups.has(event.work_id)) runGroup(event.work_id, true);
+    const group = groups.get(event.work_id);
+    if (group?.items.length) runGroup(event.work_id, true);
+    // APP-104: a record may now wait for this member in a work not on the board.
+    if (!group?.items.some((item) => item.querySelector('.cv-records'))) void showWaiting(event.app_id, event.work_id);
     return;
   }
   if (event.kind === 'app.adapted') {
@@ -785,28 +1073,53 @@ function onLive(event: LiveEvent): void {
   void placeWork(event.app_id, event.work_id).then(announce);
 }
 
+/** "Reset layout": every group back to the default rows (view layout only). */
+export function resetLayout(): void {
+  if (!canvas) return;
+  clearLayouts();
+  for (const group of groups.values()) {
+    group.pinned = false;
+    group.saved.clear();
+  }
+  reflow();
+  canvas.fitAll();
+  saveSoon();
+}
+
+/** Nudges canvas items by world pixels (arrow keys); their groups keep the new layout. */
+export function nudgeItems(items: HTMLElement[], deltaX: number, deltaY: number): void {
+  if (!canvas || !items.length) return;
+  const flush = canvas.deferDerivedUpdates(false);
+  for (const item of items) {
+    const state = canvas.getItemState(item);
+    canvas.moveItemTo(item, state.x + deltaX, state.y + deltaY);
+    if (widgetItems.has(item)) {
+      item.dataset.widgetPinned = 'true';
+      widgetAnchor?.unobserve(item);
+    }
+    const group = groups.get(item.dataset.group ?? '');
+    if (group) group.pinned = true;
+  }
+  flush();
+  fitPending = false;
+  saveSoon();
+}
+
+/** What a canvas item is: a card of a work, a widget, or a utility card. */
+export function itemKind(item: HTMLElement): 'card' | 'widget' | 'utility' | null {
+  if (widgetItems.has(item)) return 'widget';
+  if (utilityItems.has(item)) return 'utility';
+  return groups.has(item.dataset.group ?? '') ? 'card' : null;
+}
+
+/** Keeps the zoom label of the toolbar current. */
+export function refreshZoomLabel(): void {
+  updateZoomLabel();
+}
+
 function wireTools(document_: Document): void {
   const tools = document_.querySelector<HTMLElement>('[data-tools]');
   if (tools) tools.hidden = false;
-  document_.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((button) => {
-    button.addEventListener('click', () => {
-      if (!canvas) return;
-      switch (button.dataset.tool) {
-        case 'zoom-in': canvas.zoomBy(1.2); break;
-        case 'zoom-out': canvas.zoomBy(1 / 1.2); break;
-        case 'zoom-reset': canvas.resetZoom(); break;
-        case 'fit': canvas.fitAll(); break;
-        case 'reset-layout':
-          clearLayouts();
-          for (const group of groups.values()) group.pinned = false;
-          reflow();
-          canvas.fitAll();
-          break;
-      }
-      updateZoomLabel();
-      saveSoon();
-    });
-  });
   // Suggested intents fill the intent bar and submit it.
   document_.addEventListener('click', (event) => {
     const target = (event.target as Element | null)?.closest<HTMLElement>('[data-intent]');
@@ -846,23 +1159,67 @@ export function startBoard(document_: Document): void {
   host.addEventListener('wheel', () => { fitPending = false; }, { passive: true });
   host.addEventListener('pointerdown', () => { fitPending = false; });
   host.classList.add('is-canvas');
+  // APP-104: the board holds what the member brought (DS-67), the run
+  // cookie's restored work, and records waiting for the member's decision.
+  member = host.dataset.member ?? '';
+  placed = loadPlaced(member);
   const sections = Array.from(document_.querySelectorAll<HTMLElement>('#cv-board > .cv-group'));
   const flush = canvas.deferDerivedUpdates(false);
   let y = ORIGIN;
   for (const section of sections) {
-    const group = adopt(section, y, false);
+    const work = section.dataset.work ?? '';
+    const restored = section.dataset.auto === 'restored';
+    const kept = new Set(placed.get(work)?.cards ?? []);
+    const group = adopt(section, y, false, (card) => restored || kept.has(card.dataset.card ?? '') || waiting(card));
     if (!group) continue;
-    host.classList.add('has-groups');
-    y = Math.max(y, ...group.items.map((item) => Number(item.dataset.canvasY ?? 0) + item.offsetHeight)) + ROW_GAP;
+    if (restored) notePlaced(group, group.cards.map((card) => card.dataset.card ?? '').filter(Boolean));
+    if (group.items.length) {
+      y = Math.max(y, ...group.items.map((item) => Number(item.dataset.canvasY ?? 0) + item.offsetHeight)) + ROW_GAP;
+    }
   }
   flush();
+  wireTools(document_);
+  startLive(document_);
+  const missing = Array.from(placed.entries()).filter(([work]) => !groups.has(work));
+  if (missing.length) host.classList.add('has-groups');
+  void Promise.all(missing.map(([work, entry]) => fetchGroup(entry.app, work).then((json) => [work, entry, json] as const)))
+    .then((fetched) => {
+      if (!canvas || !host) return;
+      const restoreFlush = canvas.deferDerivedUpdates(false);
+      for (const [work, entry, json] of fetched) {
+        if (!json) {
+          // No longer openable for this member: forget it.
+          placed.delete(work);
+          continue;
+        }
+        if (groups.has(work)) continue;
+        const section = buildGroup(document_, json, []);
+        document_.getElementById('cv-board')?.append(section);
+        const kept = new Set(entry.cards);
+        adopt(section, nextRow(), false, (card) => kept.has(card.dataset.card ?? '') || waiting(card));
+      }
+      restoreFlush();
+      // Forget cards that no longer exist.
+      for (const [work, entry] of placed) {
+        const group = groups.get(work);
+        if (group) entry.cards = entry.cards.filter((id) => group.cards.some((card) => card.dataset.card === id));
+      }
+      keepPlaced();
+      settle(document_);
+    });
+}
+
+/** After the board's first contents are in place: camera, summary, runs. */
+function settle(document_: Document): void {
+  if (!canvas || !host) return;
   const camera = demo() ? null : loadCamera();
   const target = location.hash.match(/^#g-([0-9a-f-]{36})$/)?.[1];
+  const items = Array.from(groups.values()).flatMap((group) => group.items);
   if (target && groups.get(target)?.items[0]) {
     canvas.focusItem(groups.get(target)!.items[0]!);
-  } else if (camera) {
+  } else if (camera && items.length) {
     canvas.restoreCamera(camera);
-  } else if (groups.size) {
+  } else if (items.length) {
     canvas.fitAll();
     // Keep fitting while the first results grow the cards, until the member moves the camera.
     fitPending = true;
@@ -870,9 +1227,9 @@ export function startBoard(document_: Document): void {
   }
   scheduleReflow();
   updateZoomLabel();
-  wireTools(document_);
-  // Prefetch: every view runs now, in parallel (two in flight), except the
-  // ones the server already ran from this session's run cookie.
+  updateSummary();
+  // Prefetch: every view on the board runs now, two in flight, top rows
+  // first, except the ones the server already ran from the run cookie.
   for (const [work, group] of groups) {
     const cards = group.items
       .map((item) => item.querySelector<HTMLElement>('.cv-view'))
@@ -880,6 +1237,14 @@ export function startBoard(document_: Document): void {
     const ran = cards.some((card) => card.dataset.state === 'ready' || card.dataset.state === 'empty');
     if (cards.length && !ran) runGroup(work);
   }
+  if (!items.length && !widgetItems.size && matchMedia('(pointer: fine)').matches) {
+    (document_.getElementById('intent-input') as HTMLInputElement | null)?.focus({ preventScroll: true });
+  }
+  announce(items.length ? `${items.length} ${items.length === 1 ? 'card' : 'cards'} on the canvas.` : 'Your canvas is empty. Open the library or describe what you need.');
+}
+
+function startLive(document_: Document): void {
+  if (!host) return;
   const live = host.dataset.liveEvents ?? '';
   const chip = document_.getElementById('cv-live');
   const chipText = chip?.querySelector<HTMLElement>('[data-live-text]');
@@ -892,5 +1257,4 @@ export function startBoard(document_: Document): void {
       chip.title = state === 'live' ? 'Cards update as your team works' : text;
     });
   }
-  announce(`${groups.size} ${groups.size === 1 ? 'app' : 'apps'} on the canvas.`);
 }

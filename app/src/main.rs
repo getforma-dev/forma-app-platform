@@ -1210,6 +1210,7 @@ mod tests {
             title: "Northstar egress".into(),
             description: String::new(),
             views: vec![],
+            definition_digest: String::new(),
         };
         let form = work::FormValues {
             window_start: "2026-10-22T10:00".into(),
@@ -1459,6 +1460,45 @@ mod tests {
             member_initials: "BA".into(),
             demo: true,
             demo_mode: "on".into(),
+            ..canvas::CanvasProps::default()
+        };
+        // APP-104: the library pane, metadata only: categories, numbered
+        // apps and cards (a library app by its capability prefix; any other
+        // work under "My apps").
+        let library = canvas::library(vec![
+            canvas::LibrarySource {
+                app: app.into(),
+                work: spend.into(),
+                title: "Spend <Review>".into(),
+                grouping: None,
+                cards: vec![(format!("a-{spend}"), "App card".into(), "app".into())],
+            },
+            canvas::LibrarySource {
+                app: app.into(),
+                work: northstar.into(),
+                title: "Northstar egress".into(),
+                grouping: Some((
+                    2,
+                    "outbound-traffic".into(),
+                    "security".into(),
+                    "traffic".into(),
+                )),
+                cards: vec![
+                    (format!("a-{northstar}"), "App card".into(), "app".into()),
+                    (
+                        format!("c-{northstar}-total"),
+                        "Total".into(),
+                        "number".into(),
+                    ),
+                ],
+            },
+        ]);
+        let props = canvas::CanvasProps {
+            has_library: true,
+            library_summary: canvas::library_summary(&library),
+            library,
+            member_key: canvas::member_key("org", "principal"),
+            ..props
         };
         let response = ssr.canvas(&props);
         let (status, headers, body) = html(response).await;
@@ -1583,6 +1623,20 @@ mod tests {
         // No organization picker; the intent bar posts nowhere but the page.
         assert!(!content.to_lowercase().contains("organization picker"));
         assert!(content.contains("What do you need?"));
+        // The library pane: categories in order, numbers, the card ids the
+        // island toggles, the command slug, and titles escaped.
+        let security = content.find(">Security<").expect("security category");
+        let mine = content.find(">My apps<").expect("my apps category");
+        assert!(security < mine);
+        assert!(content.contains(&format!("id=\"lib-{northstar}\"")));
+        assert!(content.contains(&format!("data-card=\"c-{northstar}-total\"")));
+        assert!(
+            content.contains(">1.1<")
+                && content.contains(">2.0<")
+                && content.contains(">/traffic<")
+        );
+        assert!(content.contains("Spend &lt;Review&gt;") && !content.contains("<Review>"));
+        assert!(content.contains("2 apps · 3 cards"));
         // An empty canvas offers the business intents and no group.
         let empty = canvas::CanvasProps {
             csrf_signout: "S".repeat(43),
