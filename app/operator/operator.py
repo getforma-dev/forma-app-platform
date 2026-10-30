@@ -115,6 +115,32 @@ MANAGED_REFUSED = ("issue", "register-source-revision")
 # refuse or skip the provider phase exactly as on a host without provider
 # settings.
 PROVIDER_FLAGS = ("provider_email", "provider_role", "provider_issuer", "provider_tenant")
+# APP-078 review M6: the injected values only the provider-bearing admission
+# commands read. scrub_environment removes them from this process's environment
+# at entry for every other command, so nothing it runs or starts inherits them;
+# the parser host also runs with an empty environment (ParserBinding.run).
+# Mirrors provider_management.PROVIDER_VARIABLES and
+# admission_operator.INVITATION_INPUT_ENV (test_operator asserts the equality).
+PROVIDER_VARIABLES = ("GENUI_PROVIDER_URL", "GENUI_PROVIDER_MANAGEMENT_KEY", "GENUI_PROVIDER_MANAGEMENT_KEY_FILE",
+                      "GENUI_PROVIDER_MANAGEMENT_URL", "GENUI_PROVIDER_MANAGEMENT_SECRET_KEY",
+                      "GENUI_PROVIDER_MANAGEMENT_SECRET_TENANT_ID", "GENUI_PROVIDER_MANAGEMENT_JSON")
+INVITATION_INPUT_VARIABLE = "GENUI_OPERATOR_INVITATION_INPUT_JSON"
+# The service's own injected values; no operator command reads them (bind-provider-tenant
+# --from-auth-configuration reads the secret by its ARN through the operator role).
+SERVICE_ONLY_VARIABLES = ("GENUI_AUTH_CONFIGURATION_JSON", "GENUI_PROVIDER_CAPABILITIES_JSON")
+
+
+def scrub_environment(command, parsed=None):
+    """Drop every injected value this command does not read (review M6): the provider settings
+    except for `issue` with an invitation, `reconcile` and `revoke`; the invitation input except
+    for `issue --provider-input-from-secret`; the service-only values always."""
+    admission = command == "admission" and parsed is not None
+    with_input = admission and parsed.command == "issue" and bool(getattr(parsed, "provider_input_from_secret", False))
+    with_provider = admission and (parsed.command in ("reconcile", "revoke") or with_input
+                                   or parsed.command == "issue" and getattr(parsed, "provider_email", None) is not None)
+    drop = SERVICE_ONLY_VARIABLES + (() if with_provider else PROVIDER_VARIABLES) + (() if with_input else (INVITATION_INPUT_VARIABLE,))
+    for name in drop:
+        os.environ.pop(name, None)
 
 
 def managed_form_refused(parsed):
@@ -571,6 +597,7 @@ def admission(rest):
         parsed = admission_operator.parser().parse_args(rest)
     except admission_operator.Refused:
         parsed = None
+    scrub_environment("admission", parsed)
     command = parsed.command if parsed is not None else None
     require(not (managed_task() and managed_form_refused(parsed)), "refused_in_managed_task")
     if command not in (None, "defaults"):
@@ -585,6 +612,7 @@ def main(argv=None):
         if args.command == "admission":
             # admission_operator prints its own JSON result or fixed refusal.
             return admission(args.rest)
+        scrub_environment(args.command)
         result = {"migrate": lambda: migrate(), "verify-catalog": lambda: verify_catalog(args.version), "seed": lambda: seed(),
                   "upload-sources": lambda: upload_sources(args)}[args.command]()
     except Refused as refusal:
