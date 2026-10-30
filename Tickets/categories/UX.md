@@ -17,3 +17,4 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 104 | [APP-104: Canvas library pane, a clean board, and Figma-style controls](../0-backlog/APP-104.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-094, APP-101, APP-103 |
 | 106 | [APP-106: Focus mode and Unite: work on a card in a modal, and assemble an app's cards into the whole app](../0-backlog/APP-106.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-104 |
 | 109 | [APP-109: Quick notes: /note saves a note as a card](../0-backlog/APP-109.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-103, APP-104 |
+| 112 | [APP-112: Command parity: every slash command has a click path](../0-backlog/APP-112.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-104, APP-106, APP-108, APP-109 |

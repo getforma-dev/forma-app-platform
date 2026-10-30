@@ -1,0 +1,161 @@
+request_id,time,requester,item,vendor,amount,cost_center,status
+PR-6201,2026-10-01T07:01:51Z,Sofia Rossi,Laptop refresh (4 units),Atlas Office Supply,5420.00,engineering,manager_approved
+PR-6202,2026-10-01T08:15:05Z,Grace Park,Analytics add-on,Meridian Analytics,1720.00,marketing,approved
+PR-6203,2026-10-01T17:56:23Z,Priya Natarajan,Recruiting retainer,Vertex Recruiting,6631.00,marketing,approved
+PR-6204,2026-10-01T18:50:58Z,Sofia Rossi,Recruiting retainer,Vertex Recruiting,6429.00,marketing,rejected
+PR-6205,2026-10-02T07:39:58Z,Elena Petrova,Data warehouse credits,Cloudline Hosting,11607.00,engineering,approved
+PR-6206,2026-10-02T11:32:46Z,Priya Natarajan,Security audit,Beacon Legal LLP,12712.00,sales,approved
+PR-6207,2026-10-02T11:38:41Z,Ingrid Solberg,Figma seats,Lumen Software,2033.00,finance,approved
+PR-6208,2026-10-02T18:36:30Z,Ravi Shankar,Figma seats,Lumen Software,1691.00,design,approved
+PR-6209,2026-10-02T19:25:57Z,Jordan Alvarez,Data warehouse credits,Cloudline Hosting,11010.00,marketing,approved
+PR-6210,2026-10-03T07:53:04Z,Priya Natarajan,Figma seats,Lumen Software,7620.00,people,approved
+PR-6211,2026-10-03T12:39:36Z,Diego Ramos,Conference booth,Harbor Catering,12322.00,marketing,approved
+PR-6212,2026-10-03T12:41:53Z,Kwame Mensah,Analytics add-on,Meridian Analytics,3563.00,operations,rejected
+PR-6213,2026-10-03T16:14:16Z,Kwame Mensah,Figma seats,Lumen Software,6364.00,people,submitted
+PR-6214,2026-10-03T18:14:31Z,Liam O'Connor,Data warehouse credits,Cloudline Hosting,6372.00,support,approved
+PR-6215,2026-10-03T18:44:01Z,Kwame Mensah,Monitor arms,Atlas Office Supply,220.00,engineering,approved
+PR-6216,2026-10-04T14:18:00Z,Liam O'Connor,Monitor arms,Atlas Office Supply,455.00,marketing,rejected
+PR-6217,2026-10-04T14:44:10Z,Priya Natarajan,Security audit,Beacon Legal LLP,12289.00,engineering,approved
+PR-6218,2026-10-04T14:59:49Z,Priya Natarajan,Figma seats,Lumen Software,8331.00,support,manager_approved
+PR-6219,2026-10-04T15:14:23Z,Jordan Alvarez,Figma seats,Lumen Software,1071.00,design,approved
+PR-6220,2026-10-04T16:29:42Z,Aisha Bello,Recruiting retainer,Vertex Recruiting,8546.00,support,approved
+PR-6221,2026-10-05T09:01:31Z,Kwame Mensah,Monitor arms,Atlas Office Supply,704.00,support,approved
+PR-6222,2026-10-05T10:28:26Z,Maya Chen,Security audit,Beacon Legal LLP,6262.00,engineering,approved
+PR-6223,2026-10-05T12:57:44Z,Maya Chen,Standing desks,Atlas Office Supply,3973.00,design,approved
+PR-6224,2026-10-05T15:56:04Z,Diego Ramos,Recruiting retainer,Vertex Recruiting,7183.00,support,approved
+PR-6225,2026-10-05T16:09:54Z,Ingrid Solberg,Data warehouse credits,Cloudline Hosting,11529.00,engineering,submitted
+PR-6226,2026-10-06T09:51:38Z,Elena Petrova,Monitor arms,Atlas Office Supply,490.00,marketing,approved
+PR-6227,2026-10-06T11:22:11Z,Ravi Shankar,Recruiting retainer,Vertex Recruiting,10174.00,design,approved
+PR-6228,2026-10-06T12:15:51Z,Maya Chen,Monitor arms,Atlas Office Supply,693.00,sales,submitted
+PR-6229,2026-10-06T12:52:19Z,Liam O'Connor,Monitor arms,Atlas Office Supply,444.00,design,submitted
+PR-6230,2026-10-06T13:36:06Z,Diego Ramos,Data warehouse credits,Cloudline Hosting,6092.00,marketing,manager_approved
+PR-6231,2026-10-06T17:40:07Z,Tomás Herrera,Conference booth,Harbor Catering,3692.00,finance,approved
+PR-6232,2026-10-06T17:46:30Z,Priya Natarajan,Conference booth,Harbor Catering,3854.00,support,approved
+PR-6233,2026-10-07T18:35:20Z,Diego Ramos,Conference booth,Harbor Catering,12609.00,sales,submitted
+PR-6234,2026-10-08T08:45:23Z,Grace Park,Laptop refresh (4 units),Atlas Office Supply,6040.00,engineering,rejected
+PR-6235,2026-10-08T10:23:01Z,Jordan Alvarez,Monitor arms,Atlas Office Supply,394.00,operations,approved
+PR-6236,2026-10-08T19:16:57Z,Tomás Herrera,Security audit,Beacon Legal LLP,21478.00,operations,approved
+PR-6237,2026-10-09T10:46:15Z,Maya Chen,Team offsite venue,Granite Facilities,1807.00,sales,submitted
+PR-6238,2026-10-09T11:10:47Z,Lena Fischer,Conference booth,Harbor Catering,8119.00,operations,manager_approved
+PR-6239,2026-10-09T12:02:44Z,Kwame Mensah,Laptop refresh (4 units),Atlas Office Supply,8762.00,marketing,approved
+PR-6240,2026-10-09T15:07:15Z,Tomás Herrera,Conference booth,Harbor Catering,6743.00,people,approved
+PR-6241,2026-10-09T16:11:01Z,Samuel Okafor,Team offsite venue,Granite Facilities,3021.00,people,approved
+PR-6242,2026-10-11T10:39:51Z,Priya Natarajan,Monitor arms,Atlas Office Supply,726.00,marketing,approved
+PR-6243,2026-10-11T15:43:07Z,Maya Chen,Figma seats,Lumen Software,3588.00,operations,approved
+PR-6244,2026-10-12T07:03:26Z,Tomás Herrera,Security audit,Beacon Legal LLP,18248.00,operations,approved
+PR-6245,2026-10-12T11:09:46Z,Lena Fischer,Security audit,Beacon Legal LLP,19708.00,sales,manager_approved
+PR-6246,2026-10-12T14:53:07Z,Priya Natarajan,Data warehouse credits,Cloudline Hosting,11919.00,marketing,approved
+PR-6247,2026-10-12T18:27:44Z,Samuel Okafor,Security audit,Beacon Legal LLP,12523.00,marketing,manager_approved
+PR-6248,2026-10-12T19:41:49Z,Lena Fischer,Monitor arms,Atlas Office Supply,535.00,design,approved
+PR-6249,2026-10-13T08:15:08Z,Priya Natarajan,Recruiting retainer,Vertex Recruiting,4838.00,design,approved
+PR-6250,2026-10-13T14:44:40Z,Tomás Herrera,Monitor arms,Atlas Office Supply,651.00,operations,approved
+PR-6251,2026-10-13T14:48:34Z,Grace Park,Figma seats,Lumen Software,1398.00,sales,submitted
+PR-6252,2026-10-13T14:55:29Z,Tomás Herrera,Analytics add-on,Meridian Analytics,3723.00,support,approved
+PR-6253,2026-10-13T16:41:00Z,Aisha Bello,Data warehouse credits,Cloudline Hosting,6190.00,finance,manager_approved
+PR-6254,2026-10-13T16:55:10Z,Sofia Rossi,Recruiting retainer,Vertex Recruiting,9323.00,support,approved
+PR-6255,2026-10-14T15:50:48Z,Grace Park,Laptop refresh (4 units),Atlas Office Supply,6754.00,engineering,approved
+PR-6256,2026-10-15T07:12:11Z,Elena Petrova,Conference booth,Harbor Catering,6852.00,people,approved
+PR-6257,2026-10-15T09:10:33Z,Tomás Herrera,Team offsite venue,Granite Facilities,8403.00,people,submitted
+PR-6258,2026-10-16T09:17:52Z,Aisha Bello,Data warehouse credits,Cloudline Hosting,9741.00,support,approved
+PR-6259,2026-10-16T09:48:35Z,Jordan Alvarez,Security audit,Beacon Legal LLP,20438.00,operations,rejected
+PR-6260,2026-10-17T07:00:26Z,Noah Williams,Analytics add-on,Meridian Analytics,3433.00,operations,approved
+PR-6261,2026-10-17T07:25:05Z,Aisha Bello,Security audit,Beacon Legal LLP,7782.00,design,approved
+PR-6262,2026-10-17T12:04:49Z,Ingrid Solberg,Data warehouse credits,Cloudline Hosting,6740.00,engineering,approved
+PR-6263,2026-10-18T10:04:20Z,Tomás Herrera,Figma seats,Lumen Software,2858.00,finance,approved
+PR-6264,2026-10-18T10:17:11Z,Ravi Shankar,Laptop refresh (4 units),Atlas Office Supply,4231.00,finance,approved
+PR-6265,2026-10-18T18:15:37Z,Sofia Rossi,Conference booth,Harbor Catering,5509.00,operations,manager_approved
+PR-6266,2026-10-19T08:38:01Z,Samuel Okafor,Conference booth,Harbor Catering,6165.00,marketing,manager_approved
+PR-6267,2026-10-19T13:00:02Z,Noah Williams,Analytics add-on,Meridian Analytics,2075.00,sales,rejected
+PR-6268,2026-10-19T17:43:56Z,Grace Park,Recruiting retainer,Vertex Recruiting,7621.00,people,manager_approved
+PR-6269,2026-10-20T09:07:55Z,Jordan Alvarez,Team offsite venue,Granite Facilities,7328.00,people,approved
+PR-6270,2026-10-20T11:45:28Z,Maya Chen,Data warehouse credits,Cloudline Hosting,12561.00,engineering,approved
+PR-6271,2026-10-20T13:51:42Z,Sofia Rossi,Recruiting retainer,Vertex Recruiting,11793.00,support,approved
+PR-6272,2026-10-21T13:44:14Z,Sofia Rossi,Analytics add-on,Meridian Analytics,1493.00,engineering,approved
+PR-6273,2026-10-22T08:07:21Z,Lena Fischer,Security audit,Beacon Legal LLP,23189.00,engineering,approved
+PR-6274,2026-10-22T10:59:51Z,Liam O'Connor,Standing desks,Atlas Office Supply,4181.00,operations,approved
+PR-6275,2026-10-22T13:45:10Z,Priya Natarajan,Laptop refresh (4 units),Atlas Office Supply,4239.00,sales,approved
+PR-6276,2026-10-22T15:13:17Z,Liam O'Connor,Team offsite venue,Granite Facilities,5122.00,design,manager_approved
+PR-6277,2026-10-22T15:43:16Z,Elena Petrova,Laptop refresh (4 units),Atlas Office Supply,7045.00,operations,submitted
+PR-6278,2026-10-22T18:37:34Z,Ingrid Solberg,Team offsite venue,Granite Facilities,2323.00,sales,approved
+PR-6279,2026-10-22T18:37:54Z,Sofia Rossi,Figma seats,Lumen Software,4044.00,finance,rejected
+PR-6280,2026-10-23T16:44:39Z,Jordan Alvarez,Analytics add-on,Meridian Analytics,1686.00,design,submitted
+PR-6281,2026-10-24T09:26:33Z,Jordan Alvarez,Laptop refresh (4 units),Atlas Office Supply,8238.00,operations,rejected
+PR-6282,2026-10-24T10:35:21Z,Elena Petrova,Analytics add-on,Meridian Analytics,2864.00,finance,approved
+PR-6283,2026-10-24T11:14:50Z,Kwame Mensah,Monitor arms,Atlas Office Supply,498.00,marketing,submitted
+PR-6284,2026-10-24T16:48:37Z,Samuel Okafor,Conference booth,Harbor Catering,8111.00,design,approved
+PR-6285,2026-10-25T07:35:07Z,Jordan Alvarez,Team offsite venue,Granite Facilities,3438.00,finance,rejected
+PR-6286,2026-10-25T09:42:45Z,Sofia Rossi,Monitor arms,Atlas Office Supply,509.00,sales,approved
+PR-6287,2026-10-26T11:39:13Z,Kwame Mensah,Figma seats,Lumen Software,5879.00,sales,submitted
+PR-6288,2026-10-26T16:26:24Z,Samuel Okafor,Monitor arms,Atlas Office Supply,696.00,support,approved
+PR-6289,2026-10-26T16:32:10Z,Noah Williams,Analytics add-on,Meridian Analytics,821.00,finance,approved
+PR-6290,2026-10-26T17:32:55Z,Diego Ramos,Figma seats,Lumen Software,3979.00,support,submitted
+PR-6291,2026-10-26T18:47:53Z,Kwame Mensah,Security audit,Beacon Legal LLP,17695.00,marketing,submitted
+PR-6292,2026-10-27T13:52:06Z,Samuel Okafor,Standing desks,Atlas Office Supply,5467.00,sales,approved
+PR-6293,2026-10-27T14:31:25Z,Sofia Rossi,Laptop refresh (4 units),Atlas Office Supply,4139.00,sales,approved
+PR-6294,2026-10-27T17:00:37Z,Samuel Okafor,Team offsite venue,Granite Facilities,6963.00,sales,submitted
+PR-6295,2026-10-28T15:52:45Z,Maya Chen,Recruiting retainer,Vertex Recruiting,5180.00,support,approved
+PR-6296,2026-10-29T07:44:58Z,Noah Williams,Data warehouse credits,Cloudline Hosting,8598.00,finance,approved
+PR-6297,2026-10-29T09:10:55Z,Priya Natarajan,Figma seats,Lumen Software,2610.00,people,rejected
+PR-6298,2026-10-29T12:12:27Z,Aisha Bello,Figma seats,Lumen Software,3229.00,operations,submitted
+PR-6299,2026-10-29T19:26:44Z,Maya Chen,Recruiting retainer,Vertex Recruiting,11643.00,operations,submitted
+PR-6300,2026-10-30T07:12:10Z,Grace Park,Conference booth,Harbor Catering,17638.00,finance,submitted
+PR-6301,2026-10-30T14:16:53Z,Tomás Herrera,Standing desks,Atlas Office Supply,1934.00,people,approved
+PR-6302,2026-10-30T16:53:28Z,Tomás Herrera,Analytics add-on,Meridian Analytics,605.00,finance,rejected
+PR-6303,2026-10-30T17:44:25Z,Priya Natarajan,Analytics add-on,Meridian Analytics,3083.00,sales,approved
+PR-6304,2026-10-30T19:50:40Z,Elena Petrova,Laptop refresh (4 units),Atlas Office Supply,7870.00,sales,approved
+PR-6305,2026-10-31T08:08:37Z,Ingrid Solberg,Analytics add-on,Meridian Analytics,1631.00,marketing,approved
+PR-6306,2026-10-31T10:43:52Z,Elena Petrova,Monitor arms,Atlas Office Supply,623.00,sales,approved
+PR-6307,2026-10-31T15:06:56Z,Ingrid Solberg,Standing desks,Atlas Office Supply,3898.00,engineering,approved
+PR-6308,2026-10-31T17:18:08Z,Grace Park,Standing desks,Atlas Office Supply,1484.00,finance,approved
+PR-6309,2026-11-01T07:13:18Z,Samuel Okafor,Security audit,Beacon Legal LLP,14032.00,sales,rejected
+PR-6310,2026-11-01T08:44:36Z,Ravi Shankar,Monitor arms,Atlas Office Supply,401.00,finance,approved
+PR-6311,2026-11-01T14:46:06Z,Noah Williams,Analytics add-on,Meridian Analytics,2428.00,engineering,submitted
+PR-6312,2026-11-01T19:11:27Z,Aisha Bello,Conference booth,Harbor Catering,4399.00,operations,approved
+PR-6313,2026-11-02T08:33:19Z,Noah Williams,Laptop refresh (4 units),Atlas Office Supply,8650.00,sales,manager_approved
+PR-6314,2026-11-02T12:56:16Z,Ravi Shankar,Figma seats,Lumen Software,6175.00,operations,approved
+PR-6315,2026-11-02T13:03:37Z,Grace Park,Conference booth,Harbor Catering,5633.00,sales,submitted
+PR-6316,2026-11-02T16:40:56Z,Sofia Rossi,Figma seats,Lumen Software,3912.00,operations,approved
+PR-6317,2026-11-02T18:32:28Z,Ingrid Solberg,Security audit,Beacon Legal LLP,14554.00,marketing,approved
+PR-6318,2026-11-03T14:19:52Z,Tomás Herrera,Team offsite venue,Granite Facilities,3751.00,support,approved
+PR-6319,2026-11-03T18:47:06Z,Ingrid Solberg,Recruiting retainer,Vertex Recruiting,10805.00,operations,rejected
+PR-6320,2026-11-04T07:43:39Z,Ingrid Solberg,Conference booth,Harbor Catering,12836.00,support,approved
+PR-6321,2026-11-04T08:03:24Z,Lena Fischer,Monitor arms,Atlas Office Supply,474.00,marketing,submitted
+PR-6322,2026-11-04T09:23:13Z,Liam O'Connor,Data warehouse credits,Cloudline Hosting,7144.00,people,rejected
+PR-6323,2026-11-04T11:34:54Z,Grace Park,Laptop refresh (4 units),Atlas Office Supply,5777.00,finance,manager_approved
+PR-6324,2026-11-04T12:54:34Z,Ingrid Solberg,Security audit,Beacon Legal LLP,6629.00,people,manager_approved
+PR-6325,2026-11-05T10:43:01Z,Kwame Mensah,Data warehouse credits,Cloudline Hosting,11639.00,sales,manager_approved
+PR-6326,2026-11-05T10:43:55Z,Elena Petrova,Security audit,Beacon Legal LLP,18459.00,people,approved
+PR-6327,2026-11-05T19:58:34Z,Sofia Rossi,Analytics add-on,Meridian Analytics,3715.00,operations,approved
+PR-6328,2026-11-06T07:09:54Z,Kwame Mensah,Recruiting retainer,Vertex Recruiting,10525.00,finance,approved
+PR-6329,2026-11-06T07:11:14Z,Liam O'Connor,Standing desks,Atlas Office Supply,4642.00,sales,approved
+PR-6330,2026-11-06T07:48:46Z,Diego Ramos,Recruiting retainer,Vertex Recruiting,10246.00,sales,approved
+PR-6331,2026-11-06T13:02:12Z,Kwame Mensah,Figma seats,Lumen Software,1225.00,support,approved
+PR-6332,2026-11-07T13:47:04Z,Diego Ramos,Standing desks,Atlas Office Supply,1289.00,sales,approved
+PR-6333,2026-11-07T15:35:20Z,Maya Chen,Conference booth,Harbor Catering,6455.00,design,submitted
+PR-6334,2026-11-08T08:53:38Z,Ingrid Solberg,Analytics add-on,Meridian Analytics,667.00,design,approved
+PR-6335,2026-11-08T12:35:14Z,Ingrid Solberg,Monitor arms,Atlas Office Supply,445.00,operations,submitted
+PR-6336,2026-11-08T12:38:06Z,Lena Fischer,Figma seats,Lumen Software,1216.00,operations,approved
+PR-6337,2026-11-08T13:29:41Z,Samuel Okafor,Recruiting retainer,Vertex Recruiting,9636.00,support,submitted
+PR-6338,2026-11-08T17:15:53Z,Noah Williams,Figma seats,Lumen Software,4538.00,finance,approved
+PR-6339,2026-11-08T17:25:41Z,Lena Fischer,Conference booth,Harbor Catering,3637.00,people,rejected
+PR-6340,2026-11-09T07:14:56Z,Elena Petrova,Recruiting retainer,Vertex Recruiting,7800.00,people,approved
+PR-6341,2026-11-09T07:47:18Z,Jordan Alvarez,Laptop refresh (4 units),Atlas Office Supply,6580.00,support,submitted
+PR-6342,2026-11-09T19:19:43Z,Diego Ramos,Conference booth,Harbor Catering,4272.00,sales,submitted
+PR-6343,2026-11-09T19:50:10Z,Priya Natarajan,Analytics add-on,Meridian Analytics,707.00,design,approved
+PR-6344,2026-11-10T07:47:13Z,Kwame Mensah,Laptop refresh (4 units),Atlas Office Supply,7177.00,support,approved
+PR-6345,2026-11-10T10:18:55Z,Grace Park,Data warehouse credits,Cloudline Hosting,7864.00,operations,rejected
+PR-6346,2026-11-10T14:50:08Z,Diego Ramos,Conference booth,Harbor Catering,4676.00,support,approved
+PR-6347,2026-11-10T14:57:12Z,Aisha Bello,Monitor arms,Atlas Office Supply,360.00,marketing,rejected
+PR-6348,2026-11-10T15:29:56Z,Priya Natarajan,Laptop refresh (4 units),Atlas Office Supply,7695.00,engineering,approved
+PR-6349,2026-11-10T17:17:29Z,Samuel Okafor,Laptop refresh (4 units),Atlas Office Supply,9581.00,operations,submitted
+PR-6350,2026-11-10T19:56:34Z,Grace Park,Team offsite venue,Granite Facilities,7497.00,sales,approved
+PR-6351,2026-11-11T14:09:42Z,Maya Chen,Figma seats,Lumen Software,2639.00,engineering,approved
+PR-6352,2026-11-12T08:10:56Z,Aisha Bello,Recruiting retainer,Vertex Recruiting,9993.00,marketing,approved
+PR-6353,2026-11-12T09:05:26Z,Maya Chen,Figma seats,Lumen Software,5388.00,operations,manager_approved
+PR-6354,2026-11-12T10:34:06Z,Priya Natarajan,Data warehouse credits,Cloudline Hosting,4569.00,marketing,approved
+PR-6355,2026-11-12T16:42:58Z,Lena Fischer,Laptop refresh (4 units),Atlas Office Supply,3876.00,sales,submitted
+PR-6356,2026-11-12T17:48:05Z,Sofia Rossi,Analytics add-on,Meridian Analytics,670.00,people,approved
+PR-6357,2026-11-12T19:30:17Z,Jordan Alvarez,Conference booth,Harbor Catering,13055.00,support,approved
+PR-6358,2026-11-13T07:41:41Z,Samuel Okafor,Standing desks,Atlas Office Supply,5512.00,people,submitted
+PR-6359,2026-11-13T16:01:18Z,Liam O'Connor,Security audit,Beacon Legal LLP,18189.00,support,approved
+PR-6360,2026-11-14T13:33:16Z,Elena Petrova,Data warehouse credits,Cloudline Hosting,9249.00,people,approved

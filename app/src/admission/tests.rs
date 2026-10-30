@@ -1696,3 +1696,97 @@ fn edition_one_definitions_still_admit() {
         "{error}"
     );
 }
+
+/// APP-107 amendment: declared guards on transitions and initial values on a
+/// filing create are admitted exactly as validate.py admits them, and the
+/// same hostile shapes are refused with validate.py's messages.
+#[test]
+fn declared_guards_and_initial_values_match_validate_py() {
+    let library = |name: &str| -> Value {
+        let path = format!(
+            "{}/../contracts/fixtures/library/{name}.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        serde_json::from_str::<Value>(&std::fs::read_to_string(path).unwrap()).unwrap()
+            ["definition"]
+            .clone()
+    };
+    for name in [
+        "purchase-requests",
+        "deal-desk",
+        "time-off",
+        "vendor-invoices",
+        "access-requests",
+    ] {
+        assert!(admit(&library(name)).is_ok(), "{name}");
+    }
+    let base = library("purchase-requests");
+    for (pointer, value, code, rule) in [
+        (
+            "/content/commands/1/transitions/0/when/field_id",
+            r#""nope""#,
+            "encoding",
+            "unknown guard field",
+        ),
+        (
+            "/content/commands/1/transitions/0/when/value",
+            r#"{"type":"text","value":"5000"}"#,
+            "encoding",
+            "guard value type/unit mismatch",
+        ),
+        (
+            "/content/commands/1/transitions/0/when/value",
+            r#"{"type":"null"}"#,
+            "encoding",
+            "guard value type/unit mismatch",
+        ),
+        (
+            "/content/commands/1/transitions/0/when",
+            r#"{"field_id":"vendor","comparison":"gt","value":{"type":"text","value":"x"}}"#,
+            "encoding",
+            "ordered field",
+        ),
+        (
+            "/content/commands/1/transitions/0/when/comparison",
+            r#""like""#,
+            "unregistered_operator",
+            "",
+        ),
+        (
+            "/content/commands/1/transitions/0/when/sql",
+            r#""1=1""#,
+            "executable_content",
+            "",
+        ),
+        (
+            "/content/commands/0/initial/0/value",
+            r#""paid""#,
+            "encoding",
+            "unknown initial value",
+        ),
+        (
+            "/content/commands/0/initial/0/field_id",
+            r#""item""#,
+            "encoding",
+            "initial requires enum field",
+        ),
+        ("/content/commands/0/initial", r#"[]"#, "encoding", ""),
+        (
+            "/content/commands/1/initial",
+            r#"[{"field_id":"status","value":"submitted"}]"#,
+            "encoding",
+            "initial values belong to a filing create",
+        ),
+    ] {
+        let mut definition = base.clone();
+        set(
+            &mut definition,
+            pointer,
+            Some(serde_json::from_str(value).unwrap()),
+        );
+        rehash(&mut definition);
+        let error = admit(&definition).expect_err(pointer);
+        assert_eq!(error.code(), code, "{pointer}: {error}");
+        assert!(error.to_string().contains(rule), "{pointer}: {error}");
+    }
+}

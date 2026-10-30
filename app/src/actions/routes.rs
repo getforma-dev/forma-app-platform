@@ -27,6 +27,19 @@
 //! first, at most `RECORDS_LIMIT`, with the published schema, the declared
 //! commands and display labels; the uniform 404 otherwise, and for a query
 //! string.
+//!
+//! APP-109 `/v1/notes`: the member's own saved work of the library's Notes
+//! app (sidecar `library_id` "notes"), where `/note` keeps quick notes as
+//! records. `GET` answers `{"app_id", "work_id"}` with the first work of that
+//! app the member created and may still write (`storage::Data::own_works`),
+//! or `"work_id": null`; it writes nothing. `POST` (same origin, empty body)
+//! answers the same, creating that work under the member's own authority
+//! when there is none (`"created": true`; the composer's `retrieved` binding,
+//! no `app.placed` event: the canvas shows notes, not the app). A work shared
+//! with the member is never chosen, so a note stays private unless its author
+//! shares the work. The notes themselves are written only through the
+//! audited command route (`add`, `edit`) and read through the records
+//! listing. The uniform 404 when the member may not instantiate the app.
 use super::{
     ledger,
     prompt::{self, CatalogApp},
@@ -74,11 +87,108 @@ pub fn router(state: Arc<Act>) -> Router {
         .route(super::PATH, post(act))
         .with_state(state)
 }
-/// The ordinary-deadline router (the records listing).
+/// The ordinary-deadline router (the records listing, APP-109's notes work).
 pub fn records_router(auth: Arc<Auth>) -> Router {
     Router::new()
         .route("/v1/work/{app}/{work}/records", get(records))
+        .route(NOTES_PATH, get(notes_work).post(notes_work))
         .with_state(auth)
+}
+
+/// APP-109: the member's notes work.
+pub const NOTES_PATH: &str = "/v1/notes";
+/// The library entry whose records are notes.
+pub(crate) const NOTES_LIBRARY_ID: &str = "notes";
+/// The created work's context.
+const NOTES_CONTEXT: &str = "Quick notes (/note)";
+
+/// `GET` and `POST /v1/notes` (module notes above).
+async fn notes_work(State(auth): State<Arc<Auth>>, request: Request) -> Response {
+    let creating = request.method() == axum::http::Method::POST;
+    if creating && !csrf::same_origin(request.headers(), auth.origin()) {
+        return http::cross_site();
+    }
+    if request.uri().query().is_some() {
+        return http::not_found();
+    }
+    let member = match member(&auth, request.headers()).await {
+        Ok(member) => member,
+        Err(refusal) => return refusal,
+    };
+    let Some(stores) = auth.stores.as_ref() else {
+        return http::not_found();
+    };
+    let Some(digest) = storage::library_sidecar().ok().and_then(|entries| {
+        entries
+            .iter()
+            .find(|entry| entry.get("library_id").and_then(Value::as_str) == Some(NOTES_LIBRARY_ID))
+            .and_then(|entry| entry.get("definition_digest").and_then(Value::as_str))
+            .map(str::to_owned)
+    }) else {
+        return http::not_found();
+    };
+    let context = match stores.workspace.composer_context(&member).await {
+        Ok(context) => context,
+        Err(storage::Error::Denied) => return http::not_found(),
+        Err(_) => return http::unavailable(),
+    };
+    let Some(library) = context
+        .library
+        .iter()
+        .find(|app| app.definition_digest == digest)
+    else {
+        return http::not_found();
+    };
+    let own = match stores.data.own_works(&member, &library.app).await {
+        Ok(own) => own,
+        Err(storage::Error::Denied) => return http::not_found(),
+        Err(_) => return http::unavailable(),
+    };
+    if let Some(work) = own.into_iter().find(|work| work.can_write) {
+        return document(
+            StatusCode::OK,
+            &json!({"app_id": work.app, "work_id": work.work, "created": false}),
+        );
+    }
+    if !creating {
+        return document(
+            StatusCode::OK,
+            &json!({"app_id": library.app, "work_id": Value::Null, "created": false}),
+        );
+    }
+    let Some(bindings) =
+        storage::composer_bindings(&library.inputs, &library.record_schemas, &context.sources)
+    else {
+        return http::not_found();
+    };
+    match stores
+        .workspace
+        .create_work(
+            &member,
+            &library.app,
+            &library.publication,
+            NOTES_CONTEXT,
+            &bindings,
+        )
+        .await
+    {
+        Ok(saved) => {
+            tracing::info!(
+                event = "notes.work_created",
+                organization_id = member.organization(),
+                principal_id = member.principal(),
+                app_id = library.app,
+                work_id = saved.work,
+                "notes work created for the member"
+            );
+            document(
+                StatusCode::OK,
+                &json!({"app_id": library.app, "work_id": saved.work, "created": true}),
+            )
+        }
+        Err(storage::Error::Denied) => http::not_found(),
+        Err(_) => http::unavailable(),
+    }
 }
 
 async fn member(auth: &Auth, headers: &HeaderMap) -> Result<TrustedRequest, Response> {
@@ -248,6 +358,9 @@ fn draft_document(draft: &Draft, parse_ms: u64) -> Value {
         })).collect::<Vec<_>>(),
         "command_request": draft.request.document(),
         "approver": draft.approver.as_ref().map(|a| json!({"principal_id": a.principal, "label": a.label})),
+        "approvers": draft.approvers.iter().map(|a| json!({"principal_id": a.principal, "label": a.label})).collect::<Vec<_>>(),
+        "rule": draft.rule,
+        "flags": draft.flags,
         "target": draft.target.as_ref().map(|t| json!({"record_id": t.record_id, "version": t.version, "summary": t.summary})),
         "confirm_token": draft.confirm_token,
         "parse_ms": parse_ms,
@@ -538,7 +651,9 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 "open resolved"
             );
             let range = ledger::range_of(&parse.parsed.values);
-            let view = if ledger::wants_ledger(&utterance, &parse.parsed.values) {
+            // The ledger is the expense ledger: other record apps open their records.
+            let expense = super::receipt::expense_app(&catalog).is_some_and(|e| e.app == app);
+            let view = if expense && ledger::wants_ledger(&utterance, &parse.parsed.values) {
                 "ledger"
             } else {
                 "records"
@@ -632,6 +747,22 @@ pub fn records_document_with(
                 "display": resolve::display(item.get("value")?),
             }))).collect::<Vec<_>>(),
             });
+            // APP-107: the transitions that may fire on this record now (its
+            // current value, the declared guards judged on its state), so a
+            // card offers exactly what storage would accept.
+            if let Some(command) = listing
+                .collections
+                .iter()
+                .find(|c| c.collection == r.collection)
+                .and_then(|c| c.commands.iter().find(|d| !d.transitions.is_empty()))
+            {
+                record["next"] = Value::Array(
+                    resolve::allowed_transitions(&command.transitions, &command.rules, r)
+                        .into_iter()
+                        .map(|(_, to, rule)| json!({"to": to, "rule": rule}))
+                        .collect(),
+                );
+            }
             // APP-100 (DS-59): the channel that committed this version, for
             // the canvas's origin chip; a display label only.
             if let Some(via) = crate::origins::label(&r.record_id, r.version) {
@@ -679,10 +810,23 @@ async fn records(
                 .agent_attributions(&member, &app, &work)
                 .await
                 .unwrap_or_default();
-            document(
-                StatusCode::OK,
-                &records_document_with(&listing, &attributions),
-            )
+            // APP-107: display-only annotations (a purchase request's PO
+            // reference, an invoice's PO match against the purchase requests
+            // this member may read now).
+            let (references, flags) = super::workflows::annotate(stores, &member, &listing).await;
+            let mut answer = records_document_with(&listing, &attributions);
+            if let Some(rows) = answer["records"].as_array_mut() {
+                for row in rows {
+                    let id = row["record_id"].as_str().unwrap_or("").to_owned();
+                    if let Some(reference) = references.get(&id) {
+                        row["reference"] = json!(reference);
+                    }
+                    if let Some(flags) = flags.get(&id) {
+                        row["flags"] = json!(flags);
+                    }
+                }
+            }
+            document(StatusCode::OK, &answer)
         }
         Err(storage::Error::Denied) => http::not_found(),
         Err(_) => http::unavailable(),

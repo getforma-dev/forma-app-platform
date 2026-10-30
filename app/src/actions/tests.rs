@@ -43,6 +43,7 @@ pub(super) fn expense_app() -> CatalogApp {
                 .map(|s| s.to_string())
                 .collect(),
                 transitions: vec![],
+                rules: Default::default(),
             },
             CatalogCommand {
                 id: "decide".into(),
@@ -52,6 +53,7 @@ pub(super) fn expense_app() -> CatalogApp {
                     ("status".into(), "submitted".into(), "approved".into()),
                     ("status".into(), "submitted".into(), "rejected".into()),
                 ],
+                rules: Default::default(),
             },
         ],
     }
@@ -385,5 +387,40 @@ async fn real_haiku_parse_smoke() {
                 || l.contains("Place"))
             .count()
             >= 4
+    );
+}
+
+/// APP-109: the library's Notes entry `/v1/notes` resolves is a record app
+/// whose `add` creates a note and whose `edit` rewrites its title and body
+/// (an update with no transition), over a schema of plain text alone.
+#[test]
+fn the_notes_library_entry_creates_and_edits_plain_text_notes() {
+    let sidecar = crate::storage::library_sidecar().unwrap();
+    let notes = sidecar
+        .iter()
+        .find(|entry| entry["library_id"] == super::routes::NOTES_LIBRARY_ID)
+        .expect("the notes library entry");
+    assert_eq!(notes["command"]["slug"], "note");
+    let commands = notes["commands"].as_array().unwrap();
+    let command = |id: &str| commands.iter().find(|c| c["id"] == id).unwrap();
+    assert_eq!(command("add")["operation"], "create");
+    assert_eq!(command("edit")["operation"], "update");
+    for id in ["add", "edit"] {
+        assert_eq!(
+            command(id)["writable_fields"],
+            serde_json::json!(["title", "body"])
+        );
+        assert_eq!(command(id)["transitions"], serde_json::json!([]));
+    }
+    let schema = &notes["record_schemas"][0];
+    assert_eq!(schema["id"], "note");
+    let fields = schema["fields"].as_array().unwrap();
+    assert!(fields.iter().all(|f| f["type"] == "text"));
+    assert_eq!(
+        fields
+            .iter()
+            .map(|f| (f["id"].as_str().unwrap(), f["nullable"].as_bool().unwrap()))
+            .collect::<Vec<_>>(),
+        [("title", false), ("body", true)]
     );
 }

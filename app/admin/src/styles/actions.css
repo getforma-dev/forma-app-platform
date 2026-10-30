@@ -327,3 +327,10 @@
 .cv-agent-list { list-style: none; margin: 0; padding: 0; }
 .cv-agent-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-top: 1px solid var(--cv-hairline); }
 .cv-agent-name { font-weight: 600; }
+
+/* APP-107: workflow chips. The PO reference, the PO match (display only) and the declared rule on a confirmation card. */
+.cv-ref-chip, .cv-flag-chip { margin-left: 0.4rem; padding: 0 0.35rem; border: 1px solid var(--cv-muted); border-radius: 999px; font-size: 0.75em; color: var(--cv-muted); white-space: nowrap; }
+.cv-flag-chip[data-state="mismatch"], .cv-flag-chip[data-state="not_found"], .cv-flag[data-state="mismatch"], .cv-flag[data-state="not_found"] { border-color: var(--cv-bad); color: var(--cv-bad); }
+.cv-flag-chip[data-state="match"], .cv-flag[data-state="match"] { border-color: var(--cv-ready); color: var(--cv-ready); }
+.cv-confirm-rule, .cv-flag { margin: 0.4rem 0 0; font-size: 0.85em; }
+.cv-flag { padding: 0.2rem 0.5rem; border: 1px solid var(--cv-muted); border-radius: 0.4rem; }

@@ -172,6 +172,7 @@ impl Data {
                             operation: declaration.operation.clone(),
                             writable_fields: declaration.writable.clone(),
                             transitions: declaration.transitions.clone(),
+                            rules: declaration.rules.clone(),
                         })
                         .collect(),
                 });

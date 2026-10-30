@@ -441,6 +441,43 @@ class EditionThreeTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "update expects an existing version"):
             check_command(bundle)
 
+    def test_declared_guards_and_initial_values(self):
+        """APP-107 amendment (additive): a transition may carry a typed guard (`when`) over a field of the same record
+        schema, and a filing create may declare the `initial` value of an enum field, chosen by guards; the seeded
+        create must carry it. Ordering comparisons need an ordered field; values are typed literals, never null."""
+        library = ROOT / "fixtures" / "library"
+        deal = loads((library / "deal-desk.json").read_bytes())
+        purchase = loads((library / "purchase-requests.json").read_bytes())
+        validate_bundle(copy.deepcopy(deal))
+        validate_bundle(copy.deepcopy(purchase))
+        # The deal desk seed (8%) is auto-approved by the first initial rule; a seed claiming "submitted" is refused.
+        bundle = copy.deepcopy(deal)
+        status = next(item for item in bundle["command"]["values"] if item["field_id"] == "status")
+        status["value"]["value"] = "submitted"
+        bundle["outcome"]["payload_digest"] = payload_digest(bundle["command"])
+        with self.assertRaisesRegex(ContractError, "declared initial value"):
+            validate_bundle(bundle)
+        # Hostile declarations are refused by the definition rules.
+        def edited(source, change):
+            bundle = copy.deepcopy(source)
+            change(bundle["definition"]["content"]["commands"])
+            return bundle
+        cases = [
+            (lambda c: c[1]["transitions"][0]["when"].update(field_id="nope"), "unknown guard field"),
+            (lambda c: c[1]["transitions"][0]["when"].update(value={"type": "text", "value": "5000"}), "guard value type/unit mismatch"),
+            (lambda c: c[1]["transitions"][0]["when"].update(value={"type": "null"}), "guard value type/unit mismatch"),
+            (lambda c: c[1]["transitions"][0]["when"].update(field_id="vendor", value={"type": "text", "value": "x"}), "ordered field"),
+            (lambda c: c[0]["initial"][0].update(value="paid"), "unknown initial value"),
+            (lambda c: c[0]["initial"][0].update(field_id="item"), "initial requires enum field"),
+            (lambda c: c[1].update(initial=[{"field_id": "status", "value": "submitted"}]), "initial values belong to a filing create"),
+        ]
+        for change, expected in cases:
+            with self.subTest(expected=expected), self.assertRaisesRegex(ContractError, expected):
+                check_command(edited(purchase, change))
+        # A guard member outside the closed shape is a schema refusal.
+        with self.assertRaises(Exception):
+            check_command(edited(purchase, lambda c: c[1]["transitions"][0]["when"].update(sql="1=1")))
+
 
 def check_command(bundle):
     """validate_bundle after a definition edit: re-identify the definition and its pins."""

@@ -1217,9 +1217,9 @@
         ]
       },
       "command": {
-        "slug": "access",
+        "slug": "access-review",
         "aliases": [
-          "access-review"
+          "access-audit"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001201",
@@ -4146,6 +4146,2245 @@
         }
       ],
       "fixture_sha256": "446e5485a97b1a261b4c5ca6ee6836aee99f43e14140e61f3b41a3dfc97bd059"
+    },
+    {
+      "library_id": "time-off",
+      "fixture": "time-off.json",
+      "title": "Time off",
+      "purpose": "Request time off in your own words; your manager approves or rejects it, and the team sees who is out.",
+      "routing": {
+        "description": "Time off requests with manager approval: request vacation, sick or personal days (dates, days, note), the manager approves or rejects, and the team sees upcoming time off and days taken.",
+        "intent_examples": [
+          "book time off",
+          "request vacation days",
+          "I need a day off next Friday",
+          "sick day request",
+          "who is out of office next week",
+          "Book me off Nov 24-26 for Thanksgiving"
+        ],
+        "negative_examples": [
+          "build an app",
+          "expense claims",
+          "payroll",
+          "hiring funnel",
+          "public holidays calendar"
+        ],
+        "capabilities": [
+          "people.timeoff.request",
+          "people.timeoff.approve",
+          "records.create",
+          "records.transition"
+        ]
+      },
+      "command": {
+        "slug": "pto",
+        "aliases": [
+          "time-off",
+          "leave",
+          "vacation"
+        ]
+      },
+      "app_id": "00000000-0000-4000-8000-000000001701",
+      "definition_revision_id": "00000000-0000-4000-8000-000000001702",
+      "definition_digest": "sha256:86a67e4981b81e517e6901748899d93d62dd0c5b4648ed48a90ae4fd3c2b9197",
+      "publication_id": "00000000-0000-4000-8000-000000001703",
+      "work_id": "00000000-0000-4000-8000-000000001704",
+      "collection_id": "00000000-0000-4000-8000-000000001705",
+      "inputs": [
+        {
+          "id": "leave_requests",
+          "kind": "source",
+          "contract_id": "leave_requests_v1",
+          "fields": [
+            {
+              "id": "request_id",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "type": "timestamp",
+              "nullable": false
+            },
+            {
+              "id": "employee",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "leave_type",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "vacation",
+                "sick",
+                "personal"
+              ]
+            },
+            {
+              "id": "start",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "end",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "days",
+              "type": "integer",
+              "nullable": false,
+              "unit": "day"
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "approved",
+                "rejected"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "requests",
+          "kind": "records",
+          "contract_id": "leave_request_v1",
+          "fields": [
+            {
+              "id": "leave_type",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "vacation",
+                "sick",
+                "personal"
+              ]
+            },
+            {
+              "id": "start",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "end",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "days",
+              "type": "integer",
+              "nullable": true,
+              "unit": "day"
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "approved",
+                "rejected"
+              ]
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "upcoming",
+          "kind": "table",
+          "title": "Upcoming approved time off",
+          "input": "leave_requests",
+          "operators": [
+            "filter",
+            "limit",
+            "project",
+            "sort"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "days_by_person",
+          "kind": "chart",
+          "title": "Days taken by person",
+          "input": "leave_requests",
+          "operators": [
+            "aggregate",
+            "filter"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "by_type",
+          "kind": "status",
+          "title": "Requests by type",
+          "input": "leave_requests",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "title": "Request time off",
+          "runnable": false,
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "title": "How approval works",
+          "runnable": false
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "leave_request",
+          "operation": "create",
+          "writable_fields": [
+            "leave_type",
+            "start",
+            "end",
+            "days",
+            "note",
+            "status"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "submitted"
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "leave_request",
+          "operation": "create",
+          "writable_fields": [
+            "status",
+            "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "approved"
+            },
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "rejected"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "leave_request",
+          "version": 1,
+          "fields": [
+            {
+              "id": "leave_type",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "vacation",
+                "sick",
+                "personal"
+              ]
+            },
+            {
+              "id": "start",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "end",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "days",
+              "type": "integer",
+              "nullable": true,
+              "unit": "day"
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "approved",
+                "rejected"
+              ]
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "input_id": "leave_requests",
+          "source_id": "00000000-0000-4000-8000-00000000301a",
+          "revision_id": "00000000-0000-4000-8000-00000000301b",
+          "csv": "data/leave_requests.csv",
+          "content_digest": "sha256:84e1bbf68c47c3624227de797e4b7c72e109807ec805c5f385653756d3a88e34",
+          "normalized_digest": "sha256:b1e154e91754048d917e12ee9043afe2094b44fe43e459e91ea8fd4b36f50eab",
+          "row_count": 140,
+          "input_contract": {
+            "id": "leave_requests",
+            "contract_id": "leave_requests_v1",
+            "contract_version": 1,
+            "kind": "source",
+            "fields": [
+              {
+                "id": "request_id",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "time",
+                "value_type": {
+                  "type": "timestamp"
+                },
+                "nullable": false
+              },
+              {
+                "id": "employee",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "leave_type",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "vacation",
+                    "sick",
+                    "personal"
+                  ]
+                },
+                "nullable": false
+              },
+              {
+                "id": "start",
+                "value_type": {
+                  "type": "date"
+                },
+                "nullable": false
+              },
+              {
+                "id": "end",
+                "value_type": {
+                  "type": "date"
+                },
+                "nullable": false
+              },
+              {
+                "id": "days",
+                "value_type": {
+                  "type": "integer",
+                  "unit": "day"
+                },
+                "nullable": false
+              },
+              {
+                "id": "status",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "submitted",
+                    "approved",
+                    "rejected"
+                  ]
+                },
+                "nullable": false
+              }
+            ]
+          }
+        }
+      ],
+      "fixture_sha256": "909a16c7bb3c29fcdd2be2b304eae7f9667cb87e877df9dea48d1cd7d6bb1531"
+    },
+    {
+      "library_id": "purchase-requests",
+      "fixture": "purchase-requests.json",
+      "title": "Purchase requests",
+      "purpose": "Ask to buy something; your manager approves it, and anything over $5,000 also needs finance. Both steps are declared rules the server enforces.",
+      "routing": {
+        "description": "Purchase requests with multi-level approval: request an item from a vendor with an amount and cost center; the manager approves, and requests over $5,000 also need finance.",
+        "intent_examples": [
+          "purchase request",
+          "buy new laptops for the team",
+          "I need to purchase software licenses",
+          "request a purchase order",
+          "approve the Figma seat purchase"
+        ],
+        "negative_examples": [
+          "build an app",
+          "vendor invoices",
+          "expense reimbursement",
+          "inventory levels",
+          "sales pipeline"
+        ],
+        "capabilities": [
+          "finance.purchasing.request",
+          "finance.purchasing.approve",
+          "records.create",
+          "records.transition"
+        ]
+      },
+      "command": {
+        "slug": "purchase",
+        "aliases": [
+          "purchases",
+          "po"
+        ]
+      },
+      "app_id": "00000000-0000-4000-8000-000000001781",
+      "definition_revision_id": "00000000-0000-4000-8000-000000001782",
+      "definition_digest": "sha256:fef49bb7b9c9d291195a07389551158d59ae2252a9d8503e4af7cb948394b94e",
+      "publication_id": "00000000-0000-4000-8000-000000001783",
+      "work_id": "00000000-0000-4000-8000-000000001784",
+      "collection_id": "00000000-0000-4000-8000-000000001785",
+      "inputs": [
+        {
+          "id": "purchase_requests",
+          "kind": "source",
+          "contract_id": "purchase_requests_v1",
+          "fields": [
+            {
+              "id": "request_id",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "type": "timestamp",
+              "nullable": false
+            },
+            {
+              "id": "requester",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "item",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "vendor",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "cost_center",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "engineering",
+                "sales",
+                "marketing",
+                "finance",
+                "operations",
+                "people",
+                "design",
+                "support",
+                "other"
+              ]
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "manager_approved",
+                "approved",
+                "rejected"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "requests",
+          "kind": "records",
+          "contract_id": "purchase_request_v1",
+          "fields": [
+            {
+              "id": "item",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "vendor",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "cost_center",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "engineering",
+                "sales",
+                "marketing",
+                "finance",
+                "operations",
+                "people",
+                "design",
+                "support",
+                "other"
+              ]
+            },
+            {
+              "id": "justification",
+              "type": "text",
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "manager_approved",
+                "approved",
+                "rejected"
+              ]
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "totals",
+          "kind": "summary",
+          "title": "Requests to date",
+          "input": "purchase_requests",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "awaiting_finance",
+          "kind": "table",
+          "title": "Waiting for finance",
+          "input": "purchase_requests",
+          "operators": [
+            "filter",
+            "limit",
+            "project",
+            "sort"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "by_cost_center",
+          "kind": "chart",
+          "title": "Spend requested by cost center",
+          "input": "purchase_requests",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "title": "Requests by status",
+          "input": "purchase_requests",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "title": "Request a purchase",
+          "runnable": false,
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "title": "How approval works",
+          "runnable": false
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "purchase_request",
+          "operation": "create",
+          "writable_fields": [
+            "item",
+            "vendor",
+            "amount",
+            "cost_center",
+            "justification",
+            "status"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "submitted"
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "purchase_request",
+          "operation": "create",
+          "writable_fields": [
+            "status"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "approved",
+              "when": {
+                "field_id": "amount",
+                "comparison": "lte",
+                "value": {
+                  "type": "money",
+                  "minor_units": "500000",
+                  "currency": "USD",
+                  "minor_unit_exponent": 2
+                }
+              }
+            },
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "manager_approved",
+              "when": {
+                "field_id": "amount",
+                "comparison": "gt",
+                "value": {
+                  "type": "money",
+                  "minor_units": "500000",
+                  "currency": "USD",
+                  "minor_unit_exponent": 2
+                }
+              }
+            },
+            {
+              "field_id": "status",
+              "from": "manager_approved",
+              "to": "approved"
+            },
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "rejected"
+            },
+            {
+              "field_id": "status",
+              "from": "manager_approved",
+              "to": "rejected"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "purchase_request",
+          "version": 1,
+          "fields": [
+            {
+              "id": "item",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "vendor",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "cost_center",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "engineering",
+                "sales",
+                "marketing",
+                "finance",
+                "operations",
+                "people",
+                "design",
+                "support",
+                "other"
+              ]
+            },
+            {
+              "id": "justification",
+              "type": "text",
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "manager_approved",
+                "approved",
+                "rejected"
+              ]
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "input_id": "purchase_requests",
+          "source_id": "00000000-0000-4000-8000-00000000301c",
+          "revision_id": "00000000-0000-4000-8000-00000000301d",
+          "csv": "data/purchase_requests.csv",
+          "content_digest": "sha256:952d43fe9afc7fac079c4c590ae06a76cf4c2fa1dd4bc81246292de6fba37170",
+          "normalized_digest": "sha256:9c5980496548390ac13165248702dd45d56c5311181871a30501fc7fe7a90e1d",
+          "row_count": 160,
+          "input_contract": {
+            "id": "purchase_requests",
+            "contract_id": "purchase_requests_v1",
+            "contract_version": 1,
+            "kind": "source",
+            "fields": [
+              {
+                "id": "request_id",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "time",
+                "value_type": {
+                  "type": "timestamp"
+                },
+                "nullable": false
+              },
+              {
+                "id": "requester",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "item",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "vendor",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "amount",
+                "value_type": {
+                  "type": "money",
+                  "currency": "USD",
+                  "minor_unit_exponent": 2
+                },
+                "nullable": false
+              },
+              {
+                "id": "cost_center",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "engineering",
+                    "sales",
+                    "marketing",
+                    "finance",
+                    "operations",
+                    "people",
+                    "design",
+                    "support",
+                    "other"
+                  ]
+                },
+                "nullable": false
+              },
+              {
+                "id": "status",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "submitted",
+                    "manager_approved",
+                    "approved",
+                    "rejected"
+                  ]
+                },
+                "nullable": false
+              }
+            ]
+          }
+        }
+      ],
+      "fixture_sha256": "0b173bcfe914b64fd0cebec0c701f5e89e5856faed200dd221d021af3497aff9"
+    },
+    {
+      "library_id": "vendor-invoices",
+      "fixture": "vendor-invoices.json",
+      "title": "Vendor invoices",
+      "purpose": "Log a supplier invoice, approve it for payment and mark it paid or disputed; the server checks the PO against your purchase requests.",
+      "routing": {
+        "description": "Vendor invoices (accounts payable approval): log a supplier invoice with its number, amount, PO and due date, approve it for payment, mark it paid or disputed; a PO match flag against purchase requests.",
+        "intent_examples": [
+          "vendor invoice",
+          "log an invoice from a supplier",
+          "invoice to approve for payment",
+          "match an invoice to a purchase order",
+          "mark the invoice paid"
+        ],
+        "negative_examples": [
+          "build an app",
+          "unpaid invoices",
+          "accounts payable by vendor",
+          "employee expenses",
+          "subscription revenue"
+        ],
+        "capabilities": [
+          "finance.payables.invoice",
+          "finance.payables.approve",
+          "records.create",
+          "records.transition"
+        ]
+      },
+      "command": {
+        "slug": "invoice",
+        "aliases": [
+          "invoices",
+          "payables"
+        ]
+      },
+      "app_id": "00000000-0000-4000-8000-000000001801",
+      "definition_revision_id": "00000000-0000-4000-8000-000000001802",
+      "definition_digest": "sha256:a4447f244989bf5695f3ab2a2eefc51b3185740208df39df5a1077fd543d9020",
+      "publication_id": "00000000-0000-4000-8000-000000001803",
+      "work_id": "00000000-0000-4000-8000-000000001804",
+      "collection_id": "00000000-0000-4000-8000-000000001805",
+      "inputs": [
+        {
+          "id": "ap_invoices",
+          "kind": "source",
+          "contract_id": "ap_invoices_v1",
+          "fields": [
+            {
+              "id": "invoice_id",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "type": "timestamp",
+              "nullable": false
+            },
+            {
+              "id": "vendor",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "invoice_number",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "po_number",
+              "type": "text",
+              "nullable": true
+            },
+            {
+              "id": "due",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "received",
+                "approved",
+                "paid",
+                "disputed"
+              ]
+            },
+            {
+              "id": "po_match",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "match",
+                "mismatch",
+                "no_po"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "invoices",
+          "kind": "records",
+          "contract_id": "vendor_invoice_v1",
+          "fields": [
+            {
+              "id": "vendor",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "invoice_number",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "po_number",
+              "type": "text",
+              "nullable": true
+            },
+            {
+              "id": "due_date",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "received",
+                "approved",
+                "paid",
+                "disputed"
+              ]
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "by_status",
+          "kind": "status",
+          "title": "Invoices by status",
+          "input": "ap_invoices",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "po_mismatches",
+          "kind": "table",
+          "title": "Invoices that do not match their PO",
+          "input": "ap_invoices",
+          "operators": [
+            "filter",
+            "limit",
+            "project",
+            "sort"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "to_pay",
+          "kind": "table",
+          "title": "Approved, not yet paid",
+          "input": "ap_invoices",
+          "operators": [
+            "filter",
+            "limit",
+            "project",
+            "sort"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "log",
+          "kind": "form",
+          "title": "Log a vendor invoice",
+          "runnable": false,
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "title": "PO match",
+          "runnable": false
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "vendor_invoice",
+          "operation": "create",
+          "writable_fields": [
+            "vendor",
+            "invoice_number",
+            "amount",
+            "po_number",
+            "due_date",
+            "status"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "received"
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "vendor_invoice",
+          "operation": "create",
+          "writable_fields": [
+            "status"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "received",
+              "to": "approved"
+            },
+            {
+              "field_id": "status",
+              "from": "received",
+              "to": "disputed"
+            },
+            {
+              "field_id": "status",
+              "from": "approved",
+              "to": "paid"
+            },
+            {
+              "field_id": "status",
+              "from": "approved",
+              "to": "disputed"
+            },
+            {
+              "field_id": "status",
+              "from": "disputed",
+              "to": "approved"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "vendor_invoice",
+          "version": 1,
+          "fields": [
+            {
+              "id": "vendor",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "invoice_number",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "po_number",
+              "type": "text",
+              "nullable": true
+            },
+            {
+              "id": "due_date",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "received",
+                "approved",
+                "paid",
+                "disputed"
+              ]
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "input_id": "ap_invoices",
+          "source_id": "00000000-0000-4000-8000-00000000301e",
+          "revision_id": "00000000-0000-4000-8000-00000000301f",
+          "csv": "data/ap_invoices.csv",
+          "content_digest": "sha256:d350ca0a2b75e10c6b6f80dae5e1d9795d5d6cae1679f7b4ab0c765b15837b3e",
+          "normalized_digest": "sha256:f8d67c6f953cf91a7fbe594ca5f2e2c10b14d006809e67ac785d02c88b0d671b",
+          "row_count": 150,
+          "input_contract": {
+            "id": "ap_invoices",
+            "contract_id": "ap_invoices_v1",
+            "contract_version": 1,
+            "kind": "source",
+            "fields": [
+              {
+                "id": "invoice_id",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "time",
+                "value_type": {
+                  "type": "timestamp"
+                },
+                "nullable": false
+              },
+              {
+                "id": "vendor",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "invoice_number",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "amount",
+                "value_type": {
+                  "type": "money",
+                  "currency": "USD",
+                  "minor_unit_exponent": 2
+                },
+                "nullable": false
+              },
+              {
+                "id": "po_number",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": true
+              },
+              {
+                "id": "due",
+                "value_type": {
+                  "type": "date"
+                },
+                "nullable": false
+              },
+              {
+                "id": "status",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "received",
+                    "approved",
+                    "paid",
+                    "disputed"
+                  ]
+                },
+                "nullable": false
+              },
+              {
+                "id": "po_match",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "match",
+                    "mismatch",
+                    "no_po"
+                  ]
+                },
+                "nullable": false
+              }
+            ]
+          }
+        }
+      ],
+      "fixture_sha256": "fedc01ecb2fbdcef6a6164f5c6803d07c40561e1098f6e4ffb21ebbf3f356aaa"
+    },
+    {
+      "library_id": "access-requests",
+      "fixture": "access-requests.json",
+      "title": "Access requests",
+      "purpose": "Ask for access to a system with a role, a reason and an end date; the system owner grants or denies it, and grants expire.",
+      "routing": {
+        "description": "Access requests: ask for access to a system with a role, reason and expiry date; the system owner grants or denies; grants expiring this month.",
+        "intent_examples": [
+          "request access to a system",
+          "I need admin access to the production database",
+          "give me write access to payroll until Friday",
+          "access request for source control",
+          "temporary access until the end of the month"
+        ],
+        "negative_examples": [
+          "build an app",
+          "access review",
+          "pending access requests",
+          "who asked for admin access",
+          "password reset"
+        ],
+        "capabilities": [
+          "security.access.request",
+          "security.access.grant",
+          "records.create",
+          "records.transition"
+        ]
+      },
+      "command": {
+        "slug": "access",
+        "aliases": [
+          "access-request"
+        ]
+      },
+      "app_id": "00000000-0000-4000-8000-000000001881",
+      "definition_revision_id": "00000000-0000-4000-8000-000000001882",
+      "definition_digest": "sha256:db02ad5e10f519d86ae2c430a74c9114c6542f10b3b9d271efee66935a919c38",
+      "publication_id": "00000000-0000-4000-8000-000000001883",
+      "work_id": "00000000-0000-4000-8000-000000001884",
+      "collection_id": "00000000-0000-4000-8000-000000001885",
+      "inputs": [
+        {
+          "id": "access_grants",
+          "kind": "source",
+          "contract_id": "access_grants_v1",
+          "fields": [
+            {
+              "id": "request_id",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "type": "timestamp",
+              "nullable": false
+            },
+            {
+              "id": "requester",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "system",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "role",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "read",
+                "write",
+                "admin"
+              ]
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "requested",
+                "granted",
+                "denied"
+              ]
+            },
+            {
+              "id": "expires_on",
+              "type": "date",
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "requests",
+          "kind": "records",
+          "contract_id": "access_request_v1",
+          "fields": [
+            {
+              "id": "system",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "role",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "read",
+                "write",
+                "admin"
+              ]
+            },
+            {
+              "id": "reason",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "expires_on",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "requested",
+                "granted",
+                "denied"
+              ]
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "expiring",
+          "kind": "table",
+          "title": "Grants expiring in November",
+          "input": "access_grants",
+          "operators": [
+            "filter",
+            "limit",
+            "project",
+            "sort"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "by_system",
+          "kind": "chart",
+          "title": "Requests by system",
+          "input": "access_grants",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "title": "Requests by status",
+          "input": "access_grants",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "title": "Request access",
+          "runnable": false,
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "title": "How approval works",
+          "runnable": false
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "access_request",
+          "operation": "create",
+          "writable_fields": [
+            "system",
+            "role",
+            "reason",
+            "expires_on",
+            "status"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "requested"
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "access_request",
+          "operation": "create",
+          "writable_fields": [
+            "status"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "requested",
+              "to": "granted"
+            },
+            {
+              "field_id": "status",
+              "from": "requested",
+              "to": "denied"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "access_request",
+          "version": 1,
+          "fields": [
+            {
+              "id": "system",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "role",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "read",
+                "write",
+                "admin"
+              ]
+            },
+            {
+              "id": "reason",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "expires_on",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "requested",
+                "granted",
+                "denied"
+              ]
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "input_id": "access_grants",
+          "source_id": "00000000-0000-4000-8000-000000003020",
+          "revision_id": "00000000-0000-4000-8000-000000003021",
+          "csv": "data/access_grants.csv",
+          "content_digest": "sha256:f074281a852284e3834a96e53837ff74907879a7d4857eba8bc2072b674d82ac",
+          "normalized_digest": "sha256:6ce1bba56b4f1158dbb313146cafb886e596ddc5f1a076638c3c583b5735afe0",
+          "row_count": 130,
+          "input_contract": {
+            "id": "access_grants",
+            "contract_id": "access_grants_v1",
+            "contract_version": 1,
+            "kind": "source",
+            "fields": [
+              {
+                "id": "request_id",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "time",
+                "value_type": {
+                  "type": "timestamp"
+                },
+                "nullable": false
+              },
+              {
+                "id": "requester",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "system",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "role",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "read",
+                    "write",
+                    "admin"
+                  ]
+                },
+                "nullable": false
+              },
+              {
+                "id": "status",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "requested",
+                    "granted",
+                    "denied"
+                  ]
+                },
+                "nullable": false
+              },
+              {
+                "id": "expires_on",
+                "value_type": {
+                  "type": "date"
+                },
+                "nullable": false
+              }
+            ]
+          }
+        }
+      ],
+      "fixture_sha256": "40e80e8ba8bce586cfdd1dcedabbeba660b3f9e7d84b633f784fc6128d5d5350"
+    },
+    {
+      "library_id": "deal-desk",
+      "fixture": "deal-desk.json",
+      "title": "Deal desk",
+      "purpose": "Ask for a discount on a deal; up to 10% approves itself by a declared rule, deeper discounts go to the sales manager.",
+      "routing": {
+        "description": "Deal desk discount approvals: request a discount percent on a deal for an account with a reason; up to 10% approves automatically, deeper discounts go to the sales manager.",
+        "intent_examples": [
+          "deal desk",
+          "request a 15% discount for Kestrel Logistics",
+          "discount approval for a deal",
+          "price exception request",
+          "approve the discount on the Brightwater deal"
+        ],
+        "negative_examples": [
+          "build an app",
+          "sales pipeline by stage",
+          "coupon code",
+          "stock price",
+          "expense claims"
+        ],
+        "capabilities": [
+          "sales.dealdesk.discount",
+          "sales.dealdesk.approve",
+          "records.create",
+          "records.transition"
+        ]
+      },
+      "command": {
+        "slug": "discount",
+        "aliases": [
+          "deal-desk",
+          "discounts"
+        ]
+      },
+      "app_id": "00000000-0000-4000-8000-000000001901",
+      "definition_revision_id": "00000000-0000-4000-8000-000000001902",
+      "definition_digest": "sha256:144d7217e4564b59ae668fb1bd081ba50c73544a56d12f97f887f3a3ecfb6678",
+      "publication_id": "00000000-0000-4000-8000-000000001903",
+      "work_id": "00000000-0000-4000-8000-000000001904",
+      "collection_id": "00000000-0000-4000-8000-000000001905",
+      "inputs": [
+        {
+          "id": "discount_requests",
+          "kind": "source",
+          "contract_id": "discount_requests_v1",
+          "fields": [
+            {
+              "id": "request_id",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "type": "timestamp",
+              "nullable": false
+            },
+            {
+              "id": "account",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "owner",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "deal_amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "discount_pct",
+              "type": "integer",
+              "nullable": false,
+              "unit": "percent"
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "approved",
+                "rejected"
+              ]
+            },
+            {
+              "id": "auto_approved",
+              "type": "boolean",
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "requests",
+          "kind": "records",
+          "contract_id": "discount_request_v1",
+          "fields": [
+            {
+              "id": "account",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "deal_amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "discount_pct",
+              "type": "integer",
+              "nullable": false,
+              "unit": "percent"
+            },
+            {
+              "id": "reason",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "approved",
+                "rejected"
+              ]
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "by_status",
+          "kind": "status",
+          "title": "Discount requests by status",
+          "input": "discount_requests",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "deep_discounts",
+          "kind": "table",
+          "title": "Discounts over 10%",
+          "input": "discount_requests",
+          "operators": [
+            "filter",
+            "limit",
+            "project",
+            "sort"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "by_owner",
+          "kind": "chart",
+          "title": "Requests by owner",
+          "input": "discount_requests",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "title": "Request a discount",
+          "runnable": false,
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "title": "The rule",
+          "runnable": false
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "discount_request",
+          "operation": "create",
+          "writable_fields": [
+            "account",
+            "deal_amount",
+            "discount_pct",
+            "reason",
+            "status"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "approved",
+              "when": {
+                "field_id": "discount_pct",
+                "comparison": "lte",
+                "value": {
+                  "type": "integer",
+                  "value": "10",
+                  "unit": "percent"
+                }
+              }
+            },
+            {
+              "field_id": "status",
+              "value": "submitted"
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "discount_request",
+          "operation": "create",
+          "writable_fields": [
+            "status"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "approved"
+            },
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "rejected"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "discount_request",
+          "version": 1,
+          "fields": [
+            {
+              "id": "account",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "deal_amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "discount_pct",
+              "type": "integer",
+              "nullable": false,
+              "unit": "percent"
+            },
+            {
+              "id": "reason",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "approved",
+                "rejected"
+              ]
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "input_id": "discount_requests",
+          "source_id": "00000000-0000-4000-8000-000000003022",
+          "revision_id": "00000000-0000-4000-8000-000000003023",
+          "csv": "data/discount_requests.csv",
+          "content_digest": "sha256:110a73d8b0f136fea34e8550178d5644fa9fc078c256b3ca3278e6d4a6e99635",
+          "normalized_digest": "sha256:ba7e909f2d3c8989f18287ac02e0bb9afbc9c90ecb5e2ed9df7c7cd72931a12b",
+          "row_count": 120,
+          "input_contract": {
+            "id": "discount_requests",
+            "contract_id": "discount_requests_v1",
+            "contract_version": 1,
+            "kind": "source",
+            "fields": [
+              {
+                "id": "request_id",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "time",
+                "value_type": {
+                  "type": "timestamp"
+                },
+                "nullable": false
+              },
+              {
+                "id": "account",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "owner",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "deal_amount",
+                "value_type": {
+                  "type": "money",
+                  "currency": "USD",
+                  "minor_unit_exponent": 2
+                },
+                "nullable": false
+              },
+              {
+                "id": "discount_pct",
+                "value_type": {
+                  "type": "integer",
+                  "unit": "percent"
+                },
+                "nullable": false
+              },
+              {
+                "id": "status",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "submitted",
+                    "approved",
+                    "rejected"
+                  ]
+                },
+                "nullable": false
+              },
+              {
+                "id": "auto_approved",
+                "value_type": {
+                  "type": "boolean"
+                },
+                "nullable": false
+              }
+            ]
+          }
+        }
+      ],
+      "fixture_sha256": "fa791f1bcd23cc315f989b34a86dea39c98eb2a671e16dbdf64a7552115a3ca1"
+    },
+    {
+      "library_id": "notes",
+      "fixture": "notes.json",
+      "title": "Notes",
+      "purpose": "Quick notes: type /note and a sentence to keep a note as a card on your canvas; each note is a typed record of your own.",
+      "routing": {
+        "description": "Quick personal notes: write a short note with a title and a body and keep it as a card on the canvas.",
+        "intent_examples": [
+          "take a note",
+          "note to self",
+          "remember to call the auditor Friday",
+          "jot this down"
+        ],
+        "negative_examples": [
+          "expense claims",
+          "approve the Nobu dinner",
+          "sales pipeline",
+          "incident timeline",
+          "budget vs actual",
+          "outbound traffic"
+        ],
+        "capabilities": [
+          "utilities.notes",
+          "records.create"
+        ]
+      },
+      "command": {
+        "slug": "note",
+        "aliases": [
+          "notes"
+        ]
+      },
+      "app_id": "00000000-0000-4000-8000-000000001981",
+      "definition_revision_id": "00000000-0000-4000-8000-000000001982",
+      "definition_digest": "sha256:c0a637a28559a80809d79111cad208c7fb92e26c385564caa9fab26756247741",
+      "publication_id": "00000000-0000-4000-8000-000000001983",
+      "work_id": "00000000-0000-4000-8000-000000001984",
+      "collection_id": "00000000-0000-4000-8000-000000001985",
+      "inputs": [
+        {
+          "id": "team_notes",
+          "kind": "source",
+          "contract_id": "team_notes_v1",
+          "fields": [
+            {
+              "id": "note_id",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "type": "timestamp",
+              "nullable": false
+            },
+            {
+              "id": "author",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "title",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "topic",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "planning",
+                "follow_up",
+                "decision",
+                "reminder",
+                "idea"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "notes",
+          "kind": "records",
+          "contract_id": "note_v1",
+          "fields": [
+            {
+              "id": "title",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "body",
+              "type": "text",
+              "nullable": true
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "count",
+          "kind": "summary",
+          "title": "Team notes",
+          "input": "team_notes",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "by_topic",
+          "kind": "status",
+          "title": "Team notes by topic",
+          "input": "team_notes",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "pinned",
+          "kind": "table",
+          "title": "Recent team notes",
+          "input": "team_notes",
+          "operators": [
+            "limit",
+            "project",
+            "sort"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "add",
+          "kind": "form",
+          "title": "New note",
+          "runnable": false,
+          "command_id": "add"
+        }
+      ],
+      "commands": [
+        {
+          "id": "add",
+          "record_schema_id": "note",
+          "operation": "create",
+          "writable_fields": [
+            "title",
+            "body"
+          ],
+          "transitions": []
+        },
+        {
+          "id": "edit",
+          "record_schema_id": "note",
+          "operation": "update",
+          "writable_fields": [
+            "title",
+            "body"
+          ],
+          "transitions": []
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "note",
+          "version": 1,
+          "fields": [
+            {
+              "id": "title",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "body",
+              "type": "text",
+              "nullable": true
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "input_id": "team_notes",
+          "source_id": "00000000-0000-4000-8000-000000003024",
+          "revision_id": "00000000-0000-4000-8000-000000003025",
+          "csv": "data/team_notes.csv",
+          "content_digest": "sha256:be5e69f59808bc756e517e0fe86f5e60317d4651196e5ea8918dcf497e3d01e0",
+          "normalized_digest": "sha256:18eef7f4d04c6d77095f59f3ebcfbdab65b6ea0ecb870f233ccf4f577188addd",
+          "row_count": 30,
+          "input_contract": {
+            "id": "team_notes",
+            "contract_id": "team_notes_v1",
+            "contract_version": 1,
+            "kind": "source",
+            "fields": [
+              {
+                "id": "note_id",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "time",
+                "value_type": {
+                  "type": "timestamp"
+                },
+                "nullable": false
+              },
+              {
+                "id": "author",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "title",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "topic",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "planning",
+                    "follow_up",
+                    "decision",
+                    "reminder",
+                    "idea"
+                  ]
+                },
+                "nullable": false
+              }
+            ]
+          }
+        }
+      ],
+      "fixture_sha256": "d817970247671f8a8aa825fb854ec2e4a8de8735213004f64a8ab9fd23017314"
     }
   ]
 }

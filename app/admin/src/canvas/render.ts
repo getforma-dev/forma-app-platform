@@ -29,6 +29,15 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/**
+ * Where a live pulse shows (APP-106): a card's own canvas item, or the card
+ * itself when it sits in a unite frame, a stack or the focus view.
+ */
+export function pulseTarget(card: HTMLElement): HTMLElement {
+  const parent = card.parentElement;
+  return parent?.classList.contains('cv-item') ? parent : card;
+}
+
 /** Exact decimal strings gain digit grouping; anything else is unchanged (`page::display`). */
 export function display(value: string): string {
   const negative = value.startsWith('-');

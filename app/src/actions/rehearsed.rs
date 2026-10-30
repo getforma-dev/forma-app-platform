@@ -269,6 +269,12 @@ pub(super) fn approver(text: &str) -> Option<String> {
 
 /// The deterministic parse, or `None` when no rehearsed pattern applies.
 pub fn parse(utterance: &str, catalog: &[CatalogApp], today: &str) -> Option<Parsed> {
+    // APP-107 (DS-69): the workflow apps' rehearsed sentences first; they
+    // fire only on words naming a workflow (time off, purchase, invoice,
+    // access, discount) or inside a slash command pinned to one.
+    if let Some(parsed) = super::workflows::rehearsed(utterance, catalog, today) {
+        return Some(parsed);
+    }
     let lower = utterance.to_lowercase();
     let words = lower_words(utterance);
     let expense_app = catalog.iter().find(|app| {

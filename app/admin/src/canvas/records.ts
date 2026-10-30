@@ -13,7 +13,7 @@
 // sequence, version) is the record's own.
 import { postDraft, requestDecision, type Draft } from './actions';
 import { label } from './display';
-import { el } from './render';
+import { el, pulseTarget } from './render';
 
 export type RecordValueJson = { field_id: string; value: unknown; display: string };
 export type RecordJson = {
@@ -22,6 +22,12 @@ export type RecordJson = {
   values: RecordValueJson[];
   /** The channel or agent that committed this version ("Slack" for APP-100, DS-59; an MCP agent's label such as "Claude" or "OpenAI" for APP-099), a display label only. */
   via?: string | null;
+  /** APP-107: the transitions that may fire now (declared guards judged by the server). */
+  next?: { to: string; rule: string | null }[];
+  /** APP-107: a purchase request's PO reference; display only. */
+  reference?: string;
+  /** APP-107: server-computed display flags (an invoice's PO match). */
+  flags?: { kind: string; state: string; label: string }[];
 };
 export type RecordsJson = {
   app_id: string; work_id: string; publication_id: string; definition_digest: string; work_version: number; can_write: boolean;
@@ -77,6 +83,21 @@ export function buildRecordsCard(document_: Document, card: RecordsCardJson): HT
 function valueOf(record: RecordJson, field: string): RecordValueJson | undefined {
   return record.values.find((v) => v.field_id === field);
 }
+/** APP-107: a decision's button text ("approved" → "Approve", "manager_approved" → "Approve (manager)", "paid" → "Mark paid"). */
+export function decisionLabel(to: string): string {
+  const step = /^(\w+?)_approved$/.exec(to);
+  if (step) return `Approve (${label(step[1]).toLowerCase()})`;
+  const verbs: Record<string, string> = { approved: 'Approve', rejected: 'Reject', granted: 'Grant', denied: 'Deny', paid: 'Mark paid', disputed: 'Dispute' };
+  return verbs[to] ?? label(to.replace(/ed$/, 'e'));
+}
+function positive(to: string): boolean {
+  return /approv|grant|accept|paid/.test(to);
+}
+/** The targets a record may move to now: the server's `next` when given, else the declared ones from its value. */
+function nextOf(record: RecordJson, declared: { field_id: string; from: string; to: string }[], field: string, status: string): string[] {
+  if (Array.isArray(record.next)) return record.next.map((n) => n.to);
+  return declared.filter((t) => t.field_id === field && t.from === status).map((t) => t.to);
+}
 function statusOf(record: RecordJson, field: string): string {
   const value = valueOf(record, field)?.value as { value?: unknown } | undefined;
   return typeof value?.value === 'string' ? value.value : '';
@@ -94,7 +115,7 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
   const statusField = decide?.transitions[0]?.field_id ?? '';
   const froms = new Set((decide?.transitions ?? []).map((t) => t.from));
   const records = listing.records.filter((r) => r.collection_id === collection.collection_id);
-  const pending = records.filter((r) => listing.can_write && froms.has(statusOf(r, statusField)));
+  const pending = records.filter((r) => listing.can_write && froms.has(statusOf(r, statusField)) && nextOf(r, decide?.transitions ?? [], statusField, statusOf(r, statusField)).length > 0);
   card.dataset.pendingNow = String(pending.length);
   card.dataset.decide = decide?.id ?? '';
   card.dataset.statusField = statusField;
@@ -118,14 +139,19 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
     const rows = el(document_, 'tbody', {});
     for (const record of records) {
       const status = statusOf(record, statusField);
-      const isPending = listing.can_write && froms.has(status);
+      const targets = nextOf(record, decide?.transitions ?? [], statusField, status);
+      const isPending = listing.can_write && froms.has(status) && targets.length > 0;
       const tr = el(document_, 'tr', { 'data-record': record.record_id, 'data-version': String(record.version), 'data-status': status });
       if (!previous.has(`${record.record_id}@${record.version}`) && previous.size) tr.classList.add('is-new');
-      for (const field of shown) {
+      shown.forEach((field, index) => {
         const value = valueOf(record, field.id);
         const numeric = field.type === 'money' || field.type === 'integer' || field.type === 'decimal';
-        tr.append(el(document_, 'td', { class: numeric ? 'value num' : 'value', title: `${label(field.id)} · version ${record.version}` }, value?.display ?? '—'));
-      }
+        const cell = el(document_, 'td', { class: numeric ? 'value num' : 'value', title: `${label(field.id)} · version ${record.version}` }, value?.display ?? '—');
+        // APP-107: the PO reference and the PO match, beside the first value (display only).
+        if (index === 0 && record.reference) cell.append(el(document_, 'span', { class: 'cv-ref-chip', title: 'Purchase order reference' }, record.reference));
+        if (index === 0) for (const flag of record.flags ?? []) cell.append(el(document_, 'span', { class: 'cv-flag-chip', 'data-state': flag.state, title: flag.label }, flag.state === 'match' ? 'PO match' : flag.state === 'mismatch' ? 'PO mismatch' : 'PO not found'));
+        tr.append(cell);
+      });
       if (statusField) {
         tr.append(el(document_, 'td', { class: 'cv-status' }, el(document_, 'span', { class: 'cv-status-chip', 'data-status': status }, status)));
       }
@@ -135,9 +161,9 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
       if (pending.length) {
         const cell = el(document_, 'td', { class: 'cv-records-actions' });
         if (isPending && decide) {
-          const targets = decide.transitions.filter((t) => t.field_id === statusField && t.from === status).map((t) => t.to);
           for (const to of targets) {
-            const button = el(document_, 'button', { type: 'button', class: to.startsWith('approv') ? 'cv-approve' : 'cv-reject', 'data-decide': to }, label(to.replace(/ed$/, 'e')));
+            const rule = record.next?.find((n) => n.to === to)?.rule;
+            const button = el(document_, 'button', { type: 'button', class: positive(to) ? 'cv-approve' : 'cv-reject', 'data-decide': to, ...(rule ? { title: `Declared rule: ${rule}` } : {}) }, decisionLabel(to));
             button.addEventListener('click', () => void decideRecord(card, listing, record, to, button));
             cell.append(button);
           }
@@ -186,7 +212,7 @@ export async function refreshRecords(card: HTMLElement, live = false): Promise<v
   }
   renderRecords(card, listing);
   if (live) {
-    const item = card.closest<HTMLElement>('.cv-item') ?? card;
+    const item = pulseTarget(card);
     item.classList.remove('is-live-updated');
     void item.offsetWidth;
     item.classList.add('is-live-updated');

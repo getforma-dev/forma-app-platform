@@ -129,7 +129,7 @@ pub fn definitions() -> Vec<Value> {
         json!({
             "name": DRAFT_RECORD,
             "title": "Draft a record",
-            "description": "Draft a new record (for example an expense claim) in one of the member's record apps. Nothing is written: the values are typed under the app's published schema and checked by storage, and a draft_id is returned. Show the draft to the user and call forma_commit only after they confirm. The status is set by the app's workflow.",
+            "description": "Draft a new record (an expense claim, a time off, purchase, access or discount request, a vendor invoice) in one of the member's record apps. Nothing is written: the values are typed under the app's published schema and checked by storage, and a draft_id is returned. Show the draft to the user and call forma_commit only after they confirm. The status is set by the app's workflow.",
             "inputSchema": {"type": "object", "properties": {
                 "app_hint": {"type": "string", "minLength": 1, "maxLength": 120, "description": "The app's id or title, e.g. \"Expense claims\"."},
                 "values": {"type": "object", "description": "Field id to value, e.g. {\"amount\": \"86.00\", \"merchant\": \"Nobu\", \"category\": \"meals\", \"spent_on\": \"2026-10-29\", \"note\": \"client dinner\"}.",
@@ -141,7 +141,7 @@ pub fn definitions() -> Vec<Value> {
         json!({
             "name": DRAFT_DECISION,
             "title": "Draft a decision",
-            "description": "Draft approving or rejecting a pending record the member may decide (see forma_list_pending). Nothing is written; returns a draft_id for forma_commit after the user confirms.",
+            "description": "Draft approving or rejecting a pending record the member may decide (see forma_list_pending). Approve takes the next approval step the app's declared rules allow (a purchase over $5,000 is approved by the manager first, then finance; access is granted; an approved invoice is paid). Nothing is written; returns a draft_id for forma_commit after the user confirms.",
             "inputSchema": {"type": "object", "properties": {
                 "target_hint": {"type": "string", "minLength": 1, "maxLength": 120, "description": "The record: its id, or words from it such as \"Nobu dinner\"."},
                 "decision": {"type": "string", "enum": ["approve", "reject"]},
@@ -161,7 +161,7 @@ pub fn definitions() -> Vec<Value> {
         json!({
             "name": LIST_PENDING,
             "title": "List pending decisions",
-            "description": "List the records waiting for this member's decision (for example expense claims to approve), filed by teammates.",
+            "description": "List the records waiting for this member's decision (expense claims, time off, purchase, access and discount requests, vendor invoices), filed by teammates.",
             "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
             "annotations": read_only("List pending decisions"),
         }),
@@ -820,6 +820,19 @@ async fn hold(
         .as_ref()
         .map(|t| format!(" Record: {} (v{}).", t.summary, t.version))
         .unwrap_or_default();
+    // APP-107: the declared rule behind the status, and the PO match.
+    let mut notes: Vec<String> = draft.rule.iter().cloned().collect();
+    notes.extend(
+        draft
+            .flags
+            .iter()
+            .filter_map(|f| f.get("label").and_then(Value::as_str).map(str::to_owned)),
+    );
+    let target = if notes.is_empty() {
+        target
+    } else {
+        format!("{target} {}.", notes.join("; "))
+    };
     Ok(Output::ok(
         "drafted",
         format!(
@@ -839,6 +852,9 @@ fn draft_document(state: &Mcp, draft: &Draft) -> Value {
         "record_id": draft.request.record,
         "values": draft.values.iter().map(|v| json!({"field_id": v.field, "label": v.label, "display": v.display})).collect::<Vec<_>>(),
         "approver": draft.approver.as_ref().map(|a| json!({"label": a.label})),
+        "approvers": draft.approvers.iter().map(|a| json!({"label": a.label})).collect::<Vec<_>>(),
+        "rule": draft.rule,
+        "flags": draft.flags,
         "target": draft.target.as_ref().map(|t| json!({"record_id": t.record_id, "version": t.version, "summary": t.summary})),
         "expires_in_seconds": drafts::DRAFT_TTL.as_secs(),
         "written": false,
@@ -968,7 +984,9 @@ async fn commit(
             Some((&outcome.record_id, outcome.record_version)),
         )
         .await;
-        if let Some(approver) = &draft.approver {
+        // APP-107: every approver named (a two-level workflow's second too).
+        let mut shared_labels: Vec<String> = Vec::new();
+        for approver in &draft.approvers {
             match stores
                 .workspace
                 .share_work(
@@ -988,8 +1006,12 @@ async fn commit(
                             &draft.work,
                         );
                     }
-                    shared_with = json!(approver.label);
-                    share_note = format!(" Shared with {} for approval.", approver.label);
+                    if shared_labels.is_empty() {
+                        shared_with = json!(approver.label);
+                    }
+                    shared_labels.push(approver.label.clone());
+                    share_note =
+                        format!(" Shared with {} for approval.", shared_labels.join(" and "));
                 }
                 Err(error) => {
                     tracing::info!(event = "mcp.share_refused", token_id = caller.token_id, error = %error, "share after commit refused");

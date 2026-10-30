@@ -160,7 +160,8 @@ fn draft_card(state: &Slack, draft: &Draft, id: &str) -> Value {
     let (headline, fallback) = match draft.kind {
         Kind::Decide => (
             format!(
-                "*Decide this claim?* {}",
+                "*Decide this {}?* {}",
+                noun(&draft.request.schema),
                 text::escape(
                     &draft
                         .target
@@ -176,12 +177,32 @@ fn draft_card(state: &Slack, draft: &Draft, id: &str) -> Value {
             "File this record?",
         ),
     };
+    let names: Vec<String> = draft
+        .approvers
+        .iter()
+        .map(|a| format!("*{}*", text::escape(&a.label)))
+        .collect();
     let approver = match (&draft.kind, &draft.approver) {
+        (Kind::Create, Some(_)) if names.len() > 1 => {
+            format!("Approvers: {}", names.join(", then "))
+        }
         (Kind::Create, Some(approver)) => format!("Approver: *{}*", text::escape(&approver.label)),
         (Kind::Create, None) => "No approver named".to_owned(),
         _ => String::new(),
     };
     let mut blocks = vec![text::section(&headline), text::fields(&pairs)];
+    // APP-107: the declared rule behind the status and the PO match, display only.
+    let mut notes: Vec<String> = draft.rule.iter().map(|r| text::escape(r)).collect();
+    notes.extend(
+        draft
+            .flags
+            .iter()
+            .filter_map(|f| f.get("label").and_then(Value::as_str))
+            .map(text::escape),
+    );
+    if !notes.is_empty() {
+        blocks.push(text::context(&notes.join(" · ")));
+    }
     let mut note = String::from(
         "Nothing is written until you confirm. The command goes through Forma's audited path.",
     );
@@ -248,18 +269,50 @@ fn decision_buttons(record: &RecordRow) -> Value {
     )
 }
 
-/// The claim as an approver reads it: amount, merchant, date, note, filer.
+/// What a record is called in a message: "claim" for an expense claim,
+/// else its schema in words ("purchase request").
+pub(crate) fn noun(schema: &str) -> String {
+    if schema == "expense_claim" {
+        "claim".into()
+    } else {
+        schema.replace('_', " ")
+    }
+}
+
+/// The record as an approver reads it: its values (an expense claim's in
+/// the claim's order), its status aside, and the filer.
 fn claim_blocks(record: &RecordRow) -> Vec<Value> {
     let mut pairs = Vec::new();
-    for (field, label) in [
+    let expense = [
         ("amount", "Amount"),
         ("merchant", "Merchant"),
         ("spent_on", "Date"),
         ("category", "Category"),
         ("note", "Note"),
-    ] {
-        if let Some(display) = resolve::record_display(record, field) {
-            pairs.push((label.to_owned(), display));
+    ];
+    if record.schema == "expense_claim" {
+        for (field, label) in expense {
+            if let Some(display) = resolve::record_display(record, field) {
+                pairs.push((label.to_owned(), display));
+            }
+        }
+    } else {
+        for item in record.values.as_array().into_iter().flatten().take(8) {
+            let (Some(field), Some(value)) = (
+                item.get("field_id").and_then(Value::as_str),
+                item.get("value"),
+            ) else {
+                continue;
+            };
+            if field == "status" || value.get("type").and_then(Value::as_str) == Some("null") {
+                continue;
+            }
+            let mut label = field.replace('_', " ");
+            if let Some(first) = label.get(0..1) {
+                let upper = first.to_uppercase();
+                label.replace_range(0..1, &upper);
+            }
+            pairs.push((label, resolve::display(value)));
         }
     }
     pairs.push(("Filed by".to_owned(), directory::label(&record.creator)));
@@ -616,7 +669,12 @@ async fn confirm(state: Arc<Slack>, team: String, user: String, id: String, resp
     let message = match draft.kind {
         Kind::Create => {
             let mut line = format!("Filed: *{shown}*");
-            if let Some(approver) = &draft.approver {
+            let mut sent = Vec::new();
+            if let Some(rule) = &draft.rule {
+                line.push_str(&format!(" ({})", text::escape(rule)));
+            }
+            // APP-107: every approver named (a two-level workflow's second too).
+            for approver in &draft.approvers {
                 match stores
                     .workspace
                     .share_work(&member, &draft.app, &draft.work, &approver.principal, true)
@@ -630,15 +688,15 @@ async fn confirm(state: Arc<Slack>, team: String, user: String, id: String, resp
                                 &draft.work,
                             );
                         }
-                        line.push_str(&format!(
-                            ", sent to *{}* for approval",
-                            text::escape(&approver.label)
-                        ));
+                        sent.push(format!("*{}*", text::escape(&approver.label)));
                     }
                     Err(error) => {
                         tracing::warn!(event = "slack.share_failed", error = %error, "share to the approver failed");
                     }
                 }
+            }
+            if !sent.is_empty() {
+                line.push_str(&format!(", sent to {} for approval", sent.join(" and ")));
             }
             format!("{line}. {}", canvas_link(&state))
         }
@@ -712,7 +770,7 @@ async fn notify_filer_record(
         let amount = resolve::record_display(record, "amount");
         match (merchant, amount) {
             (Some(m), Some(a)) => format!("{} claim ({})", text::escape(&m), text::escape(&a)),
-            _ => format!("claim ({})", summary(record)),
+            _ => format!("{} ({})", noun(&record.schema), summary(record)),
         }
     };
     let text_line = format!(
@@ -841,6 +899,16 @@ async fn decide(
             return refuse(state.clone(), REFUSED).await;
         }
     };
+    // APP-107: the status actually drafted (a guarded step may be
+    // "manager approved" where the button said Approve).
+    let actual = request
+        .values
+        .get(0)
+        .and_then(|v| v.pointer("/value/value"))
+        .and_then(Value::as_str)
+        .map(|v| v.replace('_', " "))
+        .unwrap_or_else(|| to.to_owned());
+    let to = actual.as_str();
     let result = commit(stores, &member, &request).await;
     let message = match result {
         Ok(CommandResult::Committed(outcome)) => {
@@ -928,13 +996,14 @@ pub fn event(state: &Arc<Slack>, body: &Value) {
 /// The approver's DM for a pending claim (used by `notify`).
 pub(crate) fn approval_request(record: &RecordRow, state: &Slack) -> (String, Vec<Value>) {
     let filer = text::escape(&directory::label(&record.creator));
+    let what = noun(&record.schema);
     let mut blocks = vec![text::section(&format!(
-        "*{filer}* filed a claim for your approval"
+        "*{filer}* filed a {what} for your approval"
     ))];
     blocks.extend(claim_blocks(record));
     blocks.push(decision_buttons(record));
     blocks.push(text::context(&canvas_link(state)));
-    (format!("{filer} filed a claim for your approval"), blocks)
+    (format!("{filer} filed a {what} for your approval"), blocks)
 }
 
 /// APP-108: a folder answer as an ephemeral Slack message (text only; every

@@ -93,6 +93,8 @@ const STOPWORDS: &[&str] = &[
     "my",
     "need",
     "new",
+    // APP-109: "not" stems like "note"; a negation never names an app.
+    "not",
     "of",
     "on",
     "only",
@@ -578,7 +580,7 @@ mod tests {
     #[test]
     fn every_example_picks_its_app_and_no_negative_does() {
         let library = catalog_library();
-        assert_eq!(library.len(), 14);
+        assert_eq!(library.len(), 20);
         let sidecar = crate::storage::library_sidecar().unwrap();
         let mut samples = Vec::new();
         for entry in &sidecar {
@@ -670,6 +672,6 @@ mod tests {
         assert_eq!(found.pick, None);
         assert_eq!(found.reason, "near_tie");
         // The chooser offers both.
-        assert_eq!(found.ranked[..2], [0, 14]);
+        assert_eq!(found.ranked[..2], [0, 20]);
     }
 }

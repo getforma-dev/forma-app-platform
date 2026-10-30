@@ -61,6 +61,7 @@ fn expense_app() -> CatalogApp {
                 .map(String::from)
                 .to_vec(),
                 transitions: vec![],
+                rules: Default::default(),
             },
             CatalogCommand {
                 id: "decide".into(),
@@ -70,6 +71,7 @@ fn expense_app() -> CatalogApp {
                     ("status".into(), "submitted".into(), "approved".into()),
                     ("status".into(), "submitted".into(), "rejected".into()),
                 ],
+                rules: Default::default(),
             },
         ],
     }
@@ -98,8 +100,11 @@ fn draft() -> Draft {
         },
         values: vec![],
         approver: None,
+        approvers: vec![],
         target: None,
         confirm_token: "x".into(),
+        rule: None,
+        flags: vec![],
     }
 }
 

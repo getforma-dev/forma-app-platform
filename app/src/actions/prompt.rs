@@ -36,6 +36,8 @@ pub struct CatalogCommand {
     pub operation: String,
     pub writable: Vec<String>,
     pub transitions: Vec<(String, String, String)>,
+    /// APP-107: the declared guards and initial values (`storage::rules`).
+    pub rules: crate::storage::rules::Rules,
 }
 impl CatalogApp {
     /// The command that files a new record: a `create` without transitions.
@@ -107,6 +109,7 @@ pub fn catalog(library: &[LibraryApp]) -> Vec<CatalogApp> {
                                 ))
                             })
                             .collect(),
+                        rules: crate::storage::rules::Rules::from_declaration(c)?,
                     })
                 })
                 .collect();
