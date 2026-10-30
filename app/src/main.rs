@@ -607,6 +607,14 @@ async fn main() {
         genui::actions::Parser::from_env(),
     )));
     let records_routes = genui::actions::routes::records_router(auth.clone());
+    // APP-103: the canvas widgets' weather and customize routes, under the
+    // long deadline (Open-Meteo and the fast model are outside services).
+    let widget_routes =
+        genui::widgets::routes::router(Arc::new(genui::widgets::routes::Widgets::new(
+            auth.clone(),
+            genui::widgets::customize::Customizer::from_env(),
+            genui::widgets::weather::OpenMeteo::new(),
+        )));
     let app = match qualification {
         Some(harness) => genui::http::uniform(app.merge(harness)),
         None => genui::http::uniform_with_many(
@@ -622,6 +630,8 @@ async fn main() {
             vec![
                 (genui::composer::routes::PATH, compose_routes),
                 (genui::actions::PATH, act_routes),
+                (genui::widgets::WEATHER_PATH, widget_routes.clone()),
+                (genui::widgets::CUSTOMIZE_PATH, widget_routes),
             ],
         ),
     };

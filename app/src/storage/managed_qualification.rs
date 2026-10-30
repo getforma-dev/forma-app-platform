@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 111] = [
+const SOURCES: [(&str, &[u8]); 117] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -442,6 +442,30 @@ const SOURCES: [(&str, &[u8]); 111] = [
     ),
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
     ("app/src/supervise.rs", include_bytes!("../supervise.rs")),
+    (
+        "app/src/widgets/customize.rs",
+        include_bytes!("../widgets/customize.rs"),
+    ),
+    (
+        "app/src/widgets/mod.rs",
+        include_bytes!("../widgets/mod.rs"),
+    ),
+    (
+        "app/src/widgets/routes.rs",
+        include_bytes!("../widgets/routes.rs"),
+    ),
+    (
+        "app/src/widgets/state.rs",
+        include_bytes!("../widgets/state.rs"),
+    ),
+    (
+        "app/src/widgets/tests.rs",
+        include_bytes!("../widgets/tests.rs"),
+    ),
+    (
+        "app/src/widgets/weather.rs",
+        include_bytes!("../widgets/weather.rs"),
+    ),
     (
         "contracts/fixtures/canonical-vectors.json",
         include_bytes!("../../../contracts/fixtures/canonical-vectors.json"),

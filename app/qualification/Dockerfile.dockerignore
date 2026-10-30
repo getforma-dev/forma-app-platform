@@ -42,6 +42,12 @@
 !app/src/actions/routes.rs
 !app/src/actions/tests.rs
 !app/src/sharing/mod.rs
+!app/src/widgets/customize.rs
+!app/src/widgets/mod.rs
+!app/src/widgets/routes.rs
+!app/src/widgets/state.rs
+!app/src/widgets/tests.rs
+!app/src/widgets/weather.rs
 !app/src/commands/mod.rs
 !app/src/commands/payload.rs
 !app/src/commands/routes.rs

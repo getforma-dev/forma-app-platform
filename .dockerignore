@@ -60,6 +60,15 @@ app/src/actions/**
 !app/src/sharing/
 app/src/sharing/**
 !app/src/sharing/mod.rs
+# APP-103: canvas widgets (weather, customize in words).
+!app/src/widgets/
+app/src/widgets/**
+!app/src/widgets/customize.rs
+!app/src/widgets/mod.rs
+!app/src/widgets/routes.rs
+!app/src/widgets/state.rs
+!app/src/widgets/tests.rs
+!app/src/widgets/weather.rs
 !app/src/commands/
 app/src/commands/**
 !app/src/commands/mod.rs
@@ -165,6 +174,14 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/render.ts
 !app/admin/src/canvas/actions.ts
 !app/admin/src/canvas/records.ts
+!app/admin/src/canvas/widgets/
+app/admin/src/canvas/widgets/**
+!app/admin/src/canvas/widgets/index.ts
+!app/admin/src/canvas/widgets/calculator.ts
+!app/admin/src/canvas/widgets/clock.ts
+!app/admin/src/canvas/widgets/weather.ts
+!app/admin/src/canvas/widgets/state.ts
+!app/admin/src/canvas/widgets/card.ts
 !app/admin/src/canvas-vendor/
 app/admin/src/canvas-vendor/**
 !app/admin/src/canvas-vendor/canvas-capacity.ts
@@ -184,6 +201,7 @@ app/admin/src/styles/**
 !app/admin/src/styles/app.css
 !app/admin/src/styles/canvas.css
 !app/admin/src/styles/actions.css
+!app/admin/src/styles/widgets.css
 !app/runtime/
 app/runtime/**
 !app/runtime/runtime.py

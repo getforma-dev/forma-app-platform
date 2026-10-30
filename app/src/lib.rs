@@ -26,3 +26,5 @@ pub mod roles;
 pub mod sharing;
 pub mod storage;
 pub mod supervise;
+// APP-103 (ADR-011 pitch): canvas utility widgets (weather, customize in words).
+pub mod widgets;

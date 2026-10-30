@@ -1,6 +1,9 @@
 import { h, mount, createShow, createList, createSignal, activateIslands } from '@getforma/core';
 import { submitUtterance } from './actions';
 import { startBoard } from './board';
+// APP-103: the utility widgets' interim intent-bar hook (the orchestrator
+// rewires it to the canvas command registry at merge).
+import { restoreWidgets, widgetIntent } from './widgets/index';
 
 // ADR-011 pitch canvas (APP-092, APP-094): the signed-in workspace as one
 // canvas. Every group, card, value and receipt row below is resolved by the
@@ -192,6 +195,11 @@ function IntentBar(props: IntentProps) {
         const text = input ? input.value.trim() : '';
         if (!text || busy()) return;
         setBusy(true);
+        const widget = widgetIntent(text, report);
+        if (widget) {
+          void widget.finally(() => setBusy(false));
+          return;
+        }
         void submitUtterance(text, report).finally(() => setBusy(false));
       }}
     >
@@ -559,6 +567,7 @@ function Canvas(props: CanvasProps) {
 
 await activateIslands({ IntentBar });
 startBoard(document);
+restoreWidgets();
 
 mount(
   () =>

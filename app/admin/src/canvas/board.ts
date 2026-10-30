@@ -91,6 +91,92 @@ function nextRow(): number {
   return bottom;
 }
 
+// --- APP-103: utility widgets (`./widgets`) share the canvas surface. ---
+// A widget is a client-side card with no governed data; the board only
+// mounts it, keeps it out of the app rows and tells the widgets module when
+// the member moved something (its layout is the widgets module's, DS-06).
+const widgetItems = new Set<HTMLElement>();
+const layoutListeners: Array<() => void> = [];
+
+/** The canvas host, once the board is started (null before). */
+export function canvasHost(): HTMLElement | null {
+  return canvas ? host : null;
+}
+
+/** Whether this page runs the pitch's demo mode (`GENUI_DEMO_MODE`). */
+export function isDemoCanvas(): boolean {
+  return demo();
+}
+
+/** Calls `listener` whenever the board saves the layout (after a move). */
+export function onLayoutSaved(listener: () => void): void {
+  layoutListeners.push(listener);
+}
+
+/** The canvas item the member selected last, if any. */
+export function activeCanvasItem(): HTMLElement | null {
+  return canvas?.activeItem() ?? null;
+}
+
+/**
+ * The widget row sits above the app rows (which flow down from ORIGIN), so
+ * the apps' re-flow never overlaps a widget: left to right, bottoms aligned
+ * one row gap above the first app row.
+ */
+function nextWidgetX(): number {
+  let x = ORIGIN;
+  for (const item of widgetItems) {
+    x = Math.max(x, Number(item.dataset.canvasX ?? ORIGIN) + item.offsetWidth + GAP);
+  }
+  return x;
+}
+
+/**
+ * Mounts a widget card at `at` (a restored position) or at the next free
+ * spot, and returns its canvas item (null before the board starts).
+ */
+export function mountWidget(
+  content: HTMLElement,
+  options: { id: string; title: string; width: number; minHeight: number; at?: { x: number; y: number }; focus?: boolean },
+): HTMLElement | null {
+  if (!canvas || !host) return null;
+  const item = createCanvasItem({
+    instanceId: options.id,
+    displayName: options.title,
+    preferredWidth: options.width,
+    minHeight: options.minHeight,
+    content,
+  });
+  item.classList.add('cv-item', 'cv-item-widget');
+  const x = nextWidgetX();
+  canvas.mountItem(item, options.at ?? { x, y: ORIGIN - ROW_GAP - options.minHeight }, { focus: false });
+  if (!options.at) {
+    item.classList.add('is-placing');
+    canvas.moveItemTo(item, x, ORIGIN - ROW_GAP - Math.max(item.offsetHeight, options.minHeight));
+  }
+  widgetItems.add(item);
+  host.classList.add('has-groups');
+  host.ownerDocument.getElementById('cv-empty')?.setAttribute('hidden', '');
+  if (options.focus !== false) {
+    canvas.setActive(item);
+    canvas.centerItem(item);
+  }
+  return item;
+}
+
+/** Removes a widget's canvas item. */
+export function unmountWidget(item: HTMLElement): void {
+  if (!canvas || !widgetItems.delete(item)) return;
+  canvas.removeItem(item, { selectFallback: false });
+}
+
+/** A widget item's position on the canvas. */
+export function widgetSpot(item: HTMLElement): { x: number; y: number } | null {
+  if (!canvas || !widgetItems.has(item)) return null;
+  const state = canvas.getItemState(item);
+  return { x: state.x, y: state.y };
+}
+
 function saveSoon(): void {
   if (!canvas) return;
   clearTimeout(saveTimer);
@@ -108,6 +194,7 @@ function saveSoon(): void {
       saveLayout(group.app, group.work, items);
     }
     saveCamera(canvas.getCamera());
+    for (const listener of layoutListeners) listener();
   }, 400);
 }
 
