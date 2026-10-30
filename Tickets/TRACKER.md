@@ -119,3 +119,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 111 | [APP-111: Pro plan: large documents become a cited brief and a shareable app](0-backlog/APP-111.md) | [PH08](phases/PH08.md) | S14 | AI | P1 | XL | Backlog | APP-108 |
 | 112 | [APP-112: Command parity: every slash command has a click path](0-backlog/APP-112.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-104, APP-106, APP-108, APP-109 |
 | 113 | [APP-113: Code review of the pitch (2026-10-30): findings, fixes and deferrals](0-backlog/APP-113.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | S | Backlog | APP-099, APP-100, APP-104, APP-107, APP-108 |
+| 114 | [APP-114: Landing page for getforma.dev: the product, how it connects, security, and the beta list](0-backlog/APP-114.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-096, APP-110 |
