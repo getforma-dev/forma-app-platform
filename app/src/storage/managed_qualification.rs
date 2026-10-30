@@ -138,7 +138,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v8.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v10.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -159,12 +159,16 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 117] = [
+const SOURCES: [(&str, &[u8]); 138] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
         "app/certs/rds-global-bundle.pem",
         include_bytes!("../../certs/rds-global-bundle.pem"),
+    ),
+    (
+        "app/src/actions/ledger.rs",
+        include_bytes!("../actions/ledger.rs"),
     ),
     (
         "app/src/actions/mod.rs",
@@ -173,6 +177,14 @@ const SOURCES: [(&str, &[u8]); 117] = [
     (
         "app/src/actions/prompt.rs",
         include_bytes!("../actions/prompt.rs"),
+    ),
+    (
+        "app/src/actions/receipt.rs",
+        include_bytes!("../actions/receipt.rs"),
+    ),
+    (
+        "app/src/actions/receipt_tests.rs",
+        include_bytes!("../actions/receipt_tests.rs"),
     ),
     (
         "app/src/actions/rehearsed.rs",
@@ -322,6 +334,12 @@ const SOURCES: [(&str, &[u8]); 117] = [
         include_bytes!("../imports/sandbox.rs"),
     ),
     ("app/src/lib.rs", include_bytes!("../lib.rs")),
+    ("app/src/mcp/drafts.rs", include_bytes!("../mcp/drafts.rs")),
+    ("app/src/mcp/mod.rs", include_bytes!("../mcp/mod.rs")),
+    ("app/src/mcp/tests.rs", include_bytes!("../mcp/tests.rs")),
+    ("app/src/mcp/tokens.rs", include_bytes!("../mcp/tokens.rs")),
+    ("app/src/mcp/tools.rs", include_bytes!("../mcp/tools.rs")),
+    ("app/src/origins.rs", include_bytes!("../origins.rs")),
     (
         "app/src/query/canvas.rs",
         include_bytes!("../query/canvas.rs"),
@@ -329,6 +347,10 @@ const SOURCES: [(&str, &[u8]); 117] = [
     (
         "app/src/query/canvas_display.rs",
         include_bytes!("../query/canvas_display.rs"),
+    ),
+    (
+        "app/src/query/canvas_ledger.rs",
+        include_bytes!("../query/canvas_ledger.rs"),
     ),
     (
         "app/src/query/canvas_tests.rs",
@@ -362,6 +384,26 @@ const SOURCES: [(&str, &[u8]); 117] = [
         "app/src/sharing/mod.rs",
         include_bytes!("../sharing/mod.rs"),
     ),
+    ("app/src/slack/api.rs", include_bytes!("../slack/api.rs")),
+    (
+        "app/src/slack/flows.rs",
+        include_bytes!("../slack/flows.rs"),
+    ),
+    ("app/src/slack/link.rs", include_bytes!("../slack/link.rs")),
+    ("app/src/slack/mod.rs", include_bytes!("../slack/mod.rs")),
+    (
+        "app/src/slack/notify.rs",
+        include_bytes!("../slack/notify.rs"),
+    ),
+    (
+        "app/src/slack/signature.rs",
+        include_bytes!("../slack/signature.rs"),
+    ),
+    (
+        "app/src/slack/tests.rs",
+        include_bytes!("../slack/tests.rs"),
+    ),
+    ("app/src/slack/text.rs", include_bytes!("../slack/text.rs")),
     ("app/src/storage/actions.rs", include_bytes!("actions.rs")),
     (
         "app/src/storage/actions_campaign.rs",
@@ -375,6 +417,7 @@ const SOURCES: [(&str, &[u8]); 117] = [
         "app/src/storage/admission_qualification.rs",
         include_bytes!("admission_qualification.rs"),
     ),
+    ("app/src/storage/agents.rs", include_bytes!("agents.rs")),
     (
         "app/src/storage/authorization.rs",
         include_bytes!("authorization.rs"),
@@ -410,6 +453,10 @@ const SOURCES: [(&str, &[u8]); 117] = [
         "app/src/storage/managed_qualification/tests.rs",
         include_bytes!("managed_qualification/tests.rs"),
     ),
+    (
+        "app/src/storage/mcp_campaign.rs",
+        include_bytes!("mcp_campaign.rs"),
+    ),
     ("app/src/storage/mod.rs", include_bytes!("mod.rs")),
     (
         "app/src/storage/pitch_qualification.rs",
@@ -439,6 +486,10 @@ const SOURCES: [(&str, &[u8]); 117] = [
     (
         "app/src/storage/sharing_qualification.rs",
         include_bytes!("sharing_qualification.rs"),
+    ),
+    (
+        "app/src/storage/slack_campaign.rs",
+        include_bytes!("slack_campaign.rs"),
     ),
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
     ("app/src/supervise.rs", include_bytes!("../supervise.rs")),

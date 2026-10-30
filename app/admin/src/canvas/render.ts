@@ -5,6 +5,7 @@
 // other state is built from a message alone (ADR-011 I3).
 import { chartFigure, chartOf } from './chart';
 import { buildRecordsCard, type RecordsCardJson } from './records';
+import { buildLedgerCard, type LedgerCardJson } from './ledger';
 import {
   amount, columnTypes, decimalValue, integer, label, money, receivedAt, when,
   type ColumnType, type Shown,
@@ -336,7 +337,7 @@ export type OriginJson = { id: string; kind: string; text: string };
 export type GroupJson = {
   id: string; app: string; work: string; app_card: string; title: string; label: string; origins?: OriginJson[];
   href: string; csrf: string; window_start: string; window_end: string; destination: string;
-  cards: CardJson[]; forms: FormJson[]; records?: RecordsCardJson[];
+  cards: CardJson[]; forms: FormJson[]; records?: RecordsCardJson[]; ledger?: LedgerCardJson[];
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -435,5 +436,6 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
   }
   for (const form of group.forms) section.append(buildFormCard(document_, form));
   for (const card of group.records ?? []) section.append(buildRecordsCard(document_, card));
+  for (const card of group.ledger ?? []) section.append(buildLedgerCard(document_, card));
   return section;
 }

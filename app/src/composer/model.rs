@@ -93,9 +93,37 @@ impl ModelError {
 
 pub type Completion<'a> = Pin<Box<dyn Future<Output = Result<ModelReply, ModelError>> + Send + 'a>>;
 
+/// An image sent with a request (APP-102, the receipt): the sniffed media
+/// type and the bytes, borrowed and held in memory only. `Debug` prints the
+/// type and the length, never the bytes.
+pub struct ImageInput<'a> {
+    pub media_type: &'static str,
+    pub bytes: &'a [u8],
+}
+impl fmt::Debug for ImageInput<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "ImageInput({}, {} bytes)",
+            self.media_type,
+            self.bytes.len()
+        )
+    }
+}
+
 /// What completes a request: the HTTPS client in the binary, stubs in tests.
 pub trait Model: Send + Sync {
     fn complete<'a>(&'a self, request: &'a ModelRequest) -> Completion<'a>;
+    /// `request` with `image` before the user text (one Messages image
+    /// content block, base64). A model without vision refuses.
+    fn complete_with_image<'a>(
+        &'a self,
+        request: &'a ModelRequest,
+        image: &'a ImageInput<'a>,
+    ) -> Completion<'a> {
+        let _ = (request, image);
+        Box::pin(async { Err(ModelError::Refused) })
+    }
 }
 
 /// The key, redacted everywhere it could be printed.
@@ -234,6 +262,29 @@ fn parse_reply(bytes: &[u8]) -> Option<ModelReply> {
 
 impl Model for Anthropic {
     fn complete<'a>(&'a self, request: &'a ModelRequest) -> Completion<'a> {
+        self.send(request, Value::String(request.user.clone()))
+    }
+    fn complete_with_image<'a>(
+        &'a self,
+        request: &'a ModelRequest,
+        image: &'a ImageInput<'a>,
+    ) -> Completion<'a> {
+        use base64::Engine as _;
+        let data = base64::engine::general_purpose::STANDARD.encode(image.bytes);
+        self.send(
+            request,
+            json!([
+                {"type": "image", "source": {"type": "base64", "media_type": image.media_type, "data": data}},
+                {"type": "text", "text": request.user},
+            ]),
+        )
+    }
+}
+
+impl Anthropic {
+    /// One call with `content` as the user message's content (text, or an
+    /// image block and text); the body is never logged.
+    fn send<'a>(&'a self, request: &'a ModelRequest, content: Value) -> Completion<'a> {
         Box::pin(async move {
             let started = Instant::now();
             let deadline = started + request.budget;
@@ -242,7 +293,7 @@ impl Model for Anthropic {
                 "max_tokens": request.max_tokens,
                 "temperature": 0,
                 "system": request.system,
-                "messages": [{"role": "user", "content": request.user}],
+                "messages": [{"role": "user", "content": content}],
             });
             let mut outcome = Err(ModelError::Unavailable);
             for attempt in 0..MAX_ATTEMPTS {

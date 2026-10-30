@@ -11,7 +11,7 @@ use super::{
 use crate::storage::{Member, RecordRow};
 use serde_json::{json, Value};
 
-fn expense_app() -> CatalogApp {
+pub(super) fn expense_app() -> CatalogApp {
     let field = |id: &str, spec: Value| (id.to_owned(), spec);
     CatalogApp {
         app: "00000000-0000-4000-8000-000000001681".into(),
@@ -260,6 +260,27 @@ fn approvers_match_display_names_only_and_targets_match_record_words() {
     )
     .unwrap();
     assert_eq!(by_id.record_id, "00000000-0000-4000-8000-0000000000a3");
+    let older_by_id = match_target(
+        Some("00000000-0000-4000-8000-0000000000a2"),
+        &records,
+        "status",
+        &["submitted"],
+    )
+    .unwrap();
+    assert_eq!(
+        older_by_id.record_id,
+        "00000000-0000-4000-8000-0000000000a2"
+    );
+    assert!(
+        match_target(
+            Some("00000000-0000-4000-8000-0000000000ff"),
+            &records,
+            "status",
+            &["submitted"],
+        )
+        .is_none(),
+        "an unknown id never falls back to the newest"
+    );
     assert!(match_target(Some("x"), &records, "status", &["rejected"]).is_none());
 }
 
@@ -278,7 +299,7 @@ fn the_request_body_is_an_utterance_or_a_structured_decision() {
             assert_eq!(status, "approved");
             assert_eq!(note.as_deref(), Some("ok"));
         }
-        Body::Utterance(_) => panic!("structured"),
+        Body::Utterance(_) | Body::Receipt { .. } => panic!("structured"),
     }
     assert!(body(
         br#"{"decide":{"app_id":"x","work_id":"y","record_id":"z","status":"approved"}}"#
