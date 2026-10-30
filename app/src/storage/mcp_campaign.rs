@@ -1048,8 +1048,9 @@ async fn campaign() {
         scalar(&fixture, &format!("SELECT count(*) FROM genui.agent_attributions WHERE work_id='{composed_work}' AND record_id IS NULL")).await,
         1
     );
-    // Outside the demo organization and without a model key: unavailable,
-    // before anything of the member's context is read.
+    // Outside the demo organization and without a model key: the instant
+    // matcher runs in every organization (APP-101), and a member with nothing
+    // composable gets the uniform not_found; nothing is written.
     let refused = client
         .call(
             &outsider_token,
@@ -1057,10 +1058,10 @@ async fn campaign() {
             json!({"description": "expense claims"}),
         )
         .await;
-    assert_eq!(error_code(&refused), "composer_unavailable");
+    assert_eq!(error_code(&refused), "not_found");
     check(
         &mut checks,
-        &format!("forma_compose_app runs the composer route's compose_for (demo organization, rehearsed routing, no model): the expense app retrieved as a new saved work in {} ms, app.placed live on Diego's stream, the work attributed to his token; outside the demo organization without a model key the tool answers composer_unavailable and writes nothing", timings["compose_ms"]),
+        &format!("forma_compose_app runs the composer route's compose_for (demo organization, rehearsed routing, no model): the expense app retrieved as a new saved work in {} ms, app.placed live on Diego's stream, the work attributed to his token; an outsider with nothing composable gets the uniform not_found and nothing is written", timings["compose_ms"]),
     );
     drop(diego_stream);
 

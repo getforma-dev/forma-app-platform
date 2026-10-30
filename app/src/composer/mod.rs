@@ -234,12 +234,23 @@ impl Composer {
         if library.is_empty() {
             return Ok((Decision::Generate, "empty_library"));
         }
+        let mut nearest = None;
         if self.matcher {
-            if let Some(index) = matcher::pick(intent, library, exclude).pick {
+            let found = matcher::pick(intent, library, exclude);
+            if let Some(index) = found.pick {
                 return Ok((Decision::Retrieve { index }, "matched"));
             }
+            nearest = found.ranked.first().copied();
         }
-        let model = self.model.as_ref().ok_or(ModelError::Unavailable)?;
+        let Some(model) = self.model.as_ref() else {
+            // No model to settle a near tie (APP-098 DS-03): the matcher's
+            // best candidate, still only an app from the catalog, labeled
+            // retrieved; with no candidate at all the caller is refused.
+            return match nearest {
+                Some(index) => Ok((Decision::Retrieve { index }, "nearest")),
+                None => Err(ModelError::Unavailable),
+            };
+        };
         let request = ModelRequest {
             model: self.router_model.clone(),
             system: prompt::ROUTER_SYSTEM.to_owned(),
