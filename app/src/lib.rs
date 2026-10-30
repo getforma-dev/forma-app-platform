@@ -8,6 +8,7 @@ pub mod auth;
 pub mod auth_qualification;
 // APP-013: the declared record command route, payload digest and record page.
 pub mod commands;
+pub mod composer;
 pub mod config;
 pub mod http;
 pub mod imports;

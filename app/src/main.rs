@@ -573,13 +573,22 @@ async fn main() {
     // for its isolated run; the two never share a router.
     // APP-076 G8: the uniform 404 for unknown paths and method mismatches
     // alike (no `Allow`), and the D7.14 handler deadline.
-    let app = genui::http::uniform(match qualification {
-        Some(harness) => app.merge(harness),
-        None => app
-            .merge(auth::routes::router(auth.clone()))
-            .merge(commands::routes::router(command_routes))
-            .merge(work_routes),
-    });
+    // APP-093 (ADR-011): the composer route, under its own deadline; the
+    // model key comes from the environment alone (absent: the route answers
+    // `composer_unavailable` and nothing else changes).
+    let compose_routes = genui::composer::routes::router(Arc::new(
+        genui::composer::routes::Compose::new(auth.clone(), genui::composer::Composer::from_env()),
+    ));
+    let app = match qualification {
+        Some(harness) => genui::http::uniform(app.merge(harness)),
+        None => genui::http::uniform_with(
+            app.merge(auth::routes::router(auth.clone()))
+                .merge(commands::routes::router(command_routes))
+                .merge(work_routes),
+            genui::composer::routes::PATH,
+            compose_routes,
+        ),
+    };
 
     // ADR-006 expiry sweep: idle and expired records are destroyed and their
     // provider refresh tokens revoked.

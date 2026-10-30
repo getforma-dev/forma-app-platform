@@ -36,6 +36,12 @@ export const CAPABILITY_SECRET_ID_ENV = 'GENUI_PROVIDER_CAPABILITY_SECRET_ID';
 // service reads (GENUI_AUTH_CONFIG_FILE, GENUI_IDENTITY_REGISTRY_FILE).
 export const AUTH_CONFIGURATION_ENV = 'GENUI_AUTH_CONFIGURATION_JSON';
 export const AUTH_CONFIGURATION_SECRET_ID_ENV = 'GENUI_AUTH_CONFIGURATION_SECRET_ID';
+// APP-093 (ADR-011 §4): the composer's model key, one more secret injected into the
+// service container only, as the plain environment variable the Rust service reads
+// (composer/model.rs KEY_ENV; runtime.py serve() passes its environment through).
+// Written by the operator (PutSecretValue from a pipe, never argv); the initial `{}`
+// is "no key": the composer answers composer_unavailable and nothing else changes.
+export const COMPOSER_KEY_ENV = 'ANTHROPIC_API_KEY';
 // ADR-003 amendment 2026-10-30 (managed invitations; APP-076 G2), as revised the same
 // day after FormaStack's answers: two inputs reach the managed operator task only.
 // FormaStack's existing tenant-scoped fAuth management secret (for Northstar
@@ -199,6 +205,19 @@ export class GenuiFoundation extends Stack {
       description: 'GenUI hosted sign-in configuration and identity registry: written by the operator, injected into the service task only (APP-078 B1)',
       encryptionKey: authConfigurationKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
     });
+    // APP-093 (ADR-011 §4): the composer's model key. The operator writes it with
+    // PutSecretValue (the value piped from its private file, never argv or a log);
+    // ECS injects it into the service container only, under COMPOSER_KEY_ENV; the
+    // service reads that variable alone and treats the initial `{}` as no key. Its
+    // own retained KMS key, like the two secrets above; a new value reaches the
+    // service at its next task start (force a new deployment after a write).
+    const composerModelKey = new kms.Key(this, 'ComposerModelKey', {
+      description: 'GenUI composer model key (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const composerModel = new secretsmanager.Secret(this, 'ComposerModel', {
+      description: 'GenUI composer model key: written by the operator, injected into the service task only (APP-093, ADR-011)',
+      encryptionKey: composerModelKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
+    });
     const task = new ecs.FargateTaskDefinition(this, 'Task', { cpu: 2048, memoryLimitMiB: 8192, taskRole, executionRole, runtimePlatform });
     task.addVolume({ name: 'runtime-config' });
     const log = new logs.LogGroup(this, 'Logs', { retention: logs.RetentionDays.ONE_MONTH, removalPolicy: RemovalPolicy.RETAIN });
@@ -222,6 +241,7 @@ export class GenuiFoundation extends Stack {
       secrets: {
         [CAPABILITY_SECRET_ENV]: ecs.Secret.fromSecretsManager(capabilitySecret),
         [AUTH_CONFIGURATION_ENV]: ecs.Secret.fromSecretsManager(authConfiguration),
+        [COMPOSER_KEY_ENV]: ecs.Secret.fromSecretsManager(composerModel),
       },
       healthCheck: { command: ['CMD', 'python3', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health/live', timeout=2).read()"], interval: Duration.seconds(30), timeout: Duration.seconds(5), retries: 3, startPeriod: Duration.seconds(60) },
     });
@@ -382,9 +402,9 @@ export class GenuiFoundation extends Stack {
     // APP-078 B1: the same two actions on the auth configuration secret, so the
     // operator channel can read and rewrite it; the operator's own credentials do
     // the window's PutSecretValue from the composed private file.
-    operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], resources: [capabilitySecret.secretArn, authConfiguration.secretArn] }));
+    operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], resources: [capabilitySecret.secretArn, authConfiguration.secretArn, composerModel.secretArn] }));
     operatorRole.addToPolicy(new iam.PolicyStatement({
-      actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn, authConfigurationKey.keyArn],
+      actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn, authConfigurationKey.keyArn, composerModelKey.keyArn],
       conditions: { StringEquals: { 'kms:ViaService': `secretsmanager.${this.region}.amazonaws.com` } },
     }));
     // ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's
@@ -481,6 +501,8 @@ export class GenuiFoundation extends Stack {
     new CfnOutput(this, 'ProviderCapabilitySecretArn', { value: capabilitySecret.secretArn });
     // The secret the window's PutSecretValue targets (an identifier, not a value).
     new CfnOutput(this, 'AuthConfigurationSecretArn', { value: authConfiguration.secretArn });
+    // APP-093: the secret the operator's PutSecretValue of the composer model key targets (an identifier, not a value).
+    new CfnOutput(this, 'ComposerModelSecretArn', { value: composerModel.secretArn });
     // The operator host's invitation-input target (an identifier, not a value; APP-078 runbook 15.3).
     new CfnOutput(this, 'OperatorInvitationInputSecretArn', { value: invitationInput.secretArn });
     // APP-076 G11: the deny-all rollback revision on the same image (`PREVIOUS_TD`).

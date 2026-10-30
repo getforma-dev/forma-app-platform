@@ -37,6 +37,13 @@ impl TrustedRequest {
     pub fn organization(&self) -> &str {
         &self.organization
     }
+    /// The member the session resolved to (read-only; the composer's
+    /// per-member rate-limit key and its structured log, APP-093). Authority
+    /// still comes only from the storage operations that take the whole
+    /// request.
+    pub fn principal(&self) -> &str {
+        &self.principal
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

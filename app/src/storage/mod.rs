@@ -9,6 +9,7 @@ mod admission;
 mod authorization;
 mod catalog;
 mod commands;
+mod composer;
 mod definitions;
 mod pool;
 mod queries;
@@ -25,6 +26,10 @@ pub use commands::{
     RecordCommand, RecordDetail, RecordField, RecoveryView, COMMAND_COMMITTED,
     COMMAND_HANDLER_DEADLINE, MAX_COMMAND_VALUES, RETRY_HORIZON_SECONDS,
 };
+pub use composer::{
+    bindings as composer_bindings, AuthoringApp, ComposerContext, LibraryApp, LibraryView,
+    PublishedInput, ReadableSource, CONTEXT_DEADLINE as COMPOSER_CONTEXT_DEADLINE,
+};
 pub use definitions::{
     CurrentRevision, DefinitionDetail, DefinitionRevision, InputContract, PublicationDetail,
     PublishResult, RecordSchema, SavedWork, SavedWorkDetail, WorkBinding, MAX_CANONICAL_BYTES,
@@ -32,7 +37,7 @@ pub use definitions::{
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use queries::{
     parse_parameters, query_digests, OpenableWork, Parameters, QueryRun, RunSource, WorkOutline,
-    WorkView, QUERY_HANDLER_DEADLINE,
+    WorkView, QUALIFIED_OPERATORS, QUERY_HANDLER_DEADLINE,
 };
 pub use registry::RegistryIdentity;
 pub use sessions::{
@@ -110,6 +115,8 @@ fn valid_id(value: &str) -> bool {
 pub(crate) mod admission_qualification;
 #[cfg(test)]
 pub(crate) mod command_qualification;
+#[cfg(test)]
+mod composer_qualification;
 #[cfg(test)]
 mod definition_qualification;
 #[cfg(test)]
