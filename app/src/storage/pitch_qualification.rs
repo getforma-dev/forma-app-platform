@@ -545,7 +545,16 @@ async fn campaign() {
     assert_eq!(expense["can_write"], true);
     // The composer's context prefers her unpublished shell and never a
     // library app (review M2), with or without library ownership.
-    let maya_request = crate::storage::definition_qualification::request(&stores, ORG, &maya_id, 1);
+    // Maya as storage sees her: the identity the loopback issuer signed in.
+    let maya_request = TrustedRequest {
+        organization: ORG.into(),
+        principal: maya_id.clone(),
+        epoch: 1,
+        issuer: GATEWASM.into(),
+        provider_tenant: harness::NORTHSTAR_TENANT.into(),
+        provider_subject: maya_subject.clone(),
+        registry_sha256: stores.registry_identity().sha256.clone(),
+    };
     let context = stores
         .workspace
         .composer_context(&maya_request)
@@ -583,7 +592,7 @@ async fn campaign() {
         context.authoring, None,
         "owning only a library app: nothing to draft on"
     );
-    c.fixture.sql(&format!("INSERT INTO genui.app_permissions VALUES ('{ORG}','{maya_id}','{AUTHORING_APP}','edit_definition'),('{ORG}','{maya_id}','{AUTHORING_APP}','run')"), "genui");
+    c.fixture.sql(&format!("INSERT INTO genui.app_permissions VALUES ('{ORG}','{maya_id}','{AUTHORING_APP}','discover'),('{ORG}','{maya_id}','{AUTHORING_APP}','edit_definition'),('{ORG}','{maya_id}','{AUTHORING_APP}','run')"), "genui");
     c.fixture.sql(&format!("UPDATE genui.apps SET owner_principal_id='00000000-0000-4000-8000-000000000066' WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}'"), "genui");
     c.fixture.sql(&format!("DELETE FROM genui.app_permissions WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND principal_id='{maya_id}' AND permission='edit_definition'"), "genui");
     check(
@@ -694,10 +703,10 @@ async fn campaign() {
             assert_eq!(receipt["work_id"], work_id);
             if index == 0 {
                 samples.push(ms(run.elapsed));
-                assert_eq!(
-                    rows[0][1],
-                    json!("240"),
-                    "count of the 240 synthetic claims"
+                let cells = rows[0].as_array().unwrap();
+                assert!(
+                    cells.contains(&json!("240")) && cells.contains(&json!("26262004")),
+                    "count 240 and sum 26,262,004 minor units of the synthetic claims: {rows}"
                 );
             }
             receipts.insert(view.clone(), receipt);
@@ -776,7 +785,9 @@ async fn campaign() {
         .await;
     assert_eq!(committed.status, StatusCode::OK, "{}", committed.text());
     let outcome = committed.json();
-    assert_eq!(outcome["status"], "committed", "{outcome}");
+    assert_eq!(outcome["state"], "committed", "{outcome}");
+    assert_eq!(outcome["record_version"], 1);
+    assert!(outcome["audit_event_id"].as_str().is_some());
     expect_event(&mut mate_stream, "record.committed", EXPENSE_APP, &work_id).await;
     expect_event(&mut maya_stream, "record.committed", EXPENSE_APP, &work_id).await;
     let replayed = stand
@@ -789,7 +800,11 @@ async fn campaign() {
         )
         .await;
     assert_eq!(replayed.status, StatusCode::OK);
-    assert_eq!(replayed.json()["status"], "replayed", "{}", replayed.text());
+    assert_eq!(
+        replayed.json(),
+        outcome,
+        "the same outcome (audit event, record version): replayed, not duplicated"
+    );
     timings.insert("command_commit_ms".into(), json!(ms(committed.elapsed)));
     check(
         &mut checks,
@@ -860,7 +875,10 @@ async fn campaign() {
         generated_run.text()
     );
     let (rows, _) = receipted(&generated_run.text());
-    assert_eq!(rows[0][1], json!("240"));
+    assert!(
+        rows[0].as_array().unwrap().contains(&json!("240")),
+        "{rows}"
+    );
     // The library app's newest publication is untouched (review M2).
     let newest = text(&c.fixture, &format!("SELECT definition_digest::text FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' ORDER BY publication_sequence DESC LIMIT 1")).await;
     assert_eq!(newest, expense["definition_digest"]);

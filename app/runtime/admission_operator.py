@@ -1353,8 +1353,8 @@ def grant_library_access(c, args):
       library and the composer may instantiate any entry (`retrieved`);
     - with `--authoring-app <uuid>`, creates that app owned by the member (`--space`, default the library's
       space) when it does not exist, refuses an existing app owned by someone else, and grants the member
-      `edit_definition` and `run` on it, so the composer may draft, owner-publish and save (`adapted`,
-      `generated`).
+      `discover`, `edit_definition` and `run` on it, so the composer may draft, owner-publish and save
+      (`adapted`, `generated`) and the member's canvas lists what it saved there.
 
     Every row is `ON CONFLICT DO NOTHING` and every inserted row is one `permission.granted` event on the
     operator chain (exactly `grant_permission`'s record, with the app id and, for a work row, the work id);
@@ -1403,7 +1403,9 @@ def grant_library_access(c, args):
             created = True
         else:
             require(owner[0] == principal, "app_owner_mismatch")
-        for permission in ("edit_definition", "run"):
+        # edit_definition and run: draft, owner-publish and save; discover: the works the composer
+        # saves on it are listed on the member's canvas (openable_works needs discover on the app).
+        for permission in ("discover", "edit_definition", "run"):
             grant("app_permissions", ("organization_id", "principal_id", "app_id", "permission"), (org, principal, app, permission), app=app)
         authoring = {"app_id": app, "created": created, "owner_principal_id": principal}
     c.commit()
