@@ -194,10 +194,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -461,10 +491,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -719,10 +779,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -961,10 +1051,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -1219,10 +1339,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -1480,10 +1630,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -1727,10 +1907,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -1989,10 +2199,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -2235,10 +2475,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -2472,10 +2742,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -2721,10 +3021,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -2973,10 +3303,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -3213,10 +3573,40 @@
       "commands": [
         {
           "id": "record_decision",
+          "record_schema_id": "decision",
           "operation": "create",
           "writable_fields": [
             "status",
             "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "needs_context",
+                "reviewed"
+              ]
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": false
+            }
           ]
         }
       ],
@@ -3294,6 +3684,379 @@
         }
       ],
       "fixture_sha256": "c7642ca5bcd14a29b79617011bdcdfebb60bd119553ba9fc2451d24b8fe29192"
+    },
+    {
+      "library_id": "expense-claims",
+      "fixture": "expense-claims.json",
+      "title": "Expense claims",
+      "purpose": "File an expense in your own words, send it to your manager for approval, and watch the decision land live: every claim is a typed record, every decision an audited command.",
+      "routing": {
+        "description": "Expense claims with manager approval: file a claim (amount, merchant, category, date, note), share it with an approver, approve or reject it; the claims list updates live.",
+        "intent_examples": [
+          "I spent $86 on a client dinner at Nobu, Sarah approves my expenses",
+          "file an expense",
+          "submit a reimbursement for my flight",
+          "approve the Nobu dinner",
+          "what is waiting for my approval"
+        ],
+        "negative_examples": [
+          "vendor invoices",
+          "payroll",
+          "bank statement",
+          "budget vs actual",
+          "sales pipeline"
+        ],
+        "capabilities": [
+          "finance.expenses.claim",
+          "finance.expenses.approve",
+          "records.create",
+          "records.transition"
+        ]
+      },
+      "app_id": "00000000-0000-4000-8000-000000001681",
+      "definition_revision_id": "00000000-0000-4000-8000-000000001682",
+      "definition_digest": "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de",
+      "publication_id": "00000000-0000-4000-8000-000000001683",
+      "work_id": "00000000-0000-4000-8000-000000001684",
+      "collection_id": "00000000-0000-4000-8000-000000001685",
+      "inputs": [
+        {
+          "id": "expense_claims",
+          "kind": "source",
+          "contract_id": "expense_claims_v1",
+          "fields": [
+            {
+              "id": "expense_id",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "type": "timestamp",
+              "nullable": false
+            },
+            {
+              "id": "employee",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "vendor",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "category",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "travel",
+                "software",
+                "equipment",
+                "meals",
+                "services",
+                "facilities"
+              ]
+            },
+            {
+              "id": "amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "approved",
+                "rejected",
+                "needs_receipt"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "claims",
+          "kind": "records",
+          "contract_id": "expense_claim_v1",
+          "fields": [
+            {
+              "id": "amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "merchant",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "category",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "meals",
+                "travel",
+                "software",
+                "office",
+                "other"
+              ]
+            },
+            {
+              "id": "spent_on",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "approved",
+                "rejected"
+              ]
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "totals",
+          "kind": "summary",
+          "title": "Claims to date",
+          "input": "expense_claims",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "title": "Past claims by status",
+          "input": "expense_claims",
+          "operators": [
+            "aggregate"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "recent",
+          "kind": "table",
+          "title": "Recent past claims",
+          "input": "expense_claims",
+          "operators": [
+            "limit",
+            "project",
+            "sort"
+          ],
+          "parameters": [
+            "window"
+          ],
+          "runnable": true
+        },
+        {
+          "id": "submit",
+          "kind": "form",
+          "title": "File an expense claim",
+          "runnable": false,
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "title": "How approval works",
+          "runnable": false
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "expense_claim",
+          "operation": "create",
+          "writable_fields": [
+            "amount",
+            "merchant",
+            "category",
+            "spent_on",
+            "note",
+            "status"
+          ],
+          "transitions": []
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "expense_claim",
+          "operation": "create",
+          "writable_fields": [
+            "status",
+            "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "approved"
+            },
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "rejected"
+            }
+          ]
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "expense_claim",
+          "version": 1,
+          "fields": [
+            {
+              "id": "amount",
+              "type": "money",
+              "nullable": false,
+              "currency": "USD"
+            },
+            {
+              "id": "merchant",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "category",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "meals",
+                "travel",
+                "software",
+                "office",
+                "other"
+              ]
+            },
+            {
+              "id": "spent_on",
+              "type": "date",
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "type": "text",
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "type": "enum",
+              "nullable": false,
+              "values": [
+                "submitted",
+                "approved",
+                "rejected"
+              ]
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "input_id": "expense_claims",
+          "source_id": "00000000-0000-4000-8000-000000003000",
+          "revision_id": "00000000-0000-4000-8000-000000003001",
+          "csv": "data/expense_claims.csv",
+          "content_digest": "sha256:c26d098d3c20c83bd282d2fa3e18e8681aa997022cde88267d2e1b275f7d8fd1",
+          "normalized_digest": "sha256:e1b791d22c31487f4345c14e3007b6a945e039198707e1b620822f8d43aea6ca",
+          "row_count": 240,
+          "input_contract": {
+            "id": "expense_claims",
+            "contract_id": "expense_claims_v1",
+            "contract_version": 1,
+            "kind": "source",
+            "fields": [
+              {
+                "id": "expense_id",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "time",
+                "value_type": {
+                  "type": "timestamp"
+                },
+                "nullable": false
+              },
+              {
+                "id": "employee",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "vendor",
+                "value_type": {
+                  "type": "text"
+                },
+                "nullable": false
+              },
+              {
+                "id": "category",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "travel",
+                    "software",
+                    "equipment",
+                    "meals",
+                    "services",
+                    "facilities"
+                  ]
+                },
+                "nullable": false
+              },
+              {
+                "id": "amount",
+                "value_type": {
+                  "type": "money",
+                  "currency": "USD",
+                  "minor_unit_exponent": 2
+                },
+                "nullable": false
+              },
+              {
+                "id": "status",
+                "value_type": {
+                  "type": "enum",
+                  "values": [
+                    "submitted",
+                    "approved",
+                    "rejected",
+                    "needs_receipt"
+                  ]
+                },
+                "nullable": false
+              }
+            ]
+          }
+        }
+      ],
+      "fixture_sha256": "446e5485a97b1a261b4c5ca6ee6836aee99f43e14140e61f3b41a3dfc97bd059"
     }
   ]
 }

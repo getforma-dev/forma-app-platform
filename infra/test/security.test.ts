@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { readFileSync } from 'node:fs';
-import { ALB_IDLE_TIMEOUT_SECONDS, AUTH_CONFIGURATION_ENV, DEMO_ORGANIZATIONS_ENV, DEMO_ORGANIZATION_ID, AUTH_CONFIGURATION_SECRET_ID_ENV, CANVAS_EVENTS_URL, CANVAS_EVENTS_URL_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, COMPOSE_DEADLINE_SECONDS, COMPOSER_KEY_ENV, GenuiFoundation, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_URL_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
+import { ALB_IDLE_TIMEOUT_SECONDS, AUTH_CONFIGURATION_ENV, DEMO_MODE_ENV, DEMO_ORGANIZATIONS_ENV, DEMO_ORGANIZATION_ID, AUTH_CONFIGURATION_SECRET_ID_ENV, CANVAS_EVENTS_URL, CANVAS_EVENTS_URL_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, COMPOSE_DEADLINE_SECONDS, COMPOSER_KEY_ENV, GenuiFoundation, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_URL_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
 
 const template = Template.fromStack(new GenuiFoundation(new App(), 'SecurityQualification'));
 const document = template.toJSON();
@@ -526,6 +526,7 @@ test('the load balancer idles longer than the composer route and the live stream
     const environment = (definition.Properties.ContainerDefinitions[0].Environment ?? []).map((value: any) => value.Name);
     assert.equal(environment.includes(CANVAS_EVENTS_URL_ENV), false, id);
     assert.equal(environment.includes(DEMO_ORGANIZATIONS_ENV), false, id);
+    assert.equal(environment.includes(DEMO_MODE_ENV), false, id);
   }
 });
 
@@ -533,6 +534,7 @@ test('demo mode names the synthetic canary organization only, never the beta org
   const [, task] = one('AWS::ECS::TaskDefinition', 'Task');
   const environment = Object.fromEntries(task.Properties.ContainerDefinitions[0].Environment.map((value: any) => [value.Name, value.Value]));
   assert.equal(environment[DEMO_ORGANIZATIONS_ENV], DEMO_ORGANIZATION_ID);
+  assert.equal(environment[DEMO_MODE_ENV], '1');
   const listed = environment[DEMO_ORGANIZATIONS_ENV].split(',');
   assert.deepEqual(listed, ['00000000-0000-4000-8000-000000000002']);
   assert.equal(listed.includes('00000000-0000-4000-8000-000000000001'), false, 'the beta organization behaves exactly as without demo mode');

@@ -4,6 +4,7 @@
 // value only from a released query result that carries its receipt; every
 // other state is built from a message alone (ADR-011 I3).
 import { chartFigure, chartOf } from './chart';
+import { buildRecordsCard, type RecordsCardJson } from './records';
 import {
   amount, columnTypes, decimalValue, integer, label, money, receivedAt, when,
   type ColumnType, type Shown,
@@ -335,7 +336,7 @@ export type OriginJson = { id: string; kind: string; text: string };
 export type GroupJson = {
   id: string; app: string; work: string; app_card: string; title: string; label: string; origins?: OriginJson[];
   href: string; csrf: string; window_start: string; window_end: string; destination: string;
-  cards: CardJson[]; forms: FormJson[];
+  cards: CardJson[]; forms: FormJson[]; records?: RecordsCardJson[];
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -433,5 +434,6 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
     el(document_, 'div', { class: 'cv-card-body', 'data-body': '' }, el(document_, 'p', { class: 'cv-message', role: 'status' }, card.message))));
   }
   for (const form of group.forms) section.append(buildFormCard(document_, form));
+  for (const card of group.records ?? []) section.append(buildRecordsCard(document_, card));
   return section;
 }

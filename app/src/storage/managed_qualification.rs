@@ -125,7 +125,7 @@ const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "seed_library_sha256",
         "contracts/fixtures/library/catalog.json",
-        "f29233e0594a4faec5c78dcf990f6b1f05c0297679bec91427b72c7c15277b5e",
+        "8142befce343434dc2f3684698416b52a4492ce85cc6943cacf35cb5d5d1c860",
     ),
 ];
 /// The shared cases' checks a pass requires, in order (`qualification_cases`).
@@ -159,12 +159,36 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 101] = [
+const SOURCES: [(&str, &[u8]); 111] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
         "app/certs/rds-global-bundle.pem",
         include_bytes!("../../certs/rds-global-bundle.pem"),
+    ),
+    (
+        "app/src/actions/mod.rs",
+        include_bytes!("../actions/mod.rs"),
+    ),
+    (
+        "app/src/actions/prompt.rs",
+        include_bytes!("../actions/prompt.rs"),
+    ),
+    (
+        "app/src/actions/rehearsed.rs",
+        include_bytes!("../actions/rehearsed.rs"),
+    ),
+    (
+        "app/src/actions/resolve.rs",
+        include_bytes!("../actions/resolve.rs"),
+    ),
+    (
+        "app/src/actions/routes.rs",
+        include_bytes!("../actions/routes.rs"),
+    ),
+    (
+        "app/src/actions/tests.rs",
+        include_bytes!("../actions/tests.rs"),
     ),
     (
         "app/src/admission/canonical.rs",
@@ -272,6 +296,8 @@ const SOURCES: [(&str, &[u8]); 101] = [
         include_bytes!("../composer/tests.rs"),
     ),
     ("app/src/config.rs", include_bytes!("../config.rs")),
+    ("app/src/demo.rs", include_bytes!("../demo.rs")),
+    ("app/src/directory.rs", include_bytes!("../directory.rs")),
     ("app/src/events/mod.rs", include_bytes!("../events/mod.rs")),
     (
         "app/src/events/routes.rs",
@@ -335,6 +361,11 @@ const SOURCES: [(&str, &[u8]); 101] = [
     (
         "app/src/sharing/mod.rs",
         include_bytes!("../sharing/mod.rs"),
+    ),
+    ("app/src/storage/actions.rs", include_bytes!("actions.rs")),
+    (
+        "app/src/storage/actions_campaign.rs",
+        include_bytes!("actions_campaign.rs"),
     ),
     (
         "app/src/storage/admission.rs",

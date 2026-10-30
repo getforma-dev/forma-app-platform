@@ -1,0 +1,160 @@
+/* ADR-011 scenarios (APP-093/APP-095): the confirmation card the action path
+   shows above the intent bar, and the records card (a work's current records
+   with Approve / Reject on pending ones). Tokens come from canvas.css; state
+   is never color alone (every chip and button carries its word). */
+
+/* --- Confirmation card --- */
+.cv-confirm-host {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.cv-confirm-host:empty { display: none; }
+.cv-confirm {
+  pointer-events: auto;
+  width: min(720px, 100%);
+  margin: 0 0 0.5rem;
+  border-color: var(--cv-accent);
+  box-shadow: var(--cv-shadow-lift), 0 0 0 3px var(--cv-accent-soft);
+  animation: cv-confirm-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes cv-confirm-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.cv-confirm-quote {
+  margin: 0.25rem 0 0.75rem;
+  color: var(--cv-muted);
+  font-style: italic;
+}
+.cv-confirm-values {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.6rem 1rem;
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--cv-hairline);
+  border-radius: 12px;
+  background: var(--cv-sunken, var(--cv-canvas));
+}
+.cv-confirm-values div { min-width: 0; }
+.cv-confirm-values dt {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cv-faint);
+}
+.cv-confirm-values dd {
+  margin: 0.1rem 0 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.cv-confirm-values dd.num { font-variant-numeric: tabular-nums; font-size: 1.1rem; }
+.cv-confirm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+}
+.cv-approver-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--cv-ready);
+  border-radius: 999px;
+  color: var(--cv-ready);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.cv-approver-chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.cv-approver-chip.is-none { border-style: dashed; color: var(--cv-muted); }
+.cv-confirm-note {
+  margin: 0.75rem 0 0;
+  color: var(--cv-faint);
+  font-size: 0.78rem;
+}
+.cv-confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.cv-confirm-yes {
+  padding: 0.5rem 1rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--cv-accent);
+  color: var(--cv-on-accent);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.cv-confirm-yes:hover { filter: brightness(1.08); }
+
+/* --- Records card --- */
+.cv-records-summary {
+  margin: 0.25rem 0 0.6rem;
+  color: var(--cv-muted);
+  font-size: 0.82rem;
+}
+.cv-records-table table { width: 100%; }
+.cv-records-table tr.is-new > td { animation: cv-row-new 1.6s ease-out; }
+@keyframes cv-row-new {
+  from { background: var(--cv-accent-soft); }
+  to { background: transparent; }
+}
+.cv-status-chip {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border: 1px solid var(--cv-edge);
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.cv-status-chip[data-status="submitted"] { border-color: var(--cv-busy); color: var(--cv-busy); }
+.cv-status-chip[data-status="approved"] { border-color: var(--cv-ready); color: var(--cv-ready); }
+.cv-status-chip[data-status="rejected"] { border-color: var(--cv-bad); color: var(--cv-bad); }
+.cv-records-by { color: var(--cv-muted); white-space: nowrap; }
+.cv-records-actions { white-space: nowrap; }
+.cv-records-actions button {
+  margin-right: 0.3rem;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--cv-edge);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cv-text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cv-records-actions .cv-approve { border-color: var(--cv-ready); color: var(--cv-ready); }
+.cv-records-actions .cv-approve:hover { background: color-mix(in srgb, var(--cv-ready) 12%, transparent); }
+.cv-records-actions .cv-reject { border-color: var(--cv-bad); color: var(--cv-bad); }
+.cv-records-actions .cv-reject:hover { background: color-mix(in srgb, var(--cv-bad) 12%, transparent); }
+.cv-records-actions button:disabled { opacity: 0.5; cursor: progress; }
+.cv-records-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--cv-hairline);
+  color: var(--cv-faint);
+  font-size: 0.74rem;
+}
+.cv-records-provenance code { font-family: var(--cv-mono); font-size: 0.72rem; }
+.cv-records .cv-outcome strong { color: var(--cv-ready); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-confirm, .cv-records-table tr.is-new > td { animation: none; }
+}

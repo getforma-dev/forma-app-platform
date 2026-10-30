@@ -1,5 +1,5 @@
 import { h, mount, createShow, createList, createSignal, activateIslands } from '@getforma/core';
-import { submitIntent } from './compose';
+import { submitUtterance } from './actions';
 import { startBoard } from './board';
 
 // ADR-011 pitch canvas (APP-092, APP-094): the signed-in workspace as one
@@ -96,6 +96,38 @@ type FormCard = {
   submit: string;
 };
 type Origin = { id: string; kind: string; text: string };
+type RecordRow = {
+  id: string;
+  recordId: string;
+  version: string;
+  status: string;
+  pending: boolean;
+  cells: Cell[];
+  creator: string;
+  committedAt: string;
+  commitSequence: string;
+};
+type RecordsCard = {
+  id: string;
+  title: string;
+  summary: string;
+  url: string;
+  collection: string;
+  schema: string;
+  canWrite: boolean;
+  canWriteText: string;
+  decide: string;
+  statusField: string;
+  count: string;
+  pending: string;
+  hasRows: boolean;
+  hasNoRows: boolean;
+  columns: Cell[];
+  rows: RecordRow[];
+  publication: string;
+  definitionDigest: string;
+  workVersion: string;
+};
 type Group = {
   id: string;
   app: string;
@@ -114,6 +146,8 @@ type Group = {
   cards: Card[];
   hasForms: boolean;
   forms: FormCard[];
+  hasRecords: boolean;
+  records: RecordsCard[];
 };
 type CanvasProps = {
   csrfSignout: string;
@@ -158,7 +192,7 @@ function IntentBar(props: IntentProps) {
         const text = input ? input.value.trim() : '';
         if (!text || busy()) return;
         setBusy(true);
-        void submitIntent(text, report).finally(() => setBusy(false));
+        void submitUtterance(text, report).finally(() => setBusy(false));
       }}
     >
       <label class="sr-only" for="intent-input">What do you need?</label>
@@ -451,6 +485,55 @@ function Canvas(props: CanvasProps) {
                     ))}
                     <button type="submit">{form.submit}</button>
                   </form>
+                  <p class="cv-outcome" role="status" data-outcome></p>
+                </article>
+              ))}
+              {createList(() => group.records, records => records.id, records => (
+                <article
+                  class="cv-card cv-records"
+                  data-card={records.id}
+                  data-kind="records"
+                  data-records={records.url}
+                  data-collection={records.collection}
+                  data-schema={records.schema}
+                  data-decide={records.decide}
+                  data-status-field={records.statusField}
+                  data-can-write={records.canWriteText}
+                  data-state="ready"
+                  aria-label={records.title}
+                >
+                  <header class="cv-card-head">
+                    <h3>{records.title}</h3>
+                    <span class="badge">{records.count} records</span>
+                  </header>
+                  <p class="cv-records-summary" data-summary>{records.summary}</p>
+                  <div class="cv-card-body" data-body>
+                    {createShow(() => records.hasNoRows, () => (
+                      <p class="cv-message" role="status">No records yet.</p>
+                    ))}
+                    {createShow(() => records.hasRows, () => (
+                      <div class="cv-table cv-records-table">
+                        <table>
+                          <thead>
+                            <tr>{createList(() => records.columns, column => column.id, column => <th scope="col">{column.text}</th>)}</tr>
+                          </thead>
+                          <tbody>
+                            {createList(() => records.rows, row => row.id, row => (
+                              <tr data-record={row.recordId} data-version={row.version} data-status={row.status}>
+                                {createList(() => row.cells, cell => cell.id, cell => <td class="value">{cell.text}</td>)}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
+                  <p class="cv-records-provenance" data-provenance>
+                    <span class="cv-verified">Records</span>
+                    <code>publication {records.publication}</code>
+                    <code>{records.definitionDigest}</code>
+                    <span class="cv-receipt-meta">work v{records.workVersion}</span>
+                  </p>
                   <p class="cv-outcome" role="status" data-outcome></p>
                 </article>
               ))}

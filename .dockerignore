@@ -15,6 +15,8 @@ app/src/**
 !app/src/readiness.rs
 !app/src/roles.rs
 !app/src/supervise.rs
+!app/src/demo.rs
+!app/src/directory.rs
 !app/src/imports/
 app/src/imports/**
 !app/src/imports/mod.rs
@@ -47,6 +49,14 @@ app/src/auth_qualification/**
 app/src/events/**
 !app/src/events/mod.rs
 !app/src/events/routes.rs
+!app/src/actions/
+app/src/actions/**
+!app/src/actions/mod.rs
+!app/src/actions/prompt.rs
+!app/src/actions/rehearsed.rs
+!app/src/actions/resolve.rs
+!app/src/actions/routes.rs
+!app/src/actions/tests.rs
 !app/src/sharing/
 app/src/sharing/**
 !app/src/sharing/mod.rs
@@ -80,6 +90,8 @@ app/src/storage/**
 !app/src/storage/definition_qualification.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
+!app/src/storage/actions.rs
+!app/src/storage/actions_campaign.rs
 !app/src/storage/tests.rs
 !app/src/storage/qualification.rs
 !app/src/storage/qualification_cases.rs
@@ -151,6 +163,8 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/live.ts
 !app/admin/src/canvas/queries.ts
 !app/admin/src/canvas/render.ts
+!app/admin/src/canvas/actions.ts
+!app/admin/src/canvas/records.ts
 !app/admin/src/canvas-vendor/
 app/admin/src/canvas-vendor/**
 !app/admin/src/canvas-vendor/canvas-capacity.ts
@@ -169,6 +183,7 @@ app/admin/src/canvas-vendor/**
 app/admin/src/styles/**
 !app/admin/src/styles/app.css
 !app/admin/src/styles/canvas.css
+!app/admin/src/styles/actions.css
 !app/runtime/
 app/runtime/**
 !app/runtime/runtime.py
@@ -359,3 +374,4 @@ contracts/fixtures/impl-2026-10-28.1/**
 !contracts/fixtures/library/
 contracts/fixtures/library/**
 !contracts/fixtures/library/catalog.json
+!contracts/fixtures/library/expense-claims.json

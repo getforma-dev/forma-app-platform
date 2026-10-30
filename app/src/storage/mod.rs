@@ -5,6 +5,7 @@
 //! constructor of a `TrustedRequest`, from the session row, the member's
 //! current epoch and the registry identity. A caller cannot construct a
 //! trusted request from headers or verifier strings.
+mod actions;
 mod admission;
 mod authorization;
 mod catalog;
@@ -17,6 +18,7 @@ mod registry;
 mod sessions;
 mod sharing;
 
+pub use actions::{CollectionSummary, DryRun, RecordRow, RecordsListing, RECORDS_LIMIT};
 pub use admission::{
     code_digest, handle_digest, Admission, PendingAdmission, PendingReason, Reservation, SignOut,
     VerifiedNonmember,
@@ -117,6 +119,8 @@ fn valid_id(value: &str) -> bool {
 
 // The Docker fixtures are crate-visible to the APP-009 session campaign
 // (`auth::tests`); still compiled only into the test executable.
+#[cfg(test)]
+mod actions_campaign;
 #[cfg(test)]
 pub(crate) mod admission_qualification;
 #[cfg(test)]

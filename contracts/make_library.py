@@ -314,6 +314,38 @@ def generate_sources():
 # --- the apps ---------------------------------------------------------------------------------
 
 DECISION_NOTE = "Reviewer action; synthetic only"
+# The default records collection of a library app: one review decision per record.
+DECISION_RECORDS = {
+    "input_id": "decisions", "contract_id": "decisions_v1", "schema_id": "decision",
+    "fields": [field("status", "enum", values=["needs_context", "reviewed"]), field("note", "text")],
+    "commands": [{"id": "record_decision", "record_schema_id": "decision", "operation": "create", "writable_fields": ["status", "note"],
+                  "transitions": [{"field_id": "status", "from": "needs_context", "to": "reviewed"}]}],
+    "seed": {"command_id": "record_decision", "values": [{"field_id": "status", "value": {"type": "enum", "value": "needs_context"}},
+                                                         {"field_id": "note", "value": {"type": "text", "value": DECISION_NOTE}}]},
+}
+# ADR-011 scenarios (APP-093/095): the expense claims app. One claim per record; `submit` creates it (the action
+# path always sets status `submitted`), `decide` moves it along the two declared transitions only (storage's
+# compose rules: a create on an existing record must fire a declared transition; `decide` writes status and note
+# alone, so it can never create a claim). Amounts are USD cents; the seeded claim is an older, already approved one.
+EXPENSE_CLAIM_FIELDS = [money("amount"), field("merchant", "text"), enum("category", "meals", "travel", "software", "office", "other"),
+                        field("spent_on", "date"), field("note", "text", nullable=True), enum("status", "submitted", "approved", "rejected")]
+EXPENSE_CLAIMS_RECORDS = {
+    "input_id": "claims", "contract_id": "expense_claim_v1", "schema_id": "expense_claim",
+    "fields": EXPENSE_CLAIM_FIELDS,
+    "commands": [
+        {"id": "submit", "record_schema_id": "expense_claim", "operation": "create",
+         "writable_fields": ["amount", "merchant", "category", "spent_on", "note", "status"], "transitions": []},
+        {"id": "decide", "record_schema_id": "expense_claim", "operation": "create", "writable_fields": ["status", "note"],
+         "transitions": [{"field_id": "status", "from": "submitted", "to": "approved"}, {"field_id": "status", "from": "submitted", "to": "rejected"}]},
+    ],
+    "seed": {"command_id": "submit", "values": [
+        {"field_id": "amount", "value": {"type": "money", "minor_units": "4250", "currency": "USD", "minor_unit_exponent": 2}},
+        {"field_id": "merchant", "value": {"type": "text", "value": "Blue Bottle Coffee"}},
+        {"field_id": "category", "value": {"type": "enum", "value": "meals"}},
+        {"field_id": "spent_on", "value": {"type": "date", "value": "2026-10-21"}},
+        {"field_id": "note", "value": {"type": "text", "value": "Team coffee; synthetic only"}},
+        {"field_id": "status", "value": {"type": "enum", "value": "approved"}}]},
+}
 
 
 def routing(description, intents, negatives, capabilities):
@@ -321,7 +353,7 @@ def routing(description, intents, negatives, capabilities):
 
 
 def apps():
-    """(library_id, title, purpose, source input id, views, routing). One source input per app."""
+    """(library_id, title, purpose, source input id, views, routing[, records spec]). One source input per app."""
     s = "expense_claims"
     yield ("expense-review", "Expense review queue", "Review submitted expense claims: the queue, the totals and spend by category, with a decision form.", s, [
         view("totals", "summary", "Claims and total amount", query([s], [aggregate(s, [], [measure("claims", "count", s, "expense_id"), measure("total_amount", "sum", s, "amount"), measure("largest_claim", "max", s, "amount")])])),
@@ -480,6 +512,22 @@ def apps():
                ["one-time invoices", "stock price", "payment gateway setup", "refund a customer", "marketing funnel"],
                ["finance.revenue.mrr", "finance.revenue.top_customers", "records.decision"]))
 
+    # ADR-011 scenarios: the expense claims app the action path (`POST /v1/act`) files into. Its live claims are
+    # the work's records (read by `GET /v1/work/{app}/{work}/records`); the two data views give the historical
+    # context from the seeded claims source so the app never starts empty.
+    s = "expense_claims"
+    yield ("expense-claims", "Expense claims", "File an expense in your own words, send it to your manager for approval, and watch the decision land live: every claim is a typed record, every decision an audited command.", s, [
+        view("totals", "summary", "Claims to date", query([s], [aggregate(s, [], [measure("claims", "count", s, "expense_id"), measure("total_amount", "sum", s, "amount"), measure("largest_claim", "max", s, "amount")])])),
+        view("by_status", "status", "Past claims by status", query([s], [aggregate(s, ["status"], [measure("claims", "count", s, "expense_id"), measure("amount", "sum", s, "amount")])])),
+        view("recent", "table", "Recent past claims", query([s], [{"type": "project", "fields": [f(s, "expense_id"), f(s, "time"), f(s, "employee"), f(s, "vendor"), f(s, "category"), f(s, "amount"), f(s, "status")]}, sort(s, [("time", "desc")], "expense_id"), limit(25)])),
+        view("submit", "form", "File an expense claim", command_id="submit"),
+        view("how", "note", "How approval works", text="A claim is filed as a typed record with status submitted. Your approver sees it live and decides; the decision is an audited command, never an edit."),
+    ], routing("Expense claims with manager approval: file a claim (amount, merchant, category, date, note), share it with an approver, approve or reject it; the claims list updates live.",
+               ["I spent $86 on a client dinner at Nobu, Sarah approves my expenses", "file an expense", "submit a reimbursement for my flight", "approve the Nobu dinner", "what is waiting for my approval"],
+               ["vendor invoices", "payroll", "bank statement", "budget vs actual", "sales pipeline"],
+               ["finance.expenses.claim", "finance.expenses.approve", "records.create", "records.transition"]),
+           EXPENSE_CLAIMS_RECORDS)
+
 
 def csv_bytes(contract, rows):
     import csv
@@ -499,26 +547,28 @@ def source_revision(contract, data, normalized, count, source_id, revision_id, t
             "provenance_sample": [{"type": "csv", "logical_record": 1, "physical_line_start": 2, "physical_line_end": 2}]}
 
 
-def bundle(index, library_id, title, purpose, source, views, revision):
+def bundle(index, library_id, title, purpose, source, views, revision, records_spec=None):
+    """One bundle. `records_spec` (ADR-011 scenarios, APP-093/095) replaces the default decision schema with a
+    typed records collection of its own: {input_id, contract_id, schema_id, fields, commands, seed: {command_id, values}}."""
     offset = BASE + STRIDE * index
     app, definition_revision, publication, work, collection, record, audit = (uid(offset + n) for n in range(1, 8))
-    decisions = [field("status", "enum", values=["needs_context", "reviewed"]), field("note", "text")]
-    records = {"id": "decision", "version": 1, "fields": decisions}
-    inputs = [copy.deepcopy(source), {"id": "decisions", "contract_id": "decisions_v1", "contract_version": 1, "kind": "records", "fields": decisions}]
+    spec = records_spec or DECISION_RECORDS
+    decisions = spec["fields"]
+    records = {"id": spec["schema_id"], "version": 1, "fields": decisions}
+    inputs = [copy.deepcopy(source), {"id": spec["input_id"], "contract_id": spec["contract_id"], "contract_version": 1, "kind": "records", "fields": decisions}]
     layout = []
     for i, v in enumerate(views):
         layout.append({"view_id": v["id"], "column": 0, "row": i, "width": 12})
     content = {"title": title, "description": purpose + " Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
                "inputs": inputs, "views": views, "record_schemas": [records],
-               "commands": [{"id": "record_decision", "record_schema_id": "decision", "operation": "create", "writable_fields": ["status", "note"],
-                             "transitions": [{"field_id": "status", "from": "needs_context", "to": "reviewed"}]}],
+               "commands": copy.deepcopy(spec["commands"]),
                "links": [], "default_layout": layout}
     definition = {"kind": "app_definition", "schema_version": 1, "organization_id": ORGANIZATION, "app_id": app, "revision_id": definition_revision,
                   "content": content, "digest": digest("app-definition", content)}
     pub = {"kind": "publication", "schema_version": 1, "organization_id": ORGANIZATION, "app_id": app, "publication_id": publication,
            "definition_revision_id": definition_revision, "definition_digest": definition["digest"],
            "input_contract_digests": [{"input_id": i["id"], "digest": digest("input-contract", i)} for i in inputs],
-           "record_schema_digests": [{"schema_id": "decision", "digest": digest("record-schema", records)}],
+           "record_schema_digests": [{"schema_id": records["id"], "digest": digest("record-schema", records)}],
            "renderer_version": 1, "operator_version": 1, "admission_digest": raw_hash(library_id + ":library-admission-placeholder"),
            "policy": {"id": OWNER_PUBLISH_POLICY, "version": 1, "kind": "owner_publish"}, "author_id": PRINCIPAL, "approver_id": PRINCIPAL,
            "approver_epoch": 1, "published_at": PUBLISHED_AT}
@@ -527,9 +577,9 @@ def bundle(index, library_id, title, purpose, source, views, revision):
     saved_work = {"kind": "saved_work", "schema_version": 1, "organization_id": ORGANIZATION, "app_id": app, "work_id": work, "publication_id": publication,
                   "version": 1, "context": "Prebuilt library: " + title,
                   "bindings": [{**dependency, "kind": "source", "contract_digest": digest("input-contract", inputs[0])},
-                               {"input_id": "decisions", "kind": "records", "contract_digest": digest("input-contract", inputs[1]), "collection_id": collection,
-                                "schema_id": "decision", "schema_version": 1, "revision_policy": "committed_snapshot"}],
-                  "record_collections": [{"id": collection, "schema_id": "decision", "schema_version": 1}], "source_dependencies": [dependency]}
+                               {"input_id": spec["input_id"], "kind": "records", "contract_digest": digest("input-contract", inputs[1]), "collection_id": collection,
+                                "schema_id": records["id"], "schema_version": 1, "revision_policy": "committed_snapshot"}],
+                  "record_collections": [{"id": collection, "schema_id": records["id"], "schema_version": 1}], "source_dependencies": [dependency]}
     first = next(v for v in views if "query" in v)
     receipt = {"kind": "query_receipt", "schema_version": 1, "organization_id": ORGANIZATION, "app_id": app, "work_id": work, "mode": "published",
                "definition_digest": definition["digest"], "publication_id": publication, "view_id": first["id"], "operator_version": 1,
@@ -538,12 +588,12 @@ def bundle(index, library_id, title, purpose, source, views, revision):
                "total_scope": "full_authorized_filtered_input",
                "provenance": {"query_digest": digest("query", first["query"]), "predicate_digest": digest("query", first["query"])}}
     receipt["digest"] = digest("query-receipt", receipt)
-    command = {"kind": "command_request", "schema_version": 1, "app_id": app, "work_id": work, "publication_id": publication, "command_id": "record_decision",
-               "schema_id": "decision", "schema_version_expected": 1, "record_id": record, "expected_record_version": 0, "expected_work_version": 1,
-               "values": [{"field_id": "status", "value": {"type": "enum", "value": "needs_context"}}, {"field_id": "note", "value": {"type": "text", "value": DECISION_NOTE}}],
+    command = {"kind": "command_request", "schema_version": 1, "app_id": app, "work_id": work, "publication_id": publication, "command_id": spec["seed"]["command_id"],
+               "schema_id": records["id"], "schema_version_expected": 1, "record_id": record, "expected_record_version": 0, "expected_work_version": 1,
+               "values": copy.deepcopy(spec["seed"]["values"]),
                "idempotency_key": f"{offset:032x}"}
     outcome = {"kind": "command_outcome", "schema_version": 1, "organization_id": ORGANIZATION, "app_id": app, "work_id": work, "principal_id": PRINCIPAL,
-               "command_id": "record_decision", "idempotency_key": command["idempotency_key"], "payload_digest": payload_digest(command), "state": "committed",
+               "command_id": command["command_id"], "idempotency_key": command["idempotency_key"], "payload_digest": payload_digest(command), "state": "committed",
                "record_id": record, "record_version": 1, "work_version": 1, "commit_sequence": 1, "audit_event_id": audit, "committed_at": SEEDED_AT,
                "retry_expires_at": "2026-10-31T09:05:00Z"}
     return {"context": {"organization_id": ORGANIZATION, "principal_id": PRINCIPAL}, "definition": definition, "publication": pub, "work": saved_work,
@@ -586,7 +636,9 @@ def catalog_entry(library_id, title, purpose, route, b, csv_name):
             "publication_id": b["publication"]["publication_id"], "work_id": b["work"]["work_id"], "collection_id": b["work"]["record_collections"][0]["id"],
             "inputs": [{"id": i["id"], "kind": i["kind"], "contract_id": i["contract_id"], "fields": [field_summary(fld) for fld in i["fields"]]} for i in content["inputs"]],
             "views": views,
-            "commands": [{"id": c["id"], "operation": c["operation"], "writable_fields": c["writable_fields"]} for c in content["commands"]],
+            "commands": [{"id": c["id"], "record_schema_id": c["record_schema_id"], "operation": c["operation"], "writable_fields": c["writable_fields"],
+                          "transitions": copy.deepcopy(c["transitions"])} for c in content["commands"]],
+            "record_schemas": [{"id": r["id"], "version": r["version"], "fields": [field_summary(fld) for fld in r["fields"]]} for r in content["record_schemas"]],
             "sources": [{"input_id": source["id"], "source_id": revision["source_id"], "revision_id": revision["revision_id"], "csv": "data/" + csv_name,
                          "content_digest": revision["content_digest"], "normalized_digest": revision["normalized_digest"], "row_count": revision["row_count"],
                          "input_contract": copy.deepcopy(source)}]}
@@ -606,9 +658,11 @@ def build():
             source_id, revision_id = uid(BASE + STRIDE * 64 + 2 * n), uid(BASE + STRIDE * 64 + 2 * n + 1)
             revisions[name] = source_revision(contract, data, normalized, count, source_id, revision_id, semantics)
     entries = []
-    for index, (library_id, title, purpose, source, views, route) in enumerate(apps()):
+    for index, entry in enumerate(apps()):
+        library_id, title, purpose, source, views, route = entry[:6]
+        records_spec = entry[6] if len(entry) > 6 else None
         contract = sources[source][0]
-        b = bundle(index, library_id, title, purpose, contract, views, revisions[source])
+        b = bundle(index, library_id, title, purpose, contract, views, revisions[source], records_spec)
         validate_bundle(b)
         text = json.dumps(b, ensure_ascii=False, indent=2) + "\n"
         files[library_id + ".json"] = text.encode("utf-8")

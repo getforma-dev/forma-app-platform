@@ -35,6 +35,12 @@
 !app/src/events/mod.rs
 !app/src/events/routes.rs
 !app/src/events/tests.rs
+!app/src/actions/mod.rs
+!app/src/actions/prompt.rs
+!app/src/actions/rehearsed.rs
+!app/src/actions/resolve.rs
+!app/src/actions/routes.rs
+!app/src/actions/tests.rs
 !app/src/sharing/mod.rs
 !app/src/commands/mod.rs
 !app/src/commands/payload.rs
@@ -86,6 +92,8 @@
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
 !app/src/storage/sharing_qualification.rs
+!app/src/storage/actions.rs
+!app/src/storage/actions_campaign.rs
 !app/src/storage/tests.rs
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
@@ -104,6 +112,7 @@
 !contracts/fixtures/library/
 contracts/fixtures/library/**
 !contracts/fixtures/library/catalog.json
+!contracts/fixtures/library/expense-claims.json
 !contracts/schema.json
 !spikes/APP-006/Cargo.toml
 !spikes/APP-006/src/lib.rs
@@ -112,6 +121,8 @@ app/src/imports/**
 !app/src/imports/mod.rs
 !app/src/imports/sandbox.rs
 !app/src/supervise.rs
+!app/src/demo.rs
+!app/src/directory.rs
 !contracts/fixtures/impl-2026-10-28.1/
 contracts/fixtures/impl-2026-10-28.1/**
 !contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json

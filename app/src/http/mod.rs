@@ -138,16 +138,25 @@ pub fn uniform(router: Router) -> Router {
 /// whole `long_path` as one service, so its method router's `Allow` is
 /// removed by the outer layer like the inner router's).
 pub fn uniform_with(router: Router, long_path: &'static str, long: Router) -> Router {
+    uniform_with_many(router, vec![(long_path, long)])
+}
+/// `uniform_with` for several long-deadline paths (ADR-011 scenarios: the
+/// composer's `/v1/compose` and the action path's `/v1/act` both wait on a
+/// model). Each path is one service under `long_deadline`.
+pub fn uniform_with_many(router: Router, long: Vec<(&'static str, Router)>) -> Router {
     let inner = router
         .fallback(fallback)
         .method_not_allowed_fallback(fallback)
         .layer(middleware::from_fn(deadline));
-    let long = long
-        .fallback(fallback)
-        .method_not_allowed_fallback(fallback)
-        .layer(middleware::from_fn(long_deadline));
-    Router::new()
-        .route_service(long_path, long.into_service::<Body>())
+    let mut outer = Router::new();
+    for (path, long) in long {
+        let long = long
+            .fallback(fallback)
+            .method_not_allowed_fallback(fallback)
+            .layer(middleware::from_fn(long_deadline));
+        outer = outer.route_service(path, long.into_service::<Body>());
+    }
+    outer
         .fallback_service(inner)
         .layer(middleware::map_response(without_allow))
 }

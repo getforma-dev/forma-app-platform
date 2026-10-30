@@ -600,9 +600,16 @@ async fn main() {
     let compose_routes = genui::composer::routes::router(Arc::new(
         genui::composer::routes::Compose::new(auth.clone(), genui::composer::Composer::from_env()),
     ));
+    // ADR-011 scenarios: the action path (`POST /v1/act`, under the long
+    // deadline: it waits on the model) and the records listing.
+    let act_routes = genui::actions::routes::router(Arc::new(genui::actions::routes::Act::new(
+        auth.clone(),
+        genui::actions::Parser::from_env(),
+    )));
+    let records_routes = genui::actions::routes::records_router(auth.clone());
     let app = match qualification {
         Some(harness) => genui::http::uniform(app.merge(harness)),
-        None => genui::http::uniform_with(
+        None => genui::http::uniform_with_many(
             app.merge(auth::routes::router(auth.clone()))
                 .merge(commands::routes::router(command_routes))
                 .merge(work_routes)
@@ -610,9 +617,12 @@ async fn main() {
                 // list; the session-gated event stream re-authorized at delivery.
                 .merge(genui::sharing::router(auth.clone()))
                 .merge(genui::events::routes::router(auth.clone()))
-                .merge(canvas_routes),
-            genui::composer::routes::PATH,
-            compose_routes,
+                .merge(canvas_routes)
+                .merge(records_routes),
+            vec![
+                (genui::composer::routes::PATH, compose_routes),
+                (genui::actions::PATH, act_routes),
+            ],
         ),
     };
 

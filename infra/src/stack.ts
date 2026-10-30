@@ -58,6 +58,9 @@ export const ALB_IDLE_TIMEOUT_SECONDS = 130;
 // exactly as without demo mode. A dedicated third tenant is the proper fix (APP-098).
 export const DEMO_ORGANIZATIONS_ENV = 'GENUI_DEMO_ORGANIZATIONS';
 export const DEMO_ORGANIZATION_ID = '00000000-0000-4000-8000-000000000002';
+// app/src/demo.rs requires this switch as well as the organization list
+// (the action path's rehearsed parser); both name the same demo scope.
+export const DEMO_MODE_ENV = 'GENUI_DEMO_MODE';
 // ADR-003 amendment 2026-10-30 (managed invitations; APP-076 G2), as revised the same
 // day after FormaStack's answers: two inputs reach the managed operator task only.
 // FormaStack's existing tenant-scoped fAuth management secret (for Northstar
@@ -250,6 +253,7 @@ export class GenuiFoundation extends Stack {
       // only a `/v1/` path). Live updates are on in every deployment.
       [CANVAS_EVENTS_URL_ENV]: CANVAS_EVENTS_URL,
       [DEMO_ORGANIZATIONS_ENV]: DEMO_ORGANIZATION_ID,
+      [DEMO_MODE_ENV]: '1',
     };
     const container = task.addContainer('workspace', {
       image: ecs.ContainerImage.fromRegistry(image.valueAsString), readonlyRootFilesystem: true,
