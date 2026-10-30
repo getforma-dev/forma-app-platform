@@ -23,7 +23,7 @@
 //! decision; only the limits (429), the body bound (413), cross-site posts
 //! (403) and a failure of the first lookup (503, a store outage before any
 //! code is judged) differ, and none of those depends on the code.
-use super::{cookies, csrf, pkce::Pkce, routes, Auth, InviteView};
+use super::{cookies, csrf, pkce::Pkce, routes, Auth, InviteLimit, InviteView};
 use crate::{
     http::{self, limits},
     storage::{code_digest, FlowKind},
@@ -213,11 +213,33 @@ fn read_private(path: &Path) -> Option<Vec<u8>> {
     (bytes.len() as u64 <= CAPABILITY_LIMIT).then_some(bytes)
 }
 
+/// The directory is still an absolute same-UID 0700 directory, never a link
+/// (review m10: re-checked on every lookup, not only at startup).
+fn private_directory(directory: &Path) -> bool {
+    let uid = unsafe { libc::geteuid() };
+    directory.symlink_metadata().is_ok_and(|metadata| {
+        metadata.is_dir() && metadata.uid() == uid && metadata.mode() & 0o077 == 0
+    })
+}
+
 fn scan(directory: &Path, organization: &str, digest: &str) -> Option<Capability> {
+    if !private_directory(directory) {
+        tracing::warn!("invite.capability_directory_refused");
+        return None;
+    }
     let prefix = format!("{organization}.");
     let mut found: Option<Capability> = None;
     let mut read = 0usize;
-    for entry in std::fs::read_dir(directory).ok()?.take(SCAN_ENTRIES) {
+    for (examined, entry) in std::fs::read_dir(directory).ok()?.enumerate() {
+        if examined >= SCAN_ENTRIES {
+            // Review m10: say (counts only) that entries were left unread.
+            tracing::warn!(
+                entries = SCAN_ENTRIES,
+                files = read,
+                "invite.capability_scan_bound"
+            );
+            break;
+        }
         let name = entry.ok()?.file_name();
         let Some(invitation) = name
             .to_str()
@@ -230,6 +252,11 @@ fn scan(directory: &Path, organization: &str, digest: &str) -> Option<Capability
         };
         read += 1;
         if read > SCAN_FILES {
+            tracing::warn!(
+                entries = examined + 1,
+                files = SCAN_FILES,
+                "invite.capability_scan_bound"
+            );
             return None;
         }
         let Some(record) = read_private(&directory.join(&name))
@@ -284,23 +311,33 @@ fn neutral(auth: &Auth) -> Response {
         auth,
         InviteView {
             failed: true,
-            limited: false,
+            ..InviteView::default()
         },
         StatusCode::BAD_REQUEST,
     )
 }
+/// Review m4: an outage before any code is judged is an HTML page for the
+/// form (503), independent of the code.
+fn unavailable(auth: &Auth) -> Response {
+    page(
+        auth,
+        InviteView {
+            unavailable: true,
+            ..InviteView::default()
+        },
+        StatusCode::SERVICE_UNAVAILABLE,
+    )
+}
+
+/// The entry's own deadline, inside D7.14's 5-second handler deadline, so a
+/// slow store or provider answers the HTML page rather than the generic 503
+/// problem (review m4).
+const ENTRY_DEADLINE: std::time::Duration = std::time::Duration::from_millis(4500);
 
 /// ADR-006 `GET /invite`: the entry form. Nothing from the request is read
 /// or echoed; a code is never accepted from a URL.
 pub(crate) async fn entry(State(auth): State<Arc<Auth>>) -> Response {
-    page(
-        &auth,
-        InviteView {
-            failed: false,
-            limited: false,
-        },
-        StatusCode::OK,
-    )
+    page(&auth, InviteView::default(), StatusCode::OK)
 }
 
 /// Judge the code and start the signup flow; `Ok` carries the pre-login
@@ -384,22 +421,32 @@ pub(crate) async fn validate(State(auth): State<Arc<Auth>>, request: Request) ->
         return http::cross_site();
     }
     let class = auth.address_class(&parts);
-    if let Err(retry) = auth.limits.admit(&[
+    if let Err(blocked) = auth.limits.admit_blocked(&[
         (&format!("invite:{class}"), limits::INVITE_ADDRESS),
         ("invite:global", limits::INVITE_GLOBAL),
     ]) {
-        tracing::info!(outcome = "limited", "invite.validate");
+        // Review m4: the page names the window that refused.
+        let window = match (blocked.key, blocked.period.as_secs()) {
+            (0, seconds) if seconds <= 60 => InviteLimit::Minute,
+            (0, _) => InviteLimit::Day,
+            _ => InviteLimit::Service,
+        };
+        tracing::info!(
+            outcome = "limited",
+            window = window.as_str(),
+            "invite.validate"
+        );
         let mut response = page(
             &auth,
             InviteView {
-                failed: false,
-                limited: true,
+                limited: Some(window),
+                ..InviteView::default()
             },
             StatusCode::TOO_MANY_REQUESTS,
         );
         response.headers_mut().insert(
             header::RETRY_AFTER,
-            HeaderValue::from_str(&retry.max(1).to_string()).expect("decimal"),
+            HeaderValue::from_str(&blocked.retry_after.max(1).to_string()).expect("decimal"),
         );
         return response;
     }
@@ -415,18 +462,21 @@ pub(crate) async fn validate(State(auth): State<Arc<Auth>>, request: Request) ->
             return neutral(&auth);
         }
     };
-    match handoff(&auth, code, &class).await {
+    let judged = tokio::time::timeout(ENTRY_DEADLINE, handoff(&auth, code, &class))
+        .await
+        .unwrap_or(Err(Refusal::Unavailable));
+    match judged {
         Ok((cookie, location)) => {
             tracing::info!(outcome = "handoff", "invite.validate");
             let mut response = http::see_other(&location);
             routes::add_cookie(&mut response, cookies::set(cookies::PRELOGIN, &cookie));
             response
         }
-        // The first lookup failed before any code was judged: honest and
-        // independent of the code.
+        // The first lookup failed (or the entry's deadline passed, as D7.14's
+        // would): the form's HTML page, status 503.
         Err(Refusal::Unavailable) => {
             tracing::info!(outcome = "unavailable", "invite.validate");
-            http::unavailable()
+            unavailable(&auth)
         }
         Err(stage) => {
             tracing::info!(outcome = "refused", stage = ?stage, "invite.validate");

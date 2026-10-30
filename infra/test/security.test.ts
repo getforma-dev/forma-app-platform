@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { readFileSync } from 'node:fs';
-import { GenuiFoundation, IMAGE_DIGEST_PATTERN, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, QUALIFICATION_IMAGE_PATTERN, QUALIFICATION_SECRET_ARN_PATTERN } from '../src/stack.js';
+import { CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, GenuiFoundation, IMAGE_DIGEST_PATTERN, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
 
 const template = Template.fromStack(new GenuiFoundation(new App(), 'SecurityQualification'));
 const document = template.toJSON();
@@ -43,7 +43,7 @@ test('managed data stays private, encrypted, retained and versioned', () => {
   // Omission keeps the intended fixed 20-GiB allocation without enabling it.
   assert.equal(one('AWS::RDS::DBInstance')[1].Properties.MaxAllocatedStorage, undefined);
   template.hasResourceProperties('AWS::RDS::DBParameterGroup', { Parameters: { 'rds.force_ssl': '1' } });
-  template.resourceCountIs('AWS::KMS::Key', 2);
+  template.resourceCountIs('AWS::KMS::Key', 3); // two tenant keys and the capability secret's key
   for (const [, key] of entries('AWS::KMS::Key')) assert.equal(key.Properties.EnableKeyRotation, true);
   template.hasResourceProperties('AWS::S3::Bucket', { VersioningConfiguration: { Status: 'Enabled' }, PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }, OwnershipControls: { Rules: [{ ObjectOwnership: 'BucketOwnerEnforced' }] } });
   for (const type of ['AWS::RDS::DBInstance', 'AWS::S3::Bucket', 'AWS::KMS::Key', 'AWS::Logs::LogGroup', 'AWS::SecretsManager::Secret']) for (const [, item] of entries(type)) {
@@ -210,7 +210,12 @@ test('execution roles pull exactly the selected ECR repository; no exec, pass-ro
 
 test('only migration execution role receives admin secret; migration has no tenant AWS authority', () => {
   const readers = entries('AWS::IAM::Policy').filter(([, value]) => !value.Condition && value.Properties.PolicyDocument.Statement.some((statement: any) => actions(statement).includes('secretsmanager:GetSecretValue')));
-  assert.equal(readers.length, 1); assert.deepEqual(readers[0][1].Properties.Roles, [{ Ref: role('MigrationExecutionRole') }]);
+  // The migration execution role reads the database secret; the service's execution role reads only the capability secret.
+  assert.deepEqual(readers.map(([, value]) => value.Properties.Roles).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+    [[{ Ref: role('ExecutionRole') }], [{ Ref: role('MigrationExecutionRole') }]]);
+  const secretReads = (roleId: string) => policy(roleId).filter(statement => actions(statement).some(action => action.startsWith('secretsmanager:')));
+  assert.deepEqual(secretReads(role('MigrationExecutionRole')).map(statement => statement.Resource), [{ Ref: one('AWS::SecretsManager::SecretTargetAttachment')[0] }]);
+  assert.deepEqual(secretReads(role('ExecutionRole')).map(statement => statement.Resource), [{ Ref: one('AWS::SecretsManager::Secret', 'ProviderCapabilities')[0] }]);
   const migration = one('AWS::ECS::TaskDefinition', 'MigrationTask')[1].Properties;
   assert.deepEqual(document.Outputs.MigrationTaskRoleArn.Value, { 'Fn::GetAtt': [role('MigrationRole'), 'Arn'] });
   assert.deepEqual(document.Outputs.MigrationExecutionRoleArn.Value, { 'Fn::GetAtt': [role('MigrationExecutionRole'), 'Arn'] });
@@ -225,7 +230,9 @@ test('app environment contains identities only and one private ephemeral credent
   const task = one('AWS::ECS::TaskDefinition', 'Task')[1].Properties;
   assert.deepEqual(task.Volumes, [{ Name: 'runtime-config' }]);
   const container = task.ContainerDefinitions[0];
-  assert.equal(resolve(container.Secrets, { QualificationConfigSecretArn: '' }), undefined); assert.deepEqual(container.MountPoints, [{ ContainerPath: '/run/genui', ReadOnly: false, SourceVolume: 'runtime-config' }]);
+  // ADR-003 amendment 2026-10-30: the one secret is the capability map (runtime.py serve() consumes it).
+  assert.deepEqual(container.Secrets, [{ Name: CAPABILITY_SECRET_ENV, ValueFrom: { Ref: one('AWS::SecretsManager::Secret', 'ProviderCapabilities')[0] } }]);
+  assert.deepEqual(container.MountPoints, [{ ContainerPath: '/run/genui', ReadOnly: false, SourceVolume: 'runtime-config' }]);
   assert.equal(container.EntryPoint, undefined); assert.equal(container.Command, undefined);
   const environment = Object.fromEntries(container.Environment.map((value: any) => [value.Name, value.Value]));
   assert.equal(environment.GENUI_RUNTIME_CONFIG_FILE, '/run/genui/credentials.json'); assert.equal(environment.GENUI_RDS_CA_FILE, '/etc/ssl/certs/rds-global-bundle.pem'); assert.equal(environment.FORMA_BIND_ADDRESS, '0.0.0.0'); assert.equal(environment.FORMA_PORT, '3000');
@@ -241,60 +248,52 @@ test('app environment contains identities only and one private ephemeral credent
   }
 });
 
-test('qualification secret parameter accepts only empty or the exact rehearsal account/region/name scope', () => {
-  const parameter = document.Parameters.QualificationConfigSecretArn;
-  assert.equal(parameter.Default, '');
-  assert.equal(parameter.AllowedPattern, QUALIFICATION_SECRET_ARN_PATTERN);
-  const pattern = new RegExp(parameter.AllowedPattern);
-  const arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-northstar-A1b2C3';
-  for (const valid of ['', arn, arn.replace('northstar', 'canary-2026-10-28')]) assert.equal(pattern.test(valid), true, valid);
-  for (const invalid of [
-    ' ', '\n', arn + '\n', arn + ':password::', arn + ':AWSCURRENT',
-    arn.replace('us-east-1', 'us-west-2'), arn.replace('877573132739', '123456789012'),
-    arn.replace('genui-qualification-', 'production-'), arn.replace('northstar', '*'),
-    arn.replace('northstar', '../northstar'), arn.replace('northstar', 'Northstar'),
-    arn.replace('northstar', ''), arn.replace('northstar', 'a'.repeat(81)),
-    arn.replace('A1b2C3', 'short'), arn.replace('A1b2C3', 'toolong'),
-  ]) assert.equal(pattern.test(invalid), false, invalid);
-});
-
-test('qualification is disabled by default without an app secret or a live optional read policy', () => {
-  const parameters = { QualificationConfigSecretArn: document.Parameters.QualificationConfigSecretArn.Default };
-  const [optionalId, optional] = one('AWS::IAM::Policy', 'QualificationConfigRead');
-  assert.equal(resolve(document.Conditions[optional.Condition], parameters), false);
-  const activeReaders = entries('AWS::IAM::Policy').filter(([, resource]) =>
-    (!resource.Condition || resolve(document.Conditions[resource.Condition], parameters)) &&
-    resource.Properties.PolicyDocument.Statement.some((statement: any) => actions(statement).includes('secretsmanager:GetSecretValue')));
-  assert.equal(activeReaders.length, 1);
-  assert.deepEqual(activeReaders[0][1].Properties.Roles, [{ Ref: role('MigrationExecutionRole') }]);
-  const app = resolve(one('AWS::ECS::TaskDefinition', 'Task')[1].Properties, parameters);
-  assert.equal(Object.hasOwn(app.ContainerDefinitions[0], 'Secrets'), false);
+test('the retired qualification secret has no parameter, condition, read policy or injection (APP-074 review m11)', () => {
+  assert.equal(document.Parameters.QualificationConfigSecretArn, undefined);
+  assert.equal((document.Conditions ?? {}).QualificationConfigured, undefined);
+  assert.equal(entries('AWS::IAM::Policy').some(([id]) => id.startsWith('QualificationConfigRead')), false);
+  assert.equal(/QualificationConfigSecretArn|GENUI_AUTH_QUALIFICATION_/.test(JSON.stringify(document)), false);
   assert.equal(document.Parameters.ServiceDesiredCount.Default, 0);
-  // A false condition must not suppress the default task/service through DependsOn.
-  for (const resource of Object.values(document.Resources) as any[]) {
-    assert.equal(array(resource.DependsOn ?? []).includes(optionalId), false);
-  }
-  template.resourceCountIs('AWS::SecretsManager::Secret', 1); // Existing migration secret only.
+  // The migration secret and the capability secret only.
+  template.resourceCountIs('AWS::SecretsManager::Secret', 2);
 });
 
-test('enabled qualification injects the whole exact secret only into the app through its execution role', () => {
-  const arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-review-A1b2C3';
-  const parameters = { QualificationConfigSecretArn: arn };
-  const [, optional] = one('AWS::IAM::Policy', 'QualificationConfigRead');
-  assert.equal(resolve(document.Conditions[optional.Condition], parameters), true);
-  assert.deepEqual(optional.Properties.Roles, [{ Ref: role('ExecutionRole') }]);
-  assert.deepEqual(resolve(optional.Properties.PolicyDocument, parameters), {
-    Version: '2012-10-17', Statement: [{ Effect: 'Allow', Action: 'secretsmanager:GetSecretValue', Resource: arn }],
-  });
-  const app = one('AWS::ECS::TaskDefinition', 'Task')[1].Properties.ContainerDefinitions[0];
-  assert.deepEqual(resolve(app.Secrets, parameters), [{ Name: 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', ValueFrom: arn }]);
-  assert.equal(app.Environment.some((entry: any) => entry.Name.startsWith('GENUI_AUTH_QUALIFICATION_')), false);
-  const migration = one('AWS::ECS::TaskDefinition', 'MigrationTask')[1].Properties.ContainerDefinitions[0];
-  assert.deepEqual(migration.Secrets.map((entry: any) => entry.Name), ['PGPASSWORD']);
-  assert.equal(JSON.stringify(migration).includes('QualificationConfigSecretArn'), false);
-  assert.equal(policy(role('TaskRole')).some(statement => actions(statement).some(action => action.startsWith('secretsmanager:'))), false);
-  assert.equal(policy(role('MigrationRole')).length, 0);
-  assert.equal(JSON.stringify(document.Outputs).includes('QualificationConfigSecretArn'), false);
+test('the capability secret is KMS-encrypted, retained, starts empty and is injected into the service task only (ADR-003 amendment 2026-10-30)', () => {
+  const [secretId, secret] = one('AWS::SecretsManager::Secret', 'ProviderCapabilities');
+  const [keyId, key] = one('AWS::KMS::Key', 'ProviderCapabilityKey');
+  assert.deepEqual(secret.Properties.KmsKeyId, { 'Fn::GetAtt': [keyId, 'Arn'] });
+  assert.equal(secret.Properties.SecretString, '{}', 'the empty capability map, never a generated password the runtime would refuse');
+  assert.equal(secret.Properties.GenerateSecretString, undefined);
+  for (const item of [secret, key]) { assert.equal(item.DeletionPolicy, 'Retain'); assert.equal(item.UpdateReplacePolicy, 'Retain'); }
+  assert.equal(key.Properties.EnableKeyRotation, true);
+  assert.deepEqual(document.Outputs.ProviderCapabilitySecretArn.Value, { Ref: secretId });
+  // Injected into the service container alone; the task role never reads it.
+  for (const [id, task] of entries('AWS::ECS::TaskDefinition')) {
+    const body = JSON.stringify(task.Properties.ContainerDefinitions.map((container: any) => container.Secrets ?? []));
+    assert.equal(body.includes(secretId), id.startsWith('Task'), id);
+    assert.equal(body.includes(CAPABILITY_SECRET_ENV), id.startsWith('Task'), id);
+  }
+  assert.equal(policy(role('TaskRole')).some(statement => actions(statement).some(action => action.startsWith('secretsmanager:') || action.startsWith('kms:'))), false);
+  // Its key decrypts for the service's execution role only through Secrets Manager.
+  const decrypts = key.Properties.KeyPolicy.Statement.filter((statement: any) => statement.Principal?.AWS?.['Fn::GetAtt']);
+  assert.deepEqual(decrypts.map((statement: any) => [statement.Principal.AWS['Fn::GetAtt'][0], statement.Action]), [[role('ExecutionRole'), 'kms:Decrypt']]);
+  for (const statement of decrypts) assert.deepEqual(Object.keys(statement.Condition.StringEquals), ['kms:ViaService']);
+  // Every IAM grant on the secret: the execution role reads it; the operator role reads and writes it, nothing else.
+  const grants = entries('AWS::IAM::Policy').flatMap(([, item]) => item.Properties.PolicyDocument.Statement
+    .filter((statement: any) => JSON.stringify(statement.Resource).includes(secretId))
+    .map((statement: any) => [item.Properties.Roles.map((value: any) => value.Ref), actions(statement).sort(), item.Condition ?? null]));
+  assert.deepEqual(grants.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))), [
+    [[role('ExecutionRole')], ['secretsmanager:DescribeSecret', 'secretsmanager:GetSecretValue'], null],
+    [[role('OperatorRole')], ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], 'OperatorTaskEnabled'],
+  ].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+});
+
+test('the load balancer appends the client address without a port (APP-074 review m3)', () => {
+  const [, alb] = one('AWS::ElasticLoadBalancingV2::LoadBalancer');
+  const attributes = Object.fromEntries(alb.Properties.LoadBalancerAttributes.map((item: any) => [item.Key, item.Value]));
+  assert.equal(attributes['routing.http.xff_header_processing.mode'], 'append');
+  assert.equal(attributes['routing.http.xff_client_port.enabled'], 'false');
+  assert.equal(attributes['routing.http.drop_invalid_header_fields.enabled'], 'true');
 });
 
 test('qualification image parameter accepts only empty or a reviewed digest', () => {
@@ -398,7 +397,10 @@ test('operator task is absent by default; when supplied it is a count-zero stand
   assert.deepEqual(task.Properties.Volumes, [{ Name: 'operator-scratch' }]);
   assert.equal(container.LogConfiguration.Options['awslogs-stream-prefix'], 'genui-operator');
   const environment = Object.fromEntries(container.Environment.map((value: any) => [value.Name, value.Value]));
-  assert.deepEqual(Object.keys(environment).sort(), ['AWS_REGION', 'GENUI_EVIDENCE_BUCKET', 'GENUI_OPERATOR_TENANTS_JSON', 'PGDATABASE', 'PGHOST', 'PGPORT', 'PGSSLMODE', 'PGSSLROOTCERT', 'PGUSER']);
+  assert.deepEqual(Object.keys(environment).sort(), ['AWS_REGION', 'GENUI_EVIDENCE_BUCKET', 'GENUI_OPERATOR_TENANTS_JSON', CAPABILITY_SECRET_ID_ENV, 'PGDATABASE', 'PGHOST', 'PGPORT', 'PGSSLMODE', 'PGSSLROOTCERT', 'PGUSER']);
+  // ADR-003 amendment 2026-10-30: the capability secret's identifier (never its value) for `revoke`.
+  assert.deepEqual(environment[CAPABILITY_SECRET_ID_ENV], { Ref: one('AWS::SecretsManager::Secret', 'ProviderCapabilities')[0] });
+  assert.equal(container.Secrets.some((entry: any) => entry.Name === CAPABILITY_SECRET_ENV), false);
   assert.equal(environment.PGUSER, 'genui_migration'); assert.equal(environment.PGDATABASE, 'genui'); assert.equal(environment.PGSSLMODE, 'verify-full'); assert.equal(environment.PGSSLROOTCERT, '/etc/ssl/certs/rds-global-bundle.pem');
   assert.deepEqual(environment.PGHOST, { 'Fn::GetAtt': [one('AWS::RDS::DBInstance')[0], 'Endpoint.Address'] });
   // Tenant keys and prefixes only: no role ARN to assume, no application database identity.
@@ -412,7 +414,17 @@ test('operator task is absent by default; when supplied it is a count-zero stand
 });
 
 test('operator task role holds no role assumption and reaches only B1 source objects under each tenant key', () => {
-  const statements = policy(role('OperatorRole'));
+  const all = policy(role('OperatorRole'));
+  // ADR-003 amendment 2026-10-30: plus exactly Get/PutSecretValue on the capability secret and its key via Secrets Manager.
+  const capabilitySecret = one('AWS::SecretsManager::Secret', 'ProviderCapabilities')[0];
+  const capabilityKey = { 'Fn::GetAtt': [one('AWS::KMS::Key', 'ProviderCapabilityKey')[0], 'Arn'] };
+  const custody = all.filter(statement => JSON.stringify(statement.Resource) === JSON.stringify({ Ref: capabilitySecret })
+    || JSON.stringify(statement.Resource) === JSON.stringify(capabilityKey));
+  assert.deepEqual(custody.map(statement => [actions(statement).sort(), statement.Condition ?? null]), [
+    [['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], null],
+    [['kms:Decrypt', 'kms:GenerateDataKey'], { StringEquals: { 'kms:ViaService': { 'Fn::Join': ['', ['secretsmanager.', { Ref: 'AWS::Region' }, '.amazonaws.com']] } } }],
+  ]);
+  const statements = all.filter(statement => !custody.includes(statement));
   assert.equal(statements.some(statement => actions(statement).some(action => action.startsWith('sts:') || action.startsWith('rds-db:') || action.startsWith('secretsmanager:') || action === 's3:DeleteObject' || action === 's3:ListBucket')), false);
   const bucket = one('AWS::S3::Bucket')[0];
   assert.equal(statements.length, 6);

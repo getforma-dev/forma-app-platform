@@ -45,14 +45,19 @@ intended email and the explicit least-privilege role records a `pending` create
 in the code's transaction, then, after COMMIT, sends exactly one server-only
 create to fAuth's management API (provider_management.py) and records
 `confirmed` with the remote invitation id, `failed`, or `unknown`; a create is
-never repeated. The returned `invite_token` goes only to a 0600 capability file
-in the operator's private directory, named by the invitation row. `revoke`
-commits the local revocation first, destroys the code's capability and then
-revokes remotely; `reconcile` settles pending/unknown operations by inspecting
-the provider, one run per organization at a time, attributing each remote
-invitation to at most one create (see judge_creates). Provider settings come only
-from the environment (GENUI_PROVIDER_*; the management key from a 0600 file or the
-environment, never argv).
+never repeated. The returned `invite_token` goes only into the environment's
+provider capability secret in AWS Secrets Manager (ADR-003 amendment
+2026-10-30), keyed by the invitation row; the operator host keeps no copy, and
+the service receives it at its next task start. `revoke` commits the local
+revocation first, removes the code's capability from the secret (with the
+secret alone configured, as in the managed operator task) and then revokes
+remotely; `reconcile` removes every capability that can no longer be handed off
+and settles pending/unknown operations by inspecting the provider, one run per
+organization at a time, attributing each remote invitation to at most one
+create (see judge_creates). Provider settings come only from the environment
+(GENUI_PROVIDER_*; the management key from a 0600 file or the environment,
+never argv); the secret's ARN from GENUI_PROVIDER_CAPABILITY_SECRET_ID or
+`--capability-secret-id`.
 
 Sign-in handles (APP-009, ADR-006 §handle): `issue-handle` gives an organization
 without one its first live handle (fresh, or an exact already-issued `--handle`
@@ -224,7 +229,10 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("defaults")
     for name in ("backfill", "list", "verify", "reconcile"):
-        sub.add_parser(name).add_argument("--organization", required=True)
+        q = sub.add_parser(name)
+        q.add_argument("--organization", required=True)
+        if name == "reconcile":
+            q.add_argument("--capability-secret-id")
     q = sub.add_parser("provision")
     for arg in ("--organization", "--display-name", "--issuer", "--provider-tenant"):
         q.add_argument(arg, required=True)
@@ -239,7 +247,9 @@ def parser():
     # (mint_access_code) and the task receives only its digest, so no secret
     # reaches a task override, CloudTrail or the awslogs group.
     q.add_argument("--code-digest")
-    for arg in ("--provider-email", "--provider-role", "--provider-issuer", "--provider-tenant"):
+    # ADR-003 amendment 2026-10-30: the capability secret's ARN (an identifier, never a value);
+    # default GENUI_PROVIDER_CAPABILITY_SECRET_ID.
+    for arg in ("--provider-email", "--provider-role", "--provider-issuer", "--provider-tenant", "--capability-secret-id"):
         q.add_argument(arg)
     for name in ("revoke", "extend"):
         q = sub.add_parser(name)
@@ -247,6 +257,8 @@ def parser():
         q.add_argument("--code-id", required=True)
         if name == "extend":
             q.add_argument("--expires-days", type=int, required=True)
+        else:
+            q.add_argument("--capability-secret-id")
     for name in ("revoke-entitlement", "revoke-membership"):
         q = sub.add_parser(name)
         q.add_argument("--organization", required=True)
@@ -289,6 +301,8 @@ def validate(args):
     for name in ("code_id", "principal", "app", "work", "source", "space", "owner", "from_work", "creator", "revision"):
         if getattr(args, name, None) is not None:
             identifier(getattr(args, name))
+    if getattr(args, "capability_secret_id", None) is not None:
+        require(provider.SECRET_ARN.fullmatch(args.capability_secret_id) is not None, "capability_secret_refused")
     if args.command in ("grant-permission", "revoke-permission"):
         resource = GRANTABLE.get(args.permission)
         require(resource is not None, "permission_refused")
@@ -648,12 +662,24 @@ def revoke(c, args):
     result = {"code_id": code_id, "status": "revoked", "changed": True, "provider_revocations_pending": len(revocations)}
     # The local revocation above is final whatever happens remotely; a failed or
     # unknown remote revocation never restores it.
-    config = args.provider_config
-    result.update(provider_phase="not_configured", capabilities_destroyed=None, provider_revocations=[])
+    config, store = args.provider_config, getattr(args, "capability_store", None)
+    result.update(provider_phase="not_configured", capability_phase="not_configured", capabilities_destroyed=None,
+                  provider_revocations=[])
+    # ADR-003 amendment 2026-10-30: the capability leaves the environment's secret first
+    # (the service drops it at its next task start; the code already refuses).
+    if store is not None:
+        try:
+            result["capabilities_destroyed"] = destroy_code_capabilities(c, org, code_id, store)
+            result["capability_phase"] = "completed"
+        except Refused as refusal:
+            _rollback(c)
+            result["capability_phase"] = str(refusal)  # reconcile's sweep removes it later
+        except Exception:
+            _rollback(c)
+            result["capability_phase"] = "incomplete"
     if config is None:
         return result
     try:
-        result["capabilities_destroyed"] = destroy_code_capabilities(c, org, code_id, config.capability_dir)
         result["provider_revocations"], result["provider_phase"] = [], "completed"
         if revocations:
             client = provider.Client(config)
@@ -1073,13 +1099,35 @@ def record_revocations(c, org, code_id, lock=True):
           RETURNING invitation_id::text,provider_tenant_id""", (org, code_id)).fetchall()]
 
 
-def destroy_code_capabilities(c, org, code_id, directory):
-    """Revocation ends the private capability locally first, whatever the provider answers."""
+# ADR-003 amendment 2026-10-30: every change to the environment's capability secret is a
+# read and a whole-map PutSecretValue, so operator commands that change it take this
+# transaction-scoped advisory lock first (one per database, so one per environment). Only
+# create_remote takes it while holding rows, and no holder of this lock waits for a row
+# lock, so it adds no wait cycle to D7.1's order. The pair keeps runtime.py's lock class.
+CAPABILITY_LOCK = (1819409017, 74)
+
+
+def capability_lock(c):
+    c.execute("SELECT pg_catalog.pg_advisory_xact_lock(%s, %s)", CAPABILITY_LOCK)
+
+
+def destroy_code_capabilities(c, org, code_id, store):
+    """Revocation ends the code's capabilities in the secret first, whatever the provider answers."""
     begin(c, org)
     invitations = [r[0] for r in c.execute("""SELECT invitation_id::text FROM genui.provider_invitations
           WHERE organization_id=%s AND code_id=%s AND operation='create'""", (org, code_id)).fetchall()]
+    capability_lock(c)
+    removed = store.remove([(org, invitation) for invitation in invitations])
     c.commit()
-    return sum(1 for invitation in invitations if provider.destroy_capability(directory, org, invitation))
+    return removed
+
+
+def stored_capabilities(store):
+    """A snapshot of the secret's map, or None when it cannot be read (fixed reasons only)."""
+    try:
+        return store.read()
+    except Refused:
+        return None
 
 
 def operation_result(invitation_id, operation, state, remote, detail, **extra):
@@ -1108,7 +1156,7 @@ def create_remote(c, org, invitation_id, code_id, email, role, client):
     row and then waits on a create row, so there is no wait cycle (review n7). Review m5:
     nothing after the outcome's COMMIT can stop the committed code from being printed."""
     limits = provider.PROVIDER_DEFAULTS
-    directory = client.config.capability_dir
+    store = client.config.capability_store
     margin = limits["create_send_margin_seconds"]
     try:
         begin(c, org)
@@ -1142,15 +1190,17 @@ def create_remote(c, org, invitation_id, code_id, email, role, client):
         if outcome.usable and not (status == "active" and live and revoking == 0):
             detail = "code_no_longer_usable"  # revoked, expired or exhausted while the create was in flight
         elif outcome.usable:
-            # The file precedes the database update: a crash in between leaves a
-            # pending row that reconcile confirms from the file. It records the
-            # code's stored digest so the service's invitation entry (APP-074)
-            # can find this capability for a validated code.
+            # The secret's entry precedes the database update: a crash in between
+            # leaves a pending row that reconcile confirms from the entry. It records
+            # the code's stored digest so the service's invitation entry (APP-074)
+            # can find this capability for a validated code. A refused or ambiguous
+            # write is not stored: the invitation is revoked below, and reconcile's
+            # sweep removes an entry that the ambiguous write did make.
             digest = c.execute("SELECT code_digest FROM genui.access_codes WHERE organization_id=%s AND code_id=%s",
                                (org, code_id)).fetchone()[0]
+            capability_lock(c)
             try:
-                provider.write_capability(directory, org, invitation_id, outcome.remote_id, outcome.token, timestamp(outcome.expires_at),
-                                          code_digest=digest)
+                store.add(org, invitation_id, outcome.remote_id, outcome.token, timestamp(outcome.expires_at), code_digest=digest)
                 stored = True
             except Refused:
                 detail = "capability_unwritable"
@@ -1163,8 +1213,9 @@ def create_remote(c, org, invitation_id, code_id, email, role, client):
         c.commit()
     except Exception:
         _rollback(c)
+        snapshot = stored_capabilities(store)
         return operation_result(invitation_id, "create", "pending", None, "outcome_unrecorded",
-                                capability_stored=provider.capability_present(directory, org, invitation_id))
+                                capability_stored=None if snapshot is None else provider.capability_present(snapshot, org, invitation_id))
     result = operation_result(invitation_id, "create", outcome.state, outcome.remote_id, detail, capability_stored=stored)
     if outcome.provider_error:
         result["provider_error"] = outcome.provider_error
@@ -1254,7 +1305,7 @@ def judge_creates(c, org, client, tenant, scan):
     limits = provider.PROVIDER_DEFAULTS
     skew = datetime.timedelta(seconds=limits["reconcile_clock_skew_seconds"])
     lifetime = limits["provider_invitation_hours_default"] * 3600 + limits["reconcile_clock_skew_seconds"]
-    directory = client.config.capability_dir
+    store = client.config.capability_store
     begin(c, org)
     held = c.execute("""SELECT invitation_id::text,state,intended_email_digest,provider_role,created_at,updated_at,code_id::text,
           updated_at<=now()-make_interval(secs=>%s) FROM genui.provider_invitations
@@ -1267,8 +1318,15 @@ def judge_creates(c, org, client, tenant, scan):
     known = {r[0] for r in c.execute("""SELECT remote_invitation_id FROM genui.provider_invitations
           WHERE organization_id=%s AND remote_invitation_id IS NOT NULL""", (org,)).fetchall()}
     decided, waiting = {}, {}
+    # One read of the secret serves the whole judgment; unreadable, nothing is judged from it
+    # and the rows wait for the next run.
+    snapshot = stored_capabilities(store)
+    if snapshot is None:
+        _rollback(c)
+        return [operation_result(r[0], "create", r[1], None, "capability_secret_unavailable", state_before=r[1], capability_stored=None)
+                for r in held]
     for invitation, _, _, _, _, _, _, lapsed in held:
-        record = provider.capability_record(directory, org, invitation)
+        record = provider.capability_record(snapshot, org, invitation)
         if record is not None:
             decided[invitation] = ("confirmed", record["remote_invitation_id"], "capability_record")
             known.add(record["remote_invitation_id"])
@@ -1309,7 +1367,7 @@ def judge_creates(c, org, client, tenant, scan):
                                             capability_stored=False))
             continue
         state, remote, detail = decided[invitation]
-        stored = state == "confirmed" and provider.capability_present(directory, org, invitation)
+        stored = state == "confirmed" and provider.capability_present(snapshot, org, invitation)
         if state == "confirmed" and not stored:
             unusable.append(code_id)
         entries.append(operation_result(invitation, "create", state, remote, detail, state_before=state_before, capability_stored=stored))
@@ -1331,7 +1389,7 @@ def ended_remotely(c, org, client, tenant, scan):
     limits = provider.PROVIDER_DEFAULTS
     skew = datetime.timedelta(seconds=limits["reconcile_clock_skew_seconds"])
     lifetime = limits["provider_invitation_hours_default"] * 3600 + limits["reconcile_clock_skew_seconds"]
-    directory = client.config.capability_dir
+    store = client.config.capability_store
     begin(c, org)
     rows = c.execute("""SELECT p.invitation_id::text,p.code_id::text,p.remote_invitation_id,p.created_at,
           p.updated_at<=now()-make_interval(secs=>%s) FROM genui.provider_invitations p JOIN genui.access_codes a
@@ -1353,7 +1411,7 @@ def ended_remotely(c, org, client, tenant, scan):
             ended[invitation] = (code_id, remote, "remote_" + statuses[remote])
         elif statuses.get(remote) == "accepted":
             spent.append((invitation, remote))
-    entries, destroyed = [], 0
+    entries = []
     for invitation, (code_id, remote, detail) in ended.items():
         begin(c, org)
         recorded = record_revocations(c, org, code_id)
@@ -1361,33 +1419,46 @@ def ended_remotely(c, org, client, tenant, scan):
             c.execute("""UPDATE genui.provider_invitations SET state='confirmed',updated_at=now() WHERE organization_id=%s AND invitation_id=%s""",
                       (org, revocation))
         c.commit()
-        destroyed += provider.destroy_capability(directory, org, invitation)
         entries += [operation_result(revocation, "revoke", "confirmed", remote, detail, state_before=None) for revocation, _ in recorded]
+    # Every ended or spent capability leaves the secret in one write.
+    removing = [invitation for invitation in ended] + [invitation for invitation, _ in spent]
+    destroyed, gone = 0, set()
+    if removing:
+        begin(c, org)
+        capability_lock(c)
+        try:
+            current = store.read()
+            gone = {invitation for invitation in removing if provider.capability_present(current, org, invitation)}
+            destroyed = store.remove([(org, invitation) for invitation in gone])
+        except Refused:
+            gone = set()  # the next reconcile's sweep removes them; the code side already refuses
+        c.commit()
     for invitation, remote in spent:
-        if provider.destroy_capability(directory, org, invitation):
-            destroyed += 1
+        if invitation in gone:
             entries.append(operation_result(invitation, "create", "confirmed", remote, "remote_accepted", state_before="confirmed",
                                             capability_stored=False))
     return entries, destroyed
 
 
-def sweep_capabilities(c, org, directory):
-    """End every capability that can no longer be handed off: its code is revoked, expired or
-    exhausted, a revocation is recorded, its create failed or is unknown to the ledger, or the
-    provider's own invitation expiry has passed. A partial write older than the grace is a
-    writer that stopped before linking it (review m6); younger ones are left to their writer."""
+def sweep_capabilities(c, org, store):
+    """End every capability of this organization in the secret that can no longer be handed off:
+    its code is revoked, expired or exhausted, a revocation is recorded, its create failed or is
+    unknown to the ledger, or the provider's own invitation expiry has passed. One write at most,
+    under the capability lock."""
     begin(c, org)
-    now, destroyed = datetime.datetime.now(datetime.timezone.utc), 0
-    destroyed += provider.remove_stale_partials(directory, org, provider.PROVIDER_DEFAULTS["reconcile_grace_seconds"])
-    for invitation in provider.capability_invitations(directory, org):
+    capability_lock(c)
+    now, ending = datetime.datetime.now(datetime.timezone.utc), []
+    current = store.read()
+    for invitation in provider.capability_invitations(current, org):
         row = c.execute("""SELECT p.state<>'failed' AND a.status='active' AND a.expires_at>now() AND NOT EXISTS (
               SELECT 1 FROM genui.provider_invitations r WHERE r.organization_id=p.organization_id AND r.code_id=p.code_id
               AND r.operation='revoke') FROM genui.provider_invitations p JOIN genui.access_codes a
               ON a.organization_id=p.organization_id AND a.code_id=p.code_id
               WHERE p.organization_id=%s AND p.invitation_id=%s AND p.operation='create'""", (org, invitation)).fetchone()
-        expiry = provider.capability_expiry(directory, org, invitation)
-        if not (row == (True,) and expiry is not None and expiry > now) and provider.destroy_capability(directory, org, invitation):
-            destroyed += 1
+        expiry = provider.capability_expiry(current, org, invitation)
+        if not (row == (True,) and expiry is not None and expiry > now):
+            ending.append((org, invitation))
+    destroyed = store.remove(ending)
     c.commit()
     return destroyed
 
@@ -1439,8 +1510,12 @@ def _reconcile(c, org, config):
           ORDER BY a.code_id LIMIT %s FOR UPDATE OF a""", (org, limits["reconcile_operations_max"])).fetchall()
     recorded = sum(len(record_revocations(c, org, code, lock=False)) for (code,) in codes)
     c.commit()
-    # 2. End capabilities locally before any provider call.
-    destroyed = sweep_capabilities(c, org, config.capability_dir)
+    # 2. End capabilities in the secret before any provider call (ADR-003 amendment 2026-10-30).
+    try:
+        destroyed, capability_phase = sweep_capabilities(c, org, config.capability_store), "completed"
+    except Refused as refusal:
+        _rollback(c)
+        destroyed, capability_phase = 0, str(refusal)
     # 3. Inventory: what needs the provider.
     begin(c, org)
     # Operations past the provider lifetime are settled without inspection, so they never widen the scan.
@@ -1461,7 +1536,7 @@ def _reconcile(c, org, config):
     creates = creates[:limits["reconcile_operations_max"]]
     result = {"organization_id": org, "revocations_recorded": recorded, "capabilities_destroyed": destroyed, "operations": [],
               "deferred": sum(1 for r in creates if not r[1]), "truncated": truncated, "provider_phase": "completed",
-              "capability_directory_class": provider.directory_class(str(config.capability_dir))}
+              "capability_store": "secrets_manager", "capability_phase": capability_phase}
     ready = [r for r in creates if r[1]]
     if not ready and not revokes and not live:
         return result
@@ -1586,11 +1661,23 @@ COMMANDS = {"provision": provision, "backfill": backfill, "issue": issue, "list"
 
 
 def provider_configuration(args):
-    """Validated before any connection: required to create or reconcile, optional to revoke."""
+    """Validated before any connection: required (with the capability secret) to create or
+    reconcile, optional to revoke."""
+    secret_id = getattr(args, "capability_secret_id", None)
     if args.command == "issue" and args.provider_email is not None or args.command == "reconcile":
-        return provider.load_config(os.environ, required=True)
+        return provider.load_config(os.environ, required=True, secret_id=secret_id)
     if args.command == "revoke":
-        return provider.load_config(os.environ, required=False)
+        return provider.load_config(os.environ, required=False, secret_id=secret_id)
+    return None
+
+
+def capability_store(args):
+    """The capability secret: the provider configuration's, or for `revoke` the secret alone, so a
+    revocation with no provider settings (the managed OperatorTask) still ends the code's capability."""
+    if args.provider_config is not None:
+        return args.provider_config.capability_store
+    if args.command == "revoke":
+        return provider.load_store(os.environ, getattr(args, "capability_secret_id", None))
     return None
 
 
@@ -1598,6 +1685,7 @@ def main(argv=None):
     try:
         args = validate(parser().parse_args(argv))
         args.provider_config = provider_configuration(args)
+        args.capability_store = capability_store(args)
         if args.command == "defaults":
             result = dict(DEFAULTS, provider=dict(provider.PROVIDER_DEFAULTS))
         else:

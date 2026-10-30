@@ -10,7 +10,7 @@
 use super::{
     synthetic_issuer::{InvitationState, Issuer, ParMode, ISSUER},
     tests::{
-        app, config, field, tenants, Browser, Log, Reply, TestPages, APP, APP_ORIGIN,
+        app, config, field, full_app, tenants, Browser, Log, Reply, TestPages, APP, APP_ORIGIN,
         CANARY_HANDLE, CANARY_TENANT, NORTHSTAR_HANDLE, NORTHSTAR_TENANT, ORG, OTHER,
         UNKNOWN_HANDLE,
     },
@@ -19,9 +19,9 @@ use super::{
 use crate::{
     http::{self, proxy::TrustedProxies},
     storage::{
-        admission_qualification::{operator, operator_with, FakeProvider},
+        admission_qualification::{operator, operator_with, FakeProvider, FakeSecret},
         code_digest,
-        qualification::Fixture,
+        qualification::{fixture_python, Fixture},
         FlowKind, Stores,
     },
 };
@@ -34,6 +34,7 @@ use std::{
     io::{Read as _, Write as _},
     net::SocketAddr,
     path::PathBuf,
+    process::Command,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -64,8 +65,88 @@ fn unissued_code() -> String {
 }
 
 const NEUTRAL: &str = "page=invite;failed=true;limited=false";
-const LIMITED: &str = "page=invite;failed=false;limited=true";
+/// Review m4: the limited page names its window (this network's minute).
+const LIMITED: &str = "page=invite;failed=false;limited=minute";
+const LIMITED_SERVICE: &str = "page=invite;failed=false;limited=service";
 const ENTRY: &str = "page=invite;failed=false;limited=false";
+/// A well-formed organization id that no registry binds.
+const UNREGISTERED: &str = "00000000-0000-4000-8000-0000000000ff";
+/// The seeded saved work of both fixture organizations (tenant_seed).
+const SEEDED_WORK: &str = "00000000-0000-4000-8000-000000000069";
+/// The seeded source the seeded work reads, and the seeded owner principal
+/// (tenant_seed.py; both fixture organizations hold the same ids).
+const SOURCE: &str = "00000000-0000-4000-8000-00000000006e";
+const PRINCIPAL: &str = "00000000-0000-4000-8000-000000000066";
+/// `upload-sources`' real digests of the fixture source (as the query
+/// campaign records them): check 9 registers that revision and binds a new
+/// work to it in each organization (`register-source-revision --record-json`,
+/// `create-bound-work`), so an admitted member can open the work page and
+/// reach the query route; the seeded work itself stays untouched.
+const CONTENT: &str = "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647";
+const NORMALIZED: &str = "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082";
+const CONTRACT: &str = "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64";
+/// The seeded work's second source input (inventory), read beside SOURCE.
+const INVENTORY: &str = "00000000-0000-4000-8000-000000000070";
+const BOUND_WORK: &str = "00000000-0000-4000-8000-000000000a74";
+
+/// APP-074 review M3: the protected route families campaign check 9 probes
+/// as every principal, admitted members included: (family, method, path,
+/// mounted at this tip). Only `/workspace` is mounted here. The hook for
+/// APP-012 (plan Task 9: `POST /v1/work/{app}/{work}/queries/{view}` and
+/// `GET /w/{app}/{work}`) and APP-013 (the record command routes): the ticket
+/// that mounts a route sets its `mounted` to true (and corrects its path to
+/// the mounted shape) and re-runs `native_invite_campaign`; check 9 then
+/// requires an admitted member to reach the handler while every non-member
+/// keeps the byte-identical uniform 404. Item 2 is claimed for a family only
+/// after that run passes; an unmounted path that starts answering fails the
+/// check until its entry is flipped.
+/// Check 9's probe table (family, method, path, mounted at this tip). APP-012
+/// mounted `POST /v1/work/{app}/{work}/queries/{view}` and `GET /w/{app}/{work}`;
+/// APP-013 mounted `POST /v1/work/{app}/{work}/commands/{command}` (its record
+/// page lives at `/work/{app}/{work}/records/{collection}/{record}`, so the
+/// `/w/...` record path below stays unmounted). The import, generation and
+/// export paths are not mounted.
+/// Check 9's probe body: well-formed JSON that no route accepts, so a
+/// mounted route answers an admitted member with its own refusal (400/422)
+/// once the session gate has passed, while every non-member keeps the
+/// uniform 404 before any body is judged.
+const PROBE_BODY: &str = "[]";
+const ROUTE_FAMILIES: &[(&str, &str, &str, bool)] = &[
+    ("workspace", "GET", "/workspace", true),
+    ("query", "POST", "/v1/work/{app}/{work}/queries/total", true),
+    ("query", "GET", "/w/{app}/{work}", true),
+    ("import", "POST", "/v1/imports", false),
+    ("import", "POST", "/v1/sources/{work}/revisions", false),
+    ("generation", "POST", "/v1/generate", false),
+    ("generation", "POST", "/v1/apps/{app}/definitions", false),
+    ("export", "GET", "/v1/work/{app}/{work}/export", false),
+    (
+        "record",
+        "POST",
+        "/v1/work/{app}/{work}/commands/approve",
+        true,
+    ),
+    ("record", "GET", "/w/{app}/{work}/records/{work}", false),
+];
+
+/// `upload-sources`' content-derived revision identity for `organization`
+/// (`admission_operator.revision_id`: uuid5 re-stamped as version 4), from
+/// the operator's own code.
+fn derived_revision(organization: &str) -> String {
+    let app = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let output = Command::new(fixture_python())
+        .current_dir(app.join("runtime"))
+        .args([
+            "-c",
+            "import sys, admission_operator; print(admission_operator.revision_id(sys.argv[1], sys.argv[2]))",
+            organization,
+            CONTENT,
+        ])
+        .output()
+        .expect("operator module available");
+    assert!(output.status.success(), "revision_id");
+    String::from_utf8(output.stdout).unwrap().trim().to_owned()
+}
 
 fn anonymous_app(issuer: &Issuer, proxies: TrustedProxies) -> (Arc<Auth>, Router) {
     let auth = Arc::new(
@@ -75,7 +156,142 @@ fn anonymous_app(issuer: &Issuer, proxies: TrustedProxies) -> (Arc<Auth>, Router
     (auth.clone(), app(auth))
 }
 
+/// A capability-shaped cookie (ADR-006 amendment (3): the organization's 16
+/// bytes, then 32 random bytes) that the server never issued.
+fn forged_cookie(organization: &str) -> String {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    let hex: String = organization.chars().filter(|c| *c != '-').collect();
+    let mut raw: Vec<u8> = (0..16)
+        .map(|i| u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).unwrap())
+        .collect();
+    raw.extend(capability::random_bytes::<32>().unwrap());
+    URL_SAFE_NO_PAD.encode(raw)
+}
+
 // --- unit tests (no Docker) ------------------------------------------------
+
+/// APP-074 review M2: `GET /auth/callback` is limited per address class and
+/// across the service (sized at the sum of the starts) before the query, the
+/// cookie or any store or provider work; the limited answer is the neutral
+/// page with 429 and `Retry-After`, and it consumes nothing (the pre-login
+/// cookie is kept, so the real return can be retried).
+#[tokio::test]
+async fn callback_floods_hit_class_and_global_limits_before_any_work() {
+    let issuer = Issuer::start(tenants()).await;
+    let (auth, app) = anonymous_app(&issuer, TrustedProxies::none());
+    let log: Log = Arc::default();
+    let neutral_signin = "page=signin;action=-;failed=true";
+    let query = |browser: &mut Browser| {
+        browser
+            .jar
+            .insert(cookies::PRELOGIN.into(), forged_cookie(ORG));
+        format!(
+            "/auth/callback?code={}&state={}",
+            capability::random_capability().unwrap(),
+            capability::random_capability().unwrap()
+        )
+    };
+    let mut flood = Browser::new("198.51.100.50:5000", &log);
+    for i in 0..http::limits::CALLBACK_ADDRESS[0].limit {
+        let uri = query(&mut flood);
+        let reply = flood.get(&app, &uri).await;
+        assert_eq!(
+            (reply.status, reply.body.as_str()),
+            (StatusCode::BAD_REQUEST, neutral_signin),
+            "callback {i}"
+        );
+    }
+    let uri = query(&mut flood);
+    let limited = flood.get(&app, &uri).await;
+    assert_eq!(
+        (limited.status, limited.body.as_str()),
+        (StatusCode::TOO_MANY_REQUESTS, neutral_signin),
+        "the 16th callback from one class"
+    );
+    let retry: u64 = limited.headers[header::RETRY_AFTER]
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!((1..=60).contains(&retry));
+    assert!(
+        limited.headers.get(header::SET_COOKIE).is_none(),
+        "nothing consumed or cleared"
+    );
+    // A query or cookie that is not even well formed is limited the same way:
+    // the limit precedes parsing.
+    let malformed = flood.get(&app, "/auth/callback?code=x").await;
+    assert_eq!(malformed.status, StatusCode::TOO_MANY_REQUESTS);
+    // Across the service: 800 an hour, whatever the classes.
+    auth.limits.clear();
+    let mut admitted = 0;
+    'classes: for a in 0..=255u16 {
+        for b in 0..4u16 {
+            let mut browser = Browser::new(&format!("100.64.{a}.{b}:1"), &log);
+            for _ in 0..http::limits::CALLBACK_ADDRESS[0].limit {
+                if admitted == http::limits::CALLBACK_GLOBAL[0].limit {
+                    break 'classes;
+                }
+                let uri = query(&mut browser);
+                assert_eq!(
+                    browser.get(&app, &uri).await.status,
+                    StatusCode::BAD_REQUEST
+                );
+                admitted += 1;
+            }
+        }
+    }
+    let mut fresh = Browser::new("100.127.9.9:1", &log);
+    let uri = query(&mut fresh);
+    assert_eq!(
+        fresh.get(&app, &uri).await.status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "the 801st callback of the hour from a fresh class"
+    );
+    assert_eq!(
+        (issuer.count(|c| &c.exchange), issuer.count(|c| &c.par)),
+        (0, 0),
+        "no provider call"
+    );
+}
+
+/// APP-074 review M2: forged session and pre-access cookies on `GET
+/// /workspace` and `GET /auth/pending` whose organization the closed registry
+/// does not bind are the uniform 404 with no lookup, and failed lookups are
+/// counted per address class (then 429 for that class only).
+#[tokio::test]
+async fn forged_cookies_are_refused_before_lookup_and_counted_per_class() {
+    let issuer = Issuer::start(tenants()).await;
+    let (_auth, app) = anonymous_app(&issuer, TrustedProxies::none());
+    let log: Log = Arc::default();
+    for (path, name) in [
+        ("/workspace", cookies::SESSION),
+        ("/auth/pending", cookies::PRE_ACCESS),
+    ] {
+        let mut forger = Browser::new(
+            if path == "/workspace" {
+                "198.51.100.60:1"
+            } else {
+                "198.51.100.61:1"
+            },
+            &log,
+        );
+        for i in 0..http::limits::LOOKUP_FAILURE_ADDRESS[0].limit {
+            forger.jar.insert(name.into(), forged_cookie(UNREGISTERED));
+            assert!(forger.get(&app, path).await.uniform_404(), "{path} {i}");
+        }
+        forger.jar.insert(name.into(), forged_cookie(UNREGISTERED));
+        let limited = forger.get(&app, path).await;
+        assert_eq!(limited.status, StatusCode::TOO_MANY_REQUESTS, "{path}");
+        assert!(limited.headers.contains_key(header::RETRY_AFTER));
+        // Another class is unaffected; a request without a cookie is never limited.
+        let mut other = Browser::new("198.51.100.62:1", &log);
+        other.jar.insert(name.into(), forged_cookie(UNREGISTERED));
+        assert!(other.get(&app, path).await.uniform_404());
+        forger.jar.clear();
+        assert!(forger.get(&app, path).await.uniform_404());
+    }
+}
 
 /// The entry page reads and echoes nothing; every refusal before a code is
 /// judged happens without storage, hashing or a provider call: fetch
@@ -282,8 +498,8 @@ async fn invite_and_signin_floods_hit_class_and_global_limits_without_provider_c
         .await;
     assert_eq!(
         (global.status, global.body.as_str()),
-        (StatusCode::TOO_MANY_REQUESTS, LIMITED),
-        "the 201st attempt of the day is refused from a fresh class"
+        (StatusCode::TOO_MANY_REQUESTS, LIMITED_SERVICE),
+        "the 201st attempt of the day is refused from a fresh class, naming the service window"
     );
     // Sign-in: many handles from one class share the per-class window.
     let mut signin = Browser::new("198.51.100.32:4000", &log);
@@ -465,7 +681,17 @@ impl Run {
         } else {
             (&self.canary, CANARY_TENANT, "canary")
         };
-        let grants = [format!("discover:{APP}"), format!("run:{APP}")];
+        // APP-076's journey grant set: the app, the bound work check 9 created
+        // and the two sources it reads, so an admitted member reaches the
+        // mounted query and record routes.
+        let grants = [
+            format!("discover:{APP}"),
+            format!("run:{APP}"),
+            format!("record_read:{APP}:{BOUND_WORK}"),
+            format!("record_write:{APP}:{BOUND_WORK}"),
+            format!("source_read:{SOURCE}"),
+            format!("source_read:{INVENTORY}"),
+        ];
         let mut args = vec![
             "issue",
             "--organization",
@@ -507,6 +733,11 @@ impl Run {
                 .unwrap(),
             )
             .unwrap();
+            // The service's file is exactly the operator's secret entry.
+            assert_eq!(
+                provider.secret.record(org, &invitation),
+                Some(record.clone())
+            );
             assert_eq!(record["code_digest"], digest.as_str());
             let token = record["invite_token"].as_str().unwrap().to_owned();
             self.issuer.invitation(&token, slug, &email);
@@ -625,14 +856,75 @@ async fn campaign() {
             &["issue-handle", "--organization", org, "--handle", handle],
         );
     }
+    // Check 9's data behind the mounted query and record routes: the fixture
+    // source revision registered (the managed inline form) and a new work
+    // bound to it in each organization, through the operator channel.
+    for org in [ORG, OTHER] {
+        let revision = derived_revision(org);
+        let record = json!({
+            "organization_id": org, "source_id": SOURCE, "revision_id": revision,
+            "content_digest": CONTENT, "normalized_digest": NORMALIZED, "object_digest": NORMALIZED,
+            "row_count": 6, "contract_digest": CONTRACT,
+        })
+        .to_string();
+        let registered = operator(
+            &fixture,
+            &[
+                "register-source-revision",
+                "--organization",
+                org,
+                "--record-json",
+                &record,
+            ],
+        );
+        assert_eq!(registered["changed"], true);
+        let bound = operator(
+            &fixture,
+            &[
+                "create-bound-work",
+                "--organization",
+                org,
+                "--app",
+                APP,
+                "--from-work",
+                SEEDED_WORK,
+                "--work",
+                BOUND_WORK,
+                "--creator",
+                PRINCIPAL,
+                "--input",
+                "events",
+                "--source",
+                SOURCE,
+                "--revision",
+                &revision,
+            ],
+        );
+        assert_eq!(bound["changed"], true);
+    }
     fixture.sql(&format!("INSERT INTO genui.provider_tenant_bindings VALUES ('{ORG}','{ISSUER}','{NORTHSTAR_TENANT}',true),('{OTHER}','{ISSUER}','{CANARY_TENANT}',true)"), "genui");
     fixture.write_registry(&json!({"schema_version":1,"registry_version":"00000000-0000-4000-8000-000000000a74","bindings":[
         {"issuer":ISSUER,"provider_tenant_id":NORTHSTAR_TENANT,"organization_id":ORG},
         {"issuer":ISSUER,"provider_tenant_id":CANARY_TENANT,"organization_id":OTHER}]}));
+    // ADR-003 amendment 2026-10-30: one capability secret for the environment
+    // (the operator writes it), one service view of it (the supervisor's
+    // writer materializes it after each operator command).
     let capabilities = fixture.directory.0.join("capabilities");
-    let northstar =
-        FakeProvider::start_at(&fixture, NORTHSTAR_TENANT, "northstar", Some(&capabilities));
-    let canary = FakeProvider::start_at(&fixture, CANARY_TENANT, "canary", Some(&capabilities));
+    let secret = Arc::new(FakeSecret::start());
+    let northstar = FakeProvider::start_at(
+        &fixture,
+        NORTHSTAR_TENANT,
+        "northstar",
+        Some(&capabilities),
+        Some(&secret),
+    );
+    let canary = FakeProvider::start_at(
+        &fixture,
+        CANARY_TENANT,
+        "canary",
+        Some(&capabilities),
+        Some(&secret),
+    );
     let stores = Arc::new(Stores::new(fixture.settings()).unwrap());
     let issuer = Issuer::start(tenants()).await;
     let auth = Arc::new(
@@ -645,7 +937,7 @@ async fn campaign() {
         .with_invitations(Some(invite::Invitations::open(&capabilities).unwrap())),
     );
     let mut c = Run {
-        app: app(auth.clone()),
+        app: full_app(auth.clone()),
         fixture,
         stores,
         issuer,
@@ -780,8 +1072,12 @@ async fn campaign() {
                 "{ORG}.{}.capability",
                 revoked.invitation.as_ref().unwrap()
             ))
-            .exists(),
-        "revoked without provider settings: the capability remains, the code still refuses"
+            .exists()
+            && c.northstar
+                .secret
+                .record(ORG, revoked.invitation.as_ref().unwrap())
+                .is_some(),
+        "revoked without provider or secret settings: the capability remains in the secret and the service's view, the code still refuses"
     );
     let without_invitation = c.issue(ORG, false);
     secrets.extend([
@@ -907,6 +1203,74 @@ async fn campaign() {
     );
     c.record("item 4/5: invitation floods hit 5/minute per address class with the honest limited page (429, Retry-After) before any code is judged, valid codes included; rotating forged X-Forwarded-For from an untrusted peer never evades the peer's budget; behind the trusted load balancer the rightmost hop is the client; one code holds at most 10 live presignup reservations (the eleventh is neutral with no PAR) and none consumes a redemption slot; dispatch counters show no provider call for any denied request");
 
+    // --- 4b. Redemption floods and forged cookies (review M2) -----------------
+    c.auth.limits.clear();
+    let before = c.counts().await;
+    let exchanges = c.issuer.count(|x| &x.exchange);
+    let callback_uri = || {
+        format!(
+            "/auth/callback?code={}&state={}",
+            capability::random_capability().unwrap(),
+            capability::random_capability().unwrap()
+        )
+    };
+    // The database paused: a forged cookie of an organization no registry
+    // binds is refused before any database work, so each answers at once.
+    let docker = |verb: &str| {
+        let status = std::process::Command::new("docker")
+            .args([verb, &c.fixture.name])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "docker {verb}");
+    };
+    docker("pause");
+    let mut paused = Vec::new();
+    for (path, name) in [
+        (callback_uri(), cookies::PRELOGIN),
+        ("/workspace".to_owned(), cookies::SESSION),
+        ("/auth/pending".to_owned(), cookies::PRE_ACCESS),
+    ] {
+        let mut b = c.browser("198.51.100.70:7000");
+        b.jar.insert(name.into(), forged_cookie(UNREGISTERED));
+        let reply = tokio::time::timeout(Duration::from_secs(2), b.get(&c.app, &path)).await;
+        paused.push((path, reply));
+    }
+    docker("unpause");
+    for (path, reply) in paused {
+        let reply = reply.unwrap_or_else(|_| panic!("{path}: waited on the paused database"));
+        if path.starts_with("/auth/callback") {
+            assert_eq!(
+                (reply.status, reply.body.as_str()),
+                (StatusCode::BAD_REQUEST, "page=signin;action=-;failed=true")
+            );
+        } else {
+            assert!(reply.uniform_404(), "{path}");
+        }
+    }
+    // A registered organization's forged pre-login cookie still costs one
+    // flow lookup, at most 15 a minute from one class: the 16th is 429 with
+    // `Retry-After` before any work.
+    let mut flood = c.browser("198.51.100.71:7100");
+    let mut statuses = Vec::new();
+    for _ in 0..=http::limits::CALLBACK_ADDRESS[0].limit {
+        flood
+            .jar
+            .insert(cookies::PRELOGIN.into(), forged_cookie(ORG));
+        let reply = flood.get(&c.app, &callback_uri()).await;
+        statuses.push(reply.status.as_u16());
+        if reply.status == StatusCode::TOO_MANY_REQUESTS {
+            assert!(reply.headers.contains_key(header::RETRY_AFTER));
+        }
+    }
+    assert_eq!(statuses.iter().filter(|s| **s == 400).count(), 15);
+    assert_eq!(statuses.last(), Some(&429));
+    assert_eq!(c.counts().await, before);
+    assert_eq!(c.issuer.count(|x| &x.exchange), exchanges);
+    c.auth.limits.clear();
+    c.record("item 4 (redemption, review M2): GET /auth/callback is limited per address class (15/minute, 80/hour) and across the service (800/hour), sized at the sum of the sign-in and invitation starts, before the query, the cookie or any database work (the 16th forged callback from one class is 429 with Retry-After and the neutral page); with the database paused, forged pre-login, session and pre-access cookies of an organization the closed registry does not bind answer at once (neutral page, uniform 404) because nothing reaches the store; no flood consumed a slot, created a record or reached the token endpoint");
+
     // --- 5. Provider invitation mismatches cannot create an account ----------
     c.auth.limits.clear();
     let b_code = c.issue(ORG, true);
@@ -954,6 +1318,28 @@ async fn campaign() {
         )
         .is_none());
     assert_eq!(c.issuer.count(|x| &x.register_refused), refused_before + 3);
+    // Review m1(a): an existing identity signing in on another email's
+    // invited request is refused, as fAuth's hosted sign-in is; the request
+    // and the invitation stay as they were.
+    let login_refused = c.issuer.count(|x| &x.login_refused);
+    assert!(c.issuer.login(&start.location(), maya_subject).is_none());
+    assert_eq!(c.issuer.count(|x| &x.login_refused), login_refused + 1);
+    // Review m1(b): an existing account for the invited email is fAuth's 409:
+    // refused without consuming the invitation or the request.
+    c.issuer.user(
+        "usr_00000000-0000-4000-8000-0000000074be",
+        &b_code.email,
+        false,
+    );
+    assert!(c
+        .issuer
+        .register(
+            &start.location(),
+            "usr_00000000-0000-4000-8000-0000000074bf",
+            &b_code.email
+        )
+        .is_none());
+    assert_eq!(c.issuer.count(|x| &x.register_refused), refused_before + 4);
     assert_eq!(
         c.issuer.invitation_state(b_code.token.as_ref().unwrap()),
         Some(InvitationState::Pending)
@@ -977,7 +1363,7 @@ async fn campaign() {
     let replayed = c.validate(&mut late, &a.raw).await;
     assert_eq!(replayed.body, NEUTRAL, "a used code replays nothing");
     assert_eq!(c.scalar("SELECT count(*) FROM genui.principals WHERE provider_subject LIKE 'usr_00000000-0000-4000-8000-0000000074b%'").await, 0);
-    c.record("item 2: missing, wrong-email and other-tenant provider invitations cannot create an account through the hosted registration (refused, invitation untouched), a sign-in request offers no generic signup, and a provider-revoked or already-consumed invitation is refused at the backend PAR (neutral page, flow discarded); a leaked or replayed used code obtains nothing");
+    c.record("item 2: missing, wrong-email and other-tenant provider invitations cannot create an account through the hosted registration (refused, invitation untouched), an existing account for the invited email is refused (fAuth's 409) and an existing identity's sign-in on another email's invited request is refused, both with the invitation still pending (review m1), a sign-in request offers no generic signup, and a provider-revoked or already-consumed invitation is refused at the backend PAR (neutral page, flow discarded); a leaked or replayed used code obtains nothing");
 
     // --- 6. Wrong, replayed, expired and cross-flow state ---------------------
     c.auth.limits.clear();
@@ -1269,35 +1655,28 @@ async fn campaign() {
             vec![(cookies::SESSION.into(), foreign_cookie)],
         ),
     ];
-    let work = "00000000-0000-4000-8000-0000000000c1";
-    let families: Vec<(&str, &str, String)> = vec![
-        ("workspace", "GET", "/workspace".into()),
-        (
-            "query",
-            "POST",
-            format!("/v1/work/{APP}/{work}/queries/total"),
-        ),
-        ("query", "GET", format!("/w/{APP}/{work}")),
-        ("import", "POST", "/v1/imports".into()),
-        ("import", "POST", format!("/v1/sources/{work}/revisions")),
-        ("generation", "POST", "/v1/generate".into()),
-        ("generation", "POST", format!("/v1/apps/{APP}/definitions")),
-        ("export", "GET", format!("/v1/work/{APP}/{work}/export")),
-        (
-            "record",
-            "POST",
-            format!("/v1/work/{APP}/{work}/commands/approve"),
-        ),
-        ("record", "GET", format!("/w/{APP}/{work}/records/{work}")),
-    ];
+    // APP-074 review M3: every family is probed as every principal, admitted
+    // members included, and the evidence says which routes this tip mounts.
+    let families: Vec<(&str, &str, String, bool)> = ROUTE_FAMILIES
+        .iter()
+        .map(|(family, method, path, mounted)| {
+            (
+                *family,
+                *method,
+                path.replace("{app}", APP).replace("{work}", BOUND_WORK),
+                *mounted,
+            )
+        })
+        .collect();
     let dispatch = (
         c.issuer.count(|x| &x.par),
         c.issuer.count(|x| &x.exchange),
         c.issuer.count(|x| &x.register),
+        c.issuer.count(|x| &x.logout),
     );
     let mut refusals = Vec::new();
     for (who, jar) in &principals {
-        for (family, method, path) in &families {
+        for (family, method, path, _) in &families {
             let mut b = c.browser("192.0.2.80:2800");
             b.jar = jar.iter().cloned().collect();
             let reply = b
@@ -1305,7 +1684,7 @@ async fn campaign() {
                     &c.app,
                     method,
                     path,
-                    "{}",
+                    PROBE_BODY,
                     &[("sec-fetch-site", "same-origin")],
                 )
                 .await;
@@ -1318,16 +1697,32 @@ async fn campaign() {
             refusals.push(format!("{who}|{family}|{method}|{path}"));
         }
     }
-    // Admitted members: implemented route opens; not-yet-implemented import,
-    // generation and export families stay the uniform 404 even for members.
+    // Admitted members, over every family: a mounted route reaches its
+    // handler (PROBE_BODY is well-formed JSON no route accepts, so a member
+    // gets the handler's own shape refusal after the session gate, without
+    // any fixture data behind the route); an unmounted path answers exactly
+    // the router's fallback (the same bytes as a path no ticket names), so
+    // nothing unmounted can be counted as implemented. When APP-012/013 mount a route, its entry in
+    // ROUTE_FAMILIES flips to mounted and this loop then requires a member to
+    // reach it while every non-member above keeps the uniform 404.
+    let mut member_probes = 0;
     for (who, cookie) in [
         ("northstar member", north_cookie.clone()),
         ("canary member", session_of(&south_browser)),
     ] {
-        for (family, method, path) in families
-            .iter()
-            .filter(|f| matches!(f.0, "import" | "generation" | "export"))
-        {
+        let mut b = c.browser("192.0.2.81:2801");
+        b.jar.insert(cookies::SESSION.into(), cookie.clone());
+        let fallback = b
+            .send(
+                &c.app,
+                "POST",
+                "/v1/no-ticket-names-this-path",
+                PROBE_BODY,
+                &[("sec-fetch-site", "same-origin")],
+            )
+            .await;
+        assert!(fallback.uniform_404(), "{who}: the router fallback");
+        for (family, method, path, mounted) in &families {
             let mut b = c.browser("192.0.2.81:2801");
             b.jar.insert(cookies::SESSION.into(), cookie.clone());
             let reply = b
@@ -1335,25 +1730,58 @@ async fn campaign() {
                     &c.app,
                     method,
                     path,
-                    "{}",
+                    PROBE_BODY,
                     &[("sec-fetch-site", "same-origin")],
                 )
                 .await;
-            assert!(reply.uniform_404(), "{who} {family} {path}");
+            member_probes += 1;
+            if *mounted {
+                assert!(
+                    !reply.uniform_404(),
+                    "{who} {family} {method} {path}: a mounted route must reach its handler ({} {})",
+                    reply.status,
+                    reply.body
+                );
+            } else {
+                assert!(
+                    reply.uniform_404()
+                        && reply.body == fallback.body
+                        && reply.headers == fallback.headers,
+                    "{who} {family} {method} {path} answered {} {}: it is mounted at this tip, so set its ROUTE_FAMILIES entry to mounted and re-run the seven-principal probe before item 2 is claimed for {family}",
+                    reply.status,
+                    reply.body
+                );
+            }
         }
     }
+    // Review m8: the probes dispatched no PAR, exchange or registration; the
+    // expired and the entitlement-revoked sessions' destruction revoked each
+    // one's refresh token once (provider logout), as ADR-006 requires.
     assert_eq!(
         (
             c.issuer.count(|x| &x.par),
             c.issuer.count(|x| &x.exchange),
-            c.issuer.count(|x| &x.register)
+            c.issuer.count(|x| &x.register),
+            c.issuer.count(|x| &x.logout)
         ),
-        dispatch,
-        "no protected-route refusal dispatched provider work"
+        (dispatch.0, dispatch.1, dispatch.2, dispatch.3 + 2),
+        "no protected-route refusal dispatched provider work beyond the two ended sessions' revocations"
     );
     let pre_rows = c.scalar("SELECT count(*) FROM genui.principals WHERE provider_subject='usr_00000000-0000-4000-8000-0000000074ee'").await;
     assert_eq!(pre_rows, 0);
-    c.record(&format!("item 2/5: {} probes of the workspace, query, import, generation, export and record route families by anonymous, malformed, pre-access (also presented as a session), expired, entitlement-revoked and foreign-scoped principals all answer the byte-identical uniform 404 (problem+json, no-store, nosniff, no Set-Cookie) with no provider dispatch; admitted Northstar and Canary members still get the uniform 404 for the unimplemented import, generation and export families, which are not counted as features; a registered pre-access identity holds no principal", refusals.len()));
+    let mounted: Vec<&str> = families
+        .iter()
+        .filter(|f| f.3)
+        .map(|f| f.2.as_str())
+        .collect();
+    let unmounted: Vec<&str> = families
+        .iter()
+        .filter(|f| !f.3)
+        .map(|f| f.0)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    c.record(&format!("item 2/5: mounted protected routes at this tip: {mounted:?}; the {unmounted:?} paths are not mounted and answer the router's uniform fallback 404 to every principal, admitted members included, so none is counted as implemented. {} probes by anonymous, malformed, pre-access (also presented as a session), expired, entitlement-revoked and foreign-scoped principals all answer the byte-identical uniform 404 (problem+json, no-store, nosniff, no Set-Cookie); {member_probes} member probes over all {} paths: the mounted route reaches its handler and every unmounted path is byte-identical to the fallback; no PAR, exchange or registration was dispatched, and the expired and entitlement-revoked sessions' destruction revoked each refresh token once (ADR-006); a registered pre-access identity holds no principal. APP-012/APP-013 re-run this check with their routes marked mounted before item 2 is claimed for the query or record family", refusals.len(), families.len()));
 
     // --- 10. Provider faults at the PAR ---------------------------------------
     for mode in [ParMode::Unavailable, ParMode::Timeout] {
@@ -1503,7 +1931,7 @@ async fn campaign() {
         "log_lines_scanned": log_lines,
         "passed": true,
         "limits": [
-            "The provider is the cfg(test) synthetic loopback issuer (PAR, hosted registration, token) plus the loopback management stand-in app/runtime/fake_fauth.py; the test copies each invitation token from the operator's capability file into the issuer (one simulated provider). Never the deployed fAuth; hosted PAR, real mail and browsers are APP-076/079.",
+            "The provider is the cfg(test) synthetic loopback issuer (PAR, hosted registration, token) plus the loopback management stand-in app/runtime/fake_fauth.py; the operator writes each capability into the environment's secret (app/runtime/local_secrets.py, a loopback Secrets Manager stand-in reached through the real boto3 client; ADR-003 amendment 2026-10-30), the supervisor's own writer (runtime.write_capabilities) materializes it as the service's 0600 files after each operator command, and the test copies each invitation token from the service's file into the issuer (one simulated provider). Never the deployed fAuth; hosted PAR, real mail and browsers are APP-076/079.",
             "Synthetic local password authentication over TLS, not RDS IAM; synthetic identifiers.",
             "Rate-limit windows are in-process (D7.5, D7.18).",
             "The route-level admission race repeat and the provider create/revoke fault exercise are APP-082's (ADR-010).",

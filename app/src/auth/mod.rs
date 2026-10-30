@@ -232,11 +232,34 @@ pub struct WorkspaceView {
     pub csrf_signout_all: String,
 }
 /// APP-074 invitation entry. The submitted code is never shown back.
+#[derive(Default)]
 pub struct InviteView {
     /// The one neutral refusal of every unusable code.
     pub failed: bool,
-    /// The invitation limits refused the attempt (429 with `Retry-After`).
-    pub limited: bool,
+    /// The invitation window that refused the attempt (429 with
+    /// `Retry-After`); review m4: the page names it.
+    pub limited: Option<InviteLimit>,
+    /// A store or provider outage, or the entry's own deadline, before any
+    /// code was judged (503): an HTML answer for a form, never raw JSON.
+    pub unavailable: bool,
+}
+/// Which ADR-006 invitation window refused: this network's per-minute or
+/// per-day window, or the service-wide daily window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InviteLimit {
+    Minute,
+    Day,
+    Service,
+}
+impl InviteLimit {
+    /// The page's wording key (`InviteProps.limit_window`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Minute => "minute",
+            Self::Day => "day",
+            Self::Service => "service",
+        }
+    }
 }
 pub trait Pages: Send + Sync {
     fn invite(&self, view: &InviteView) -> Response;

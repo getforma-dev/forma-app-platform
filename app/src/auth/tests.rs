@@ -21,7 +21,11 @@ use super::{
     vault::AccessFailure,
     *,
 };
-use crate::http;
+use crate::{
+    commands::{self, RecordPage, RecordView},
+    http,
+    query::{self, page::WorkPages, page::WorkProps},
+};
 use axum::{
     body::{to_bytes, Body},
     extract::ConnectInfo,
@@ -64,8 +68,10 @@ fn page(text: String) -> Response {
 impl Pages for TestPages {
     fn invite(&self, v: &InviteView) -> Response {
         page(format!(
-            "page=invite;failed={};limited={}",
-            v.failed, v.limited
+            "page=invite;failed={};limited={}{}",
+            v.failed,
+            v.limited.map_or("false", |w| w.as_str()),
+            if v.unavailable { ";unavailable" } else { "" }
         ))
     }
     fn signin(&self, v: &SigninView) -> Response {
@@ -140,8 +146,36 @@ pub(crate) fn tenants() -> Vec<Tenant> {
         },
     ]
 }
-/// The same composition as the binary: ADR-006 routes, the uniform 404 for
-/// unknown paths and methods, the 5 s handler deadline.
+impl WorkPages for TestPages {
+    fn work(&self, v: &WorkProps) -> Response {
+        page(format!("page=work;views={}", v.views.len()))
+    }
+}
+impl RecordPage for TestPages {
+    fn record(&self, v: &RecordView) -> Response {
+        page(format!("page=record;version={}", v.version))
+    }
+}
+/// The binary's whole product router (`main.rs`): the ADR-006 routes, the
+/// APP-013 command route and record page, and the APP-012 query route and
+/// work page (no engine: a run that reaches execution answers 503), then the
+/// uniform 404 for unknown paths and methods and the 5 s handler deadline.
+pub(crate) fn full_app(auth: Arc<Auth>) -> Router {
+    let pages = Arc::new(TestPages);
+    let command_routes = Arc::new(commands::routes::Commands {
+        auth: auth.clone(),
+        page: pages.clone(),
+    });
+    let work = Arc::new(query::routes::Work::new(auth.clone(), None, pages));
+    routes::router(auth)
+        .merge(commands::routes::router(command_routes))
+        .merge(query::routes::router(work))
+        .fallback(http::fallback)
+        .method_not_allowed_fallback(http::fallback)
+        .layer(middleware::from_fn(http::deadline))
+}
+/// The ADR-006 routes alone: the uniform 404 for unknown paths and methods,
+/// the 5 s handler deadline.
 pub(crate) fn app(auth: Arc<Auth>) -> Router {
     routes::router(auth)
         .fallback(http::fallback)
@@ -1033,7 +1067,7 @@ async fn campaign() {
     let hooks = settings.hooks.clone();
     let stores = Arc::new(Stores::new(settings).unwrap());
     let issuer = Issuer::start(tenants()).await;
-    let provider = FakeProvider::start_at(&fixture, NORTHSTAR_TENANT, "provider", None);
+    let provider = FakeProvider::start_at(&fixture, NORTHSTAR_TENANT, "provider", None, None);
     let auth = Arc::new(
         Auth::loopback(
             config(&issuer.origin),

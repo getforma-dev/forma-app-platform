@@ -12,14 +12,14 @@
       "canvas": false,
       "files": [
         {
-          "file": "home.af02bcd2.js",
+          "file": "home.9c17bce8.js",
           "raw": 79448,
-          "gzip": 26636,
-          "brotli": 23927,
+          "gzip": 26640,
+          "brotli": 23906,
           "forma": {
             "raw": 79081,
-            "gzip": 26513,
-            "brotli": 23816
+            "gzip": 26517,
+            "brotli": 23796
           },
           "router": {
             "raw": 0,
@@ -29,17 +29,17 @@
         }
       ],
       "raw": 79448,
-      "gzip": 26636,
-      "brotli": 23927,
+      "gzip": 26640,
+      "brotli": 23906,
       "forma": {
         "raw": 79081,
-        "gzip": 26513,
-        "brotli": 23816
+        "gzip": 26517,
+        "brotli": 23796
       },
       "core": {
         "raw": 79081,
-        "gzip": 26513,
-        "brotli": 23816
+        "gzip": 26517,
+        "brotli": 23796
       },
       "router": {
         "raw": 0,
@@ -49,17 +49,17 @@
       "application": {
         "raw": 367,
         "gzip": 123,
-        "brotli": 111
+        "brotli": 110
       },
       "worker": {
         "raw": 3221,
         "gzip": 1531,
-        "brotli": 1302
+        "brotli": 1303
       },
       "javascript": {
         "raw": 82669,
-        "gzip": 28167,
-        "brotli": 25229
+        "gzip": 28171,
+        "brotli": 25209
       },
       "ceilings": {
         "forma": 28420,
@@ -343,6 +343,6 @@
     "file": "sw.js",
     "raw": 3221,
     "gzip": 1531,
-    "brotli": 1302
+    "brotli": 1303
   }
 }

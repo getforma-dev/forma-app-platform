@@ -825,14 +825,21 @@ async fn route_campaign(
     stores.readiness().await.unwrap();
     let issuer = Issuer::start(harness::tenants()).await;
     // APP-074: invited signups go through the real `POST /invite/validate`;
-    // one loopback management stand-in per tenant, one capability directory.
-    let provider =
-        FakeProvider::start_at(&fixture, harness::NORTHSTAR_TENANT, "route-northstar", None);
+    // one loopback management stand-in per tenant, one capability secret
+    // (ADR-003 amendment 2026-10-30) and one service view of it.
+    let provider = FakeProvider::start_at(
+        &fixture,
+        harness::NORTHSTAR_TENANT,
+        "route-northstar",
+        None,
+        None,
+    );
     let canary = FakeProvider::start_at(
         &fixture,
         harness::CANARY_TENANT,
         "route-canary",
         Some(&provider.capabilities),
+        Some(&provider.secret),
     );
     let auth = Arc::new(
         Auth::loopback(

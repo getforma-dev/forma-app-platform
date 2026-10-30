@@ -169,6 +169,133 @@ class EmptyIdentityRegistryFile(QualificationFile):
         super().__init__(runtime_path, payload)
 
 
+# --- provider invitation capabilities (ADR-003 amendment 2026-10-30; APP-074 review M1) ---
+#
+# The operator writes every live capability of the environment into one Secrets
+# Manager secret (provider_management.CapabilitySecret); ECS injects it into the
+# service container only, as CAPABILITIES_JSON_ENV. serve() removes it from its
+# own environment before anything else, validates it whole, writes each entry as
+# a 0600 `{organization}.{invitation}.capability` file into a fresh 0700
+# directory under the private /run/genui volume, and hands only that directory's
+# path (CAPABILITY_DIR_ENV) to the service child, whose invitation entry
+# (app/src/auth/invite.rs) reads it. The directory is removed when serve() ends.
+# A new or removed capability reaches the service at its next task start.
+CAPABILITIES_JSON_ENV = "GENUI_PROVIDER_CAPABILITIES_JSON"
+CAPABILITY_DIR_ENV = "GENUI_PROVIDER_CAPABILITY_DIR"
+CAPABILITY_FORMAT = "forma:fauth-invite-capability:v1"
+# Secrets Manager's SecretString bound; each record within the service's
+# per-file bound (invite.rs CAPABILITY_LIMIT); at most this many per environment.
+CAPABILITY_SECRET_BYTES_MAX = 65536
+CAPABILITY_RECORD_BYTES_MAX = 4096
+CAPABILITIES_MAX = 128
+CAPABILITY_RECORD_KEYS = frozenset({"format", "organization_id", "invitation_id", "remote_invitation_id", "provider_expires_at",
+                                    "invite_token"})
+_CAPABILITY_UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+_CAPABILITY_ID = re.compile(r"(%s)\.(%s)" % (_CAPABILITY_UUID, _CAPABILITY_UUID))
+_PROVIDER_ID = re.compile(r"tinv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+_CAPABILITY_EXPIRY = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+_CODE_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def capability_record_bytes(record):
+    """One capability's file bytes, exactly as the service reads them."""
+    return json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def check_capability(capability_id, record):
+    """One entry of the capability map: its id names the record's organization and invitation."""
+    match = _CAPABILITY_ID.fullmatch(capability_id) if isinstance(capability_id, str) else None
+    require(match is not None and isinstance(record, dict))
+    require(set(record) in (CAPABILITY_RECORD_KEYS, CAPABILITY_RECORD_KEYS | {"code_digest"}))
+    require(record["format"] == CAPABILITY_FORMAT and record["organization_id"] == match.group(1)
+            and record["invitation_id"] == match.group(2))
+    for name in ("remote_invitation_id", "invite_token"):
+        require(isinstance(record[name], str) and _PROVIDER_ID.fullmatch(record[name]) is not None)
+    require(record["remote_invitation_id"] != record["invite_token"])
+    require(isinstance(record["provider_expires_at"], str) and _CAPABILITY_EXPIRY.fullmatch(record["provider_expires_at"]) is not None)
+    require("code_digest" not in record
+            or (isinstance(record["code_digest"], str) and _CODE_DIGEST.fullmatch(record["code_digest"]) is not None))
+    require(len(capability_record_bytes(record)) <= CAPABILITY_RECORD_BYTES_MAX)
+    return record
+
+
+def _unique_object(pairs):
+    require(len({key for key, _ in pairs}) == len(pairs))
+    return dict(pairs)
+
+
+def capability_map(text):
+    """The whole secret, validated whole: a JSON object of at most CAPABILITIES_MAX entries keyed by
+    `{organization}.{invitation}`. Any malformed entry refuses the whole map (never a partial set)."""
+    require(isinstance(text, str) and len(text.encode("utf-8")) <= CAPABILITY_SECRET_BYTES_MAX)
+    value = json.loads(text, object_pairs_hook=_unique_object)
+    require(isinstance(value, dict) and len(value) <= CAPABILITIES_MAX)
+    return {key: check_capability(key, record) for key, record in value.items()}
+
+
+def write_capabilities(directory, text):
+    """Write each entry of the capability map as a 0600 file into `directory`, an existing 0700
+    directory of this user (never a link), refusing any existing name. Returns the names written."""
+    capabilities = capability_map(text)
+    directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    written = []
+    try:
+        info = os.fstat(directory_fd)
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) == 0o700)
+        for capability_id, record in sorted(capabilities.items()):
+            name = capability_id + ".capability"
+            descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600,
+                                 dir_fd=directory_fd)
+            written.append(name)
+            try:
+                os.fchmod(descriptor, 0o600)
+                os.write(descriptor, capability_record_bytes(record))
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+    return written
+
+
+class CapabilityDirectory:
+    """A fresh 0700 directory under the private runtime volume holding the injected capabilities;
+    close() removes it and the capability files in it."""
+    PREFIX = "provider-capabilities-"
+
+    def __init__(self, runtime_path, text):
+        parent = Path(runtime_path).parent
+        info = parent.lstat()
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and info.st_mode & 0o077 == 0)
+        self.path = Path(tempfile.mkdtemp(prefix=self.PREFIX, dir=parent))
+        try:
+            os.chmod(self.path, 0o700)
+            write_capabilities(str(self.path), text)
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        if self.path is None:
+            return
+        try:
+            for name in os.listdir(self.path):
+                if name.endswith(".capability"):
+                    Path(self.path, name).unlink(missing_ok=True)
+            self.path.rmdir()
+        except FileNotFoundError:
+            pass
+        finally:
+            self.path = None
+
+
+def take_capability_injection():
+    """Remove the injected capability secret from this process's environment (every mode), so no
+    later child can inherit it. Only serve() uses the value."""
+    return os.environ.pop(CAPABILITIES_JSON_ENV, None)
+
+
 def load(path, now=None):
     now = int(time.time()) if now is None else now
     path = Path(path)
@@ -562,12 +689,18 @@ def cleanup(report_path):
     print(json.dumps({"run_id": run_id, "deleted_versions": len(report["cleanup"])}))
 
 
-def serve(path):
+def serve(path, capabilities=None):
+    # ADR-003 amendment 2026-10-30: out of this process's environment before anything else.
+    injected = take_capability_injection()
+    capabilities = capabilities if capabilities is not None else injected
     refuse_qualification_injection()
+    # Only serve() names the capability directory, and only for the injected secret.
+    require(CAPABILITY_DIR_ENV not in os.environ)
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT): signal.signal(sig, lambda *_: stop.set())
     child = None
     registry_file = None
+    capability_directory = None
     credentials_started = False
     try:
         Path(path).parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -575,6 +708,11 @@ def serve(path):
         if IDENTITY_REGISTRY_FILE_ENV not in child_environment:
             registry_file = EmptyIdentityRegistryFile(path)
             child_environment[IDENTITY_REGISTRY_FILE_ENV] = str(registry_file.path)
+        if capabilities is not None:
+            # A malformed secret is a terminal refusal: never a partial set, never a launch.
+            capability_directory = CapabilityDirectory(path, capabilities)
+            child_environment[CAPABILITY_DIR_ENV] = str(capability_directory.path)
+        capabilities = injected = None
         while not stop.is_set():
             try:
                 credentials_started = True
@@ -606,8 +744,12 @@ def serve(path):
                 if registry_file is not None:
                     registry_file.close()
             finally:
-                if credentials_started:
-                    Path(path).unlink(missing_ok=True)
+                try:
+                    if capability_directory is not None:
+                        capability_directory.close()
+                finally:
+                    if credentials_started:
+                        Path(path).unlink(missing_ok=True)
     return 0
 
 
@@ -685,6 +827,9 @@ def query():
 
 
 if __name__ == "__main__":
+    # ADR-003 amendment 2026-10-30: the capability secret leaves the environment in every
+    # mode, first; only serve() writes it out, for its service child alone.
+    capabilities = take_capability_injection()
     parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup", "query", "cache")); parser.add_argument("--generation"); parser.add_argument("--report")
     args = parser.parse_args()
     try:
@@ -701,7 +846,7 @@ if __name__ == "__main__":
         elif args.mode == "migrate": migrate()
         elif args.mode == "qualify": qualification(path)
         elif args.mode == "cleanup": cleanup(args.report)
-        else: raise SystemExit(serve(path))
+        else: raise SystemExit(serve(path, capabilities))
     except Exception:
         print("managed_dependency_operation_refused", file=sys.stderr)
         raise SystemExit(1)

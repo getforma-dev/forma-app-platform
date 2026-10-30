@@ -34,7 +34,11 @@ struct AboutProps {}
 #[derive(PageProps)]
 struct InviteProps {
     failed: bool,
-    limited: bool,
+    /// APP-074 review m4: the ADR-006 window that refused, named.
+    limit_minute: bool,
+    limit_day: bool,
+    limit_service: bool,
+    unavailable: bool,
     described_by: String,
 }
 #[derive(PageProps)]
@@ -194,8 +198,11 @@ impl auth::Pages for SsrPages {
             self.invite.render(
                 &InviteProps {
                     failed: view.failed,
-                    limited: view.limited,
-                    described_by: if view.failed || view.limited {
+                    limit_minute: view.limited == Some(auth::InviteLimit::Minute),
+                    limit_day: view.limited == Some(auth::InviteLimit::Day),
+                    limit_service: view.limited == Some(auth::InviteLimit::Service),
+                    unavailable: view.unavailable,
+                    described_by: if view.failed || view.limited.is_some() || view.unavailable {
                         "invite-error"
                     } else {
                         "invite-help"
@@ -707,11 +714,7 @@ mod tests {
     #[tokio::test]
     async fn invite_page_renders_entry_refusal_and_limit_without_javascript() {
         let pages = pages();
-        let (status, headers, body) = html(pages.invite(&InviteView {
-            failed: false,
-            limited: false,
-        }))
-        .await;
+        let (status, headers, body) = html(pages.invite(&InviteView::default())).await;
         assert_eq!(status, StatusCode::OK);
         assert!(headers[header::CACHE_CONTROL]
             .to_str()
@@ -732,19 +735,39 @@ mod tests {
         assert!(body.contains("aria-describedby=\"invite-help\""));
         let (_, _, refused) = html(pages.invite(&InviteView {
             failed: true,
-            limited: false,
+            ..InviteView::default()
         }))
         .await;
         assert!(refused.contains("role=\"alert\"") && refused.contains("could not be used"));
         assert!(refused.contains("aria-describedby=\"invite-error\""));
         assert!(refused.contains("id=\"invite-error\"") && refused.contains("<form"));
-        let (_, _, limited) = html(pages.invite(&InviteView {
-            failed: false,
-            limited: true,
+        // APP-074 review m4: each limit names its window; an outage is a page.
+        for (window, says) in [
+            (auth::InviteLimit::Minute, "in the last minute"),
+            (auth::InviteLimit::Day, "today. Try again tomorrow"),
+            (auth::InviteLimit::Service, "across the service today"),
+        ] {
+            let (_, _, limited) = html(pages.invite(&InviteView {
+                limited: Some(window),
+                ..InviteView::default()
+            }))
+            .await;
+            assert!(limited.contains("Too many attempts") && limited.contains("role=\"alert\""));
+            assert!(limited.contains(says), "{window:?}");
+            assert!(limited.contains("aria-describedby=\"invite-error\""));
+            assert!(
+                !limited.contains("could not be used") && !limited.contains("Wait a few minutes")
+            );
+        }
+        let (_, _, unavailable) = html(pages.invite(&InviteView {
+            unavailable: true,
+            ..InviteView::default()
         }))
         .await;
-        assert!(limited.contains("Too many attempts") && limited.contains("role=\"alert\""));
-        assert!(!limited.contains("could not be used"));
+        assert!(
+            unavailable.contains("unavailable right now") && unavailable.contains("role=\"alert\"")
+        );
+        assert!(unavailable.contains("<form") && !unavailable.contains("Too many attempts"));
     }
 
     /// The four APP-009 pages render natively with their typed props, no

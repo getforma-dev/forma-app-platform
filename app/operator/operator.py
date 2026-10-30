@@ -93,7 +93,9 @@ PINNED_CA = "/etc/ssl/certs/rds-global-bundle.pem"
 MANAGED_TASK_VARIABLES = ("ECS_CONTAINER_METADATA_URI_V4", "ECS_CONTAINER_METADATA_URI")
 # admission subcommands never run in a managed task: `issue` prints the raw
 # code to standard output, which there is the awslogs group; `reconcile` (like
-# a provider invitation) needs the management key and a private directory;
+# a provider invitation) needs the management key, which the task never holds
+# (`revoke` there removes the code's capability from the secret the task
+# definition names, ADR-003 amendment 2026-10-30);
 # `register-source-revision` reads a local record file that a command-only
 # override cannot deliver (APP-012).
 MANAGED_REFUSED = ("issue", "reconcile", "register-source-revision")
@@ -101,6 +103,13 @@ MANAGED_REFUSED = ("issue", "reconcile", "register-source-revision")
 # `issue --code-digest` without a provider invitation (the operator minted the
 # code locally; the task sees and prints only its digest) and
 # `register-source-revision --record-json` (the non-secret record inline).
+# ADR-003 amendment 2026-10-30 reconciliation: the digest-only form never writes
+# the provider capability secret because it never creates a provider
+# invitation (admission_operator refuses the two together), so a managed task
+# needs no management key and prints only identifiers; `--capability-secret-id`
+# beside it is an unused identifier. A code that can obtain a signup handoff
+# (ADR-006 invitation-first) needs `issue --provider-email`, which still runs
+# only where the management key is (never a task); that path writes the secret.
 
 
 def managed_form_refused(parsed):

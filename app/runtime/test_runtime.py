@@ -842,4 +842,138 @@ raise SystemExit({exit_code})
                     self.assertNotIn(self.PAYLOAD, process.stdout + process.stderr)
         self.assertEqual(sorted(self.directory.iterdir()), [])
 
+
+def capability(org=None, invitation=None, **changes):
+    """One synthetic capability entry: (id, record)."""
+    org, invitation = org or str(uuid.uuid4()), invitation or str(uuid.uuid4())
+    record = {'format': runtime.CAPABILITY_FORMAT, 'organization_id': org, 'invitation_id': invitation,
+              'remote_invitation_id': 'tinv_' + str(uuid.uuid4()), 'provider_expires_at': '2026-11-03T00:00:00Z',
+              'invite_token': 'tinv_' + str(uuid.uuid4()), 'code_digest': 'sha256:' + 'ab' * 32}
+    record.update(changes)
+    return '%s.%s' % (org, invitation), {k: v for k, v in record.items() if v is not None}
+
+
+class CapabilityInjectionTests(unittest.TestCase):
+    """ADR-003 amendment 2026-10-30 (APP-074 review M1): the injected secret becomes 0600 files in a
+    fresh 0700 directory under the runtime volume that only the service child is told about."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='genui-capabilities-unit-')
+        self.directory = Path(self.tmp.name); self.directory.chmod(0o700)
+        self.path = self.directory / 'credentials.json'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def secret(self, *entries):
+        return json.dumps(dict(entries))
+
+    def test_the_map_is_validated_whole(self):
+        good = capability()
+        self.assertEqual(runtime.capability_map(self.secret(good)), dict([good]))
+        self.assertEqual(runtime.capability_map('{}'), {})
+        self.assertEqual(runtime.capability_map(self.secret(capability(code_digest=None))).popitem()[1].get('code_digest'), None)
+        key, record = capability()
+        other_org = capability()[1]['organization_id']
+        bad = [
+            'not json', '[]', '{"a": 1}',
+            json.dumps({key.upper(): record}),
+            json.dumps({'%s.%s' % (other_org, record['invitation_id']): record}),
+            self.secret(capability(extra='x')), self.secret(capability(format='other')),
+            self.secret(capability(invite_token='short')), self.secret(capability(remote_invitation_id=None)),
+            self.secret(capability(provider_expires_at='2026-11-03T00:00:00.000Z')),
+            self.secret(capability(code_digest='sha256:AB')),
+            '{"%s": %s, "%s": %s}' % (key, json.dumps(record), key, json.dumps(record)),  # a duplicated id
+            self.secret(*(capability() for _ in range(runtime.CAPABILITIES_MAX + 1))),
+            json.dumps({key: dict(record, invite_token=record['remote_invitation_id'])}),
+            'x' * (runtime.CAPABILITY_SECRET_BYTES_MAX + 1),
+        ]
+        for text in bad:
+            with self.subTest(text=text[:60]), self.assertRaises((runtime.Refused, ValueError)):
+                runtime.capability_map(text)
+
+    def test_files_are_private_exact_and_never_replace_a_name(self):
+        entries = [capability(), capability()]
+        target = self.directory / 'capabilities'; target.mkdir(mode=0o700); target.chmod(0o700)
+        written = runtime.write_capabilities(str(target), self.secret(*entries))
+        self.assertEqual(sorted(written), sorted(key + '.capability' for key, _ in entries))
+        for key, record in entries:
+            path = target / (key + '.capability')
+            info = path.lstat()
+            self.assertEqual((stat.S_IMODE(info.st_mode), info.st_uid, info.st_nlink), (0o600, os.geteuid(), 1))
+            self.assertEqual(json.loads(path.read_bytes()), record)
+        with self.assertRaises(FileExistsError):
+            runtime.write_capabilities(str(target), self.secret(entries[0]))
+        loose = self.directory / 'loose'; loose.mkdir(); loose.chmod(0o755)
+        with self.assertRaises(runtime.Refused):
+            runtime.write_capabilities(str(loose), self.secret(capability()))
+        link = self.directory / 'link'; link.symlink_to(target, target_is_directory=True)
+        with self.assertRaises(OSError):
+            runtime.write_capabilities(str(link), self.secret(capability()))
+        self.assertEqual(list(loose.iterdir()), [])
+
+    def child(self):
+        report = self.directory / 'report.json'; script = self.directory / 'child.py'
+        script.write_text(f'''#!{sys.executable}
+import json,os,stat
+from pathlib import Path
+d=os.environ.get({runtime.CAPABILITY_DIR_ENV!r})
+out={{'dir':d,'raw_absent':{runtime.CAPABILITIES_JSON_ENV!r} not in os.environ}}
+if d:
+    p=Path(d)
+    out.update(mode=stat.S_IMODE(p.lstat().st_mode),parent=str(p.parent),files={{n:[stat.S_IMODE((p/n).lstat().st_mode),json.loads((p/n).read_text())] for n in os.listdir(p)}})
+Path({str(report)!r}).write_text(json.dumps(out))
+'''); script.chmod(0o700)
+        return script, report
+
+    def test_serve_materializes_the_injected_secret_for_its_child_only(self):
+        script, report = self.child()
+        entries = [capability(), capability()]
+        text = self.secret(*entries)
+        for injected in (text, '{}', None):
+            with self.subTest(injected=injected and injected[:20]):
+                env = {'GENUI_BINARY': str(script)}
+                if injected is not None:
+                    env[runtime.CAPABILITIES_JSON_ENV] = injected
+                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
+                     patch.object(runtime, 'refresh', side_effect=lambda p: runtime.atomic_write(p, fixture())):
+                    self.assertEqual(runtime.serve(self.path), 0)
+                    self.assertNotIn(runtime.CAPABILITIES_JSON_ENV, os.environ, 'removed from the supervisor itself')
+                    self.assertNotIn(runtime.CAPABILITY_DIR_ENV, os.environ)
+                value = json.loads(report.read_text())
+                self.assertTrue(value['raw_absent'], 'the child never inherits the secret value')
+                if injected is None:
+                    self.assertIsNone(value['dir'])
+                else:
+                    self.assertEqual((value['mode'], value['parent']), (0o700, str(self.directory)))
+                    self.assertTrue(Path(value['dir']).name.startswith(runtime.CapabilityDirectory.PREFIX))
+                    expected = dict(entries) if injected == text else {}
+                    self.assertEqual(value['files'], {key + '.capability': [0o600, record] for key, record in expected.items()})
+                    self.assertFalse(Path(value['dir']).exists(), 'removed when serve ends')
+                self.assertEqual(sorted(p.name for p in self.directory.iterdir()), ['child.py', 'report.json'])
+
+    def test_a_malformed_secret_or_an_inherited_directory_refuses_before_launch(self):
+        for env in ({runtime.CAPABILITIES_JSON_ENV: self.secret(capability(extra='x'))},
+                    {runtime.CAPABILITIES_JSON_ENV: 'not json'},
+                    {runtime.CAPABILITY_DIR_ENV: str(self.directory)}):
+            with self.subTest(env=sorted(env)):
+                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
+                     patch.object(runtime, 'refresh') as refresh, patch.object(runtime.subprocess, 'Popen') as launch:
+                    with self.assertRaises((runtime.Refused, ValueError)): runtime.serve(self.path)
+                    launch.assert_not_called(); refresh.assert_not_called()
+                    self.assertNotIn(runtime.CAPABILITIES_JSON_ENV, os.environ)
+                self.assertEqual(list(self.directory.iterdir()), [])
+
+    def test_every_mode_removes_the_injection(self):
+        with patch.dict(os.environ, {runtime.CAPABILITIES_JSON_ENV: '{}'}, clear=True):
+            self.assertEqual(runtime.take_capability_injection(), '{}')
+            self.assertNotIn(runtime.CAPABILITIES_JSON_ENV, os.environ)
+            self.assertIsNone(runtime.take_capability_injection())
+        process = subprocess.run([sys.executable, str(Path(runtime.__file__).resolve()), 'refresh'],
+                                 env={runtime.CAPABILITIES_JSON_ENV: self.secret(capability()),
+                                      'GENUI_RUNTIME_CONFIG_FILE': str(self.path)},
+                                 capture_output=True, text=True, timeout=10)
+        self.assertEqual((process.returncode, process.stdout), (1, ''))
+        self.assertEqual(process.stderr, 'managed_dependency_operation_refused\n')
+
 if __name__ == '__main__': unittest.main()
