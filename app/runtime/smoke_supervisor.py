@@ -37,7 +37,15 @@ def refresh(path):
     runtime.atomic_write(path,value)
     runtime.load(path)
 runtime.refresh=refresh
-raise SystemExit(runtime.serve(os.environ['GENUI_RUNTIME_CONFIG_FILE']))
+# Mirror the image entrypoint (runtime.py __main__): refuse first, then serve;
+# any refusal prints only the fixed marker, never the exception.
+try:
+    runtime.refuse_qualification_injection()
+    status=runtime.serve(os.environ['GENUI_RUNTIME_CONFIG_FILE'])
+except Exception:
+    print('managed_dependency_operation_refused',flush=True)
+    raise SystemExit(1)
+raise SystemExit(status)
 """
 
 
@@ -192,6 +200,8 @@ def run_mode(mode, binary, directory):
         assert not list(private.iterdir()), 'owned auth/registry/credential files remain'
         if mode != 'disabled':
             assert b'FORMA_LISTENING' not in output and b'managed_dependency_operation_refused' in output
+            # Refused before any credential refresh: no refresh attempt, no traceback.
+            assert b'credential_refresh_unavailable' not in output and b'Traceback' not in output
         return {'mode':mode,'callback_status':status,'refused_before_bind':mode != 'disabled',
                 'refused_by_supervisor_before_child':mode != 'disabled',
                 'native_environment_observed':mode == 'disabled','raw_secret_in_child_environment':False,

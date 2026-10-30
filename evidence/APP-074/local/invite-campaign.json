@@ -41,7 +41,7 @@
       "passed": true
     },
     {
-      "name": "item 1: 163 responses carry no raw code, invite_token, issued code, token or request_uri outside the authorize redirect; the database (135814 bytes dumped) holds no raw code or invitation token; 64 captured log lines carry none of them and no cookie value, while recording invite.validate outcomes",
+      "name": "item 1: the observer detects a deliberately planted raw code, invite_token and issued code (negative control); 163 responses carry no raw code, invite_token, issued code, token or request_uri outside the authorize redirect; the database (135768 bytes dumped) holds no raw code or invitation token; 64 captured log lines carry none of them and no cookie value, while recording invite.validate outcomes",
       "passed": true
     }
   ],
