@@ -30,7 +30,6 @@ use axum::{
     body::{to_bytes, Body},
     extract::ConnectInfo,
     http::{header, HeaderMap, Request, StatusCode},
-    middleware,
     response::IntoResponse,
     Router,
 };
@@ -288,20 +287,16 @@ pub(crate) fn full_app(auth: Arc<Auth>) -> Router {
         page: pages.clone(),
     });
     let work = Arc::new(query::routes::Work::new(auth.clone(), None, pages));
-    routes::router(auth)
-        .merge(commands::routes::router(command_routes))
-        .merge(query::routes::router(work))
-        .fallback(http::fallback)
-        .method_not_allowed_fallback(http::fallback)
-        .layer(middleware::from_fn(http::deadline))
+    http::uniform(
+        routes::router(auth)
+            .merge(commands::routes::router(command_routes))
+            .merge(query::routes::router(work)),
+    )
 }
 /// The ADR-006 routes alone: the uniform 404 for unknown paths and methods,
 /// the 5 s handler deadline.
 pub(crate) fn app(auth: Arc<Auth>) -> Router {
-    routes::router(auth)
-        .fallback(http::fallback)
-        .method_not_allowed_fallback(http::fallback)
-        .layer(middleware::from_fn(http::deadline))
+    http::uniform(routes::router(auth))
 }
 
 #[derive(Clone)]
@@ -337,6 +332,19 @@ impl Reply {
             && self.headers[header::CACHE_CONTROL] == "no-store"
             && self.headers[header::X_CONTENT_TYPE_OPTIONS] == "nosniff"
             && self.headers.get(header::SET_COOKIE).is_none()
+            // APP-076 G8: exactly the uniform header set; in particular no
+            // `Allow`, so a method mismatch on a mounted route is
+            // indistinguishable from an unknown path.
+            && self.headers.keys().all(|name| {
+                [
+                    header::CONTENT_TYPE,
+                    header::CACHE_CONTROL,
+                    header::X_CONTENT_TYPE_OPTIONS,
+                    header::REFERRER_POLICY,
+                    header::CONTENT_LENGTH,
+                ]
+                .contains(name)
+            })
     }
 }
 

@@ -1,7 +1,6 @@
 use axum::{
     extract::State,
     http::{header, StatusCode},
-    middleware,
     response::{IntoResponse, Response},
     routing::get,
     Router,
@@ -535,16 +534,15 @@ async fn main() {
         .with_state(state);
     // The operator harness (feature builds only) replaces the product routes
     // for its isolated run; the two never share a router.
-    let app = match qualification {
+    // APP-076 G8: the uniform 404 for unknown paths and method mismatches
+    // alike (no `Allow`), and the D7.14 handler deadline.
+    let app = genui::http::uniform(match qualification {
         Some(harness) => app.merge(harness),
         None => app
             .merge(auth::routes::router(auth.clone()))
             .merge(commands::routes::router(command_routes))
             .merge(work_routes),
-    }
-    .fallback(genui::http::fallback)
-    .method_not_allowed_fallback(genui::http::fallback)
-    .layer(middleware::from_fn(genui::http::deadline));
+    });
 
     // ADR-006 expiry sweep: idle and expired records are destroyed and their
     // provider refresh tokens revoked.
