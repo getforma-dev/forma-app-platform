@@ -62,6 +62,8 @@ SPEND_WORK = "00000000-0000-4000-8000-0000000000cd"
 SPEND_COLLECTION = "00000000-0000-4000-8000-0000000000ce"
 SPEND_RECORD = "00000000-0000-4000-8000-0000000013b1"
 EXP_002 = "00000000-0000-4000-8000-0000000000f0"
+# A record id in the ungranted seeded Northstar work (no row exists).
+UNGRANTED_RECORD = "00000000-0000-4000-8000-0000000013b9"
 WINDOW = {"start": "2026-10-22T10:00:00Z", "end": "2026-10-22T10:10:00Z"}
 DESTINATION = "198.51.100.7"
 TOTAL_WINDOW = "1140000"
@@ -729,10 +731,14 @@ def parser():
     m.add_argument("--bound-work", required=True, type=identifier, help="the bound Northstar work id (create-bound-work)")
     m.add_argument("--northstar-app", default=NORTHSTAR_APP, type=identifier)
     m.add_argument("--northstar-collection", default=NORTHSTAR_COLLECTION, type=identifier)
-    m.add_argument("--spend-app", default=SPEND_APP, type=identifier)
-    m.add_argument("--spend-work", default=SPEND_WORK, type=identifier)
-    m.add_argument("--spend-collection", default=SPEND_COLLECTION, type=identifier)
-    m.add_argument("--spend-record", default=SPEND_RECORD, type=identifier)
+    # The "foreign" record ids the matrix probes. Since Spend Review moved
+    # into Northstar (APP-076 G3), the trial member is granted record_write
+    # on SPEND_*, so the defaults point at the seeded Northstar work that no
+    # code grants: a run without these flags can never commit a decision.
+    m.add_argument("--spend-app", default=NORTHSTAR_APP, type=identifier)
+    m.add_argument("--spend-work", default=NORTHSTAR_SEEDED_WORK, type=identifier)
+    m.add_argument("--spend-collection", default=NORTHSTAR_COLLECTION, type=identifier)
+    m.add_argument("--spend-record", default=UNGRANTED_RECORD, type=identifier)
     m.add_argument("--unissued-handle", default="aaaaaaaaaaaaaaaaaaaaaaaaaa", type=handle)
     m.add_argument("--check", default="matrix,canary,controls", help="comma list of matrix, canary, controls, forwarded-ip")
     m.add_argument("--canary-revoked", action="store_true", help="the canary member's entitlement was revoked: its control joins not_found")
