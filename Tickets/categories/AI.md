@@ -12,3 +12,4 @@ Authorized discovery, bounded generation, explanation and evaluation.
 | 093 | [APP-093: Composer: describe an app and assemble it from admitted modules](../0-backlog/APP-093.md) | [PH08](../phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-091, APP-092 |
 | 099 | [APP-099: Forma as an MCP server: any agent (Claude, OpenAI, others) works through the governed canvas](../0-backlog/APP-099.md) | [PH08](../phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095 |
 | 100 | [APP-100: Slack: file, approve and get notified in Slack through the governed action path](../0-backlog/APP-100.md) | [PH08](../phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095, APP-099 |
+| 101 | [APP-101: Instant pick and live transform: prebuilt apps land at once and reshape to the request](../0-backlog/APP-101.md) | [PH08](../phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-094 |

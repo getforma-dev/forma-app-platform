@@ -12,7 +12,7 @@ Categories describe ownership; sprints describe execution order. A ticket lives 
 | [UX: Workspace and accessibility](categories/UX.md) | Native presentation, canvas and equivalent keyboard/focused workflows. | 10 |
 | [AUT: App authoring](categories/AUT.md) | Typed definitions, direct composition, patches and isolated preview. | 4 |
 | [GOV: Publication and lifecycle](categories/GOV.md) | Policy, exact-content publication, pinned work and maintenance. | 6 |
-| [AI: AI and retrieval](categories/AI.md) | Authorized discovery, bounded generation, explanation and evaluation. | 8 |
+| [AI: AI and retrieval](categories/AI.md) | Authorized discovery, bounded generation, explanation and evaluation. | 9 |
 | [SHR: Sharing and handoff](categories/SHR.md) | Separate grants, derived information, revocation and exports. | 5 |
 | [VAL: Validation and demonstrations](categories/VAL.md) | Synthetic fixtures, both app journeys and reproducible release evidence. | 14 |
 | [OPS: Operations and security](categories/OPS.md) | Jobs, release controls, recovery, retention, support and pilot operations. | 16 |
