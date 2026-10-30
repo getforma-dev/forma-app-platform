@@ -34,7 +34,7 @@ use crate::{
     auth::{capability, csrf},
     commands,
     http::{self, UniformPath},
-    storage::{Error, OpenableWork, TrustedRequest, WorkOutline},
+    storage::{Error, OpenableWork, RecordsListing, TrustedRequest, WorkOutline},
 };
 use axum::{
     extract::{Request, State},
@@ -91,6 +91,54 @@ pub struct GroupProps {
     pub cards: Vec<CanvasCardProps>,
     pub has_forms: bool,
     pub forms: Vec<FormCardProps>,
+    /// ADR-011 scenarios: the work's records (one card per collection), read
+    /// through `Data::list_records` under the record page's authorization;
+    /// the island refreshes them on `record.committed`.
+    pub has_records: bool,
+    pub records: Vec<RecordsCardProps>,
+}
+
+/// One records card (ADR-011 scenarios): a collection's current records,
+/// newest first, with the decide command the member may post on a pending
+/// one, and the identities the numbers come from (publication, definition
+/// digest, commit sequence) kept visible as the card's provenance.
+#[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct RecordsCardProps {
+    /// `r-{work}-{collection}`.
+    pub id: String,
+    pub title: String,
+    /// "2 waiting for approval · 5 records".
+    pub summary: String,
+    /// `GET /v1/work/{app}/{work}/records`.
+    pub url: String,
+    pub collection: String,
+    pub schema: String,
+    pub can_write: bool,
+    /// The transition command (`decide`) the member may post, or empty.
+    pub decide: String,
+    /// The transition field (`status`), or empty.
+    pub status_field: String,
+    pub count: String,
+    pub pending: String,
+    pub has_rows: bool,
+    pub columns: Vec<CellProps>,
+    pub rows: Vec<RecordRowProps>,
+    pub publication: String,
+    pub definition_digest: String,
+    pub work_version: String,
+}
+#[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct RecordRowProps {
+    pub id: String,
+    pub record_id: String,
+    pub version: String,
+    pub status: String,
+    /// At a declared transition's starting state and the member may decide.
+    pub pending: bool,
+    pub cells: Vec<CellProps>,
+    pub creator: String,
+    pub committed_at: String,
+    pub commit_sequence: String,
 }
 
 /// One view card: the work page's card state model (`page::card`) plus the
@@ -302,9 +350,154 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
     })
 }
 
+/// A records card from a listing (ADR-011 scenarios), one per collection;
+/// none for a work without collections.
+pub fn records_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<RecordsCardProps> {
+    listing
+        .collections
+        .iter()
+        .map(|collection| {
+            let decide = collection
+                .commands
+                .iter()
+                .find(|c| !c.transitions.is_empty());
+            let status_field = decide
+                .and_then(|c| c.transitions.first())
+                .map(|(field, _, _)| field.clone())
+                .unwrap_or_default();
+            let froms: Vec<&str> = decide
+                .map(|c| c.transitions.iter().map(|(_, from, _)| from.as_str()).collect())
+                .unwrap_or_default();
+            let shown: Vec<&crate::storage::RecordField> = collection
+                .fields
+                .iter()
+                .filter(|f| f.id != status_field)
+                .collect();
+            let mut columns: Vec<CellProps> = shown
+                .iter()
+                .map(|f| CellProps {
+                    id: f.id.clone(),
+                    text: f.id.replace('_', " "),
+                })
+                .collect();
+            if !status_field.is_empty() {
+                columns.push(CellProps {
+                    id: status_field.clone(),
+                    text: status_field.replace('_', " "),
+                });
+            }
+            columns.push(CellProps {
+                id: "filed_by".into(),
+                text: "filed by".into(),
+            });
+            let mut pending = 0usize;
+            let rows: Vec<RecordRowProps> = listing
+                .records
+                .iter()
+                .filter(|r| r.collection == collection.collection)
+                .map(|record| {
+                    let value = |field: &str| -> Option<&serde_json::Value> {
+                        record
+                            .values
+                            .as_array()?
+                            .iter()
+                            .find(|item| item.get("field_id").and_then(serde_json::Value::as_str) == Some(field))
+                            .and_then(|item| item.get("value"))
+                    };
+                    let status = value(&status_field)
+                        .and_then(|v| v.get("value"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_owned();
+                    let is_pending = listing.can_write && froms.contains(&status.as_str());
+                    pending += usize::from(is_pending);
+                    let mut cells: Vec<CellProps> = shown
+                        .iter()
+                        .map(|f| CellProps {
+                            id: f.id.clone(),
+                            text: value(&f.id)
+                                .map(crate::actions::resolve::display)
+                                .unwrap_or_else(|| "—".into()),
+                        })
+                        .collect();
+                    if !status_field.is_empty() {
+                        cells.push(CellProps {
+                            id: status_field.clone(),
+                            text: status.clone(),
+                        });
+                    }
+                    cells.push(CellProps {
+                        id: "filed_by".into(),
+                        text: crate::directory::label(&record.creator),
+                    });
+                    RecordRowProps {
+                        id: format!("rec-{}", record.record_id),
+                        record_id: record.record_id.clone(),
+                        version: record.version.to_string(),
+                        status,
+                        pending: is_pending,
+                        cells,
+                        creator: crate::directory::label(&record.creator),
+                        committed_at: record.committed_at.clone(),
+                        commit_sequence: record.commit_sequence.to_string(),
+                    }
+                })
+                .collect();
+            let count = rows.len();
+            let title = schema_title(&collection.schema);
+            let summary = match (listing.can_write && decide.is_some(), pending) {
+                (true, 0) => format!("Nothing waiting for your approval · {count} {}", plural(count, "record")),
+                (true, n) => format!("{n} waiting for your approval · {count} {}", plural(count, "record")),
+                (false, _) => format!("{count} {}", plural(count, "record")),
+            };
+            RecordsCardProps {
+                id: format!("r-{work}-{}", collection.collection),
+                title,
+                summary,
+                url: format!("/v1/work/{app}/{work}/records"),
+                collection: collection.collection.clone(),
+                schema: collection.schema.clone(),
+                can_write: listing.can_write,
+                decide: decide.map(|c| c.id.clone()).unwrap_or_default(),
+                status_field,
+                count: count.to_string(),
+                pending: pending.to_string(),
+                has_rows: !rows.is_empty(),
+                columns,
+                rows,
+                publication: listing.publication.clone(),
+                definition_digest: abbreviate(&listing.definition_digest),
+                work_version: listing.work_version.to_string(),
+            }
+        })
+        .collect()
+}
+fn plural(count: usize, word: &str) -> String {
+    if count == 1 {
+        word.to_owned()
+    } else {
+        format!("{word}s")
+    }
+}
+/// "expense_claim" → "Expense claims".
+pub fn schema_title(schema: &str) -> String {
+    let mut words = schema.replace('_', " ");
+    if let Some(first) = words.get(0..1) {
+        let upper = first.to_uppercase();
+        words.replace_range(0..1, &upper);
+    }
+    if !words.ends_with('s') {
+        words.push('s');
+    }
+    words
+}
+
 /// The page's count line.
 pub fn summary(groups: &[GroupProps]) -> String {
-    let cards: usize = groups.iter().map(|g| g.cards.len() + g.forms.len()).sum();
+    let cards: usize = groups
+        .iter()
+        .map(|g| g.cards.len() + g.forms.len() + g.records.len())
+        .sum();
     let apps = groups.len();
     format!(
         "{apps} {} · {cards} {}",
@@ -442,6 +635,15 @@ async fn group(
             }
         }
     }
+    let records = if listed.collections.is_empty() {
+        Vec::new()
+    } else {
+        match stores.data.list_records(member, app, work).await {
+            Ok(listing) => records_cards(app, work, &listing),
+            Err(Error::Denied) => Vec::new(),
+            Err(error) => return Err(routes::storage_refusal(&error)),
+        }
+    };
     Ok(Some(GroupProps {
         id: format!("g-{work}"),
         app: app.to_owned(),
@@ -459,6 +661,8 @@ async fn group(
         cards,
         has_forms: !forms.is_empty(),
         forms,
+        has_records: !records.is_empty(),
+        records,
     }))
 }
 

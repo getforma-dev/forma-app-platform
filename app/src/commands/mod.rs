@@ -21,7 +21,7 @@ pub mod routes;
 #[cfg(test)]
 mod tests;
 
-use crate::storage::RecordDetail;
+use crate::storage::{RecordCommand, RecordDetail};
 use axum::response::Response;
 
 /// A form notice the record page shows after a redirect (closed set).
@@ -155,18 +155,23 @@ pub fn view(
             .and_then(|f| f.value.get("value"))
             .and_then(serde_json::Value::as_str)
     };
+    let admits = |c: &&RecordCommand| match (detail.version, c.operation.as_str()) {
+        (0, operation) => operation == "create",
+        (_, "update") => true,
+        (_, "create") => c
+            .transitions
+            .iter()
+            .any(|(field, from, _)| current(field) == Some(from.as_str())),
+        _ => false,
+    };
+    // ADR-011 scenarios: on an absent record a pure `create` (no declared
+    // transitions, the one that files a new record) is offered before a
+    // transition-only `create` such as `decide`, whatever their ids sort as.
     let command = detail
         .commands
         .iter()
-        .find(|c| match (detail.version, c.operation.as_str()) {
-            (0, operation) => operation == "create",
-            (_, "update") => true,
-            (_, "create") => c
-                .transitions
-                .iter()
-                .any(|(field, from, _)| current(field) == Some(from.as_str())),
-            _ => false,
-        })
+        .filter(admits)
+        .min_by_key(|c| (detail.version == 0 && !c.transitions.is_empty()) as u8)
         .cloned();
     let fields = detail
         .fields

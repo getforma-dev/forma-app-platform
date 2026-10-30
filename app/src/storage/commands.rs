@@ -322,32 +322,32 @@ fn require_stored(condition: bool) -> Result<()> {
         Err(Error::Unavailable)
     }
 }
-fn decode_stored(row: &Row, index: usize) -> Result<Value> {
+pub(super) fn decode_stored(row: &Row, index: usize) -> Result<Value> {
     let bytes: Vec<u8> = row.try_get(index).map_err(|_| Error::Unavailable)?;
     require_stored(bytes.len() <= MAX_CANONICAL_BYTES)?;
     admission::decode(&bytes).map_err(|_| Error::Unavailable)
 }
 
 /// A field of the published record schema.
-struct FieldSpec {
-    id: String,
-    value_type: Value,
-    nullable: bool,
+pub(super) struct FieldSpec {
+    pub(super) id: String,
+    pub(super) value_type: Value,
+    pub(super) nullable: bool,
 }
 /// A declared command of the published definition.
-struct Declaration {
-    operation: String,
-    writable: Vec<String>,
+pub(super) struct Declaration {
+    pub(super) operation: String,
+    pub(super) writable: Vec<String>,
     /// `(field_id, from, to)`.
-    transitions: Vec<(String, String, String)>,
+    pub(super) transitions: Vec<(String, String, String)>,
 }
 /// The published definition's record schema `schema` at `version` and the
 /// commands declared on it (stored content is admitted content: a shape that
 /// does not parse is unavailability).
-struct Published {
-    definition_digest: String,
-    fields: Vec<FieldSpec>,
-    commands: BTreeMap<String, Declaration>,
+pub(super) struct Published {
+    pub(super) definition_digest: String,
+    pub(super) fields: Vec<FieldSpec>,
+    pub(super) commands: BTreeMap<String, Declaration>,
 }
 
 fn string_list(value: Option<&Value>) -> Result<Vec<String>> {
@@ -359,7 +359,7 @@ fn string_list(value: Option<&Value>) -> Result<Vec<String>> {
         .collect()
 }
 
-async fn published(
+pub(super) async fn published(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -448,7 +448,7 @@ async fn published(
 }
 
 /// The work's collection of `schema` at `version`.
-async fn collection(
+pub(super) async fn collection(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -462,7 +462,7 @@ async fn collection(
 }
 
 /// The record's current version (0 when absent) and state.
-async fn current_state(
+pub(super) async fn current_state(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -528,7 +528,7 @@ async fn stored_outcome(
 }
 
 /// The saved work's pin, as the work fence sees it.
-async fn work_pin(
+pub(super) async fn work_pin(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -547,7 +547,7 @@ async fn work_pin(
 /// `lock_work_revision` with the caller's premise: `Ok(true)` when the work
 /// pins exactly that publication and version (and is now `FOR SHARE`
 /// locked), `Ok(false)` when the premise has moved.
-async fn work_fence(
+pub(super) async fn work_fence(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -673,7 +673,7 @@ fn compatible(value: &Value, field: &FieldSpec) -> bool {
 }
 
 /// The record's state as stored: a `{field_id, value}` array in schema order.
-fn state_map(state: Option<&Value>) -> Result<BTreeMap<String, Value>> {
+pub(super) fn state_map(state: Option<&Value>) -> Result<BTreeMap<String, Value>> {
     let mut map = BTreeMap::new();
     for item in state.and_then(Value::as_array).into_iter().flatten() {
         let id = item
@@ -694,7 +694,7 @@ fn state_map(state: Option<&Value>) -> Result<BTreeMap<String, Value>> {
 /// `update`, and a `create` command must fire one of its declared
 /// transitions: a note-only edit or a resubmission of the current values
 /// through a `create` is refused, and no command writes a no-op revision.
-fn compose(
+pub(super) fn compose(
     spec: &[FieldSpec],
     declaration: &Declaration,
     current: Option<&Value>,

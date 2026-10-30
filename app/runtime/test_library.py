@@ -128,7 +128,7 @@ class LibraryFixtures(unittest.TestCase):
     def test_every_library_fixture_validates_under_the_contract_and_the_catalog_names_it(self):
         from validate import digest, validate_bundle
         names = sorted(p.name for p in LIBRARY.glob("*.json") if p.name != "catalog.json")
-        self.assertEqual(len(names), 13)
+        self.assertEqual(len(names), 14)
         self.assertEqual(names, sorted(a["fixture"] for a in CATALOG["apps"]))
         self.assertTrue(CATALOG["synthetic"])
         self.assertEqual((CATALOG["window_field"], CATALOG["destination_field"]), ("time", "destination"))

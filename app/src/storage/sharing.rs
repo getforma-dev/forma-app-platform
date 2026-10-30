@@ -70,9 +70,11 @@ fn text(row: &Row, index: usize) -> Result<String> {
 fn boolean(row: &Row, index: usize) -> Result<bool> {
     row.try_get(index).map_err(|_| Error::Unavailable)
 }
-/// The neutral member label: `Member` and the first eight hex digits.
+/// The member label: the operator-set display name when one exists
+/// (`crate::directory`, ADR-011 scenarios), else the neutral `Member` and the
+/// first eight hex digits.
 pub fn member_label(principal: &str) -> String {
-    format!("Member {}", &principal[..8.min(principal.len())])
+    crate::directory::label(principal)
 }
 
 impl Workspace {

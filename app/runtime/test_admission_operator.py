@@ -996,7 +996,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
             tenant_seed.seed(c, tenant_seed.make_bundles())
         bundles = tenant_seed.make_library_bundles(northstar)
         catalog = tenant_seed.library_catalog()
-        self.assertEqual(len(bundles), 13)
+        self.assertEqual(len(bundles), 14)
         self.assertEqual([b["definition"]["app_id"] for b in bundles], [a["app_id"] for a in catalog["apps"]])
         apps = lambda org: self.query("SELECT count(*) FROM genui.apps WHERE organization_id=%s", (org,))[0][0]
         before = (apps(northstar), apps(canary))
@@ -1005,7 +1005,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual((first["changed"], first["label"], first["edition"], first["synthetic"], first["audit_event"]),
                          (True, "seeded definition", "impl-2026-10-28.1", True, None))
         self.assertEqual([a["app_id"] for a in first["apps"]], [a["app_id"] for a in catalog["apps"]])
-        self.assertEqual((apps(northstar), apps(canary)), (before[0] + 13, before[1]))
+        self.assertEqual((apps(northstar), apps(canary)), (before[0] + 14, before[1]))
         for b, reported in zip(bundles, first["apps"]):
             app, work = b["definition"]["app_id"], b["work"]["work_id"]
             self.assertEqual((reported["work_id"], reported["publication_id"], reported["definition_digest"]),

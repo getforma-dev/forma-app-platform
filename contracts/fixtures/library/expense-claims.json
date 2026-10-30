@@ -1,0 +1,684 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "principal_id": "00000000-0000-4000-8000-000000000066"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001681",
+    "revision_id": "00000000-0000-4000-8000-000000001682",
+    "content": {
+      "title": "Expense claims",
+      "description": "File an expense in your own words, send it to your manager for approval, and watch the decision land live: every claim is a typed record, every decision an audited command. Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
+      "inputs": [
+        {
+          "id": "expense_claims",
+          "contract_id": "expense_claims_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "expense_id",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            },
+            {
+              "id": "employee",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "vendor",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "category",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "travel",
+                  "software",
+                  "equipment",
+                  "meals",
+                  "services",
+                  "facilities"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "approved",
+                  "rejected",
+                  "needs_receipt"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "claims",
+          "contract_id": "expense_claim_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "merchant",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "category",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "meals",
+                  "travel",
+                  "software",
+                  "office",
+                  "other"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "spent_on",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "totals",
+          "kind": "summary",
+          "renderer_version": 1,
+          "title": "Claims to date",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "expense_claims"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [],
+                "measures": [
+                  {
+                    "id": "claims",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "expense_claims",
+                      "field_id": "expense_id"
+                    }
+                  },
+                  {
+                    "id": "total_amount",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "expense_claims",
+                      "field_id": "amount"
+                    }
+                  },
+                  {
+                    "id": "largest_claim",
+                    "operation": "max",
+                    "field": {
+                      "input_id": "expense_claims",
+                      "field_id": "amount"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "renderer_version": 1,
+          "title": "Past claims by status",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "expense_claims"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "expense_claims",
+                    "field_id": "status"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "claims",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "expense_claims",
+                      "field_id": "expense_id"
+                    }
+                  },
+                  {
+                    "id": "amount",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "expense_claims",
+                      "field_id": "amount"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "submit",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "File an expense claim",
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "renderer_version": 1,
+          "title": "How approval works",
+          "text": "A claim is filed as a typed record with status submitted. Your approver sees it live and decides; the decision is an audited command, never an edit."
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "expense_claim",
+          "version": 1,
+          "fields": [
+            {
+              "id": "amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "merchant",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "category",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "meals",
+                  "travel",
+                  "software",
+                  "office",
+                  "other"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "spent_on",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "expense_claim",
+          "operation": "create",
+          "writable_fields": [
+            "amount",
+            "merchant",
+            "category",
+            "spent_on",
+            "note",
+            "status"
+          ],
+          "transitions": []
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "expense_claim",
+          "operation": "create",
+          "writable_fields": [
+            "status",
+            "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "approved"
+            },
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "rejected"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "totals",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "by_status",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "submit",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "how",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:34537f6eb61c4fc78c313dbccd29b80d90c980f28319a713fa7d5fc593b7af8c"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001681",
+    "publication_id": "00000000-0000-4000-8000-000000001683",
+    "definition_revision_id": "00000000-0000-4000-8000-000000001682",
+    "definition_digest": "sha256:34537f6eb61c4fc78c313dbccd29b80d90c980f28319a713fa7d5fc593b7af8c",
+    "input_contract_digests": [
+      {
+        "input_id": "expense_claims",
+        "digest": "sha256:1911de710061779639b8fc45878e9d62469b815e1702494afb87dc556dbe9854"
+      },
+      {
+        "input_id": "claims",
+        "digest": "sha256:58f6ba77516ab1f38afdc4a9ae7fb4c5b32f17c5f46feec25209c7ed2a638648"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "expense_claim",
+        "digest": "sha256:4f41c0be0fa305480a91a39c80e56ea1cbad6e639a7180c090ea4fc6bfdac234"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "admission_digest": "sha256:4aee922e47ccfc7cc21328670dcb8238da07256da8ee6eb89028a45ebf9393ef",
+    "policy": {
+      "id": "00000000-0000-4000-8000-0000000000e0",
+      "version": 1,
+      "kind": "owner_publish"
+    },
+    "author_id": "00000000-0000-4000-8000-000000000066",
+    "approver_id": "00000000-0000-4000-8000-000000000066",
+    "approver_epoch": 1,
+    "published_at": "2026-10-30T09:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001681",
+    "work_id": "00000000-0000-4000-8000-000000001684",
+    "publication_id": "00000000-0000-4000-8000-000000001683",
+    "version": 1,
+    "context": "Prebuilt library: Expense claims",
+    "bindings": [
+      {
+        "input_id": "expense_claims",
+        "source_id": "00000000-0000-4000-8000-000000003000",
+        "source_revision_id": "00000000-0000-4000-8000-000000003001",
+        "source_digest": "sha256:e1b791d22c31487f4345c14e3007b6a945e039198707e1b620822f8d43aea6ca",
+        "kind": "source",
+        "contract_digest": "sha256:1911de710061779639b8fc45878e9d62469b815e1702494afb87dc556dbe9854"
+      },
+      {
+        "input_id": "claims",
+        "kind": "records",
+        "contract_digest": "sha256:58f6ba77516ab1f38afdc4a9ae7fb4c5b32f17c5f46feec25209c7ed2a638648",
+        "collection_id": "00000000-0000-4000-8000-000000001685",
+        "schema_id": "expense_claim",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-000000001685",
+        "schema_id": "expense_claim",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "expense_claims",
+        "source_id": "00000000-0000-4000-8000-000000003000",
+        "source_revision_id": "00000000-0000-4000-8000-000000003001",
+        "source_digest": "sha256:e1b791d22c31487f4345c14e3007b6a945e039198707e1b620822f8d43aea6ca"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "source_id": "00000000-0000-4000-8000-000000003000",
+      "revision_id": "00000000-0000-4000-8000-000000003001",
+      "content_digest": "sha256:c26d098d3c20c83bd282d2fa3e18e8681aa997022cde88267d2e1b275f7d8fd1",
+      "normalized_digest": "sha256:e1b791d22c31487f4345c14e3007b6a945e039198707e1b620822f8d43aea6ca",
+      "input_contract": {
+        "id": "expense_claims",
+        "contract_id": "expense_claims_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "expense_id",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "time",
+            "value_type": {
+              "type": "timestamp"
+            },
+            "nullable": false
+          },
+          {
+            "id": "employee",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "vendor",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "category",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "travel",
+                "software",
+                "equipment",
+                "meals",
+                "services",
+                "facilities"
+              ]
+            },
+            "nullable": false
+          },
+          {
+            "id": "amount",
+            "value_type": {
+              "type": "money",
+              "currency": "USD",
+              "minor_unit_exponent": 2
+            },
+            "nullable": false
+          },
+          {
+            "id": "status",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "submitted",
+                "approved",
+                "rejected",
+                "needs_receipt"
+              ]
+            },
+            "nullable": false
+          }
+        ]
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 240,
+      "timezone": "UTC",
+      "time_semantics": "event",
+      "units_confirmed": true,
+      "created_at": "2026-10-30T09:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001681",
+    "work_id": "00000000-0000-4000-8000-000000001684",
+    "mode": "published",
+    "definition_digest": "sha256:34537f6eb61c4fc78c313dbccd29b80d90c980f28319a713fa7d5fc593b7af8c",
+    "publication_id": "00000000-0000-4000-8000-000000001683",
+    "view_id": "totals",
+    "operator_version": 1,
+    "source_revisions": [
+      {
+        "input_id": "expense_claims",
+        "source_id": "00000000-0000-4000-8000-000000003000",
+        "source_revision_id": "00000000-0000-4000-8000-000000003001",
+        "source_digest": "sha256:e1b791d22c31487f4345c14e3007b6a945e039198707e1b620822f8d43aea6ca"
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:23cba0fad1682457d722a04110753523eb8a13cfd0c2f3755327beaa5c22272d",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:68b5b5d1cbd12c0fb5af50aac9149159139aa50277f521859af43ea3f11ff760",
+      "predicate_digest": "sha256:68b5b5d1cbd12c0fb5af50aac9149159139aa50277f521859af43ea3f11ff760"
+    },
+    "digest": "sha256:dcdef9120a1c3dafa19db3dae72fb11a58f77931578d26bd0e93917645dcb4ff"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-000000001681",
+    "work_id": "00000000-0000-4000-8000-000000001684",
+    "publication_id": "00000000-0000-4000-8000-000000001683",
+    "command_id": "submit",
+    "schema_id": "expense_claim",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-000000001686",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "amount",
+        "value": {
+          "type": "money",
+          "minor_units": "4250",
+          "currency": "USD",
+          "minor_unit_exponent": 2
+        }
+      },
+      {
+        "field_id": "merchant",
+        "value": {
+          "type": "text",
+          "value": "Blue Bottle Coffee"
+        }
+      },
+      {
+        "field_id": "category",
+        "value": {
+          "type": "enum",
+          "value": "meals"
+        }
+      },
+      {
+        "field_id": "spent_on",
+        "value": {
+          "type": "date",
+          "value": "2026-10-21"
+        }
+      },
+      {
+        "field_id": "note",
+        "value": {
+          "type": "text",
+          "value": "Team coffee; synthetic only"
+        }
+      },
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "approved"
+        }
+      }
+    ],
+    "idempotency_key": "00000000000000000000000000001680"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001681",
+    "work_id": "00000000-0000-4000-8000-000000001684",
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "command_id": "submit",
+    "idempotency_key": "00000000000000000000000000001680",
+    "payload_digest": "sha256:4516315dfa586e841ad70d654abbf147f297a62fd6279c967f848223dcb3cddd",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-000000001686",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-000000001687",
+    "committed_at": "2026-10-30T09:05:00Z",
+    "retry_expires_at": "2026-10-31T09:05:00Z"
+  }
+}
