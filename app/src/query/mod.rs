@@ -5,6 +5,7 @@
 //! builds its receipt ([`receipt`]), serves the JSON query route and the
 //! work page ([`routes`]) and turns each view's outcome into what the page
 //! shows ([`page`]).
+pub mod canvas;
 pub mod page;
 pub mod receipt;
 pub mod routes;

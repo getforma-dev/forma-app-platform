@@ -69,18 +69,18 @@ pub struct CardProps {
     pub receipt_json: String,
 }
 
-#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct PairProps {
     pub id: String,
     pub label: String,
     pub value: String,
 }
-#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct CellProps {
     pub id: String,
     pub text: String,
 }
-#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct RowProps {
     pub id: String,
     pub cells: Vec<CellProps>,

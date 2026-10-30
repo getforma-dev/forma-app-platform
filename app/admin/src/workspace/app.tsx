@@ -7,7 +7,7 @@ import { h, mount, createShow, createList } from '@getforma/core';
 // the session's fenced, scoped transaction; this page only lays them out. An
 // empty listing says only that there is nothing to open yet.
 type RecordLink = { id: string; label: string; href: string };
-type Item = { id: string; title: string; href: string; hasRecords: boolean; records: RecordLink[] };
+type Item = { id: string; title: string; href: string; canvas: string; hasRecords: boolean; records: RecordLink[] };
 type WorkspaceProps = {
   csrfSignout: string;
   csrfSignoutAll: string;
@@ -20,6 +20,7 @@ function Workspace(props: WorkspaceProps) {
     <main class="page">
       <h1>Workspace</h1>
       <p class="lede">You are signed in.</p>
+      <a class="canvas-entry" href="/canvas">Open the canvas</a>
       <h2>Saved work</h2>
       {props.hasItems ? null : <p>Nothing to open yet.</p>}
       {createShow(() => props.hasItems, () => (
@@ -27,6 +28,7 @@ function Workspace(props: WorkspaceProps) {
           {createList(() => props.items, item => item.id, item => (
             <li>
               <a href={item.href}>{item.title}</a>
+              <a class="canvas-link" href={item.canvas}>Open on canvas</a>
               <p class="label">Seeded definition, retrieved from the library. Sources seeded by the operator.</p>
               {createShow(() => item.hasRecords, () => (
                 <ul>

@@ -73,6 +73,8 @@ struct WorkspaceItemProps {
     id: String,
     title: String,
     href: String,
+    /// ADR-011: the work's group on the canvas (`/canvas#g-{work}`).
+    canvas: String,
     has_records: bool,
     records: Vec<RecordLinkProps>,
 }
@@ -288,6 +290,10 @@ impl auth::Pages for SsrPages {
                             id: item.href.clone(),
                             title: item.title.clone(),
                             href: item.href.clone(),
+                            canvas: format!(
+                                "/canvas#g-{}",
+                                item.href.rsplit('/').next().unwrap_or_default()
+                            ),
                             has_records: !item.records.is_empty(),
                             records: item
                                 .records
@@ -438,6 +444,7 @@ async fn main() {
         "/workspace",
         "/record",
         "/w/{app}/{work}",
+        "/canvas",
     ] {
         require_ssr(manifest.route(route).map(|entry| entry.mode))
             .unwrap_or_else(|reason| panic!("required SSR route {route}: {reason}"));
@@ -493,6 +500,12 @@ async fn main() {
             .bind::<genui::query::page::WorkProps>("work")
             .unwrap_or_else(bind_errors),
     });
+    // ADR-011 (APP-092): the pitch canvas.
+    let canvas_page = Arc::new(genui::query::canvas::SsrCanvasPages {
+        page: pages
+            .bind::<genui::query::canvas::CanvasProps>("canvas")
+            .unwrap_or_else(bind_errors),
+    });
     pages.finalize().unwrap_or_else(|errors| {
         for error in errors {
             eprintln!("{error}");
@@ -530,11 +543,18 @@ async fn main() {
                 .unwrap_or_else(|_| refuse("query engine directories refused")),
         ) as Arc<dyn genui::query::Executor>
     });
-    let work_routes = genui::query::routes::router(Arc::new(genui::query::Work::new(
-        auth.clone(),
-        engine,
-        work_page,
-    )));
+    let work = Arc::new(genui::query::Work::new(auth.clone(), engine, work_page));
+    let work_routes = genui::query::routes::router(work.clone());
+    // The organization's realtime stream (`pivot/realtime`) once it exists;
+    // until then the island subscribes to nothing.
+    let canvas_routes = genui::query::canvas::router(Arc::new(genui::query::canvas::Canvas {
+        work,
+        pages: canvas_page,
+        live_events: std::env::var("GENUI_CANVAS_EVENTS_URL")
+            .ok()
+            .filter(|url| url.starts_with("/v1/"))
+            .unwrap_or_default(),
+    }));
     let readiness = genui::readiness::Readiness::start(
         credential_path.into(),
         std::env::var("GENUI_HELPER_PATH")
@@ -578,7 +598,8 @@ async fn main() {
         None => app
             .merge(auth::routes::router(auth.clone()))
             .merge(commands::routes::router(command_routes))
-            .merge(work_routes),
+            .merge(work_routes)
+            .merge(canvas_routes),
     });
 
     // ADR-006 expiry sweep: idle and expired records are destroyed and their
@@ -734,6 +755,7 @@ mod tests {
         let _ = pages.bind::<HomeProps>("home");
         let _ = pages.bind::<AboutProps>("about");
         let _ = pages.bind::<genui::query::page::WorkProps>("work");
+        let _ = pages.bind::<genui::query::canvas::CanvasProps>("canvas");
         pages.finalize().unwrap();
         ssr
     }
@@ -910,6 +932,9 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert!(!body.contains("Nothing to open yet."));
         assert!(body.contains(&format!("href=\"{work}\"")));
+        // ADR-011: each work opens on the canvas too.
+        assert!(body.contains("href=\"/canvas\"") && body.contains("Open the canvas"));
+        assert!(body.contains("href=\"/canvas#g-00000000-0000-4000-8000-0000000000f2\""));
         assert!(
             body.contains(&format!("href=\"{record}\"")) && body.contains("New decision record")
         );
@@ -1031,11 +1056,13 @@ mod tests {
         let _ = pages.bind::<WorkspaceProps>("workspace");
         let _ = pages.bind::<InviteProps>("invite");
         let _ = pages.bind::<RecordProps>("record");
+        let _ = pages.bind::<genui::query::canvas::CanvasProps>("canvas");
         pages.finalize().unwrap();
         let view = |id: &str, kind: &str| genui::storage::WorkView {
             id: id.into(),
             title: id.into(),
             kind: kind.into(),
+            integer_columns: Vec::new(),
         };
         let result = |columns: &[&str], rows: Vec<Vec<serde_json::Value>>| WorkerResult {
             columns: columns.iter().map(|c| (*c).to_owned()).collect(),
@@ -1175,5 +1202,241 @@ mod tests {
         refused.views = vec![work::card(&view("total", "summary"), Outcome::Idle)];
         let (_, _, body) = html(ssr.work(&refused)).await;
         assert!(body.contains("was not accepted") && !body.contains("class=\"value\""));
+    }
+
+    /// ADR-011 (APP-092, APP-094): the canvas page renders every group, its
+    /// app card, its view cards with their values and always-visible receipt
+    /// identities, and its record form, in the HTML itself (the island only
+    /// adds pan/zoom and runs views again); a failed or denied card shows no
+    /// number; the page ships the one canvas island and `no-store`.
+    #[tokio::test]
+    async fn canvas_page_renders_groups_cards_and_receipts_without_javascript() {
+        use genui::query::canvas::{self, CanvasPages as _, SsrCanvasPages};
+        use genui::query::page::{self as work, Outcome, Reason};
+        use genui::query::{QueryReceipt, WorkerResult};
+        use serde_json::json;
+        let manifest = assets::try_load_manifest::<Assets>().expect("admin/dist built");
+        require_ssr(manifest.route("/canvas").map(|entry| entry.mode)).unwrap();
+        let pages = load_ir_modules::<Assets>(&manifest).unwrap();
+        let ssr = SsrCanvasPages {
+            page: pages.bind::<canvas::CanvasProps>("canvas").unwrap(),
+        };
+        let _ = pages.bind::<HomeProps>("home");
+        let _ = pages.bind::<AboutProps>("about");
+        let _ = pages.bind::<SigninProps>("signin");
+        let _ = pages.bind::<PendingProps>("pending");
+        let _ = pages.bind::<DeniedProps>("denied");
+        let _ = pages.bind::<WorkspaceProps>("workspace");
+        let _ = pages.bind::<InviteProps>("invite");
+        let _ = pages.bind::<RecordProps>("record");
+        let _ = pages.bind::<work::WorkProps>("work");
+        pages.finalize().unwrap();
+        let (app, northstar, spend) = (
+            "00000000-0000-4000-8000-000000000065",
+            "00000000-0000-4000-8000-0000000000f2",
+            "00000000-0000-4000-8000-0000000000cd",
+        );
+        let view = |id: &str, kind: &str, integers: &[&str]| genui::storage::WorkView {
+            id: id.into(),
+            title: id.into(),
+            kind: kind.into(),
+            integer_columns: integers.iter().map(|c| (*c).to_owned()).collect(),
+        };
+        let result = |columns: &[&str], rows: Vec<Vec<serde_json::Value>>| WorkerResult {
+            columns: columns.iter().map(|c| (*c).to_owned()).collect(),
+            integer_columns: columns
+                .iter()
+                .filter(|c| matches!(**c, "total_bytes" | "bytes"))
+                .map(|c| (*c).to_owned())
+                .collect(),
+            result_digest: genui::query::worker::result_digest(&rows).unwrap(),
+            rows,
+            truncated_page: false,
+            engine_elapsed_ms: 0,
+            wall: Duration::ZERO,
+            peak_rss_bytes: 0,
+        };
+        let receipt = |result: &WorkerResult, digest: &str| QueryReceipt {
+            digest: digest.into(),
+            document: json!({"digest": digest, "result_digest": result.result_digest,
+                "mode": "published", "principal_id": "00000000-0000-4000-8000-0000000000aa",
+                "membership_epoch": 4, "policy_epoch": 1,
+                "source_revisions": [{"input_id": "events", "source_id": "s", "source_revision_id": "r", "source_digest": "sha256:source"}],
+                "parameters": [{"field_id": "window", "value": {"type": "text", "value": "2026-10-22T10:00:00Z/2026-10-22T10:10:00Z"}}],
+                "provenance": {}}),
+        };
+        let total = result(&["total_bytes"], vec![vec![json!("1140000")]]);
+        let buckets = result(
+            &["minute", "destination", "bytes"],
+            vec![vec![
+                json!("2026-10-22T10:00:00Z"),
+                json!("203.0.113.9"),
+                json!("60000"),
+            ]],
+        );
+        let (total_receipt, timeline_receipt) = (
+            receipt(&total, "sha256:receipt-total"),
+            receipt(&buckets, "sha256:receipt-timeline"),
+        );
+        let card = |v: &genui::storage::WorkView, outcome| {
+            canvas::canvas_card(app, northstar, v, work::card(v, outcome))
+        };
+        let (total_view, timeline_view, failed_view, denied_view) = (
+            view("total", "summary", &["total_bytes"]),
+            view("timeline", "timeline", &["bytes"]),
+            view("failed", "summary", &["total_bytes"]),
+            view("denied", "summary", &["total_bytes"]),
+        );
+        let field = |id: &str, kind: &str, options: &str, writable: bool| commands::FieldRow {
+            id: id.into(),
+            kind: kind.into(),
+            value: String::new(),
+            input: format!("value.{id}"),
+            spec: format!("{{\"type\":\"{kind}\"}}"),
+            spec_input: format!("spec.{id}"),
+            options: options.into(),
+            nullable: false,
+            writable,
+        };
+        let record = RecordView {
+            app: app.into(),
+            work: spend.into(),
+            collection: "00000000-0000-4000-8000-0000000000ce".into(),
+            record_id: "00000000-0000-4000-8000-0000000013b1".into(),
+            schema: "decision".into(),
+            schema_version: "1".into(),
+            publication: "00000000-0000-4000-8000-0000000000cc".into(),
+            work_version: "1".into(),
+            version: "0".into(),
+            exists: false,
+            fields: vec![
+                field("status", "enum", "needs_context | reviewed", true),
+                field("note", "text", "", true),
+            ],
+            command: "record_decision".into(),
+            action: format!("/v1/work/{app}/{spend}/commands/record_decision"),
+            can_write: true,
+            csrf: "C".repeat(43),
+            idempotency_key: "0123456789abcdef0123456789abcdef".into(),
+            notice: None,
+        };
+        let group = |work: &str, title: &str| canvas::GroupProps {
+            id: format!("g-{work}"),
+            app: app.into(),
+            work: work.into(),
+            app_card: format!("a-{work}"),
+            title: title.into(),
+            label: canvas::SEEDED_LABEL.into(),
+            href: format!("/w/{app}/{work}"),
+            csrf: "Q".repeat(43),
+            ..canvas::GroupProps::default()
+        };
+        let mut first = group(northstar, "Northstar <egress>");
+        first.window_start = "2026-10-22T10:00:00".into();
+        first.restored = true;
+        first.has_cards = true;
+        first.cards = vec![
+            card(&total_view, Outcome::Released(&total, &total_receipt)),
+            card(
+                &timeline_view,
+                Outcome::Released(&buckets, &timeline_receipt),
+            ),
+            card(&failed_view, Outcome::Failed(Reason::Deadline)),
+            card(&denied_view, Outcome::Denied),
+        ];
+        let mut second = group(spend, "Spend Review");
+        second.has_forms = true;
+        second.forms = canvas::form_card(spend, &record).into_iter().collect();
+        let groups = vec![first, second];
+        let props = canvas::CanvasProps {
+            csrf_signout: "S".repeat(43),
+            has_groups: true,
+            summary: canvas::summary(&groups),
+            groups,
+            live_events: String::new(),
+        };
+        let response = ssr.canvas(&props);
+        let (status, headers, body) = html(response).await;
+        if let Some(path) = std::env::var_os("GENUI_CANVAS_PAGE_SNAPSHOT") {
+            std::fs::write(path, &body).unwrap();
+        }
+        assert_eq!(status, StatusCode::OK);
+        assert!(headers[header::CACHE_CONTROL]
+            .to_str()
+            .unwrap()
+            .contains("no-store"));
+        assert!(headers.contains_key(header::CONTENT_SECURITY_POLICY));
+        // The content is in the HTML: everything asserted below sits in the
+        // body before the one module script (the island's).
+        let start = body.find("<body").unwrap();
+        let end = body.find("<script type=\"module\"").unwrap();
+        assert_eq!(body.matches("<script type=\"module\"").count(), 1);
+        let content = &body[start..end];
+        assert!(content.contains("2 apps · 5 cards"));
+        assert!(content.contains("Northstar &lt;egress&gt;") && !content.contains("<egress>"));
+        assert_eq!(content.matches(canvas::SEEDED_LABEL).count(), 2);
+        assert!(content.contains(&format!("id=\"g-{northstar}\"")));
+        assert!(content.contains(&format!("action=\"/w/{app}/{northstar}\"")));
+        assert!(content.contains("value=\"2026-10-22T10:00:00\""));
+        let section = |id: &str| -> String {
+            let start = content
+                .find(&format!("data-view=\"{id}\""))
+                .unwrap_or_else(|| panic!("{id}"));
+            let rest = &content[start..];
+            rest[..rest.find("</article>").unwrap()].to_owned()
+        };
+        let ready = section("total");
+        assert!(ready.contains("data-state=\"ready\"") && ready.contains(">1,140,000<"));
+        assert!(ready.contains(&format!(
+            "data-query=\"/v1/work/{app}/{northstar}/queries/total\""
+        )));
+        assert!(ready.contains("data-integers=\"total_bytes\""));
+        // The receipt is visible, not collapsed: its digest and key identities
+        // sit outside the inspector's <details>.
+        let visible = &ready[..ready.find("<details").unwrap()];
+        assert!(
+            visible.contains("class=\"cv-receipt\"") && visible.contains("sha256:receipt-total")
+        );
+        // Key identities are shortened on the card; the inspector keeps them whole.
+        assert!(visible.contains(&canvas::abbreviate(&total.result_digest)));
+        assert!(visible.contains("Membership epoch") && ready.contains(&total.result_digest));
+        assert!(
+            visible.contains("Source revision (events)") && visible.contains("Parameter window")
+        );
+        let timeline = section("timeline");
+        assert!(timeline.contains("<table") && timeline.contains(">60,000<"));
+        assert!(timeline.contains("sha256:receipt-timeline"));
+        for (id, state) in [("failed", "failed"), ("denied", "denied")] {
+            let html = section(id);
+            assert!(html.contains(&format!("data-state=\"{state}\"")), "{id}");
+            assert!(
+                !html.contains("class=\"value\"") && !html.contains("cv-receipt"),
+                "{id}"
+            );
+            assert!(!html.contains("1,140,000") && !html.contains(">0<"), "{id}");
+        }
+        // The record form posts to the audited command route, keyed, without JS.
+        assert!(content.contains(&format!(
+            "action=\"/v1/work/{app}/{spend}/commands/record_decision\""
+        )));
+        assert_eq!(
+            content.matches("0123456789abcdef0123456789abcdef").count(),
+            1
+        );
+        assert!(content.contains("name=\"value.status\"") && content.contains(">reviewed<"));
+        assert!(content.contains("name=\"spec.note\"") && content.contains("New decision record"));
+        assert!(content.contains(&format!("value=\"{}\"", "C".repeat(43))));
+        assert!(content.contains("action=\"/auth/signout\"") && content.contains(&"S".repeat(43)));
+        // No organization picker; the intent bar posts nowhere but the page.
+        assert!(!content.to_lowercase().contains("organization picker"));
+        assert!(content.contains("What do you need?"));
+        // An empty canvas offers the business intents and no group.
+        let empty = canvas::CanvasProps {
+            csrf_signout: "S".repeat(43),
+            summary: canvas::summary(&[]),
+            ..canvas::CanvasProps::default()
+        };
+        let (_, _, body) = html(ssr.canvas(&empty)).await;
+        assert!(body.contains("Review expenses over $200") && !body.contains("class=\"cv-group\""));
     }
 }

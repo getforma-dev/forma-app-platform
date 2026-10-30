@@ -2154,3 +2154,7 @@ async fn route_campaign(
     let Campaign { fixture, .. } = c;
     (fixture, report)
 }
+
+/// ADR-011: the pitch canvas campaign extends this one (its fixture helpers).
+#[path = "canvas_campaign.rs"]
+mod canvas_campaign;
