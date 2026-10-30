@@ -47,6 +47,9 @@ ADMIT_FUNCTIONS = {
 # Relations migration 0003 adds to genui (D7.3: each states RLS, FORCE and tenant_scope).
 ADMISSION_TABLES = ('access_codes','audit_events','audit_heads','code_grant_templates','code_redemptions',
                     'code_reservations','entitlements','provider_invitations')
+# Relation migration 0008 adds (APP-095 review M3): the record of each share that
+# wrote a row, written by share_work only; no application role holds a privilege.
+SHARING_TABLES = ('work_shares',)
 # D7.8 closed chains and kinds for the roles that hold INSERT on audit_events in 0003.
 CHAIN_KINDS = {
     # 0008 widens the admission list in place (ALTER POLICY): share_work appends
@@ -94,6 +97,8 @@ ADMIT_GRANTS = set().union(
     _columns('app_permissions','INSERT','organization_id','principal_id','app_id','permission'),
     _columns('work_permissions','INSERT','organization_id','principal_id','app_id','work_id','permission'),
     _columns('source_permissions','INSERT','organization_id','principal_id','source_id','permission'),
+    # 0008 (APP-095 review M3): the share's record, exactly the inserted set.
+    _columns('work_shares','INSERT','organization_id','share_id','sharer_id','grantee_id','app_id','work_id','granted','audit_event_id','shared_at'),
     _columns('entitlements','INSERT','organization_id','principal_id','entitlement_id','status','kind','starts_at','expires_at'),
     _columns('code_redemptions','SELECT','organization_id','redemption_id','principal_id','pending_admission_id','entitlement_id','payload_digest'),
     _columns('code_redemptions','INSERT','organization_id','redemption_id','code_id','principal_id','pending_admission_id',
@@ -294,10 +299,24 @@ def admission_checks(pg, passed, denied):
         rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
           AND policyname='tenant_scope' AND tablename = ANY(%s) ORDER BY tablename""",(list(ADMISSION_TABLES),)).fetchall()
         assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in sorted(ADMISSION_TABLES)],rows
+        # 0008 work_shares: owner-held, RLS, FORCE, the exact policy; only genui_admit's INSERT.
+        rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",(list(SHARING_TABLES),)).fetchall()
+        assert rows==[(t,True,True,'genui_owner') for t in SHARING_TABLES],rows
+        rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
+          AND tablename = ANY(%s) ORDER BY tablename""",(list(SHARING_TABLES),)).fetchall()
+        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in SHARING_TABLES],rows
+        shares=c.execute("""SELECT grantee,privilege_type,count(*) FROM information_schema.column_privileges
+          WHERE table_schema='genui' AND table_name='work_shares' AND grantee<>'genui_owner' GROUP BY 1,2 ORDER BY 1,2""").fetchall()
+        assert shares==[('genui_admit','INSERT',9)],shares
+        assert c.execute("""SELECT count(*) FROM information_schema.role_table_grants WHERE table_schema='genui' AND table_name='work_shares'
+          AND grantee<>'genui_owner'""").fetchone()==(0,)
         rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner),
           (SELECT count(*) FROM pg_policy p WHERE p.polrelid=c.oid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
           WHERE n.nspname='genui_private' AND c.relkind='r' ORDER BY c.relname""").fetchall()
         assert rows==[('code_index',False,False,'genui_owner',0),('handle_index',False,False,'genui_owner',0)],rows
+    passed('0008 work_shares is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; only genui_admit holds a privilege on it (INSERT, nine columns), no application role any',
+           tables=list(SHARING_TABLES))
     passed('0003 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the two genui_private indexes carry no RLS',
            tables=list(ADMISSION_TABLES))
 

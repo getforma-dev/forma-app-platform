@@ -87,21 +87,21 @@
   ],
   "first_outcome": {
     "app_id": "00000000-0000-4000-8000-0000000000c9",
-    "audit_event_id": "233e837c-4782-432d-8c7a-77bc361eeb21",
+    "audit_event_id": "a29c2f40-1346-486a-84af-ff1844f3871d",
     "command_id": "record_decision",
     "commit_sequence": 2,
-    "committed_at": "2026-10-30T14:51:42Z",
+    "committed_at": "2026-10-30T15:43:58Z",
     "idempotency_key": "00000000000000000000000000000001",
     "kind": "command_outcome",
     "organization_id": "00000000-0000-4000-8000-000000000001",
-    "payload_digest": "sha256:0fefa85e5ea722ce23f846cc610399112c9e82cbd2eed7cd74b0ff83fef581fd",
+    "payload_digest": "sha256:86de909381eca0a3e8cb99808fb657dd2a8d8fe0d50d3a87d0ad99085defc155",
     "principal_id": "00000000-0000-4000-8000-0000000000ca",
     "record_id": "00000000-0000-4000-8000-0000000000f0",
     "record_version": 1,
-    "retry_expires_at": "2026-10-31T14:51:42Z",
+    "retry_expires_at": "2026-10-31T15:43:58Z",
     "schema_version": 1,
     "state": "committed",
-    "work_id": "7bcea31e-7303-4310-a388-7965b1db8fca",
+    "work_id": "209c5977-5fc0-4d1c-bf18-30e1288b8866",
     "work_version": 1
   },
   "limits": [
@@ -116,12 +116,12 @@
   "passed": true,
   "s05": {
     "app_id": "00000000-0000-4000-8000-0000000000c9",
-    "collection_id": "9b24592e-897a-448f-9a6d-5d2cb47254b7",
+    "collection_id": "a843c917-d4aa-4e42-8649-04b937e4f819",
     "definition_digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9",
     "organization_id": "00000000-0000-4000-8000-000000000001",
-    "publication_id": "617e9fbe-f1db-4599-be45-c0056900ac8e",
+    "publication_id": "409b98e0-5a3e-42ae-87c3-1b38ecfbd3d9",
     "record_id": "00000000-0000-4000-8000-0000000000f0",
-    "work_id": "7bcea31e-7303-4310-a388-7965b1db8fca"
+    "work_id": "209c5977-5fc0-4d1c-bf18-30e1288b8866"
   },
   "schema_version": 1,
   "scope": "APP-013 isolated native PostgreSQL TLS record command, outcome and audit qualification",

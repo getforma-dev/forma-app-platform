@@ -79,16 +79,18 @@ async fn permissions(fixture: &Fixture, s05: &SpendReview, principal: &str) -> V
         .map(|row| row.get::<_, String>(0))
         .collect()
 }
-/// The permission rows in both organizations and the admission chain's
-/// `permission.granted` events: what a share may write.
-async fn footprint(fixture: &Fixture) -> [i64; 5] {
-    let mut counts = [0; 5];
+/// The permission rows in both organizations, the admission chain's
+/// `permission.granted` events and the `work_shares` records: what a share
+/// may write.
+async fn footprint(fixture: &Fixture) -> [i64; 6] {
+    let mut counts = [0; 6];
     for (slot, sql) in [
         "SELECT count(*) FROM genui.app_permissions",
         "SELECT count(*) FROM genui.work_permissions",
         "SELECT count(*) FROM genui.source_permissions",
         "SELECT count(*) FROM genui.organization_permissions",
         "SELECT count(*) FROM genui.audit_events WHERE writer_role='admission' AND kind='permission.granted'",
+        "SELECT count(*) FROM genui.work_shares",
     ]
     .into_iter()
     .enumerate()
@@ -103,6 +105,15 @@ fn names(shared: &Shared) -> Vec<String> {
         .iter()
         .map(|g| format!("{}:{}:{}", g.scope, g.resource, g.permission))
         .collect()
+}
+/// The `work_shares` row referenced by the admission chain's latest
+/// `permission.granted` event: `(sharer, grantee, granted, digest recomputed
+/// from the row == the event's outcome_digest)` (review M3: every share is
+/// reconstructable from the row the event references).
+async fn latest_share_record(fixture: &Fixture) -> (String, String, Vec<String>, bool) {
+    let operator = fixture.operator().await;
+    let row = operator.client.query_one(&format!("SELECT s.sharer_id::text,s.grantee_id::text,s.granted,e.outcome_digest='sha256:'||encode(sha256(convert_to('forma:share-grant:v1','UTF8')||'\\x00'::bytea||convert_to(s.grantee_id::text,'UTF8')||'\\x00'::bytea||convert_to(array_to_string(s.granted,','),'UTF8')),'hex') FROM genui.audit_events e JOIN genui.work_shares s ON s.organization_id=e.organization_id AND s.audit_event_id=e.event_id WHERE e.organization_id='{ORG}' AND e.writer_role='admission' AND e.kind='permission.granted' ORDER BY e.chain_sequence DESC LIMIT 1"), &[]).await.unwrap();
+    (row.get(0), row.get(1), row.get(2), row.get(3))
 }
 fn expected_subset(s05: &SpendReview, write: bool) -> Vec<String> {
     let mut all = vec![
@@ -296,7 +307,7 @@ async fn campaign() {
     let after = footprint(&fixture).await;
     assert_eq!(
         after,
-        [before[0] + 2, before[1] + 1, before[2] + 1, before[3], 1]
+        [before[0] + 2, before[1] + 1, before[2] + 1, before[3], 1, 1]
     );
     {
         let operator = fixture.operator().await;
@@ -307,9 +318,15 @@ async fn campaign() {
         assert!(event.get::<_, String>(3).starts_with("sha256:"));
         assert!(event.get::<_, bool>(4));
     }
+    // The share's record names exactly the inserted set and the event's
+    // outcome_digest is recomputable from it.
+    let (sharer, grantee, granted, digest_matches) = latest_share_record(&fixture).await;
+    assert_eq!((sharer.as_str(), grantee.as_str()), (AUTHOR, REVIEWER));
+    assert_eq!(granted, expected_subset(&s05, false));
+    assert!(digest_matches);
     check(
         &mut checks,
-        "the creator shares the work read-only: the teammate receives exactly discover and run on the app, record_read on the work and source_read on its one source dependency (never edit_definition, record_write or anything the creator does not hold), with one permission.granted event on the admission chain naming the sharer, the app and the work",
+        "the creator shares the work read-only: the teammate receives exactly discover and run on the app, record_read on the work and source_read on its one source dependency (never edit_definition, record_write or anything the creator does not hold), with one permission.granted event on the admission chain naming the sharer, the app and the work, and one work_shares row naming exactly the inserted set, referenced by the event, from which the event's outcome_digest recomputes",
     );
 
     // --- the teammate opens it under its own grants; others still cannot ---
@@ -407,7 +424,14 @@ async fn campaign() {
         ["record_write"]
     );
     let after_write = footprint(&fixture).await;
-    assert_eq!(after_write, [after[0], after[1] + 1, after[2], after[3], 2]);
+    assert_eq!(
+        after_write,
+        [after[0], after[1] + 1, after[2], after[3], 2, 2]
+    );
+    let (_, grantee, granted, digest_matches) = latest_share_record(&fixture).await;
+    assert_eq!(grantee, REVIEWER);
+    assert_eq!(granted, vec![format!("work:{}:record_write", s05.work)]);
+    assert!(digest_matches);
     assert!(matches!(
         stores
             .data
@@ -426,7 +450,7 @@ async fn campaign() {
     ));
     check(
         &mut checks,
-        "a repeat share inserts nothing and appends no event; sharing record_write adds exactly that row with its own event, after which the teammate's command commits",
+        "a repeat share inserts nothing and appends no event or record; sharing record_write adds exactly that row with its own event and a record naming only record_write, after which the teammate's command commits",
     );
 
     // --- refusals: self, revoked, outsider, nobody, another scope, no escalation ---
@@ -722,25 +746,54 @@ async fn campaign() {
     )
     .await;
     assert_eq!(shared.status, StatusCode::OK, "{}", shared.body);
+    let shared_body = shared.body.clone();
     let shared = shared.json();
     assert_eq!(shared["grantee_principal_id"], PRINCIPAL);
     assert_eq!(shared["app_id"], SPEND_APP);
     assert_eq!(shared["work_id"], work);
-    let inserted: Vec<&str> = shared["granted"]
+    // The answer is the subset now held, without which rows were new (review
+    // m1): the same keys on every element, no `inserted`.
+    let granted_names: Vec<String> = shared["granted"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|g| g["inserted"] == true)
-        .map(|g| g["permission"].as_str().unwrap())
+        .map(|g| {
+            assert_eq!(
+                g.as_object().unwrap().keys().collect::<Vec<_>>(),
+                ["permission", "resource_id", "scope"]
+            );
+            format!(
+                "{}:{}:{}",
+                g["scope"].as_str().unwrap(),
+                g["resource_id"].as_str().unwrap(),
+                g["permission"].as_str().unwrap()
+            )
+        })
         .collect();
-    assert_eq!(inserted, ["discover"]);
-    assert_eq!(shared["granted"].as_array().unwrap().len(), 4);
+    assert_eq!(granted_names, expected_subset(&s05, false));
+    // The database says what was new: exactly discover, one event, one record.
+    assert_eq!(
+        footprint(&fixture).await,
+        [
+            http_before[0] + 1,
+            http_before[1],
+            http_before[2],
+            http_before[3],
+            http_before[4] + 1,
+            http_before[5] + 1
+        ]
+    );
+    let (_, grantee, granted, digest_matches) = latest_share_record(&fixture).await;
+    assert_eq!(grantee, PRINCIPAL);
+    assert_eq!(granted, vec![format!("app:{SPEND_APP}:discover")]);
+    assert!(digest_matches);
     reviewer_stream.expect("app.shared", work).await;
     principal_stream.expect("app.shared", work).await;
     let mut rows = expected_subset(&s05, false);
     rows.sort();
     assert_eq!(permissions(&fixture, &s05, PRINCIPAL).await, rows);
-    // A replay over the route changes nothing and announces nothing.
+    // A replay over the route changes nothing, announces nothing and answers
+    // the byte-identical body (nothing tells the sharer the rows existed).
     let replay = send(
         &app,
         "POST",
@@ -751,15 +804,11 @@ async fn campaign() {
     )
     .await;
     assert_eq!(replay.status, StatusCode::OK);
-    assert!(replay.json()["granted"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|g| g["inserted"] == false));
+    assert_eq!(replay.body, shared_body);
     reviewer_stream.silent(Duration::from_millis(500)).await;
     check(
         &mut checks,
-        "the event stream delivers record.committed for a work the subscriber can open now and nothing for a work it cannot (or of another organization); the creator's share over the route inserts exactly the missing row, answers the granted set and announces app.shared to every subscriber who can open the work; a replay announces nothing",
+        "the event stream delivers record.committed for a work the subscriber can open now and nothing for a work it cannot (or of another organization); the creator's share over the route inserts exactly the missing row (one event, one work_shares record), answers the granted subset without disclosing which rows were new, and announces app.shared to every subscriber who can open the work; a replay answers the byte-identical body and announces nothing",
     );
 
     // The teammate commits through the command route: both streams learn.
@@ -884,9 +933,19 @@ async fn campaign() {
         scalar(&fixture, "SELECT count(*) FROM genui.audit_events WHERE writer_role<>'admission' AND writer_role<>'operator' AND kind='permission.granted'").await,
         0
     );
+    // Every share record pairs with exactly one admission event and recomputes
+    // its digest; no record is orphaned and no admission event lacks one.
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares s JOIN genui.audit_events e ON e.organization_id=s.organization_id AND e.event_id=s.audit_event_id AND e.writer_role='admission' AND e.kind='permission.granted' AND e.actor_principal_id=s.sharer_id AND e.app_id=s.app_id AND e.work_id=s.work_id AND e.outcome_digest='sha256:'||encode(sha256(convert_to('forma:share-grant:v1','UTF8')||'\\x00'::bytea||convert_to(s.grantee_id::text,'UTF8')||'\\x00'::bytea||convert_to(array_to_string(s.granted,','),'UTF8')),'hex') WHERE s.organization_id='{ORG}'")).await,
+        4
+    );
+    assert_eq!(
+        scalar(&fixture, "SELECT count(*) FROM genui.work_shares").await,
+        4
+    );
     check(
         &mut checks,
-        "the admission chain verifies with its permission.granted events (one per share that wrote a row); no other chain carries the kind",
+        "the admission chain verifies with its permission.granted events (one per share that wrote a row), each paired with the one work_shares record it references whose inserted set recomputes the event's outcome_digest; no other chain carries the kind",
     );
 
     if let Some(path) = std::env::var_os("GENUI_SHARING_REPORT") {

@@ -1,21 +1,31 @@
 -- ADR-011 (APP-095, pitch sub-branch pivot/realtime): a member shares a saved
 -- work with a teammate of the SAME organization. One definer function,
 -- genui_private.share_work, owned by genui_admit (ADR-007 D7.1's authority
--- writer), copies onto the grantee exactly the subset of the sharer's own
+-- writer), COPIES onto the grantee exactly the subset of the sharer's own
 -- current permissions on that work: `discover` and `run` on the app that the
 -- sharer holds, `record_read` on the work (the sharer holds it as the
 -- unrevoked creator or by a work grant), `record_write` only when the sharer
 -- asks for it and holds it, and `source_read` on each of the work's source
--- dependencies the sharer holds. Nothing else is ever written: no
--- `edit_definition`, `review_publish`, `share_work`, `export` or
--- `admin_policy`, and no row for a principal outside the transaction's
--- organization scope (RLS WITH CHECK). The sharer must be the work's unrevoked
--- creator or hold `share_work` on it, and must hold `run` on the app. The
--- function takes no permission names from its caller and exposes no bypass.
--- It appends exactly one `permission.granted` event on the admission chain
--- (actor the sharer, app and work named, outcome_digest the digest of the
--- grantee and the granted set) when at least one row was inserted; a repeat
--- share inserts nothing and writes no event.
+-- dependencies the sharer holds. The teammate therefore opens the work under
+-- the sharer's permissions, copied (ADR-011 amendment 2026-10-30; APP-095
+-- review M3), not under grants of its own. `source_read` is copied because
+-- the work's read clause requires it on every dependency; by the 0002 model
+-- it is keyed (organization, principal, source), so the copied row is
+-- organization-wide (the grantee may afterwards read that source through any
+-- app it can `run`) and is not removed when the share is reversed. Nothing
+-- else is ever written: no `edit_definition`, `review_publish`, `share_work`,
+-- `export` or `admin_policy`, and no row for a principal outside the
+-- transaction's organization scope (RLS WITH CHECK). The sharer must be the
+-- work's unrevoked creator or hold `share_work` on it, and must hold `run` on
+-- the app. The function takes no permission names from its caller and exposes
+-- no bypass. When at least one row was inserted it writes one
+-- genui.work_shares row naming exactly the inserted set and appends exactly
+-- one `permission.granted` event on the admission chain (actor the sharer, app
+-- and work named, outcome_digest the digest of the grantee and that inserted
+-- set, event_id referenced by the work_shares row), so every share is
+-- reconstructable and reversible row by row; a repeat share inserts nothing
+-- and writes neither. This migration has been applied only to disposable
+-- databases and is amended in place (review M3).
 --
 -- Recorded debt (ADR-011 §Consequences, APP-095, APP-097): ADR-007 D7.3 says
 -- permission rows are written only by admit_redemption and the operator
@@ -33,6 +43,31 @@ ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_che
  ADD CONSTRAINT schema_version_version_check CHECK (version BETWEEN 1 AND 8);
 ALTER TABLE genui_meta.schema_migrations DROP CONSTRAINT schema_migrations_version_check,
  ADD CONSTRAINT schema_migrations_version_check CHECK (version BETWEEN 1 AND 8);
+
+-- The record of each share that wrote a row: who shared which work with whom,
+-- exactly the permission rows the share inserted (`scope:resource:permission`,
+-- the set the audit event's outcome_digest covers) and the event that recorded
+-- it. Written only by share_work; no application role reads it (an unshare
+-- route is recorded debt, APP-097). No foreign key to audit_events (0007's
+-- decision: the audit log is insert-only and a referencing row would need a
+-- KEY SHARE lock on it); the operator `verify` pairs them as a set.
+CREATE TABLE genui.work_shares (
+ organization_id uuid NOT NULL, share_id uuid NOT NULL,
+ sharer_id uuid NOT NULL, grantee_id uuid NOT NULL, app_id uuid NOT NULL, work_id uuid NOT NULL,
+ granted text[] NOT NULL CHECK (cardinality(granted) BETWEEN 1 AND 64),
+ audit_event_id uuid NOT NULL, shared_at timestamptz NOT NULL,
+ PRIMARY KEY (organization_id,share_id),
+ UNIQUE (organization_id,audit_event_id),
+ FOREIGN KEY (organization_id,sharer_id) REFERENCES genui.memberships,
+ FOREIGN KEY (organization_id,grantee_id) REFERENCES genui.memberships,
+ FOREIGN KEY (organization_id,app_id,work_id) REFERENCES genui.saved_work,
+ CHECK (sharer_id<>grantee_id)
+);
+-- D7.3: every new genui relation states ENABLE/FORCE RLS and tenant_scope here.
+ALTER TABLE genui.work_shares ENABLE ROW LEVEL SECURITY;
+ALTER TABLE genui.work_shares FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_scope ON genui.work_shares USING (organization_id = nullif(current_setting('genui.organization_id',true),'')::uuid) WITH CHECK (organization_id = nullif(current_setting('genui.organization_id',true),'')::uuid);
+GRANT INSERT(organization_id,share_id,sharer_id,grantee_id,app_id,work_id,granted,audit_event_id,shared_at) ON genui.work_shares TO genui_admit;
 
 -- D7.1 A4 extension: the reads share_work needs, by column. INSERT on the
 -- three permission tables is 0003's grant; no UPDATE or DELETE is added.
@@ -59,7 +94,7 @@ CREATE FUNCTION genui_private.share_work(p_org uuid,p_sharer uuid,p_grantee uuid
  LANGUAGE plpgsql SECURITY DEFINER STRICT VOLATILE PARALLEL UNSAFE
  SET search_path=pg_catalog,pg_temp AS $$
 DECLARE o_status text; s_status text; s_epoch bigint; g_status text; v_creator boolean; v_share boolean;
- v_count integer; v_any boolean:=false; v_granted text[]:='{}'; r record;
+ v_count integer; v_any boolean:=false; v_inserted text[]:='{}'; r record;
  v_seq bigint; v_prev text; v_event uuid; v_at timestamptz; v_body text; v_hash text; v_digest text;
 BEGIN
  IF p_sharer=p_grantee
@@ -71,8 +106,11 @@ BEGIN
  SELECT m.status,m.membership_epoch INTO s_status,s_epoch FROM genui.memberships m
   WHERE m.organization_id=p_org AND m.principal_id=p_sharer FOR SHARE;
  IF NOT FOUND OR s_status<>'active' OR s_epoch::text IS DISTINCT FROM nullif(current_setting('genui.membership_epoch',true),'') THEN RETURN; END IF;
- -- The grantee: an active member of this organization (RLS scopes the read).
- SELECT m.status INTO g_status FROM genui.memberships m WHERE m.organization_id=p_org AND m.principal_id=p_grantee;
+ -- The grantee: an active member of this organization (RLS scopes the read),
+ -- locked FOR SHARE too (review m3) so that an operator revocation of the
+ -- grantee (member FOR UPDATE) cannot interleave between this read and the
+ -- inserts below. Lock order unchanged: organizations, then member rows.
+ SELECT m.status INTO g_status FROM genui.memberships m WHERE m.organization_id=p_org AND m.principal_id=p_grantee FOR SHARE;
  IF NOT FOUND OR g_status<>'active' THEN RETURN; END IF;
  -- The sharer's authority over the work: its unrevoked creator (ADR-007
  -- amendment 2026-10-29) or a `share_work` grant; and `run` on the app.
@@ -96,7 +134,7 @@ BEGIN
    ON CONFLICT DO NOTHING;
   GET DIAGNOSTICS v_count=ROW_COUNT;
   scope:='app'; resource_id:=p_app; permission:=r.permission; inserted:=v_count=1; v_any:=v_any OR inserted;
-  v_granted:=v_granted||('app:'||p_app::text||':'||r.permission); RETURN NEXT;
+  IF inserted THEN v_inserted:=v_inserted||('app:'||p_app::text||':'||r.permission); END IF; RETURN NEXT;
  END LOOP;
  -- record_read always (the sharer holds it, judged above); record_write on request.
  FOR r IN SELECT x.permission FROM (VALUES ('record_read'),('record_write')) AS x(permission)
@@ -105,7 +143,7 @@ BEGIN
    ON CONFLICT DO NOTHING;
   GET DIAGNOSTICS v_count=ROW_COUNT;
   scope:='work'; resource_id:=p_work; permission:=r.permission; inserted:=v_count=1; v_any:=v_any OR inserted;
-  v_granted:=v_granted||('work:'||p_work::text||':'||r.permission); RETURN NEXT;
+  IF inserted THEN v_inserted:=v_inserted||('work:'||p_work::text||':'||r.permission); END IF; RETURN NEXT;
  END LOOP;
  -- source_read on each source dependency of the work that the sharer holds.
  FOR r IN SELECT DISTINCT d.source_id FROM genui.work_source_dependencies d
@@ -116,12 +154,14 @@ BEGIN
    ON CONFLICT DO NOTHING;
   GET DIAGNOSTICS v_count=ROW_COUNT;
   scope:='source'; resource_id:=r.source_id; permission:='source_read'; inserted:=v_count=1; v_any:=v_any OR inserted;
-  v_granted:=v_granted||('source:'||r.source_id::text||':source_read'); RETURN NEXT;
+  IF inserted THEN v_inserted:=v_inserted||('source:'||r.source_id::text||':source_read'); END IF; RETURN NEXT;
  END LOOP;
  IF NOT v_any THEN RETURN; END IF;
  -- D7.8 append on the admission chain; the head row lock serializes appenders.
+ -- The digest covers the grantee and exactly the inserted set, which the
+ -- work_shares row stores, so it is recomputable from that row.
  v_digest:='sha256:'||encode(sha256(convert_to('forma:share-grant:v1','UTF8')||'\x00'::bytea||convert_to(p_grantee::text,'UTF8')
-  ||'\x00'::bytea||convert_to(array_to_string(v_granted,','),'UTF8')),'hex');
+  ||'\x00'::bytea||convert_to(array_to_string(v_inserted,','),'UTF8')),'hex');
  SELECT h.chain_sequence,h.head_hash INTO v_seq,v_prev FROM genui.audit_heads h
   WHERE h.organization_id=p_org AND h.writer_role='admission' FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'admission audit chain is not provisioned' USING ERRCODE='55000'; END IF;
@@ -135,6 +175,9 @@ BEGIN
  INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,actor_principal_id,app_id,work_id,record_id,code_id,outcome_digest,occurred_at,previous_hash,hash)
   VALUES (p_org,v_event,'admission',v_seq,'permission.granted',p_sharer,p_app,p_work,NULL,NULL,v_digest,v_at,v_prev,v_hash);
  UPDATE genui.audit_heads SET chain_sequence=v_seq,head_hash=v_hash WHERE organization_id=p_org AND writer_role='admission';
+ -- The share's record: exactly what this call inserted, referencing the event.
+ INSERT INTO genui.work_shares(organization_id,share_id,sharer_id,grantee_id,app_id,work_id,granted,audit_event_id,shared_at)
+  VALUES (p_org,gen_random_uuid(),p_sharer,p_grantee,p_app,p_work,v_inserted,v_event,v_at);
  RETURN;
 END $$;
 REVOKE ALL ON FUNCTION genui_private.share_work(uuid,uuid,uuid,uuid,uuid,boolean) FROM PUBLIC;
