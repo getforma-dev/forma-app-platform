@@ -154,3 +154,8 @@ body {
 .receipt dt { min-width: 12rem; color: var(--muted); }
 .receipt dd { margin: 0; overflow-wrap: anywhere; }
 .receipt pre { overflow-x: auto; font-size: 0.75rem; }
+/* APP-076 G9 workspace listing. */
+.openable { padding: 0; list-style: none; margin: 0 0 2rem; }
+.openable > li { border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem 1rem; margin: 0 0 0.75rem; }
+.openable .label { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.875rem; }
+.openable ul { margin: 0.5rem 0 0; padding-left: 1.25rem; }

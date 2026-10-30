@@ -7,11 +7,15 @@
 //! synchronizer token (403), and only then any hashing, database or provider
 //! work. Every protected refusal is the uniform 404.
 use super::{
-    cookies, csrf, invite, pending, pkce::Pkce, Auth, DeniedView, Route, SigninView, WorkspaceView,
+    capability, cookies, csrf, invite, pending, pkce::Pkce, Auth, DeniedView, RecordLink, Route,
+    SigninView, WorkspaceItem, WorkspaceView,
 };
 use crate::{
     http::{self, limits},
-    storage::{handle_digest, Completion, Error, FlowKind, Lookup, PendingAdmission},
+    storage::{
+        handle_digest, Completion, Error, FlowKind, Lookup, OpenableWork, PendingAdmission,
+        TrustedRequest,
+    },
 };
 use axum::{
     body::Body,
@@ -487,6 +491,52 @@ pub(crate) fn denied(auth: &Auth, pre_cookie: &str) -> Response {
     )
 }
 
+/// One listed work as the page shows it (APP-076 G9): the work page
+/// `/w/{app}/{work}` and, with `record_write`, the APP-013 record page
+/// `/work/{app}/{work}/records/{collection}/{record}` of a fresh record id
+/// minted per render (a canonical UUID v4, which the record page shows as an
+/// absent record at version 0 with its `create` form).
+pub(crate) fn workspace_item(work: &OpenableWork) -> WorkspaceItem {
+    let (app, id) = (&work.app, &work.work);
+    let records = if work.can_write {
+        work.collections
+            .iter()
+            .filter_map(|(collection, schema)| {
+                Some(RecordLink {
+                    label: format!("New {schema} record"),
+                    href: format!(
+                        "/work/{app}/{id}/records/{collection}/{}",
+                        capability::random_uuid()?
+                    ),
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    WorkspaceItem {
+        title: work.title.clone(),
+        href: format!("/w/{app}/{id}"),
+        records,
+    }
+}
+/// The member's openable works; a denial or a store failure is the empty
+/// listing (the page's neutral "nothing to open yet"), so the entry and its
+/// sign-out stay reachable and nothing about the refusal is shown.
+async fn listing(auth: &Auth, request: &TrustedRequest) -> Vec<WorkspaceItem> {
+    let Some(stores) = &auth.stores else {
+        return Vec::new();
+    };
+    match stores.data.openable_works(request).await {
+        Ok(works) => works.iter().map(workspace_item).collect(),
+        Err(Error::Denied) => Vec::new(),
+        Err(error) => {
+            tracing::info!(code = %error, "workspace.listing_unavailable");
+            Vec::new()
+        }
+    }
+}
+
 /// The protected workspace entry: a live workspace session, the uniform 404
 /// for no, an unknown, an ended or a refused session, or 503 when the
 /// workspace store itself is unavailable or saturated (D7.9; the APP-012
@@ -505,10 +555,14 @@ async fn workspace(State(auth): State<Arc<Auth>>, request: Request) -> Response 
     };
     let live = |reference: &str| auth.vault.contains(reference);
     match stores.workspace.resolve_session(&cookie, &live).await {
-        Ok(Lookup::Live(_request)) => auth.pages.workspace(&WorkspaceView {
-            csrf_signout: auth.csrf.token(csrf::Form::SignOut, &cookie),
-            csrf_signout_all: auth.csrf.token(csrf::Form::SignOutAll, &cookie),
-        }),
+        Ok(Lookup::Live(request)) => {
+            let items = listing(&auth, &request).await;
+            auth.pages.workspace(&WorkspaceView {
+                csrf_signout: auth.csrf.token(csrf::Form::SignOut, &cookie),
+                csrf_signout_all: auth.csrf.token(csrf::Form::SignOutAll, &cookie),
+                items,
+            })
+        }
         Ok(Lookup::Ended(ended)) => {
             auth.revoke(&ended).await;
             http::not_found()

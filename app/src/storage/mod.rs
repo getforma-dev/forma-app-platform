@@ -31,8 +31,8 @@ pub use definitions::{
 };
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use queries::{
-    parse_parameters, query_digests, Parameters, QueryRun, RunSource, WorkOutline, WorkView,
-    QUERY_HANDLER_DEADLINE,
+    parse_parameters, query_digests, OpenableWork, Parameters, QueryRun, RunSource, WorkOutline,
+    WorkView, QUERY_HANDLER_DEADLINE,
 };
 pub use registry::RegistryIdentity;
 pub use sessions::{

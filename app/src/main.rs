@@ -61,10 +61,27 @@ struct PendingProps {
 struct DeniedProps {
     csrf_signout: String,
 }
+// APP-076 G9: the member's openable works, resolved by the auth route.
+#[derive(PageProps)]
+struct RecordLinkProps {
+    id: String,
+    label: String,
+    href: String,
+}
+#[derive(PageProps)]
+struct WorkspaceItemProps {
+    id: String,
+    title: String,
+    href: String,
+    has_records: bool,
+    records: Vec<RecordLinkProps>,
+}
 #[derive(PageProps)]
 struct WorkspaceProps {
     csrf_signout: String,
     csrf_signout_all: String,
+    has_items: bool,
+    items: Vec<WorkspaceItemProps>,
 }
 // APP-013 record page (D7.16): typed rows and premise fields; the key and the
 // token are minted per render by the route, never read from the request.
@@ -263,6 +280,26 @@ impl auth::Pages for SsrPages {
                 &WorkspaceProps {
                     csrf_signout: view.csrf_signout.clone(),
                     csrf_signout_all: view.csrf_signout_all.clone(),
+                    has_items: !view.items.is_empty(),
+                    items: view
+                        .items
+                        .iter()
+                        .map(|item| WorkspaceItemProps {
+                            id: item.href.clone(),
+                            title: item.title.clone(),
+                            href: item.href.clone(),
+                            has_records: !item.records.is_empty(),
+                            records: item
+                                .records
+                                .iter()
+                                .map(|record| RecordLinkProps {
+                                    id: record.href.clone(),
+                                    label: record.label.clone(),
+                                    href: record.href.clone(),
+                                })
+                                .collect(),
+                        })
+                        .collect(),
                 },
                 &RenderCtx::new().with_title("Workspace"),
             ),
@@ -841,9 +878,51 @@ mod tests {
         let (_, _, body) = html(pages.workspace(&WorkspaceView {
             csrf_signout: "W".repeat(43),
             csrf_signout_all: "A".repeat(43),
+            items: Vec::new(),
         }))
         .await;
         assert!(body.contains("action=\"/auth/signout-all\"") && body.contains(&"A".repeat(43)));
+        // APP-076 G9: an empty listing is the neutral line and no list.
+        assert!(body.contains("Nothing to open yet.") && !body.contains("class=\"openable\""));
+        assert!(!body.contains("<script src"));
+        let work = "/w/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2";
+        let record = "/work/00000000-0000-4000-8000-0000000000c9/00000000-0000-4000-8000-0000000000cd/records/00000000-0000-4000-8000-0000000000ce/00000000-0000-4000-8000-0000000013b1";
+        let (status, _, body) = html(pages.workspace(&WorkspaceView {
+            csrf_signout: "W".repeat(43),
+            csrf_signout_all: "A".repeat(43),
+            items: vec![
+                auth::WorkspaceItem {
+                    title: "Northstar <operations>".into(),
+                    href: work.into(),
+                    records: Vec::new(),
+                },
+                auth::WorkspaceItem {
+                    title: "Spend Review".into(),
+                    href: record.split("/records/").next().unwrap().replacen("/work/", "/w/", 1),
+                    records: vec![auth::RecordLink {
+                        label: "New decision record".into(),
+                        href: record.into(),
+                    }],
+                },
+            ],
+        }))
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(!body.contains("Nothing to open yet."));
+        assert!(body.contains(&format!("href=\"{work}\"")));
+        assert!(
+            body.contains(&format!("href=\"{record}\"")) && body.contains("New decision record")
+        );
+        // Titles are text, never markup.
+        assert!(body.contains("Northstar &lt;operations&gt;") && !body.contains("<operations>"));
+        assert_eq!(
+            body.matches(
+                "Seeded definition, retrieved from the library. Sources seeded by the operator."
+            )
+            .count(),
+            2
+        );
+        assert!(!body.contains("<script src"));
     }
 
     /// APP-013 (D7.16): the record page renders its field rows and a form

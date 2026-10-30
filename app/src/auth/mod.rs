@@ -230,6 +230,25 @@ pub struct DeniedView {
 pub struct WorkspaceView {
     pub csrf_signout: String,
     pub csrf_signout_all: String,
+    /// APP-076 G9: what the member may open now, judged under the session's
+    /// fenced, scoped transaction (`Data::openable_works`). Empty (denied,
+    /// nothing granted, or a listing the store could not answer): the page
+    /// says only that there is nothing to open yet.
+    pub items: Vec<WorkspaceItem>,
+}
+/// One saved work on the workspace page: a plain link to its work page and,
+/// when the member may write its records, one link per record collection to
+/// the record page of a fresh record id (the S05 `create` at version 0).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkspaceItem {
+    pub title: String,
+    pub href: String,
+    pub records: Vec<RecordLink>,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecordLink {
+    pub label: String,
+    pub href: String,
 }
 /// APP-074 invitation entry. The submitted code is never shown back.
 #[derive(Default)]

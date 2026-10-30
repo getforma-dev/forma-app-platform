@@ -95,9 +95,24 @@ impl Pages for TestPages {
         page(format!("page=denied;signout={}", v.csrf_signout))
     }
     fn workspace(&self, v: &WorkspaceView) -> Response {
+        // APP-076 G9: `title|href|label>href+label>href`, items joined by `,`.
+        let items: Vec<String> = v
+            .items
+            .iter()
+            .map(|item| {
+                let records: Vec<String> = item
+                    .records
+                    .iter()
+                    .map(|r| format!("{}>{}", r.label, r.href))
+                    .collect();
+                format!("{}|{}|{}", item.title, item.href, records.join("+"))
+            })
+            .collect();
         page(format!(
-            "page=workspace;signout={};signout_all={}",
-            v.csrf_signout, v.csrf_signout_all
+            "page=workspace;signout={};signout_all={};items={}",
+            v.csrf_signout,
+            v.csrf_signout_all,
+            items.join(",")
         ))
     }
 }
@@ -1566,6 +1581,93 @@ async fn campaign() {
     let verify = operator(&c.fixture, &["verify", "--organization", ORG]);
     assert_eq!(verify["verified"], true);
     c.record("a fresh sign-in whose exchange reports email_verified true redeems the live pending admission through admit_redemption (slot, membership epoch 1, entitlement, audit) and mints the workspace session once (12 h, digest-only cookie, session.signed_in on the workspace chain; chains verify); later requests make no provider call");
+
+    // --- 5b. APP-076 G9: the workspace lists what the member may open now ---
+    // Data::openable_works runs in the data role's READ COMMITTED transaction
+    // under the session's scope and member fence, and lists a saved work only
+    // when discover on its app and record_read on the work (run on the app
+    // and live source_read on every dependency) hold after the fence.
+    const SEEDED_WORK: &str = "00000000-0000-4000-8000-000000000069";
+    const SEEDED_COLLECTION: &str = "00000000-0000-4000-8000-00000000006a";
+    const EVENTS: &str = "00000000-0000-4000-8000-00000000006e";
+    const INVENTORY: &str = "00000000-0000-4000-8000-000000000070";
+    let listing = |reply: &Reply| field(&reply.body, "items");
+    assert_eq!(
+        listing(&workspace),
+        "",
+        "discover and run on the app open nothing"
+    );
+    let grant = |permission: &str, resource: &[&str]| {
+        let mut args = vec![
+            "grant-permission",
+            "--organization",
+            ORG,
+            "--principal",
+            &maya_principal,
+            "--permission",
+            permission,
+        ];
+        args.extend_from_slice(resource);
+        let out = operator(&c.fixture, &args);
+        assert_eq!(out["changed"], true, "{permission}");
+        assert_eq!(out["membership_epoch"], 1, "a grant advances no epoch");
+    };
+    grant("record_read", &["--app", APP, "--work", SEEDED_WORK]);
+    assert_eq!(
+        listing(&verified.get(&c.app, "/workspace").await),
+        "",
+        "record_read without source_read on the work's dependencies"
+    );
+    grant("source_read", &["--source", EVENTS]);
+    assert_eq!(
+        listing(&verified.get(&c.app, "/workspace").await),
+        "",
+        "source_read on one of two dependencies"
+    );
+    grant("source_read", &["--source", INVENTORY]);
+    let reader = verified.get(&c.app, "/workspace").await;
+    assert_eq!(reader.status, StatusCode::OK);
+    assert_eq!(
+        listing(&reader),
+        format!("Northstar investigation|/w/{APP}/{SEEDED_WORK}|"),
+        "a reader gets the work page link and no record link"
+    );
+    grant("record_write", &["--app", APP, "--work", SEEDED_WORK]);
+    let record_link = |reply: &Reply| {
+        let items = listing(reply);
+        let (head, link) = items.split_once('>').expect("one record link");
+        assert_eq!(
+            head,
+            format!("Northstar investigation|/w/{APP}/{SEEDED_WORK}|New decision record")
+        );
+        let prefix = format!("/work/{APP}/{SEEDED_WORK}/records/{SEEDED_COLLECTION}/");
+        let record = link.strip_prefix(&prefix).expect("the record page route");
+        assert!(crate::storage::valid_identifier(record) && &record[14..15] == "4");
+        record.to_owned()
+    };
+    let first = record_link(&verified.get(&c.app, "/workspace").await);
+    let second = record_link(&verified.get(&c.app, "/workspace").await);
+    assert_ne!(first, second, "a fresh record id per render");
+    // A dependency's source_read removed (fixture SQL: no epoch advance, so
+    // the same session shows that every request re-reads it) unlists the work;
+    // restored, it is listed again.
+    let operator_sql = c.fixture.operator().await;
+    let removed = operator_sql.client.execute(&format!("DELETE FROM genui.source_permissions WHERE organization_id='{ORG}' AND principal_id='{maya_principal}' AND source_id='{INVENTORY}'"), &[]).await.unwrap();
+    assert_eq!(removed, 1);
+    assert_eq!(listing(&verified.get(&c.app, "/workspace").await), "");
+    operator_sql.client.execute(&format!("INSERT INTO genui.source_permissions(organization_id,principal_id,source_id,permission) VALUES ('{ORG}','{maya_principal}','{INVENTORY}','source_read')"), &[]).await.unwrap();
+    drop(operator_sql);
+    record_link(&verified.get(&c.app, "/workspace").await);
+    // Spend Review and the canary's Northstar copy live in the canary
+    // organization: nothing of it is ever listed under this session's scope.
+    let listed = verified.get(&c.app, "/workspace").await;
+    assert!(
+        !listed.body.contains("0000000000c9") && !listed.body.contains("Spend Review"),
+        "{}",
+        listed.body
+    );
+    assert_eq!(c.epoch(&maya_principal).await, 1);
+    c.record("APP-076 G9: GET /workspace lists only the saved works the member may open now, read in one data-role transaction under the session's scope and member fence: discover and run alone list nothing; record_read lists nothing until source_read holds on both of the seeded work's dependencies; then the work page link /w/{app}/{work} with the definition's title, and with record_write one record page link per record collection to a fresh UUID v4 record per render; removing one dependency's source_read unlists it on the same session; the canary organization's apps are never listed; grants advance no epoch");
 
     // --- 6. State, PKCE and replay -----------------------------------------
     let exchanges = c.issuer.count(|x| &x.exchange);
