@@ -130,6 +130,27 @@ pub fn uniform(router: Router) -> Router {
         .fallback_service(inner)
         .layer(middleware::map_response(without_allow))
 }
+/// `uniform`, plus routes that wait on an external model and so run under
+/// `COMPOSE_DEADLINE` instead of the D7.14 handler deadline (APP-093's
+/// `POST /v1/compose`; ADR-011 §4 relaxes the deadline for that one route).
+/// Those routes keep every other property: a method mismatch on them is the
+/// uniform 404 and no answer carries `Allow` (the `long` router answers the
+/// whole `long_path` as one service, so its method router's `Allow` is
+/// removed by the outer layer like the inner router's).
+pub fn uniform_with(router: Router, long_path: &'static str, long: Router) -> Router {
+    let inner = router
+        .fallback(fallback)
+        .method_not_allowed_fallback(fallback)
+        .layer(middleware::from_fn(deadline));
+    let long = long
+        .fallback(fallback)
+        .method_not_allowed_fallback(fallback)
+        .layer(middleware::from_fn(long_deadline));
+    Router::new()
+        .route_service(long_path, long.into_service::<Body>())
+        .fallback_service(inner)
+        .layer(middleware::map_response(without_allow))
+}
 async fn without_allow(mut response: Response) -> Response {
     response.headers_mut().remove(header::ALLOW);
     response
@@ -160,6 +181,14 @@ where
 /// D7.14 handler deadline; a request that outlives it is unavailable.
 pub async fn deadline(request: Request, next: Next) -> Response {
     tokio::time::timeout(HANDLER_DEADLINE, next.run(request))
+        .await
+        .unwrap_or_else(|_| unavailable())
+}
+/// The composer's deadline (APP-093): the whole `POST /v1/compose`, model
+/// calls included.
+pub const COMPOSE_DEADLINE: Duration = crate::composer::COMPOSE_DEADLINE;
+async fn long_deadline(request: Request, next: Next) -> Response {
+    tokio::time::timeout(COMPOSE_DEADLINE, next.run(request))
         .await
         .unwrap_or_else(|_| unavailable())
 }

@@ -56,6 +56,14 @@ app/src/commands/**
 !app/src/commands/payload.rs
 !app/src/commands/routes.rs
 !app/src/commands/tests.rs
+!app/src/composer/
+app/src/composer/**
+!app/src/composer/mod.rs
+!app/src/composer/model.rs
+!app/src/composer/plan.rs
+!app/src/composer/prompt.rs
+!app/src/composer/routes.rs
+# composer/tests.rs is cfg(test) only; the qualification context lists it.
 !app/src/storage/
 app/src/storage/**
 !app/src/storage/mod.rs
@@ -66,6 +74,7 @@ app/src/storage/**
 !app/src/storage/catalog.rs
 !app/src/storage/command_qualification.rs
 !app/src/storage/commands.rs
+!app/src/storage/composer.rs
 !app/src/storage/definitions.rs
 !app/src/storage/queries.rs
 !app/src/storage/definition_qualification.rs
@@ -306,3 +315,12 @@ parser/vendor/zip-9.1.3/src/read/**
 !parser/vendor/zip-9.1.3/src/write/
 parser/vendor/zip-9.1.3/src/write/**
 !parser/vendor/zip-9.1.3/src/write/options.rs
+# APP-093: composer/prompt.rs embeds the two edition impl-2026-10-28.1 fixtures as few-shot examples (release build).
+!contracts/
+contracts/**
+!contracts/fixtures/
+contracts/fixtures/**
+!contracts/fixtures/impl-2026-10-28.1/
+contracts/fixtures/impl-2026-10-28.1/**
+!contracts/fixtures/impl-2026-10-28.1/northstar.json
+!contracts/fixtures/impl-2026-10-28.1/spend-review.json

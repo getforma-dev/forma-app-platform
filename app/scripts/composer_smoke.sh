@@ -1,0 +1,29 @@
+#!/bin/sh
+# APP-093: a one-shot local smoke of the composer's model path against the
+# real endpoint, with the cheapest setting (the Haiku model for the router
+# and for generation). The key is loaded from the repository's gitignored
+# `.env` (`ANTHROPIC_API_KEY=...`) into this process's environment only; it is
+# never printed, logged, passed on argv or written anywhere. Without that
+# file (or with no `ANTHROPIC_API_KEY` line in it) the smoke is skipped.
+# The service itself never reads a file: it takes the key from its
+# environment alone (the ECS secret in deployment).
+set -eu
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH= cd -- "$here/../.." && pwd)
+env_file=${GENUI_ENV_FILE:-$root/.env}
+if [ ! -f "$env_file" ]; then
+  echo "composer smoke skipped: no $env_file" >&2
+  exit 0
+fi
+# Only the one variable, only from that file; everything else in it is ignored.
+key=$(grep -m1 '^ANTHROPIC_API_KEY=' "$env_file" | cut -d= -f2- | tr -d '\r\n"' || true)
+if [ -z "$key" ]; then
+  echo "composer smoke skipped: no ANTHROPIC_API_KEY line in $env_file" >&2
+  exit 0
+fi
+export ANTHROPIC_API_KEY="$key"
+unset key
+export GENUI_COMPOSER_ROUTER_MODEL=${GENUI_COMPOSER_ROUTER_MODEL:-claude-haiku-4-5-20251001}
+export GENUI_COMPOSER_GENERATION_MODEL=${GENUI_COMPOSER_GENERATION_MODEL:-claude-haiku-4-5-20251001}
+cd "$root/app"
+exec cargo +1.93.1 test --locked --lib composer::tests::real_model_smoke -- --ignored --exact --nocapture

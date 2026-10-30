@@ -322,7 +322,10 @@ fn readmit(
 
 /// The workspace confirms the request's provider identity against the
 /// scoped principal and an active binding, as `read_publication` does.
-async fn confirm_identity(transaction: &Transaction<'_>, request: &TrustedRequest) -> Result<()> {
+pub(super) async fn confirm_identity(
+    transaction: &Transaction<'_>,
+    request: &TrustedRequest,
+) -> Result<()> {
     let rows = transaction.query("SELECT 1 FROM genui.principals p JOIN genui.provider_tenant_bindings b USING(organization_id,issuer,provider_tenant_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.issuer=$3 AND p.provider_tenant_id=$4 AND p.provider_subject=$5 AND b.active", &[&request.organization,&request.principal,&request.issuer,&request.provider_tenant,&request.provider_subject]).await?;
     require(rows.len() == 1)
 }

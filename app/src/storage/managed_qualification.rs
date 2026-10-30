@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 91] = [
+const SOURCES: [(&str, &[u8]); 99] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -247,6 +247,30 @@ const SOURCES: [(&str, &[u8]); 91] = [
         "app/src/commands/tests.rs",
         include_bytes!("../commands/tests.rs"),
     ),
+    (
+        "app/src/composer/mod.rs",
+        include_bytes!("../composer/mod.rs"),
+    ),
+    (
+        "app/src/composer/model.rs",
+        include_bytes!("../composer/model.rs"),
+    ),
+    (
+        "app/src/composer/plan.rs",
+        include_bytes!("../composer/plan.rs"),
+    ),
+    (
+        "app/src/composer/prompt.rs",
+        include_bytes!("../composer/prompt.rs"),
+    ),
+    (
+        "app/src/composer/routes.rs",
+        include_bytes!("../composer/routes.rs"),
+    ),
+    (
+        "app/src/composer/tests.rs",
+        include_bytes!("../composer/tests.rs"),
+    ),
     ("app/src/config.rs", include_bytes!("../config.rs")),
     ("app/src/events/mod.rs", include_bytes!("../events/mod.rs")),
     (
@@ -330,6 +354,11 @@ const SOURCES: [(&str, &[u8]); 91] = [
         include_bytes!("command_qualification.rs"),
     ),
     ("app/src/storage/commands.rs", include_bytes!("commands.rs")),
+    ("app/src/storage/composer.rs", include_bytes!("composer.rs")),
+    (
+        "app/src/storage/composer_qualification.rs",
+        include_bytes!("composer_qualification.rs"),
+    ),
     (
         "app/src/storage/definition_qualification.rs",
         include_bytes!("definition_qualification.rs"),

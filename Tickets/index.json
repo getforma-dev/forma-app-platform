@@ -2995,7 +2995,7 @@
       "Depends on": "APP-091, APP-092",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Branch / PR": "`pivot/composer` (server side: composer module, `POST /v1/compose`, storage context, CDK secret; sub-branch of `pivot/pitch-mvp` at 9cf52c2), not merged",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

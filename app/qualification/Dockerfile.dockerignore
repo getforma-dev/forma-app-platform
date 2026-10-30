@@ -40,6 +40,12 @@
 !app/src/commands/payload.rs
 !app/src/commands/routes.rs
 !app/src/commands/tests.rs
+!app/src/composer/mod.rs
+!app/src/composer/model.rs
+!app/src/composer/plan.rs
+!app/src/composer/prompt.rs
+!app/src/composer/routes.rs
+!app/src/composer/tests.rs
 !app/src/admission/mod.rs
 !app/src/admission/canonical.rs
 !app/src/admission/digest.rs
@@ -59,6 +65,8 @@
 !app/src/storage/catalog.rs
 !app/src/storage/command_qualification.rs
 !app/src/storage/commands.rs
+!app/src/storage/composer.rs
+!app/src/storage/composer_qualification.rs
 !app/src/storage/definition_qualification.rs
 !app/src/storage/definitions.rs
 !app/src/storage/managed_qualification.rs

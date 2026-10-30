@@ -38,7 +38,8 @@ impl TrustedRequest {
         &self.organization
     }
     /// The member the session resolved to (read-only; APP-095 counts event
-    /// streams per member). Authority still comes only from storage.
+    /// streams per member; the composer's per-member rate-limit key and its
+    /// structured log, APP-093). Authority still comes only from storage.
     pub fn principal(&self) -> &str {
         &self.principal
     }
