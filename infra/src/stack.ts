@@ -42,6 +42,22 @@ export const AUTH_CONFIGURATION_SECRET_ID_ENV = 'GENUI_AUTH_CONFIGURATION_SECRET
 // Written by the operator (PutSecretValue from a pipe, never argv); the initial `{}`
 // is "no key": the composer answers composer_unavailable and nothing else changes.
 export const COMPOSER_KEY_ENV = 'ANTHROPIC_API_KEY';
+// ADR-011 pitch (APP-095): the same-origin path of the organization's event stream
+// the canvas island subscribes to; set on the service task so live updates are on.
+export const CANVAS_EVENTS_URL_ENV = 'GENUI_CANVAS_EVENTS_URL';
+export const CANVAS_EVENTS_URL = '/v1/events';
+// The composer route's deadline (app/src/composer/routes.rs COMPOSE_DEADLINE) plus
+// ten seconds; the ALB must not close an idle connection before the route answers.
+export const COMPOSE_DEADLINE_SECONDS = 120;
+export const ALB_IDLE_TIMEOUT_SECONDS = 130;
+// ADR-011 demo mode (APP-098 demo shortcuts register): the organizations whose
+// members' rehearsed intents are answered from the library catalog without a model
+// call (app/src/composer/mod.rs DEMO_ORGANIZATIONS_ENV). Exactly the second fixture
+// tenant (the synthetic canary organization, which already has its tenant role, key
+// and object prefix here); never the first (the beta's organization), which behaves
+// exactly as without demo mode. A dedicated third tenant is the proper fix (APP-098).
+export const DEMO_ORGANIZATIONS_ENV = 'GENUI_DEMO_ORGANIZATIONS';
+export const DEMO_ORGANIZATION_ID = '00000000-0000-4000-8000-000000000002';
 // ADR-003 amendment 2026-10-30 (managed invitations; APP-076 G2), as revised the same
 // day after FormaStack's answers: two inputs reach the managed operator task only.
 // FormaStack's existing tenant-scoped fAuth management secret (for Northstar
@@ -229,6 +245,11 @@ export class GenuiFoundation extends Stack {
       // ADR-007 D7.14 (APP-074): only the ALB's subnets are trusted proxies, so the
       // rightmost X-Forwarded-For hop is believed from them alone.
       GENUI_TRUSTED_PROXY_CIDRS: vpc.publicSubnets.map(subnet => subnet.ipv4CidrBlock).join(','),
+      // ADR-011 pitch (APP-095, APP-096): the canvas island subscribes to the
+      // organization's live stream at this same-origin route (main.rs accepts
+      // only a `/v1/` path). Live updates are on in every deployment.
+      [CANVAS_EVENTS_URL_ENV]: CANVAS_EVENTS_URL,
+      [DEMO_ORGANIZATIONS_ENV]: DEMO_ORGANIZATION_ID,
     };
     const container = task.addContainer('workspace', {
       image: ecs.ContainerImage.fromRegistry(image.valueAsString), readonlyRootFilesystem: true,
@@ -273,7 +294,11 @@ export class GenuiFoundation extends Stack {
     albSecurity.addIngressRule(ec2.Peer.ipv4(Fn.conditionIf(publicIngress.logicalId, '0.0.0.0/0', operatorCidr.valueAsString).toString()), ec2.Port.tcp(443), 'Public beta HTTPS or the temporary operator-only trial');
     albSecurity.addEgressRule(taskSecurity, ec2.Port.tcp(3000), 'Application and readiness probes');
     taskSecurity.addIngressRule(albSecurity, ec2.Port.tcp(3000), 'Only the ALB reaches the application');
-    const alb = new elbv2.ApplicationLoadBalancer(this, 'LoadBalancer', { vpc, internetFacing: true, vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }, securityGroup: albSecurity, dropInvalidHeaderFields: true });
+    // ADR-011 pitch (APP-093 debt 4, APP-096): `POST /v1/compose` waits on the
+    // model for up to 120 s (composer/routes.rs COMPOSE_DEADLINE) and the event
+    // stream (`GET /v1/events`) idles between 15 s heartbeats, so the ALB's idle
+    // timeout must outlast the composer route; 130 s leaves 10 s for the answer.
+    const alb = new elbv2.ApplicationLoadBalancer(this, 'LoadBalancer', { vpc, internetFacing: true, vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }, securityGroup: albSecurity, dropInvalidHeaderFields: true, idleTimeout: Duration.seconds(ALB_IDLE_TIMEOUT_SECONDS) });
     // APP-074 review m3: app/src/http/proxy.rs believes only the rightmost hop of the
     // last X-Forwarded-For line from these subnets, which holds only while the ALB
     // appends the client address (never `preserve`) without a client port.

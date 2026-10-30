@@ -75,23 +75,22 @@ pub struct CanvasProps {
     /// principals carry no display name) and its two-letter avatar.
     pub member_label: String,
     pub member_initials: String,
-    /// `GENUI_DEMO_MODE` (APP-098 demo shortcuts): the small-print
+    /// `GENUI_DEMO_ORGANIZATIONS` (APP-098 demo shortcuts; the session's
+    /// organization is one of them): the small-print
     /// synthetic-data label, and `demo_mode` = "on" for the island's
     /// demo-safe layout (each load starts from the default arrangement).
     pub demo: bool,
     pub demo_mode: String,
 }
 
-/// `GENUI_DEMO_MODE` is on (`1`, `true` or `on`); off by default.
-pub fn demo_mode() -> bool {
-    std::env::var("GENUI_DEMO_MODE")
-        .map(|value| {
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "on"
-            )
-        })
-        .unwrap_or(false)
+/// The demo organizations (APP-098): `GENUI_DEMO_ORGANIZATIONS`, the same
+/// value and parse as the composer's (`composer::demo_organizations`); a
+/// member of any other organization sees the canvas exactly as without demo
+/// mode. Empty by default.
+pub fn demo_organizations() -> std::collections::BTreeSet<String> {
+    crate::composer::demo_organizations(
+        &std::env::var(crate::composer::DEMO_ORGANIZATIONS_ENV).unwrap_or_default(),
+    )
 }
 
 /// An origin chip on an app card ("Retrieved from library", "Seeded
@@ -509,8 +508,9 @@ pub struct Canvas {
     pub pages: Arc<dyn CanvasPages>,
     /// The realtime URL the page hands the island (empty: none yet).
     pub live_events: String,
-    /// `GENUI_DEMO_MODE` (APP-098): demo shortcuts on.
-    pub demo: bool,
+    /// `GENUI_DEMO_ORGANIZATIONS` (APP-098): the organizations whose members
+    /// see the demo shortcuts; every other organization is unchanged.
+    pub demo_organizations: std::collections::BTreeSet<String>,
 }
 
 pub fn router(canvas: Arc<Canvas>) -> Router {
@@ -686,6 +686,7 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
     }
     let organization = organization_name(&canvas, &member).await;
     let principal = member.principal();
+    let demo = canvas.demo_organizations.contains(member.organization());
     let props = CanvasProps {
         csrf_signout: auth.csrf.token(csrf::Form::SignOut, &cookie),
         has_groups: !groups.is_empty(),
@@ -697,8 +698,8 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         organization,
         member_label: crate::storage::member_label(principal),
         member_initials: initials(principal),
-        demo: canvas.demo,
-        demo_mode: if canvas.demo { "on" } else { "" }.to_owned(),
+        demo,
+        demo_mode: if demo { "on" } else { "" }.to_owned(),
     };
     canvas.pages.canvas(&props)
 }

@@ -200,7 +200,7 @@ async fn campaign() {
                 } else {
                     String::new()
                 },
-                demo: canvas::demo_mode(),
+                demo_organizations: canvas::demo_organizations(),
             }))),
     );
     let c = Campaign {

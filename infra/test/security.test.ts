@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { readFileSync } from 'node:fs';
-import { AUTH_CONFIGURATION_ENV, AUTH_CONFIGURATION_SECRET_ID_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, COMPOSER_KEY_ENV, GenuiFoundation, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_URL_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
+import { ALB_IDLE_TIMEOUT_SECONDS, AUTH_CONFIGURATION_ENV, DEMO_ORGANIZATIONS_ENV, DEMO_ORGANIZATION_ID, AUTH_CONFIGURATION_SECRET_ID_ENV, CANVAS_EVENTS_URL, CANVAS_EVENTS_URL_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, COMPOSE_DEADLINE_SECONDS, COMPOSER_KEY_ENV, GenuiFoundation, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_URL_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
 
 const template = Template.fromStack(new GenuiFoundation(new App(), 'SecurityQualification'));
 const document = template.toJSON();
@@ -504,6 +504,42 @@ test('the load balancer appends the client address without a port (APP-074 revie
   assert.equal(attributes['routing.http.xff_header_processing.mode'], 'append');
   assert.equal(attributes['routing.http.xff_client_port.enabled'], 'false');
   assert.equal(attributes['routing.http.drop_invalid_header_fields.enabled'], 'true');
+});
+
+test('the load balancer idles longer than the composer route and the live stream subscribes at /v1/events (ADR-011 APP-093/095/096)', () => {
+  const [, alb] = one('AWS::ElasticLoadBalancingV2::LoadBalancer');
+  const attributes = Object.fromEntries(alb.Properties.LoadBalancerAttributes.map((item: any) => [item.Key, item.Value]));
+  // POST /v1/compose runs up to 120 s; SSE heartbeats every 15 s keep the stream inside the timeout.
+  assert.equal(ALB_IDLE_TIMEOUT_SECONDS >= COMPOSE_DEADLINE_SECONDS + 10, true);
+  assert.equal(attributes['idle_timeout.timeout_seconds'], String(ALB_IDLE_TIMEOUT_SECONDS));
+  assert.equal(Number(attributes['idle_timeout.timeout_seconds']) >= 130, true);
+  const [, task] = one('AWS::ECS::TaskDefinition', 'Task');
+  const [, rollbackTask] = one('AWS::ECS::TaskDefinition', 'RollbackTask');
+  for (const definition of [task, rollbackTask]) {
+    const environment = Object.fromEntries(definition.Properties.ContainerDefinitions[0].Environment.map((value: any) => [value.Name, value.Value]));
+    assert.equal(environment[CANVAS_EVENTS_URL_ENV], CANVAS_EVENTS_URL);
+    assert.equal(CANVAS_EVENTS_URL.startsWith('/v1/'), true, 'main.rs accepts a /v1/ path only');
+  }
+  // The other task definitions (migration, operator, qualification) do not run the canvas.
+  for (const [id, definition] of entries('AWS::ECS::TaskDefinition')) {
+    if (id === one('AWS::ECS::TaskDefinition', 'Task')[0] || id === one('AWS::ECS::TaskDefinition', 'RollbackTask')[0]) continue;
+    const environment = (definition.Properties.ContainerDefinitions[0].Environment ?? []).map((value: any) => value.Name);
+    assert.equal(environment.includes(CANVAS_EVENTS_URL_ENV), false, id);
+    assert.equal(environment.includes(DEMO_ORGANIZATIONS_ENV), false, id);
+  }
+});
+
+test('demo mode names the synthetic canary organization only, never the beta organization (ADR-011 APP-098)', () => {
+  const [, task] = one('AWS::ECS::TaskDefinition', 'Task');
+  const environment = Object.fromEntries(task.Properties.ContainerDefinitions[0].Environment.map((value: any) => [value.Name, value.Value]));
+  assert.equal(environment[DEMO_ORGANIZATIONS_ENV], DEMO_ORGANIZATION_ID);
+  const listed = environment[DEMO_ORGANIZATIONS_ENV].split(',');
+  assert.deepEqual(listed, ['00000000-0000-4000-8000-000000000002']);
+  assert.equal(listed.includes('00000000-0000-4000-8000-000000000001'), false, 'the beta organization behaves exactly as without demo mode');
+  for (const id of listed) assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/, 'lowercase UUIDs, as the service parses them');
+  // The demo organization is a configured tenant (role, key, prefix), so its library sources are reachable.
+  const tenants = JSON.parse(resolve(environment.GENUI_TENANTS_JSON, {}));
+  assert.equal(tenants.some((tenant: any) => tenant.organization_id === DEMO_ORGANIZATION_ID), true);
 });
 
 test('qualification image parameter accepts only empty or a reviewed digest', () => {

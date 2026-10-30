@@ -16,6 +16,12 @@ COPY app/src ./src
 COPY app/migrations ./migrations
 COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml
 COPY spikes/APP-006/src /source/spikes/APP-006/src
+# Compile-time inputs embedded by non-test code (include_str!): the composer's
+# two few-shot fixtures (composer/prompt.rs) and the library router sidecar
+# (storage/queries.rs). Each is listed in .dockerignore; app/qualification/
+# test_tools.py proves this set covers every such include.
+COPY contracts/fixtures/impl-2026-10-28.1/northstar.json contracts/fixtures/impl-2026-10-28.1/spend-review.json /source/contracts/fixtures/impl-2026-10-28.1/
+COPY contracts/fixtures/library/catalog.json /source/contracts/fixtures/library/catalog.json
 COPY --from=browser /source/admin/dist ./admin/dist
 RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=genui-cargo-target-${TARGETARCH},target=/source/app/target cargo build --release --locked && cp /source/app/target/release/forma-app-platform /source/genui
 

@@ -169,6 +169,7 @@ class PackageTests(unittest.TestCase):
                  (["register-source-revision", "--organization", NORTHSTAR], True),
                  (["reconcile", "--organization", NORTHSTAR], False), (["revoke", "--organization", NORTHSTAR, "--code-id", NORTHSTAR], False),
                  (["seed-spend-review", "--organization", NORTHSTAR], False), (["seed-library", "--organization", NORTHSTAR], False),
+                 (["grant-library-access", "--organization", NORTHSTAR, "--principal", NORTHSTAR, "--authoring-app", NORTHSTAR], False),
                  (["list", "--organization", NORTHSTAR], False)]
         for argv, refused in cases:
             with self.subTest(argv=argv):

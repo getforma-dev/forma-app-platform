@@ -2654,3 +2654,7 @@ async fn route_campaign(
 /// ADR-011: the pitch canvas campaign extends this one (its fixture helpers).
 #[path = "canvas_campaign.rs"]
 mod canvas_campaign;
+
+/// ADR-011: the pitch integration campaign (APP-096) extends this one too.
+#[path = "pitch_qualification.rs"]
+mod pitch_campaign;

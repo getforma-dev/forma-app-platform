@@ -97,7 +97,7 @@ async fn anonymous_forged_and_pre_access_requests_get_the_uniform_404_and_run_no
         work,
         pages: pages.clone(),
         live_events: String::new(),
-        demo: false,
+        demo_organizations: Default::default(),
     })));
     let group = format!("/v1/canvas/works/{APP}/{WORK}");
     for headers in [

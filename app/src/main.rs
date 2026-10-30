@@ -554,7 +554,7 @@ async fn main() {
             .ok()
             .filter(|url| url.starts_with("/v1/"))
             .unwrap_or_default(),
-        demo: genui::query::canvas::demo_mode(),
+        demo_organizations: genui::query::canvas::demo_organizations(),
     }));
     let readiness = genui::readiness::Readiness::start(
         credential_path.into(),
