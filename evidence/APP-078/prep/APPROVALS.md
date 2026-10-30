@@ -1,6 +1,6 @@
 # APP-078 window — what Victor approves
 
-Each item names the runbook steps it unlocks. Defaults are what the preparation assumes; a different answer changes only the named step. Nothing here is approved yet; quote his words in the private window record when he gives them. A12 (2026-10-30, managed invitations) is the one item with a FormaStack follow-up: the rotation of the Northstar management key after the trial, once the attachment is cleared.
+Each item names the runbook steps it unlocks. Defaults are what the preparation assumes; a different answer changes only the named step. **Approved 2026-10-30:** Victor approved A1–A12 as written, in chat, together with the APP-076 trial items and the PR 3 merge; his words are quoted in the private window record (`approvals-record.md` in `$PRIV`). The spare recipient's address is in the private recipients file only (step 0.6). A12 (2026-10-30, managed invitations) is the one item with a FormaStack follow-up: the rotation of the Northstar management key after the trial, once the attachment is cleared.
 
 | # | Decision | Default prepared | Runbook steps |
 | --- | --- | --- | --- |
