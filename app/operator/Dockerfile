@@ -36,6 +36,12 @@ RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry,
         --rustc-vv /source/rustc-vv.txt --output /source/parser-out/parser-manifest.json
 
 FROM python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+# Debian security fixes for the base image's openssl, gnutls and perl (APP-078 step 3.5, ECR scan of
+# 2026-10-30: 10 CRITICAL in these packages). Exact versions from bookworm-security; bump them with the base digest.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade \
+       libssl3=3.0.22-1~deb12u2 openssl=3.0.22-1~deb12u2 libgnutls30=3.7.9-2+deb12u7 perl-base=5.36.0-7+deb12u4 \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /operator
 COPY app/operator/requirements.lock /tmp/operator-requirements.lock
 RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/operator-requirements.lock \
