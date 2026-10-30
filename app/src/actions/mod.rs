@@ -31,8 +31,8 @@
 //! nothing canned applies. Everything after the parse is identical and real:
 //! the typed draft, the storage dry run, the member's Confirm, the audited
 //! commit, the share and the live events.
-pub mod rehearsed;
 pub mod prompt;
+pub mod rehearsed;
 pub mod resolve;
 pub mod routes;
 

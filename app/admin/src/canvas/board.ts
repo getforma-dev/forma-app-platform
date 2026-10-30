@@ -15,6 +15,7 @@ import { clearLayouts, loadCamera, loadLayout, saveCamera, saveLayout, type Item
 import { subscribeLive, type LiveEvent } from './live';
 import { parametersOf, runView } from './queries';
 import { buildForm, buildGroup, el, groupJson, isUuid, renderNoValue, type FormJson } from './render';
+import { recordsCardsOf, refreshRecords, wireRecordsCard } from './records';
 
 type Group = {
   app: string;
@@ -25,8 +26,8 @@ type Group = {
   pinned: boolean;
 };
 
-const WIDTH: Record<string, number> = { app: 340, summary: 400, timeline: 620, form: 360 };
-const HEIGHT: Record<string, number> = { app: 300, summary: 250, timeline: 340, form: 300 };
+const WIDTH: Record<string, number> = { app: 340, summary: 400, timeline: 620, form: 360, records: 680 };
+const HEIGHT: Record<string, number> = { app: 300, summary: 250, timeline: 340, form: 300, records: 260 };
 const GAP = 28;
 const ROW_GAP = 72;
 const ORIGIN = 64;
@@ -144,6 +145,8 @@ export function runGroup(work: string, live = false): void {
     .map((item) => item.querySelector<HTMLFormElement>('form[data-window]'))
     .find((found): found is HTMLFormElement => Boolean(found)) ?? null;
   const parameters = parametersOf(form);
+  // ADR-011 scenarios: the group's records cards re-read their listing too.
+  for (const card of recordsCardsOf(group.items)) void refreshRecords(card, live);
   for (const item of group.items) {
     const card = item.querySelector<HTMLElement>('.cv-view');
     if (!card) continue;
@@ -260,8 +263,16 @@ function adopt(section: HTMLElement, y: number, animate: boolean): Group | null 
   for (const card of cards) {
     const form = card.querySelector<HTMLFormElement>('form.cv-command');
     if (form) wireCommand(form, group, card);
+    if (card.dataset.kind === 'records') wireRecordsCard(card);
   }
   return group;
+}
+
+/** ADR-011 scenarios: re-reads a work's records cards (after a command this browser confirmed). */
+export async function refreshGroupRecords(work: string, live = false): Promise<void> {
+  const group = groups.get(work);
+  if (!group) return;
+  await Promise.all(recordsCardsOf(group.items).map((card) => refreshRecords(card, live)));
 }
 
 async function fetchGroup(app: string, work: string) {

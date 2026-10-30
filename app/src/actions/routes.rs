@@ -65,7 +65,9 @@ impl Act {
 
 /// The long-deadline router (`/v1/act`).
 pub fn router(state: Arc<Act>) -> Router {
-    Router::new().route(super::PATH, post(act)).with_state(state)
+    Router::new()
+        .route(super::PATH, post(act))
+        .with_state(state)
 }
 /// The ordinary-deadline router (the records listing).
 pub fn records_router(auth: Arc<Auth>) -> Router {
@@ -134,10 +136,12 @@ pub(super) fn body(bytes: &[u8]) -> Option<Body> {
         return prompt::utterance(text.as_str()?).map(|t| Body::Utterance(t.to_owned()));
     }
     let decide = object.get("decide")?.as_object()?;
-    if !decide
-        .keys()
-        .all(|k| matches!(k.as_str(), "app_id" | "work_id" | "record_id" | "status" | "note"))
-    {
+    if !decide.keys().all(|k| {
+        matches!(
+            k.as_str(),
+            "app_id" | "work_id" | "record_id" | "status" | "note"
+        )
+    }) {
         return None;
     }
     let id = |key: &str| {
@@ -265,18 +269,11 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 log_refused(&member, "composer_unavailable", started);
                 return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
             }
-            match state
-                .parser
-                .parse(&utterance, &catalog, demo, &today)
-                .await
-            {
+            match state.parser.parse(&utterance, &catalog, demo, &today).await {
                 Ok(parse) => (parse, utterance),
                 Err(ParseFailure::Unavailable) => {
                     log_refused(&member, "composer_unavailable", started);
-                    return http::problem(
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "composer_unavailable",
-                    );
+                    return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
                 }
                 Err(ParseFailure::CouldNotParse(code)) => {
                     log_refused(&member, code, started);

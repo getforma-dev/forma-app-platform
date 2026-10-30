@@ -168,6 +168,8 @@ pub struct RecordsCardProps {
     pub collection: String,
     pub schema: String,
     pub can_write: bool,
+    /// `can_write` as the data attribute's text (the SSR subset takes no ternary).
+    pub can_write_text: String,
     /// The transition command (`decide`) the member may post, or empty.
     pub decide: String,
     /// The transition field (`status`), or empty.
@@ -175,6 +177,7 @@ pub struct RecordsCardProps {
     pub count: String,
     pub pending: String,
     pub has_rows: bool,
+    pub has_no_rows: bool,
     pub columns: Vec<CellProps>,
     pub rows: Vec<RecordRowProps>,
     pub publication: String,
@@ -518,7 +521,12 @@ pub fn records_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Rec
                 .map(|(field, _, _)| field.clone())
                 .unwrap_or_default();
             let froms: Vec<&str> = decide
-                .map(|c| c.transitions.iter().map(|(_, from, _)| from.as_str()).collect())
+                .map(|c| {
+                    c.transitions
+                        .iter()
+                        .map(|(_, from, _)| from.as_str())
+                        .collect()
+                })
                 .unwrap_or_default();
             let shown: Vec<&crate::storage::RecordField> = collection
                 .fields
@@ -553,7 +561,10 @@ pub fn records_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Rec
                             .values
                             .as_array()?
                             .iter()
-                            .find(|item| item.get("field_id").and_then(serde_json::Value::as_str) == Some(field))
+                            .find(|item| {
+                                item.get("field_id").and_then(serde_json::Value::as_str)
+                                    == Some(field)
+                            })
                             .and_then(|item| item.get("value"))
                     };
                     let status = value(&status_field)
@@ -598,8 +609,14 @@ pub fn records_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Rec
             let count = rows.len();
             let title = schema_title(&collection.schema);
             let summary = match (listing.can_write && decide.is_some(), pending) {
-                (true, 0) => format!("Nothing waiting for your approval · {count} {}", plural(count, "record")),
-                (true, n) => format!("{n} waiting for your approval · {count} {}", plural(count, "record")),
+                (true, 0) => format!(
+                    "Nothing waiting for your approval · {count} {}",
+                    plural(count, "record")
+                ),
+                (true, n) => format!(
+                    "{n} waiting for your approval · {count} {}",
+                    plural(count, "record")
+                ),
                 (false, _) => format!("{count} {}", plural(count, "record")),
             };
             RecordsCardProps {
@@ -610,19 +627,28 @@ pub fn records_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Rec
                 collection: collection.collection.clone(),
                 schema: collection.schema.clone(),
                 can_write: listing.can_write,
+                can_write_text: listing.can_write.to_string(),
                 decide: decide.map(|c| c.id.clone()).unwrap_or_default(),
                 status_field,
                 count: count.to_string(),
                 pending: pending.to_string(),
                 has_rows: !rows.is_empty(),
+                has_no_rows: rows.is_empty(),
                 columns,
                 rows,
                 publication: listing.publication.clone(),
-                definition_digest: abbreviate(&listing.definition_digest),
+                definition_digest: short_digest(&listing.definition_digest),
                 work_version: listing.work_version.to_string(),
             }
         })
         .collect()
+}
+/// `sha256:<64 hex>` as its first twelve and last six digits.
+fn short_digest(digest: &str) -> String {
+    match digest.strip_prefix("sha256:") {
+        Some(hex) if hex.len() == 64 => format!("sha256:{}…{}", &hex[..12], &hex[58..]),
+        _ => digest.to_owned(),
+    }
 }
 fn plural(count: usize, word: &str) -> String {
     if count == 1 {

@@ -64,7 +64,11 @@ fn load_from_env() -> Option<HashMap<String, String>> {
     let path = std::env::var_os(FILE_ENV)?;
     let metadata = std::fs::metadata(&path).ok()?;
     if metadata.len() > MAX_FILE_BYTES {
-        tracing::warn!(event = "directory.refused", code = "too_large", "display names file refused");
+        tracing::warn!(
+            event = "directory.refused",
+            code = "too_large",
+            "display names file refused"
+        );
         return None;
     }
     let bytes = std::fs::read(&path).ok()?;
@@ -85,9 +89,8 @@ pub fn display_name(principal: &str) -> Option<String> {
 /// The label people see: the display name, else the neutral
 /// `Member <8 hex>` handle (`storage::sharing::member_label`'s rule).
 pub fn label(principal: &str) -> String {
-    display_name(principal).unwrap_or_else(|| {
-        format!("Member {}", &principal[..8.min(principal.len())])
-    })
+    display_name(principal)
+        .unwrap_or_else(|| format!("Member {}", &principal[..8.min(principal.len())]))
 }
 
 /// Every (principal, name) known; for approver matching.
@@ -118,10 +121,7 @@ mod tests {
     fn the_file_is_closed_and_names_are_bounded() {
         let parsed = parse(br#"{"members":[{"principal_id":"00000000-0000-4000-8000-00000000006d","display_name":" Sarah Chen "},{"principal_id":"bad","display_name":"x"},{"principal_id":"00000000-0000-4000-8000-000000000066","display_name":"a\nb"}]}"#).unwrap();
         assert_eq!(parsed.len(), 1);
-        assert_eq!(
-            parsed["00000000-0000-4000-8000-00000000006d"],
-            "Sarah Chen"
-        );
+        assert_eq!(parsed["00000000-0000-4000-8000-00000000006d"], "Sarah Chen");
         assert!(parse(b"[]").is_none());
         assert!(!usable_name(""));
         assert!(!usable_name(&"n".repeat(81)));

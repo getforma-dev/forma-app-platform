@@ -120,6 +120,8 @@ fn valid_id(value: &str) -> bool {
 // The Docker fixtures are crate-visible to the APP-009 session campaign
 // (`auth::tests`); still compiled only into the test executable.
 #[cfg(test)]
+mod actions_campaign;
+#[cfg(test)]
 pub(crate) mod admission_qualification;
 #[cfg(test)]
 pub(crate) mod command_qualification;

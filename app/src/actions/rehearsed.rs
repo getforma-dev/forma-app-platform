@@ -91,7 +91,8 @@ pub fn amount(text: &str) -> Option<String> {
         }
         if !whole.is_empty() && whole.len() <= 9 {
             let rest = text[end..].trim_start().to_lowercase();
-            let currency_word = rest.starts_with("dollar") || rest.starts_with("usd") || rest.starts_with("bucks");
+            let currency_word =
+                rest.starts_with("dollar") || rest.starts_with("usd") || rest.starts_with("bucks");
             // A bare number counts only with a dollar sign or a currency word.
             if dollar || currency_word {
                 if whole.len() > 1 && whole.starts_with('0') {
@@ -115,7 +116,20 @@ pub fn amount(text: &str) -> Option<String> {
 /// The words after "at" up to a stop (comma, period, "last", "yesterday",
 /// "on", "for", "and", a dollar amount).
 fn merchant(text: &str) -> Option<String> {
-    let stops = ["last", "yesterday", "today", "on", "for", "and", "with", "this", "which", "that", "so", "then"];
+    let stops = [
+        "last",
+        "yesterday",
+        "today",
+        "on",
+        "for",
+        "and",
+        "with",
+        "this",
+        "which",
+        "that",
+        "so",
+        "then",
+    ];
     let words: Vec<&str> = text.split_whitespace().collect();
     let position = words.iter().position(|w| w.eq_ignore_ascii_case("at"))?;
     let mut name = Vec::new();
@@ -137,7 +151,10 @@ fn merchant(text: &str) -> Option<String> {
 
 fn category(words: &[String]) -> &'static str {
     for (keyword, category) in CATEGORIES {
-        if words.iter().any(|w| w == keyword || w.trim_end_matches('s') == *keyword) {
+        if words
+            .iter()
+            .any(|w| w == keyword || w.trim_end_matches('s') == *keyword)
+        {
             return category;
         }
     }
@@ -171,7 +188,8 @@ pub fn days_before(today: &str, days: i64) -> Option<String> {
 }
 
 fn spent_on(lower: &str, today: &str) -> String {
-    if lower.contains("last night") || lower.contains("yesterday") || lower.contains("last evening") {
+    if lower.contains("last night") || lower.contains("yesterday") || lower.contains("last evening")
+    {
         days_before(today, 1).unwrap_or_else(|| today.to_owned())
     } else if lower.contains("day before yesterday") {
         days_before(today, 2).unwrap_or_else(|| today.to_owned())
@@ -190,30 +208,48 @@ fn spent_on(lower: &str, today: &str) -> String {
 /// to approve", "ask <Name>", "approver (is) <Name>", "cc <Name>".
 fn approver(text: &str) -> Option<String> {
     let words: Vec<&str> = text.split_whitespace().collect();
-    let clean = |w: &str| w.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '\'').to_owned();
+    let clean = |w: &str| {
+        w.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '\'')
+            .to_owned()
+    };
     let is_name = |w: &str| {
         let c = clean(w);
         c.chars().next().is_some_and(char::is_uppercase) && c.len() >= 2
     };
     for (index, word) in words.iter().enumerate() {
         let lower = clean(word).to_lowercase();
-        if matches!(lower.as_str(), "approves" | "approve" | "signs" | "reviews" | "handles")
-            && index >= 1
+        if matches!(
+            lower.as_str(),
+            "approves" | "approve" | "signs" | "reviews" | "handles"
+        ) && index >= 1
             && is_name(words[index - 1])
-            && !matches!(clean(words[index - 1]).to_lowercase().as_str(), "i" | "please")
+            && !matches!(
+                clean(words[index - 1]).to_lowercase().as_str(),
+                "i" | "please"
+            )
         {
             // "Sarah Chen approves": take up to two capitalized words before.
             let mut name = vec![clean(words[index - 1])];
-            if index >= 2 && is_name(words[index - 2]) && !matches!(clean(words[index - 2]).to_lowercase().as_str(), "i" | "nobu") {
+            if index >= 2
+                && is_name(words[index - 2])
+                && !matches!(
+                    clean(words[index - 2]).to_lowercase().as_str(),
+                    "i" | "nobu"
+                )
+            {
                 name.insert(0, clean(words[index - 2]));
             }
             return Some(name.join(" "));
         }
-        if matches!(lower.as_str(), "to" | "ask" | "approver" | "cc" | "notify" | "manager")
-            && index + 1 < words.len()
+        if matches!(
+            lower.as_str(),
+            "to" | "ask" | "approver" | "cc" | "notify" | "manager"
+        ) && index + 1 < words.len()
         {
             let mut j = index + 1;
-            if clean(words[j]).eq_ignore_ascii_case("is") || clean(words[j]).eq_ignore_ascii_case("it") {
+            if clean(words[j]).eq_ignore_ascii_case("is")
+                || clean(words[j]).eq_ignore_ascii_case("it")
+            {
                 j += 1;
             }
             if j < words.len() && clean(words[j]).eq_ignore_ascii_case("to") {
@@ -236,18 +272,24 @@ pub fn parse(utterance: &str, catalog: &[CatalogApp], today: &str) -> Option<Par
     let lower = utterance.to_lowercase();
     let words = lower_words(utterance);
     let expense_app = catalog.iter().find(|app| {
-        app.field("amount").is_some() && app.field("status").is_some() && app.create_command().is_some()
+        app.field("amount").is_some()
+            && app.field("status").is_some()
+            && app.create_command().is_some()
     });
     // Decide: "approve the Nobu dinner", "reject Victor's hotel".
-    if let Some((_, status)) = DECIDE_WORDS
-        .iter()
-        .find(|(word, _)| words.first().is_some_and(|w| w == word.trim()) || lower.starts_with(word))
-    {
+    if let Some((_, status)) = DECIDE_WORDS.iter().find(|(word, _)| {
+        words.first().is_some_and(|w| w == word.trim()) || lower.starts_with(word)
+    }) {
         let app = expense_app.or(catalog.first())?;
         let hint: String = utterance
             .split_whitespace()
             .skip(1)
-            .filter(|w| !matches!(w.to_lowercase().trim_matches(',').as_ref(), "the" | "that" | "this" | "please" | "expense" | "claim"))
+            .filter(|w| {
+                !matches!(
+                    w.to_lowercase().trim_matches(','),
+                    "the" | "that" | "this" | "please" | "expense" | "claim"
+                )
+            })
             .collect::<Vec<_>>()
             .join(" ");
         let mut values = Map::new();
@@ -261,7 +303,10 @@ pub fn parse(utterance: &str, catalog: &[CatalogApp], today: &str) -> Option<Par
         });
     }
     // Open: "what's waiting for my approval", "show my expenses", "open expenses".
-    if (lower.contains("waiting for") || lower.contains("pending") || lower.starts_with("show") || lower.starts_with("open"))
+    if (lower.contains("waiting for")
+        || lower.contains("pending")
+        || lower.starts_with("show")
+        || lower.starts_with("open"))
         && (lower.contains("approv") || lower.contains("expense") || lower.contains("claim"))
     {
         let app = expense_app?;
@@ -274,7 +319,11 @@ pub fn parse(utterance: &str, catalog: &[CatalogApp], today: &str) -> Option<Par
         });
     }
     // Create: an amount with a spending verb.
-    let spent = lower.contains("spent") || lower.contains("paid") || lower.contains("expense") || lower.contains("bought") || lower.contains("reimburse");
+    let spent = lower.contains("spent")
+        || lower.contains("paid")
+        || lower.contains("expense")
+        || lower.contains("bought")
+        || lower.contains("reimburse");
     if let (Some(amount), true, Some(app)) = (amount(utterance), spent, expense_app) {
         let mut values = Map::new();
         values.insert("amount".into(), Value::String(amount));
@@ -282,14 +331,19 @@ pub fn parse(utterance: &str, catalog: &[CatalogApp], today: &str) -> Option<Par
             "merchant".into(),
             Value::String(merchant(utterance).unwrap_or_else(|| "Unknown merchant".into())),
         );
-        values.insert("category".into(), Value::String(category(&words).to_owned()));
+        values.insert(
+            "category".into(),
+            Value::String(category(&words).to_owned()),
+        );
         values.insert("spent_on".into(), Value::String(spent_on(&lower, today)));
         // The note: the words between "on" and "at" ("a client dinner").
         let note = utterance
             .split_whitespace()
             .skip_while(|w| !w.eq_ignore_ascii_case("on"))
             .skip(1)
-            .take_while(|w| !w.eq_ignore_ascii_case("at") && !w.starts_with('$') && !w.ends_with(','))
+            .take_while(|w| {
+                !w.eq_ignore_ascii_case("at") && !w.starts_with('$') && !w.ends_with(',')
+            })
             .collect::<Vec<_>>()
             .join(" ");
         if !note.is_empty() {

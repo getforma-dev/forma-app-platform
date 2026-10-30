@@ -83,7 +83,10 @@ mod tests {
         assert!(!is_demo_org(other));
         assert!(!is_demo_org("not-an-id"));
         configure_for_tests(true, &[]);
-        assert!(!is_demo_org(org), "no organization listed: no shortcut anywhere");
+        assert!(
+            !is_demo_org(org),
+            "no organization listed: no shortcut anywhere"
+        );
         configure_for_tests(false, &[]);
     }
 }

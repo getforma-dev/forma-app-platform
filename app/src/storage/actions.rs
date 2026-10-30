@@ -274,9 +274,16 @@ impl Data {
                 command.schema_version_expected,
             )
             .await?;
-            let (current_version, current_values, _) =
-                current_state(transaction, org, app, work, &collection, &command.record, false)
-                    .await?;
+            let (current_version, current_values, _) = current_state(
+                transaction,
+                org,
+                app,
+                work,
+                &collection,
+                &command.record,
+                false,
+            )
+            .await?;
             if current_version != command.expected_record_version {
                 return Ok(DryRun::Conflict { current_version });
             }

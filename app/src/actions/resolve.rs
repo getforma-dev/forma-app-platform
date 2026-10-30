@@ -65,7 +65,7 @@ pub struct Draft {
 /// What an action resolved to.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Resolution {
-    Draft(Draft),
+    Draft(Box<Draft>),
     /// Show this saved work (placed now when `placed`).
     Open {
         app: String,
@@ -295,12 +295,15 @@ pub fn match_approver(name: &str, members: &[Member]) -> Option<Approver> {
             4
         } else if wanted.iter().all(|w| have.contains(w)) {
             3
-        } else if have.first().is_some_and(|first| wanted.first() == Some(first)) {
-            2
-        } else if wanted
-            .iter()
-            .any(|w| have.iter().any(|h| h.starts_with(w.as_str()) && w.len() >= 3))
+        } else if have
+            .first()
+            .is_some_and(|first| wanted.first() == Some(first))
         {
+            2
+        } else if wanted.iter().any(|w| {
+            have.iter()
+                .any(|h| h.starts_with(w.as_str()) && w.len() >= 3)
+        }) {
             1
         } else {
             0
@@ -367,7 +370,10 @@ pub fn match_target<'a>(
         let mut haystack = tokens(&summarize(record));
         haystack.extend(tokens(&directory::label(&record.creator)));
         // The amount as dollars and as cents both count.
-        if let Some(amount) = field_value(record, "amount").and_then(|v| v.get("minor_units")).and_then(Value::as_str) {
+        if let Some(amount) = field_value(record, "amount")
+            .and_then(|v| v.get("minor_units"))
+            .and_then(Value::as_str)
+        {
             haystack.push(amount.to_owned());
         }
         let score = wanted.iter().filter(|w| haystack.contains(w)).count();
@@ -500,7 +506,10 @@ pub async fn resolve(
     if !work.can_write {
         return Err(Refusal::CouldNotDraft("no_record_write"));
     }
-    let listing = stores.data.list_records(member, &work.app, &work.work).await?;
+    let listing = stores
+        .data
+        .list_records(member, &work.app, &work.work)
+        .await?;
     let summary = listing
         .collections
         .iter()
@@ -567,11 +576,20 @@ pub async fn resolve(
                     .find(|t| t.starts_with("approv") || t.starts_with("accept"))
                     .map(|t| (*t).to_owned())
                     .ok_or(Refusal::CouldNotDraft("no_transition"))?,
-                Some(w) if w.starts_with("reject") || w.starts_with("declin") || w.starts_with("den") => tos
-                    .iter()
-                    .find(|t| t.starts_with("reject") || t.starts_with("declin") || t.starts_with("den"))
-                    .map(|t| (*t).to_owned())
-                    .ok_or(Refusal::CouldNotDraft("no_transition"))?,
+                Some(w)
+                    if w.starts_with("reject")
+                        || w.starts_with("declin")
+                        || w.starts_with("den") =>
+                {
+                    tos.iter()
+                        .find(|t| {
+                            t.starts_with("reject")
+                                || t.starts_with("declin")
+                                || t.starts_with("den")
+                        })
+                        .map(|t| (*t).to_owned())
+                        .ok_or(Refusal::CouldNotDraft("no_transition"))?
+                }
                 _ => tos
                     .first()
                     .map(|t| (*t).to_owned())
@@ -583,7 +601,9 @@ pub async fn resolve(
                 .find(|f| f.id == field)
                 .map(|f| f.value_type.clone())
                 .ok_or(Refusal::CouldNotDraft("no_transition"))?;
-            let mut values = vec![json!({"field_id": field, "value": typed_value(&spec, &to).ok_or(Refusal::CouldNotDraft("untypable_value"))?})];
+            let mut values = vec![
+                json!({"field_id": field, "value": typed_value(&spec, &to).ok_or(Refusal::CouldNotDraft("untypable_value"))?}),
+            ];
             if let Some(note) = parsed.values.get("note").and_then(Value::as_str) {
                 if command.writable.iter().any(|w| w == "note") {
                     if let Some(note_spec) = summary.fields.iter().find(|f| f.id == "note") {
@@ -653,7 +673,7 @@ pub async fn resolve(
         }
         _ => None,
     };
-    Ok(Resolution::Draft(Draft {
+    Ok(Resolution::Draft(Box::new(Draft {
         kind: parsed.kind,
         app: work.app,
         work: work.work,
@@ -665,5 +685,5 @@ pub async fn resolve(
         approver,
         target,
         confirm_token,
-    }))
+    })))
 }
