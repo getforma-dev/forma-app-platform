@@ -53,6 +53,7 @@ KEYS = {NORTHSTAR: "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-80
         CANARY: "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a2"}
 DB_HOST = "pg.app077.test"
 SYNTHETIC_PASSWORD = "app077-synthetic-not-a-password"
+SEEDED_REVISION = "00000000-0000-4000-8000-00000000006f"
 PROBE = r"""
 import hashlib, json, os, stat, sys
 from pathlib import Path
@@ -313,12 +314,31 @@ class Checks:
             ("endpoint-override", ["--env", "GENUI_EVIDENCE_BUCKET=genui-app077-local-stub", "--env", "AWS_REGION=us-east-1",
                                    "--env", "GENUI_OPERATOR_TENANTS_JSON=" + tenants_json(), "--env", "AWS_ENDPOINT_URL_S3=http://127.0.0.1:9"],
              ["upload-sources"], "aws_override_refused"),
+            # Review m2: an abstract socket, a host list and the OS trust store never reach libpq.
+            ("abstract-socket-host", ["--env", "PGHOST=@genui", "--env", "PGUSER=genui_migration", "--env", "PGSSLROOTCERT=/etc/ssl/certs/rds-global-bundle.pem"],
+             ["migrate"], "socket_host_refused"),
+            ("host-list", ["--env", "PGHOST=" + DB_HOST + ",/var/run/postgresql", "--env", "PGUSER=genui_migration",
+                           "--env", "PGSSLROOTCERT=/etc/ssl/certs/rds-global-bundle.pem"], ["verify-catalog"], "host_refused"),
+            ("system-trust-store", ["--env", "PGHOST=" + DB_HOST, "--env", "PGUSER=genui_migration", "--env", "PGSSLROOTCERT=system"],
+             ["seed"], "ca_refused"),
+            # Review m1: the admission passthrough runs the same identity check before connecting.
+            ("admission-identity", ["--env", "PGHOST=" + DB_HOST, "--env", "PGUSER=genui_workspace", "--env", "PGSSLROOTCERT=/etc/ssl/certs/rds-global-bundle.pem"],
+             ["admission", "list", "--organization", NORTHSTAR], "migration_identity_required"),
+            # Review M3: inside a managed task, no raw access code ever reaches standard output (the awslogs group).
+            ("managed-issue", ["--env", "ECS_CONTAINER_METADATA_URI_V4=http://169.254.170.2/v4/app077", "--env", "PGHOST=" + DB_HOST,
+                               "--env", "PGUSER=genui_migration", "--env", "PGSSLROOTCERT=/etc/ssl/certs/rds-global-bundle.pem"],
+             ["admission", "issue", "--organization", NORTHSTAR, "--issued-by", "ops", "--grant", "x"], "refused_in_managed_task"),
+            ("managed-reconcile", ["--env", "ECS_CONTAINER_METADATA_URI_V4=http://169.254.170.2/v4/app077"],
+             ["admission", "reconcile", "--organization", NORTHSTAR], "refused_in_managed_task"),
+            ("managed-unpinned-ca", ["--env", "ECS_CONTAINER_METADATA_URI_V4=http://169.254.170.2/v4/app077", "--env", "PGHOST=" + DB_HOST,
+                                     "--env", "PGUSER=genui_migration", "--env", "PGSSLROOTCERT=/operator/app/operator/overrides.json"],
+             ["migrate"], "ca_refused"),
         ]
         observed = self.report["refusals"] = []
         for name, args, command, code in cases:
             # An empty command must not fall back to the image's default.
             result = self.docker_run("refuse-" + name, *args, command=command) if command else \
-                self.docker_run("refuse-" + name, entrypoint=["python3", "-I", "/operator/app/operator/operator.py"])
+                self.docker_run("refuse-" + name, entrypoint=["python3", "-I", "-u", "/operator/app/operator/operator.py"])
             lines = result["stderr"].strip().splitlines()
             got = json.loads(lines[-1]).get("refused") if lines and lines[-1].startswith("{") else None
             observed.append({"case": name, "exit_code": result["exit_code"], "refused": got})
@@ -334,8 +354,21 @@ class Checks:
         self.report["timings_seconds"]["upload"] = result["seconds"]
         plan = (value.get("plan") or [{}])[0]
         puts = value.get("puts") or []
-        keys = ["o/%s/s/%s/r/%s/%s" % (NORTHSTAR, "00000000-0000-4000-8000-00000000006e", "00000000-0000-4000-8000-00000000006f", name)
+        revision = plan.get("revision_id")
+        keys = ["o/%s/s/%s/r/%s/%s" % (NORTHSTAR, "00000000-0000-4000-8000-00000000006e", revision, name)
                 for name in ("original", "part.parquet")]
+        self.expect("upload-sources writes a new revision derived from the original, never the seeded placeholder revision (review M2)",
+                    revision == value.get("derived_revision") and revision != SEEDED_REVISION
+                    and (plan.get("seeded_placeholder_not_written") or {}).get("revision_id") == SEEDED_REVISION
+                    and not any(SEEDED_REVISION in p["key"] for p in puts + (value.get("rerun_puts") or [])), revision)
+        record = value.get("registration") or {}
+        self.expect("upload-sources prints exactly the registration record for register-source-revision",
+                    sorted(record) == sorted(["organization_id", "source_id", "revision_id", "content_digest", "normalized_digest", "object_digest",
+                                              "row_count", "contract_digest"])
+                    and record.get("revision_id") == revision and record.get("object_digest") == record.get("normalized_digest")
+                    and record.get("object_digest") == (value.get("stored_digests") or [None, None])[1] and record.get("row_count") == 6, record)
+        self.expect("a rerun without kms:Decrypt on the tenant key refuses (review M1: checksum-mode HeadObject of SSE-KMS)",
+                    value.get("rerun_without_decrypt") == "object_write_refused")
         self.expect("upload-sources in the image writes exactly the two ADR-009 B1 keys, original first",
                     [p["key"] for p in puts] == keys)
         self.expect("every PUT is conditional and carries SSE-KMS with the Northstar tenant key and a matching SHA-256 checksum, signed SigV4",
@@ -345,7 +378,7 @@ class Checks:
                     and [p["key"] for p in value.get("rerun_puts") or []] == keys)
         self.expect("the receipt records the real content and normalized digests (not the seeded placeholders)",
                     plan.get("content_digest") == "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647"
-                    and plan.get("normalized_digest") not in (None, plan.get("seeded_placeholders", {}).get("normalized_digest"))
+                    and plan.get("normalized_digest") not in (None, plan.get("seeded_placeholder_not_written", {}).get("normalized_digest"))
                     and value.get("stored_digests") == [o["sha256"] for o in plan.get("objects", [])])
         self.expect("the image's adapter used its manifest-bound parser guest",
                     plan.get("adapter", {}).get("parser_guest_sha256") == "sha256:%s" % (self.report.get("parser") or {}).get("guest_sha256"))
@@ -463,11 +496,21 @@ op = importlib.util.module_from_spec(spec); spec.loader.exec_module(op)
 keys = %(keys)s
 tenants = op.load_tenants(%(tenants)r)
 plans = op.plan_sources()
-with Stub("genui-app077-local-stub", {"o/%%s/" %% org: arn for org, arn in keys.items()}) as stub:
+prefixes = {"o/%%s/" %% org: arn for org, arn in keys.items()}
+# The OperatorRole's grants (infra/src/stack.ts): GenerateDataKey and Decrypt, conditional PutObject only.
+with Stub("genui-app077-local-stub", prefixes, kms_grants={arn: {"kms:GenerateDataKey"} for arn in keys.values()}) as stub:
+    op.upload(stub.client(), "genui-app077-local-stub", tenants, plans)
+    try:
+        op.upload(stub.client(), "genui-app077-local-stub", tenants, plans)
+        rerun_without_decrypt = "unchanged"
+    except op.Refused as refusal:
+        rerun_without_decrypt = str(refusal)
+with Stub("genui-app077-local-stub", prefixes, kms_grants={arn: {"kms:GenerateDataKey", "kms:Decrypt"} for arn in keys.values()}) as stub:
     client = stub.client()
     receipts = op.upload(client, "genui-app077-local-stub", tenants, plans)
     first = len(stub.puts())
     rerun = op.upload(client, "genui-app077-local-stub", tenants, plans)
+    registration = op.registration(rerun[0], rerun[0]["objects"])
     stored = {key: versions[-1]["body"] for key, versions in stub.objects.items()}
     versions = {key: len(v) for key, v in stub.objects.items()}
     view = lambda p: {"key": p["key"], "sse": p["headers"].get("x-amz-server-side-encryption"),
@@ -488,7 +531,9 @@ with tempfile.TemporaryDirectory() as directory:
                "compression": sorted({r[0] for r in c.execute("SELECT compression FROM parquet_metadata(?)", [str(path)]).fetchall()})}
     c.close()
 print(json.dumps({"plan": op.public(plans), "receipts": receipts, "rerun_states": [o["state"] for o in rerun[0]["objects"]], "puts": puts,
-                  "rerun_puts": rerun_puts, "stored_versions": versions,
+                  "rerun_puts": rerun_puts, "stored_versions": versions, "registration": registration,
+                  "rerun_without_decrypt": rerun_without_decrypt,
+                  "derived_revision": op.derived_revision_id(plans[0]["organization_id"], plans[0]["content_digest"]),
                   "stored_digests": ["sha256:" + hashlib.sha256(stored[o["key"]]).hexdigest() for o in plans[0]["objects"]], "parquet": parquet}, sort_keys=True))
 '''
 

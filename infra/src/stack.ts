@@ -264,17 +264,26 @@ export class GenuiFoundation extends Stack {
     const operatorRole = new iam.Role(this, 'OperatorRole', { assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com') });
     const operatorTenants: Array<{ organization_id: string; kms_key_arn: string; prefix: string }> = [];
     for (const [i, tenant] of tenantIds.entries()) {
-      // PutObject is conditional (If-None-Match) and an existing object is read
-      // back by HeadObject (s3:GetObject); no ListBucket, no delete.
-      operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['s3:GetObject', 's3:PutObject'], resources: [bucket.arnForObjects(`o/${tenant}/s/*`)] }));
-      operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['kms:GenerateDataKey'], resources: [keys[i].keyArn] }));
+      // PutObject only as a conditional create (If-None-Match: *); an existing
+      // object is read back by a checksum-mode HeadObject (s3:GetObject), which
+      // for an SSE-KMS object needs kms:Decrypt. No ListBucket, no delete. Both
+      // KMS actions work only through S3 in this region and only for this
+      // tenant's B1 source objects: bucket keys are off, so S3's encryption
+      // context is the object ARN (APP-077 review M1, m3).
+      const sourceObjects = bucket.arnForObjects(`o/${tenant}/s/*`);
+      operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['s3:GetObject'], resources: [sourceObjects] }));
+      operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['s3:PutObject'], resources: [sourceObjects], conditions: { StringEquals: { 's3:if-none-match': '*' } } }));
+      operatorRole.addToPolicy(new iam.PolicyStatement({
+        actions: ['kms:GenerateDataKey', 'kms:Decrypt'], resources: [keys[i].keyArn],
+        conditions: { StringEquals: { 'kms:ViaService': `s3.${this.region}.amazonaws.com` }, StringLike: { 'kms:EncryptionContext:aws:s3:arn': sourceObjects } },
+      }));
       operatorTenants.push({ organization_id: tenant, kms_key_arn: keys[i].keyArn, prefix: `o/${tenant}/` });
     }
     const operatorTask = new ecs.FargateTaskDefinition(this, 'OperatorTask', { cpu: 1024, memoryLimitMiB: 2048, taskRole: operatorRole, executionRole: migrationExecutionRole, runtimePlatform });
     operatorTask.addVolume({ name: 'operator-scratch' });
     const operatorContainer = operatorTask.addContainer('operator', {
       image: ecs.ContainerImage.fromRegistry(operatorImage.valueAsString), readonlyRootFilesystem: true, user: '65532:65532',
-      entryPoint: ['python3', '-I', '/operator/app/operator/operator.py'], command: ['verify-catalog'],
+      entryPoint: ['python3', '-I', '-u', '/operator/app/operator/operator.py'], command: ['verify-catalog'],
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'genui-operator', logGroup: log }),
       environment: {
         PGHOST: database.instanceEndpoint.hostname, PGPORT: '5432', PGDATABASE: 'genui', PGUSER: 'genui_migration', PGSSLROOTCERT: '/etc/ssl/certs/rds-global-bundle.pem', PGSSLMODE: 'verify-full',

@@ -12,8 +12,10 @@ verify-full TLS; they skip without Docker and OpenSSL and remove the container.
 Run: python -m unittest discover -s app/operator -v (with the operator lock installed).
 """
 import base64
+import contextlib
 import copy
 import hashlib
+import io
 import importlib.util
 import json
 import os
@@ -41,6 +43,14 @@ NORTHSTAR, CANARY = "00000000-0000-4000-8000-000000000001", "00000000-0000-4000-
 KEYS = {NORTHSTAR: "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
         CANARY: "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a2"}
 BUCKET = "genui-app077-local-stub"
+# The OperatorRole grants of infra/src/stack.ts, mirrored for the stub (review M1,
+# m3): kms:GenerateDataKey and kms:Decrypt on each tenant key (both bound to S3
+# and that tenant's o/<tenant>/s/* encryption context), and PutObject only with
+# If-None-Match: *. infra/test/security.test.ts asserts the same set.
+OPERATOR_KMS = ("kms:Decrypt", "kms:GenerateDataKey")
+SEEDED_REVISION = "00000000-0000-4000-8000-00000000006f"
+REGISTRATION_KEYS = ["content_digest", "contract_digest", "normalized_digest", "object_digest", "organization_id", "revision_id",
+                     "row_count", "source_id"]
 POSTGRES = "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
 
 
@@ -108,12 +118,12 @@ class PackageTests(unittest.TestCase):
 
     def test_documented_overrides_fit_ecs_and_match_the_entry_point(self):
         document = json.loads(op.OVERRIDES_FILE.read_text())
-        self.assertEqual(document["entryPoint"], ["python3", "-I", "/operator/app/operator/operator.py"])
+        self.assertEqual(document["entryPoint"], ["python3", "-I", "-u", "/operator/app/operator/operator.py"])
         self.assertEqual(document["container"], "operator")
         self.assertEqual(document["max_override_bytes"], 8192)
         names = [item["name"] for item in document["overrides"]]
         self.assertEqual(len(names), len(set(names)))
-        covered = set()
+        covered, admission_covered = set(), set()
         import admission_operator
         for item in document["overrides"]:
             with self.subTest(name=item["name"]):
@@ -128,10 +138,98 @@ class PackageTests(unittest.TestCase):
                 covered.add(args.command)
                 if args.command == "admission":
                     parsed = admission_operator.validate(admission_operator.parser().parse_args(args.rest))
-                    self.assertNotEqual(parsed.command, "issue")
+                    self.assertNotIn(parsed.command, op.MANAGED_REFUSED)
+                    admission_covered.add(parsed.command)
         self.assertEqual(covered, set(op.COMMANDS))
         self.assertEqual(op.parse(document["default_command"]).command, "verify-catalog")
         self.assertEqual([item["command"][:2] for item in document["not_ecs_overrides"]][0], ["admission", "issue"])
+        # Every admission subcommand is either documented (review m4) or refused in a managed task (M3).
+        excluded = {item["command"][1] for item in document["not_ecs_overrides"]}
+        self.assertEqual(excluded, set(op.MANAGED_REFUSED))
+        self.assertEqual(admission_covered | excluded, set(admission_operator.parser()._subparsers._group_actions[0].choices))
+        self.assertEqual(admission_covered & excluded, set())
+
+    def test_issue_and_reconcile_refuse_in_a_managed_task(self):
+        # Review M3: a Fargate task's stdout is the awslogs group; the raw code must never reach it.
+        org = NORTHSTAR
+        for variable in ("ECS_CONTAINER_METADATA_URI_V4", "ECS_CONTAINER_METADATA_URI"):
+            for argv in (["admission", "issue", "--organization", org, "--issued-by", "ops", "--grant", "x"],
+                         ["admission", "issue", "--organization", org, "--issued-by", "ops", "--grant", "x", "--provider-email", "a@b.test"],
+                         ["admission", "reconcile", "--organization", org]):
+                with self.subTest(variable=variable, argv=argv[:3]):
+                    completed = cli(*argv, env_extra={variable: "http://169.254.170.2/v4/x", "PGHOST": "db.example.test",
+                                                      "PGUSER": "genui_migration", "PGSSLROOTCERT": str(SCRIPT)})
+                    self.assertEqual((completed.returncode, completed.stdout, refusal(completed)), (1, "", "refused_in_managed_task"))
+        # The guard reads the subcommand as admission_operator's own parser does; a form that parser
+        # does not accept as `issue` never reaches it.
+        completed = cli("admission", "--", "issue", "--organization", org, "--issued-by", "ops",
+                        env_extra={"ECS_CONTAINER_METADATA_URI_V4": "x"})
+        self.assertEqual((completed.returncode, completed.stdout, refusal(completed)), (1, "", "usage"))
+        # Outside a managed task the guard does not apply (the identity check refuses next, before any connection).
+        completed = cli("admission", "reconcile", "--organization", org, env_extra={"PGHOST": "localhost", "PGUSER": "genui_workspace",
+                                                                                  "PGSSLROOTCERT": str(SCRIPT)})
+        self.assertEqual(refusal(completed), "migration_identity_required")
+        # A documented admission command still runs in a managed task (here it reaches the host check).
+        completed = cli("admission", "list", "--organization", org, env_extra={"ECS_CONTAINER_METADATA_URI_V4": "x", "PGHOST": "@abstract"})
+        self.assertEqual(refusal(completed), "socket_host_refused")
+
+    def test_admission_checks_the_database_environment_before_connecting(self):
+        # Review m1: the passthrough runs the same pre-connect identity checks as every database command.
+        for environment, code in (({"PGHOST": "localhost", "PGUSER": "genui_workspace", "PGDATABASE": "postgres", "PGSSLROOTCERT": str(SCRIPT)},
+                                   "migration_identity_required"),
+                                  ({"PGHOST": "localhost", "PGUSER": "genui_migration", "PGDATABASE": "postgres", "PGSSLROOTCERT": str(SCRIPT)},
+                                   "database_refused"),
+                                  ({"PGHOST": "db.example.test,/var/run/postgresql", "PGUSER": "genui_migration", "PGSSLROOTCERT": str(SCRIPT)},
+                                   "host_refused")):
+            with self.subTest(code=code), mock.patch.dict(os.environ, environment, clear=True), \
+                    mock.patch("psycopg.connect", side_effect=AssertionError("connected")) as connect, \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr:
+                self.assertEqual(op.main(["admission", "list", "--organization", NORTHSTAR]), 1)
+                self.assertEqual(json.loads(stderr.getvalue().strip().splitlines()[-1]), {"refused": code})
+                connect.assert_not_called()
+        # `defaults` needs no database and no environment.
+        with mock.patch.dict(os.environ, {}, clear=True), contextlib.redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(op.main(["admission", "defaults"]), 0)
+        self.assertIn("code_expiry_days_max", json.loads(stdout.getvalue()))
+
+    def test_host_and_ca_guards_refuse_non_tls_and_unpinned_trust(self):
+        # Review m2: libpq treats '@' as an abstract Unix socket and ',' as a host list; sslmode does not apply to sockets.
+        base = {"PGUSER": "genui_migration", "PGSSLROOTCERT": str(SCRIPT)}
+        for host, code in (("/var/run/postgresql", "socket_host_refused"), ("@abstract", "socket_host_refused"),
+                           ("db.example.test,/var/run/postgresql", "host_refused"), ("db.example.test,@x", "host_refused"),
+                           ("db example.test", "host_refused"), ("-db.example.test", "host_refused"), ("db.example.test.", "host_refused"),
+                           ("[::1]", "host_refused"), ("", "socket_host_refused")):
+            with self.subTest(host=host), mock.patch.dict(os.environ, dict(base, PGHOST=host), clear=True), self.assertRaises(op.Refused) as refused:
+                op.database_environment()
+            self.assertEqual(str(refused.exception), code)
+        for ca in ("system", "relative/ca.pem", str(HERE), str(HERE / "missing.pem")):
+            with self.subTest(ca=ca), mock.patch.dict(os.environ, dict(base, PGHOST="db.example.test", PGSSLROOTCERT=ca), clear=True), \
+                    self.assertRaises(op.Refused) as refused:
+                op.database_environment()
+            self.assertEqual(str(refused.exception), "ca_refused")
+        with mock.patch.dict(os.environ, dict(base, PGHOST="genui.abc123.us-east-1.rds.amazonaws.com"), clear=True):
+            self.assertEqual(op.database_environment(), ("genui.abc123.us-east-1.rds.amazonaws.com", 5432))
+        # Inside a managed task only the image's pinned RDS bundle is a trust root.
+        with mock.patch.dict(os.environ, dict(base, PGHOST="db.example.test", ECS_CONTAINER_METADATA_URI_V4="x"), clear=True), \
+                self.assertRaises(op.Refused) as refused:
+            op.database_environment()
+        self.assertEqual(str(refused.exception), "ca_refused")
+        self.assertEqual(op.PINNED_CA, "/etc/ssl/certs/rds-global-bundle.pem")
+
+    def test_upload_revision_is_derived_and_never_the_seeded_placeholder(self):
+        # Review M2 (coordinated decision): a new revision id, uuid5 over the organization id and the
+        # original content digest, stamped version 4 so the contract's v4/v7 identifier shape accepts it.
+        digest = op.SOURCES[0]["original_digest"]
+        revision = op.derived_revision_id(NORTHSTAR, digest)
+        self.assertEqual(revision, str(uuid.UUID(bytes=uuid.uuid5(uuid.UUID(NORTHSTAR), digest).bytes, version=4)))
+        self.assertEqual(revision, op.derived_revision_id(NORTHSTAR, digest))
+        self.assertIsNotNone(op.UUID.fullmatch(revision))
+        self.assertNotEqual(revision, SEEDED_REVISION)
+        self.assertNotEqual(revision, op.derived_revision_id(CANARY, digest))
+        self.assertNotEqual(revision, op.derived_revision_id(NORTHSTAR, "sha256:" + "0" * 64))
+        for bad in (("not-a-uuid", digest), (NORTHSTAR, "sha256:" + "0" * 63), (NORTHSTAR, digest.upper())):
+            with self.subTest(bad=bad), self.assertRaises(op.Refused):
+                op.derived_revision_id(*bad)
 
     def test_dockerfile_entry_point_and_default_command_match(self):
         text = (HERE / "Dockerfile").read_text()
@@ -228,9 +326,14 @@ class PackageTests(unittest.TestCase):
             self.assertEqual(str(refused.exception), "fixture_digest_refused")
 
 
+def operator_stub(kms_actions=OPERATOR_KMS):
+    return local_s3.Stub(BUCKET, {"o/%s/" % org: arn for org, arn in KEYS.items()},
+                         kms_grants={arn: set(kms_actions) for arn in KEYS.values()}, require_if_none_match=True)
+
+
 class S3Tests(unittest.TestCase):
-    def stub(self):
-        return local_s3.Stub(BUCKET, {"o/%s/" % org: arn for org, arn in KEYS.items()})
+    def stub(self, kms_actions=OPERATOR_KMS):
+        return operator_stub(kms_actions)
 
     def test_upload_writes_b1_keys_with_sse_kms_under_the_tenant_key(self):
         plan = synthetic_plan()
@@ -285,6 +388,34 @@ class S3Tests(unittest.TestCase):
             again = op.upload(client, BUCKET, tenants, plan)
         self.assertEqual([o["state"] for o in again[0]["objects"]], ["unchanged", "created"])
 
+    def test_a_rerun_without_kms_decrypt_refuses(self):
+        # Review M1: a checksum-mode HeadObject of an SSE-KMS object needs kms:Decrypt. With only
+        # kms:GenerateDataKey (the grant before the fix) the first run succeeds and every rerun refuses.
+        plan = synthetic_plan()
+        with self.stub(kms_actions=("kms:GenerateDataKey",)) as stub:
+            client, tenants = stub.client(), op.load_tenants(tenants_json())
+            first = op.upload(client, BUCKET, tenants, plan)
+            self.assertEqual([o["state"] for o in first[0]["objects"]], ["created", "created"])
+            with self.assertRaises(op.Refused) as refused:
+                op.upload(client, BUCKET, tenants, plan)
+            self.assertEqual(str(refused.exception), "object_write_refused")
+            heads = [r for r in stub.requests if r["method"] == "HEAD"]
+            self.assertEqual(heads[0]["headers"].get("x-amz-checksum-mode"), "ENABLED")
+        with self.stub(kms_actions=("kms:Decrypt",)) as stub:  # and no write without GenerateDataKey
+            with self.assertRaises(op.Refused):
+                op.upload(stub.client(), BUCKET, op.load_tenants(tenants_json()), plan)
+            self.assertEqual(stub.objects, {})
+
+    def test_an_unconditional_put_is_denied(self):
+        # Review m3: OperatorRole allows PutObject only with s3:if-none-match = *.
+        from botocore.exceptions import ClientError
+        with self.stub() as stub:
+            key = synthetic_plan()[0]["objects"][0]["key"]
+            with self.assertRaises(ClientError) as denied:
+                stub.client().put_object(Bucket=BUCKET, Key=key, Body=b"x", ServerSideEncryption="aws:kms", SSEKMSKeyId=KEYS[NORTHSTAR])
+            self.assertEqual(denied.exception.response["Error"]["Code"], "AccessDenied")
+            self.assertEqual(stub.objects, {})
+
     def test_the_bucket_policy_denies_another_tenants_key(self):
         swapped = {NORTHSTAR: KEYS[CANARY], CANARY: KEYS[NORTHSTAR]}
         with self.stub() as stub:
@@ -320,9 +451,16 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(plan["content_digest"], op.sha256(original))
         self.assertEqual(plan["content_digest"], op.SOURCES[0]["original_digest"])
         self.assertEqual(plan["normalized_digest"], op.sha256(normalized))
-        self.assertNotEqual(plan["normalized_digest"], plan["seeded_placeholders"]["normalized_digest"])
-        self.assertNotEqual(plan["content_digest"], plan["seeded_placeholders"]["content_digest"])
-        self.assertEqual([item["key"].rsplit("/", 1)[1] for item in plan["objects"]], ["original", "part.parquet"])
+        placeholder = plan["seeded_placeholder_not_written"]
+        self.assertEqual(placeholder["revision_id"], SEEDED_REVISION)
+        self.assertNotEqual(plan["normalized_digest"], placeholder["normalized_digest"])
+        self.assertNotEqual(plan["content_digest"], placeholder["content_digest"])
+        # Review M2: the objects go to a new revision derived from the original, never the placeholder's keys.
+        revision = op.derived_revision_id(NORTHSTAR, plan["content_digest"])
+        self.assertEqual(plan["revision_id"], revision)
+        self.assertEqual([item["key"] for item in plan["objects"]],
+                         [op.object_key(NORTHSTAR, plan["source_id"], revision, name) for name in ("original", "part.parquet")])
+        self.assertFalse(any(SEEDED_REVISION in item["key"] for item in plan["objects"]))
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "part.parquet"
             path.write_bytes(normalized)
@@ -366,9 +504,33 @@ class AdapterTests(unittest.TestCase):
             op.plan_sources(binding)
         self.assertEqual(str(refused.exception), "parser_binding_refused")
 
+    def test_upload_sources_prints_one_registration_record(self):
+        # Review M2: exactly the record APP-012's register-source-revision consumes, after both objects are stored.
+        with operator_stub() as stub, \
+                mock.patch.dict(os.environ, {"GENUI_EVIDENCE_BUCKET": BUCKET, "GENUI_OPERATOR_TENANTS_JSON": tenants_json()}), \
+                mock.patch.object(op.ParserBinding, "from_manifest", return_value=local_parser()), \
+                mock.patch.object(op, "s3_client", return_value=stub.client()):
+            for _ in range(2):  # a rerun prints the same record and stores nothing new
+                with contextlib.redirect_stdout(io.StringIO()) as stdout:
+                    self.assertEqual(op.main(["upload-sources"]), 0)
+                lines = stdout.getvalue().splitlines()
+                self.assertEqual(len(lines), 1)
+                record = json.loads(lines[0])
+                self.assertEqual(sorted(record), REGISTRATION_KEYS)
+                stored = {key: versions[-1]["body"] for key, versions in stub.objects.items()}
+                self.assertEqual({key: len(versions) for key, versions in stub.objects.items()}, {key: 1 for key in stored})
+        plan = op.plan_sources(local_parser())[0]
+        self.assertEqual(record, {"organization_id": NORTHSTAR, "source_id": "00000000-0000-4000-8000-00000000006e",
+                                  "revision_id": op.derived_revision_id(NORTHSTAR, plan["content_digest"]),
+                                  "content_digest": op.SOURCES[0]["original_digest"], "normalized_digest": plan["normalized_digest"],
+                                  "object_digest": plan["normalized_digest"], "row_count": 6,
+                                  "contract_digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64"})
+        self.assertEqual(sorted(stored), sorted(item["key"] for item in plan["objects"]))
+        self.assertEqual(op.sha256(stored[plan["objects"][1]["key"]]), record["object_digest"])
+
     def test_planned_objects_upload_to_the_stub(self):
         plans = op.plan_sources(local_parser())
-        with local_s3.Stub(BUCKET, {"o/%s/" % org: arn for org, arn in KEYS.items()}) as stub:
+        with operator_stub() as stub:
             receipts = op.upload(stub.client(), BUCKET, op.load_tenants(tenants_json()), plans)
             stored = {key: versions[-1]["body"] for key, versions in stub.objects.items()}
         self.assertEqual({item["key"]: item["data"] for item in plans[0]["objects"]}, stored)

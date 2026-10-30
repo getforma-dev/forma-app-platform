@@ -3,6 +3,7 @@ test_a_parser_reader_disagreement_refuses (test_operator.AdapterTests.test_a_par
 test_plan_bytes_are_deterministic (test_operator.AdapterTests.test_plan_bytes_are_deterministic) ... ok
 test_plan_normalizes_through_the_parser_and_records_real_digests (test_operator.AdapterTests.test_plan_normalizes_through_the_parser_and_records_real_digests) ... ok
 test_planned_objects_upload_to_the_stub (test_operator.AdapterTests.test_planned_objects_upload_to_the_stub) ... ok
+test_upload_sources_prints_one_registration_record (test_operator.AdapterTests.test_upload_sources_prints_one_registration_record) ... ok
 test_1_verify_catalog_refuses_before_migration_and_seed_refuses_too (test_operator.DatabaseTests.test_1_verify_catalog_refuses_before_migration_and_seed_refuses_too) ... ok
 test_2_migrate_applies_every_landed_migration_and_a_repeat_is_unchanged (test_operator.DatabaseTests.test_2_migrate_applies_every_landed_migration_and_a_repeat_is_unchanged) ... ok
 test_3_verify_catalog_refuses_drift_and_writes_nothing (test_operator.DatabaseTests.test_3_verify_catalog_refuses_drift_and_writes_nothing) ... ok
@@ -10,25 +11,31 @@ test_4_a_seed_that_meets_a_changed_row_refuses_whole_and_writes_nothing (test_op
 test_5_seed_is_exact_match_idempotent (test_operator.DatabaseTests.test_5_seed_is_exact_match_idempotent) ... ok
 test_6_admission_passes_through_to_the_operator_channel (test_operator.DatabaseTests.test_6_admission_passes_through_to_the_operator_channel) ... ok
 test_7_another_identity_is_refused_before_connecting (test_operator.DatabaseTests.test_7_another_identity_is_refused_before_connecting) ... ok
+test_admission_checks_the_database_environment_before_connecting (test_operator.PackageTests.test_admission_checks_the_database_environment_before_connecting) ... ok
 test_database_environment_is_checked_before_any_connection (test_operator.PackageTests.test_database_environment_is_checked_before_any_connection) ... ok
 test_dockerfile_entry_point_and_default_command_match (test_operator.PackageTests.test_dockerfile_entry_point_and_default_command_match) ... ok
 test_dockerignore_is_an_exact_allowlist_of_tracked_files (test_operator.PackageTests.test_dockerignore_is_an_exact_allowlist_of_tracked_files) ... ok
 test_documented_overrides_fit_ecs_and_match_the_entry_point (test_operator.PackageTests.test_documented_overrides_fit_ecs_and_match_the_entry_point) ... ok
 test_fixture_bytes_are_pinned (test_operator.PackageTests.test_fixture_bytes_are_pinned) ... ok
+test_host_and_ca_guards_refuse_non_tls_and_unpinned_trust (test_operator.PackageTests.test_host_and_ca_guards_refuse_non_tls_and_unpinned_trust) ... ok
+test_issue_and_reconcile_refuse_in_a_managed_task (test_operator.PackageTests.test_issue_and_reconcile_refuse_in_a_managed_task) ... ok
 test_object_keys_are_the_adr_009_b1_layout (test_operator.PackageTests.test_object_keys_are_the_adr_009_b1_layout) ... ok
 test_refusals_print_fixed_codes_and_never_echo_values (test_operator.PackageTests.test_refusals_print_fixed_codes_and_never_echo_values) ... ok
 test_requirements_lock_is_the_verbatim_union_of_reviewed_locks (test_operator.PackageTests.test_requirements_lock_is_the_verbatim_union_of_reviewed_locks) ... ok
 test_seeded_source_is_the_northstar_events_revision (test_operator.PackageTests.test_seeded_source_is_the_northstar_events_revision) ... ok
 test_subcommands_are_closed (test_operator.PackageTests.test_subcommands_are_closed) ... ok
 test_tenant_configuration_is_exact (test_operator.PackageTests.test_tenant_configuration_is_exact) ... ok
+test_upload_revision_is_derived_and_never_the_seeded_placeholder (test_operator.PackageTests.test_upload_revision_is_derived_and_never_the_seeded_placeholder) ... ok
 test_a_partial_upload_completes_on_rerun (test_operator.S3Tests.test_a_partial_upload_completes_on_rerun) ... ok
+test_a_rerun_without_kms_decrypt_refuses (test_operator.S3Tests.test_a_rerun_without_kms_decrypt_refuses) ... ok
 test_a_tenant_without_configuration_refuses_before_any_request (test_operator.S3Tests.test_a_tenant_without_configuration_refuses_before_any_request) ... ok
 test_an_existing_different_object_refuses_and_is_not_overwritten (test_operator.S3Tests.test_an_existing_different_object_refuses_and_is_not_overwritten) ... ok
+test_an_unconditional_put_is_denied (test_operator.S3Tests.test_an_unconditional_put_is_denied) ... ok
 test_rerun_leaves_equal_objects_unchanged (test_operator.S3Tests.test_rerun_leaves_equal_objects_unchanged) ... ok
 test_the_bucket_policy_denies_another_tenants_key (test_operator.S3Tests.test_the_bucket_policy_denies_another_tenants_key) ... ok
 test_upload_writes_b1_keys_with_sse_kms_under_the_tenant_key (test_operator.S3Tests.test_upload_writes_b1_keys_with_sse_kms_under_the_tenant_key) ... ok
 
 ----------------------------------------------------------------------
-Ran 29 tests in 17.646s
+Ran 36 tests in 21.390s
 
 OK

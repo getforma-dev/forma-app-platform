@@ -11,23 +11,31 @@ application or signup path, and never generic SQL:
                    proof, in one caller-owned transaction (exact-match
                    idempotent; a changed seed refuses whole)
   admission ...    passed unchanged to admission_operator.main: whatever closed
-                   subcommands that module defines (APP-073 and later)
+                   subcommands that module defines (APP-073 and later), after
+                   the same pre-connect environment checks; `issue` and
+                   `reconcile` are refused inside a managed (ECS) task
   upload-sources   the closed fixture-source table below: original bytes
                    normalized through the reviewed APP-004/005 adapter path of
                    fixtures/qualify.py (parser-host and its WASM guest, then
                    the trusted asset selection and DuckDB Parquet), written to
                    ADR-009 B1's layout o/{org}/s/{source}/r/{rev}/original and
-                   .../part.parquet with SSE-KMS under the tenant key, with the
-                   real digests printed; `--plan` makes no AWS call
+                   .../part.parquet with SSE-KMS under the tenant key, at a NEW
+                   revision derived from the original (never the seeded
+                   placeholder revision); prints one registration record for
+                   APP-012's register-source-revision; `--plan` makes no AWS call
 
 Every database command connects as genui_migration over verify-full TLS using
 only the libpq environment (PGHOST, PGPORT, PGUSER, PGPASSWORD, PGSSLROOTCERT,
 PGDATABASE=genui); the password is never read into an argument, printed or
-logged. The task holds no application role-assumption grant: no subcommand
-refreshes or assumes the runtime's database or tenant roles. Refusals print a
-fixed reason code on standard error and never echo an argument or environment
-value. Run as `python3 -I operator.py ...` (isolated mode) so this file's
-directory never shadows the standard library's `operator` module.
+logged. The host must be one DNS name or address (never a socket path, an
+abstract socket or a host list) and the trust root a CA file, inside a managed
+task exactly the image's pinned RDS bundle. The task holds no application
+role-assumption grant: no subcommand refreshes or assumes the runtime's
+database or tenant roles. Refusals print a fixed reason code on standard error
+and never echo an argument or environment value. Run as
+`python3 -I -u operator.py ...`: isolated mode so this file's directory never
+shadows the standard library's `operator` module, unbuffered so a receipt
+printed after a commit is not lost to a later kill.
 """
 import argparse
 import base64
@@ -39,6 +47,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import uuid
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -54,9 +63,13 @@ PARSER_MANIFEST = ROOT / "bin" / "parser-manifest.json"
 FIXTURES = ROOT / "fixtures" / "phase-one" / "v1"
 NORTHSTAR = "00000000-0000-4000-8000-000000000001"
 # The closed fixture-source table. Phase 1 has one: the Northstar organization's
-# events revision as seeded by tenant_seed (D7.10 "replacing the seeded
-# placeholders for the Northstar organization"; plan Task 9). The CSV digest is
-# pinned here and must also equal the fixture manifest's.
+# events source as seeded by tenant_seed. The seeded revision row carries
+# placeholder digests and is immutable (FK-chained; ADR-009 D9.3: nothing is
+# rewritten), so the real objects go to a NEW revision of the same source whose
+# id is derived from the original (derived_revision_id); APP-012's
+# register-source-revision records its row from the printed registration record
+# (APP-077 review M2, coordinated decision). The CSV digest is pinned here and
+# must also equal the fixture manifest's.
 SOURCES = (
     {"organization_id": NORTHSTAR, "app_id": "00000000-0000-4000-8000-000000000065", "input_id": "events", "fixture_id": "northstar-events-csv",
      "original_digest": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647", "asset": "build-worker-17"},
@@ -67,6 +80,22 @@ CONTENT_TYPES = {"original": "text/csv", "part.parquet": "application/vnd.apache
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 BUCKET = re.compile(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
 KMS_KEY = re.compile(r"arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+# One DNS name or IPv4 address: no '/' socket path, no '@' abstract socket, no
+# comma-separated host list (libpq tries each; sslmode does not apply to a
+# socket). APP-077 review m2.
+HOSTNAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
+# The image's pinned RDS CA bundle (Dockerfile; check_image.py pins its digest).
+PINNED_CA = "/etc/ssl/certs/rds-global-bundle.pem"
+# Fargate always sets these in a task's containers (review M3).
+MANAGED_TASK_VARIABLES = ("ECS_CONTAINER_METADATA_URI_V4", "ECS_CONTAINER_METADATA_URI")
+# admission subcommands never run in a managed task: `issue` prints the raw
+# code to standard output, which there is the awslogs group; `reconcile` (like
+# a provider invitation) needs the management key and a private directory.
+MANAGED_REFUSED = ("issue", "reconcile")
+# The record APP-012's register-source-revision consumes, one per uploaded revision.
+REGISTRATION_FIELDS = ("organization_id", "source_id", "revision_id", "content_digest", "normalized_digest", "object_digest",
+                       "row_count", "contract_digest")
 
 
 class Refused(ValueError):
@@ -108,15 +137,27 @@ def parse(argv):
 
 # --- the migration identity -----------------------------------------------------
 
+def managed_task():
+    return any(name in os.environ for name in MANAGED_TASK_VARIABLES)
+
+
 def database_environment():
+    """Every pre-connect check of a database command (migrate, verify-catalog, seed, admission)."""
     env = os.environ
     host = env.get("PGHOST", "")
-    # A Unix-socket host never uses TLS; libpq would also prefer GSSAPI encryption.
-    require(host and not host.startswith("/"), "socket_host_refused")
+    # A Unix-socket host ('/' path or '@' abstract name) never uses TLS; libpq
+    # would also prefer GSSAPI encryption. A host list could fall back to one.
+    require(host and not host.startswith(("/", "@")), "socket_host_refused")
+    require(HOSTNAME.fullmatch(host) is not None, "host_refused")
     require(env.get("PGUSER") == "genui_migration", "migration_identity_required")
     require(env.get("PGDATABASE", "genui") == "genui", "database_refused")
     require(env.get("PGSSLMODE", "verify-full") == "verify-full", "tls_mode_refused")
-    require(bool(env.get("PGSSLROOTCERT")), "ca_required")
+    ca = env.get("PGSSLROOTCERT", "")
+    require(bool(ca), "ca_required")
+    # A CA file, never libpq's `system` (the OS trust store); in a managed task
+    # exactly the image's pinned RDS bundle.
+    require(ca != "system" and os.path.isabs(ca) and os.path.isfile(ca), "ca_refused")
+    require(not managed_task() or ca == PINNED_CA, "ca_refused")
     require(re.fullmatch(r"[1-9][0-9]{0,4}", env.get("PGPORT", "5432")) is not None, "port_refused")
     return host, int(env.get("PGPORT", "5432"))
 
@@ -259,7 +300,7 @@ def fixture_entry(entry, root=FIXTURES):
 
 
 def seeded_source(entry):
-    """The seeded revision this upload backs: ids, contract and placeholder digests."""
+    """The seeded source this upload adds a revision to: ids, contract and the placeholder revision."""
     import tenant_seed
     from validate import digest
     bundles = [b for b in tenant_seed.make_bundles()
@@ -306,6 +347,22 @@ def normalize(rows, scratch):
     return target.read_bytes(), duckdb.__version__, len(typed)
 
 
+def derived_revision_id(organization, content_digest):
+    """The upload's revision id: uuid5 over the organization id and the original's digest.
+
+    RFC 9562 name-based (SHA-1) with the organization id as namespace and the
+    `sha256:<hex>` content digest as name, then stamped version 4: the contract
+    (contracts/schema.json source_revision.revision_id) and the operator
+    channels accept only version 4 or 7 identifiers. Deterministic, so a rerun
+    targets the same keys, and one original has one revision per organization:
+    a different normalization of the same original meets the existing
+    part.parquet and refuses (existing_object_differs) instead of overwriting.
+    """
+    require(isinstance(organization, str) and UUID.fullmatch(organization) is not None
+            and isinstance(content_digest, str) and DIGEST.fullmatch(content_digest) is not None, "revision_refused")
+    return str(uuid.UUID(bytes=uuid.uuid5(uuid.UUID(organization), content_digest).bytes, version=4))
+
+
 def object_key(organization, source, revision, name):
     require(UUID.fullmatch(organization) and UUID.fullmatch(source) and UUID.fullmatch(revision) and name in OBJECT_NAMES, "key_refused")
     return "o/%s/s/%s/r/%s/%s" % (organization, source, revision, name)
@@ -332,17 +389,20 @@ def plan_sources(binding=None, fixtures=FIXTURES):
             selected = [row for row in rows if row["asset"] == entry["asset"]]
             require(selected, "asset_selection_empty")
             normalized, duckdb_version, row_count = normalize(selected, scratch)
+        # Review M2: never the seeded placeholder revision's immutable keys.
+        revision = derived_revision_id(entry["organization_id"], sha256(original))
+        require(revision != source["revision_id"], "placeholder_revision_refused")
         objects = []
         for name, data in (("original", original), ("part.parquet", normalized)):
-            objects.append({"name": name, "key": object_key(entry["organization_id"], source["source_id"], source["revision_id"], name),
+            objects.append({"name": name, "key": object_key(entry["organization_id"], source["source_id"], revision, name),
                             "sha256": sha256(data), "bytes": len(data), "content_type": CONTENT_TYPES[name], "data": data})
         plans.append({
-            "organization_id": entry["organization_id"], "source_id": source["source_id"], "revision_id": source["revision_id"],
+            "organization_id": entry["organization_id"], "source_id": source["source_id"], "revision_id": revision,
             "input_id": entry["input_id"], "contract_id": source["input_contract"]["contract_id"],
             "content_digest": sha256(original), "normalized_digest": sha256(normalized), "contract_digest": contract_digest,
             "row_count": row_count, "parsed_rows": len(rows), "selected_asset": entry["asset"],
-            "seeded_placeholders": {"content_digest": source["content_digest"], "normalized_digest": source["normalized_digest"],
-                                    "row_count": source["row_count"]},
+            "seeded_placeholder_not_written": {"revision_id": source["revision_id"], "content_digest": source["content_digest"],
+                                               "normalized_digest": source["normalized_digest"], "row_count": source["row_count"]},
             "adapter": {"path": "parser-host + WASM guest -> fixtures/qualify.py parser_rows -> asset selection -> DuckDB Parquet ZSTD",
                         "parser_guest_sha256": binding.guest_sha256, "parser_host_sha256": binding.host_sha256,
                         "parser_manifest_sha256": binding.manifest_sha256, "duckdb_version": duckdb_version,
@@ -433,18 +493,48 @@ def s3_client():
         request_checksum_calculation="when_required", response_checksum_validation="when_required"))
 
 
+def registration(plan, objects):
+    """APP-012's register-source-revision input: exactly REGISTRATION_FIELDS.
+
+    `object_digest` is the SHA-256 of the stored part.parquet object, which
+    D7.10 verifies on fetch; under ADR-009 D9.3 (option a) it equals
+    `normalized_digest`, and both are checked equal here.
+    """
+    stored = {item["name"]: item["sha256"] for item in objects}
+    require(stored.get("original") == plan["content_digest"] and stored.get("part.parquet") == plan["normalized_digest"],
+            "registration_refused")
+    record = dict(plan, object_digest=stored["part.parquet"])
+    return {name: record[name] for name in REGISTRATION_FIELDS}
+
+
 def upload_sources(args):
     if args.plan:
-        return {"command": "upload-sources", "plan": True, "sources": public(plan_sources())}
+        plans = plan_sources()
+        return {"command": "upload-sources", "plan": True, "sources": public(plans),
+                "registration": [registration(plan, plan["objects"]) for plan in plans]}
     bucket = os.environ.get("GENUI_EVIDENCE_BUCKET", "")
     require(BUCKET.fullmatch(bucket) is not None, "bucket_refused")
     tenants = load_tenants(os.environ.get("GENUI_OPERATOR_TENANTS_JSON"))
     client = s3_client()
-    return {"command": "upload-sources", "plan": False, "sources": upload(client, bucket, tenants, plan_sources())}
+    receipts = upload(client, bucket, tenants, plan_sources())
+    # The closed table has one source: one record, printed only after both objects are stored.
+    require(len(receipts) == 1, "sources_refused")
+    return registration(receipts[0], receipts[0]["objects"])
 
 
 def admission(rest):
+    """The same pre-connect checks as every database command (review m1), and no
+    secret-printing or key-holding subcommand inside a managed task (review M3)."""
     import admission_operator
+    try:
+        # admission_operator's own parser decides the subcommand; an argv it
+        # refuses never runs (it refuses again, before connecting).
+        command = admission_operator.parser().parse_args(rest).command
+    except admission_operator.Refused:
+        command = None
+    require(not (managed_task() and command in MANAGED_REFUSED), "refused_in_managed_task")
+    if command not in (None, "defaults"):
+        database_environment()
     return admission_operator.main(rest)
 
 

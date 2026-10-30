@@ -1,28 +1,35 @@
 {
   "cleanup": {
-    "genui-app077-check-53a6481ce1-db-admission-backfill-canary": true,
-    "genui-app077-check-53a6481ce1-db-admission-backfill-northstar": true,
-    "genui-app077-check-53a6481ce1-db-admission-list-northstar": true,
-    "genui-app077-check-53a6481ce1-db-admission-verify-northstar": true,
-    "genui-app077-check-53a6481ce1-db-default-command": true,
-    "genui-app077-check-53a6481ce1-db-migrate": true,
-    "genui-app077-check-53a6481ce1-db-migrate-repeat": true,
-    "genui-app077-check-53a6481ce1-db-seed": true,
-    "genui-app077-check-53a6481ce1-db-seed-repeat": true,
-    "genui-app077-check-53a6481ce1-db-verify-catalog": true,
-    "genui-app077-check-53a6481ce1-db-verify-catalog-before": true,
-    "genui-app077-check-53a6481ce1-net": true,
-    "genui-app077-check-53a6481ce1-overrides": true,
-    "genui-app077-check-53a6481ce1-postgres": true,
-    "genui-app077-check-53a6481ce1-probe": true,
-    "genui-app077-check-53a6481ce1-refuse-admission-unknown": true,
-    "genui-app077-check-53a6481ce1-refuse-application-identity": true,
-    "genui-app077-check-53a6481ce1-refuse-endpoint-override": true,
-    "genui-app077-check-53a6481ce1-refuse-generic-sql": true,
-    "genui-app077-check-53a6481ce1-refuse-no-arguments": true,
-    "genui-app077-check-53a6481ce1-refuse-service-mode": true,
-    "genui-app077-check-53a6481ce1-refuse-socket-host": true,
-    "genui-app077-check-53a6481ce1-upload": true
+    "genui-app077-check-8bc229fc97-db-admission-backfill-canary": true,
+    "genui-app077-check-8bc229fc97-db-admission-backfill-northstar": true,
+    "genui-app077-check-8bc229fc97-db-admission-list-northstar": true,
+    "genui-app077-check-8bc229fc97-db-admission-verify-northstar": true,
+    "genui-app077-check-8bc229fc97-db-default-command": true,
+    "genui-app077-check-8bc229fc97-db-migrate": true,
+    "genui-app077-check-8bc229fc97-db-migrate-repeat": true,
+    "genui-app077-check-8bc229fc97-db-seed": true,
+    "genui-app077-check-8bc229fc97-db-seed-repeat": true,
+    "genui-app077-check-8bc229fc97-db-verify-catalog": true,
+    "genui-app077-check-8bc229fc97-db-verify-catalog-before": true,
+    "genui-app077-check-8bc229fc97-net": true,
+    "genui-app077-check-8bc229fc97-overrides": true,
+    "genui-app077-check-8bc229fc97-postgres": true,
+    "genui-app077-check-8bc229fc97-probe": true,
+    "genui-app077-check-8bc229fc97-refuse-abstract-socket-host": true,
+    "genui-app077-check-8bc229fc97-refuse-admission-identity": true,
+    "genui-app077-check-8bc229fc97-refuse-admission-unknown": true,
+    "genui-app077-check-8bc229fc97-refuse-application-identity": true,
+    "genui-app077-check-8bc229fc97-refuse-endpoint-override": true,
+    "genui-app077-check-8bc229fc97-refuse-generic-sql": true,
+    "genui-app077-check-8bc229fc97-refuse-host-list": true,
+    "genui-app077-check-8bc229fc97-refuse-managed-issue": true,
+    "genui-app077-check-8bc229fc97-refuse-managed-reconcile": true,
+    "genui-app077-check-8bc229fc97-refuse-managed-unpinned-ca": true,
+    "genui-app077-check-8bc229fc97-refuse-no-arguments": true,
+    "genui-app077-check-8bc229fc97-refuse-service-mode": true,
+    "genui-app077-check-8bc229fc97-refuse-socket-host": true,
+    "genui-app077-check-8bc229fc97-refuse-system-trust-store": true,
+    "genui-app077-check-8bc229fc97-upload": true
   },
   "cleanup_complete": true,
   "database_sequence": [
@@ -32,7 +39,7 @@
       ],
       "exit_code": 1,
       "output": null,
-      "seconds": 0.39,
+      "seconds": 0.45,
       "stderr": [
         "{\"refused\": \"catalog_refused\"}"
       ],
@@ -64,12 +71,12 @@
             "version": 4
           },
           {
-            "sha256": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+            "sha256": "78d837a2968a661253f5fa9ddaab1502fc17a4e84aac979d5acf6e6c969de06e",
             "version": 5
           }
         ]
       },
-      "seconds": 0.55,
+      "seconds": 0.53,
       "stderr": [],
       "step": "migrate"
     },
@@ -99,7 +106,7 @@
             "version": 4
           },
           {
-            "sha256": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+            "sha256": "78d837a2968a661253f5fa9ddaab1502fc17a4e84aac979d5acf6e6c969de06e",
             "version": 5
           }
         ]
@@ -118,7 +125,7 @@
         "command": "verify-catalog",
         "read_only": true
       },
-      "seconds": 0.4,
+      "seconds": 0.38,
       "stderr": [],
       "step": "verify-catalog"
     },
@@ -150,7 +157,7 @@
           "00000000-0000-4000-8000-000000000002"
         ]
       },
-      "seconds": 0.67,
+      "seconds": 0.62,
       "stderr": [],
       "step": "seed"
     },
@@ -182,7 +189,7 @@
           "00000000-0000-4000-8000-000000000002"
         ]
       },
-      "seconds": 0.62,
+      "seconds": 0.6,
       "stderr": [],
       "step": "seed-repeat"
     },
@@ -208,7 +215,7 @@
         "existing": [],
         "organization_id": "00000000-0000-4000-8000-000000000001"
       },
-      "seconds": 0.4,
+      "seconds": 0.39,
       "stderr": [],
       "step": "admission-backfill-northstar"
     },
@@ -234,7 +241,7 @@
         "existing": [],
         "organization_id": "00000000-0000-4000-8000-000000000002"
       },
-      "seconds": 0.41,
+      "seconds": 0.38,
       "stderr": [],
       "step": "admission-backfill-canary"
     },
@@ -272,7 +279,7 @@
         "organization_id": "00000000-0000-4000-8000-000000000001",
         "verified": true
       },
-      "seconds": 0.42,
+      "seconds": 0.43,
       "stderr": [],
       "step": "admission-verify-northstar"
     },
@@ -289,7 +296,7 @@
         "organization_id": "00000000-0000-4000-8000-000000000001",
         "truncated": false
       },
-      "seconds": 0.42,
+      "seconds": 0.6,
       "stderr": [],
       "step": "admission-list-northstar"
     },
@@ -301,7 +308,7 @@
         "command": "verify-catalog",
         "read_only": true
       },
-      "seconds": 0.41,
+      "seconds": 0.42,
       "stderr": [],
       "step": "default-command"
     }
@@ -487,7 +494,7 @@
       "met": true
     },
     {
-      "detail": 206,
+      "detail": 282,
       "expectation": "every documented override fits 8,192 bytes",
       "met": true
     },
@@ -526,6 +533,57 @@
     },
     {
       "expectation": "refusal endpoint-override exits 1 with aws_override_refused and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal abstract-socket-host exits 1 with socket_host_refused and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal host-list exits 1 with host_refused and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal system-trust-store exits 1 with ca_refused and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal admission-identity exits 1 with migration_identity_required and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal managed-issue exits 1 with refused_in_managed_task and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal managed-reconcile exits 1 with refused_in_managed_task and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal managed-unpinned-ca exits 1 with ca_refused and prints nothing else",
+      "met": true
+    },
+    {
+      "detail": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45",
+      "expectation": "upload-sources writes a new revision derived from the original, never the seeded placeholder revision (review M2)",
+      "met": true
+    },
+    {
+      "detail": {
+        "content_digest": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+        "contract_digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64",
+        "normalized_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+        "object_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+        "organization_id": "00000000-0000-4000-8000-000000000001",
+        "revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45",
+        "row_count": 6,
+        "source_id": "00000000-0000-4000-8000-00000000006e"
+      },
+      "expectation": "upload-sources prints exactly the registration record for register-source-revision",
+      "met": true
+    },
+    {
+      "expectation": "a rerun without kms:Decrypt on the tenant key refuses (review M1: checksum-mode HeadObject of SSE-KMS)",
       "met": true
     },
     {
@@ -676,31 +734,31 @@
       "met": true
     }
   ],
-  "image": "genui-app077-operator:1c581f2",
+  "image": "genui-app077-fix:293528b",
   "image_files": {
     "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
     "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
     "app/migrations/0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
     "app/migrations/0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
-    "app/migrations/0005_definition_work_grants.sql": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+    "app/migrations/0005_definition_work_grants.sql": "78d837a2968a661253f5fa9ddaab1502fc17a4e84aac979d5acf6e6c969de06e",
     "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
     "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
     "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
     "app/migrations/catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
     "app/migrations/catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
-    "app/migrations/catalog-v5.json": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
-    "app/migrations/manifest.json": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
-    "app/operator/operator.py": "97de5f3be1654b9f91b48a2aebeab3dc3ffc19113aa503d39cd0c78fcffebc78",
-    "app/operator/overrides.json": "b71ccda7ea97fbc660f812169e593e74a20fcca8a03ea39e6ec2542454b2ac49",
+    "app/migrations/catalog-v5.json": "66112bd02c1cf3e04753c8fe38d7baa261ecae91f35f5254d58c8d61d6987804",
+    "app/migrations/manifest.json": "7857f4bbab7cd96572586aa7bf510f794d088a80e4b8604074c0b2d9821ec6bf",
+    "app/operator/operator.py": "01c80c187faf607991127afee2b189b0223e31e517663eef6047cba5b59a613c",
+    "app/operator/overrides.json": "9b779da4beef4c595811ca87fb54651a796fe9c4b6e89c58023c156c0dd3d0d6",
     "app/operator/requirements.lock": "72a22a15b6deaa312b2a6f4b98db686bae08731e01bc13fa32a0a0b7385c357a",
-    "app/runtime/admission_operator.py": "aa76c5de301bd6ce1a179c73008e54bcba91845601397b24d4d9a0c5e84bbaf8",
+    "app/runtime/admission_operator.py": "8e4b0299bbb54afff6d69d84328f1549afd6691fcc99865a562aea3af6411cea",
     "app/runtime/provider_management.py": "7c06821a7723b0bd7ca71a1e883e1e7dac0aac689055e6b1c471efdd515c11c0",
     "app/runtime/runtime.py": "689462bf2abc4b81d0603677ec0a1940f75e81be85a6bfa9bec3115020602e04",
-    "app/runtime/tenant_seed.py": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
+    "app/runtime/tenant_seed.py": "73bd6b2d16c636fc3e2a8f91b71507d42aa737823084c7f6a2fe3570ee65fc2e",
     "bin/parser-host": "44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934",
     "bin/parser-manifest.json": "9cd03be78b42f7e1e99020f8765c973e8f5cf7f81a47ed52b8058fc68c4a8a13",
     "bin/parser_guest.wasm": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
-    "build-identity.json": "0a8ef8dff380079297415302c317d85da185b77fcfbe5d05eb501a4b506e0f19",
+    "build-identity.json": "c968a8595e3bac932bf8cd14bafac2205efb496de613e349b7a4c6dcb20a67b0",
     "contracts/fixtures/impl-2026-10-28.1/northstar.json": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
     "contracts/fixtures/impl-2026-10-28.1/spend-review.json": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
     "contracts/schema.json": "93fac1752605c99e85dec50ed8317d8451553d2bf7a9f7ae2b718b6542852e58",
@@ -718,6 +776,7 @@
     "entrypoint": [
       "python3",
       "-I",
+      "-u",
       "/operator/app/operator/operator.py"
     ],
     "env_names": [
@@ -733,15 +792,15 @@
       "TMPDIR"
     ],
     "exposed_ports": [],
-    "id": "sha256:a3b07f930744fdd470e2c2012fa6bee75c6f594038f7d01c59d175aa3990d41b",
+    "id": "sha256:16398054e2c08f46b032753eb09fb01a6e95b2e31cbd596959385fecebc97198",
     "os": "linux",
-    "size": 438200398,
+    "size": 438225947,
     "user": "65532:65532",
     "volumes": [
       "/run/operator"
     ]
   },
-  "label": "genui-app077-check-53a6481ce1",
+  "label": "genui-app077-check-8bc229fc97",
   "operator_context": {
     "count": 132,
     "files": {
@@ -750,23 +809,23 @@
       "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
       "app/migrations/0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
       "app/migrations/0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
-      "app/migrations/0005_definition_work_grants.sql": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+      "app/migrations/0005_definition_work_grants.sql": "78d837a2968a661253f5fa9ddaab1502fc17a4e84aac979d5acf6e6c969de06e",
       "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
       "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
       "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
       "app/migrations/catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
       "app/migrations/catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
-      "app/migrations/catalog-v5.json": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
-      "app/migrations/manifest.json": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
-      "app/operator/Dockerfile": "e0dda83715a51edf335df7e6972901c7f0461864d855216b310bb12b4a32cbd2",
+      "app/migrations/catalog-v5.json": "66112bd02c1cf3e04753c8fe38d7baa261ecae91f35f5254d58c8d61d6987804",
+      "app/migrations/manifest.json": "7857f4bbab7cd96572586aa7bf510f794d088a80e4b8604074c0b2d9821ec6bf",
+      "app/operator/Dockerfile": "eb133b55fa2614f768ed30b86ac8569943d1674be7483652e3f797d174c09051",
       "app/operator/Dockerfile.dockerignore": "05cfbf14778553496bb246b7e223c09c5c35165acd663e536b257dda526ee945",
-      "app/operator/operator.py": "97de5f3be1654b9f91b48a2aebeab3dc3ffc19113aa503d39cd0c78fcffebc78",
-      "app/operator/overrides.json": "b71ccda7ea97fbc660f812169e593e74a20fcca8a03ea39e6ec2542454b2ac49",
+      "app/operator/operator.py": "01c80c187faf607991127afee2b189b0223e31e517663eef6047cba5b59a613c",
+      "app/operator/overrides.json": "9b779da4beef4c595811ca87fb54651a796fe9c4b6e89c58023c156c0dd3d0d6",
       "app/operator/requirements.lock": "72a22a15b6deaa312b2a6f4b98db686bae08731e01bc13fa32a0a0b7385c357a",
-      "app/runtime/admission_operator.py": "aa76c5de301bd6ce1a179c73008e54bcba91845601397b24d4d9a0c5e84bbaf8",
+      "app/runtime/admission_operator.py": "8e4b0299bbb54afff6d69d84328f1549afd6691fcc99865a562aea3af6411cea",
       "app/runtime/provider_management.py": "7c06821a7723b0bd7ca71a1e883e1e7dac0aac689055e6b1c471efdd515c11c0",
       "app/runtime/runtime.py": "689462bf2abc4b81d0603677ec0a1940f75e81be85a6bfa9bec3115020602e04",
-      "app/runtime/tenant_seed.py": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
+      "app/runtime/tenant_seed.py": "73bd6b2d16c636fc3e2a8f91b71507d42aa737823084c7f6a2fe3570ee65fc2e",
       "contracts/fixtures/impl-2026-10-28.1/northstar.json": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
       "contracts/fixtures/impl-2026-10-28.1/spend-review.json": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
       "contracts/schema.json": "93fac1752605c99e85dec50ed8317d8451553d2bf7a9f7ae2b718b6542852e58",
@@ -882,9 +941,17 @@
   "override_bytes": {
     "admission-backfill-canary": 135,
     "admission-backfill-northstar": 135,
+    "admission-create-app": 282,
+    "admission-defaults": 79,
     "admission-extend": 206,
+    "admission-grant-permission": 276,
     "admission-list-northstar": 131,
+    "admission-provision": 260,
     "admission-revoke": 184,
+    "admission-revoke-creator-authority": 246,
+    "admission-revoke-entitlement": 198,
+    "admission-revoke-membership": 197,
+    "admission-revoke-permission": 277,
     "admission-verify-canary": 133,
     "admission-verify-northstar": 133,
     "migrate": 66,
@@ -896,15 +963,19 @@
   "overrides_in_image": {
     "admission_subcommands": [
       "backfill",
+      "create-app",
       "defaults",
       "extend",
+      "grant-permission",
       "issue",
       "list",
       "provision",
       "reconcile",
       "revoke",
+      "revoke-creator-authority",
       "revoke-entitlement",
       "revoke-membership",
+      "revoke-permission",
       "verify"
     ],
     "parsed": [
@@ -955,6 +1026,38 @@
       {
         "command": "admission",
         "name": "admission-extend"
+      },
+      {
+        "command": "admission",
+        "name": "admission-defaults"
+      },
+      {
+        "command": "admission",
+        "name": "admission-provision"
+      },
+      {
+        "command": "admission",
+        "name": "admission-create-app"
+      },
+      {
+        "command": "admission",
+        "name": "admission-grant-permission"
+      },
+      {
+        "command": "admission",
+        "name": "admission-revoke-permission"
+      },
+      {
+        "command": "admission",
+        "name": "admission-revoke-creator-authority"
+      },
+      {
+        "command": "admission",
+        "name": "admission-revoke-membership"
+      },
+      {
+        "command": "admission",
+        "name": "admission-revoke-entitlement"
       }
     ]
   },
@@ -981,21 +1084,21 @@
         "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
         "app/migrations/0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
         "app/migrations/0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
-        "app/migrations/0005_definition_work_grants.sql": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+        "app/migrations/0005_definition_work_grants.sql": "78d837a2968a661253f5fa9ddaab1502fc17a4e84aac979d5acf6e6c969de06e",
         "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
         "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
         "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
         "app/migrations/catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
         "app/migrations/catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
-        "app/migrations/catalog-v5.json": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
-        "app/migrations/manifest.json": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
-        "app/operator/operator.py": "97de5f3be1654b9f91b48a2aebeab3dc3ffc19113aa503d39cd0c78fcffebc78",
-        "app/operator/overrides.json": "b71ccda7ea97fbc660f812169e593e74a20fcca8a03ea39e6ec2542454b2ac49",
+        "app/migrations/catalog-v5.json": "66112bd02c1cf3e04753c8fe38d7baa261ecae91f35f5254d58c8d61d6987804",
+        "app/migrations/manifest.json": "7857f4bbab7cd96572586aa7bf510f794d088a80e4b8604074c0b2d9821ec6bf",
+        "app/operator/operator.py": "01c80c187faf607991127afee2b189b0223e31e517663eef6047cba5b59a613c",
+        "app/operator/overrides.json": "9b779da4beef4c595811ca87fb54651a796fe9c4b6e89c58023c156c0dd3d0d6",
         "app/operator/requirements.lock": "72a22a15b6deaa312b2a6f4b98db686bae08731e01bc13fa32a0a0b7385c357a",
-        "app/runtime/admission_operator.py": "aa76c5de301bd6ce1a179c73008e54bcba91845601397b24d4d9a0c5e84bbaf8",
+        "app/runtime/admission_operator.py": "8e4b0299bbb54afff6d69d84328f1549afd6691fcc99865a562aea3af6411cea",
         "app/runtime/provider_management.py": "7c06821a7723b0bd7ca71a1e883e1e7dac0aac689055e6b1c471efdd515c11c0",
         "app/runtime/runtime.py": "689462bf2abc4b81d0603677ec0a1940f75e81be85a6bfa9bec3115020602e04",
-        "app/runtime/tenant_seed.py": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
+        "app/runtime/tenant_seed.py": "73bd6b2d16c636fc3e2a8f91b71507d42aa737823084c7f6a2fe3570ee65fc2e",
         "bin/parser-host": "44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934",
         "bin/parser-manifest.json": "9cd03be78b42f7e1e99020f8765c973e8f5cf7f81a47ed52b8058fc68c4a8a13",
         "bin/parser_guest.wasm": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
@@ -1065,10 +1168,10 @@
     "setid_files": []
   },
   "qualification_context": {
-    "base_revision": "d6986c2",
+    "base_revision": "e7c7421",
     "count": 50
   },
-  "recorded_at": "2026-10-29T23:59:27.742536+00:00",
+  "recorded_at": "2026-10-30T00:35:18.642728+00:00",
   "refusals": [
     {
       "case": "no-arguments",
@@ -1104,19 +1207,55 @@
       "case": "endpoint-override",
       "exit_code": 1,
       "refused": "aws_override_refused"
+    },
+    {
+      "case": "abstract-socket-host",
+      "exit_code": 1,
+      "refused": "socket_host_refused"
+    },
+    {
+      "case": "host-list",
+      "exit_code": 1,
+      "refused": "host_refused"
+    },
+    {
+      "case": "system-trust-store",
+      "exit_code": 1,
+      "refused": "ca_refused"
+    },
+    {
+      "case": "admission-identity",
+      "exit_code": 1,
+      "refused": "migration_identity_required"
+    },
+    {
+      "case": "managed-issue",
+      "exit_code": 1,
+      "refused": "refused_in_managed_task"
+    },
+    {
+      "case": "managed-reconcile",
+      "exit_code": 1,
+      "refused": "refused_in_managed_task"
+    },
+    {
+      "case": "managed-unpinned-ca",
+      "exit_code": 1,
+      "refused": "ca_refused"
     }
   ],
   "scope": "APP-077 local confined operator-image checks; no AWS/RDS/registry",
   "service_context": {
-    "base_revision": "d6986c2",
+    "base_revision": "e7c7421",
     "count": 155
   },
   "timings_seconds": {
-    "contexts": 4.42,
-    "database": 7.4,
-    "upload": 2.14
+    "contexts": 3.94,
+    "database": 6.95,
+    "upload": 2.76
   },
   "upload_in_image": {
+    "derived_revision": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45",
     "parquet": {
       "columns": [
         "time",
@@ -1148,25 +1287,26 @@
           {
             "bytes": 397,
             "content_type": "text/csv",
-            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/original",
+            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/original",
             "name": "original",
             "sha256": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647"
           },
           {
             "bytes": 642,
             "content_type": "application/vnd.apache.parquet",
-            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/part.parquet",
+            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/part.parquet",
             "name": "part.parquet",
             "sha256": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082"
           }
         ],
         "organization_id": "00000000-0000-4000-8000-000000000001",
         "parsed_rows": 6,
-        "revision_id": "00000000-0000-4000-8000-00000000006f",
+        "revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45",
         "row_count": 6,
-        "seeded_placeholders": {
+        "seeded_placeholder_not_written": {
           "content_digest": "sha256:f85bf298e932bbd0636a7f24b4c92a4cb1fa17e7402af5458b434e045fbe7371",
           "normalized_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+          "revision_id": "00000000-0000-4000-8000-00000000006f",
           "row_count": 5
         },
         "selected_asset": "build-worker-17",
@@ -1177,7 +1317,7 @@
       {
         "checksum_matches": true,
         "conditional": true,
-        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/original",
+        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/original",
         "kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
         "signed": true,
         "sse": "aws:kms"
@@ -1185,7 +1325,7 @@
       {
         "checksum_matches": true,
         "conditional": true,
-        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/part.parquet",
+        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/part.parquet",
         "kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
         "signed": true,
         "sse": "aws:kms"
@@ -1210,43 +1350,54 @@
         "objects": [
           {
             "bytes": 397,
-            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/original",
+            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/original",
             "kms_key_arn": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
             "name": "original",
             "server_side_encryption": "aws:kms",
             "sha256": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
             "state": "created",
-            "version_id": "a4814816e65749d59696c5fc3882eac3"
+            "version_id": "b9177379060d40d18f98bf19d53c0024"
           },
           {
             "bytes": 642,
-            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/part.parquet",
+            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/part.parquet",
             "kms_key_arn": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
             "name": "part.parquet",
             "server_side_encryption": "aws:kms",
             "sha256": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
             "state": "created",
-            "version_id": "4e091c1326dd490fb30d2add23f6757a"
+            "version_id": "81870a54456b46ef8d254a33ae096c16"
           }
         ],
         "organization_id": "00000000-0000-4000-8000-000000000001",
         "parsed_rows": 6,
-        "revision_id": "00000000-0000-4000-8000-00000000006f",
+        "revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45",
         "row_count": 6,
-        "seeded_placeholders": {
+        "seeded_placeholder_not_written": {
           "content_digest": "sha256:f85bf298e932bbd0636a7f24b4c92a4cb1fa17e7402af5458b434e045fbe7371",
           "normalized_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+          "revision_id": "00000000-0000-4000-8000-00000000006f",
           "row_count": 5
         },
         "selected_asset": "build-worker-17",
         "source_id": "00000000-0000-4000-8000-00000000006e"
       }
     ],
+    "registration": {
+      "content_digest": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+      "contract_digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64",
+      "normalized_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+      "object_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45",
+      "row_count": 6,
+      "source_id": "00000000-0000-4000-8000-00000000006e"
+    },
     "rerun_puts": [
       {
         "checksum_matches": true,
         "conditional": true,
-        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/original",
+        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/original",
         "kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
         "signed": true,
         "sse": "aws:kms"
@@ -1254,7 +1405,7 @@
       {
         "checksum_matches": true,
         "conditional": true,
-        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/part.parquet",
+        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/part.parquet",
         "kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
         "signed": true,
         "sse": "aws:kms"
@@ -1264,13 +1415,14 @@
       "unchanged",
       "unchanged"
     ],
+    "rerun_without_decrypt": "object_write_refused",
     "stored_digests": [
       "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
       "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082"
     ],
     "stored_versions": {
-      "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/original": 1,
-      "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/part.parquet": 1
+      "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/original": 1,
+      "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/part.parquet": 1
     }
   }
 }

@@ -1,27 +1,163 @@
+
+> test
+> tsx --test test/*.test.ts
+
+TAP version 13
+# Subtest: deployment preflight refuses stale/over-budget windows and durably preserves reservations
 ok 1 - deployment preflight refuses stale/over-budget windows and durably preserves reservations
+  ---
+  duration_ms: 458.748375
+  type: 'test'
+  ...
+# Subtest: runtime negative runner preserves isolation, refusal and cleanup boundaries locally
 ok 2 - runtime negative runner preserves isolation, refusal and cleanup boundaries locally
+  ---
+  duration_ms: 4010.706958
+  type: 'test'
+  ...
+# test/security.test.ts:8:37
+# WARNING Parameters/QualificationConfigSecretArn: Parameter 'QualificationConfigSecretArn' appears to be a password but does not have NoEcho set to true (CloudFormation Validate)
+#    SecurityQualification aws-cdk-lib.Stack
+#    Acknowledge with 'CloudFormation-Validate::W2509'
+# A copy of this report can be found in: /private/var/folders/rh/_w3bj3lx0fg0z2vvj9wkbvmr0000gn/T/cdk.outPw35Sp/validation-report.json
+# Subtest: managed data stays private, encrypted, retained and versioned
 ok 3 - managed data stays private, encrypted, retained and versioned
+  ---
+  duration_ms: 4.763667
+  type: 'test'
+  ...
+# Subtest: only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact
 ok 4 - only HTTPS switches public/operator; ALB-to-task and private database boundaries stay exact
+  ---
+  duration_ms: 0.931833
+  type: 'test'
+  ...
+# Subtest: operator and certificate are required; broad/private/placeholder networks fail
 ok 5 - operator and certificate are required; broad/private/placeholder networks fail
+  ---
+  duration_ms: 0.641584
+  type: 'test'
+  ...
+# Subtest: expiry is one UTC execution that can update only this service in this cluster
 ok 6 - expiry is one UTC execution that can update only this service in this cluster
+  ---
+  duration_ms: 0.794917
+  type: 'test'
+  ...
+# Subtest: expiry schedule ARN output uses the actual group and schedule names without GetAtt
 ok 7 - expiry schedule ARN output uses the actual group and schedule names without GetAtt
+  ---
+  duration_ms: 0.140709
+  type: 'test'
+  ...
+# Subtest: digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints
 ok 8 - digest-pinned Fargate service has HTTPS and no default live task, exec, NAT or endpoints
+  ---
+  duration_ms: 1.990166
+  type: 'test'
+  ...
+# Subtest: task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it
 ok 9 - task identity assumes exactly four DB roles and two tenant roles; trusts bind back to it
+  ---
+  duration_ms: 0.606875
+  type: 'test'
+  ...
+# Subtest: each DB identity connects only as its fixed username on this database
 ok 10 - each DB identity connects only as its fixed username on this database
+  ---
+  duration_ms: 0.298791
+  type: 'test'
+  ...
+# Subtest: tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required
 ok 11 - tenant roles isolate object prefixes and keys; both explicit matching KMS headers are required
+  ---
+  duration_ms: 0.522167
+  type: 'test'
+  ...
+# Subtest: execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants
 ok 12 - execution roles pull exactly the selected ECR repository; no exec, pass-role or broad data grants
+  ---
+  duration_ms: 0.937375
+  type: 'test'
+  ...
+# Subtest: only migration execution role receives admin secret; migration has no tenant AWS authority
 ok 13 - only migration execution role receives admin secret; migration has no tenant AWS authority
+  ---
+  duration_ms: 0.241708
+  type: 'test'
+  ...
+# Subtest: app environment contains identities only and one private ephemeral credential mount
 ok 14 - app environment contains identities only and one private ephemeral credential mount
+  ---
+  duration_ms: 0.290709
+  type: 'test'
+  ...
+# Subtest: qualification secret parameter accepts only empty or the exact rehearsal account/region/name scope
 ok 15 - qualification secret parameter accepts only empty or the exact rehearsal account/region/name scope
+  ---
+  duration_ms: 0.153958
+  type: 'test'
+  ...
+# Subtest: qualification is disabled by default without an app secret or a live optional read policy
 ok 16 - qualification is disabled by default without an app secret or a live optional read policy
+  ---
+  duration_ms: 0.603041
+  type: 'test'
+  ...
+# Subtest: enabled qualification injects the whole exact secret only into the app through its execution role
 ok 17 - enabled qualification injects the whole exact secret only into the app through its execution role
+  ---
+  duration_ms: 0.31725
+  type: 'test'
+  ...
+# Subtest: qualification image parameter accepts only empty or a reviewed digest
 ok 18 - qualification image parameter accepts only empty or a reviewed digest
+  ---
+  duration_ms: 0.460333
+  type: 'test'
+  ...
+# Subtest: qualification task is absent by default; when supplied it is a count-zero standalone task on the runtime role only
 ok 19 - qualification task is absent by default; when supplied it is a count-zero standalone task on the runtime role only
+  ---
+  duration_ms: 1.3905
+  type: 'test'
+  ...
+# Subtest: operator image parameter accepts only empty or a reviewed digest
 ok 20 - operator image parameter accepts only empty or a reviewed digest
+  ---
+  duration_ms: 0.114209
+  type: 'test'
+  ...
+# Subtest: operator task is absent by default; when supplied it is a count-zero standalone task with the migration channel only
 ok 21 - operator task is absent by default; when supplied it is a count-zero standalone task with the migration channel only
+  ---
+  duration_ms: 1.152667
+  type: 'test'
+  ...
+# Subtest: operator task role holds no role assumption and reaches only B1 source objects under each tenant key
 ok 22 - operator task role holds no role assumption and reaches only B1 source objects under each tenant key
+  ---
+  duration_ms: 0.469209
+  type: 'test'
+  ...
+# Subtest: documented operator overrides fit the 8,192-byte ECS limit and match the task entry point
 ok 23 - documented operator overrides fit the 8,192-byte ECS limit and match the task entry point
+  ---
+  duration_ms: 0.276917
+  type: 'test'
+  ...
+# Subtest: the service, migration and qualification task definitions do not reference the operator
 ok 24 - the service, migration and qualification task definitions do not reference the operator
+  ---
+  duration_ms: 0.14375
+  type: 'test'
+  ...
+1..24
 # tests 24
+# suites 0
 # pass 24
 # fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4162.209334

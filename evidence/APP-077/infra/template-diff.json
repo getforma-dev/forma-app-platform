@@ -1,14 +1,6 @@
 {
-  "added_output_conditions": {
-    "OperatorTaskDefinition": "OperatorTaskEnabled",
-    "OperatorTaskRoleArn": "OperatorTaskEnabled"
-  },
-  "added_resource_conditions": {
-    "OperatorImagePull": "OperatorTaskEnabled",
-    "OperatorRole6A7B6B68": "OperatorTaskEnabled",
-    "OperatorRoleDefaultPolicyA061B00C": "OperatorTaskEnabled",
-    "OperatorTask534EBA45": "OperatorTaskEnabled"
-  },
+  "added_output_conditions": {},
+  "added_resource_conditions": {},
   "named_existing_resources": {
     "MigrationExecutionRoleB6B10AD3": {
       "base": "sha256:f6ed069e914ac4eb6183b1984466f3ae47d225c322a1737fffe1a81aed857f79",
@@ -67,47 +59,38 @@
       "new": "sha256:d446256d4f82f7726dbe2d07426d743988a287d51f362895fa018bee865dd8bb"
     }
   },
-  "scope": "APP-077 CDK template comparison: GenuiFoundation('SecurityQualification') synthesized at d6986c2 (base) and at the APP-077 commit (new), same aws-cdk-lib 2.275.0; no cloud call",
+  "scope": "APP-077 CDK template comparison: GenuiFoundation('SecurityQualification') synthesized at e7c7421 (base) and at 293528b (new), same aws-cdk-lib 2.275.0; no cloud call",
   "sections": {
     "Conditions": {
-      "added": [
-        "OperatorTaskEnabled"
-      ],
+      "added": [],
       "changed": [],
       "removed": [],
-      "unchanged_count": 3,
-      "unchanged_digest": "sha256:4373b9737226246cd83cf1449ed71002fcfd46e40d816fb4408938944ee6f5f8"
+      "unchanged_count": 4,
+      "unchanged_digest": "sha256:b9410ca216c72a3156c96a39a43067b070060c57c6359639fc4623e3d2838491"
     },
     "Outputs": {
-      "added": [
-        "OperatorTaskDefinition",
-        "OperatorTaskRoleArn"
-      ],
+      "added": [],
       "changed": [],
       "removed": [],
-      "unchanged_count": 19,
-      "unchanged_digest": "sha256:d22d80edd56b2806f880cadaa9e5088438ee98567d169f483eb63c9bc6a3f29a"
+      "unchanged_count": 21,
+      "unchanged_digest": "sha256:e8438a6e2cb265ee27f5ecbca9bc56b878438b8e9b23fe66261eb5562d7ed141"
     },
     "Parameters": {
-      "added": [
-        "OperatorImageDigest"
-      ],
+      "added": [],
       "changed": [],
       "removed": [],
-      "unchanged_count": 12,
-      "unchanged_digest": "sha256:fb9c3a2b1db4085ed7d0814faf3cc80c1bd851accdf986c98abe62cf1b4a4a79"
+      "unchanged_count": 13,
+      "unchanged_digest": "sha256:fce3edd237d11f6d6d6d6670f064e684341ca8df6fa8ee23d5cf74dc62ce6ef7"
     },
     "Resources": {
-      "added": [
-        "OperatorImagePull",
-        "OperatorRole6A7B6B68",
+      "added": [],
+      "changed": [
         "OperatorRoleDefaultPolicyA061B00C",
         "OperatorTask534EBA45"
       ],
-      "changed": [],
       "removed": [],
-      "unchanged_count": 68,
-      "unchanged_digest": "sha256:00d7df48249824081c42020aadfdae0a3d98a0cb4a7812bb33a3b17a28c25f0d"
+      "unchanged_count": 70,
+      "unchanged_digest": "sha256:c8ccad1a62e4d42ef5a7daae3298743039bcf33aa4993d6f41eb3865c45b05a5"
     }
   }
 }
