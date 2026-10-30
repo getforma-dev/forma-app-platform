@@ -13,7 +13,7 @@
 // sequence, version) is the record's own.
 import { postDraft, requestDecision, type Draft } from './actions';
 import { label } from './display';
-import { el } from './render';
+import { el, pulseTarget } from './render';
 
 export type RecordValueJson = { field_id: string; value: unknown; display: string };
 export type RecordJson = {
@@ -186,7 +186,7 @@ export async function refreshRecords(card: HTMLElement, live = false): Promise<v
   }
   renderRecords(card, listing);
   if (live) {
-    const item = card.closest<HTMLElement>('.cv-item') ?? card;
+    const item = pulseTarget(card);
     item.classList.remove('is-live-updated');
     void item.offsetWidth;
     item.classList.add('is-live-updated');

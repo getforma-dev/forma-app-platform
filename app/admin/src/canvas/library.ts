@@ -108,7 +108,11 @@ function buildAppRow(
       el(document_, 'span', { class: 'cv-lib-app-title' }, entry.title),
       ...(entry.slug ? [el(document_, 'code', { class: 'cv-lib-slug' }, `/${entry.slug}`)] : []),
       el(document_, 'span', { class: 'cv-lib-on', 'data-lib-on': '' })),
-    ...(entry.widget ? [] : [el(document_, 'button', { type: 'button', class: 'cv-lib-stack', 'data-lib-stack': '', title: 'Add the app as one stack' }, 'Stack')]),
+    ...(entry.widget ? [] : [
+      el(document_, 'button', { type: 'button', class: 'cv-lib-stack', 'data-lib-stack': '', title: 'Add the app as one stack' }, 'Stack'),
+      // APP-106: `unite.ts` handles the click.
+      el(document_, 'button', { type: 'button', class: 'cv-lib-stack cv-lib-unite', 'data-lib-unite': '', title: 'Unite: assemble the app’s cards into one frame' }, 'Unite'),
+    ]),
     el(document_, 'button', { type: 'button', class: 'cv-lib-all', 'data-lib-all': '' }, 'Add all'));
   const list = el(document_, 'ul', { class: 'cv-lib-cards' },
     ...entry.cards.map((card) => el(document_, 'li', {

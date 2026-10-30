@@ -17,6 +17,11 @@ APP-104 local changes in `widget-canvas.ts` (DS-10), each marked "Local change (
 - A card's own header (`[data-canvas-drag-handle]`) moves it, like the chrome's drag handle (its interactive controls keep their clicks).
 - Public `zoomAt(factor, x, y)`, `panBy(dx, dy)` and `cancelGestures()` (the pitch's pinch and zoom keys, `../canvas/controls.ts`).
 
+APP-106 local changes in `widget-canvas.ts` (DS-10), each marked "Local change (APP-106)" in the code:
+
+- `#normalizedPlacement` accepts a preferred width up to 1440 px (was 720), for the unite frame (1240 px); every card and widget asks for 680 px or less (only the placement skeleton, 760 px, now shows at its asked width).
+- `#bindDragHandle` ignores a press unless the item it was bound for is still mounted and still holds the handle. A card's header is bound once per item that adopts it; after a unite frame, a break apart or the focus view moved the card, the stale binding of the old item would otherwise take the drag.
+
 Not vendored: the runtime's Forma 2.x widget host (`src/forma`), its contracts, persistence and vector routing. The pitch canvas mounts only server-rendered cards (`../canvas/board.ts`); it has no runtime host, so the canvas runs with `NO_RUNTIME_ADAPTER`.
 
 Design D10 (one native canvas island, geometry and keyboard from genui-runtime) is the decision this follows. The look and interaction of the page (`../styles/canvas.css`, `../canvas/app.tsx`) adapt Forma Generative UI's canvas workspace (`forma-generative-ui` at `a108203`, `client/css/shell.css` and `client/html/shell.html`): top bar, bottom dock with the intent bar, materialize motion, empty state; not its planner, widget host or widgets. Re-vendoring is a copy of the same files from a newer commit, recorded here.

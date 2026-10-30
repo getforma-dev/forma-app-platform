@@ -209,6 +209,9 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/library.ts
 !app/admin/src/canvas/controls.ts
 !app/admin/src/canvas/stacks.ts
+# APP-106: focus mode and unite.
+!app/admin/src/canvas/focus.ts
+!app/admin/src/canvas/unite.ts
 !app/admin/src/canvas/widgets/
 app/admin/src/canvas/widgets/**
 !app/admin/src/canvas/widgets/index.ts

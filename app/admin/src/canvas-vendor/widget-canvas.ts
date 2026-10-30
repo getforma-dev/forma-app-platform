@@ -1467,10 +1467,12 @@ export class WidgetCanvas {
     restored?: Partial<WidgetCanvasItemState>,
   ): WidgetCanvasItemState {
     const index = this.#items.size - 1;
+    // Local change (APP-106): up to 1440 wide (was 720), so a unite frame
+    // can hold an app's cards side by side; every card asks for 680 or less.
     const preferredWidth = clamp(
       finiteNumber(Number(item.dataset.canvasPreferredWidth), 440),
       300,
-      720,
+      1440,
     );
     const minHeight = clamp(
       finiteNumber(Number(item.dataset.canvasMinHeight), 300),
@@ -1650,6 +1652,10 @@ export class WidgetCanvas {
     const extra = !handle.classList.contains("widget-drag-handle");
     handle.addEventListener("pointerdown", (event) => {
       if (extra && eventOriginatesInInteractiveControl(event)) return;
+      // Local change (APP-106): a card header outlives the item it was first
+      // bound for (a unite frame, a break apart or the focus view moves the
+      // card); only a mounted item that still holds the handle may drag.
+      if (!item.contains(handle) || this.#items.get(item.dataset.instanceId ?? "") !== item) return;
       if (
         this.#spacePressed ||
         this.#panMode ||

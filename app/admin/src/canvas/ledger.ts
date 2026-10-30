@@ -10,7 +10,7 @@
 // every amount is a record's own typed money value, summed in cents.
 import { label } from './display';
 import { recordsJson, type RecordJson, type RecordsJson } from './records';
-import { el } from './render';
+import { el, pulseTarget } from './render';
 
 export const LEDGER_SCOPE = 'live records, last 200';
 
@@ -238,7 +238,7 @@ export async function refreshLedger(card: HTMLElement, live = false): Promise<vo
   statusOptions(card, listing);
   renderLedger(card);
   if (live) {
-    const item = card.closest<HTMLElement>('.cv-item') ?? card;
+    const item = pulseTarget(card);
     item.classList.remove('is-live-updated');
     void item.offsetWidth;
     item.classList.add('is-live-updated');
