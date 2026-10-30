@@ -269,6 +269,10 @@ export class GenuiFoundation extends Stack {
       // a deployment or rollback is a brief outage that signs members out.
       minHealthyPercent: 0, maxHealthyPercent: 100,
     });
+    // ECS enables Availability Zone rebalancing by default and refuses it with
+    // maximumPercent <= 100 (APP-078 window 2026-10-30, change set rolled back).
+    // One task, stop-then-start: there is nothing to rebalance.
+    (service.node.defaultChild as ecs.CfnService).addPropertyOverride('AvailabilityZoneRebalancing', 'DISABLED');
     const certificate = acm.Certificate.fromCertificateArn(this, 'Certificate', certificateArn.valueAsString);
     const listener = alb.addListener('Https', { port: 443, protocol: elbv2.ApplicationProtocol.HTTPS, certificates: [certificate], sslPolicy: elbv2.SslPolicy.RECOMMENDED_TLS, open: false });
     listener.addTargets('Application', { port: 3000, protocol: elbv2.ApplicationProtocol.HTTP, targets: [service], healthCheck: { path: '/health/ready', healthyHttpCodes: '200', interval: Duration.seconds(30), timeout: Duration.seconds(5), healthyThresholdCount: 2, unhealthyThresholdCount: 3 }, deregistrationDelay: Duration.seconds(30) });
