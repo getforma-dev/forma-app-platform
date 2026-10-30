@@ -33,6 +33,7 @@ import copy
 import datetime
 import hashlib
 import json
+import re
 from pathlib import Path
 import random
 import sys
@@ -348,6 +349,28 @@ EXPENSE_CLAIMS_RECORDS = {
 }
 
 
+# APP-101 slash commands: per library app its command slug and a short alias
+# list (`/slug rest-of-text` opens the app instantly in the canvas intent bar;
+# `apps` is reserved for the list). Lowercase, [a-z][a-z0-9-]{1,31}, unique
+# across the library.
+COMMANDS = {
+    "expense-review": ("expense-review", ["review-expenses"]),
+    "vendor-spend": ("vendor-spend", ["spend", "vendors"]),
+    "outbound-traffic": ("traffic", ["egress", "network"]),
+    "incident-timeline": ("incidents", ["incident"]),
+    "access-review": ("access", ["access-review"]),
+    "sales-pipeline": ("pipeline", ["sales", "deals"]),
+    "inventory-comparison": ("inventory", ["stock"]),
+    "support-queue": ("support", ["tickets"]),
+    "budget-vs-actual": ("budget", ["variance"]),
+    "audit-trail": ("audit", ["audit-log"]),
+    "cash-flow": ("cash", ["cash-flow"]),
+    "hiring-funnel": ("hiring", ["candidates"]),
+    "subscription-revenue": ("mrr", ["subscriptions", "revenue"]),
+    "expense-claims": ("expense", ["expenses", "claim"]),
+}
+
+
 def routing(description, intents, negatives, capabilities):
     return {"description": description, "intent_examples": intents, "negative_examples": negatives, "capabilities": capabilities}
 
@@ -631,7 +654,9 @@ def catalog_entry(library_id, title, purpose, route, b, csv_name):
             if "command_id" in v:
                 entry["command_id"] = v["command_id"]
         views.append(entry)
+    slug, aliases = COMMANDS[library_id]
     return {"library_id": library_id, "fixture": library_id + ".json", "title": title, "purpose": purpose, "routing": route,
+            "command": {"slug": slug, "aliases": aliases},
             "app_id": b["definition"]["app_id"], "definition_revision_id": b["definition"]["revision_id"], "definition_digest": b["definition"]["digest"],
             "publication_id": b["publication"]["publication_id"], "work_id": b["work"]["work_id"], "collection_id": b["work"]["record_collections"][0]["id"],
             "inputs": [{"id": i["id"], "kind": i["kind"], "contract_id": i["contract_id"], "fields": [field_summary(fld) for fld in i["fields"]]} for i in content["inputs"]],
@@ -657,6 +682,9 @@ def build():
             # Source identities: one pair per source, past every app's identity block.
             source_id, revision_id = uid(BASE + STRIDE * 64 + 2 * n), uid(BASE + STRIDE * 64 + 2 * n + 1)
             revisions[name] = source_revision(contract, data, normalized, count, source_id, revision_id, semantics)
+    names = [name for slug, aliases in COMMANDS.values() for name in [slug, *aliases]]
+    assert len(names) == len(set(names)) and "apps" not in names, "command slugs are unique"
+    assert all(re.fullmatch(r"[a-z][a-z0-9-]{1,31}", name) for name in names), "command slug shape"
     entries = []
     for index, entry in enumerate(apps()):
         library_id, title, purpose, source, views, route = entry[:6]

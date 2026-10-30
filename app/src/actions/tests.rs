@@ -278,8 +278,15 @@ fn the_request_body_is_an_utterance_or_a_structured_decision() {
             assert_eq!(status, "approved");
             assert_eq!(note.as_deref(), Some("ok"));
         }
-        Body::Utterance(_) => panic!("structured"),
+        Body::Utterance(_) | Body::Pinned { .. } => panic!("structured"),
     }
+    // APP-101: an utterance pinned to one app by a slash command.
+    assert!(matches!(
+        body(br#"{"utterance":"approve the Nobu dinner","app_id":"00000000-0000-4000-8000-000000001681"}"#),
+        Some(Body::Pinned { .. })
+    ));
+    assert!(body(br#"{"utterance":"approve the Nobu dinner","app_id":"nope"}"#).is_none());
+    assert!(body(br#"{"utterance":"approve","decide":{}}"#).is_none());
     assert!(body(
         br#"{"decide":{"app_id":"x","work_id":"y","record_id":"z","status":"approved"}}"#
     )

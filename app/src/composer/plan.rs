@@ -40,37 +40,6 @@ pub enum Decision {
     Generate,
 }
 
-/// ADR-011 demo mode (APP-098): the deterministic router over the same
-/// catalog the model would see, for a demo organization's rehearsed
-/// intents. Scores each library app by the intent's words (four letters or
-/// more, lowercased) found in its title and description; the best app with
-/// at least one hit is retrieved (`demo`); no hit is `Generate`
-/// (`demo_no_match`, so the real model is consulted). Never a title the
-/// intent wrote, never an app outside the catalog.
-pub fn demo_route(intent: &str, library: &[LibraryApp]) -> (Decision, &'static str) {
-    let words: Vec<String> = intent
-        .to_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|word| word.chars().count() >= 4)
-        .map(str::to_owned)
-        .collect();
-    let mut best: Option<(usize, usize)> = None;
-    for (index, app) in library.iter().enumerate() {
-        let haystack = format!("{} {}", app.title, app.description).to_lowercase();
-        let score = words
-            .iter()
-            .filter(|word| haystack.contains(word.as_str()))
-            .count();
-        if score > 0 && best.is_none_or(|(_, top)| score > top) {
-            best = Some((index, score));
-        }
-    }
-    match best {
-        Some((index, _)) => (Decision::Retrieve { index }, "demo"),
-        None => (Decision::Generate, "demo_no_match"),
-    }
-}
-
 /// Decodes the router's text. Anything outside the closed shape, an unknown
 /// id or an unknown confidence is `Generate` (the slow path, never an
 /// error the member sees). `confidence` is reported for the log only.
@@ -151,6 +120,16 @@ pub fn plan_generated(
 ) -> Result<Planned, Refusal> {
     let mut content = object(text).ok_or(Refusal { code: "not_json" })?;
     pin_sources(&mut content, sources)?;
+    // APP-101: only the server writes the adapted marker line the canvas
+    // reads its chips from (`transform::ADAPTED_PREFIX`).
+    if let Some(rest) = content
+        .get("description")
+        .and_then(Value::as_str)
+        .and_then(|description| description.strip_prefix(super::transform::ADAPTED_PREFIX))
+        .map(str::to_owned)
+    {
+        content["description"] = json!(rest);
+    }
     // Admission first, so a malformed document reports admission's code;
     // then the engine's subset over what admission accepted.
     let admitted = admit(&content, organization, app)?;
@@ -219,7 +198,7 @@ fn pin_sources(content: &mut Value, sources: &[ReadableSource]) -> Result<(), Re
 }
 
 /// Every view with a query reads one input through the runnable operators.
-fn require_runnable(content: &Value) -> Result<(), Refusal> {
+pub(crate) fn require_runnable(content: &Value) -> Result<(), Refusal> {
     let runnable = content
         .get("views")
         .and_then(Value::as_array)
@@ -239,7 +218,11 @@ fn require_runnable(content: &Value) -> Result<(), Refusal> {
 
 /// The envelope under the trusted scope (organization and authoring app from
 /// the request, never from the model), the content's digest, admission.
-fn admit(content: &Value, organization: &str, app: &str) -> Result<AdmittedDefinition, Refusal> {
+pub(crate) fn admit(
+    content: &Value,
+    organization: &str,
+    app: &str,
+) -> Result<AdmittedDefinition, Refusal> {
     let canonical = admission::encode(content)?;
     let identity = digest::digest(digest::APP_DEFINITION, &canonical);
     let mut envelope = Map::new();

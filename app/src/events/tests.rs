@@ -38,6 +38,7 @@ fn documents_carry_ids_and_kind_only() {
         organization: ORG.into(),
         app: APP.into(),
         work: OPEN.into(),
+        from: None,
         at: "2026-10-30T12:00:00Z".into(),
     };
     assert_eq!(
@@ -56,6 +57,17 @@ fn documents_carry_ids_and_kind_only() {
         ["at", "kind"]
     );
     assert_eq!(document["kind"], "stream.lagged");
+    // APP-101: an adapted work names the standard work it came from (ids only).
+    let adapted = Event {
+        kind: Kind::AppAdapted,
+        from: Some((APP.into(), OPEN.into())),
+        ..event.clone()
+    };
+    assert_eq!(
+        adapted.document(),
+        serde_json::json!({"kind": "app.adapted", "app_id": APP, "work_id": OPEN, "from_app_id": APP, "from_work_id": OPEN, "at": "2026-10-30T12:00:00Z"})
+    );
+    assert_eq!(Kind::AppKept.name(), "app.kept");
 }
 
 #[test]

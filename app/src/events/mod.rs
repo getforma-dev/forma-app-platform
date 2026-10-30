@@ -35,6 +35,11 @@
 //! Heartbeat every `HEARTBEAT`; a stream ends after `STREAM_LIFETIME` so the
 //! client re-resolves its session by reconnecting.
 //!
+//! APP-101 adds `app.adapted` (the composer's live transform saved an
+//! adapted work; the document also names the standard work it came from as
+//! `from_app_id`/`from_work_id`, judged on the adapted work) and `app.kept`
+//! (the transform kept the standard view; judged on the standard work).
+//!
 //! Wire shape, one SSE message per event:
 //! `event: <kind>` and `data: {"kind":"record.committed"|"app.shared"|
 //! "app.placed","app_id":"<uuid>","work_id":"<uuid>","at":"<whole-second UTC>"}`;
@@ -84,6 +89,12 @@ pub enum Kind {
     RecordCommitted,
     AppShared,
     AppPlaced,
+    /// APP-101: the composer saved an adapted work tailored from a standard
+    /// one (`from`); the canvas reshapes the standard card in place.
+    AppAdapted,
+    /// APP-101: the transform kept the standard view (ids of the standard
+    /// work); the canvas ends its "tailoring" state with a neutral note.
+    AppKept,
     /// The stream dropped at least one hint (the client was not reading, or
     /// the subscriber lagged behind the hub); the client refetches.
     StreamLagged,
@@ -94,6 +105,8 @@ impl Kind {
             Self::RecordCommitted => "record.committed",
             Self::AppShared => "app.shared",
             Self::AppPlaced => "app.placed",
+            Self::AppAdapted => "app.adapted",
+            Self::AppKept => "app.kept",
             Self::StreamLagged => "stream.lagged",
         }
     }
@@ -106,6 +119,9 @@ pub struct Event {
     pub organization: String,
     pub app: String,
     pub work: String,
+    /// `app.adapted` only: the standard `(app, work)` the adapted work was
+    /// tailored from (ids only, like the others).
+    pub from: Option<(String, String)>,
     /// Whole-second UTC, as the audit chain's `occurred_at`.
     pub at: String,
 }
@@ -116,6 +132,7 @@ impl Event {
             organization: organization.to_owned(),
             app: app.to_owned(),
             work: work.to_owned(),
+            from: None,
             at: timestamp(unix_seconds()),
         }
     }
@@ -129,12 +146,17 @@ impl Event {
         if self.kind == Kind::StreamLagged {
             return json!({"kind": self.kind.name(), "at": self.at});
         }
-        json!({
+        let mut document = json!({
             "kind": self.kind.name(),
             "app_id": self.app,
             "work_id": self.work,
             "at": self.at,
-        })
+        });
+        if let Some((app, work)) = &self.from {
+            document["from_app_id"] = json!(app);
+            document["from_work_id"] = json!(work);
+        }
+        document
     }
 }
 
@@ -250,6 +272,25 @@ impl Hub {
     /// that work learn of it; nobody else does.
     pub fn app_placed(&self, organization: &str, app: &str, work: &str) {
         self.publish(Event::now(Kind::AppPlaced, organization, app, work));
+    }
+    /// APP-101: the adapted `(app, work)` tailored from `(from_app,
+    /// from_work)`; judged, like every event, on the work it names (the
+    /// adapted one).
+    pub fn app_adapted(
+        &self,
+        organization: &str,
+        app: &str,
+        work: &str,
+        from_app: &str,
+        from_work: &str,
+    ) {
+        let mut event = Event::now(Kind::AppAdapted, organization, app, work);
+        event.from = Some((from_app.to_owned(), from_work.to_owned()));
+        self.publish(event);
+    }
+    /// APP-101: the transform of the standard `(app, work)` kept its defaults.
+    pub fn app_kept(&self, organization: &str, app: &str, work: &str) {
+        self.publish(Event::now(Kind::AppKept, organization, app, work));
     }
     pub fn subscribe(&self) -> broadcast::Receiver<Announcement> {
         self.sender.subscribe()

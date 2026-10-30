@@ -117,6 +117,12 @@ fn today() -> String {
 /// The request body: an utterance, or a structured decision.
 pub(super) enum Body {
     Utterance(String),
+    /// APP-101: an utterance for one app the member named with a slash
+    /// command (`{"utterance", "app_id"}`): the parser sees that app alone.
+    Pinned {
+        utterance: String,
+        app: String,
+    },
     Decide {
         app: String,
         work: String,
@@ -129,6 +135,17 @@ pub(super) enum Body {
 pub(super) fn body(bytes: &[u8]) -> Option<Body> {
     let value: Value = crate::admission::decode(bytes).ok()?;
     let object = value.as_object()?;
+    if object.len() == 2 {
+        let app = object.get("app_id")?.as_str()?;
+        let text = object.get("utterance")?.as_str()?;
+        if !storage::valid_identifier(app) {
+            return None;
+        }
+        return prompt::utterance(text).map(|t| Body::Pinned {
+            utterance: t.to_owned(),
+            app: app.to_owned(),
+        });
+    }
     if object.len() != 1 {
         return None;
     }
@@ -256,7 +273,11 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
         }
         Err(_) => return http::unavailable(),
     };
-    let catalog: Vec<CatalogApp> = prompt::catalog(&context.library);
+    let mut catalog: Vec<CatalogApp> = prompt::catalog(&context.library);
+    if let Body::Pinned { app, .. } = &body {
+        // APP-101: a slash command names the app; the parser does not re-pick.
+        catalog.retain(|entry| &entry.app == app);
+    }
     if catalog.is_empty() {
         // Nothing this member may act on: indistinguishable from a stranger.
         log_refused(&member, "nothing_actionable", started);
@@ -264,7 +285,7 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
     }
     let today = today();
     let (parse, utterance): (Parse, String) = match body {
-        Body::Utterance(utterance) => {
+        Body::Utterance(utterance) | Body::Pinned { utterance, .. } => {
             if !state.parser.enabled() && !demo {
                 log_refused(&member, "composer_unavailable", started);
                 return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");

@@ -35,6 +35,12 @@
           "records.decision"
         ]
       },
+      "command": {
+        "slug": "expense-review",
+        "aliases": [
+          "review-expenses"
+        ]
+      },
       "app_id": "00000000-0000-4000-8000-000000001001",
       "definition_revision_id": "00000000-0000-4000-8000-000000001002",
       "definition_digest": "sha256:2ceb86d69a707a4fead89e2ef2f032da0cde7e96f591cf7acd981b6b64c32e5a",
@@ -344,6 +350,13 @@
           "records.decision"
         ]
       },
+      "command": {
+        "slug": "vendor-spend",
+        "aliases": [
+          "spend",
+          "vendors"
+        ]
+      },
       "app_id": "00000000-0000-4000-8000-000000001081",
       "definition_revision_id": "00000000-0000-4000-8000-000000001082",
       "definition_digest": "sha256:5fe21c290e4261497e1689e97572f57fba0e06ecbc049fa760a45475c8882d4e",
@@ -635,6 +648,13 @@
           "records.observation"
         ]
       },
+      "command": {
+        "slug": "traffic",
+        "aliases": [
+          "egress",
+          "network"
+        ]
+      },
       "app_id": "00000000-0000-4000-8000-000000001101",
       "definition_revision_id": "00000000-0000-4000-8000-000000001102",
       "definition_digest": "sha256:e678a311e3655c53e5370409ee7e18f65a667985bdc3e884723030039e8c6f03",
@@ -903,6 +923,12 @@
           "ops.incidents.timeline",
           "ops.incidents.open",
           "records.decision"
+        ]
+      },
+      "command": {
+        "slug": "incidents",
+        "aliases": [
+          "incident"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001181",
@@ -1188,6 +1214,12 @@
           "security.access.review",
           "security.access.pending",
           "records.decision"
+        ]
+      },
+      "command": {
+        "slug": "access",
+        "aliases": [
+          "access-review"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001201",
@@ -1483,6 +1515,13 @@
           "records.decision"
         ]
       },
+      "command": {
+        "slug": "pipeline",
+        "aliases": [
+          "sales",
+          "deals"
+        ]
+      },
       "app_id": "00000000-0000-4000-8000-000000001281",
       "definition_revision_id": "00000000-0000-4000-8000-000000001282",
       "definition_digest": "sha256:5f979712531f396b8a7aaac7e50bcd8f5685e867cf44f025cab33fad896e97de",
@@ -1774,6 +1813,12 @@
           "records.decision"
         ]
       },
+      "command": {
+        "slug": "inventory",
+        "aliases": [
+          "stock"
+        ]
+      },
       "app_id": "00000000-0000-4000-8000-000000001301",
       "definition_revision_id": "00000000-0000-4000-8000-000000001302",
       "definition_digest": "sha256:cc931be476cd6e284783d2dce0581f521e0d1271db50607bb015576d8361046b",
@@ -2041,6 +2086,12 @@
           "support.tickets.queue",
           "support.tickets.timeline",
           "records.decision"
+        ]
+      },
+      "command": {
+        "slug": "support",
+        "aliases": [
+          "tickets"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001381",
@@ -2350,6 +2401,12 @@
           "records.decision"
         ]
       },
+      "command": {
+        "slug": "budget",
+        "aliases": [
+          "variance"
+        ]
+      },
       "app_id": "00000000-0000-4000-8000-000000001401",
       "definition_revision_id": "00000000-0000-4000-8000-000000001402",
       "definition_digest": "sha256:8a372b21a0b2d8a056587851e5658a5c16e3e043f14fd1ebbb45170631671562",
@@ -2599,6 +2656,12 @@
           "security.audit.trail",
           "security.audit.denied",
           "records.decision"
+        ]
+      },
+      "command": {
+        "slug": "audit",
+        "aliases": [
+          "audit-log"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001481",
@@ -2872,6 +2935,12 @@
           "finance.cashflow.summary",
           "finance.cashflow.timeline",
           "records.decision"
+        ]
+      },
+      "command": {
+        "slug": "cash",
+        "aliases": [
+          "cash-flow"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001501",
@@ -3163,6 +3232,12 @@
           "records.decision"
         ]
       },
+      "command": {
+        "slug": "hiring",
+        "aliases": [
+          "candidates"
+        ]
+      },
       "app_id": "00000000-0000-4000-8000-000000001581",
       "definition_revision_id": "00000000-0000-4000-8000-000000001582",
       "definition_digest": "sha256:bad8a26f71335895b10a12e193f4b035a3feab3c7b0d66229fc2438628c5d33b",
@@ -3434,6 +3509,13 @@
           "finance.revenue.mrr",
           "finance.revenue.top_customers",
           "records.decision"
+        ]
+      },
+      "command": {
+        "slug": "mrr",
+        "aliases": [
+          "subscriptions",
+          "revenue"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001601",
@@ -3711,6 +3793,13 @@
           "finance.expenses.approve",
           "records.create",
           "records.transition"
+        ]
+      },
+      "command": {
+        "slug": "expense",
+        "aliases": [
+          "expenses",
+          "claim"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001681",

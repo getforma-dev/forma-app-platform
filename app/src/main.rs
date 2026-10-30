@@ -618,7 +618,9 @@ async fn main() {
                 .merge(genui::sharing::router(auth.clone()))
                 .merge(genui::events::routes::router(auth.clone()))
                 .merge(canvas_routes)
-                .merge(records_routes),
+                .merge(records_routes)
+                // APP-101: the slash-command list and "save as /name".
+                .merge(genui::composer::commands::router(auth.clone())),
             vec![
                 (genui::composer::routes::PATH, compose_routes),
                 (genui::actions::PATH, act_routes),

@@ -381,13 +381,13 @@ fn a_model_failure_ends_generation_and_an_absent_key_disables_it() {
     let library = [library_app(SPEND, APP)];
     assert_eq!(
         runtime()
-            .block_on(disabled.route("abc", &library, false))
+            .block_on(disabled.route("abc", &library, None))
             .unwrap_err(),
         ModelError::Unavailable
     );
     assert_eq!(
         runtime()
-            .block_on(disabled.route("abc", &[], false))
+            .block_on(disabled.route("abc", &[], None))
             .unwrap(),
         (Decision::Generate, "empty_library")
     );
@@ -465,7 +465,11 @@ fn the_router_decides_only_within_the_catalog() {
         r#"{"choice":"00000000-0000-4000-8000-0000000000c9","confidence":"high","reason":"fits","title":"Spend"}"#.into(),
     )]);
     let routed = runtime()
-        .block_on(composer(&script).route("review spend", &library, false))
+        .block_on(
+            composer(&script)
+                .with_matcher(false)
+                .route("review spend", &library, None),
+        )
         .unwrap();
     assert_eq!(routed, (Decision::Retrieve { index: 1 }, "high"));
     assert_eq!(script.requests()[0].model, "router-model");
@@ -741,6 +745,29 @@ fn the_body_is_one_intent_of_bounded_shape() {
     assert_eq!(intent(r#"{"intent":1}"#), None);
     assert_eq!(intent(r#"["show spend"]"#), None);
     assert_eq!(intent(""), None);
+    // APP-101: a pinned app or "build something new", never both.
+    let request = |text: &str| routes::body_request(text.as_bytes());
+    let app = "00000000-0000-4000-8000-000000001001";
+    assert_eq!(
+        request(&format!(r#"{{"intent":"over $200","app_id":"{app}"}}"#)),
+        Some(("over $200".into(), routes::Pin::App(app.into())))
+    );
+    assert_eq!(
+        request(r#"{"intent":"a PTO tracker","generate":true}"#),
+        Some(("a PTO tracker".into(), routes::Pin::Generate))
+    );
+    assert_eq!(
+        request(r#"{"intent":"x y z"}"#),
+        Some(("x y z".into(), routes::Pin::Chooser))
+    );
+    for refused in [
+        format!(r#"{{"intent":"over $200","app_id":"{app}","generate":true}}"#),
+        r#"{"intent":"over $200","app_id":"not-a-uuid"}"#.to_owned(),
+        r#"{"intent":"over $200","generate":false}"#.to_owned(),
+        r#"{"intent":"over $200","app_id":null}"#.to_owned(),
+    ] {
+        assert_eq!(request(&refused), None, "{refused}");
+    }
 }
 
 #[test]
@@ -807,88 +834,68 @@ fn the_budgets_fit_the_route_deadline_and_an_attempt_needs_room() {
 }
 
 #[test]
-fn demo_organizations_answer_rehearsed_intents_from_the_catalog_and_nobody_else_does() {
+fn the_instant_matcher_routes_before_the_model_in_every_organization() {
     let library = [
         library_app(NORTHSTAR, "00000000-0000-4000-8000-000000000065"),
         library_app(SPEND, "00000000-0000-4000-8000-0000000000c9"),
     ];
     let demo = "00000000-0000-4000-8000-00000000000d";
-    // The deterministic router: keywords of the intent in the catalog's
-    // titles and descriptions, never a title or an app the intent wrote.
-    assert_eq!(
-        plan::demo_route("Review expenses over $200", &library),
-        (Decision::Retrieve { index: 1 }, "demo")
-    );
-    assert_eq!(
-        plan::demo_route("Northstar investigation of egress", &library),
-        (Decision::Retrieve { index: 0 }, "demo")
-    );
-    assert_eq!(
-        plan::demo_route("zzz qqq", &library),
-        (Decision::Generate, "demo_no_match")
-    );
-    assert_eq!(
-        plan::demo_route("Review expenses", &[]),
-        (Decision::Generate, "demo_no_match")
-    );
     // The environment value: lowercase UUIDs only.
     assert_eq!(
         demo_organizations(&format!(" {demo}, not-a-uuid,{},", demo.to_uppercase())),
         [demo.to_owned()].into_iter().collect()
     );
     assert!(demo_organizations("").is_empty());
-    // Scoping: without a model, only the demo organization composes.
     let disabled = Composer::new(None, "r", "g").with_demo_organizations([demo.to_owned()]);
     assert!(!disabled.enabled());
     assert!(disabled.demo_for(demo) && !disabled.demo_for(ORG));
-    assert!(disabled.available_for(demo) && !disabled.available_for(ORG));
-    assert!(
-        !Composer::new(None, "r", "g").available_for(demo),
-        "off by default"
-    );
+    // The matcher runs everywhere, so the route is available without a key.
+    assert!(disabled.available_for(ORG) && disabled.available_for(demo));
+    assert!(!Composer::new(None, "r", "g")
+        .with_matcher(false)
+        .available_for(ORG));
     runtime().block_on(async {
-        // Demo organization: the rehearsed intent needs no model at all; an
-        // unrehearsed one still needs the model.
+        // A title match is a confident pick with no model at all...
+        assert_eq!(
+            disabled.route("spend review", &library, None).await,
+            Ok((Decision::Retrieve { index: 1 }, "matched"))
+        );
+        // ...never the excluded authoring app...
         assert_eq!(
             disabled
-                .route("Review expenses over $200", &library, true)
+                .route(
+                    "spend review",
+                    &library,
+                    Some("00000000-0000-4000-8000-0000000000c9")
+                )
                 .await,
-            Ok((Decision::Retrieve { index: 1 }, "demo"))
-        );
-        assert_eq!(
-            disabled.route("zzz qqq", &library, true).await,
             Err(ModelError::Unavailable)
         );
-        // A real organization: never the canned path.
+        // ...and no hit needs the model.
         assert_eq!(
-            disabled
-                .route("Review expenses over $200", &library, false)
-                .await,
+            disabled.route("zzz qqq", &library, None).await,
             Err(ModelError::Unavailable)
         );
         let reply =
             r#"{"choice":"00000000-0000-4000-8000-000000000065","confidence":"high","reason":"x"}"#;
         let script = Script::new(vec![Ok(reply.into()), Ok(reply.into())]);
-        let with_model = composer(&script).with_demo_organizations([demo.to_owned()]);
-        // Demo organization with a model: the rehearsed intent never reaches it...
+        let with_model = composer(&script);
         assert_eq!(
-            with_model
-                .route("Review expenses over $200", &library, true)
-                .await,
-            Ok((Decision::Retrieve { index: 1 }, "demo"))
+            with_model.route("spend review", &library, None).await,
+            Ok((Decision::Retrieve { index: 1 }, "matched"))
         );
-        assert!(script.requests().is_empty());
-        // ...an unrehearsed one does, and the model decides as always.
+        assert!(script.requests().is_empty(), "no model call for a pick");
         assert_eq!(
-            with_model.route("zzz qqq", &library, true).await,
+            with_model.route("zzz qqq", &library, None).await,
             Ok((Decision::Retrieve { index: 0 }, "high"))
         );
         assert_eq!(script.requests().len(), 1);
-        // A real organization with a model: the model decides, even for the
-        // rehearsed words.
+        // Turned off: the model decides, as before APP-101.
         assert_eq!(
             with_model
-                .route("Review expenses over $200", &library, false)
+                .clone()
+                .with_matcher(false)
+                .route("spend review", &library, None)
                 .await,
             Ok((Decision::Retrieve { index: 0 }, "high"))
         );
@@ -920,7 +927,7 @@ fn real_model_smoke() {
             .route(
                 "Review expenses over $200 and record a decision on each",
                 &library,
-                false,
+                None,
             )
             .await;
         eprintln!("smoke: routed={routed:?} in {} ms", started.elapsed().as_millis());
@@ -929,7 +936,7 @@ fn real_model_smoke() {
             .route(
                 "Which destinations receive the most bytes each minute?",
                 &library,
-                false,
+                None,
             )
             .await;
         eprintln!("smoke: routed={routed:?} in {} ms", started.elapsed().as_millis());

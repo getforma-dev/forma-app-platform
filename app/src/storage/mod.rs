@@ -39,9 +39,9 @@ pub use definitions::{
 };
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use queries::{
-    events_fields, field_type, parse_parameters, query_digests, LibraryEntry, OpenableWork,
-    Parameters, QueryRun, RunSource, WorkOutline, WorkView, QUALIFIED_OPERATORS,
-    QUERY_HANDLER_DEADLINE,
+    command_slug, events_fields, field_type, library_sidecar, parse_parameters, query_digests,
+    LibraryEntry, NamedWork, OpenableWork, Parameters, QueryRun, RunSource, WorkOutline, WorkView,
+    COMMAND_MARKER, QUALIFIED_OPERATORS, QUERY_HANDLER_DEADLINE,
 };
 pub use registry::RegistryIdentity;
 pub use sessions::{

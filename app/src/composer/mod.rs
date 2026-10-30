@@ -20,6 +20,18 @@
 //! the admitted definition is drafted, owner-published and saved: origin
 //! `generated`.
 //!
+//! **APP-101: instant pick and live transform.** Before any model call, the
+//! local matcher (`matcher`) scores the intent against the library's routing
+//! metadata in every organization; a confident pick is retrieved at once (no
+//! model call), a near tie or no hit goes to the router model as above. When
+//! the request says more than the picked app's defaults, the fast model (or,
+//! in a demo organization, a rehearsed sentence) turns the rest into a
+//! closed, typed `transform::Transform`, which is judged against the app's
+//! input contract, applied to the library content, admitted whole and saved
+//! as an `adapted` work on the member's authoring app, in the background
+//! after the response (`routes::Tailor`); `app.adapted` (or `app.kept`) on
+//! the event stream tells the canvas to reshape (or to keep the defaults).
+//!
 //! Every path ends in the APP-010 storage operations unchanged (their own
 //! prechecks, fences and audit events); model output exists only as a typed
 //! definition after `admit_definition`, never as markup, SQL, FMIR or a
@@ -27,16 +39,21 @@
 //! actions (ADR-007 D7.3): a member who owns no app with `edit_definition`
 //! and `run` can retrieve but not generate. Logs carry identities, codes,
 //! counts and durations; never the intent, a definition or the key.
+pub mod commands;
+pub mod lineage;
+pub mod matcher;
 pub mod model;
 pub mod plan;
 pub mod prompt;
 pub mod routes;
+pub mod transform;
 
 use crate::storage::{LibraryApp, ReadableSource};
 use model::{Model, ModelError, ModelRequest};
 use plan::{Decision, Planned, Refusal};
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use tokio::time::Instant;
+use transform::Transform;
 
 #[cfg(test)]
 mod tests;
@@ -76,27 +93,34 @@ pub const MIN_GENERATION_ATTEMPT: Duration = Duration::from_secs(5);
 pub const COMPOSE_DEADLINE: Duration = Duration::from_secs(120);
 /// ADR-011 demo mode (APP-098 demo shortcuts register; Victor, 2026-10-30:
 /// the pitch is a concept-car demo): the organization ids (comma-separated
-/// UUIDs) whose members' rehearsed intents are answered instantly and
-/// deterministically from the catalog (`plan::demo_route`: the intent's
-/// words against the library titles and descriptions) without a model call;
-/// text that matches nothing goes to the real model as everywhere else.
-/// Empty or unset by default: no organization; the pitch deploy's stack
-/// names the synthetic demo organization only, so a real beta organization
-/// behaves exactly as without it. Everything the canned path does is the
-/// retrieved path: it instantiates an admitted library app, labeled
-/// `retrieved`; nothing is generated and nothing bypasses admission,
-/// authorization, the audited command path, receipts or live updates.
+/// UUIDs) whose members' rehearsed sentences are tailored by a fixed
+/// transform without a model call (`transform::rehearsed`, APP-098 DS-53;
+/// APP-101 replaced the earlier canned router, `plan::demo_route`, with the
+/// matcher every organization runs). Text that is not rehearsed goes to the
+/// real model as everywhere else. Empty or unset by default: no
+/// organization; the pitch deploy's stack names the synthetic demo
+/// organization only. A rehearsed transform is judged and admitted like any
+/// other; nothing bypasses admission, authorization, the audited command
+/// path, receipts or live updates.
 pub const DEMO_ORGANIZATIONS_ENV: &str = "GENUI_DEMO_ORGANIZATIONS";
 const ROUTER_MAX_TOKENS: u32 = 300;
+/// The transform call's output bound and budget (APP-101: the reshape
+/// targets 1.5 s after the pick; the budget only caps a slow model).
+const TRANSFORM_MAX_TOKENS: u32 = 400;
+pub const TRANSFORM_BUDGET: Duration = Duration::from_secs(10);
 const GENERATION_MAX_TOKENS: u32 = 8000;
 
 /// The composer: a model (none: disabled) and the two model names.
+#[derive(Clone)]
 pub struct Composer {
     model: Option<Arc<dyn Model>>,
     router_model: String,
     generation_model: String,
     /// `DEMO_ORGANIZATIONS_ENV`: the demo organizations (module notes).
     demo: BTreeSet<String>,
+    /// APP-101: the instant matcher runs before the router model
+    /// (`matcher::MATCHER_ENV=off` turns it off: the pre-APP-101 behavior).
+    matcher: bool,
 }
 
 /// Why generation ended without a definition.
@@ -108,6 +132,13 @@ pub enum GenerationFailure {
     /// The route deadline left no room for an attempt (review M5): nothing
     /// was called, so nothing is cut between publish and save.
     OutOfTime,
+}
+
+/// Why a transform ended without a typed transform.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TransformFailure {
+    Model(ModelError),
+    Refused(Refusal),
 }
 
 /// A generation that ended in a definition, with the codes of the refused
@@ -125,7 +156,13 @@ impl Composer {
             router_model: router_model.to_owned(),
             generation_model: generation_model.to_owned(),
             demo: BTreeSet::new(),
+            matcher: true,
         }
+    }
+    /// Turns the instant matcher on or off (module notes).
+    pub fn with_matcher(mut self, on: bool) -> Self {
+        self.matcher = on;
+        self
     }
     /// The demo organizations (module notes; `DEMO_ORGANIZATIONS_ENV`).
     pub fn with_demo_organizations<I: IntoIterator<Item = String>>(mut self, ids: I) -> Self {
@@ -153,6 +190,7 @@ impl Composer {
         .with_demo_organizations(demo_organizations(
             &std::env::var(DEMO_ORGANIZATIONS_ENV).unwrap_or_default(),
         ))
+        .with_matcher(std::env::var(matcher::MATCHER_ENV).as_deref() != Ok("off"))
     }
     /// A model is configured.
     pub fn enabled(&self) -> bool {
@@ -162,10 +200,16 @@ impl Composer {
     pub fn demo_for(&self, organization: &str) -> bool {
         self.demo.contains(organization)
     }
-    /// The route may compose for this organization: a model, or the demo
-    /// organization's canned path.
+    /// The route may compose for this organization: a model, the instant
+    /// matcher (APP-101: a confident pick needs no model; without one the
+    /// composition answers `composer_unavailable`), or the demo
+    /// organization's rehearsed path.
     pub fn available_for(&self, organization: &str) -> bool {
-        self.enabled() || self.demo_for(organization)
+        self.enabled() || self.matcher || self.demo_for(organization)
+    }
+    /// Whether the instant matcher runs.
+    pub fn matcher_on(&self) -> bool {
+        self.matcher
     }
     pub fn router_model(&self) -> &str {
         &self.router_model
@@ -177,21 +221,22 @@ impl Composer {
     /// Step 1: the router's decision over the catalog, and its confidence
     /// word for the log. An empty library is `Generate` without a call.
     ///
-    /// `demo` (the caller's `demo_for(organization)`): a rehearsed intent is
-    /// answered from the catalog without a model call (`plan::demo_route`,
-    /// confidence `demo`); an intent matching nothing goes to the model.
+    /// APP-101: the instant matcher first (`matcher::pick`; `exclude` is the
+    /// member's authoring app, never a candidate): a confident pick is
+    /// `Retrieve` with confidence `matched` and no model call; a near tie or
+    /// no hit goes to the router model.
     pub async fn route(
         &self,
         intent: &str,
         library: &[LibraryApp],
-        demo: bool,
+        exclude: Option<&str>,
     ) -> Result<(Decision, &'static str), ModelError> {
         if library.is_empty() {
             return Ok((Decision::Generate, "empty_library"));
         }
-        if demo {
-            if let (Decision::Retrieve { index }, _) = plan::demo_route(intent, library) {
-                return Ok((Decision::Retrieve { index }, "demo"));
+        if self.matcher {
+            if let Some(index) = matcher::pick(intent, library, exclude).pick {
+                return Ok((Decision::Retrieve { index }, "matched"));
             }
         }
         let model = self.model.as_ref().ok_or(ModelError::Unavailable)?;
@@ -204,6 +249,42 @@ impl Composer {
         };
         let reply = model.complete(&request).await?;
         Ok(plan::decide(&reply.text, library))
+    }
+
+    /// APP-101: the transform of a picked app. In a demo organization a
+    /// rehearsed sentence is a fixed transform (`transform::rehearsed`,
+    /// APP-098 DS-53, source `rehearsed`); otherwise the fast router model
+    /// answers the closed shape (source `model`), parsed strictly. The
+    /// caller judges and applies it (`transform::plan_transformed`).
+    pub async fn transform(
+        &self,
+        intent: &str,
+        library: &LibraryApp,
+        demo: bool,
+    ) -> Result<(Transform, &'static str), TransformFailure> {
+        if demo {
+            if let Some(rehearsed) = transform::rehearsed(intent) {
+                return Ok((rehearsed, "rehearsed"));
+            }
+        }
+        let model = self
+            .model
+            .as_ref()
+            .ok_or(TransformFailure::Model(ModelError::Unavailable))?;
+        let request = ModelRequest {
+            model: self.router_model.clone(),
+            system: transform::TRANSFORM_SYSTEM.to_owned(),
+            user: transform::transform_user(intent, library),
+            max_tokens: TRANSFORM_MAX_TOKENS,
+            budget: TRANSFORM_BUDGET,
+        };
+        let reply = model
+            .complete(&request)
+            .await
+            .map_err(TransformFailure::Model)?;
+        transform::parse(&reply.text)
+            .map(|parsed| (parsed, "model"))
+            .map_err(TransformFailure::Refused)
     }
 
     /// Step 2: generation with at most two retries, each carrying only the

@@ -125,7 +125,7 @@ const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "seed_library_sha256",
         "contracts/fixtures/library/catalog.json",
-        "8142befce343434dc2f3684698416b52a4492ce85cc6943cacf35cb5d5d1c860",
+        "70530b2141972d2b6697154e4d90883745b93b00c447205570519f2020fd98d6",
     ),
 ];
 /// The shared cases' checks a pass requires, in order (`qualification_cases`).
@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 111] = [
+const SOURCES: [(&str, &[u8]); 115] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -272,6 +272,18 @@ const SOURCES: [(&str, &[u8]); 111] = [
         include_bytes!("../commands/tests.rs"),
     ),
     (
+        "app/src/composer/commands.rs",
+        include_bytes!("../composer/commands.rs"),
+    ),
+    (
+        "app/src/composer/lineage.rs",
+        include_bytes!("../composer/lineage.rs"),
+    ),
+    (
+        "app/src/composer/matcher.rs",
+        include_bytes!("../composer/matcher.rs"),
+    ),
+    (
         "app/src/composer/mod.rs",
         include_bytes!("../composer/mod.rs"),
     ),
@@ -294,6 +306,10 @@ const SOURCES: [(&str, &[u8]); 111] = [
     (
         "app/src/composer/tests.rs",
         include_bytes!("../composer/tests.rs"),
+    ),
+    (
+        "app/src/composer/transform.rs",
+        include_bytes!("../composer/transform.rs"),
     ),
     ("app/src/config.rs", include_bytes!("../config.rs")),
     ("app/src/demo.rs", include_bytes!("../demo.rs")),

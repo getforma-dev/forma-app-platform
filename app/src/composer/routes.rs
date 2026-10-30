@@ -28,7 +28,10 @@
 //! rehearsed intent skips the router model (`Composer::route`). The
 //! structured log records identities, origin, codes, confidence and
 //! per-step durations; never the intent text, a definition or the key.
-use super::{plan::Decision, Composer, GenerationFailure, Origin, COMPOSE_DEADLINE};
+use super::{
+    lineage::lineage, plan::Decision, transform, Composer, GenerationFailure, Origin,
+    TransformFailure, COMPOSE_DEADLINE,
+};
 use crate::{
     auth::{cookies, csrf, Auth},
     http::{self, limits},
@@ -53,19 +56,54 @@ pub const PATH: &str = "/v1/compose";
 /// The intent body bound (D7.14 form-sized).
 pub const COMPOSE_BODY_LIMIT: usize = 4096;
 /// Per member: six compositions an hour.
-pub const COMPOSE_MEMBER: &[limits::Window] = &[limits::per(6, 3600)];
+/// APP-101: 30 an hour (was 6): a slash command, a chooser click or an
+/// instant pick is a composition too, and most use no model call.
+pub const COMPOSE_MEMBER: &[limits::Window] = &[limits::per(30, 3600)];
 
 /// The route's state: sessions, limits and stores from [`Auth`]; the
 /// composer (disabled when no key is configured).
 pub struct Compose {
     auth: Arc<Auth>,
-    composer: Composer,
+    composer: Arc<Composer>,
 }
 impl Compose {
     pub fn new(auth: Arc<Auth>, composer: Composer) -> Self {
-        Self { auth, composer }
+        Self {
+            auth,
+            composer: Arc::new(composer),
+        }
     }
 }
+
+/// APP-101: how far a composition's live transform got.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Tailoring {
+    /// The request said nothing beyond the app's defaults (or the pick came
+    /// from the router model, which already read the whole request).
+    None,
+    /// The transform runs in the background; `app.adapted` or `app.kept`
+    /// follows on the event stream.
+    Pending,
+    /// The defaults stay (no model, no authoring app, a refused transform):
+    /// the canvas shows a neutral "kept the standard view" note.
+    Kept,
+    /// This is the adapted work, tailored from the standard `(app, work)`.
+    Adapted { from_app: String, from_work: String },
+}
+impl Tailoring {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Pending => "pending",
+            Self::Kept => "kept",
+            Self::Adapted { .. } => "adapted",
+        }
+    }
+}
+
+/// The whole background transform, model call and three storage
+/// transactions included.
+pub const TAILOR_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
 
 pub fn router(state: Arc<Compose>) -> Router {
     Router::new().route(PATH, post(compose)).with_state(state)
@@ -78,6 +116,8 @@ pub struct Composed {
     pub work: String,
     pub origin: Origin,
     pub title: String,
+    /// APP-101: the live transform's state for this composition.
+    pub tailoring: Tailoring,
 }
 
 /// Why a composition stopped; the HTTP shell maps each to a design §9 answer.
@@ -94,38 +134,147 @@ pub enum Refused {
     CouldNotCompose(&'static str),
 }
 
-/// One composition for a live member (module documentation, from the
-/// composer-enabled check on). Everything the model wrote reaches storage
-/// only as an [`crate::admission::AdmittedDefinition`].
-pub(crate) async fn compose_for(
+/// One composition for a live member, in one phase (module documentation,
+/// from the composer-enabled check on): the instant pick and, when the
+/// request asks for more, the live transform awaited inline, so the answer
+/// is the adapted work (`Tailoring::Adapted`) or the standard one with
+/// `Tailoring::Kept`. This is the stable entry other callers use (the MCP
+/// tool, the campaigns): `(trusted request, intent)` in, the placed result
+/// out. The canvas route uses [`compose_instant`] and runs the [`Tailor`] in
+/// the background instead. Everything the model wrote reaches storage only
+/// as an [`crate::admission::AdmittedDefinition`].
+pub async fn compose_for(
     stores: &Stores,
     composer: &Composer,
     member: &TrustedRequest,
     intent: &str,
 ) -> Result<Composed, Refused> {
+    let (composed, tailor) =
+        match compose_instant(stores, composer, member, intent, &Pin::Free).await? {
+            First::Placed(composed, tailor) => (composed, tailor),
+            // `Pin::Free` never asks the member to choose.
+            First::Choose(_) => return Err(Refused::CouldNotCompose("near_tie")),
+        };
+    Ok(match tailor {
+        Some(tailor) => tailor.run(stores, composer, member).await,
+        None => composed,
+    })
+}
+
+/// How the caller constrains the routing step (APP-101).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Pin {
+    /// Matcher, then the router model for a near tie or no hit.
+    Free,
+    /// Matcher; a near tie answers [`First::Choose`] instead of a guess
+    /// (the canvas's chooser); no hit goes to the router model.
+    Chooser,
+    /// This library app (a slash command or a chooser click): no routing.
+    App(String),
+    /// "Build something new": straight to generation.
+    Generate,
+}
+
+/// One app the chooser offers.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Choice {
+    pub app: String,
+    pub title: String,
+    pub purpose: String,
+}
+
+/// The first phase's answer.
+pub enum First {
+    /// The saved work, with the pending transform if any.
+    Placed(Composed, Option<Box<Tailor>>),
+    /// A near tie under `Pin::Chooser`: the member picks (nothing written).
+    Choose(Vec<Choice>),
+}
+
+/// The first phase (APP-101): the pick, saved and announced (`app.placed`),
+/// with the pending [`Tailor`] when the request says more than the picked
+/// app's defaults and a transform can be drafted for this member; or, under
+/// [`Pin::Chooser`], the near-tie candidates.
+pub(crate) async fn compose_instant(
+    stores: &Stores,
+    composer: &Composer,
+    member: &TrustedRequest,
+    intent: &str,
+    pin: &Pin,
+) -> Result<First, Refused> {
     let started = Instant::now();
     let deadline = tokio::time::Instant::now() + COMPOSE_DEADLINE;
     let refused = |code: &'static str, origin: Option<Origin>, refusal: Refused| {
         log_refused(member, code, origin, started);
-        Err(refusal)
+        refusal
     };
     let demo = composer.demo_for(member.organization());
     if !composer.available_for(member.organization()) {
-        return refused("composer_unavailable", None, Refused::ComposerUnavailable);
+        return Err(refused(
+            "composer_unavailable",
+            None,
+            Refused::ComposerUnavailable,
+        ));
     }
     let context = match stores.workspace.composer_context(member).await {
         Ok(context) => context,
-        Err(error) => return refused("context_denied", None, storage_refusal(&error)),
+        Err(error) => return Err(refused("context_denied", None, storage_refusal(&error))),
     };
     if context.library.is_empty() && context.authoring.is_none() {
         // Nothing this member may compose: indistinguishable from a stranger.
-        return refused("nothing_composable", None, Refused::NotFound);
+        return Err(refused("nothing_composable", None, Refused::NotFound));
     }
 
     // Step 1: the router.
     let routed = Instant::now();
-    let (decision, confidence) = match composer.route(intent, &context.library, demo).await {
+    let exclude = context.authoring.as_ref().map(|a| a.app.as_str());
+    if *pin == Pin::Chooser && composer.matcher_on() {
+        let found = super::matcher::pick(intent, &context.library, exclude);
+        if found.reason == "near_tie" && found.ranked.len() >= 2 {
+            tracing::info!(
+                event = "composer.routed",
+                organization_id = member.organization(),
+                principal_id = member.principal(),
+                library_size = context.library.len(),
+                decision = "choose",
+                choices = found.ranked.len(),
+                duration_ms = elapsed_ms(routed),
+                "intent routed"
+            );
+            return Ok(First::Choose(
+                found
+                    .ranked
+                    .iter()
+                    .map(|index| {
+                        let app = &context.library[*index];
+                        Choice {
+                            app: app.app.clone(),
+                            title: app.title.clone(),
+                            purpose: super::matcher::purpose(app),
+                        }
+                    })
+                    .collect(),
+            ));
+        }
+    }
+    let routing = match pin {
+        Pin::App(app) => match context.library.iter().position(|item| &item.app == app) {
+            Some(index) => Ok((Decision::Retrieve { index }, "pinned")),
+            None => return Err(refused("unknown_pin", None, Refused::NotFound)),
+        },
+        Pin::Generate => Ok((Decision::Generate, "requested")),
+        Pin::Free | Pin::Chooser => composer.route(intent, &context.library, exclude).await,
+    };
+    let (decision, confidence) = match routing {
         Ok(decision) => decision,
+        Err(super::model::ModelError::Unavailable) if !composer.enabled() => {
+            // No confident pick and no model to ask (APP-101).
+            return Err(refused(
+                "composer_unavailable",
+                None,
+                Refused::ComposerUnavailable,
+            ));
+        }
         Err(error) => {
             // The library cannot be consulted; generation is still possible.
             tracing::warn!(
@@ -153,23 +302,62 @@ pub(crate) async fn compose_for(
         "intent routed"
     );
 
-    match decision {
+    let composed = match decision {
         Decision::Retrieve { index } => {
-            retrieve(
-                stores,
-                member,
-                &context,
-                &context.library[index],
-                intent,
-                started,
-            )
-            .await
+            let library = &context.library[index];
+            let standard = retrieve(stores, member, &context, library, intent, started).await?;
+            if !matches!(confidence, "matched" | "pinned") || !transform::wants(intent, library) {
+                return Ok(First::Placed(standard, None));
+            }
+            // APP-101: the request says more than the defaults.
+            let rehearsed = demo && transform::rehearsed(intent).is_some();
+            let (Some(_), Some(_)) = (
+                context.authoring.as_ref(),
+                context.owner_publish_policy.as_deref(),
+            ) else {
+                log_kept(member, "no_authoring_app", started);
+                return Ok(First::Placed(
+                    Composed {
+                        tailoring: Tailoring::Kept,
+                        ..standard
+                    },
+                    None,
+                ));
+            };
+            if !composer.enabled() && !rehearsed {
+                log_kept(member, "unavailable", started);
+                return Ok(First::Placed(
+                    Composed {
+                        tailoring: Tailoring::Kept,
+                        ..standard
+                    },
+                    None,
+                ));
+            }
+            lineage().begin(member.organization(), member.principal(), &standard.work);
+            let tailor = Tailor {
+                intent: intent.to_owned(),
+                library: library.clone(),
+                context: ComposerContext {
+                    library: Vec::new(),
+                    ..context.clone()
+                },
+                standard: standard.clone(),
+                demo,
+            };
+            return Ok(First::Placed(
+                Composed {
+                    tailoring: Tailoring::Pending,
+                    ..standard
+                },
+                Some(Box::new(tailor)),
+            ));
         }
-        Decision::Adapt { index, title } => {
+        Decision::Adapt { index, title } => 'adapt: {
             let library = &context.library[index];
             let Some(authoring) = context.authoring.as_ref() else {
                 // No app to draft on: the library app as it is.
-                return retrieve(stores, member, &context, library, intent, started).await;
+                break 'adapt retrieve(stores, member, &context, library, intent, started).await;
             };
             let description = format!("Adapted from {} for: {}", library.title, intent);
             match super::plan::plan_adapted(
@@ -180,22 +368,23 @@ pub(crate) async fn compose_for(
                 &authoring.app,
             ) {
                 Ok(planned) => {
-                    draft_publish_save(stores, member, &context, planned, intent, started).await
+                    draft_publish_save(stores, member, &context, planned, intent, started, true)
+                        .await
                 }
-                Err(refusal) => refused(
+                Err(refusal) => Err(refused(
                     refusal.code,
                     Some(Origin::Adapted),
                     Refused::CouldNotCompose(refusal.code),
-                ),
+                )),
             }
         }
         Decision::Generate => {
             let Some(authoring) = context.authoring.as_ref() else {
-                return refused(
+                return Err(refused(
                     "no_authoring_app",
                     Some(Origin::Generated),
                     Refused::CouldNotCompose("no_authoring_app"),
-                );
+                ));
             };
             let generating = Instant::now();
             match composer
@@ -220,8 +409,16 @@ pub(crate) async fn compose_for(
                         duration_ms = elapsed_ms(generating),
                         "definition generated and admitted"
                     );
-                    draft_publish_save(stores, member, &context, generated.planned, intent, started)
-                        .await
+                    draft_publish_save(
+                        stores,
+                        member,
+                        &context,
+                        generated.planned,
+                        intent,
+                        started,
+                        true,
+                    )
+                    .await
                 }
                 Err(GenerationFailure::Refused(codes)) => {
                     tracing::info!(
@@ -233,25 +430,26 @@ pub(crate) async fn compose_for(
                         duration_ms = elapsed_ms(generating),
                         "every generation attempt refused by admission"
                     );
-                    refused(
+                    Err(refused(
                         "admission_refused",
                         Some(Origin::Generated),
                         Refused::CouldNotCompose("admission_refused"),
-                    )
+                    ))
                 }
-                Err(GenerationFailure::OutOfTime) => refused(
+                Err(GenerationFailure::OutOfTime) => Err(refused(
                     "out_of_time",
                     Some(Origin::Generated),
                     Refused::CouldNotCompose("out_of_time"),
-                ),
-                Err(GenerationFailure::Model(error)) => refused(
+                )),
+                Err(GenerationFailure::Model(error)) => Err(refused(
                     error.code(),
                     Some(Origin::Generated),
                     Refused::CouldNotCompose(error.code()),
-                ),
+                )),
             }
         }
-    }
+    };
+    composed.map(|composed| First::Placed(composed, None))
 }
 
 /// Origin `retrieved`: a new saved work of the library app's newest
@@ -280,13 +478,15 @@ async fn retrieve(
         &library.title,
         intent,
         started,
+        true,
     )
     .await
 }
 
 /// Origins `adapted` and `generated`: draft the admitted definition on the
 /// authoring app, owner-publish it, save a work bound under the member's
-/// authority.
+/// authority. `announce`: publish `app.placed` (the live transform announces
+/// `app.adapted` itself instead).
 async fn draft_publish_save(
     stores: &Stores,
     member: &TrustedRequest,
@@ -294,6 +494,7 @@ async fn draft_publish_save(
     planned: super::plan::Planned,
     intent: &str,
     started: Instant,
+    announce: bool,
 ) -> Result<Composed, Refused> {
     let origin = planned.origin;
     let refused = |code: &'static str, refusal: Refused| {
@@ -373,6 +574,7 @@ async fn draft_publish_save(
         &planned.title,
         intent,
         started,
+        announce,
     )
     .await;
     if saved.is_ok() {
@@ -421,6 +623,7 @@ async fn save(
     title: &str,
     intent: &str,
     started: Instant,
+    announce: bool,
 ) -> Result<Composed, Refused> {
     match stores
         .workspace
@@ -430,7 +633,9 @@ async fn save(
         Ok(work) => {
             // APP-095: the organization's event stream learns that an app was
             // placed (ids only; every subscriber is re-authorized at delivery).
-            crate::events::hub().app_placed(member.organization(), app, &work.work);
+            if announce {
+                crate::events::hub().app_placed(member.organization(), app, &work.work);
+            }
             tracing::info!(
                 event = "composer.composed",
                 organization_id = member.organization(),
@@ -446,6 +651,7 @@ async fn save(
                 work: work.work,
                 origin,
                 title: title.to_owned(),
+                tailoring: Tailoring::None,
             })
         }
         Err(error) => {
@@ -453,6 +659,175 @@ async fn save(
             Err(storage_refusal(&error))
         }
     }
+}
+
+/// APP-101: the second phase of a composition, the live transform of the
+/// standard work the instant pick saved (module notes of
+/// `composer::transform`). Owned, so the route can run it after answering.
+/// The member is passed to [`Tailor::run`] (a `TrustedRequest` has no
+/// clone by design; the route moves its own into the background task).
+pub struct Tailor {
+    intent: String,
+    library: LibraryApp,
+    /// The member's authoring app, policy and sources (no library list).
+    context: ComposerContext,
+    standard: Composed,
+    demo: bool,
+}
+impl Tailor {
+    /// Runs the transform under [`TAILOR_DEADLINE`]: the adapted work
+    /// (drafted on the member's authoring app, owner-published, saved,
+    /// shared as the standard work was, `app.adapted` announced), or the
+    /// standard work with `Tailoring::Kept` and `app.kept` announced. Never
+    /// an error the member sees.
+    pub async fn run(
+        self,
+        stores: &Stores,
+        composer: &Composer,
+        member: &TrustedRequest,
+    ) -> Composed {
+        let started = Instant::now();
+        let organization = member.organization().to_owned();
+        let outcome = match tokio::time::timeout(
+            TAILOR_DEADLINE,
+            self.tailor(stores, composer, member, started),
+        )
+        .await
+        {
+            Ok(outcome) => outcome,
+            Err(_) => Err(("out_of_time", "none")),
+        };
+        match outcome {
+            Ok(composed) => composed,
+            Err((code, source)) => {
+                tracing::info!(
+                    event = "composer.transform_kept",
+                    code,
+                    source,
+                    organization_id = organization,
+                    principal_id = member.principal(),
+                    duration_ms = elapsed_ms(started),
+                    "the transform kept the standard view"
+                );
+                lineage().kept(&organization, &self.standard.work);
+                crate::events::hub().app_kept(
+                    &organization,
+                    &self.standard.app,
+                    &self.standard.work,
+                );
+                Composed {
+                    tailoring: Tailoring::Kept,
+                    ..self.standard.clone()
+                }
+            }
+        }
+    }
+
+    async fn tailor(
+        &self,
+        stores: &Stores,
+        composer: &Composer,
+        member: &TrustedRequest,
+        started: Instant,
+    ) -> Result<Composed, (&'static str, &'static str)> {
+        let organization = member.organization();
+        let (parsed, source) = composer
+            .transform(&self.intent, &self.library, self.demo)
+            .await
+            .map_err(|failure| match failure {
+                TransformFailure::Model(error) => (error.code(), "model"),
+                TransformFailure::Refused(refusal) => (refusal.code, "model"),
+            })?;
+        let modeled = elapsed_ms(started);
+        let authoring = self
+            .context
+            .authoring
+            .as_ref()
+            .map(|a| a.app.clone())
+            .ok_or(("no_authoring_app", source))?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let (planned, chips) =
+            transform::plan_transformed(&self.library, &parsed, organization, &authoring, now)
+                .map_err(|refusal| (refusal.code, source))?
+                .ok_or(("nothing_to_change", source))?;
+        let composed = draft_publish_save(
+            stores,
+            member,
+            &self.context,
+            planned,
+            &self.intent,
+            started,
+            false,
+        )
+        .await
+        .map_err(|_| ("save_refused", source))?;
+        // A teammate the member already shared the standard work with gets
+        // the adapted one too (`composer::lineage`), under the member's own
+        // share authority, before the announcement is judged.
+        let shares = lineage().adapted(
+            organization,
+            &self.standard.work,
+            &composed.app,
+            &composed.work,
+        );
+        for (grantee, record_write) in shares {
+            let shared = stores
+                .workspace
+                .share_work(
+                    member,
+                    &composed.app,
+                    &composed.work,
+                    &grantee,
+                    record_write,
+                )
+                .await;
+            tracing::info!(
+                event = "composer.adapted_shared",
+                organization_id = organization,
+                outcome = if shared.is_ok() { "shared" } else { "refused" },
+                "adapted work shared as the standard work was"
+            );
+        }
+        crate::events::hub().app_adapted(
+            organization,
+            &composed.app,
+            &composed.work,
+            &self.standard.app,
+            &self.standard.work,
+        );
+        tracing::info!(
+            event = "composer.transformed",
+            organization_id = organization,
+            principal_id = member.principal(),
+            source,
+            chips = chips.len(),
+            model_ms = modeled,
+            duration_ms = elapsed_ms(started),
+            "the standard work was adapted to the request"
+        );
+        Ok(Composed {
+            origin: Origin::Adapted,
+            tailoring: Tailoring::Adapted {
+                from_app: self.standard.app.clone(),
+                from_work: self.standard.work.clone(),
+            },
+            ..composed
+        })
+    }
+}
+
+fn log_kept(request: &TrustedRequest, code: &str, started: Instant) {
+    tracing::info!(
+        event = "composer.transform_kept",
+        code,
+        organization_id = request.organization(),
+        principal_id = request.principal(),
+        duration_ms = elapsed_ms(started),
+        "the transform kept the standard view"
+    );
 }
 
 fn storage_refusal(error: &Error) -> Refused {
@@ -538,15 +913,30 @@ async fn member(auth: &Auth, headers: &HeaderMap) -> Result<TrustedRequest, Resp
     }
 }
 
-/// `{"intent": "<text>"}` and nothing else.
-pub(super) fn body_intent(bytes: &[u8]) -> Option<String> {
+/// APP-101: `{"intent"}` with at most one of `"app_id": "<uuid>"` (a slash
+/// command or a chooser click) or `"generate": true` ("Build something
+/// new"); nothing else. Without either, a near tie answers the chooser.
+pub(super) fn body_request(bytes: &[u8]) -> Option<(String, Pin)> {
     let value: Value = serde_json::from_slice(bytes).ok()?;
     let object = value.as_object()?;
-    if object.len() != 1 {
-        return None;
-    }
-    let text = object.get("intent")?.as_str()?;
-    super::prompt::intent(text).map(str::to_owned)
+    let intent = super::prompt::intent(object.get("intent")?.as_str()?)?.to_owned();
+    let pin = match (object.get("app_id"), object.get("generate"), object.len()) {
+        (None, None, 1) => Pin::Chooser,
+        (Some(Value::String(app)), None, 2) if crate::storage::valid_identifier(app) => {
+            Pin::App(app.clone())
+        }
+        (None, Some(Value::Bool(true)), 2) => Pin::Generate,
+        _ => return None,
+    };
+    Some((intent, pin))
+}
+
+/// `{"intent": "<text>"}` alone (the pre-APP-101 shape, kept for the tests).
+#[cfg(test)]
+pub(super) fn body_intent(bytes: &[u8]) -> Option<String> {
+    body_request(bytes)
+        .filter(|(_, pin)| *pin == Pin::Chooser)
+        .map(|(intent, _)| intent)
 }
 
 fn json_response(body: Vec<u8>) -> Response {
@@ -617,20 +1007,42 @@ async fn compose(State(state): State<Arc<Compose>>, request: Request) -> Respons
             return http::not_found();
         }
     };
-    let Some(intent) = body_intent(&bytes).filter(|_| parts.uri.query().is_none()) else {
+    let Some((intent, pin)) = body_request(&bytes).filter(|_| parts.uri.query().is_none()) else {
         log_refused(&member, "invalid_intent", None, started);
         return problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_intent");
     };
-    let Some(stores) = state.auth.stores.as_ref() else {
+    let Some(stores) = state.auth.stores.clone() else {
         return http::not_found();
     };
-    match compose_for(stores, &state.composer, &member, &intent).await {
-        Ok(composed) => {
+    // APP-101: the pick answers now; the transform follows on the stream.
+    match compose_instant(&stores, &state.composer, &member, &intent, &pin).await {
+        Ok(First::Choose(choices)) => {
+            let body = json!({
+                "choices": choices.iter().map(|choice| json!({
+                    "app_id": choice.app,
+                    "title": choice.title,
+                    "purpose": choice.purpose,
+                })).collect::<Vec<_>>(),
+            });
+            match crate::admission::encode(&body) {
+                Ok(bytes) => json_response(bytes),
+                Err(_) => http::unavailable(),
+            }
+        }
+        Ok(First::Placed(composed, tailor)) => {
+            if let Some(tailor) = tailor {
+                let composer = state.composer.clone();
+                let stores = stores.clone();
+                tokio::spawn(async move {
+                    tailor.run(&stores, &composer, &member).await;
+                });
+            }
             let body = json!({
                 "app_id": composed.app,
                 "work_id": composed.work,
                 "origin": composed.origin.as_str(),
                 "title": composed.title,
+                "tailoring": composed.tailoring.as_str(),
             });
             match crate::admission::encode(&body) {
                 Ok(bytes) => json_response(bytes),
