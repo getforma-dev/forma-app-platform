@@ -13,12 +13,20 @@ schema 2) is Victor's approval of 2026-10-29 recorded in ADR-008: GenUI's
 always-on synthetic beta at about $150-170/month, with FormaStack's lean fAuth
 (about $33, up to $38) reserved separately. The always-on stop schedule is a
 backstop at most 32 days away, renewed with a fresh reconciled reservation.
+
+A redeploy of the same service (new image digests) is a new window, because a
+window's inputs are immutable. It may declare `supersedes_window_id`: the
+earlier window of the same plan, service and account then stays recorded, but
+counts only its elapsed compute up to the supersession (plus its task-hour
+allowance in the months already used); its future compute is replaced by the
+new window's. A window is superseded at most once; supersession is never a
+cycle, never deletes a record and never edits the earlier reservation figures.
 """
 import argparse
 import calendar
 import copy
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal, ROUND_CEILING
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 import fcntl
 import hashlib
 import ipaddress
@@ -53,7 +61,7 @@ DIGEST_RE = r'877573132739\.dkr\.ecr\.us-east-1\.amazonaws\.com/[a-z0-9]+(?:[._-
 # disabled and are left out of the window binding, so earlier windows keep
 # their hashes.
 OPTIONAL_INPUTS = ('qualification_config_secret_arn', 'qualification_image_digest', 'operator_image_digest', 'operating_plan',
-                   'provider_management_secret_arn', 'provider_management_url')
+                   'provider_management_secret_arn', 'provider_management_url', 'supersedes_window_id')
 # Stack parameters an older deployed template may lack; absent means disabled.
 OPTIONAL_PARAMETERS = ('QualificationImageDigest', 'OperatorImageDigest', 'ProviderManagementSecretArn', 'ProviderManagementUrl')
 # ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's answers; approval A12):
@@ -68,6 +76,16 @@ WITHIN_WINDOW = ('ingress_mode', 'service_desired_count', 'provider_management_s
 TASK_HOURLY = Decimal('0.1215248')  # 2 CPU + 8 GiB + task IPv4
 FIXED_HOURLY = Decimal('0.0645')   # RDS + ALB + two ALB IPv4
 FIXED_STORAGE_KEYS = Decimal('4.30')  # 20 GiB RDS + two tenant keys
+# Retained window records: the original four fields never change. A window
+# reserved since supersession support records its service identity; a window
+# that supersedes names its predecessor; a superseded window gains the three
+# SUPERSEDED fields (who, when, and the compute it still counts).
+WINDOW_FIELDS = ('input_sha256', 'created_at_utc', 'expires_at_utc', 'reserved_compute_cents_by_month')
+SUPERSEDED = ('superseded_by_window_id', 'superseded_at_utc', 'counted_compute_cents_by_month')
+IDENTITY_FIELDS = ('operating_plan', 'account', 'region', 'hostname')
+# Every window reserved before identities were recorded was pinned by reserve()
+# to this one account, region and hostname (the GenuiSyntheticFoundation beta).
+LEGACY_SERVICE = {'account': '877573132739', 'region': 'us-east-1', 'hostname': 'beta.getforma.dev'}
 
 
 def require(condition, message):
@@ -100,6 +118,83 @@ def months_between(start, end):
         result[start.strftime('%Y-%m')] = Decimal(str((stop - start).total_seconds())) / 3600
         start = stop
     return result
+
+
+def floor_cents(value):
+    return int((value * 100).to_integral_value(rounding=ROUND_FLOOR))
+
+
+def canonical_window(value, label):
+    require(isinstance(value, str), label + ' must be a canonical UUID')
+    try:
+        canonical = str(uuid.UUID(value))
+    except ValueError:
+        canonical = None
+    require(canonical == value, label + ' must be a canonical UUID')
+    return value
+
+
+def identity_of(record, ledger_plan):
+    """The plan/account/region/hostname a retained window was reserved for."""
+    return record.get('service_identity') or dict(LEGACY_SERVICE, operating_plan=ledger_plan)
+
+
+def validate_windows(windows, ledger_plan):
+    """Closed record contract plus a consistent, acyclic, single-successor supersession graph."""
+    for key, old in windows.items():
+        canonical_window(key, 'retained window identity')
+        optional = [k for k in ('service_identity', 'supersedes_window_id') + SUPERSEDED if isinstance(old, dict) and k in old]
+        exact_keys(old, list(WINDOW_FIELDS) + optional, 'retained window')
+        require(re.fullmatch('[0-9a-f]{64}', old['input_sha256']) is not None, 'invalid retained input digest')
+        created = timestamp(old['created_at_utc']); timestamp(old['expires_at_utc'])
+        reserved = old['reserved_compute_cents_by_month']
+        require(isinstance(reserved, dict) and all(integer(v, 1) for v in reserved.values()), 'invalid retained reservation')
+        if 'service_identity' in old:
+            exact_keys(old['service_identity'], IDENTITY_FIELDS, 'retained window service identity')
+            require(old['service_identity']['operating_plan'] == ledger_plan, 'retained window was reserved under another operating plan')
+        marks = [k for k in SUPERSEDED if k in old]
+        require(len(marks) in (0, len(SUPERSEDED)), 'a superseded window records its successor, time and counted compute together')
+        if marks:
+            successor = windows.get(canonical_window(old['superseded_by_window_id'], 'superseded_by_window_id'))
+            require(successor is not None and successor.get('supersedes_window_id') == key, 'supersession is not recorded on both windows')
+            superseded_at = timestamp(old['superseded_at_utc'])
+            require(superseded_at == timestamp(successor['created_at_utc']) and superseded_at >= created, 'supersession time differs from the successor reservation')
+            counted = old['counted_compute_cents_by_month']
+            require(isinstance(counted, dict) and set(counted) == set(reserved)
+                    and all(integer(counted[m]) and counted[m] <= reserved[m] for m in reserved), 'invalid counted compute of a superseded window')
+        if 'supersedes_window_id' in old:
+            earlier = windows.get(canonical_window(old['supersedes_window_id'], 'supersedes_window_id'))
+            require(earlier is not None and earlier.get('superseded_by_window_id') == key, 'superseded window is missing or does not name its successor')
+    for key in windows:
+        seen, current = {key}, windows[key].get('supersedes_window_id')
+        while current is not None:
+            require(current not in seen, 'supersession cycle in the ledger')
+            seen.add(current)
+            current = windows[current].get('supersedes_window_id')
+
+
+def counted_compute(record):
+    return record.get('counted_compute_cents_by_month', record['reserved_compute_cents_by_month'])
+
+
+def supersede(earlier, now):
+    """What the earlier window still counts once superseded at `now`.
+
+    Elapsed compute up to `now` stays counted, and so does the task-hour
+    allowance in every month already begun; the rest of the month's reserved
+    window time is released (rounded down, so never more than was reserved
+    for it) and months that have not begun are released entirely.
+    """
+    created, expires = timestamp(earlier['created_at_utc']), timestamp(earlier['expires_at_utc'])
+    unused = months_between(max(now, created), expires + timedelta(hours=1))
+    counted = {}
+    for month, reserved in earlier['reserved_compute_cents_by_month'].items():
+        year, number = (int(x) for x in month.split('-'))
+        if datetime(year, number, 1, tzinfo=UTC) >= now:
+            counted[month] = 0
+        else:
+            counted[month] = max(0, reserved - floor_cents(unused.get(month, Decimal(0)) * TASK_HOURLY))
+    return counted
 
 
 def plan_of(config):
@@ -139,6 +234,10 @@ def reserve(config, ledger, now):
     require(not management['provider_management_secret_arn'] or task_images['operator_image_digest'],
             'an attached management secret needs the operator task (operator_image_digest)')
     require(str(uuid.UUID(config['window_id'])) == config['window_id'], 'window_id must be a canonical UUID retained across retry')
+    supersedes = config.get('supersedes_window_id', '')
+    if supersedes != '':
+        canonical_window(supersedes, 'supersedes_window_id')
+        require(supersedes != config['window_id'], 'supersession cycle: a window cannot supersede itself')
     require(config['account'] == '877573132739' and config['region'] == 'us-east-1', 'unexpected account or region')
     require(config['hostname'] == 'beta.getforma.dev', 'unexpected beta hostname')
     require(isinstance(config['operator'], str) and 0 < len(config['operator'].strip()) <= 100, 'named operator required')
@@ -167,14 +266,14 @@ def reserve(config, ledger, now):
                  and not (k in OPTIONAL_INPUTS and v in ('', BOUNDED))}
     encoded = json.dumps(immutable, sort_keys=True, separators=(',', ':')).encode()
     binding = hashlib.sha256(encoded).hexdigest()
-    for key, old in ledger['windows'].items():
-        require(str(uuid.UUID(key)) == key, 'invalid retained window identity')
-        exact_keys(old, ['input_sha256', 'created_at_utc', 'expires_at_utc', 'reserved_compute_cents_by_month'], 'retained window')
-        require(re.fullmatch('[0-9a-f]{64}', old['input_sha256']) is not None, 'invalid retained input digest')
-        timestamp(old['created_at_utc']); timestamp(old['expires_at_utc'])
-        require(isinstance(old['reserved_compute_cents_by_month'], dict) and all(integer(v, 1) for v in old['reserved_compute_cents_by_month'].values()), 'invalid retained reservation')
+    validate_windows(ledger['windows'], plan)
     existing = ledger['windows'].get(config['window_id'])
     require(existing is None or existing['input_sha256'] == binding, 'window identity already has different deployment inputs; do not overwrite an unknown outcome')
+    # A superseded window no longer reserves its future compute: it can never
+    # be reused, retried or activated; its successor's input is the live one.
+    require(existing is None or 'superseded_by_window_id' not in existing,
+            'window was superseded by ' + str((existing or {}).get('superseded_by_window_id')) + '; use the superseding window input')
+    identity = {'operating_plan': plan, 'account': config['account'], 'region': config['region'], 'hostname': config['hostname']}
     active = months_between(now, expires + timedelta(hours=1))
     # A migration/rollout can occur on either side of UTC month-end. Reserve
     # its complete allowance in every touched month rather than hiding it in
@@ -183,10 +282,22 @@ def reserve(config, ledger, now):
         active[month] += config['extra_task_hours']
     reserved = existing['reserved_compute_cents_by_month'] if existing else {month: cents(hours * TASK_HOURLY) for month, hours in active.items()}
     updated = copy.deepcopy(ledger)
-    updated['windows'][config['window_id']] = existing or {
+    record = existing or {
         'input_sha256': binding, 'created_at_utc': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
         'expires_at_utc': config['deployment_expires_at_utc'], 'reserved_compute_cents_by_month': reserved,
+        'service_identity': identity,
     }
+    if existing is None and supersedes:
+        earlier = ledger['windows'].get(supersedes)
+        require(earlier is not None, 'superseded window ' + supersedes + ' is not in the ledger')
+        require('superseded_by_window_id' not in earlier, 'window ' + supersedes + ' was already superseded by ' + str(earlier.get('superseded_by_window_id')))
+        require(identity_of(earlier, plan) == identity, 'superseded window is for another operating plan, service or account')
+        require(timestamp(earlier['created_at_utc']) <= now, 'superseded window was reserved after this reservation time')
+        record['supersedes_window_id'] = supersedes
+        updated['windows'][supersedes] = dict(earlier, superseded_by_window_id=config['window_id'],
+                                              superseded_at_utc=record['created_at_utc'], counted_compute_cents_by_month=supersede(earlier, now))
+    updated['windows'][config['window_id']] = record
+    validate_windows(updated['windows'], plan)
     reports = {}
     for month in active:
         require(month in ledger['months'], 'missing reconciled ledger month ' + month)
@@ -205,11 +316,13 @@ def reserve(config, ledger, now):
             require(rules['auth_min_cents'] <= entry['auth_spent_or_reserved_cents'] <= rules['auth_max_cents'], 'reserve FormaStack lean fAuth at its approved $33-38 figure')
         year, number = (int(x) for x in month.split('-'))
         retained = cents(FIXED_HOURLY * calendar.monthrange(year, number)[1] * 24 + FIXED_STORAGE_KEYS)
-        windows = sum(w['reserved_compute_cents_by_month'].get(month, 0) for w in updated['windows'].values())
+        windows = sum(counted_compute(w).get(month, 0) for w in updated['windows'].values())
+        released = sum(w['reserved_compute_cents_by_month'].get(month, 0) - counted_compute(w).get(month, 0) for w in updated['windows'].values())
         genui = retained + windows + entry['prior_extra_spend_cents'] + entry['variable_reserve_cents']
         total = genui + entry['auth_spent_or_reserved_cents'] + entry['unallocated_cents']
         require(genui <= rules['genui_cap_cents'] and total <= rules['project_cap_cents'], 'budget exceeded for ' + month + '; reconcile prior reservations or change the reviewed operating plan')
         reports[month] = {'retained_core_full_month_cents': retained, 'all_window_compute_reservations_cents': windows,
+                          'superseded_compute_released_cents': released,
                           'prior_extra_spend_cents': entry['prior_extra_spend_cents'], 'variable_reserve_cents': entry['variable_reserve_cents'],
                           'genui_total_cents': genui, 'auth_spent_or_reserved_cents': entry['auth_spent_or_reserved_cents'],
                           'unallocated_cents': entry['unallocated_cents'], 'project_total_cents': total}
@@ -223,6 +336,7 @@ def reserve(config, ledger, now):
                   'ProviderManagementUrl': management['provider_management_url']}
     return updated, {'status': 'reserved_local_plan_only', 'window_id': config['window_id'], 'input_sha256': binding,
                      'observed_at_utc': now.strftime('%Y-%m-%dT%H:%M:%SZ'), 'reused_reservation': existing is not None,
+                     'superseded_window_id': record.get('supersedes_window_id'),
                      'operating_plan': plan, 'decision': rules['decision'],
                      'monthly_budget_cents': rules['project_cap_cents'], 'genui_allocation_cents': rules['genui_cap_cents'], 'cost_by_month': reports,
                      'cloudformation_parameters': parameters,
