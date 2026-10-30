@@ -330,5 +330,156 @@ class Preflight(unittest.TestCase):
             self.assertEqual(len(json.loads(book.read_text())['windows']), 1)
 
 
+WINDOW = datetime(2026, 11, 1, 17, tzinfo=timezone.utc)
+QUALIFICATION = '877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-qualification@sha256:' + 'b' * 64
+OPERATOR = '877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-operator@sha256:' + 'c' * 64
+
+
+def always_on(now=WINDOW):
+    """The APP-078 shape: always-on plan, backstop at the end of November."""
+    config, _ = inputs(now)
+    config.update(operating_plan='always-on-beta', ingress_mode='public', deployment_expires_at_utc='2026-11-30T23:00:00Z',
+                  extra_task_hours=3, qualification_image_digest=QUALIFICATION, operator_image_digest=OPERATOR)
+    ledger = {'schema_version': 2, 'scope': 'genui-beta-incremental', 'operating_plan': 'always-on-beta', 'windows': {},
+              'months': {'2026-11': {'reconciled_at_utc': now.strftime('%Y-%m-%dT%H:%M:%SZ'), 'basis': 'Synthetic fixture, not AWS billing evidence',
+                                     'prior_extra_spend_cents': 0, 'variable_reserve_cents': 1500,
+                                     'auth_spent_or_reserved_cents': 3800, 'unallocated_cents': 0}}}
+    return config, ledger
+
+
+class AlwaysOnPlan(unittest.TestCase):
+    def test_always_on_reserves_the_whole_month_within_the_approved_figure(self):
+        config, ledger = always_on()
+        updated, report = preflight.reserve(config, ledger, WINDOW)
+        month = report['cost_by_month']['2026-11']
+        self.assertEqual(set(report['cost_by_month']), {'2026-11'})
+        self.assertEqual(month['retained_core_full_month_cents'], 5074)
+        # 17:00 Nov 1 to 23:00 Nov 30 plus the one-hour margin is 703 hours, plus three extra task-hours.
+        self.assertEqual(month['all_window_compute_reservations_cents'], 8580)
+        self.assertEqual(month['genui_total_cents'], 15154)
+        self.assertEqual(month['project_total_cents'], 18954)
+        self.assertEqual((report['operating_plan'], report['genui_allocation_cents'], report['monthly_budget_cents']), ('always-on-beta', 17000, 20800))
+        parameters = report['cloudformation_parameters']
+        self.assertEqual(parameters['MonthlyBudgetUsd'], '170')
+        self.assertEqual((parameters['QualificationImageDigest'], parameters['OperatorImageDigest']), (QUALIFICATION, OPERATOR))
+        self.assertEqual(parameters['ServiceDesiredCount'], '0')
+        self.assertIn('backstop', report['limits'][1])
+        self.assertEqual(updated['operating_plan'], 'always-on-beta')
+
+    def test_plan_and_ledger_schema_must_agree(self):
+        config, ledger = always_on()
+        legacy = dict(ledger, schema_version=1); del legacy['operating_plan']
+        with self.assertRaises(ValueError): preflight.reserve(config, legacy, WINDOW)
+        with self.assertRaisesRegex(ValueError, 'operating plan differs'):
+            preflight.reserve(config, dict(ledger, operating_plan='bounded-window'), WINDOW)
+        bounded, _ = inputs(WINDOW)
+        with self.assertRaises(ValueError): preflight.reserve(bounded, ledger, WINDOW)
+        for plan in ['always-on', 'ALWAYS-ON-BETA', '', None, 1]:
+            with self.assertRaisesRegex(ValueError, 'unknown operating plan'):
+                preflight.reserve(dict(config, operating_plan=plan), ledger, WINDOW)
+
+    def test_always_on_expiry_is_a_bounded_backstop(self):
+        config, ledger = always_on()
+        preflight.reserve(dict(config, deployment_expires_at_utc='2026-12-03T16:59:59Z'), copy.deepcopy(ledger) | {'months': ledger['months'] | {'2026-12': ledger['months']['2026-11']}}, WINDOW)
+        for expiry in ['2026-12-03T17:00:01Z', '2026-11-01T17:09:59Z']:
+            with self.assertRaisesRegex(ValueError, '32 days'):
+                preflight.reserve(dict(config, deployment_expires_at_utc=expiry), ledger, WINDOW)
+        bounded, book = inputs(WINDOW)
+        with self.assertRaisesRegex(ValueError, '48 hours'):
+            preflight.reserve(dict(bounded, deployment_expires_at_utc='2026-11-03T17:00:01Z'), book, WINDOW)
+
+    def test_always_on_auth_reservation_and_genui_cap(self):
+        for auth in [3299, 3801]:
+            config, ledger = always_on(); ledger['months']['2026-11']['auth_spent_or_reserved_cents'] = auth
+            with self.assertRaisesRegex(ValueError, 'fAuth'): preflight.reserve(config, ledger, WINDOW)
+        config, ledger = always_on(); ledger['months']['2026-11']['prior_extra_spend_cents'] = 17000 - 15154
+        preflight.reserve(config, ledger, WINDOW)
+        ledger['months']['2026-11']['prior_extra_spend_cents'] += 1
+        with self.assertRaisesRegex(ValueError, 'budget exceeded for 2026-11'): preflight.reserve(config, ledger, WINDOW)
+        config, ledger = always_on(); ledger['months']['2026-11']['unallocated_cents'] = 20800 - 18954 + 1
+        with self.assertRaisesRegex(ValueError, 'budget exceeded'): preflight.reserve(config, ledger, WINDOW)
+        config, ledger = always_on(); ledger['months']['2026-11']['variable_reserve_cents'] = 999
+        with self.assertRaises(ValueError): preflight.reserve(config, ledger, WINDOW)
+
+    def test_task_image_digests_are_validated_and_bound(self):
+        config, ledger = always_on()
+        for key in ['qualification_image_digest', 'operator_image_digest']:
+            for value in ['123456789012.dkr.ecr.us-east-1.amazonaws.com/genui-operator@sha256:' + 'c' * 64,
+                          '877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-operator:latest', config['image_digest'], OPERATOR + '\n', None]:
+                with self.assertRaises(ValueError, msg=(key, value)): preflight.reserve(dict(config, **{key: value}), ledger, WINDOW)
+        with self.assertRaisesRegex(ValueError, 'distinct'):
+            preflight.reserve(dict(config, qualification_image_digest=OPERATOR), ledger, WINDOW)
+        updated, report = preflight.reserve(config, ledger, WINDOW)
+        with self.assertRaisesRegex(ValueError, 'already has different'):
+            preflight.reserve(dict(config, operator_image_digest=OPERATOR[:-1] + 'd'), updated, WINDOW)
+        # Ingress mode and desired count may change within the reserved window.
+        again, same = preflight.reserve(dict(config, service_desired_count=1), updated, WINDOW + timedelta(hours=2))
+        self.assertEqual((again, same['input_sha256']), (updated, report['input_sha256']))
+
+    def test_empty_task_images_and_default_plan_keep_earlier_bindings(self):
+        config, ledger = inputs()
+        _, report = preflight.reserve(config, ledger, NOW)
+        explicit = dict(config, qualification_image_digest='', operator_image_digest='', operating_plan='bounded-window')
+        _, same = preflight.reserve(explicit, ledger, NOW)
+        self.assertEqual(same['input_sha256'], report['input_sha256'])
+        self.assertEqual((same['cloudformation_parameters']['QualificationImageDigest'], same['cloudformation_parameters']['OperatorImageDigest']), ('', ''))
+        self.assertEqual(same['cloudformation_parameters']['MonthlyBudgetUsd'], '100')
+
+    def activation(self):
+        config, ledger = always_on(); config['service_desired_count'] = 1
+        _, report = preflight.reserve(config, ledger, WINDOW)
+        outputs = {'DeploymentExpiryScheduleArn': 'arn:aws:scheduler:us-east-1:877573132739:schedule/owned-group/expiry',
+                   'DeploymentExpiryGroup': 'owned-group', 'DeploymentExpiryRoleArn': 'arn:aws:iam::877573132739:role/owned-expiry',
+                   'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:3'}
+        cluster = 'arn:aws:ecs:us-east-1:877573132739:cluster/owned-cluster'
+        service = 'arn:aws:ecs:us-east-1:877573132739:service/owned-cluster/owned-service'
+        stack = {'StackStatus': 'UPDATE_COMPLETE', 'Parameters': [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()],
+                 'Outputs': [{'OutputKey': k, 'OutputValue': v} for k, v in outputs.items()]}
+        schedule = {'Arn': outputs['DeploymentExpiryScheduleArn'], 'State': 'ENABLED', 'ScheduleExpressionTimezone': 'UTC',
+                    'ScheduleExpression': 'at(2026-11-30T23:00:00)', 'FlexibleTimeWindow': {'Mode': 'OFF'},
+                    'Target': {'Arn': 'arn:aws:scheduler:::aws-sdk:ecs:updateService', 'RoleArn': outputs['DeploymentExpiryRoleArn'],
+                               'Input': json.dumps({'Cluster': cluster, 'Service': service, 'DesiredCount': 0}),
+                               'RetryPolicy': {'MaximumEventAgeInSeconds': 900, 'MaximumRetryAttempts': 3}}}
+        current = {'serviceArn': service, 'clusterArn': cluster, 'taskDefinition': outputs['TaskDefinition'], 'status': 'ACTIVE', 'desiredCount': 0}
+        definition = {'taskDefinitionArn': outputs['TaskDefinition'], 'runtimePlatform': {'cpuArchitecture': 'ARM64'},
+                      'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest']}]}
+        calls = []
+        def call(*args):
+            calls.append(args)
+            if args[:2] == ('sts', 'get-caller-identity'): return {'Account': '877573132739'}
+            if args[:2] == ('cloudformation', 'describe-stacks'): return {'Stacks': [stack]}
+            if args[:2] == ('scheduler', 'get-schedule'): return schedule
+            if args[:2] == ('ecs', 'describe-task-definition'): return {'taskDefinition': copy.deepcopy(definition)}
+            if args[:2] == ('ecs', 'describe-services'): return {'services': [dict(current)], 'failures': []}
+            if args[:2] == ('ecs', 'update-service'):
+                current['desiredCount'] = int(args[-1]); return {'service': dict(current)}
+            raise AssertionError(args)
+        return config, report, stack, calls, call
+
+    def test_always_on_activation_accepts_the_month_backstop_and_checks_task_images(self):
+        config, report, _, calls, call = self.activation()
+        self.assertEqual(preflight.activate(config, report, call, lambda: WINDOW + timedelta(hours=1))['desired_count'], 1)
+        for key in ['QualificationImageDigest', 'OperatorImageDigest', 'MonthlyBudgetUsd']:
+            config, report, stack, calls, call = self.activation()
+            parameter = next(p for p in stack['Parameters'] if p['ParameterKey'] == key)
+            parameter['ParameterValue'] = '100' if key == 'MonthlyBudgetUsd' else ''
+            with self.assertRaisesRegex(ValueError, 'deployed parameters differ'):
+                preflight.activate(config, report, call, lambda: WINDOW + timedelta(hours=1))
+            self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), key)
+        # Too close to the backstop: never start compute that would stop within ten minutes.
+        config, report, _, calls, call = self.activation()
+        with self.assertRaises(ValueError):
+            preflight.activate(config, report, call, lambda: datetime(2026, 11, 30, 22, 51, tzinfo=timezone.utc))
+        self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls))
+
+    def test_legacy_stack_without_task_image_parameters_is_disabled_only(self):
+        config, ledger = inputs(); config['service_desired_count'] = 1
+        _, report = preflight.reserve(config, ledger, NOW)
+        fixture = Preflight('test_activation_checks_live_stop_and_service_before_count_one').activation_fixture()
+        _, _, stack, _, _, _, call = fixture
+        stack['Parameters'] = [p for p in stack['Parameters'] if p['ParameterKey'] not in ('QualificationImageDigest', 'OperatorImageDigest')]
+        self.assertEqual(preflight.activate(fixture[0], fixture[1], call, lambda: NOW)['desired_count'], 1)
+
+
 if __name__ == '__main__':
     unittest.main()

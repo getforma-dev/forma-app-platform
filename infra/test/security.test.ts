@@ -81,7 +81,8 @@ test('operator and certificate are required; broad/private/placeholder networks 
   for (const value of ['0.0.0.0/0', '8.8.0.0/16', '1.1.0.0/23', '1.1.1.0/24', '9.9.9.8/30', '10.1.2.3/32', '172.16.0.1/32', '172.31.255.1/24', '192.168.1.1/32', '127.0.0.1/32', '169.254.169.254/32', '224.1.2.3/32', '203.0.113.1/32', '198.51.100.1/32', '192.0.2.1/32', '100.64.1.1/32', '198.18.0.1/32', '256.1.1.1/32', '1.1.1.1/33', '8.8.8.8/32\n', '::/0']) assert.equal(pattern.test(value), false, value);
   for (const name of ['OperatorIpv4Cidr', 'TlsCertificateArn', 'Operator', 'ImageArchitecture', 'DeploymentExpiresAtUtc']) assert.equal(document.Parameters[name].Default, undefined);
   assert.equal(document.Parameters.MonthlyBudgetUsd.Default, 100);
-  assert.deepEqual(document.Parameters.MonthlyBudgetUsd.AllowedValues, ['100']);
+  // '100' is ADR-003's bounded window; '170' is the always-on beta figure Victor approved (ADR-008, 2026-10-29).
+  assert.deepEqual(document.Parameters.MonthlyBudgetUsd.AllowedValues, ['100', '170']);
   const cert = new RegExp(document.Parameters.TlsCertificateArn.AllowedPattern);
   assert.equal(cert.test('arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-4000-8000-000000000001'), true);
   assert.equal(cert.test('invented-certificate'), false);
@@ -123,7 +124,7 @@ test('digest-pinned Fargate service has HTTPS and no default live task, exec, NA
   for (const type of ['AWS::EC2::NatGateway', 'AWS::EC2::VPCEndpoint', 'AWS::EC2::Instance', 'AWS::AppRunner::Service', 'AWS::Route53::RecordSet', 'AWS::CertificateManager::Certificate']) template.resourceCountIs(type, 0);
   template.resourceCountIs('AWS::ECS::Service', 1); template.resourceCountIs('AWS::ElasticLoadBalancingV2::Listener', 1);
   assert.equal(document.Parameters.ServiceDesiredCount.Default, 0); assert.deepEqual(document.Parameters.ServiceDesiredCount.AllowedValues, ['0']);
-  template.hasResourceProperties('AWS::ECS::Service', { LaunchType: 'FARGATE', DesiredCount: { Ref: 'ServiceDesiredCount' }, EnableExecuteCommand: false, DeploymentConfiguration: Match.objectLike({ DeploymentCircuitBreaker: { Enable: true, Rollback: true }, MinimumHealthyPercent: 100, MaximumPercent: 200 }), NetworkConfiguration: { AwsvpcConfiguration: Match.objectLike({ AssignPublicIp: 'ENABLED' }) } });
+  template.hasResourceProperties('AWS::ECS::Service', { LaunchType: 'FARGATE', DesiredCount: { Ref: 'ServiceDesiredCount' }, EnableExecuteCommand: false, DeploymentConfiguration: Match.objectLike({ DeploymentCircuitBreaker: { Enable: true, Rollback: true }, MinimumHealthyPercent: 0, MaximumPercent: 100 }), NetworkConfiguration: { AwsvpcConfiguration: Match.objectLike({ AssignPublicIp: 'ENABLED' }) } });
   template.hasResourceProperties('AWS::ElasticLoadBalancingV2::Listener', { Port: 443, Protocol: 'HTTPS', Certificates: [{ CertificateArn: { Ref: 'TlsCertificateArn' } }], SslPolicy: 'ELBSecurityPolicy-TLS13-1-2-2021-06' });
   template.hasResourceProperties('AWS::ElasticLoadBalancingV2::TargetGroup', { Port: 3000, Protocol: 'HTTP', TargetType: 'ip', HealthCheckPath: '/health/ready', Matcher: { HttpCode: '200' } });
   const imagePattern = new RegExp(document.Parameters.ImageDigest.AllowedPattern);

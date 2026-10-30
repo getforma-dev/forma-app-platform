@@ -31,7 +31,10 @@ export class GenuiFoundation extends Stack {
     Tags.of(this).add('Application', 'forma-app-platform');
     Tags.of(this).add('Environment', 'synthetic');
     const operator = new CfnParameter(this, 'Operator', { type: 'String', minLength: 1, description: 'Named operator before provisioning' });
-    const budget = new CfnParameter(this, 'MonthlyBudgetUsd', { type: 'Number', default: 100, allowedValues: ['100'], description: 'Approved $100 monthly operating limit; preflight accounts for retained resources and other spending. This is not an AWS billing hard-stop.' });
+    // '100' is ADR-003's bounded 48-hour window; '170' is the always-on beta
+    // figure Victor approved on 2026-10-29 (ADR-008). preflight.py selects it
+    // from the reserved operating plan; neither is an AWS billing hard-stop.
+    const budget = new CfnParameter(this, 'MonthlyBudgetUsd', { type: 'Number', default: 100, allowedValues: ['100', '170'], description: 'Approved monthly GenUI operating figure: 100 for the bounded qualification window, 170 for the approved always-on beta. Preflight accounts for retained resources and other spending. This is not an AWS billing hard-stop.' });
     const ingressMode = new CfnParameter(this, 'IngressMode', { type: 'String', default: 'public', allowedValues: ['operator', 'public'], description: 'operator only for the temporary /32 ingress trial; public HTTPS is the selected beta mode. Application access requires its separately tested signup/invite gate.' });
     const publicIngress = new CfnCondition(this, 'PublicIngress', { expression: Fn.conditionEquals(ingressMode.valueAsString, 'public') });
     const operatorCidr = new CfnParameter(this, 'OperatorIpv4Cidr', {
@@ -177,7 +180,10 @@ export class GenuiFoundation extends Stack {
       platformVersion: ecs.FargatePlatformVersion.VERSION1_4,
       assignPublicIp: true, vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }, securityGroups: [taskSecurity],
       enableExecuteCommand: false, circuitBreaker: { rollback: true }, healthCheckGracePeriod: Duration.seconds(90),
-      minHealthyPercent: 100, maxHealthyPercent: 200,
+      // ADR-007 D7.18: stop-then-start, so exactly one task runs at any moment
+      // (D7.5's in-process limits and D7.11's process-memory key stay defined);
+      // a deployment or rollback is a brief outage that signs members out.
+      minHealthyPercent: 0, maxHealthyPercent: 100,
     });
     const certificate = acm.Certificate.fromCertificateArn(this, 'Certificate', certificateArn.valueAsString);
     const listener = alb.addListener('Https', { port: 443, protocol: elbv2.ApplicationProtocol.HTTPS, certificates: [certificate], sslPolicy: elbv2.SslPolicy.RECOMMENDED_TLS, open: false });

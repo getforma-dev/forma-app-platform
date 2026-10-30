@@ -131,6 +131,26 @@ class PureTests(unittest.TestCase):
             with self.assertRaises(op.Refused) as refusal:
                 parse(good, organization="00000000-0000-4000-8000-000000000002")
             self.assertEqual(str(refusal.exception), "record_organization_refused")
+            # APP-078: the same record inline is checked identically; exactly one form.
+            def inline(value, organization=northstar):
+                return op.validate(op.parser().parse_args(["register-source-revision", "--organization", organization, "--record-json", value]))
+            self.assertEqual(inline(json.dumps(good)).revision_record, good)
+            for change in (dict(good, extra=1), dict(good, object_digest=content), dict(good, row_count="6")):
+                with self.assertRaises(op.Refused):
+                    inline(json.dumps(change))
+            duplicate = json.dumps(good)[:-1] + ',"row_count":7}'
+            for bad in (duplicate, "", "[]", "x" * 4097, json.dumps(good).replace("6e0f", "ée0f")):
+                with self.assertRaises(op.Refused) as refusal:
+                    inline(bad)
+                self.assertTrue(str(refusal.exception).startswith("record_"), bad[:20])
+            with self.assertRaises(op.Refused):
+                inline(json.dumps(good), organization="00000000-0000-4000-8000-000000000002")
+            path = Path(directory) / "record.json"
+            for argv in (["register-source-revision", "--organization", northstar],
+                         ["register-source-revision", "--organization", northstar, "--record", str(path), "--record-json", json.dumps(good)]):
+                with self.assertRaises(op.Refused) as refusal:
+                    op.validate(op.parser().parse_args(argv))
+                self.assertEqual(str(refusal.exception), "record_refused")
         parser = op.parser()
         base = ["create-bound-work", "--organization", northstar, "--app", ORG, "--from-work", ORG, "--work", ORG,
                 "--creator", ORG, "--input", "events", "--source", ORG, "--revision", ORG]
@@ -165,6 +185,16 @@ class PureTests(unittest.TestCase):
             op.validate(parser.parse_args(["issue", "--organization", ORG, "--issued-by", "unit"]))
         with self.assertRaises(op.Refused):
             op.validate(parser.parse_args(["issue", "--organization", ORG.upper(), "--issued-by", "unit", "--grant", "source_read:" + str(uuid.uuid4())]))
+        # APP-078 managed channel: a pre-minted digest of the exact stored shape, never with an invitation.
+        digest = op.code_digest(bytes(32))
+        self.assertEqual(op.validate(parser.parse_args(base + ["--code-digest", digest])).code_digest, digest)
+        for bad in ("sha256:" + "A" * 64, "sha256:" + "0" * 63, digest + "\n", "0" * 64, op.encode_code(bytes(32))):
+            with self.subTest(digest=bad[:12]), self.assertRaises(op.Refused) as refused:
+                op.validate(parser.parse_args(base + ["--code-digest", bad]))
+            self.assertEqual(str(refused.exception), "malformed_code_digest")
+        with self.assertRaises(op.Refused) as refused:
+            op.validate(parser.parse_args(base + ["--code-digest", digest] + invitation + ["user"]))
+        self.assertEqual(str(refused.exception), "code_digest_with_invitation_refused")
 
     def test_canonical_event_bytes_match_the_contract_encoder(self):
         body = {"b": None, "a": "x", "chain_sequence": 2, "kind": "code.issued"}
@@ -430,6 +460,27 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
                                       "expires_at", "revoked_at", "provider_invitations"})
         self.assertEqual((entry["status"], entry["redeemed_count"], entry["live_pending_admissions"], entry["lapsed_pending_admissions"],
                           entry["denied_for_reconciliation"]), ("active", 0, 0, 0, 0))
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+
+    def test_preminted_issue_stores_the_given_digest_and_prints_no_secret(self):
+        # APP-078 managed channel: the operator minted the code; the command sees only its digest.
+        raw = os.urandom(32)
+        code, digest = op.encode_code(raw), op.code_digest(raw)
+        out = self.issue("--code-digest", digest)
+        self.assertEqual(set(out), {"code_id", "code_digest", "kind", "max_redemptions", "expires_at"})
+        self.assertEqual(out["code_digest"], digest)
+        self.assertEqual(self.query("SELECT organization_id::text FROM genui_private.code_index WHERE code_digest=%s", (digest,)), [(ORG,)])
+        self.assertEqual(self.query("SELECT code_digest::text,status FROM genui.access_codes WHERE organization_id=%s AND code_id=%s",
+                                    (ORG, out["code_id"])), [(digest, "active")])
+        self.assertNotIn(code, self.dump())
+        self.assertEqual(self.operator_events()[-1], ("code.issued",))
+        # The code the operator holds is the one the stored digest admits.
+        self.assertEqual(op.code_digest(op.normalize_code(code)), digest)
+        # A reused digest refuses whole (code_index primary key) and writes nothing.
+        before = self.dump()
+        self.cli("issue", "--organization", ORG, "--issued-by", "unit-operator", "--grant", "source_read:" + self.source,
+                 "--code-digest", digest, expect=1)
+        self.assertEqual(self.dump(), before)
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
 
     def test_issue_refusals_write_nothing(self):
