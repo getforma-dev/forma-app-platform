@@ -277,11 +277,7 @@ pub async fn generate(
     let pdf_ms = ms(step);
     // Overview, data paragraphs, key points: placeholders only.
     let step = Instant::now();
-    let (overview, data_paragraphs, key_points): (
-        Vec<Part>,
-        Vec<(String, Vec<Part>)>,
-        Vec<Vec<Part>>,
-    ) = if demo || !state.composer.enabled() {
+    let (overview, data_paragraphs, key_points): Summary = if demo || !state.composer.enabled() {
         let mut paragraphs = Vec::new();
         for (file, _, ids) in &data_files {
             let mine: Vec<ViewResult> = results
@@ -315,10 +311,7 @@ pub async fn generate(
         let judged = reply
             .ok()
             .and_then(|reply| judge_summary(&reply.text, &results, &data_files));
-        match judged {
-            Some(judged) => judged,
-            None => (Vec::new(), Vec::new(), Vec::new()),
-        }
+        judged.unwrap_or_default()
     };
     let summary_ms = ms(step);
     let template = json!({

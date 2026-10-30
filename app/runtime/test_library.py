@@ -444,3 +444,36 @@ class LibraryEngine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BoxNormalizer(unittest.TestCase):
+    """APP-108: the folder normalizer child writes exactly the library normalizer's bytes."""
+
+    def test_box_normalize_matches_library_sources_for_every_library_csv(self):
+        sources = {s["source_id"]: s for a in CATALOG["apps"] for s in a["sources"]}
+        directory = Path(tempfile.mkdtemp(prefix="box-normalize-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        for source in sources.values():
+            data = (LIBRARY / source["csv"]).read_bytes()
+            target = directory / (source["source_id"] + ".parquet")
+            request = {"contract": source["input_contract"], "csv": data.decode("utf-8"), "target": str(target)}
+            completed = subprocess.run([sys.executable, "-I", str(HERE / "runtime.py"), "normalize"], input=json.dumps(request).encode(),
+                                       capture_output=True, env={}, timeout=60)
+            self.assertEqual(completed.returncode, 0, completed.stdout)
+            answer = json.loads(completed.stdout)
+            self.assertEqual(answer["normalized_digest"], source["normalized_digest"], source["csv"])
+            self.assertEqual(answer["row_count"], source["row_count"])
+            self.assertEqual("sha256:" + hashlib.sha256(target.read_bytes()).hexdigest(), source["normalized_digest"])
+
+    def test_box_normalize_refuses_cells_outside_the_contract(self):
+        directory = Path(tempfile.mkdtemp(prefix="box-normalize-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        contract = {"id": "q3", "contract_id": "q3_x", "contract_version": 1, "kind": "source",
+                    "fields": [{"id": "revenue", "value_type": {"type": "money", "currency": "USD", "minor_unit_exponent": 2}, "nullable": False}]}
+        for csv_text, code in (("revenue\n12.5\n", "money_refused"), ("other\n1.00\n", "header_refused"), ("revenue\n\n", "row_shape_refused")):
+            request = {"contract": contract, "csv": csv_text, "target": str(directory / "x.parquet")}
+            completed = subprocess.run([sys.executable, "-I", str(HERE / "runtime.py"), "normalize"], input=json.dumps(request).encode(),
+                                       capture_output=True, env={}, timeout=60)
+            self.assertEqual(completed.returncode, 1)
+            self.assertEqual(json.loads(completed.stdout), {"refused": code})
+            self.assertFalse((directory / "x.parquet").exists())

@@ -105,12 +105,12 @@ pub fn long_path(path: &str) -> bool {
         return false;
     };
     let parts: Vec<&str> = rest.split('/').collect();
-    match parts.as_slice() {
-        [_, "files"] | [_, "apps"] | [_, "brief"] => true,
-        [_, "files", _, "preview" | "data" | "attach"] => true,
-        ["explain", _, _] => true,
-        _ => false,
-    }
+    matches!(
+        parts.as_slice(),
+        [_, "files" | "apps" | "brief"]
+            | [_, "files", _, "preview" | "data" | "attach"]
+            | ["explain", _, _]
+    )
 }
 
 pub(crate) fn document(status: StatusCode, value: &Value) -> Response {
