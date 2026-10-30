@@ -286,10 +286,6 @@ function confirmCard(document_: Document, draft: Draft, utterance: string, recei
 }
 
 /**
- * The intent bar's submit: the action path first, the composer when the
- * server says `place`; `report` updates the bar's status line.
- */
-/**
  * APP-108: the folder lane. With a folder chip active or mentioned in the bar,
  * plain sentences go to that folder (`folder-bar.ts`); the router answers
  * true when it took the sentence.
@@ -300,6 +296,10 @@ export function setUtteranceRouter(router: UtteranceRouter): void {
   utteranceRouter = router;
 }
 
+/**
+ * The intent bar's submit: the action path first, the composer when the
+ * server says `place`; `report` updates the bar's status line.
+ */
 export async function submitUtterance(text: string, report: (message: string) => void, app: string | null = null): Promise<void> {
   const receiptAttached = document.getElementById('intent-form')?.getAttribute('data-receipt') === 'attached';
   // APP-101: `/name rest` is the explicit lane (`slash.ts`): no guessing.

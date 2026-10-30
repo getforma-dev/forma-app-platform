@@ -1,8 +1,10 @@
-// APP-108: a minimal, self-contained file viewer for box files. APP-106
-// (`pivot/focus-unite`) is building the canvas's focus modal; until it
-// merges, this module is the stand-in, kept behind a tiny API
-// (`openViewer(file, boxId)`, `openModal`) so it can be swapped for the focus
-// modal without touching the box card.
+// APP-108: the file viewer for folder files, a separate module behind a tiny
+// API (`openViewer(file, boxId, page)`, `openModal`). APP-106's focus mode
+// (`focus.ts`) moves an existing canvas card into its modal and has no API
+// for arbitrary content, so the viewer stays its own dialog with focus mode's
+// look (its close button and panel styling) and stacks above it: a file
+// opened from a focused folder card closes first on Esc or a backdrop click
+// (`data-modal-above` tells focus mode to leave those keys alone).
 //
 // The modal: role=dialog, aria-modal, a labelled title, focus kept inside
 // (Tab wraps), Esc, the close button and a backdrop click close it, and focus
@@ -26,7 +28,17 @@ export function openModal(title: string, subtitle: string, onClose?: () => void,
   const document_ = document;
   const previous = document_.activeElement as HTMLElement | null;
   const titleId = `bx-modal-title-${Math.random().toString(36).slice(2, 8)}`;
-  const closeButton = el(document_, 'button', { type: 'button', class: 'bx-modal-close', 'aria-label': 'Close' }, '×');
+  // APP-106's look (focus mode's close button and panel), stacked above it.
+  const closeButton = el(document_, 'button', { type: 'button', class: 'cv-focus-close bx-modal-close', 'aria-label': 'Close (Esc)', title: 'Close (Esc)' });
+  const x = document_.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  x.setAttribute('viewBox', '0 0 16 16');
+  x.setAttribute('width', '16');
+  x.setAttribute('height', '16');
+  x.setAttribute('aria-hidden', 'true');
+  const xPath = document_.createElementNS('http://www.w3.org/2000/svg', 'path');
+  xPath.setAttribute('d', 'M3.5 3.5l9 9M12.5 3.5l-9 9');
+  x.append(xPath);
+  closeButton.append(x);
   const body = el(document_, 'div', { class: 'bx-modal-body' });
   const actions = el(document_, 'div', { class: 'bx-modal-actions' });
   const dialog = el(document_, 'div', {
@@ -39,7 +51,8 @@ export function openModal(title: string, subtitle: string, onClose?: () => void,
     closeButton),
   body,
   actions);
-  const root = el(document_, 'div', { class: 'bx-backdrop' }, dialog);
+  // `data-modal-above`: focus mode leaves Esc, Tab and the backdrop to this dialog while it is open.
+  const root = el(document_, 'div', { class: 'bx-backdrop', 'data-modal-above': '' }, dialog);
   let closed = false;
   const close = () => {
     if (closed) return;

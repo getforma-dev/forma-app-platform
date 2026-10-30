@@ -216,32 +216,32 @@ async fn expect_adapted(
 }
 
 /// One HTTP answer over the socket.
-struct Answer {
-    status: StatusCode,
-    headers: reqwest::header::HeaderMap,
-    body: Vec<u8>,
-    elapsed: Duration,
+pub(crate) struct Answer {
+    pub(crate) status: StatusCode,
+    pub(crate) headers: reqwest::header::HeaderMap,
+    pub(crate) body: Vec<u8>,
+    pub(crate) elapsed: Duration,
 }
 impl Answer {
-    fn json(&self) -> Value {
+    pub(crate) fn json(&self) -> Value {
         serde_json::from_slice(&self.body).unwrap_or(Value::Null)
     }
-    fn text(&self) -> String {
+    pub(crate) fn text(&self) -> String {
         String::from_utf8_lossy(&self.body).into_owned()
     }
     /// The uniform 404 (`http::not_found`), byte for byte.
-    fn uniform_404(&self) -> bool {
+    pub(crate) fn uniform_404(&self) -> bool {
         self.status == StatusCode::NOT_FOUND
             && self.body == br#"{"code":"not_found","status":404}"#
             && self.headers[reqwest::header::CACHE_CONTROL] == "no-store"
     }
 }
-struct Stand {
-    origin: String,
-    client: reqwest::Client,
+pub(crate) struct Stand {
+    pub(crate) origin: String,
+    pub(crate) client: reqwest::Client,
 }
 impl Stand {
-    async fn call(
+    pub(crate) async fn call(
         &self,
         method: &str,
         path: &str,
@@ -280,15 +280,15 @@ impl Stand {
             elapsed: started.elapsed(),
         }
     }
-    async fn get(&self, path: &str, cookie: Option<&str>) -> Answer {
+    pub(crate) async fn get(&self, path: &str, cookie: Option<&str>) -> Answer {
         self.call("GET", path, cookie, None, &[]).await
     }
-    async fn post(&self, path: &str, cookie: Option<&str>, body: &str) -> Answer {
+    pub(crate) async fn post(&self, path: &str, cookie: Option<&str>, body: &str) -> Answer {
         self.call("POST", path, cookie, Some(body), &[]).await
     }
     /// Opens `GET /v1/events` for a session and parses its frames into
     /// documents; the task ends with the stream.
-    async fn stream(&self, cookie: &str) -> tokio::sync::mpsc::UnboundedReceiver<Value> {
+    pub(crate) async fn stream(&self, cookie: &str) -> tokio::sync::mpsc::UnboundedReceiver<Value> {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let response = self
             .client
@@ -329,7 +329,7 @@ impl Stand {
 }
 /// The next event of a kind (others of the same stream are skipped), within
 /// `WAIT`.
-async fn expect_event(
+pub(crate) async fn expect_event(
     rx: &mut tokio::sync::mpsc::UnboundedReceiver<Value>,
     kind: &str,
     app: &str,

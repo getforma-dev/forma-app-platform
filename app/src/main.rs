@@ -561,7 +561,6 @@ async fn main() {
     });
     genui::boxes::intent::install(box_state.clone());
     let box_routes = genui::boxes::routes::router(box_state.clone());
-    let box_long_routes = genui::boxes::routes::long_routes(box_state.clone());
     let work_routes = genui::query::routes::router(work.clone());
     // APP-099 (ADR-011 pitch): Forma as an MCP server (`POST /v1/mcp`, long
     // deadline: `forma_compose_app` waits on the model), bearer agent tokens
@@ -673,10 +672,7 @@ async fn main() {
                 (genui::mcp::PATH, mcp_routes),
                 (genui::widgets::WEATHER_PATH, widget_routes.clone()),
                 (genui::widgets::CUSTOMIZE_PATH, widget_routes),
-            ]
-            .into_iter()
-            .chain(box_long_routes)
-            .collect(),
+            ],
         ),
     };
 

@@ -54,7 +54,7 @@ NEVER write a number, digit, date or amount yourself. Every value from the data 
 /// The demo PDF's rehearsed statements (DS-75): `(sha256, [(text, page)])`.
 /// The fixture is `docs/pitch/folder-fixture/q3_metrics_brief.pdf`.
 pub const REHEARSED_PDFS: &[(&str, &[(&str, u64)])] = &[(
-    "sha256:b7b6f0b0d0e4e1c3e7a2b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f7a8b9c0d",
+    "sha256:3739b1a012f6a73697d5f6f141ca1a244d65caf80bfb27ce27ca562a7cf71373",
     &[
         (
             "Q3 revenue grew in every month of the quarter, with September the strongest month.",

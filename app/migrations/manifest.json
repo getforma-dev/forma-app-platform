@@ -55,7 +55,7 @@
     {
       "version": 11,
       "file": "0011_boxes.sql",
-      "sha256": "115ef6d2a57655389a0e7d7f35e33dcbaa53040f0f6547ec4520bb759be72671"
+      "sha256": "e3a479966c3feb1473259adb2d78d688819086e7f0a7fcb475d1183688e740d1"
     }
   ],
   "catalog": [
@@ -105,7 +105,7 @@
     },
     {
       "file": "catalog-v11.json",
-      "sha256": "31032d7215ecbee0d02289ab82dd79e69f57eed474306132fdc95cce8f091541"
+      "sha256": "d9bc7f7160018fc734708fdbd18bcc589c9ee94deecd8a815ab081eb8b338104"
     }
   ]
 }

@@ -132,8 +132,12 @@ fn valid_id(value: &str) -> bool {
 // (`auth::tests`); still compiled only into the test executable.
 #[cfg(test)]
 mod actions_campaign;
+// APP-108: the folders campaign (Docker; upload → parse → register → view →
+// derived app → share → isolation).
 #[cfg(test)]
 pub(crate) mod admission_qualification;
+#[cfg(test)]
+mod box_campaign;
 #[cfg(test)]
 pub(crate) mod command_qualification;
 #[cfg(test)]

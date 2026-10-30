@@ -11,6 +11,7 @@ import { brief, NOUN, refusalText, type Brief, type BriefFile, type BriefPart } 
 import { openViewer } from './box-viewer';
 import { canvasApi, mountWidget, unmountWidget } from './board';
 import { showValue } from './explain';
+import { registerFocusCard, unregisterFocusCard } from './focus';
 import { el } from './render';
 
 const LABEL = 'AI brief · cited from your files';
@@ -65,16 +66,20 @@ export async function openBrief(boxId: string, name: string, generate: boolean, 
   const regenerate = el(document_, 'button', { type: 'button', class: 'cv-ex-regen' }, 'Regenerate');
   const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'aria-label': 'Remove the brief from the canvas', title: 'Remove' }, '×');
   const label = el(document_, 'span', { class: 'cv-origin cv-ex-label', 'data-origin': 'generated' }, LABEL);
-  const card = el(document_, 'article', { class: 'cv-card cv-ex cv-brief', 'data-kind': 'brief', 'aria-label': `Brief of ${NOUN.toLowerCase()} ${name}` },
-    el(document_, 'header', { class: 'cv-ex-head' },
-      el(document_, 'div', { class: 'cv-ex-id' }, el(document_, 'h2', {}, 'Brief'), el(document_, 'p', { class: 'cv-ex-of' }, `${NOUN} ${name}`)),
-      label, close),
+  const head = el(document_, 'header', { class: 'cv-ex-head' },
+    el(document_, 'div', { class: 'cv-ex-id' }, el(document_, 'h2', {}, 'Brief'), el(document_, 'p', { class: 'cv-ex-of' }, `${NOUN} ${name}`)),
+    label);
+  const card = el(document_, 'article', { class: 'cv-card cv-ex cv-brief', 'data-kind': 'brief', 'data-card': `br-${boxId}`, 'aria-label': `Brief of ${NOUN.toLowerCase()} ${name}` },
+    head,
     overview, filesList, pointsSection, status,
     el(document_, 'footer', { class: 'cv-ex-foot' }, when, regenerate));
   const state = beside ? canvasApi()?.getItemState(beside) : null;
   const at = state && beside ? { x: state.x + beside.offsetWidth + 32, y: state.y } : undefined;
   const item = mountWidget(card, { id: `brief-${boxId}`, title: 'Brief', width: 480, minHeight: 300, at, focus: !at });
   if (!item) return 'The brief could not be placed.';
+  // APP-106 focus mode (F or the focus button), as for every card.
+  registerFocusCard(card, head, `${NOUN} ${name}`);
+  head.append(close);
   let files: BriefFile[] = [];
   const say = (text: string) => { status.textContent = text; };
   const render = (found: Brief) => {
@@ -94,6 +99,7 @@ export async function openBrief(boxId: string, name: string, generate: boolean, 
     when.textContent = found.generated_at ? `Generated ${found.generated_at.replace('T', ' ').replace(/:\d\dZ$/, ' UTC')}` : '';
   };
   const remove = () => {
+    unregisterFocusCard(card);
     unmountWidget(item);
     cards.delete(boxId);
   };

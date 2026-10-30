@@ -83,28 +83,34 @@ pub fn router(state: Arc<Boxes>) -> Router {
         .route("/v1/boxes/{box}/name", post(rename))
         .route("/v1/boxes/lineage/{app}/{work}", get(lineage))
         .route("/v1/boxes/{box}/files/{file}/content", get(content))
-        .with_state(state)
-}
-/// Routes that run the parser, the normalizer or a model (long deadline).
-pub fn long_routes(state: Arc<Boxes>) -> Vec<(&'static str, Router)> {
-    let one = |path: &'static str, router: axum::routing::MethodRouter<Arc<Boxes>>| {
-        (
-            path,
-            Router::new().route(path, router).with_state(state.clone()),
-        )
-    };
-    vec![
-        one("/v1/boxes/{box}/files", post(upload)),
-        one("/v1/boxes/{box}/files/{file}/preview", get(preview)),
-        one("/v1/boxes/{box}/files/{file}/data", post(data)),
-        one("/v1/boxes/{box}/files/{file}/attach", post(attach)),
-        one(APPS_PATH, post(apps)),
-        one(EXPLAIN_PATH, get(explain_get).post(explain_post)),
-        one(
+        // Long deadline (`long_path`).
+        .route("/v1/boxes/{box}/files", post(upload))
+        .route("/v1/boxes/{box}/files/{file}/preview", get(preview))
+        .route("/v1/boxes/{box}/files/{file}/data", post(data))
+        .route("/v1/boxes/{box}/files/{file}/attach", post(attach))
+        .route(APPS_PATH, post(apps))
+        .route(EXPLAIN_PATH, get(explain_get).post(explain_post))
+        .route(
             BRIEF_PATH,
             get(super::brief::brief_get).post(super::brief::brief_post),
-        ),
-    ]
+        )
+        .with_state(state)
+}
+/// Whether `path` is a route that runs the parser, the normalizer or a
+/// model: `http::deadline` gives it the composer's deadline
+/// (`COMPOSE_DEADLINE`) instead of the D7.14 handler deadline.
+/// (`http::uniform_with_many` routes only static paths; these carry ids.)
+pub fn long_path(path: &str) -> bool {
+    let Some(rest) = path.strip_prefix("/v1/boxes/") else {
+        return false;
+    };
+    let parts: Vec<&str> = rest.split('/').collect();
+    match parts.as_slice() {
+        [_, "files"] | [_, "apps"] | [_, "brief"] => true,
+        [_, "files", _, "preview" | "data" | "attach"] => true,
+        ["explain", _, _] => true,
+        _ => false,
+    }
 }
 
 pub(crate) fn document(status: StatusCode, value: &Value) -> Response {
@@ -120,6 +126,7 @@ pub(crate) fn document(status: StatusCode, value: &Value) -> Response {
     response
 }
 fn refusal(error: Error) -> Response {
+    tracing::info!(code = %error, "box.refused");
     match error {
         Error::Denied => http::not_found(),
         _ => http::unavailable(),
@@ -1118,16 +1125,16 @@ pub async fn build_from_box(
     }
     let step = Instant::now();
     let mut data: Vec<DataFile> = Vec::new();
-    let candidates: Vec<&BoxFile> = view
+    // Confirmed files first (the member chose their types), then the newest
+    // others; at most three (the context cap).
+    let mut candidates: Vec<&BoxFile> = view
         .files
         .iter()
         .filter(|f| matches!(f.kind.as_str(), "csv" | "xlsx"))
         .filter(|f| only.is_none_or(|ids| ids.contains(&f.file_id)))
         .collect();
-    let skip = candidates
-        .len()
-        .saturating_sub(super::MAX_CONTEXT_DATA_FILES);
-    for file in candidates.into_iter().skip(skip) {
+    candidates.sort_by_key(|f| (f.data.is_none(), std::cmp::Reverse(f.created_at.clone())));
+    for file in candidates.into_iter().take(super::MAX_CONTEXT_DATA_FILES) {
         let (registered, table) = match &file.data {
             Some(registered) => match inspect_file(state, member, file).await {
                 Ok((_, table, _)) => (registered.clone(), table),

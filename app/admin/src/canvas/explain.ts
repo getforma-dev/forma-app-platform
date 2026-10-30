@@ -9,6 +9,7 @@
 // stored in the browser; a reload fetches again when the work is placed.
 import { addCards, boardWorks, canvasApi, focusCard, mountWidget, onBoardChange, unmountWidget } from './board';
 import { lineage } from './box-api';
+import { registerFocusCard, unregisterFocusCard } from './focus';
 import { el, isUuid } from './render';
 
 const LABEL = 'AI summary · numbers from receipts';
@@ -96,13 +97,13 @@ function mountCard(app: string, work: string, title: string) {
   const when = el(document_, 'p', { class: 'cv-ex-when' });
   const regenerate = el(document_, 'button', { type: 'button', class: 'cv-ex-regen' }, 'Regenerate');
   const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'aria-label': 'Remove the summary from the canvas', title: 'Remove' }, '×');
-  const card = el(document_, 'article', { class: 'cv-card cv-ex', 'data-kind': 'explain', 'aria-label': `Summary of ${title}` },
-    el(document_, 'header', { class: 'cv-ex-head' },
-      el(document_, 'div', { class: 'cv-ex-id' },
-        el(document_, 'h2', {}, 'Summary'),
-        el(document_, 'p', { class: 'cv-ex-of' }, title)),
-      el(document_, 'span', { class: 'cv-origin cv-ex-label', 'data-origin': 'generated' }, LABEL),
-      close),
+  const head = el(document_, 'header', { class: 'cv-ex-head' },
+    el(document_, 'div', { class: 'cv-ex-id' },
+      el(document_, 'h2', {}, 'Summary'),
+      el(document_, 'p', { class: 'cv-ex-of' }, title)),
+    el(document_, 'span', { class: 'cv-origin cv-ex-label', 'data-origin': 'generated' }, LABEL));
+  const card = el(document_, 'article', { class: 'cv-card cv-ex', 'data-kind': 'explain', 'data-card': `ex-${work}`, 'aria-label': `Summary of ${title}` },
+    head,
     list, status,
     el(document_, 'footer', { class: 'cv-ex-foot' }, when, regenerate));
   // Beside the app card: just left of its group, top-aligned.
@@ -111,6 +112,9 @@ function mountCard(app: string, work: string, title: string) {
   const at = state ? { x: state.x - 440, y: state.y } : undefined;
   const item = mountWidget(card, { id: `explain-${work}`, title: 'Summary', width: 420, minHeight: 220, at, focus: false });
   if (!item) return null;
+  // APP-106 focus mode (F or the focus button), as for every card.
+  registerFocusCard(card, head, title);
+  head.append(close);
   const render = (explanation: Explanation) => {
     const label = card.querySelector('.cv-ex-label');
     if (label) label.textContent = explanation.label || LABEL;
@@ -147,6 +151,8 @@ function mountCard(app: string, work: string, title: string) {
 function remove(work: string): void {
   const entry = cards.get(work);
   if (!entry) return;
+  const card = entry.item.querySelector<HTMLElement>('.cv-ex');
+  if (card) unregisterFocusCard(card);
   unmountWidget(entry.item);
   cards.delete(work);
 }

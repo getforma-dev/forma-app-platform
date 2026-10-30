@@ -39,6 +39,7 @@ import { openBrief } from './brief';
 import { activeFolder, folderRenamed, openFolderPicker, setActiveFolder, startFolderBar } from './folder-bar';
 import { openDataSheet } from './data-sheet';
 import { startExplain } from './explain';
+import { registerFocusCard, unregisterFocusCard } from './focus';
 import {
   boardWorks, canvasApi, canvasHost, isDemoCanvas, mountWidget, onBoardChange, onLayoutSaved,
   placeWork, unmountWidget, widgetSpot,
@@ -245,6 +246,7 @@ export async function openBox(boxId: string, at?: { x: number; y: number }): Pro
   if (!at) setActiveFolder({ box_id: boxId, name: boxLabel(contents.box) });
   else if (activeFolder()?.box_id === boxId) card.card.classList.add('is-folder-active');
   card.onClose(() => {
+    unregisterFocusCard(card.card);
     unmountWidget(item);
     open.delete(boxId);
     if (activeFolder()?.box_id === boxId) setActiveFolder(null);
@@ -284,11 +286,12 @@ function buildBoxCard(initial: BoxContents) {
   const cancelFormation = el(document_, 'button', { type: 'button', class: 'bx-quiet' }, 'Cancel');
   const form = el(document_, 'form', { class: 'bx-create', autocomplete: 'off', hidden: '' },
     el(document_, 'span', { class: 'bx-formation-mark', 'aria-hidden': 'true' }, '✨'), purpose, build, cancelFormation);
-  const card = el(document_, 'article', { class: 'cv-card bx-card', 'data-kind': 'box', 'data-box': boxId, 'aria-label': `${NOUN} ${boxLabel(initial.box)}` },
-    el(document_, 'header', { class: 'bx-head' },
-      el(document_, 'span', { class: 'bx-mark', 'aria-hidden': 'true' }),
-      el(document_, 'div', { class: 'bx-id' }, eyebrow, title),
-      close),
+  const head = el(document_, 'header', { class: 'bx-head' },
+    el(document_, 'span', { class: 'bx-mark', 'aria-hidden': 'true' }),
+    el(document_, 'div', { class: 'bx-id' }, eyebrow, title),
+    close);
+  const card = el(document_, 'article', { class: 'cv-card bx-card', 'data-kind': 'box', 'data-box': boxId, 'data-card': `bx-${boxId}`, 'aria-label': `${NOUN} ${boxLabel(initial.box)}` },
+    head,
     el(document_, 'div', { class: 'bx-actions' }, formationButton, briefButton),
     el(document_, 'div', { class: 'bx-body' }, drop, progress, tiles, appsSection),
     form,
@@ -430,6 +433,9 @@ function buildBoxCard(initial: BoxContents) {
     event.stopPropagation();
     if (event.key === 'Escape') form.hidden = true;
   });
+  // APP-106 focus mode: F or the focus button; a focused folder is the active folder.
+  registerFocusCard(card, head, NOUN, () => setActiveFolder({ box_id: boxId, name: boxLabel(contents.box) }));
+  head.append(close);
   // Clicking the card makes it the bar's active folder.
   card.addEventListener('pointerdown', () => setActiveFolder({ box_id: boxId, name: boxLabel(contents.box) }));
   // Rename: click the title, Enter or blur saves, Esc cancels.
