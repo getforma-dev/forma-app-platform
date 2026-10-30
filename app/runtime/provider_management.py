@@ -29,13 +29,18 @@ crates/server/src/handlers/management.rs blob bc12859a):
   (:1802-1832). Repeating a revoke is therefore safe; repeating a create is not.
 
 The management key is read from the environment or a private file, never argv.
-In the managed operator task (ADR-003 amendment 2026-10-30, managed invitations)
-it arrives instead as one injected ECS secret, GENUI_PROVIDER_MANAGEMENT_JSON,
-whose value is `{}` (not configured) or exactly
-`{"format": "forma:fauth-management-configuration:v1", "url": ..., "management_key": ...}`
-written by FormaStack, the key's owner, under approval A12; the plain variables
-never appear beside it. Nothing here prints or logs the key, an `invite_token`
-or an address; callers receive fixed reason codes.
+In the managed operator task (ADR-003 amendment 2026-10-30, managed invitations,
+as revised the same day after FormaStack's answers) it arrives instead from
+FormaStack's own tenant-scoped management secret (for Northstar
+`fauth-beta/management/northstar`, JSON `{tenant_id, management_key}`), which
+the stack attaches by ARN (parameter ProviderManagementSecretArn, approval A12)
+and never copies: ECS injects its two JSON keys into the operator container
+alone, as GENUI_PROVIDER_MANAGEMENT_SECRET_KEY and
+GENUI_PROVIDER_MANAGEMENT_SECRET_TENANT_ID, beside the non-secret
+GENUI_PROVIDER_MANAGEMENT_URL (parameter ProviderManagementUrl). All three or
+none; the plain variables never appear beside them; the injected tenant must be
+the code's bound tenant before any provider call. Nothing here prints or logs
+the key, an `invite_token` or an address; callers receive fixed reason codes.
 
 Capability custody (ADR-003 amendment 2026-10-30, APP-074 review M1; it
 supersedes the operator-host 0600 directory): a token is written only into the
@@ -84,12 +89,19 @@ ENV_CAPABILITY_SECRET = "GENUI_PROVIDER_CAPABILITY_SECRET_ID"
 # so a stale setup never believes it keeps capabilities on the host.
 ENV_RETIRED_CAPABILITY_DIR = "GENUI_PROVIDER_CAPABILITY_DIR"
 ENV_NAMES = (ENV_URL, ENV_KEY, ENV_KEY_FILE)
-# ADR-003 amendment 2026-10-30 (managed invitations): the ProviderManagementKey secret, injected
-# whole into the managed operator task only. `{}` is "not configured"; otherwise exactly these keys.
-ENV_MANAGEMENT_JSON = "GENUI_PROVIDER_MANAGEMENT_JSON"
-MANAGEMENT_FORMAT = "forma:fauth-management-configuration:v1"
-MANAGEMENT_KEYS = frozenset({"format", "url", "management_key"})
-MANAGEMENT_BYTES_MAX = 4096
+# ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's answers): the
+# managed operator task's only provider source. ECS injects `management_key` and `tenant_id` from
+# FormaStack's existing management secret (attached by ARN, never copied) and the stack sets the
+# non-secret URL; all three are present (attached) or none is (not configured).
+ENV_MANAGED_URL = "GENUI_PROVIDER_MANAGEMENT_URL"
+ENV_MANAGED_KEY = "GENUI_PROVIDER_MANAGEMENT_SECRET_KEY"
+ENV_MANAGED_TENANT = "GENUI_PROVIDER_MANAGEMENT_SECRET_TENANT_ID"
+MANAGED_NAMES = (ENV_MANAGED_URL, ENV_MANAGED_KEY, ENV_MANAGED_TENANT)
+# The retired whole-document injection of the CDK-created ProviderManagementKey secret; refused if
+# still set, so a stale task definition never runs beside the attached secret.
+ENV_RETIRED_MANAGEMENT_JSON = "GENUI_PROVIDER_MANAGEMENT_JSON"
+# Every variable that carries provider settings (operator.py scrubs them from commands that need none).
+PROVIDER_VARIABLES = ENV_NAMES + MANAGED_NAMES + (ENV_RETIRED_MANAGEMENT_JSON,)
 # The capability secret: a full Secrets Manager ARN (its region is the client's region).
 SECRET_ARN = re.compile(r"arn:aws:secretsmanager:([a-z]{2}(?:-[a-z]+)+-[0-9]):[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]{1,512}")
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
@@ -131,8 +143,11 @@ def normalize_email(email):
 class Config:
     """Validated provider configuration. The key never appears in repr or str."""
 
-    def __init__(self, scheme, host, port, key, capability_store):
+    def __init__(self, scheme, host, port, key, capability_store, tenant_id=None):
         self.scheme, self.host, self.port, self.capability_store = scheme, host, port, capability_store
+        # The managed source's injected tenant (None for the plain variables): the key's own tenant
+        # as FormaStack recorded it beside the key, checked before any provider call.
+        self.tenant_id = tenant_id
         self._key = key
 
     def authorization(self):
@@ -172,45 +187,38 @@ def load_store(environ, secret_id=None, required=False):
     return CapabilitySecret(value)
 
 
-def _unique_object(pairs):
-    keys = [key for key, _ in pairs]
-    require(len(keys) == len(set(keys)), "provider_configuration_refused")
-    return dict(pairs)
+def _graphic(value, bound):
+    return isinstance(value, str) and 1 <= len(value) <= bound and all(0x21 <= ord(ch) <= 0x7E for ch in value)
 
 
-def management_configuration(text):
-    """The injected ProviderManagementKey secret, validated whole: `{}` (not configured) gives None;
-    otherwise exactly {format, url, management_key}, the key of the shape fAuth issues. The value
-    never appears in a refusal."""
-    require(isinstance(text, str) and len(text.encode("utf-8")) <= MANAGEMENT_BYTES_MAX, "provider_configuration_refused")
-    try:
-        value = json.loads(text, object_pairs_hook=_unique_object)
-    except ValueError:
-        raise Refused("provider_configuration_refused") from None
-    require(isinstance(value, dict), "provider_configuration_refused")
-    if not value:
+def management_configuration(environ):
+    """The managed source: None when none of its three variables is set; otherwise all three,
+    non-empty (a missing piece is `provider_configuration_missing`), the key of the shape fAuth
+    issues and the tenant a registry-shaped id. No value ever appears in a refusal."""
+    present = {name: environ.get(name) for name in MANAGED_NAMES if environ.get(name) is not None}
+    if not present:
         return None
-    require(set(value) == MANAGEMENT_KEYS and value["format"] == MANAGEMENT_FORMAT, "provider_configuration_refused")
-    require(isinstance(value["url"], str) and 1 <= len(value["url"]) <= 512, "provider_url_refused")
-    require(isinstance(value["management_key"], str) and KEY.fullmatch(value["management_key"]) is not None, "provider_key_refused")
-    return {"url": value["url"], "management_key": value["management_key"]}
+    require(len(present) == len(MANAGED_NAMES) and all(present.values()), "provider_configuration_missing")
+    require(len(present[ENV_MANAGED_URL]) <= 512, "provider_url_refused")
+    require(KEY.fullmatch(present[ENV_MANAGED_KEY]) is not None, "provider_key_refused")
+    # runtime.identity_registry's provider_tenant_id rule (1..128 printable ASCII, no space).
+    require(_graphic(present[ENV_MANAGED_TENANT], 128), "provider_tenant_refused")
+    return {"url": present[ENV_MANAGED_URL], "management_key": present[ENV_MANAGED_KEY], "tenant_id": present[ENV_MANAGED_TENANT]}
 
 
 def load_config(environ, required, secret_id=None):
     """None when no provider variable is set and none is required; otherwise all of them, validated,
     with the capability secret (a provider configuration without one is incomplete)."""
     require(ENV_RETIRED_CAPABILITY_DIR not in environ, "provider_capability_directory_retired")
+    require(ENV_RETIRED_MANAGEMENT_JSON not in environ, "provider_management_json_retired")
     present = {name: environ.get(name) for name in ENV_NAMES if environ.get(name) is not None}
-    injected = environ.get(ENV_MANAGEMENT_JSON)
-    if injected is not None:
-        # The managed operator task: the injected secret is the only source of the URL and the
-        # key, and the plain variables are refused beside it (never merged, never preferred).
+    tenant_id = None
+    if any(environ.get(name) is not None for name in MANAGED_NAMES):
+        # The managed operator task: the attached secret is the only source of the key and its
+        # tenant, and the plain variables are refused beside it (never merged, never preferred).
         require(not present, "provider_configuration_conflict")
-        managed = management_configuration(injected)
-        if managed is None:
-            require(not required, "provider_configuration_missing")
-            return None
-        present = {ENV_URL: managed["url"], ENV_KEY: managed["management_key"]}
+        managed = management_configuration(environ)
+        present, tenant_id = {ENV_URL: managed["url"], ENV_KEY: managed["management_key"]}, managed["tenant_id"]
     if not present:
         require(not required, "provider_configuration_missing")
         return None
@@ -228,7 +236,7 @@ def load_config(environ, required, secret_id=None):
     require(ENV_KEY not in present or ENV_KEY_FILE not in present, "provider_key_refused")
     key = _private_file(present[ENV_KEY_FILE]) if ENV_KEY_FILE in present else present[ENV_KEY]
     require(isinstance(key, str) and KEY.fullmatch(key) is not None, "provider_key_refused")
-    return Config(scheme, host, port or (443 if scheme == "https" else 80), key, store)
+    return Config(scheme, host, port or (443 if scheme == "https" else 80), key, store, tenant_id)
 
 
 # --- transport -------------------------------------------------------------------
@@ -356,7 +364,9 @@ class Client:
         return body["tenant_id"]
 
     def require_tenant(self, provider_tenant):
-        """The key's tenant must be the code's bound provider tenant."""
+        """The key's tenant must be the code's bound provider tenant: first the tenant injected beside a
+        managed key (no request is made for another tenant's code), then the key's own, asked of fAuth."""
+        require(self.config.tenant_id is None or self.config.tenant_id == provider_tenant, "provider_tenant_mismatch")
         require(self.tenant() == provider_tenant, "provider_tenant_mismatch")
         return provider_tenant
 

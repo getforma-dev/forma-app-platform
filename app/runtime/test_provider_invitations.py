@@ -125,36 +125,54 @@ class ConfigTests(unittest.TestCase):
                 op.parser().parse_args(command)
             self.assertEqual(str(refusal.exception), "usage")
 
-    def test_injected_management_configuration_is_the_managed_tasks_only_source(self):
-        """ADR-003 amendment 2026-10-30 (managed invitations): the ProviderManagementKey secret, injected whole."""
-        managed = json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "https://auth.example.test", "management_key": KEY})
+    def test_attached_management_secret_is_the_managed_tasks_only_source(self):
+        """ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's answers): FormaStack's
+        existing management secret, attached by ARN; ECS injects its `management_key` and `tenant_id` JSON keys
+        beside the stack's non-secret URL."""
+        managed = {pm.ENV_MANAGED_URL: "https://auth.example.test", pm.ENV_MANAGED_KEY: KEY, pm.ENV_MANAGED_TENANT: TENANT}
         base = {pm.ENV_CAPABILITY_SECRET: ARN}
-        config = pm.load_config(dict(base, **{pm.ENV_MANAGEMENT_JSON: managed}), required=True)
-        self.assertEqual((config.scheme, config.host, config.port), ("https", "auth.example.test", 443))
+        config = pm.load_config(dict(base, **managed), required=True)
+        self.assertEqual((config.scheme, config.host, config.port, config.tenant_id), ("https", "auth.example.test", 443, TENANT))
         self.assertEqual(config.authorization(), "Bearer " + KEY)
         self.assertNotIn(KEY, repr(config))
-        # `{}` is "not configured": optional callers get None, required ones the usual missing reason.
-        self.assertIsNone(pm.load_config(dict(base, **{pm.ENV_MANAGEMENT_JSON: "{}"}), required=False))
-        self.refused(dict(base, **{pm.ENV_MANAGEMENT_JSON: "{}"}), "provider_configuration_missing")
-        # The plain variables are never merged with or preferred over the injected secret.
+        # The plain variables carry no injected tenant.
+        self.assertIsNone(pm.load_config(self.env(), required=True).tenant_id)
+        # Not attached (the parameter empty): none of the three is set.
+        self.assertIsNone(pm.load_config(dict(base), required=False))
+        self.refused(dict(base), "provider_configuration_missing")
+        # A missing or empty piece is never "not configured", whoever asks.
+        for name in pm.MANAGED_NAMES:
+            for partial in ({k: v for k, v in managed.items() if k != name}, dict(managed, **{name: ""})):
+                with self.subTest(missing=name, empty=name in partial):
+                    self.refused(dict(base, **partial), "provider_configuration_missing", required=False)
+                    self.refused(dict(base, **partial), "provider_configuration_missing")
+        # The plain variables are never merged with or preferred over the attached secret.
         for beside in ({pm.ENV_URL: "https://auth.example.test"}, {pm.ENV_KEY_FILE: str(self.key_file)}, {pm.ENV_KEY: KEY}):
-            self.refused(dict(base, **{pm.ENV_MANAGEMENT_JSON: managed}, **beside), "provider_configuration_conflict", required=False)
-        for bad, reason in (("[]", "provider_configuration_refused"), ("{", "provider_configuration_refused"), ("x" * 5000, "provider_configuration_refused"),
-                            (json.dumps({"url": "https://auth.example.test", "management_key": KEY}), "provider_configuration_refused"),
-                            (json.dumps({"format": "other", "url": "https://auth.example.test", "management_key": KEY}), "provider_configuration_refused"),
-                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "https://auth.example.test", "management_key": KEY, "x": 1}), "provider_configuration_refused"),
-                            ('{"format":"%s","format":"%s","url":"https://a.test","management_key":"%s"}' % (pm.MANAGEMENT_FORMAT, pm.MANAGEMENT_FORMAT, KEY),
-                             "provider_configuration_refused"),
-                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "https://auth.example.test", "management_key": "plat_" + KEY[5:]}), "provider_key_refused"),
-                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "https://auth.example.test", "management_key": KEY + " x"}), "provider_key_refused"),
-                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "http://auth.example.test", "management_key": KEY}), "provider_url_refused"),
-                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "", "management_key": KEY}), "provider_url_refused"),
-                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": 7, "management_key": KEY}), "provider_url_refused")):
-            with self.subTest(bad=bad[:30]):
-                self.refused(dict(base, **{pm.ENV_MANAGEMENT_JSON: bad}), reason, required=False)
-        # The injected configuration still needs the capability secret's identifier.
-        self.refused({pm.ENV_MANAGEMENT_JSON: managed}, "provider_configuration_incomplete")
+            self.refused(dict(base, **managed, **beside), "provider_configuration_conflict", required=False)
+            self.refused(dict(base, **{pm.ENV_MANAGED_KEY: KEY}, **beside), "provider_configuration_conflict", required=False)
+        for changes, reason in (({pm.ENV_MANAGED_KEY: "plat_" + KEY[5:]}, "provider_key_refused"),
+                                ({pm.ENV_MANAGED_KEY: KEY + " x"}, "provider_key_refused"),
+                                ({pm.ENV_MANAGED_TENANT: "ten with space"}, "provider_tenant_refused"),
+                                ({pm.ENV_MANAGED_TENANT: "t" * 129}, "provider_tenant_refused"),
+                                ({pm.ENV_MANAGED_URL: "http://auth.example.test"}, "provider_url_refused"),
+                                ({pm.ENV_MANAGED_URL: "https://auth.example.test/manage"}, "provider_url_refused"),
+                                ({pm.ENV_MANAGED_URL: "https://" + "a" * 600}, "provider_url_refused")):
+            with self.subTest(changes=sorted(changes)):
+                self.refused({**base, **managed, **changes}, reason, required=False)
+        # The attached configuration still needs the capability secret's identifier.
+        self.refused(dict(managed), "provider_configuration_incomplete")
+        # The retired whole-document injection refuses, alone or beside the attached secret.
+        for env in ({pm.ENV_RETIRED_MANAGEMENT_JSON: "{}"}, dict(base, **managed, **{pm.ENV_RETIRED_MANAGEMENT_JSON: "{}"})):
+            self.refused(env, "provider_management_json_retired", required=False)
 
+    def test_the_injected_tenant_must_be_the_codes_tenant_before_any_request(self):
+        """A managed key for another tenant refuses `provider_tenant_mismatch` with no provider call."""
+        config = pm.load_config({pm.ENV_MANAGED_URL: "https://auth.example.test", pm.ENV_MANAGED_KEY: KEY,
+                                 pm.ENV_MANAGED_TENANT: "ten_other", pm.ENV_CAPABILITY_SECRET: ARN}, required=True)
+        with mock.patch.object(pm, "request", side_effect=AssertionError("no provider call")):
+            with self.assertRaises(pm.Refused) as refusal:
+                pm.Client(config).require_tenant(TENANT)
+        self.assertEqual(str(refusal.exception), "provider_tenant_mismatch")
     def test_capability_secret_is_a_full_arn_and_the_host_directory_is_retired(self):
         """ADR-003 amendment 2026-10-30 (APP-074 review M1): the secret replaces the operator-host directory."""
         for bad in ("genui-provider-capabilities", "arn:aws:s3:::bucket", ARN + "\n", ARN.replace("us-east-1", "US-EAST-1"),
@@ -577,11 +595,13 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         # The stored capability is the one the provider accepts for this address (hosted registration stand-in).
         self.assertIsNotNone(self.fake.register(token, email))
 
-    def managed_env(self, invitations=None, management=None):
-        """The managed operator task's environment: the two injected secrets, no plain provider variable."""
+    def managed_env(self, invitations=None, attached=True, tenant=TENANT):
+        """The managed operator task's environment: the attached management secret's two injected keys and the
+        stack's URL (none of the three when `attached` is False: the parameter empty), the invitation input, no
+        plain provider variable."""
         env = {k: v for k, v in self.provider_env().items() if k not in (pm.ENV_URL, pm.ENV_KEY_FILE, pm.ENV_KEY)}
-        env[pm.ENV_MANAGEMENT_JSON] = management if management is not None else json.dumps(
-            {"format": pm.MANAGEMENT_FORMAT, "url": self.fake.url, "management_key": KEY})
+        if attached:
+            env.update({pm.ENV_MANAGED_URL: self.fake.url, pm.ENV_MANAGED_KEY: KEY, pm.ENV_MANAGED_TENANT: tenant})
         if invitations is not None:
             env[op.INVITATION_INPUT_ENV] = invitations if isinstance(invitations, str) else json.dumps(
                 {"format": op.INVITATION_INPUT_FORMAT, "invitations": invitations})
@@ -642,7 +662,8 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
                  (self.managed_env([dict(entry, organization_id="00000000-0000-4000-8000-0000000000a2")]), "invitation_input_missing"),
                  (self.managed_env("[not json"), "invitation_input_malformed"),
                  (self.managed_env([dict(entry, role="admin")]), "provider_role_refused"),
-                 (self.managed_env([entry], management="{}"), "provider_configuration_missing"),     # the key not yet written (A12)
+                 (self.managed_env([entry], attached=False), "provider_configuration_missing"),      # no secret attached (A12)
+                 (self.managed_env([entry], tenant="ten_other"), "provider_tenant_mismatch"),        # another tenant's key
                  (dict(self.managed_env([entry]), **{pm.ENV_URL: self.fake.url}), "provider_configuration_conflict"),
                  ({k: v for k, v in self.managed_env([entry]).items() if k != pm.ENV_CAPABILITY_SECRET}, "provider_configuration_incomplete")]
         for env, reason in cases:
@@ -670,11 +691,11 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual([r["state"] for r in revoked["provider_revocations"]], ["confirmed"])
         self.assertEqual(self.fake.status_of(created["remote_invitation_id"]), "revoked")
         self.assertFalse(self.capability(created["invitation_id"]).exists())
-        # With the key not yet written, reconcile refuses and revoke still ends the capability locally.
-        refused = self.run_cli("reconcile", "--organization", ORG, env=self.managed_env(management="{}"), expect=1)
+        # With no secret attached, reconcile refuses and revoke still ends the capability locally.
+        refused = self.run_cli("reconcile", "--organization", ORG, env=self.managed_env(attached=False), expect=1)
         self.assertEqual(json.loads(refused.stderr), {"refused": "provider_configuration_missing"})
         other = self.invite("managedlocal-%s@example.test" % uuid.uuid4().hex[:6])
-        revoked = self.run_cli("revoke", "--organization", ORG, "--code-id", other["code_id"], env=self.managed_env(management="{}"))
+        revoked = self.run_cli("revoke", "--organization", ORG, "--code-id", other["code_id"], env=self.managed_env(attached=False))
         self.assertEqual((revoked["changed"], revoked["provider_phase"], revoked["capability_phase"], revoked["capabilities_destroyed"]),
                          (True, "not_configured", "completed", 1))
 

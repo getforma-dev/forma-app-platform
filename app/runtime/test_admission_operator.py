@@ -897,6 +897,42 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual((entry["redemptions"][0]["membership_status"], entry["redemptions"][0]["entitlement_status"]), ("active", "revoked"))
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
 
+    def test_list_never_hides_a_redemption_whose_rows_are_absent(self):
+        """APP-078 review M5: `list` LEFT JOINs memberships and entitlements, so a redemption shows with null statuses."""
+        out = self.issue("--max-redemptions", "1")
+        digest = op.code_digest(op.normalize_code(out["code"]))
+        subject = "usr_" + uuid.uuid4().hex
+        with self.workspace() as c:
+            reservation, _, _ = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)", (ORG, digest, "sha256:" + "b" * 64)).fetchone()
+            pending, _, _ = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)",
+                                      (ORG, reservation, ISSUER, TENANT, subject)).fetchone()
+            principal, _, entitlement, redemption, outcome = c.execute("SELECT * FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)",
+                                                                       (ORG, pending, ISSUER, TENANT, subject, "sha256:" + "4" * 64)).fetchone()
+            self.assertEqual(outcome, "admitted")
+        # The foreign keys make this unreachable through any role; the fixture superuser removes the
+        # rows with referential triggers off (replica) and puts them back byte-for-byte afterwards.
+        key = (ORG, principal)
+        with self.connect("postgres") as c:
+            c.execute("SET LOCAL session_replication_role = replica")
+            entitlements = c.execute("DELETE FROM genui.entitlements WHERE organization_id=%s AND principal_id=%s RETURNING *", key).fetchall()
+            memberships = c.execute("DELETE FROM genui.memberships WHERE organization_id=%s AND principal_id=%s RETURNING *", key).fetchall()
+        self.assertEqual((len(entitlements), len(memberships)), (1, 1))
+        try:
+            entry = next(i for i in self.cli("list", "--organization", ORG)["codes"] if i["code_id"] == out["code_id"])
+            self.assertEqual([(r["redemption_id"], r["principal_id"], r["entitlement_id"], r["membership_status"], r["entitlement_status"])
+                              for r in entry["redemptions"]],
+                             [(str(redemption), str(principal), str(entitlement), None, None)])
+        finally:
+            with self.connect("postgres") as c:
+                c.execute("SET LOCAL session_replication_role = replica")
+                for row in memberships:
+                    c.execute("INSERT INTO genui.memberships VALUES (%s)" % ",".join(["%s"] * len(row)), row)
+                for row in entitlements:
+                    c.execute("INSERT INTO genui.entitlements VALUES (%s)" % ",".join(["%s"] * len(row)), row)
+        entry = next(i for i in self.cli("list", "--organization", ORG)["codes"] if i["code_id"] == out["code_id"])
+        self.assertEqual((entry["redemptions"][0]["membership_status"], entry["redemptions"][0]["entitlement_status"]), ("active", "active"))
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+
     @unittest.skipUnless(importlib.util.find_spec("jsonschema") is not None,
                          "seed-spend-review validates the bundle with contracts/validate.py; jsonschema is in the operator image's "
                          "lock (app/operator/requirements.lock) and in tenant-foundation CI, not in the runtime-only lock")

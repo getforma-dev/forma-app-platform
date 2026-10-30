@@ -196,11 +196,15 @@ class PackageTests(unittest.TestCase):
                     completed = cli(*argv, env_extra=dict(task, **{variable: "http://169.254.170.2/v4/x"}))
                     self.assertEqual((completed.returncode, completed.stdout, refusal(completed)), (1, "", "refused_in_managed_task"))
                     self.assertNotIn("a@b.test", completed.stderr)
-        # `reconcile` passes the guard; without the injected management configuration (or with it still `{}`,
-        # before FormaStack's A12 write) it refuses on configuration, before any connection; a plain provider
-        # variable beside the injected secret is a conflict.
-        for extra, code in (({}, "provider_configuration_missing"), ({"GENUI_PROVIDER_MANAGEMENT_JSON": "{}"}, "provider_configuration_missing"),
-                            ({"GENUI_PROVIDER_MANAGEMENT_JSON": "{}", "GENUI_PROVIDER_URL": "https://auth.example.test"}, "provider_configuration_conflict")):
+        # `reconcile` passes the guard; without the attached management secret (the parameter empty, before A12) or
+        # with a piece of it missing it refuses on configuration, before any connection; a plain provider variable
+        # beside the attached secret is a conflict; the retired whole-document injection refuses.
+        attached = {"GENUI_PROVIDER_MANAGEMENT_URL": "https://auth.example.test", "GENUI_PROVIDER_MANAGEMENT_SECRET_KEY": "mgmt_" + "k" * 16,
+                    "GENUI_PROVIDER_MANAGEMENT_SECRET_TENANT_ID": "ten_operator_test"}
+        for extra, code in (({}, "provider_configuration_missing"),
+                            ({"GENUI_PROVIDER_MANAGEMENT_URL": "https://auth.example.test"}, "provider_configuration_missing"),
+                            (dict(attached, GENUI_PROVIDER_URL="https://auth.example.test"), "provider_configuration_conflict"),
+                            ({"GENUI_PROVIDER_MANAGEMENT_JSON": "{}"}, "provider_management_json_retired")):
             with self.subTest(code=code):
                 # Inside a managed task the guard admits the form (the checkout lacks the image's pinned CA, so
                 # the managed host check answers next); outside it the configuration refusal is exact.
@@ -229,6 +233,49 @@ class PackageTests(unittest.TestCase):
         # A documented admission command still runs in a managed task (here it reaches the host check).
         completed = cli("admission", "list", "--organization", org, env_extra={"ECS_CONTAINER_METADATA_URI_V4": "x", "PGHOST": "@abstract"})
         self.assertEqual(refusal(completed), "socket_host_refused")
+
+    def test_injected_values_reach_only_the_commands_that_read_them(self):
+        """APP-078 review M6: the provider settings and the invitation input are removed from the process at entry
+        for every command that does not read them, and the parser host runs with an empty environment."""
+        import admission_operator
+        import provider_management
+        self.assertEqual(set(op.PROVIDER_VARIABLES), set(provider_management.PROVIDER_VARIABLES))
+        self.assertEqual(op.INVITATION_INPUT_VARIABLE, admission_operator.INVITATION_INPUT_ENV)
+        values = {name: "injected-%d" % i for i, name in enumerate(op.PROVIDER_VARIABLES + (op.INVITATION_INPUT_VARIABLE,) + op.SERVICE_ONLY_VARIABLES)}
+        provider, given = set(op.PROVIDER_VARIABLES), set(values)
+        digest = "sha256:" + "0" * 63 + "1"
+        for argv, kept in ((["list", "--organization", NORTHSTAR], set()),
+                           (["verify", "--organization", NORTHSTAR], set()),
+                           (["bind-provider-tenant", "--organization", NORTHSTAR, "--from-auth-configuration"], set()),
+                           (["reconcile", "--organization", NORTHSTAR], provider),
+                           (["revoke", "--organization", NORTHSTAR, "--code-id", NORTHSTAR], provider),
+                           (["issue", "--organization", NORTHSTAR, "--issued-by", "ops", "--grant", "x", "--code-digest", digest], set()),
+                           (["issue", "--organization", NORTHSTAR, "--issued-by", "ops", "--grant", "x", "--provider-email", "a@b.test",
+                             "--provider-role", "user", "--provider-issuer", "iss", "--provider-tenant", "ten_x"], provider),
+                           (["issue", "--organization", NORTHSTAR, "--issued-by", "ops", "--grant", "x", "--code-digest", digest,
+                             "--provider-input-from-secret"], provider | {op.INVITATION_INPUT_VARIABLE})):
+            with self.subTest(argv=argv[0]), mock.patch.dict(os.environ, values):
+                op.scrub_environment("admission", admission_operator.parser().parse_args(argv))
+                self.assertEqual(given & set(os.environ), kept)
+        for command in ("migrate", "verify-catalog", "seed", "upload-sources"):
+            with self.subTest(command=command), mock.patch.dict(os.environ, values):
+                op.scrub_environment(command)
+                self.assertEqual(given & set(os.environ), set())
+        with mock.patch.dict(os.environ, values):
+            op.scrub_environment("admission", None)  # an argv admission_operator refuses
+            self.assertEqual(given & set(os.environ), set())
+        # upload-sources end to end: at the parser host's start neither the process nor the child holds any of them.
+        seen = []
+
+        def parser_host(argv, **kwargs):
+            seen.append((kwargs.get("env"), given & set(os.environ)))
+            return subprocess.CompletedProcess(argv, 1, b"", b"")
+        binding = op.ParserBinding(Path("/nonexistent/parser-host"), Path("/nonexistent/guest.wasm"), "sha256:" + "0" * 64)
+        with mock.patch.dict(os.environ, values), mock.patch.object(op.ParserBinding, "from_manifest", return_value=binding), \
+                mock.patch.object(op.subprocess, "run", side_effect=parser_host), contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(op.main(["upload-sources", "--plan"]), 1)
+        self.assertEqual(json.loads(err.getvalue()), {"refused": "parser_failed"})
+        self.assertEqual(seen, [({}, set())])
 
     def test_admission_checks_the_database_environment_before_connecting(self):
         # Review m1: the passthrough runs the same pre-connect identity checks as every database command.

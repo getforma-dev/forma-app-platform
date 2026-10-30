@@ -52,9 +52,18 @@ DIGEST_RE = r'877573132739\.dkr\.ecr\.us-east-1\.amazonaws\.com/[a-z0-9]+(?:[._-
 # Optional inputs: missing and explicitly empty (or the default plan) mean
 # disabled and are left out of the window binding, so earlier windows keep
 # their hashes.
-OPTIONAL_INPUTS = ('qualification_config_secret_arn', 'qualification_image_digest', 'operator_image_digest', 'operating_plan')
+OPTIONAL_INPUTS = ('qualification_config_secret_arn', 'qualification_image_digest', 'operator_image_digest', 'operating_plan',
+                   'provider_management_secret_arn', 'provider_management_url')
 # Stack parameters an older deployed template may lack; absent means disabled.
-OPTIONAL_PARAMETERS = ('QualificationImageDigest', 'OperatorImageDigest')
+OPTIONAL_PARAMETERS = ('QualificationImageDigest', 'OperatorImageDigest', 'ProviderManagementSecretArn', 'ProviderManagementUrl')
+# ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's answers; approval A12):
+# FormaStack's existing management secret, attached by ARN to the operator task for the window and
+# the trial and cleared afterwards. Attaching and clearing cost nothing and change no compute, so,
+# like the ingress mode and the desired count, they may change within one reserved window and are
+# not part of its binding. Both or neither; this account and region only.
+MANAGEMENT_SECRET_RE = r'arn:aws:secretsmanager:us-east-1:877573132739:secret:[A-Za-z0-9/_+=.@-]{1,512}-[A-Za-z0-9]{6}'
+MANAGEMENT_URL_RE = r'https://[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::[0-9]{1,5})?'
+WITHIN_WINDOW = ('ingress_mode', 'service_desired_count', 'provider_management_secret_arn', 'provider_management_url')
 # Conservative Linux x86 price even when deploying an ARM64 image.
 TASK_HOURLY = Decimal('0.1215248')  # 2 CPU + 8 GiB + task IPv4
 FIXED_HOURLY = Decimal('0.0645')   # RDS + ALB + two ALB IPv4
@@ -118,6 +127,17 @@ def reserve(config, ledger, now):
         require(value != config['image_digest'], key + ' must never be the service image')
         task_images[key] = value
     require(not task_images['qualification_image_digest'] or task_images['qualification_image_digest'] != task_images['operator_image_digest'], 'qualification and operator images must be distinct artifacts')
+    management = {key: config.get(key, '') for key in ('provider_management_secret_arn', 'provider_management_url')}
+    require(isinstance(management['provider_management_secret_arn'], str)
+            and re.fullmatch('(?:' + MANAGEMENT_SECRET_RE + ')?', management['provider_management_secret_arn']) is not None,
+            'provider_management_secret_arn must be empty or a complete same-account/region Secrets Manager ARN')
+    require(isinstance(management['provider_management_url'], str)
+            and re.fullmatch('(?:' + MANAGEMENT_URL_RE + ')?', management['provider_management_url']) is not None,
+            'provider_management_url must be empty or an https origin')
+    require((management['provider_management_secret_arn'] == '') == (management['provider_management_url'] == ''),
+            'provider_management_secret_arn and provider_management_url are set together or left empty together')
+    require(not management['provider_management_secret_arn'] or task_images['operator_image_digest'],
+            'an attached management secret needs the operator task (operator_image_digest)')
     require(str(uuid.UUID(config['window_id'])) == config['window_id'], 'window_id must be a canonical UUID retained across retry')
     require(config['account'] == '877573132739' and config['region'] == 'us-east-1', 'unexpected account or region')
     require(config['hostname'] == 'beta.getforma.dev', 'unexpected beta hostname')
@@ -143,7 +163,7 @@ def reserve(config, ledger, now):
     # Missing and explicitly empty both mean disabled. Preserve the exact
     # binding of earlier disabled windows; enabling/changing a secret is a new
     # immutable input and cannot repurpose an already reserved window.
-    immutable = {k: v for k, v in config.items() if k not in ('ingress_mode', 'service_desired_count')
+    immutable = {k: v for k, v in config.items() if k not in WITHIN_WINDOW
                  and not (k in OPTIONAL_INPUTS and v in ('', BOUNDED))}
     encoded = json.dumps(immutable, sort_keys=True, separators=(',', ':')).encode()
     binding = hashlib.sha256(encoded).hexdigest()
@@ -198,7 +218,9 @@ def reserve(config, ledger, now):
                   'TlsCertificateArn': config['tls_certificate_arn'], 'ImageDigest': config['image_digest'],
                   'ImageArchitecture': config['image_architecture'], 'ServiceDesiredCount': '0',
                   'QualificationImageDigest': task_images['qualification_image_digest'],
-                  'OperatorImageDigest': task_images['operator_image_digest']}
+                  'OperatorImageDigest': task_images['operator_image_digest'],
+                  'ProviderManagementSecretArn': management['provider_management_secret_arn'],
+                  'ProviderManagementUrl': management['provider_management_url']}
     return updated, {'status': 'reserved_local_plan_only', 'window_id': config['window_id'], 'input_sha256': binding,
                      'observed_at_utc': now.strftime('%Y-%m-%dT%H:%M:%SZ'), 'reused_reservation': existing is not None,
                      'operating_plan': plan, 'decision': rules['decision'],
@@ -275,6 +297,16 @@ def activate(config, report, call, clock):
             and not any(item['name'].startswith(('GENUI_AUTH_QUALIFICATION_', 'GENUI_PROVIDER_CAPABILIT', 'GENUI_AUTH_CONFIG', 'GENUI_IDENTITY_REGISTRY'))
                         for item in fallback[0].get('environment', [])),
             'rollback task definition must inject no secret and name no sign-in configuration: it starts deny-all')
+    # A12: an attached management secret must be the named one, live, and under the AWS-managed
+    # `aws/secretsmanager` key: the stack grants the operator task's execution role GetSecretValue
+    # only, so a customer-managed key would fail the task start (it would need a key-policy grant).
+    attached = parameters.get('ProviderManagementSecretArn', '')
+    if attached:
+        described = call('secretsmanager', 'describe-secret', '--secret-id', attached)
+        require(described.get('ARN') == attached and 'DeletedDate' not in described,
+                'the attached management secret is not the named live secret')
+        require(described.get('KmsKeyId') in (None, 'alias/aws/secretsmanager'),
+                'the attached management secret uses a customer-managed key; the operator task cannot decrypt it without a key-policy grant')
     def current_service():
         result = call('ecs', 'describe-services', '--cluster', cluster_arn, '--services', service_arn)
         require(not result.get('failures') and len(result['services']) == 1, 'intended service is unavailable')

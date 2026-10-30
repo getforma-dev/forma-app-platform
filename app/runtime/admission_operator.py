@@ -62,11 +62,13 @@ never argv); the secret's ARN from GENUI_PROVIDER_CAPABILITY_SECRET_ID or
 Managed invitations (ADR-003 amendment 2026-10-30, "managed invitations"; APP-076
 gap G2): on RDS, reachable only from tasks, a redeemable code is issued by
 `issue --code-digest <d> --provider-input-from-secret` in the managed operator
-task. The task receives two injected ECS secrets: GENUI_PROVIDER_MANAGEMENT_JSON
-(the fAuth management URL and key, written by FormaStack under approval A12;
-provider_management.management_configuration) and
-GENUI_OPERATOR_INVITATION_INPUT_JSON (a small document the operator host writes
-immediately before the task and overwrites with `{}` right after:
+task. The task receives FormaStack's existing tenant-scoped management secret,
+attached by ARN under approval A12 and never copied (its `management_key` and
+`tenant_id` JSON keys, injected by ECS, beside the stack's non-secret
+management URL; provider_management.management_configuration; the injected
+tenant must equal the code's bound tenant before any provider call), and the
+injected GENUI_OPERATOR_INVITATION_INPUT_JSON (a small document the operator
+host writes immediately before the task and empties right after:
 `{"format": ..., "invitations": [{organization_id, code_digest, email, role,
 issuer, tenant}]}`, composed by infra/scripts/window_requests.py
 invitation-input). The command takes the one entry whose organization and code
@@ -78,7 +80,7 @@ lives only in the input secret and at the provider: never in an override,
 argv, CloudTrail, the log or this command's output, which prints identifiers,
 states and the digest only. `issue --provider-email` (the address in argv) stays
 refused in a managed task; `reconcile` and `revoke` run there with the same
-injected management configuration.
+attached management secret.
 
 Spend Review in Northstar (APP-076 gap G3, ADR-010 act 6): `seed-spend-review`
 seeds the Spend Review fixture bundle (contracts/fixtures/impl-2026-10-28.1/
@@ -852,12 +854,13 @@ def list_codes(c, args):
                                                  "remote_invitation_id": remote})
     # APP-076 G5: who redeemed each code, by identifier, so `revoke-entitlement` and
     # `revoke-membership` can name the redeemer; with the member's and entitlement's
-    # current status (never a provider subject, address or token).
+    # current status (never a provider subject, address or token). APP-078 review M5: LEFT
+    # JOINs, so a redemption is never hidden; an absent row shows as a null status.
     redemptions = {}
     for code, redemption, principal, entitlement, committed, member_status, entitlement_status in c.execute("""SELECT d.code_id::text,
           d.redemption_id::text,d.principal_id::text,d.entitlement_id::text,d.committed_at,m.status,e.status
-          FROM genui.code_redemptions d JOIN genui.memberships m ON m.organization_id=d.organization_id AND m.principal_id=d.principal_id
-          JOIN genui.entitlements e ON e.organization_id=d.organization_id AND e.principal_id=d.principal_id AND e.entitlement_id=d.entitlement_id
+          FROM genui.code_redemptions d LEFT JOIN genui.memberships m ON m.organization_id=d.organization_id AND m.principal_id=d.principal_id
+          LEFT JOIN genui.entitlements e ON e.organization_id=d.organization_id AND e.principal_id=d.principal_id AND e.entitlement_id=d.entitlement_id
           WHERE d.organization_id=%s ORDER BY d.committed_at,d.redemption_id""", (org,)).fetchall():
         redemptions.setdefault(code, []).append({"redemption_id": redemption, "principal_id": principal, "entitlement_id": entitlement,
                                                  "redeemed_at": timestamp(committed), "membership_status": member_status,

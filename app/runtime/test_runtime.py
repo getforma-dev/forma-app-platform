@@ -58,6 +58,13 @@ def synthetic_versions(target, latest):
     return target
 
 
+# APP-078 review M1: each is serialized differently by WHATWG (`0x7f.1`, `127.1`, `2130706433` -> `127.0.0.1`;
+# `1.2.3` -> `1.2.0.3`; `012.0.0.1` -> `10.0.0.1`; `1.2.3.4.` -> `1.2.3.4`) or refused outright.
+WHATWG_NUMERIC_HOST_PROBES = ('https://0x7f.1', 'https://127.1', 'https://2130706433', 'https://1.2.3',
+                              'https://012.0.0.1', 'https://example.0', 'https://1.2.3.4.5', 'https://09.1.1.1',
+                              'https://1.2.3.4.', 'https://example.0x')
+
+
 class MigrationRecorder:
     """Unit-only stand-in for one migration transaction; never a database.
 
@@ -1038,6 +1045,8 @@ class AuthConfigurationInjectionTests(unittest.TestCase):
             json.dumps(auth_document(auth_config__auth_origin='https://ex{ample.com')),
             json.dumps(auth_document(auth_config__auth_origin='https://-example.com')),
             json.dumps(auth_document(auth_config__auth_origin='https://auth-synthetic.invalid:99999')),
+            # APP-078 review M1: WHATWG "ends in a number" hosts the url crate normalizes or refuses.
+            *[json.dumps(auth_document(auth_config__auth_origin=origin)) for origin in WHATWG_NUMERIC_HOST_PROBES],
             json.dumps(auth_document(identity_registry__registry_version='00000000-0000-1000-8000-0000000000b1')),
             json.dumps(auth_document(identity_registry__registry_version='00000000-0000-4000-c000-0000000000b1')),
             json.dumps(auth_document(auth_config__organizations=[dict(good['auth_config']['organizations'][0], organization_id='00000000-0000-1000-8000-000000000001'), good['auth_config']['organizations'][1]],
@@ -1076,6 +1085,19 @@ class AuthConfigurationInjectionTests(unittest.TestCase):
         for text in bad:
             with self.subTest(text=text[:80]), self.assertRaises((runtime.Refused, ValueError)):
                 runtime.auth_configuration(text)
+
+    def test_exact_origin_agrees_with_the_whatwg_serialization(self):
+        """APP-078 review M1: `_exact_origin` accepts a value only when a WHATWG parser (the service's `url`
+        crate; cross-checked with Node 22 `new URL(v).origin`) serializes it to itself."""
+        for origin in WHATWG_NUMERIC_HOST_PROBES + ('https://exa mple.com', 'https://ex%41mple.com',
+                                                   'https://EXAMPLE.com', 'https://a_b.com', 'https://[::1]'):
+            with self.subTest(origin=origin):
+                self.assertFalse(runtime._exact_origin(origin))
+        for origin in ('https://auth-synthetic.invalid', 'https://auth.example.test:8443', 'https://127.0.0.1',
+                       'https://192.168.0.1:8443', 'https://a1.example', 'https://example.1a', 'https://example.0x1g',
+                       'https://example.com.', 'https://1e5'):
+            with self.subTest(origin=origin):
+                self.assertTrue(runtime._exact_origin(origin))
 
     def test_files_are_private_exact_and_never_replace_a_name(self):
         good = auth_document()
