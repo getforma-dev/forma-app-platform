@@ -5,15 +5,17 @@ tools, asks what is waiting for the member's approval, drafts the approval of
 the Nobu dinner and commits it (the prompt states the member's confirmation).
 
 The OpenAI key is read from the gitignored `.env` (`OPENAI_API_KEY=...`, the
-clone root's by default, `GENUI_ENV_FILE` to override) into this process's
-memory only: never printed, logged, put on argv or written anywhere. Without
+clone root's by default, `GENUI_ENV_FILE` to override) by the one `.env` reader
+(`read_env.py`) into this process's memory only: never printed, logged, put on argv or written anywhere. Without
 the file or the line the smoke is skipped (exit 0). The Forma agent token
 comes from `FORMA_AGENT_TOKEN` or a local stand file (`--stand-file`, the
 `approver_token` of `GENUI_MCP_STAND_FILE`) and is never printed either.
 
 OpenAI's servers call the MCP endpoint themselves, so `--server-url` must be
-reachable from the internet (the beta deployment, or a tunnel to the local
-stand); a loopback URL is refused here rather than failing remotely.
+an https URL reachable from the internet (the beta deployment, or a tunnel to
+the local stand); a loopback or unspecified address (localhost, 127.0.0.0/8,
+0.0.0.0, ::1, ::) is refused here rather than failing remotely. The request
+asks OpenAI not to store the response (`store: false`) and follows no redirect.
 
 The report (stdout, JSON) holds decisions and latencies only: the tools the
 model saw, each MCP call's tool name and whether it was an error, the
@@ -24,8 +26,11 @@ Usage:
       [--stand-file <scratch>/mcp-stand.json] [--model gpt-4.1]
 """
 import argparse
+import importlib.util
+import ipaddress
 import json
 import os
+import socket
 import sys
 import time
 import urllib.error
@@ -42,15 +47,41 @@ PROMPT = (
 )
 
 
+def _read_env():
+    spec = importlib.util.spec_from_file_location("read_env", Path(__file__).resolve().parent / "read_env.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+read_env = _read_env()
+
+
 def read_key(env_file: Path):
-    """The one variable, only from that file; everything else is ignored."""
+    """The one variable, through the shared reader (quotes, CR and `export` stripped; duplicates refused)."""
     if not env_file.is_file():
         return None
-    for line in env_file.read_text().splitlines():
-        if line.startswith("OPENAI_API_KEY="):
-            value = line.split("=", 1)[1].strip().strip('"').strip("'")
-            return value or None
-    return None
+    return read_env.read(env_file, ["OPENAI_API_KEY"]).get("OPENAI_API_KEY")
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect: the request carries the OpenAI key."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "redirect refused: " + msg, headers, fp)
+
+
+def unreachable_from_openai(host):
+    """Loopback or unspecified: names (localhost, *.localhost) and literals (127.0.0.0/8, 0.0.0.0, ::1, ::)."""
+    host = (host or "").lower().rstrip(".")
+    if not host or host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    address = getattr(address, "ipv4_mapped", None) or address
+    return address.is_loopback or address.is_unspecified
 
 
 def agent_token(stand_file):
@@ -70,7 +101,11 @@ def main() -> int:
     args = parser.parse_args()
 
     env_file = Path(os.environ.get("GENUI_ENV_FILE", ROOT / ".env"))
-    key = read_key(env_file)
+    try:
+        key = read_key(env_file)
+    except read_env.EnvError as error:
+        print(f"mcp openai smoke refused: {error}", file=sys.stderr)
+        return 2
     if not key:
         print(f"mcp openai smoke skipped: no OPENAI_API_KEY line in {env_file}", file=sys.stderr)
         return 0
@@ -78,14 +113,19 @@ def main() -> int:
     if not token or not token.startswith("fmat_"):
         print("mcp openai smoke skipped: no Forma agent token (FORMA_AGENT_TOKEN or --stand-file)", file=sys.stderr)
         return 0
-    host = urllib.parse.urlparse(args.server_url).hostname or ""
-    if host in ("localhost", "127.0.0.1", "::1") or host.endswith(".localhost"):
+    parsed = urllib.parse.urlparse(args.server_url)
+    if parsed.scheme != "https":
+        print("mcp openai smoke refused: --server-url must be https (the agent token travels in its header)", file=sys.stderr)
+        return 2
+    if unreachable_from_openai(parsed.hostname):
         print("mcp openai smoke refused: OpenAI cannot reach a loopback server; use the beta URL or a tunnel", file=sys.stderr)
         return 2
 
     body = {
         "model": args.model,
         "input": PROMPT,
+        # The response holds the member's records; OpenAI keeps no copy of it.
+        "store": False,
         "tools": [{
             "type": "mcp",
             "server_label": "forma",
@@ -103,12 +143,16 @@ def main() -> int:
     del key, token, body
     started = time.monotonic()
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
+        with urllib.request.build_opener(NoRedirect).open(request, timeout=180) as response:
             status = response.status
             answer = json.loads(response.read())
     except urllib.error.HTTPError as error:
         # The error body may echo request members; report the status only.
         print(json.dumps({"passed": False, "status": error.code, "wall_ms": int((time.monotonic() - started) * 1000)}))
+        return 1
+    except (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionError, json.JSONDecodeError) as error:
+        # No answer (DNS, TLS, refused, timeout) or not JSON: the error kind only, never the request.
+        print(json.dumps({"passed": False, "status": None, "error": type(error).__name__, "wall_ms": int((time.monotonic() - started) * 1000)}))
         return 1
     wall_ms = int((time.monotonic() - started) * 1000)
     listed, calls = [], []

@@ -17,7 +17,7 @@ import { Construct } from 'constructs';
 // Keep the operator address separately so /0 can never masquerade as that trial.
 const octet = '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])';
 export const OPERATOR_CIDR_PATTERN = `^(?!(?:0|10|127)\\.)(?!100\\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\\.)(?!169\\.254\\.)(?!172\\.(?:1[6-9]|2[0-9]|3[01])\\.)(?!192\\.168\\.)(?!192\\.0\\.[02]\\.)(?!192\\.88\\.99\\.)(?!198\\.(?:18|19)\\.)(?!198\\.51\\.100\\.)(?!203\\.0\\.113\\.)(?!2(?:2[4-9]|[3-5][0-9])\\.)${octet}(?:\\.${octet}){3}/32(?![\\s\\S])`;
-export const EXPIRY_UTC_PATTERN = '^20[0-9]{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z(?![\\s\\S])';
+const EXPIRY_UTC_PATTERN = '^20[0-9]{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z(?![\\s\\S])';
 const IMAGE_DIGEST_BODY = '[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}';
 export const IMAGE_DIGEST_PATTERN = `^${IMAGE_DIGEST_BODY}(?![\\s\\S])`;
 // Empty, or a reviewed digest of the separate APP-075 qualification image.
@@ -60,7 +60,7 @@ export const CANVAS_EVENTS_URL = '/v1/events';
 // The composer route's deadline (app/src/composer/routes.rs COMPOSE_DEADLINE) plus
 // ten seconds; the ALB must not close an idle connection before the route answers.
 export const COMPOSE_DEADLINE_SECONDS = 120;
-export const ALB_IDLE_TIMEOUT_SECONDS = 130;
+export const ALB_IDLE_TIMEOUT_SECONDS = COMPOSE_DEADLINE_SECONDS + 10;
 // ADR-011 demo mode (APP-098 demo shortcuts register): the organizations whose
 // members' rehearsed intents are answered without a model call (app/src/demo.rs).
 // Victor, 2026-10-30, pitch deploy decision P1: Northstar, the synthetic fixture
@@ -68,7 +68,9 @@ export const ALB_IDLE_TIMEOUT_SECONDS = 130;
 // Superseded the earlier canary-only choice; a dedicated demo tenant is the proper
 // fix (APP-098 DS-05, APP-097).
 export const DEMO_ORGANIZATIONS_ENV = 'GENUI_DEMO_ORGANIZATIONS';
-export const DEMO_ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
+// The two synthetic tenants, in key order: Northstar (…0001) and Canary (…0002).
+export const TENANT_IDS = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'] as const;
+export const DEMO_ORGANIZATION_ID = TENANT_IDS[0];
 // app/src/demo.rs requires this switch as well as the organization list
 // (the action path's rehearsed parser); both name the same demo scope.
 export const DEMO_MODE_ENV = 'GENUI_DEMO_MODE';
@@ -80,19 +82,36 @@ export const DEMO_MODE_ENV = 'GENUI_DEMO_MODE';
 export const DISPLAY_NAMES_JSON_ENV = 'GENUI_DISPLAY_NAMES_JSON';
 export const DISPLAY_NAMES_CONTEXT = 'displayNamesFile';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+// app/src/directory.rs MAX_NAME_CHARACTERS and usable_name: 1..=80 characters (Unicode scalar
+// values, not UTF-16 units), not blank, no control character (Rust char::is_control is Cc: C0,
+// DEL and C1). Stricter here, at synth: no format characters (Cf: bidi overrides and isolates,
+// zero-width joiners, BOM) and no line or paragraph separators, so a name cannot reorder or hide
+// text around it on the members list or the approver chip.
+export const MAX_DISPLAY_NAME_CHARACTERS = 80;
+export function usableDisplayName(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const count = [...value].length;
+  return count >= 1 && count <= MAX_DISPLAY_NAME_CHARACTERS && value.trim() !== ''
+    && !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(value);
+}
 export function displayNamesEnvironment(path: unknown): Record<string, string> {
   if (path === undefined) return {};
   if (typeof path !== 'string' || path === '') throw new Error('displayNamesFile must name a file');
   const parsed = JSON.parse(readFileSync(path, 'utf8'));
   const members = parsed?.members;
   if (!Array.isArray(members) || members.length > 50) throw new Error('displayNamesFile: members must be a list of at most 50');
+  const seen = new Set<string>();
   const clean = members.map((member: any) => {
     const keys = Object.keys(member ?? {}).sort().join(',');
     if (keys !== 'display_name,principal_id' || typeof member.principal_id !== 'string' || !UUID.test(member.principal_id)
-      || typeof member.display_name !== 'string' || !/^[^\u0000-\u001f\u007f]{1,80}$/.test(member.display_name)) {
-      throw new Error('displayNamesFile: each member is exactly {principal_id, display_name}');
+      || !usableDisplayName(member.display_name)) {
+      throw new Error('displayNamesFile: each member is exactly {principal_id, display_name} with a usable name');
     }
-    return { principal_id: member.principal_id, display_name: member.display_name };
+    // The service keys names by principal: a repeat would silently keep only one of them.
+    if (seen.has(member.principal_id)) throw new Error('displayNamesFile: each principal_id appears once');
+    seen.add(member.principal_id);
+    // The service trims the name it shows; the deployed value is that trimmed name.
+    return { principal_id: member.principal_id, display_name: member.display_name.trim() };
   });
   return { [DISPLAY_NAMES_JSON_ENV]: JSON.stringify({ members: clean }) };
 }
@@ -172,7 +191,7 @@ export class GenuiFoundation extends Stack {
       autoMinorVersionUpgrade: false, deletionProtection: true, removalPolicy: RemovalPolicy.RETAIN,
       parameters: { 'rds.force_ssl': '1' },
     });
-    const tenantIds = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'];
+    const tenantIds = TENANT_IDS;
     const keys = ['northstar', 'canary'].map(name => new kms.Key(this, `${name}Key`, {
       description: `GenUI synthetic ${name} organization`, enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
     }));
@@ -480,10 +499,12 @@ export class GenuiFoundation extends Stack {
     // these two actions on this one secret, and its key only through Secrets Manager.
     // APP-078 B1: the same two actions on the auth configuration secret, so the
     // operator channel can read and rewrite it; the operator's own credentials do
-    // the window's PutSecretValue from the composed private file.
-    operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], resources: [capabilitySecret.secretArn, authConfiguration.secretArn, composerModel.secretArn, slackApp.secretArn] }));
+    // the window's PutSecretValue from the composed private file. APP-113: no operator
+    // command reads or writes the composer model key or the Slack app secret (Victor
+    // writes both with his own credentials), so the operator task holds neither.
+    operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], resources: [capabilitySecret.secretArn, authConfiguration.secretArn] }));
     operatorRole.addToPolicy(new iam.PolicyStatement({
-      actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn, authConfigurationKey.keyArn, composerModelKey.keyArn, slackAppKey.keyArn],
+      actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn, authConfigurationKey.keyArn],
       conditions: { StringEquals: { 'kms:ViaService': `secretsmanager.${this.region}.amazonaws.com` } },
     }));
     // ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's

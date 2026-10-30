@@ -59,8 +59,11 @@ import time
 import uuid
 
 REPOSITORY = Path(__file__).resolve().parents[2]
-STACK = 'GenuiSyntheticFoundation'
-ACCOUNT, REGION = '877573132739', 'us-east-1'
+# The beta's account, region and stack, shared with preflight.py (loaded by path, not sys.path).
+_spec = importlib.util.spec_from_file_location('genui_infra_common', Path(__file__).resolve().parent / 'common.py')
+_COMMON = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_COMMON)
+STACK, ACCOUNT, REGION = _COMMON.STACK, _COMMON.ACCOUNT, _COMMON.REGION
 ASSETS_BUCKET = 'cdk-hnb659fds-assets-%s-%s' % (ACCOUNT, REGION)
 MAX_OVERRIDE_BYTES = 8192
 ORGANIZATIONS = ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002')
