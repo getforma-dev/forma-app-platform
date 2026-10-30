@@ -76,6 +76,38 @@ Share it: from the work page (`/w/{app}/{work}`), the share form posts `POST /v1
 
 Honest notes: generation needs the member to own an app with `edit_definition` and `run` (ADR-007 D7.3; DS-20); generated views are limited to the engine's qualified operators (DS-33); generation takes several seconds (budget 60 s per attempt) and must be rehearsed with the real key before the pitch (`app/scripts/composer_smoke.sh`).
 
+## Scenario 5: two vendors' agents on one governed record (MCP, APP-099)
+
+Forma is an MCP server (`POST /v1/mcp`, Streamable HTTP, stateless). Any MCP client acts through it as the member who connected it: the same identity, permissions, receipts and audit as the canvas, and its work appears live on the team's canvases.
+
+**Connect (once per person, before the pitch).** On the canvas, click **Connect an agent**, name it ("Claude" for Diego, "OpenAI" for Sarah) and **Create token**. The token is shown once; copy it into the client. Forma keeps only its SHA-256 digest; the panel lists connected agents and revokes them. Signing out of the canvas moves the member's epoch and ends every token of that member: mint after the last sign-in.
+
+- Claude Code (Diego):
+
+  ```sh
+  claude mcp add --transport http forma https://<host>/v1/mcp --header "Authorization: Bearer <YOUR_FORMA_TOKEN>"
+  ```
+
+- OpenAI Responses API (Sarah), as a `tools` entry; the rehearsal client is `app/scripts/mcp_openai_smoke.py` (key from the gitignored `.env`, never printed; OpenAI calls the server from its own infrastructure, so the URL must be the beta host or a tunnel, never loopback):
+
+  ```json
+  {"type": "mcp", "server_label": "forma", "server_url": "https://<host>/v1/mcp",
+   "headers": {"Authorization": "Bearer <YOUR_FORMA_TOKEN>"}, "require_approval": "never"}
+  ```
+
+**The act.** Left window: Diego's canvas; right window: Sarah's canvas; a terminal with Claude Code in front of the left window.
+
+1. Diego, in Claude: *"Log my $86 Nobu dinner and send it to Sarah."* Claude calls `forma_list_apps`, then `forma_draft_record` (app "Expense claims", amount 86, merchant Nobu, category meals, approver Sarah): a draft, typed under the app's schema and dry-run by storage, nothing written. Claude shows the values and asks; Diego says yes; Claude calls `forma_commit`: one audited command (server-minted idempotency key, `command.committed` on the chain), then the share to Sarah.
+2. Right window: the claim arrives live (`app.shared`, then her records card), with a **via Claude** chip on the row.
+3. Sarah, in an OpenAI agent: *"What's waiting for me? Approve the Nobu dinner."* `forma_list_pending` → `forma_draft_decision` → `forma_commit`.
+4. Left window: Diego's row flips to **approved** live (`record.committed`), **via OpenAI**.
+
+Say: "Two vendors' agents just acted on one governed record. Neither got a right Diego or Sarah does not hold; every write was confirmed, typed, audited and idempotent, and both canvases watched it happen."
+
+Tools (closed set, typed JSON Schemas, annotations): `forma_list_apps`, `forma_run_view` (rows ≤ 50 with the receipt id, the canvas's query path), `forma_compose_app` (the composer; the app is placed live), `forma_draft_record`, `forma_draft_decision`, `forma_commit` (held drafts: 10 minutes, the member's and token's own, one record each; a repeated commit replays the same outcome), `forma_list_pending`, `forma_share`. Refusals: a missing, malformed, unknown, revoked, foreign or epoch-stale token and a cookie without a bearer are all the byte-identical 404; a foreign `Origin` is 403; inside a tool, every denial is the same `not_found` result.
+
+Measured on the local stand (`storage::mcp_campaign`, Docker PostgreSQL, stub engine; debug build): draft ~0.8 s (the expense app placed on first use), commit + share ~0.24 s, `app.shared` on Sarah's stream ~45 ms later, Sarah's draft + commit ~0.5 s, `record.committed` on Diego's stream immediately.
+
 ## What each screen shows, in one line each
 
 - **Intent bar status**: "Understanding…" → "Understood in N ms. Review the record, then confirm." → "Committing through the audited command path…" → "Filed: record v1, commit N, audit ab12cd34. Shared with Sarah Chen for approval."
@@ -97,6 +129,7 @@ Honest notes: generation needs the member to own an app with `edit_definition` a
 
 - `POST /v1/act` `{"utterance"}` or `{"decide": {app_id, work_id, record_id, status, note?}}` → a confirmation card payload (`command_request` with a server-minted `Idempotency-Key`, typed `values`, `approver`, `target`, `confirm_token`), `{"action":"open"}` or `{"action":"place"}`. Rate-limited 60/member/hour; uniform 404 for strangers; 422 `could_not_parse` / `could_not_draft`; 503 `composer_unavailable` without a key outside the demo organization.
 - `GET /v1/work/{app}/{work}/records` → the work's current records, newest first, at most 200, with schema, commands and display labels; uniform 404 otherwise.
+- `POST /v1/mcp` (APP-099: MCP Streamable HTTP, bearer agent token, 120/token/hour, long deadline; `GET` 405), `POST|GET /v1/agent-tokens`, `DELETE /v1/agent-tokens/{id}` (canvas session, same-origin).
 - `POST /v1/work/{app}/{work}/commands/{command}` (existing, audited), `POST /v1/work/{app}/{work}/share` (existing), `GET /v1/events` (existing), `POST /v1/compose` (existing).
 
 ## Evidence

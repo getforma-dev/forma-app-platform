@@ -3178,7 +3178,7 @@
       "Depends on": "APP-093, APP-095",
       "External dependencies": "None for the server; a Claude client (Claude Code or Claude Desktop) and an OpenAI API key for the cross-vendor rehearsal",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started (`pivot/mcp`, from `pivot/pitch-mvp` 4825e7f)",
+      "Branch / PR": "`pivot/mcp` (from `pivot/pitch-mvp` ef54988; not merged)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

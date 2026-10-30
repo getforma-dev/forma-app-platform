@@ -1109,12 +1109,9 @@ async fn share(
         .members(member)
         .await
         .map_err(storage_output)?;
-    let grantee = resolve::match_approver(&name, &members).ok_or_else(|| {
-        Output::error(
-            "unknown_member",
-            "No teammate in your organization matches that name.",
-        )
-    })?;
+    // No teammate of that name is the uniform denial too (a member of
+    // another organization is never named).
+    let grantee = resolve::match_approver(&name, &members).ok_or_else(Output::not_found)?;
     let shared = stores
         .workspace
         .share_work(member, &app, &work, &grantee.principal, record_write)
