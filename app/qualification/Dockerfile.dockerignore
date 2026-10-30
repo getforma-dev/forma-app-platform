@@ -156,8 +156,6 @@ app/src/imports/**
 !app/src/imports/mod.rs
 !app/src/imports/sandbox.rs
 !app/src/supervise.rs
-!app/src/demo.rs
-!app/src/directory.rs
 !contracts/fixtures/impl-2026-10-28.1/
 contracts/fixtures/impl-2026-10-28.1/**
 !contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json
