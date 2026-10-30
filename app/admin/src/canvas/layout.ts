@@ -118,3 +118,27 @@ export function loadStacks(member: string): StoredStack[] {
 export function saveStacks(member: string, stacks: StoredStack[]): void {
   if (/^[0-9a-f]{16}$/.test(member)) write(stacksKey(member), stacks);
 }
+
+// APP-106 unite frames (DS-67): per member in this browser, the works shown
+// as one assembled frame, the frame's position and each card's position before
+// the unite (for "Break apart"). Ids and numbers only.
+export type StoredUnite = { work: string; app: string; x: number; y: number; previous: Record<string, { x: number; y: number }> };
+const unitedKey = (member: string) => `forma.canvas.united.v1:${member}`;
+export function loadUnited(member: string): StoredUnite[] {
+  if (!/^[0-9a-f]{16}$/.test(member)) return [];
+  const stored = read(unitedKey(member));
+  if (!Array.isArray(stored)) return [];
+  return stored.slice(0, 32).flatMap((value): StoredUnite[] => {
+    const entry = value as Partial<StoredUnite> | null;
+    if (!entry || typeof entry.work !== 'string' || !UUID.test(entry.work) || typeof entry.app !== 'string' || !UUID.test(entry.app)) return [];
+    if (!finite(entry.x) || !finite(entry.y) || typeof entry.previous !== 'object' || entry.previous === null) return [];
+    const previous: Record<string, { x: number; y: number }> = {};
+    for (const [id, spot] of Object.entries(entry.previous).slice(0, 64)) {
+      if (CARD.test(id) && spot && finite(spot.x) && finite(spot.y)) previous[id] = { x: spot.x, y: spot.y };
+    }
+    return [{ work: entry.work, app: entry.app, x: entry.x, y: entry.y, previous }];
+  });
+}
+export function saveUnited(member: string, united: StoredUnite[]): void {
+  if (/^[0-9a-f]{16}$/.test(member)) write(unitedKey(member), united);
+}

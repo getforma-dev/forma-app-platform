@@ -5,6 +5,8 @@ import { startBoard } from './board';
 import { startLibrary } from './library';
 import { startControls } from './controls';
 import { startStacks } from './stacks';
+import { startUnite } from './unite';
+import { startFocus } from './focus';
 import { registerCommands, startSlash } from './slash';
 // APP-103 utility widgets, registered as canvas slash commands (APP-101):
 // `/weather`, `/calculator`, `/clock` in the `/` list and `/apps`; a command
@@ -702,6 +704,7 @@ function Canvas(props: CanvasProps) {
                         <span class="cv-lib-on" data-lib-on></span>
                       </button>
                       <button type="button" class="cv-lib-stack" data-lib-stack title="Add the app as one stack">Stack</button>
+                      <button type="button" class="cv-lib-stack cv-lib-unite" data-lib-unite title="Unite: assemble the app's cards into one frame">Unite</button>
                       <button type="button" class="cv-lib-all" data-lib-all>Add all</button>
                     </div>
                     <ul class="cv-lib-cards">
@@ -748,6 +751,9 @@ function Canvas(props: CanvasProps) {
               <button type="button" role="menuitem" data-tool="fit"><span>Zoom to fit</span><span class="cv-kbd-group">⇧ 1</span></button>
               <button type="button" role="menuitem" data-tool="selection"><span>Zoom to selection</span><span class="cv-kbd-group">⇧ 2</span></button>
               <span class="cv-zoom-sep" aria-hidden="true"></span>
+              <button type="button" role="menuitem" data-tool="focus"><span>Focus selected</span><span class="cv-kbd-group">F</span></button>
+              <button type="button" role="menuitem" data-tool="unite"><span>Unite app</span><span class="cv-kbd-group">U</span></button>
+              <span class="cv-zoom-sep" aria-hidden="true"></span>
               <button type="button" role="menuitem" data-tool="reset-layout" title="View layout only: saved in this browser"><span>Reset layout</span></button>
               <button type="button" role="menuitem" data-tool="help"><span>Keyboard shortcuts</span><span class="cv-kbd-group">?</span></button>
             </div>
@@ -773,6 +779,8 @@ restoreWidgets();
 startLibrary(document);
 startControls(document);
 startStacks(document);
+startUnite(document);
+startFocus(document);
 
 mount(
   () =>

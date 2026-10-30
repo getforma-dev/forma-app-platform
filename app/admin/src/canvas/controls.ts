@@ -14,6 +14,8 @@
 // - zoom keys: Cmd/Ctrl + `=`/`+` and `-` (the browser's page zoom is held
 //   back), Shift + 0 (100%), Shift + 1 (fit all), Shift + 2 (selection);
 // - L opens the library, `?` this sheet of shortcuts;
+// - APP-106: F focuses the selected card (`focus.ts`), U unites its app and
+//   Shift + U breaks it apart (`unite.ts`); the toolbar menu has both;
 // - touch: one finger on the empty canvas pans (the vendor's), two fingers
 //   pinch to zoom; Safari's trackpad gesture events zoom too.
 //
@@ -25,6 +27,8 @@ import { el } from './render';
 import { registerCommands } from './slash';
 import { removeWidgets } from './widgets/index';
 import { collapseAll, dissolve, expand, isStackItem, shuffle, stackOfItem, stackSelection } from './stacks';
+import { focusFromItem, isFocusOpen } from './focus';
+import { frameCardsOfItem, isUniteItem, splitFromItem, uniteFromItem } from './unite';
 
 const selection = new Set<HTMLElement>();
 let tool: 'move' | 'hand' = 'move';
@@ -96,10 +100,23 @@ function removeSelected(): void {
     else if (kind === 'utility') removeUtilityItem(item);
     else if (kind === 'card' && item.dataset.instanceId) cards.push(item.dataset.instanceId);
     else if (isStackItem(item)) cards.push(...(stackOfItem(item)?.cards ?? []));
+    else if (isUniteItem(item)) cards.push(...frameCardsOfItem(item));
   }
   if (cards.length) removeCards(cards);
   selection.clear();
   renderSelection();
+}
+
+/** The item F and U act on: the first selected one, else the active one. */
+function chosenItem(): HTMLElement | null {
+  return [...selection].find((item) => item.isConnected) ?? canvasApi()?.activeItem() ?? null;
+}
+function focusSelected(): void {
+  if (!focusFromItem(chosenItem())) announce('Select a card first, then press F to focus it.');
+}
+function uniteSelected(split = false): void {
+  const outcome = split ? splitFromItem(chosenItem()) : uniteFromItem(chosenItem());
+  void Promise.resolve(outcome).then(announce);
 }
 
 function action(name: string): void {
@@ -113,6 +130,8 @@ function action(name: string): void {
     case 'selection': zoomToSelection(); break;
     case 'reset-layout': resetLayout(); break;
     case 'help': showSheet(); break;
+    case 'focus': focusSelected(); break;
+    case 'unite': uniteSelected(); break;
     case 'move': setTool('move'); break;
     case 'hand': setTool('hand'); break;
     default: return;
@@ -150,6 +169,13 @@ const SHORTCUTS: [string, [string, string][]][] = [
     ['← · →, Shift + scroll', 'Leaf through a stack'],
     ['Enter, double-click, +N', 'Fan a stack out'],
     ['Double-click the name', 'Rename a stack'],
+  ]],
+  ['Focus and unite', [
+    ['F', 'Focus the selected card'],
+    ['← · →, swipe', 'Previous · next card in focus'],
+    ['Esc', 'Back to the canvas'],
+    ['U', 'Unite the selected card’s app'],
+    ['Shift + U', 'Break the app apart'],
   ]],
   ['Canvas', [
     ['L', 'Library'],
@@ -190,6 +216,8 @@ function hideSheet(): void {
 
 function onKey(event: KeyboardEvent): void {
   if (event.defaultPrevented || event.isComposing) return;
+  // Focus mode owns the keyboard while it is open (`focus.ts`).
+  if (isFocusOpen()) return;
   const mod = event.metaKey || event.ctrlKey;
   // The browser's page zoom keys zoom the canvas instead (outside text fields).
   // Cmd/Ctrl+G stacks the selection; with Shift, spreads the selected stacks.
@@ -264,6 +292,17 @@ function onKey(event: KeyboardEvent): void {
   }
   // Inside the library pane and the toolbar, keys belong to their controls.
   if ((event.target as Element | null)?.closest?.('#cv-library, .cv-tools, .cv-dock')) return;
+  // APP-106: F focus, U unite, Shift + U break apart.
+  if (key === 'f' && !event.shiftKey) {
+    event.preventDefault();
+    focusSelected();
+    return;
+  }
+  if (key === 'u') {
+    event.preventDefault();
+    uniteSelected(event.shiftKey);
+    return;
+  }
   const selected = [...selection].filter((item) => item.isConnected);
   if (!selected.length) {
     const active = canvasApi()?.activeItem();

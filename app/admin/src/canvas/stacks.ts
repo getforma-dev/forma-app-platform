@@ -429,6 +429,37 @@ function pile(dragged: HTMLElement, onto: HTMLElement): void {
   if (stack) board.flash(stack.item);
 }
 
+/**
+ * Takes cards out of their stacks (parked in the hidden board; a stack left
+ * with one card spreads it onto the canvas). Returns the ids it handled.
+ */
+export function releaseCards(ids: string[]): string[] {
+  const handled: string[] = [];
+  for (const stack of [...stacks.values()]) {
+    const out = stack.cards.filter((id) => ids.includes(id));
+    if (!out.length) continue;
+    handled.push(...out);
+    collapse(stack);
+    const current = stack.holder.firstElementChild as HTMLElement | null;
+    if (current && out.includes(current.dataset.card ?? '')) board.park(current);
+    stack.cards = stack.cards.filter((id) => !out.includes(id));
+    if (stack.cards.length === 0) removeStack(stack, 'empty');
+    else if (stack.cards.length === 1) dissolve(stack);
+    else {
+      stack.top = Math.min(stack.top, stack.cards.length - 1);
+      showTop(stack);
+    }
+  }
+  if (handled.length) save();
+  return handled;
+}
+
+/** APP-106: the cards of the stack that holds `id` (top first as stacked), and which is on top. */
+export function stackCardsOf(id: string): { cards: string[]; top: string; item: HTMLElement } | null {
+  const stack = [...stacks.values()].find((candidate) => candidate.cards.includes(id) && !candidate.fanned);
+  return stack ? { cards: [...stack.cards], top: stack.cards[stack.top] ?? id, item: stack.item } : null;
+}
+
 /** Starts stacks once (after the board): hooks, drag-to-pile, shuffle on scroll. */
 export function startStacks(document_: Document): void {
   if (documentRef) return;
@@ -436,26 +467,7 @@ export function startStacks(document_: Document): void {
   setStackHooks({
     has: (id) => [...stacks.values()].some((stack) => stack.cards.includes(id)),
     count: () => [...stacks.values()].reduce((sum, stack) => sum + (stack.fanned ? 0 : stack.cards.length), 0),
-    remove: (ids) => {
-      const handled: string[] = [];
-      for (const stack of [...stacks.values()]) {
-        const out = stack.cards.filter((id) => ids.includes(id));
-        if (!out.length) continue;
-        handled.push(...out);
-        collapse(stack);
-        const current = stack.holder.firstElementChild as HTMLElement | null;
-        if (current && out.includes(current.dataset.card ?? '')) board.park(current);
-        stack.cards = stack.cards.filter((id) => !out.includes(id));
-        if (stack.cards.length === 0) removeStack(stack, 'empty');
-        else if (stack.cards.length === 1) dissolve(stack);
-        else {
-          stack.top = Math.min(stack.top, stack.cards.length - 1);
-          showTop(stack);
-        }
-      }
-      if (handled.length) save();
-      return handled;
-    },
+    remove: releaseCards,
     live: (work) => {
       for (const stack of stacks.values()) {
         const members = stack.cards.filter((id) => id.includes(work));

@@ -38,6 +38,7 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 | `/card <name or number>` | Brings one card (for example `/card 6.2`). |
 | `/app <name>` | Brings all of an app's cards. |
 | `/arrange` | Lays the board out by app. |
+| `/unite <app>`, `/split <app>` | Assembles an app's cards into one frame; breaks it apart again. |
 | `/weather <place>`, `/calculator`, `/clock <zone>` | Utility widgets; restyle them in words. |
 | Any other sentence | The instant pick and live reshape; a short chooser when two apps fit equally; "Build something new" generates one. |
 
@@ -50,6 +51,8 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 - Shuffling: Shift+scroll or ←/→.
 - Fanning out: click the count, or press Enter. Esc folds it back.
 - Spreading back onto the board: Cmd/Ctrl+Shift+G.
+
+**Focus and unite.** The `[ ]` button on a card (or `F`) opens it in a focus modal where ←/→ or a swipe walk the app's cards and Esc returns; "Unite" on the app card, the library row, `/unite` or `U` assembles the app's cards into one frame (KPIs, chart, table, form and records beside them), and "Break apart" or Shift+U puts every card back.
 
 **Controls (as in Figma).**
 - Scroll pans. Cmd/Ctrl+scroll or a pinch zooms at the cursor. Space+drag or middle-drag pans.

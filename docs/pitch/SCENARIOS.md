@@ -40,6 +40,8 @@ A confirmation card: *Decide this record?* — Status **approved**, the record c
 
 **Left window.** The Nobu row turns **approved** live (`record.committed` on Diego's stream re-read his records list), with a brief glow. Say: "That decision is an audited command: version 2 of the record, one `command.committed` event on the organization's hash chain, and the chain verifies."
 
+**Close the beat with Unite (APP-106).** On the left window type `/unite expense` (or select one of its cards and press **U**): every Expense claims card flies into one frame titled with the app and its *retrieved* label (numbers in a row, the chart, the table, the form and records beside them), with the Nobu claim still showing **approved**; **F** on any card opens it in focus, ←/→ walk the app's cards, Esc returns; **Shift + U** breaks it apart. Say: "Those cards were never separate things. They are one governed app."
+
 Measured on the local stand (Docker PostgreSQL, loopback model stub): parse-to-card ~0.6 s (deterministic for the rehearsed sentence), confirm commit ~0.15 s, share ~0.1 s, `app.shared` on Sarah's stream ~40 ms after the share, `record.committed` on Diego's stream well under a second. See `actions-campaign.json` in the evidence for the exact run.
 
 ## Scenario 2: the manager asks what is waiting
