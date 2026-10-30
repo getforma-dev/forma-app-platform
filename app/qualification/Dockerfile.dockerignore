@@ -61,6 +61,7 @@
 !app/src/storage/qualification_cases.rs
 !app/src/storage/queries.rs
 !app/src/storage/query_qualification.rs
+!app/src/storage/race_qualification.rs
 !app/src/storage/registry.rs
 !app/src/storage/sessions.rs
 !app/src/storage/tests.rs

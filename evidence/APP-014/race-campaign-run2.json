@@ -1,0 +1,164 @@
+{
+  "checks_total": 25,
+  "closing": [
+    {
+      "name": "the operator recomputes the data chain to its head: 17 command.committed events for 17 outcomes and 17 claims, every outcome naming its own event; no refused or raced command left a claim, outcome or event",
+      "passed": true
+    },
+    {
+      "name": "local database and private fixture files removed",
+      "passed": true
+    }
+  ],
+  "commits": 17,
+  "elapsed_ms": 28457,
+  "groups": [
+    {
+      "checks": [
+        {
+          "name": "lost_response_retry_returns_original_outcome_with_stale_expected_version: a committed command whose response is lost, retried with the same scoped key and payload and its now-stale expected version 0 after another edit reached version 2, returns the original outcome (record version 1) byte-identically on the route (200) and as Replayed in storage; the lookup by key returns the same; one revision, one outcome and one command.committed event per command, no new claim",
+          "passed": true
+        },
+        {
+          "name": "lost_response_retry_returns_original_outcome_with_stale_expected_version: the lost key reused with a changed payload conflicts (409 conflict) with the authorized recovery view naming the original outcome and the record's current version 2 and values; nothing is written",
+          "passed": true
+        },
+        {
+          "name": "lost_response_retry_returns_original_outcome_with_stale_expected_version: current authorization precedes outcome disclosure: after the operator revokes the author's app run grant (epoch advanced) the retry and the lookup are the uniform 404 and Denied at the old and the new epoch; once run is granted again the same retry returns the original outcome; nothing is written either way",
+          "passed": true
+        },
+        {
+          "name": "lost_response_retry_returns_original_outcome_with_stale_expected_version: after every pool and store is replaced (the old session ended with its vault), the lost key retried on a fresh session still returns the original outcome byte-identically and replays in storage; still exactly two revisions, outcomes and events for the record",
+          "passed": true
+        }
+      ],
+      "elapsed_ms": 3195,
+      "group": "lost_response_retry_returns_original_outcome_with_stale_expected_version"
+    },
+    {
+      "checks": [
+        {
+          "name": "same_key_and_different_key_races_commit_exactly_one_intended_write: two submissions of the same key and payload race: the second waits on the first's in-flight claim (observed in pg_stat_activity), and when the first commits version 1 the second returns that outcome as Replayed; exactly one revision, outcome and event",
+          "passed": true
+        },
+        {
+          "name": "same_key_and_different_key_races_commit_exactly_one_intended_write: the same key with a changed payload racing an in-flight command waits on its claim, then conflicts (payload_mismatch) with the recovery view naming the committed outcome and the current values; exactly one write",
+          "passed": true
+        },
+        {
+          "name": "same_key_and_different_key_races_commit_exactly_one_intended_write: two different keys expecting version 2 race: the second waits on the organization sequence row, then conflicts (expected 2, current 3, the winner's values, no stored outcome) without writing; its authorized recovery on version 3 under a new key commits version 4, and the stale edit stays a conflict",
+          "passed": true
+        },
+        {
+          "name": "same_key_and_different_key_races_commit_exactly_one_intended_write: on the route, the same key behind a command holding its claim and a different key behind its sequence lock each wait past lock_timeout and answer 409 in_flight with Retry-After: 2 (never 503) with nothing written; after the holder commits, the same key returns its outcome (200) and the different key conflicts (409 expected_version) until its authorized recovery commits; seven intended writes, seven revisions, outcomes and events",
+          "passed": true
+        }
+      ],
+      "elapsed_ms": 4030,
+      "group": "same_key_and_different_key_races_commit_exactly_one_intended_write"
+    },
+    {
+      "checks": [
+        {
+          "name": "other_principal_cannot_retrieve_key: while the author's identical retry holds its fences, another principal with record_write submitting the author's key and payload gets its own fresh claim judged on its own premise (409 conflict expected_version, no stored outcome, no lock wait) and its lookup by that key finds nothing (404 on the route); the author's retry replays and the author's lookup returns the outcome",
+          "passed": true
+        },
+        {
+          "name": "other_principal_cannot_retrieve_key: a member without record_write gets the uniform 404 for the key's lookup and submission, the canary organization's member is Denied, and at the row level the data role under the reviewer's scope sees none of the author's claims or outcomes under the key (one under the author's)",
+          "passed": true
+        },
+        {
+          "name": "other_principal_cannot_retrieve_key: the scope includes the principal: the reviewer's own command under the author's key string commits its own outcome and each principal's lookup returns only its own; while the author's fresh claim is in flight the reviewer's same-key command neither waits nor replays it and commits, and the author's command then conflicts on the moved version with its claim released",
+          "passed": true
+        }
+      ],
+      "elapsed_ms": 2710,
+      "group": "other_principal_cannot_retrieve_key"
+    },
+    {
+      "checks": [
+        {
+          "name": "adoption_vs_commit_both_orders: adoption first: a command paused after its precheck resumes after the D7.4 test-only adoption (saved work FOR UPDATE, version 1 → 2) committed, and its work fence answers Stale naming the current publication and version 2; no revision, outcome, event or claim remains",
+          "passed": true
+        },
+        {
+          "name": "adoption_vs_commit_both_orders: adoption first with its lock held: the resumed route command's claim waits on the adoption writer's saved-work lock (observed), the writer commits version 3 during the wait, and the route answers 412 stale naming version 3; nothing is written",
+          "passed": true
+        },
+        {
+          "name": "adoption_vs_commit_both_orders: an adoption writer holding the saved work past lock_timeout: FOR UPDATE blocks the claim's reference and the route answers 409 in_flight; a FOR NO KEY UPDATE holder passes the claim and blocks the work fence, answering 409 busy; both with Retry-After: 2, never 503, nothing written, and the writer's rollback leaves version 3",
+          "passed": true
+        },
+        {
+          "name": "adoption_vs_commit_both_orders: command first: while the command holds the work FOR SHARE (paused at its record lock) the adoption writer waits (observed); the command commits version 1 on work version 3, then the adoption commits version 4; the committed outcome stays recorded and its identical retry replays it (200, work_version 3), a new edit on work version 3 is 412 stale naming 4, and its recovery on version 4 commits record version 2",
+          "passed": true
+        },
+        {
+          "name": "adoption_vs_commit_both_orders: a command paused right after its claim already holds the saved work's key share: the adoption writer's FOR UPDATE waits on it (observed), the command's work fence then takes FOR SHARE ahead of the queued writer without deadlock and commits on work version 4, and the adoption commits version 5 afterwards",
+          "passed": true
+        }
+      ],
+      "elapsed_ms": 4456,
+      "group": "adoption_vs_commit_both_orders"
+    },
+    {
+      "checks": [
+        {
+          "name": "revocation_vs_commit_both_orders: revocation first: a command paused after its precheck resumes after the operator's revoke-membership committed (epoch advanced); the fence refuses it (Denied), nothing is written and its claim is released; the next request at either epoch is Denied and the route answers the uniform 404",
+          "passed": true
+        },
+        {
+          "name": "revocation_vs_commit_both_orders: revocation first with its locks held (D7.1 order in the operator channel): the resumed route command's claim waits on the member row (observed), the revocation commits during the wait, and the fence refuses the command: the uniform 404, nothing written",
+          "passed": true
+        },
+        {
+          "name": "revocation_vs_commit_both_orders: a member writer holding the row past lock_timeout after the command's precheck: a revocation in progress (FOR UPDATE) blocks the claim's reference and the route answers 409 in_flight; a FOR NO KEY UPDATE holder passes the claim and blocks the authorization fence, answering 409 busy; both with Retry-After: 2, never 503, nothing written",
+          "passed": true
+        },
+        {
+          "name": "revocation_vs_commit_both_orders: a route request arriving while a revocation already holds the member row waits in session resolution past lock_timeout and answers 404 not_found (recorded as found; not 503), nothing written",
+          "passed": true
+        },
+        {
+          "name": "revocation_vs_commit_both_orders: command first: while the command holds its fences (paused at its record lock) the operator's revoke-membership waits on the member row (observed); the command commits version 1, then the revocation commits; the committed revision, outcome and event remain recorded (the author reads version 1), but the revoked principal's identical retry and lookup are Denied at both epochs and the uniform 404 on the route",
+          "passed": true
+        },
+        {
+          "name": "revocation_vs_commit_both_orders: a command paused right after its claim already holds the member row's key share: revoke-membership's FOR UPDATE waits on it (observed), the command's member fence takes FOR SHARE ahead of the queued revocation without deadlock and commits version 2, the revocation then commits, and the revoked principal's retry and lookup are refused",
+          "passed": true
+        },
+        {
+          "name": "revocation_vs_commit_both_orders: a replay of a committed key (the restored reviewer's identical retry replays it) paused after its precheck holds no member lock, so revoke-membership commits without waiting; the resumed replay's fence then refuses delivery of the stored outcome (Denied): current visibility, not the stored outcome, governs the response",
+          "passed": true
+        }
+      ],
+      "elapsed_ms": 8165,
+      "group": "revocation_vs_commit_both_orders"
+    }
+  ],
+  "limits": [
+    "Synthetic local password authentication is not RDS IAM; the RDS lock-observation repeat of these orders is APP-080's (ADR-008).",
+    "Identities are synthetic registry-bound fixtures; HTTP sessions are minted by a test-only constructor after the seeded membership.",
+    "Writers that must hold their locks across a checkpoint are fixture-only SQL in the operator channel's order (genui_owner under explicit scope); the unheld revocations are the real operator command. The adoption writer is test-only by D7.4.",
+    "Fixture-only restoration re-activates a revoked member between orders (as the APP-008 campaign), writing no operator audit event.",
+    "The database itself is not restarted (tmpfs fixture); the restart is of every application pool and store.",
+    "Races are serialized by the pool's test-only checkpoints and observed pg_stat_activity lock waits; lock_timeout is the pool baseline's 1000 ms."
+  ],
+  "managed_acceptance": false,
+  "passed": true,
+  "s05": {
+    "app_id": "00000000-0000-4000-8000-0000000000c9",
+    "collection_id": "800e96d1-9394-4adb-bc18-0d2f94e21032",
+    "definition_digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9",
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "publication_id": "a1ab191b-583d-4809-a48c-c1d50e68c7c4",
+    "work_id": "75205d7d-0e55-433a-95d4-941361cda888"
+  },
+  "schema_version": 1,
+  "scope": "APP-014 isolated native PostgreSQL TLS command retry, conflict and authorization race qualification",
+  "server_version": "16.13 (Debian 16.13-1.pgdg13+1)",
+  "session_wait_observation": {
+    "code": "not_found",
+    "status": 404
+  }
+}

@@ -120,4 +120,6 @@ pub(crate) mod qualification_cases;
 #[cfg(test)]
 mod query_qualification;
 #[cfg(test)]
+mod race_qualification;
+#[cfg(test)]
 mod tests;

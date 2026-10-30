@@ -51,7 +51,7 @@ const IK: [&str; 10] = [
     "0000000000000000000000000000000a",
 ];
 
-fn values(status: &str, note: &str) -> Value {
+pub(super) fn values(status: &str, note: &str) -> Value {
     json!([
         {"field_id": "status", "value": {"type": "enum", "value": status}},
         {"field_id": "note", "value": {"type": "text", "value": note}},
@@ -78,12 +78,12 @@ fn command(
         idempotency_key: key.into(),
     }
 }
-async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
+pub(super) async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
     let operator = fixture.operator().await;
     operator.client.query_one(sql, &[]).await.unwrap().get(0)
 }
 /// Every row a command can write, as the superuser counts them.
-async fn footprint(fixture: &Fixture) -> [i64; 6] {
+pub(super) async fn footprint(fixture: &Fixture) -> [i64; 6] {
     let mut counts = [0; 6];
     for (slot, sql) in [
         "SELECT count(*) FROM genui.internal_records",
@@ -107,18 +107,18 @@ async fn next_sequence(fixture: &Fixture) -> i64 {
     )
     .await
 }
-async fn paused(hooks: &TestHooks) {
+pub(super) async fn paused(hooks: &TestHooks) {
     timeout(Duration::from_secs(5), hooks.reached.notified())
         .await
         .expect("command barrier reached");
 }
-fn committed(result: Result<CommandResult>) -> CommandOutcome {
+pub(super) fn committed(result: Result<CommandResult>) -> CommandOutcome {
     match result {
         Ok(CommandResult::Committed(outcome)) => outcome,
         other => panic!("expected a committed command: {other:?}"),
     }
 }
-fn conflict(result: Result<CommandResult>) -> RecoveryView {
+pub(super) fn conflict(result: Result<CommandResult>) -> RecoveryView {
     match result {
         Ok(CommandResult::Conflict(view)) => view,
         other => panic!("expected a conflict: {other:?}"),
@@ -147,7 +147,7 @@ async fn refused(fixture: &Fixture, role: &str, sql: &str, code: &str) {
     operator.client.batch_execute("ROLLBACK").await.unwrap();
 }
 
-struct TestPages;
+pub(super) struct TestPages;
 fn page(text: String) -> Response {
     let mut response = (StatusCode::OK, text).into_response();
     http::secure(response.headers_mut());
@@ -207,20 +207,20 @@ fn field(body: &str, name: &str) -> String {
         .unwrap_or_else(|| panic!("field {name} in {body}"))
         .to_owned()
 }
-struct Reply {
-    status: StatusCode,
-    headers: HeaderMap,
-    body: String,
+pub(super) struct Reply {
+    pub status: StatusCode,
+    pub headers: HeaderMap,
+    pub body: String,
 }
 impl Reply {
-    fn json(&self) -> Value {
+    pub fn json(&self) -> Value {
         serde_json::from_str(&self.body).unwrap_or_else(|_| panic!("JSON body: {}", self.body))
     }
     fn location(&self) -> String {
         self.headers[header::LOCATION].to_str().unwrap().to_owned()
     }
 }
-async fn send(
+pub(super) async fn send(
     app: &Router,
     method: &str,
     uri: &str,
@@ -256,14 +256,14 @@ fn encode(pairs: &[(&str, &str)]) -> String {
     }
     out.finish()
 }
-fn json_headers(key: &str) -> Vec<(&'static str, &str)> {
+pub(super) fn json_headers(key: &str) -> Vec<(&'static str, &str)> {
     vec![
         ("sec-fetch-site", "same-origin"),
         ("content-type", "application/json"),
         ("idempotency-key", key),
     ]
 }
-fn vault_token() -> provider::Token {
+pub(super) fn vault_token() -> provider::Token {
     provider::Token {
         access_token: "synthetic-access".into(),
         refresh_token: capability::random_capability().unwrap(),
