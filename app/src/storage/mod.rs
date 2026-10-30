@@ -49,7 +49,7 @@ pub use queries::{
 };
 pub use registry::RegistryIdentity;
 pub use sessions::{
-    agent_token_organization, capability_organization, capability_shaped, AdmittedMember,
+    agent_token_organization, capability_organization, capability_shaped, slack_id, AdmittedMember,
     AgentCaller, Completion, Ended, FlowKind, FlowRecord, FlowStart, Lookup, PreAccess,
     PreAccessStart, SignedOut, AGENT_TOKEN_PREFIX, PRELOGIN_SECONDS, PRE_ACCESS_ABSOLUTE_SECONDS,
     PRE_ACCESS_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS, SESSION_IDLE_SECONDS,
@@ -147,5 +147,7 @@ mod query_qualification;
 mod race_qualification;
 #[cfg(test)]
 mod sharing_qualification;
+#[cfg(test)]
+mod slack_campaign;
 #[cfg(test)]
 mod tests;

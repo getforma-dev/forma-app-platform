@@ -248,8 +248,30 @@ pub(crate) fn parse(bytes: &[u8]) -> Message {
     }
 }
 
+/// A `YYYY-MM-DD` revision string.
+fn revision_shaped(value: &str) -> bool {
+    let b = value.as_bytes();
+    b.len() == 10
+        && b.iter().enumerate().all(|(i, c)| {
+            if i == 4 || i == 7 {
+                *c == b'-'
+            } else {
+                c.is_ascii_digit()
+            }
+        })
+}
+/// `MCP-Protocol-Version`: a supported revision, or a revision newer than
+/// the newest this server speaks (MCP version negotiation: the server then
+/// answers with its own latest, as `initialize` does; Claude Code probes
+/// with a newer revision first). An older unsupported revision or anything
+/// else is 400.
+pub(crate) fn header_version_accepted(value: &str) -> bool {
+    PROTOCOL_VERSIONS.contains(&value) || (revision_shaped(value) && value > PROTOCOL_VERSIONS[0])
+}
+
 /// The negotiated protocol version: the client's when supported, else the
-/// newest this server speaks (the client then decides).
+/// newest this server speaks (a newer client's request included; the client
+/// then decides).
 pub(crate) fn negotiate(params: &Value) -> &'static str {
     let asked = params.get("protocolVersion").and_then(Value::as_str);
     PROTOCOL_VERSIONS
@@ -302,10 +324,7 @@ async fn handle(State(state): State<Arc<Mcp>>, request: Request) -> Response {
         return http::too_many_requests(retry_after);
     }
     if let Some(version) = parts.headers.get("mcp-protocol-version") {
-        let known = version
-            .to_str()
-            .is_ok_and(|v| PROTOCOL_VERSIONS.contains(&v));
-        if !known {
+        if !version.to_str().is_ok_and(header_version_accepted) {
             log(&caller, "", "", "unsupported_protocol_version", started);
             return http::problem(StatusCode::BAD_REQUEST, "unsupported_protocol_version");
         }

@@ -19,7 +19,7 @@
 //!   instead of the router model's parse; values are typed under the
 //!   published schema (I5). The result is a held draft, not a write.
 //! - `forma_commit`: the held draft through the command route's
-//!   [`crate::commands::routes::commit_audited`] with its server-minted key
+//!   [`crate::commands::routes::commit`] with its server-minted key
 //!   (I4), then the share route's `Workspace::share_work` to the resolved
 //!   approver; `record.committed` updates the teammates' canvases live.
 //! - `forma_list_pending`: the records the member may decide now
@@ -37,7 +37,6 @@ use crate::{
         resolve::{self, Draft, Refusal, Resolution},
         Kind, Parsed,
     },
-    commands::routes::commit_audited,
     composer::{self, routes::Refused},
     demo, directory, events,
     query::{
@@ -898,7 +897,7 @@ async fn commit(
     };
     let held = state.drafts.get(caller, id).ok_or_else(refused)?;
     let draft = held.draft;
-    let result = commit_audited(stores, &caller.request, &draft.request).await;
+    let result = crate::commands::routes::commit(stores, &caller.request, &draft.request).await;
     let outcome = match result {
         Ok(CommandResult::Committed(outcome)) | Ok(CommandResult::Replayed(outcome)) => outcome,
         Ok(CommandResult::Conflict(_)) | Ok(CommandResult::Stale(_)) => return Err(Output::error(

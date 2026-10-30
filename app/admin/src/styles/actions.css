@@ -123,6 +123,7 @@
 .cv-status-chip[data-status="approved"] { border-color: var(--cv-ready); color: var(--cv-ready); }
 .cv-status-chip[data-status="rejected"] { border-color: var(--cv-bad); color: var(--cv-bad); }
 .cv-records-by { color: var(--cv-muted); white-space: nowrap; }
+.cv-via-chip { margin-left: 0.4rem; padding: 0 0.35rem; border: 1px solid var(--cv-muted); border-radius: 999px; font-size: 0.75em; color: var(--cv-muted); }
 .cv-records-actions { white-space: nowrap; }
 .cv-records-actions button {
   margin-right: 0.3rem;
@@ -159,18 +160,7 @@
   .cv-confirm, .cv-records-table tr.is-new > td { animation: none; }
 }
 
-/* APP-099: the "via <agent>" chip and the "Connect an agent" panel. */
-.cv-via-chip {
-  display: inline-block;
-  margin-left: 0.35rem;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  background: var(--cv-accent-soft);
-  color: var(--cv-accent);
-  font-size: 0.72rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
+/* APP-099: the "Connect an agent" panel (the via chip is APP-100's .cv-via-chip, shared). */
 .cv-agent-open {
   padding: 0.3rem 0.7rem;
   border: 1px solid var(--cv-line);

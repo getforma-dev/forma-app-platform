@@ -11,9 +11,10 @@
 //! holds only a reference to the caller's process-memory vault (D7.11).
 //!
 //! `TrustedRequest` is constructed here and nowhere else in production: from
-//! the session row, the member's *current* `membership_epoch` read under the
-//! `lock_member_authority` fence, the principal's registered provider
-//! identity and this process's registry identity. A `PreAccess` is a distinct
+//! the session row (or, APP-100, a live Slack link row:
+//! `resolve_slack_link`), the member's *current* `membership_epoch` read
+//! under the `lock_member_authority` fence, the principal's registered
+//! provider identity and this process's registry identity. A `PreAccess` is a distinct
 //! type with no conversion into a `TrustedRequest`.
 //!
 //! APP-099 (ADR-011 pitch): the second production constructor is
@@ -149,6 +150,15 @@ fn same(left: &str, right: &str) -> bool {
             .zip(right.bytes())
             .fold(0u8, |d, (a, b)| d | (a ^ b))
             == 0
+}
+
+/// A Slack team or user id as Slack issues them (uppercase letters and
+/// digits), mirrored by migration 0009's CHECKs.
+pub fn slack_id(value: &str) -> bool {
+    (1..=32).contains(&value.len())
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
 }
 
 fn text(row: &Row, index: usize) -> Result<String> {
@@ -876,6 +886,133 @@ impl Workspace {
             return Err(Error::Denied);
         }
         finished?;
+        result
+    }
+
+    /// APP-100 (ADR-011 pitch): the second `TrustedRequest` constructor, for
+    /// a Slack request from workspace `team` by Slack user `user` (both
+    /// already checked against Slack's request signature by the caller). Each
+    /// registry organization is scanned under its own scope (RLS) for an
+    /// unrevoked `genui.slack_links` row; a row admits only when, under the
+    /// member fence, the organization and membership are active, the
+    /// member's **current** epoch equals the epoch recorded at link time (a
+    /// sign-out or an operator revocation advanced it: the link has ended),
+    /// an entitlement is live, the principal's provider binding is active and
+    /// the registry agrees, exactly the session path's judgment. `None` for
+    /// no row, a stale or revoked row, or more than one organization
+    /// answering (an ambiguous Slack user is never guessed at). Nothing is
+    /// written. A lock wait is `Denied` as in `resolve_session`.
+    pub async fn resolve_slack_link(
+        &self,
+        team: &str,
+        user: &str,
+    ) -> Result<Option<TrustedRequest>> {
+        if !(slack_id(team) && slack_id(user)) {
+            return Ok(None);
+        }
+        let registry = &self.inner.registry;
+        let mut found = Vec::new();
+        for organization in registry.organizations() {
+            let transaction =
+                Transaction::begin_nonmember(&self.inner, Some(&organization)).await?;
+            let result = async {
+                let rows = transaction.query("SELECT l.principal_id::text,l.membership_epoch_at_link,p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=l.organization_id AND e.principal_id=l.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active) FROM genui.slack_links l JOIN genui.principals p ON p.organization_id=l.organization_id AND p.principal_id=l.principal_id JOIN genui.memberships m ON m.organization_id=l.organization_id AND m.principal_id=l.principal_id WHERE l.organization_id=$1::text::uuid AND l.team_id=$2 AND l.slack_user_id=$3 AND l.revoked_at IS NULL", &[&organization,&team,&user]).await?;
+                let Some(row) = rows.first() else {
+                    return Ok(None);
+                };
+                let principal = text(row, 0)?;
+                let issuer = text(row, 2)?;
+                let provider_tenant = text(row, 3)?;
+                let (organization_active, member_active, epoch) =
+                    fence(&transaction, &organization, &principal, integer(row, 5)?).await?;
+                let valid = organization_active
+                    && member_active
+                    && epoch == integer(row, 1)?
+                    && boolean(row, 6)?
+                    && boolean(row, 7)?
+                    && registry.agrees(&issuer, &provider_tenant, &organization);
+                if !valid {
+                    return Ok(None);
+                }
+                Ok(Some(TrustedRequest {
+                    organization: organization.clone(),
+                    principal,
+                    epoch,
+                    issuer,
+                    provider_tenant,
+                    provider_subject: text(row, 4)?,
+                    registry_sha256: registry.identity.sha256.clone(),
+                }))
+            }
+            .await;
+            let lock_wait = result.is_err() && transaction.lock_timed_out();
+            let finished = transaction.finish(result.is_ok()).await;
+            if lock_wait {
+                return Err(Error::Denied);
+            }
+            finished?;
+            if let Some(request) = result? {
+                found.push(request);
+            }
+        }
+        Ok(if found.len() == 1 { found.pop() } else { None })
+    }
+
+    /// APP-100: the unrevoked Slack links of `organization`, as
+    /// `(team, slack user, principal)`, for the approver notifier. A listing
+    /// confers nothing: every use resolves the link again through
+    /// [`Workspace::resolve_slack_link`].
+    pub async fn slack_links(&self, organization: &str) -> Result<Vec<(String, String, String)>> {
+        let transaction = Transaction::begin_nonmember(&self.inner, Some(organization)).await?;
+        let result = async {
+            let rows = transaction.query("SELECT team_id,slack_user_id,principal_id::text FROM genui.slack_links WHERE organization_id=$1::text::uuid AND revoked_at IS NULL ORDER BY linked_at LIMIT 256", &[&organization]).await?;
+            rows.iter()
+                .map(|row| Ok((text(row, 0)?, text(row, 1)?, text(row, 2)?)))
+                .collect::<Result<Vec<_>>>()
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
+    /// APP-100: links Slack user `user` of workspace `team` to the member
+    /// behind `request` (a live workspace session, judged by the caller's
+    /// session resolution), in the member's own organization, at the member's
+    /// current epoch (re-read under the fence). A re-link of the same Slack
+    /// user in this organization replaces the earlier member and clears a
+    /// revocation. `Denied` for a member that is no longer current.
+    pub async fn link_slack(&self, request: &TrustedRequest, team: &str, user: &str) -> Result<()> {
+        require(slack_id(team) && slack_id(user))?;
+        let transaction = Transaction::begin(&self.inner, request).await?;
+        let result = async {
+            let (organization_active, member_active, epoch) =
+                fence(&transaction, &request.organization, &request.principal, request.epoch).await?;
+            require(organization_active && member_active && epoch == request.epoch)?;
+            transaction.query("INSERT INTO genui.slack_links(organization_id,link_id,principal_id,team_id,slack_user_id,membership_epoch_at_link,linked_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text::uuid,$3,$4,$5::bigint,now()) ON CONFLICT (organization_id,team_id,slack_user_id) DO UPDATE SET principal_id=EXCLUDED.principal_id,membership_epoch_at_link=EXCLUDED.membership_epoch_at_link,linked_at=EXCLUDED.linked_at,revoked_at=NULL", &[&request.organization,&request.principal,&team,&user,&epoch]).await?;
+            Ok(())
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
+    /// APP-100 `/forma unlink`: revokes the link of `team`/`user` held by the
+    /// member behind `request` (resolved from that same link). Revoking only
+    /// takes authority away. `true` when a live link was revoked.
+    pub async fn unlink_slack(
+        &self,
+        request: &TrustedRequest,
+        team: &str,
+        user: &str,
+    ) -> Result<bool> {
+        require(slack_id(team) && slack_id(user))?;
+        let transaction = Transaction::begin(&self.inner, request).await?;
+        let result = async {
+            let rows = transaction.query("UPDATE genui.slack_links SET revoked_at=now() WHERE organization_id=$1::text::uuid AND team_id=$2 AND slack_user_id=$3 AND principal_id=$4::text::uuid AND revoked_at IS NULL RETURNING link_id::text", &[&request.organization,&team,&user,&request.principal]).await?;
+            Ok(!rows.is_empty())
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
         result
     }
 

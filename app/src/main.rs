@@ -614,6 +614,15 @@ async fn main() {
         genui::actions::Parser::from_env(),
     )));
     let records_routes = genui::actions::routes::records_router(auth.clone());
+    // APP-100 (ADR-011 pitch): Slack, from SLACK_BOT_TOKEN and
+    // SLACK_SIGNING_SECRET alone (absent: no route is mounted, the paths are
+    // the uniform 404, and nothing posts). The approver notifier follows the
+    // event hub for the life of the process.
+    let slack = genui::slack::Slack::from_env(auth.clone());
+    if let Some(slack) = &slack {
+        genui::slack::notify::spawn(slack.clone());
+    }
+    let slack_routes = genui::slack::router(slack);
     let app = match qualification {
         Some(harness) => genui::http::uniform(app.merge(harness)),
         None => genui::http::uniform_with_many(
@@ -627,7 +636,8 @@ async fn main() {
                 .merge(canvas_routes)
                 .merge(records_routes)
                 // APP-099: the canvas's "Connect an agent" token routes.
-                .merge(genui::mcp::tokens::router(auth.clone())),
+                .merge(genui::mcp::tokens::router(auth.clone()))
+                .merge(slack_routes),
             vec![
                 (genui::composer::routes::PATH, compose_routes),
                 (genui::actions::PATH, act_routes),

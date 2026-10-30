@@ -20,7 +20,7 @@ export type RecordJson = {
   record_id: string; collection_id: string; schema_id: string; version: number; commit_sequence: number;
   committed_at: string; creator: { principal_id: string; label: string }; updater: { principal_id: string; label: string };
   values: RecordValueJson[];
-  /** APP-099: the agent label ("Claude", "OpenAI") that committed this version through MCP, else null. */
+  /** The channel or agent that committed this version ("Slack" for APP-100, DS-59; an MCP agent's label such as "Claude" or "OpenAI" for APP-099), a display label only. */
   via?: string | null;
 };
 export type RecordsJson = {
@@ -126,10 +126,11 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
         tr.append(el(document_, 'td', { class: numeric ? 'value num' : 'value', title: `${label(field.id)} · version ${record.version}` }, value?.display ?? '—'));
       }
       if (statusField) {
-        tr.append(el(document_, 'td', { class: 'cv-status' }, el(document_, 'span', { class: 'cv-status-chip', 'data-status': status }, status),
-          record.via ? el(document_, 'span', { class: 'cv-via-chip', title: `Version ${record.version} was committed by an agent connected through MCP` }, `via ${record.via}`) : null));
+        tr.append(el(document_, 'td', { class: 'cv-status' }, el(document_, 'span', { class: 'cv-status-chip', 'data-status': status }, status)));
       }
-      tr.append(el(document_, 'td', { class: 'cv-records-by', title: record.creator.principal_id }, record.creator.label));
+      const by = el(document_, 'td', { class: 'cv-records-by', title: record.creator.principal_id }, record.creator.label);
+      if (record.via) by.append(el(document_, 'span', { class: 'cv-via-chip', title: `Version ${record.version} was committed from ${record.via}` }, `via ${record.via}`));
+      tr.append(by);
       if (pending.length) {
         const cell = el(document_, 'td', { class: 'cv-records-actions' });
         if (isPending && decide) {

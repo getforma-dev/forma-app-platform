@@ -200,6 +200,23 @@ fn initialize_negotiates_the_protocol_version() {
         PROTOCOL_VERSIONS[0]
     );
     assert_eq!(negotiate(&json!({})), PROTOCOL_VERSIONS[0]);
+    // A newer revision than ours (Claude Code's 2026-07-28) is answered with
+    // our latest; an older unsupported one or garbage is refused.
+    assert_eq!(
+        negotiate(&json!({"protocolVersion": "2026-07-28"})),
+        PROTOCOL_VERSIONS[0]
+    );
+    assert!(header_version_accepted("2026-07-28") && header_version_accepted("2025-06-18"));
+    for bad in [
+        "2024-11-05",
+        "2025-01-01",
+        "latest",
+        "2026-7-28",
+        "2026-07-28x",
+        "",
+    ] {
+        assert!(!header_version_accepted(bad), "{bad}");
+    }
 }
 
 #[test]

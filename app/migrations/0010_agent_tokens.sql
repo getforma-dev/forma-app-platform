@@ -32,9 +32,9 @@ SET LOCAL ROLE genui_owner;
 
 -- D7.12: each migration 000k ALTERs both version CHECKs to BETWEEN 1 AND k.
 ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check,
- ADD CONSTRAINT schema_version_version_check CHECK (version BETWEEN 1 AND 9);
+ ADD CONSTRAINT schema_version_version_check CHECK (version BETWEEN 1 AND 10);
 ALTER TABLE genui_meta.schema_migrations DROP CONSTRAINT schema_migrations_version_check,
- ADD CONSTRAINT schema_migrations_version_check CHECK (version BETWEEN 1 AND 9);
+ ADD CONSTRAINT schema_migrations_version_check CHECK (version BETWEEN 1 AND 10);
 
 -- One member-minted agent token: its digest, the member, a short label the
 -- member chose ("Claude", "OpenAI"), the epoch and registry identity at

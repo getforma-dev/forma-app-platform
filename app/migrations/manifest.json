@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 9,
+  "database_version": 10,
   "migrations": [
     {
       "version": 1,
@@ -44,8 +44,13 @@
     },
     {
       "version": 9,
-      "file": "0009_agent_tokens.sql",
-      "sha256": "931713d4db3cc54c279ada18f18c0c44a0461d1aca1c31f37a4e332cbc2f1dd3"
+      "file": "0009_slack_links.sql",
+      "sha256": "95ec6da10c1c39b37853c986dcd331c6885d18264f3b9201c8fdd36d1e469fae"
+    },
+    {
+      "version": 10,
+      "file": "0010_agent_tokens.sql",
+      "sha256": "82b79d6102604211db1950060a1892a0aab783ab720e530a66414df9037c6d03"
     }
   ],
   "catalog": [
@@ -87,7 +92,11 @@
     },
     {
       "file": "catalog-v9.json",
-      "sha256": "d5d2ac27d29f20025c09097e11dc37c349872380af0d3ebe017dddd24b1d5584"
+      "sha256": "0f75ed14af3c30963407664d17fd48ab9a539f420c7037dc1d42876c6ad6b2ee"
+    },
+    {
+      "file": "catalog-v10.json",
+      "sha256": "96b33ed02618b5ffaf7744bd7948016d8bdf15ba8f1f9a9bb15dd7dfcdbae026"
     }
   ]
 }

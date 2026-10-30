@@ -1,4 +1,4 @@
-# Pitch scenarios: the four flows, the exact words, the two-window choreography
+# Pitch scenarios: the five flows, the exact words, the two-window choreography
 
 Status: built on `pivot/scenarios` (ADR-011; APP-093 action path, APP-094 library, APP-095 sharing and live updates, APP-098 demo shortcuts). Every number and every state change in these scenarios is real: the records are typed records committed through the audited, idempotent command path; the permissions are the share path's; the live updates are the event stream re-authorized at delivery; the receipts are the governed query path's. The only staged part is the parse of the rehearsed sentences inside the demo organization (APP-098 DS-38), and the member still confirms before anything is written.
 
@@ -76,7 +76,33 @@ Share it: from the work page (`/w/{app}/{work}`), the share form posts `POST /v1
 
 Honest notes: generation needs the member to own an app with `edit_definition` and `run` (ADR-007 D7.3; DS-20); generated views are limited to the engine's qualified operators (DS-33); generation takes several seconds (budget 60 s per attempt) and must be rehearsed with the real key before the pitch (`app/scripts/composer_smoke.sh`).
 
-## Scenario 5: two vendors' agents on one governed record (MCP, APP-099)
+## Scenario 5: the Slack act (APP-100)
+
+The manager lives in Slack. Same records, same audited path, same live canvas; Slack is one more door into it.
+
+Before the pitch (once, `docs/pitch/SLACK-SETUP.md`): Diego and Sarah each run `/forma link` in Victor's workspace and confirm the link page while signed in to `beta.getforma.dev` as themselves. A sign-out (which advances the member's epoch) ends the Slack link: re-link after one.
+
+**Slack, Diego's window.** Type:
+
+> /forma I spent $86 on a client dinner at Nobu last night, Sarah approves my expenses
+
+Slack shows "Working on it…" at once (the acknowledgement); within about a second an ephemeral card replaces it, visible to Diego only: *File this in Expense claims?*, the typed values (Amount $86.00, Merchant Nobu, Category meals, Spent on yesterday, Note, Status submitted), "Approver: **Sarah Chen** · Nothing is written until you confirm", and **Confirm** / **Cancel**. Click **Confirm**. The card becomes "Filed: **$86.00 · Nobu · a client dinner**, sent to **Sarah Chen** for approval."
+
+Say: "Diego never left Slack. The same parser, the same typed draft, the same audited command and share as the canvas."
+
+**Slack, Sarah's DMs.** A DM from Forma arrives about a second later: "**Diego Ramos** filed a claim for your approval", the claim (amount, merchant, date, category, note, filed by) and **Approve** / **Reject**. On the canvas (right window) the Expense claims group arrives live as in scenario 1, with the row's **via Slack** chip.
+
+Click **Approve**. The DM is replaced by "**Approved by Sarah Chen** · 2:14 PM" with no buttons. Diego gets a DM: "Your Nobu claim ($86.00) was **approved** by **Sarah Chen**." Both canvases flip the row to **approved** live, marked via Slack.
+
+Say: "Sarah's click was judged as Sarah: her link, her current session epoch, her grant on this work. Anyone else clicking that button gets a refusal; clicking it twice changes nothing."
+
+Alternatives on stage: Sarah can type `/forma what's waiting for my approval` (the pending list with Approve / Reject on each claim) or `/forma approve the Nobu dinner` (a confirmation card, then **Confirm**).
+
+Measured on the local stand (`storage::slack_campaign`, Docker PostgreSQL, loopback Slack and model stubs, synthetic payloads): acknowledgement under 10 ms (and under 3 s with a 10-second model), command to card ~0.75 s, Confirm to "Filed" ~0.3 s, Confirm to Sarah's DM ~1.1 s, Approve to the replaced DM and Diego's DM ~0.6 s. The live rehearsal in Victor's workspace is still to be recorded (APP-100).
+
+Honest notes: Slack reaches only `https://beta.getforma.dev` (or a tunnel); the "via Slack" chip is kept in process memory and disappears after a restart (DS-59); a link binds whoever confirms it (DS-60); the approver DM goes to linked members who can decide the claim (DS-61).
+
+## Scenario 6: two vendors' agents on one governed record (MCP, APP-099)
 
 Forma is an MCP server (`POST /v1/mcp`, Streamable HTTP, stateless). Any MCP client acts through it as the member who connected it: the same identity, permissions, receipts and audit as the canvas, and its work appears live on the team's canvases.
 
@@ -107,7 +133,6 @@ Say: "Two vendors' agents just acted on one governed record. Neither got a right
 Tools (closed set, typed JSON Schemas, annotations): `forma_list_apps`, `forma_run_view` (rows ≤ 50 with the receipt id, the canvas's query path), `forma_compose_app` (the composer; the app is placed live), `forma_draft_record`, `forma_draft_decision`, `forma_commit` (held drafts: 10 minutes, the member's and token's own, one record each; a repeated commit replays the same outcome), `forma_list_pending`, `forma_share`. Refusals: a missing, malformed, unknown, revoked, foreign or epoch-stale token and a cookie without a bearer are all the byte-identical 404; a foreign `Origin` is 403; inside a tool, every denial is the same `not_found` result.
 
 Measured on the local stand (`storage::mcp_campaign`, Docker PostgreSQL, stub engine; debug build): draft ~0.8 s (the expense app placed on first use), commit + share ~0.24 s, `app.shared` on Sarah's stream ~45 ms later, Sarah's draft + commit ~0.5 s, `record.committed` on Diego's stream immediately.
-
 ## What each screen shows, in one line each
 
 - **Intent bar status**: "Understanding…" → "Understood in N ms. Review the record, then confirm." → "Committing through the audited command path…" → "Filed: record v1, commit N, audit ab12cd34. Shared with Sarah Chen for approval."
@@ -127,6 +152,7 @@ Measured on the local stand (`storage::mcp_campaign`, Docker PostgreSQL, stub en
 
 ## Routes behind the scenarios
 
+- `POST /v1/slack/commands`, `/v1/slack/interactivity`, `/v1/slack/events` (Slack-signed; absent `SLACK_BOT_TOKEN`/`SLACK_SIGNING_SECRET`: uniform 404) and `GET|POST /slack/link` (the member's link confirmation).
 - `POST /v1/act` `{"utterance"}` or `{"decide": {app_id, work_id, record_id, status, note?}}` → a confirmation card payload (`command_request` with a server-minted `Idempotency-Key`, typed `values`, `approver`, `target`, `confirm_token`), `{"action":"open"}` or `{"action":"place"}`. Rate-limited 60/member/hour; uniform 404 for strangers; 422 `could_not_parse` / `could_not_draft`; 503 `composer_unavailable` without a key outside the demo organization.
 - `GET /v1/work/{app}/{work}/records` → the work's current records, newest first, at most 200, with schema, commands and display labels; uniform 404 otherwise.
 - `POST /v1/mcp` (APP-099: MCP Streamable HTTP, bearer agent token, 120/token/hour, long deadline; `GET` 405), `POST|GET /v1/agent-tokens`, `DELETE /v1/agent-tokens/{id}` (canvas session, same-origin).

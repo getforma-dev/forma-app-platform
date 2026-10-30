@@ -417,18 +417,17 @@ async fn submit(
     if !request.well_formed() || payload::digest(&request).is_none() {
         return http::problem(StatusCode::BAD_REQUEST, "malformed_command");
     }
-    let result = commit_audited(stores, &trusted, &request).await;
+    let result = commit(stores, &trusted, &request).await;
     answer(&mode, &app, &work, &request.record, result)
 }
 
-/// The audited commit behind this route, shared with the MCP `forma_commit`
-/// tool (APP-099): the caller has checked the key's shape and the request's
-/// form; storage judges everything else under the member's trusted request
-/// (`commit_record_until`: precheck, fences, declaration, version premise,
-/// one transaction, the `command.committed` audit event, idempotent by key),
-/// the outcome is logged and a committed record is announced on the event
-/// hub (subscribers are re-authorized at delivery).
-pub(crate) async fn commit_audited(
+/// The audited command route's commit (ADR-007 D7.9; APP-095's hook): the
+/// request's shape, the commit under the handler deadline, the outcome log
+/// line and the `record.committed` announcement. The route calls it after
+/// its own refusals; APP-100's Slack Confirm and Approve call it with the
+/// TrustedRequest of a resolved Slack link, so every write takes this one
+/// path (ADR-011 I4).
+pub(crate) async fn commit(
     stores: &storage::Stores,
     trusted: &TrustedRequest,
     request: &CommandRequest,

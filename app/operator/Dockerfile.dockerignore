@@ -26,7 +26,8 @@
 !app/migrations/0006_sessions.sql
 !app/migrations/0007_command_outcomes.sql
 !app/migrations/0008_sharing.sql
-!app/migrations/0009_agent_tokens.sql
+!app/migrations/0010_agent_tokens.sql
+!app/migrations/0009_slack_links.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
 !app/migrations/catalog-v1.json
@@ -38,6 +39,7 @@
 !app/migrations/catalog-v7.json
 !app/migrations/catalog-v8.json
 !app/migrations/catalog-v9.json
+!app/migrations/catalog-v10.json
 !app/certs/rds-global-bundle.pem
 !contracts/validate.py
 !contracts/schema.json
