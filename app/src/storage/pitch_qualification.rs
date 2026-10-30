@@ -1039,6 +1039,36 @@ async fn campaign() {
         &format!("isolation: {denials} requests by the canary member (both groups, compose, the query route, share and the command route), anonymous and forged sessions (canvas, group, library, events, members, compose) got the uniform 404; the engine and the model saw none; the outsider's library is empty, their canvas shows neither work and their event stream stayed silent through every Northstar event"),
     );
 
+    // --- The local stand for the pitch screenshots (scratch only) ---
+    // With `GENUI_PITCH_STAND_SECONDS`, the composed routes stay served on the
+    // socket for that long (or until `<stand file>.stop` exists), and the
+    // origin with Maya's synthetic session cookie is written to
+    // `GENUI_PITCH_STAND_FILE` (never evidence), so a local browser can show
+    // her canvas with the retrieved and generated apps and their receipts.
+    if let Some(seconds) = std::env::var("GENUI_PITCH_STAND_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        let file = std::env::var("GENUI_PITCH_STAND_FILE").unwrap_or_default();
+        if !file.is_empty() {
+            std::fs::write(
+                &file,
+                serde_json::to_vec(&json!({
+                    "origin": stand.origin, "cookie": cookies::SESSION, "value": maya_cookie,
+                    "app": EXPENSE_APP, "work": work_id, "generated_app": AUTHORING_APP, "generated_work": generated_work,
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        }
+        println!("PITCH_STAND {}", stand.origin);
+        let deadline = Instant::now() + Duration::from_secs(seconds);
+        let stopped = || !file.is_empty() && std::path::Path::new(&format!("{file}.stop")).exists();
+        while Instant::now() < deadline && !stopped() {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+        }
+    }
+
     // --- Chain integrity ---
     let verified = operator(&c.fixture, &["verify", "--organization", ORG]);
     assert_eq!(verified["verified"], true);
