@@ -1,0 +1,1 @@
+{"chains": {"admission": {"events": 7, "head_sequence": 8}, "control": {"events": 0, "head_sequence": 1}, "data": {"events": 0, "head_sequence": 1}, "operator": {"events": 5, "head_sequence": 6}, "workspace": {"events": 4, "head_sequence": 5}}, "command_outcomes": 0, "next_commit_sequence": 2, "organization_id": "00000000-0000-4000-8000-000000000001", "verified": true}
