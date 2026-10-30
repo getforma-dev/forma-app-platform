@@ -203,6 +203,17 @@ Not run live, by design (item 2): an entitlement revocation *while a query is qu
 
 ## Gaps that stop or weaken the trial (found 2026-10-30 at `89c6ec1`)
 
+**Dispositions (orchestrator, 2026-10-30).**
+- **G3, decision D1 reversed:** Spend Review runs in Northstar (`…0001`), as ADR-010 act 6 and demo §4 place it, through a new labeled operator seed command (Tier A, `app/runtime/admission_operator.py`). Victor holds one membership. The canary organization stays a pure outsider for the replay. §4 of this runbook is rewritten for Northstar when that command lands; until then the `…0002` steps are superseded, not runnable.
+- **G4 and G12:** fixed in `evidence/APP-078/prep/RUNBOOK.md` (new steps 11.4 bound work `…00f2` through the documented override, creator `…0066`; 11.5 the sign-in page check moved out of 13.3) and `APPROVALS.md` A9.
+- **G6:** assigned to the APP-012 review-fix pass (one structured log line per dispatch and release decision).
+- **G1, G2:** in the APP-074 / B1 live-identity pass; re-checked when it reports.
+- **G5, G7, G8, G11:** the operator-and-refusal gap pass after APP-012 and APP-074 merge (principal id in `list`; uniform 404 for undecodable path segments and method mismatches; a deny-all rollback revision on the migrated schema).
+- **G13 closed:** FormaStack confirmed 2026-10-30 that both return entries are registered since 2026-10-29 (northstar-platform and canary-platform, each to its `/signin/{handle}` URL on `beta.getforma.dev`, exact callback `/auth/callback`).
+- **G15 closed:** FormaStack confirmed `victor@getforma.dev` has no account in either beta tenant; the fresh invited signup is the path. Use delivery mode `server_only`; the 60-second resend cooldown starts at signup. FormaStack has no fAuth operation planned during the Nov 1 window or this trial.
+- **G10, G14:** reviewer dispositions at the gate.
+
+
 | # | Gap | Effect | Owner (file) |
 | --- | --- | --- | --- |
 | G1 | No hosted sign-in wiring: the stack supplies no auth configuration (`GENUI_AUTH_CONFIG_FILE`), no identity registry (`GENUI_IDENTITY_REGISTRY_FILE`) and no provider capability directory (`GENUI_PROVIDER_CAPABILITY_DIR`); the seed binds both organizations to the fixture issuer `app008-fixture-only`, and no operator command binds the real fAuth issuer/tenant to an existing organization (`provision` creates a new one). APP-078 README B1. | **Stops** §2 onward: every sign-in fails neutrally, every protected route is 404. | `infra/src/stack.ts`, `app/runtime/runtime.py` (delivery through the runtime helper on the read-only filesystem), `app/runtime/admission_operator.py` (binding subcommand) |
