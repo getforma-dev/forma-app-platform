@@ -1,0 +1,37 @@
+subscription_id,customer,plan,mrr,started,status
+SUB-601,Harlow & Sons,growth,255.00,2026-07-20,active
+SUB-602,Nimbus Studio,growth,459.00,2026-06-07,active
+SUB-603,Peregrine Clinics,growth,289.00,2026-01-21,active
+SUB-604,Cobalt Works,starter,195.00,2026-01-01,churned
+SUB-605,Ashgrove Partners,starter,175.00,2025-12-20,active
+SUB-606,Riverbend Dental,starter,154.00,2025-10-01,trial
+SUB-607,Solstice Fitness,growth,884.00,2025-02-07,active
+SUB-608,Trellis Gardens,enterprise,3500.00,2025-02-16,trial
+SUB-609,Vantage Legal,starter,89.00,2024-12-19,active
+SUB-610,Willowmere School,starter,151.00,2026-07-15,trial
+SUB-611,Ironleaf Outdoors,enterprise,3020.00,2025-03-01,churned
+SUB-612,Bluefin Seafood,starter,53.00,2025-10-05,trial
+SUB-613,Canopy Books,growth,575.00,2025-03-23,churned
+SUB-614,Delta Bakers,growth,397.00,2026-04-16,active
+SUB-615,Brightwater Foods,growth,638.00,2026-07-18,active
+SUB-616,Kestrel Logistics,starter,81.00,2026-08-31,trial
+SUB-617,Oakridge Health,growth,341.00,2025-10-15,active
+SUB-618,Juniper Media,starter,68.00,2025-12-07,churned
+SUB-619,Copperline Energy,starter,126.00,2025-12-01,active
+SUB-620,Ravenna Retail,starter,151.00,2025-02-12,active
+SUB-621,Silverthread Textiles,starter,167.00,2024-12-21,active
+SUB-622,Marlow Robotics,starter,192.00,2025-04-02,active
+SUB-623,Fathom Marine,starter,103.00,2025-04-06,active
+SUB-624,Tidewater Insurance,growth,300.00,2025-04-15,churned
+SUB-625,Alder Pharmaceuticals,starter,74.00,2026-08-12,active
+SUB-626,Quill Education,starter,196.00,2025-12-04,active
+SUB-627,Maya Chen Co.,starter,70.00,2026-03-21,trial
+SUB-628,Jordan Alvarez Co.,starter,161.00,2025-02-25,active
+SUB-629,Priya Natarajan Co.,starter,194.00,2025-07-02,active
+SUB-630,Samuel Okafor Co.,growth,561.00,2025-04-26,trial
+SUB-631,Lena Fischer Co.,starter,116.00,2025-08-05,active
+SUB-632,Diego Ramos Co.,growth,649.00,2026-03-23,churned
+SUB-633,Aisha Bello Co.,enterprise,1990.00,2026-02-14,active
+SUB-634,Tomás Herrera Co.,starter,138.00,2025-07-22,active
+SUB-635,Grace Park Co.,starter,169.00,2026-07-03,trial
+SUB-636,Noah Williams Co.,enterprise,3780.00,2026-04-11,active

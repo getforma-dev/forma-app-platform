@@ -522,6 +522,10 @@ impl Engine {
                 "revision_id": source.revision(),
                 "normalized_digest": source.normalized_digest(),
                 "s3_key": source.object_key(run.organization()),
+                // ADR-011 library: the input and its contract fields, from the
+                // re-admitted definition; the child types columns from them.
+                "input_id": source.input(),
+                "fields": run.fields(),
             },
             "query": run.query(),
             "deadline_ms": u64::try_from(child_deadline.as_millis()).unwrap_or(u64::MAX).min(1800),
@@ -563,7 +567,7 @@ impl Engine {
                 return Err(QueryError::Failed(Failure::Engine));
             }
             let mut result = parse_result(&output.stdout)?;
-            result.integer_columns = integer_columns(run.query());
+            result.integer_columns = typed_integer_columns(run.query(), run.fields());
             result.wall = started.elapsed();
             result.peak_rss_bytes = output.peak_rss_bytes;
             Ok(result)
@@ -772,12 +776,36 @@ fn parse_result(stdout: &[u8]) -> Result<WorkerResult, QueryError> {
 /// field's type, a `time_bucket` output is a timestamp, `project` keeps the
 /// named fields and `filter`/`sort`/`limit` change nothing (review m11).
 pub fn integer_columns(query: &Value) -> BTreeSet<String> {
-    let mut integers: BTreeSet<String> = BTreeSet::from(["bytes".to_owned()]);
-    let mut present: BTreeSet<String> = BTreeSet::from([
-        "time".to_owned(),
-        "destination".to_owned(),
-        "bytes".to_owned(),
-    ]);
+    typed_integer_columns(query, &crate::storage::events_fields())
+}
+
+/// Whether a contract value type's column is an exact integer the page may
+/// digit-group: `integer`, and `money` and `decimal`, whose columns hold the
+/// minor units or the coefficient (`app/runtime/library_sources.py`).
+fn integer_type(value_type: &str) -> bool {
+    matches!(value_type, "integer" | "money" | "decimal")
+}
+
+/// [`integer_columns`] for any input contract (ADR-011 library): the
+/// integer-typed `fields` of the run's input, followed through the same
+/// operators.
+pub fn typed_integer_columns(query: &Value, fields: &[Value]) -> BTreeSet<String> {
+    let mut integers: BTreeSet<String> = BTreeSet::new();
+    let mut present: BTreeSet<String> = BTreeSet::new();
+    for item in fields {
+        let Some(name) = item.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        present.insert(name.to_owned());
+        if item
+            .get("value_type")
+            .and_then(|t| t.get("type"))
+            .and_then(Value::as_str)
+            .is_some_and(integer_type)
+        {
+            integers.insert(name.to_owned());
+        }
+    }
     let field = |reference: &Value| {
         reference
             .get("field_id")

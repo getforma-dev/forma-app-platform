@@ -5,6 +5,7 @@ the source list, the seed inputs and their declared pins; these tests keep
 local_harness.py and check_image.py reading the same tables.
 """
 import hashlib
+import json
 from pathlib import Path
 import re
 import sys
@@ -32,12 +33,13 @@ class SeedInputTests(unittest.TestCase):
         inputs = harness.seed_inputs()
         self.assertEqual([field for field, _ in inputs],
                          ["fixture_setup_sha256", "seed_northstar_sha256", "seed_spend_review_sha256",
-                          "seed_program_sha256", "seed_validator_sha256"])
+                          "seed_program_sha256", "seed_validator_sha256", "seed_library_sha256"])
         paths = dict(inputs)
         self.assertEqual(paths["seed_northstar_sha256"], "contracts/fixtures/impl-2026-10-28.1/northstar.json")
         self.assertEqual(paths["seed_spend_review_sha256"], "contracts/fixtures/impl-2026-10-28.1/spend-review.json")
         self.assertEqual(paths["seed_program_sha256"], "app/runtime/tenant_seed.py")
         self.assertEqual(paths["seed_validator_sha256"], "contracts/validate.py")
+        self.assertEqual(paths["seed_library_sha256"], "contracts/fixtures/library/catalog.json")
 
     def test_expected_pins_recompute_every_entry_pin_from_the_seeded_files(self):
         pins = harness.expected_pins()
@@ -50,10 +52,17 @@ class SeedInputTests(unittest.TestCase):
                 self.assertEqual(pins[field], declared.group(1), "declared pin differs from the repository file")
 
     def test_the_seed_reads_the_pinned_edition(self):
-        editions = {Path(path).parent.name for field, path in harness.seed_inputs() if field.startswith("seed_") and path.endswith(".json")}
+        editions = {Path(path).parent.name for field, path in harness.seed_inputs()
+                    if field.startswith("seed_") and path.endswith(".json") and "/fixtures/impl-" in path}
         self.assertEqual(len(editions), 1)
+        edition = editions.pop()
         seed = (harness.APP / "runtime/tenant_seed.py").read_text()
-        self.assertIn('CONTRACTS / "fixtures" / "%s" / (name + ".json")' % editions.pop(), seed)
+        self.assertIn('CONTRACTS / "fixtures" / "%s" / (name + ".json")' % edition, seed)
+        # ADR-011 library: the catalog pin names every library fixture (by digest) and the same edition.
+        catalog = json.loads((harness.APP.parent / dict(harness.seed_inputs())["seed_library_sha256"]).read_text())
+        self.assertEqual((catalog["edition"], catalog["synthetic"]), (edition, True))
+        for entry in catalog["apps"]:
+            self.assertEqual(sha256("contracts/fixtures/library/" + entry["fixture"]), entry["fixture_sha256"])
 
 
 class SourceTests(unittest.TestCase):

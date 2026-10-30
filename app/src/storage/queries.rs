@@ -32,6 +32,17 @@
 //! one effective typed query whose digest is the receipt's
 //! `predicate_digest`; the stored view query's digest is its `query_digest`.
 //! No money, ratio or lookup is ever added.
+//!
+//! ADR-011 pitch library (APP-094): a view reads one `source` input of any
+//! admitted contract shape, not only `events_v1`. The run carries that input
+//! contract's `fields` (from the re-admitted definition, never the client) to
+//! the engine, which types every column and literal from them. The window
+//! parameter applies to the field named `time` (a timestamp) and the
+//! `destination` parameter to a text field of that name; for an input without
+//! them the parameter is refused (`Denied`), never silently dropped, so a
+//! receipt's `parameters` are always what ran. [`Data::library_catalog`]
+//! lists the admitted library apps the member may open now, joined with the
+//! router sidecar `contracts/fixtures/library/catalog.json`.
 use super::{
     authorization::{Action, Resource, Transaction},
     definitions::stored_content,
@@ -102,6 +113,7 @@ pub struct QueryRun {
     record_snapshot_sequence: i64,
     source: RunSource,
     dependencies: Vec<RunSource>,
+    fields: Vec<Value>,
 }
 impl QueryRun {
     pub fn organization(&self) -> &str {
@@ -166,6 +178,11 @@ impl QueryRun {
     pub fn dependencies(&self) -> &[RunSource] {
         &self.dependencies
     }
+    /// The read input's contract `fields` (id, value type, nullability), from
+    /// the re-admitted definition: the engine types its columns from them.
+    pub fn fields(&self) -> &[Value] {
+        &self.fields
+    }
 
     /// A run for engine and receipt unit tests only; never reachable from a
     /// request (the test executable only). The read source is the work's one
@@ -185,7 +202,8 @@ impl QueryRun {
         source: (&str, &str, &str),
     ) -> Self {
         let parsed = parse_parameters(parameters).expect("test parameters");
-        let query = parsed.apply(&view_query).expect("test query");
+        let fields = events_fields();
+        let query = parsed.apply(&view_query, &fields).expect("test query");
         let source = RunSource {
             input: "events".into(),
             source: source.0.into(),
@@ -210,8 +228,29 @@ impl QueryRun {
             record_snapshot_sequence: 0,
             dependencies: vec![source.clone()],
             source,
+            fields,
         }
     }
+}
+
+/// The seeded Northstar `events_v1` field list (tests and the worker's
+/// events-shaped default).
+pub fn events_fields() -> Vec<Value> {
+    vec![
+        json!({"id": "time", "value_type": {"type": "timestamp"}, "nullable": false}),
+        json!({"id": "destination", "value_type": {"type": "text"}, "nullable": false}),
+        json!({"id": "bytes", "value_type": {"type": "integer", "unit": "byte"}, "nullable": false}),
+    ]
+}
+
+/// The contract type of `field` among an input's `fields`, if declared.
+pub fn field_type<'a>(fields: &'a [Value], field: &str) -> Option<&'a str> {
+    fields
+        .iter()
+        .find(|f| f.get("id").and_then(Value::as_str) == Some(field))
+        .and_then(|f| f.get("value_type"))
+        .and_then(|t| t.get("type"))
+        .and_then(Value::as_str)
 }
 
 /// The closed run parameters.
@@ -288,11 +327,22 @@ impl Parameters {
     }
     /// The effective query: the stored view query with the window and the
     /// destination filter applied. A view that declares its own window takes
-    /// no window parameter.
-    fn apply(&self, query: &Value) -> Option<Value> {
+    /// no window parameter. The window needs the input's `time` timestamp
+    /// field and the destination filter its `destination` text field (the
+    /// library convention, `contracts/fixtures/library/catalog.json`
+    /// `window_field`/`destination_field`); otherwise `None`, so the
+    /// parameter is refused rather than recorded in a receipt without
+    /// having run.
+    fn apply(&self, query: &Value, fields: &[Value]) -> Option<Value> {
         let mut query = query.as_object()?.clone();
+        let input = query
+            .get("inputs")?
+            .as_array()?
+            .first()?
+            .as_str()?
+            .to_owned();
         if let Some((start, end)) = &self.window {
-            if query.contains_key("window") {
+            if query.contains_key("window") || field_type(fields, "time") != Some("timestamp") {
                 return None;
             }
             query.insert(
@@ -301,10 +351,13 @@ impl Parameters {
             );
         }
         if let Some(destination) = &self.destination {
+            if field_type(fields, "destination") != Some("text") {
+                return None;
+            }
             let operations = query.get_mut("operations")?.as_array_mut()?;
             operations.insert(
                 0,
-                json!({"type": "filter", "field": {"input_id": "events", "field_id": "destination"},
+                json!({"type": "filter", "field": {"input_id": input, "field_id": "destination"},
                     "comparison": "eq", "value": {"type": "text", "value": destination}}),
             );
         }
@@ -327,8 +380,10 @@ fn integer(row: &Row, index: usize) -> Result<i64> {
     row.try_get(index).map_err(|_| Error::Unavailable)
 }
 
-/// The view's typed query in the re-admitted definition content.
-fn view_query(content: &[u8], view: &str) -> Result<Value> {
+/// The view's typed query in the re-admitted definition content, and the
+/// contract `fields` of its one `source` input (`Denied` for a view whose
+/// input is a records collection: Phase 1 runs source inputs only).
+fn view_query(content: &[u8], view: &str) -> Result<(Value, Vec<Value>)> {
     let content = admission::decode(content).map_err(|_| Error::Unavailable)?;
     let views = content
         .get("views")
@@ -339,7 +394,30 @@ fn view_query(content: &[u8], view: &str) -> Result<Value> {
         .find(|v| v.get("id").and_then(Value::as_str) == Some(view))
         .ok_or(Error::Denied)?;
     // A view without a query (form, note) has nothing to run.
-    found.get("query").cloned().ok_or(Error::Denied)
+    let query = found.get("query").cloned().ok_or(Error::Denied)?;
+    let inputs = query
+        .get("inputs")
+        .and_then(Value::as_array)
+        .ok_or(Error::Unavailable)?;
+    // APP-005's qualified subset reads exactly one source input.
+    require(inputs.len() == 1)?;
+    let input = inputs[0].as_str().ok_or(Error::Unavailable)?;
+    let fields = source_fields(&content, input).ok_or(Error::Denied)?;
+    Ok((query, fields))
+}
+
+/// The `fields` of the content's `source` input `input`; `None` for an
+/// unknown or records input.
+fn source_fields(content: &Value, input: &str) -> Option<Vec<Value>> {
+    let contract = content
+        .get("inputs")?
+        .as_array()?
+        .iter()
+        .find(|i| i.get("id").and_then(Value::as_str) == Some(input))?;
+    if contract.get("kind").and_then(Value::as_str) != Some("source") {
+        return None;
+    }
+    contract.get("fields")?.as_array().cloned()
 }
 
 /// The pinned premise a run and its release must both see.
@@ -463,14 +541,8 @@ impl Data {
             if admitted != premise.definition_digest {
                 return Err(Error::Unavailable);
             }
-            let stored = view_query(&content, view)?;
-            let inputs = stored
-                .get("inputs")
-                .and_then(Value::as_array)
-                .ok_or(Error::Unavailable)?;
-            // APP-005's qualified subset reads exactly one source input.
-            require(inputs.len() == 1)?;
-            let input = inputs[0].as_str().ok_or(Error::Unavailable)?;
+            let (stored, fields) = view_query(&content, view)?;
+            let input = stored["inputs"][0].as_str().ok_or(Error::Unavailable)?;
             let source = bound_source(transaction, org, app, work, input).await?;
             permit
                 .also(Action::SourceRead, Resource::Source(&source.source))
@@ -488,7 +560,7 @@ impl Data {
             // APP-012 review m8).
             let rows = transaction.query("SELECT coalesce(max(commit_sequence),0)::bigint FROM genui.internal_record_revisions WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[org,&app,&work]).await?;
             let record_snapshot_sequence = integer(rows.first().ok_or(Error::Unavailable)?, 0)?;
-            let query = parameters.apply(&stored).ok_or(Error::Denied)?;
+            let query = parameters.apply(&stored, &fields).ok_or(Error::Denied)?;
             Ok(QueryRun {
                 organization: org.clone(),
                 principal: request.principal.clone(),
@@ -507,6 +579,7 @@ impl Data {
                 record_snapshot_sequence,
                 source,
                 dependencies,
+                fields,
             })
         }
         .await;
@@ -571,9 +644,10 @@ pub const QUALIFIED_OPERATORS: [&str; 6] = [
 ];
 
 /// One view of a saved work's pinned definition that the Phase 1 query path
-/// can run: it carries a typed query over exactly one input using only
-/// [`QUALIFIED_OPERATORS`] (APP-005's qualified subset). Forms, notes,
-/// multi-input views and views with an unqualified operator are not listed.
+/// can run: it carries a typed query over exactly one `source` input using
+/// only [`QUALIFIED_OPERATORS`] (APP-005's qualified subset). Forms, notes,
+/// multi-input views, views over a records input and views with an
+/// unqualified operator are not listed.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkView {
     pub id: String,
@@ -608,7 +682,9 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
         let single_input = query
             .and_then(|q| q.get("inputs"))
             .and_then(Value::as_array)
-            .is_some_and(|inputs| inputs.len() == 1);
+            .filter(|inputs| inputs.len() == 1)
+            .and_then(|inputs| inputs[0].as_str())
+            .is_some_and(|input| source_fields(&content, input).is_some());
         let qualified = query
             .and_then(|q| q.get("operations"))
             .and_then(Value::as_array)
@@ -762,6 +838,137 @@ impl Data {
     }
 }
 
+/// The router sidecar of the prebuilt library (ADR-011, APP-094): per
+/// library app its purpose, routing examples and the typed summary of its
+/// fields and views, generated by `contracts/make_library.py` and keyed by
+/// the definition digest the seed places. Metadata only: it grants nothing
+/// and names no result.
+const LIBRARY_CATALOG: &str = include_str!("../../../contracts/fixtures/library/catalog.json");
+
+/// The sidecar entries by definition digest.
+fn library_sidecar() -> Result<Vec<Value>> {
+    let catalog: Value = serde_json::from_str(LIBRARY_CATALOG).map_err(|_| Error::Unavailable)?;
+    catalog
+        .get("apps")
+        .and_then(Value::as_array)
+        .cloned()
+        .ok_or(Error::Unavailable)
+}
+
+/// One admitted library app the member may open now: the saved work the
+/// seed placed, its pinned definition's title and description, and the
+/// sidecar's router metadata (purpose, intent and negative examples,
+/// capabilities, typed fields and views). Only apps whose pinned definition
+/// digest is a library definition are listed; a member's own or composed
+/// apps are not library entries.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LibraryEntry {
+    pub library_id: String,
+    pub app: String,
+    pub work: String,
+    pub title: String,
+    pub description: String,
+    pub definition_digest: String,
+    /// The sidecar entry's `purpose`.
+    pub purpose: String,
+    /// The sidecar entry's `routing` (`description`, `intent_examples`,
+    /// `negative_examples`, `capabilities`).
+    pub routing: Value,
+    /// The sidecar entry's `inputs` (id, kind, contract id, typed fields).
+    pub inputs: Value,
+    /// The sidecar entry's `views` (id, kind, title, input, operators,
+    /// parameters, runnable).
+    pub views: Value,
+    pub can_write: bool,
+}
+impl LibraryEntry {
+    /// The entry as the catalog route returns it.
+    pub fn to_json(&self) -> Value {
+        json!({
+            "library_id": self.library_id,
+            "app_id": self.app,
+            "work_id": self.work,
+            "title": self.title,
+            "description": self.description,
+            "definition_digest": self.definition_digest,
+            "purpose": self.purpose,
+            "routing": self.routing,
+            "inputs": self.inputs,
+            "views": self.views,
+            "can_write": self.can_write,
+        })
+    }
+}
+
+impl Data {
+    /// The library catalog for the composer (`GET /v1/library`): of the saved
+    /// works the member may open now (exactly [`Data::openable_works`]'s
+    /// clause: `discover` on the app and `record_read` on the work after the
+    /// member fence, the pinned publication under `lock_work_revision`, the
+    /// definition re-admitted), those whose definition digest the library
+    /// sidecar names, with that entry's router metadata. Nothing is written;
+    /// a refused member is `Denied` (the route shows an empty catalog).
+    pub async fn library_catalog(&self, request: &TrustedRequest) -> Result<Vec<LibraryEntry>> {
+        let sidecar = library_sidecar()?;
+        let works = self.openable_works(request).await?;
+        if works.is_empty() {
+            return Ok(Vec::new());
+        }
+        let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
+        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
+        let result = async {
+            let permit = transaction.fence_member().await?;
+            let org = &request.organization;
+            let mut listed = Vec::new();
+            for item in &works {
+                let (app, work) = (item.app.as_str(), item.work.as_str());
+                let transaction = permit.transaction();
+                let premise = match premise(transaction, org, app, work).await {
+                    Ok(premise) => premise,
+                    Err(Error::Denied) => continue,
+                    Err(error) => return Err(error),
+                };
+                let Some(entry) = sidecar.iter().find(|entry| {
+                    entry.get("definition_digest").and_then(Value::as_str)
+                        == Some(premise.definition_digest.as_str())
+                }) else {
+                    continue;
+                };
+                let (admitted, content) =
+                    stored_content(transaction, org, app, &premise.definition_revision).await?;
+                if admitted != premise.definition_digest {
+                    return Err(Error::Unavailable);
+                }
+                let content = admission::decode(&content).map_err(|_| Error::Unavailable)?;
+                let text = |value: &Value, key: &str| -> String {
+                    value
+                        .get(key)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned()
+                };
+                listed.push(LibraryEntry {
+                    library_id: text(entry, "library_id"),
+                    app: app.to_owned(),
+                    work: work.to_owned(),
+                    title: text(&content, "title"),
+                    description: text(&content, "description"),
+                    definition_digest: premise.definition_digest,
+                    purpose: text(entry, "purpose"),
+                    routing: entry.get("routing").cloned().unwrap_or(Value::Null),
+                    inputs: entry.get("inputs").cloned().unwrap_or(Value::Null),
+                    views: entry.get("views").cloned().unwrap_or(Value::Null),
+                    can_write: item.can_write,
+                });
+            }
+            Ok(listed)
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+}
+
 /// The receipt's stored-view and effective-query identities (`forma:query:v1`).
 pub fn query_digests(run: &QueryRun) -> Option<(String, String)> {
     let view = admission::encode(&run.view_query).ok()?;
@@ -818,7 +1025,11 @@ mod tests {
     #[test]
     fn outline_lists_only_single_input_query_views() {
         let aggregate = json!([{"type": "aggregate", "group_by": [], "measures": []}]);
-        let content = json!({"title": "Northstar", "views": [
+        let content = json!({"title": "Northstar", "inputs": [
+            {"id": "events", "kind": "source", "fields": []}, {"id": "inventory", "kind": "source", "fields": []},
+            {"id": "decisions", "kind": "records", "fields": []}], "views": [
+            // A records-input view runs nowhere in Phase 1: not listed (ADR-011 library).
+            {"id": "status", "title": "status", "kind": "status", "query": {"inputs": ["decisions"], "operations": [{"type": "project"}]}},
             {"id": "total", "title": "total", "kind": "summary", "query": {"inputs": ["events"], "operations": aggregate}},
             {"id": "destinations", "title": "destinations", "kind": "table", "query": {"inputs": ["events", "inventory"], "operations": [{"type": "lookup"}]}},
             {"id": "record_observation", "title": "record observation", "kind": "form"},
@@ -848,7 +1059,7 @@ mod tests {
         let total = json!({"operator_version": 1, "inputs": ["events"], "null_policy": "unknown",
             "operations": [{"type": "aggregate", "group_by": [], "measures": [{"id": "total_bytes", "operation": "sum", "field": {"input_id": "events", "field_id": "bytes"}}]}]});
         let parameters = parse_parameters(&json!({"window": {"start": "2026-10-22T10:00:00Z", "end": "2026-10-22T10:10:00Z"}, "destination": "198.51.100.7", "filter_epoch": 3})).unwrap();
-        let effective = parameters.apply(&total).unwrap();
+        let effective = parameters.apply(&total, &events_fields()).unwrap();
         assert_eq!(
             effective["window"],
             json!({"start": "2026-10-22T10:00:00Z", "end": "2026-10-22T10:10:00Z", "bounds": "half_open"})
@@ -865,6 +1076,118 @@ mod tests {
         );
         let mut windowed = total.clone();
         windowed["window"] = effective["window"].clone();
-        assert_eq!(parameters.apply(&windowed), None);
+        assert_eq!(parameters.apply(&windowed, &events_fields()), None);
+        // ADR-011 library: a window needs the input's `time` timestamp and the
+        // destination filter its `destination` text field; otherwise refused,
+        // never dropped. The filter names the view's own input.
+        let inventory = vec![
+            json!({"id": "sku", "value_type": {"type": "text"}, "nullable": false}),
+            json!({"id": "on_hand", "value_type": {"type": "integer", "unit": "each"}, "nullable": false}),
+        ];
+        let mut stock = total.clone();
+        stock["inputs"] = json!(["inventory"]);
+        assert_eq!(parameters.apply(&stock, &inventory), None);
+        let window_only = parse_parameters(
+            &json!({"window": {"start": "2026-10-22T10:00:00Z", "end": "2026-10-22T10:10:00Z"}}),
+        )
+        .unwrap();
+        assert_eq!(window_only.apply(&stock, &inventory), None);
+        let traffic = vec![
+            json!({"id": "time", "value_type": {"type": "timestamp"}, "nullable": false}),
+            json!({"id": "destination", "value_type": {"type": "text"}, "nullable": false}),
+        ];
+        let mut outbound = total.clone();
+        outbound["inputs"] = json!(["traffic"]);
+        let applied = parameters.apply(&outbound, &traffic).unwrap();
+        assert_eq!(
+            applied["operations"][0]["field"],
+            json!({"input_id": "traffic", "field_id": "destination"})
+        );
+        assert_eq!(
+            parse_parameters(&json!({}))
+                .unwrap()
+                .apply(&stock, &inventory),
+            Some(stock)
+        );
+    }
+
+    fn repository() -> std::path::PathBuf {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_owned()
+    }
+
+    /// ADR-011 library (APP-094): every library fixture is admitted by the real
+    /// `admit_definition` as the edition the store keeps, its runnable views are
+    /// exactly the outline's, and the embedded sidecar names it by digest.
+    #[test]
+    fn every_library_definition_is_admitted_and_in_the_sidecar() {
+        let sidecar = library_sidecar().unwrap();
+        assert_eq!(sidecar.len(), 13);
+        let directory = repository().join("contracts/fixtures/library");
+        let mut admitted_digests = std::collections::BTreeSet::new();
+        for entry in &sidecar {
+            let fixture = entry["fixture"].as_str().unwrap();
+            let bundle: Value =
+                serde_json::from_slice(&std::fs::read(directory.join(fixture)).unwrap()).unwrap();
+            let definition = &bundle["definition"];
+            let bytes = admission::encode(definition).unwrap();
+            let admitted = admission::admit_definition(&bytes)
+                .unwrap_or_else(|error| panic!("{fixture}: {error:?}"));
+            assert_eq!(admitted.schema_version, 1, "{fixture}: the stored edition");
+            assert_eq!(
+                (admitted.renderer_version, admitted.operator_version),
+                (1, 1)
+            );
+            assert_eq!(definition["digest"], json!(admitted.digest), "{fixture}");
+            assert_eq!(
+                entry["definition_digest"], definition["digest"],
+                "{fixture}"
+            );
+            assert!(
+                admitted_digests.insert(admitted.digest.clone()),
+                "{fixture}: duplicate"
+            );
+            let listed = outline(&admitted.canonical).unwrap();
+            assert_eq!(json!(listed.title), entry["title"], "{fixture}");
+            let runnable: Vec<&str> = entry["views"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|v| v["runnable"] == json!(true))
+                .map(|v| v["id"].as_str().unwrap())
+                .collect();
+            assert_eq!(
+                listed
+                    .views
+                    .iter()
+                    .map(|v| v.id.as_str())
+                    .collect::<Vec<_>>(),
+                runnable,
+                "{fixture}: the sidecar's runnable views are the outline's"
+            );
+            assert!(
+                listed.views.len() >= 3,
+                "{fixture}: a library app shows at least three governed views"
+            );
+            // Each runnable view's query runs over the one source input and
+            // only the qualified operators; its stored query digest is stable.
+            let content = admission::decode(&admitted.canonical).unwrap();
+            for view in content["views"].as_array().unwrap() {
+                let Some(query) = view.get("query") else {
+                    continue;
+                };
+                let input = query["inputs"][0].as_str().unwrap();
+                let fields = source_fields(&content, input).unwrap();
+                assert!(!fields.is_empty());
+                let (stored, found) =
+                    view_query(&admitted.canonical, view["id"].as_str().unwrap()).unwrap();
+                assert_eq!((stored, found), (query.clone(), fields));
+            }
+            let routing = &entry["routing"];
+            assert!(routing["intent_examples"].as_array().unwrap().len() >= 4);
+            assert!(routing["negative_examples"].as_array().unwrap().len() >= 3);
+        }
     }
 }

@@ -33,6 +33,18 @@ evidence/APP-012/README.md, are:
    receipt is built and digested by the Rust process (`query::receipt`);
    admission (2 per organization, 4 per task, 20 queued) is the Rust
    parent's, so `Admission` is not copied.
+6. (ADR-011 pitch library, APP-094.) The compiled field set is no longer the
+   fixed `events_v1` shape: the request's `source` names the view's one input
+   (`input_id`) and carries that input contract's `fields` verbatim, taken by
+   the Rust parent from the re-admitted definition (never from the client), and
+   `compile_query` types every column, literal and measure from them under the
+   normalization table of `library_sources.py` (text/enum VARCHAR, boolean,
+   integer/money/decimal BIGINT, date, timestamp). A query window applies to
+   the field named `time` and requires it to be a timestamp; the Rust parent
+   refuses a window or destination parameter for an input without that
+   field. Everything else (POLICY, the one-file allowlist, the read-only
+   private database, the closed request, the single result line, the 500-row
+   page, the deadline and the fixed refusal codes) is unchanged.
 
 Protocol: one JSON request on stdin, exactly one JSON line on stdout. The
 child runs with an empty environment, its three pipes and nothing else
@@ -51,7 +63,16 @@ import sys
 import threading
 import time
 
-FIELDS = {"time": {"type": "timestamp"}, "destination": {"type": "text"}, "bytes": {"type": "integer", "unit": "byte"}}
+# The seeded Northstar `events_v1` shape, kept as the reference example of a field list (deviation 6).
+FIELDS = [{"id": "time", "value_type": {"type": "timestamp"}, "nullable": False},
+          {"id": "destination", "value_type": {"type": "text"}, "nullable": False},
+          {"id": "bytes", "value_type": {"type": "integer", "unit": "byte"}, "nullable": False}]
+# Contract value types a source column may have (library_sources.py's table); `reference` never is.
+COLUMN_TYPES = ("text", "enum", "boolean", "integer", "money", "decimal", "date", "timestamp")
+# Measures that need a numeric field; count/min/max take any column type.
+NUMERIC = ("integer", "money", "decimal")
+LOCAL_ID = re.compile(r"[a-z][a-z0-9_]{0,63}")
+MAX_FIELDS = 32
 POLICY = {"threads": 2, "memory_limit": "1GiB", "max_temp_directory_size": "2GiB", "enable_external_access": False,
           "autoinstall_known_extensions": False, "autoload_known_extensions": False, "allow_unsigned_extensions": False,
           "allow_community_extensions": False, "allow_persistent_secrets": False,
@@ -62,7 +83,7 @@ MAX_REQUEST_BYTES = 65536
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 REQUEST_KEYS = {"organization_id", "source", "query", "deadline_ms", "cache_root", "scratch"}
-SOURCE_KEYS = {"source_id", "revision_id", "normalized_digest", "s3_key"}
+SOURCE_KEYS = {"source_id", "revision_id", "normalized_digest", "s3_key", "input_id", "fields"}
 
 
 class Refused(ValueError):
@@ -78,15 +99,72 @@ def require(condition, reason):
         raise Refused(reason)
 
 
-def compile_query(query, source_path):
+def parse_fields(fields):
+    """The input contract's field list, re-checked here (defense in depth): id -> value_type."""
+    require(isinstance(fields, list) and 0 < len(fields) <= MAX_FIELDS, "fields_refused")
+    typed = {}
+    for item in fields:
+        require(isinstance(item, dict) and set(item) == {"id", "value_type", "nullable"}, "fields_refused")
+        name, value_type = item["id"], item["value_type"]
+        require(isinstance(name, str) and LOCAL_ID.fullmatch(name) is not None and name not in typed, "fields_refused")
+        require(isinstance(value_type, dict) and value_type.get("type") in COLUMN_TYPES and isinstance(item["nullable"], bool), "fields_refused")
+        typed[name] = value_type
+    return typed
+
+
+def literal_parameter(value, value_type):
+    """A filter literal as a bound parameter plus its SQL cast, or a refusal; the type must be the column's."""
+    require(isinstance(value, dict) and value.get("type") == value_type["type"], "literal type is not in the qualified query subset")
+    kind = value["type"]
+    if kind in ("text", "enum"):
+        require(isinstance(value.get("value"), str), "literal_not_qualified")
+        return value["value"], ""
+    if kind == "boolean":
+        require(isinstance(value.get("value"), bool), "literal_not_qualified")
+        return value["value"], ""
+    if kind == "timestamp":
+        require(isinstance(value.get("value"), str), "literal_not_qualified")
+        try:
+            datetime.datetime.strptime(value["value"], "%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            raise Refused("literal_not_qualified") from None
+        return value["value"], "::TIMESTAMP"
+    if kind == "date":
+        require(isinstance(value.get("value"), str), "literal_not_qualified")
+        try:
+            datetime.date.fromisoformat(value["value"])
+        except ValueError:
+            raise Refused("literal_not_qualified") from None
+        return value["value"], "::DATE"
+    if kind == "integer":
+        require(value.get("unit") == value_type.get("unit") and isinstance(value.get("value"), str), "literal_not_qualified")
+        parameter = int(value["value"])
+    elif kind == "money":
+        require(value.get("currency") == value_type.get("currency") == "USD" and value.get("minor_unit_exponent") == value_type.get("minor_unit_exponent") == 2
+                and isinstance(value.get("minor_units"), str), "literal_not_qualified")
+        parameter = int(value["minor_units"])
+    elif kind == "decimal":
+        require(value.get("unit") == value_type.get("unit") and value.get("scale") == value_type.get("scale")
+                and isinstance(value.get("coefficient"), str), "literal_not_qualified")
+        parameter = int(value["coefficient"])
+    else:
+        raise Refused("literal type is not in the qualified query subset")
+    if not -(2**63) <= parameter < 2**63:
+        raise Refused("this qualification stores signed 64-bit integer columns")
+    return parameter, ""
+
+
+def compile_query(query, source_path, input_id="events", fields=FIELDS):
     require(isinstance(query, dict) and set(query) <= {"operator_version", "inputs", "operations", "null_policy", "window"}
             and query.get("operator_version") == 1 and query.get("null_policy") == "unknown"
             and isinstance(query.get("operations"), list) and 0 < len(query["operations"]) <= 16, "query_shape_refused")
-    if query["inputs"] != ["events"]:
-        raise Refused("only the registered events input is qualified")
+    require(isinstance(input_id, str) and LOCAL_ID.fullmatch(input_id) is not None, "request_refused")
+    types = parse_fields(fields)
+    if query["inputs"] != [input_id]:
+        raise Refused("only the request's one source input is qualified")
     params = [str(source_path)]
     sql = "SELECT * FROM read_parquet(?)"
-    available = set(FIELDS)
+    available = set(types)
     aggregated = False
     if "window" in query:
         require(query["window"].get("bounds") == "half_open", "window_refused")
@@ -97,11 +175,13 @@ def compile_query(query, source_path):
             except (TypeError, ValueError):
                 raise Refused("window_refused") from None
         require(query["window"]["start"] < query["window"]["end"], "window_refused")
-        sql += " WHERE time >= ?::TIMESTAMP AND time < ?::TIMESTAMP"
+        # Deviation 6: the window is the half-open range of the `time` timestamp field.
+        require(types.get("time", {}).get("type") == "timestamp", "window_refused")
+        sql += ' WHERE "time" >= ?::TIMESTAMP AND "time" < ?::TIMESTAMP'
         params += [query["window"]["start"], query["window"]["end"]]
 
     def column(ref):
-        if ref["input_id"] != "events" or ref["field_id"] not in available:
+        if not isinstance(ref, dict) or ref.get("input_id") != input_id or ref.get("field_id") not in available:
             raise Refused("field is unavailable at this pipeline stage")
         return '"' + ref["field_id"] + '"'
 
@@ -113,16 +193,8 @@ def compile_query(query, source_path):
                 raise Refused("post-aggregate filters are not qualified")
             name = column(op["field"])
             comparison = {"eq": "=", "ne": "<>", "lt": "<", "lte": "<=", "gt": ">", "gte": ">="}[op["comparison"]]
-            value = op["value"]
-            if value["type"] in ("text", "timestamp", "date", "enum"):
-                parameter = value["value"]
-            elif value["type"] == "integer":
-                parameter = int(value["value"])
-                if not -(2**63) <= parameter < 2**63:
-                    raise Refused("this qualification stores signed 64-bit integer columns")
-            else:
-                raise Refused("literal type is not in the qualified query subset")
-            sql = f"SELECT * FROM {source} WHERE {name} {comparison} ?"
+            parameter, cast = literal_parameter(op["value"], types[op["field"]["field_id"]])
+            sql = f"SELECT * FROM {source} WHERE {name} {comparison} ?{cast}"
             params.append(parameter)
         elif kind == "project":
             if aggregated:
@@ -138,10 +210,11 @@ def compile_query(query, source_path):
             for item in op["measures"]:
                 value = column(item["field"])
                 operator = {"count": "count", "sum": "sum", "min": "min", "max": "max"}[item["operation"]]
+                if operator == "sum" and types[item["field"]["field_id"]]["type"] not in NUMERIC:
+                    raise Refused("query_shape_refused")
                 # The measure id becomes an SQL alias: a local identifier only (review m5);
                 # literals are parameter-bound.
-                require(isinstance(item["id"], str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", item["id"]) is not None,
-                        "query_shape_refused")
+                require(isinstance(item["id"], str) and LOCAL_ID.fullmatch(item["id"]) is not None, "query_shape_refused")
                 measures.append(f'{operator}({value}) AS "{item["id"]}"')
             sql = f"SELECT {', '.join(groups + measures)} FROM {source}"
             if groups:
@@ -152,9 +225,10 @@ def compile_query(query, source_path):
             if aggregated:
                 raise Refused("time bucket after aggregate is not qualified")
             name = column(op["field"])
+            require(types[op["field"]["field_id"]]["type"] == "timestamp", "time_bucket_refused")
             require(op.get("timezone") == "UTC" and op.get("seconds") in (60, 300, 3600, 86400), "time_bucket_refused")
             output = op["output_field"]
-            require(re.fullmatch(r"[a-z][a-z0-9_]{0,63}", output) is not None, "time_bucket_refused")
+            require(isinstance(output, str) and LOCAL_ID.fullmatch(output) is not None, "time_bucket_refused")
             if output == op["field"]["field_id"]:
                 sql = f"SELECT * REPLACE (time_bucket(INTERVAL '{op['seconds']} seconds', {name}) AS {name}) FROM {source}"
             else:
@@ -223,6 +297,8 @@ def encode_rows(rows):
     def encode(value):
         if isinstance(value, datetime.datetime):
             return value.strftime("%Y-%m-%dT%H:%M:%SZ")
+        if isinstance(value, datetime.date):
+            return value.isoformat()
         if type(value) is int:
             return str(value)
         if value is None or isinstance(value, (str, bool)):
@@ -278,6 +354,11 @@ def parse_request(raw):
     require(isinstance(organization, str) and UUID.fullmatch(organization) is not None, "request_refused")
     require(all(isinstance(source[k], str) and UUID.fullmatch(source[k]) for k in ("source_id", "revision_id")), "request_refused")
     require(isinstance(source["normalized_digest"], str) and DIGEST.fullmatch(source["normalized_digest"]) is not None, "request_refused")
+    require(isinstance(source["input_id"], str) and LOCAL_ID.fullmatch(source["input_id"]) is not None, "request_refused")
+    try:
+        parse_fields(source["fields"])
+    except Refused:
+        raise Refused("request_refused") from None
     require(source["s3_key"] == f"o/{organization}/s/{source['source_id']}/r/{source['revision_id']}/part.parquet", "request_refused")
     deadline = request["deadline_ms"]
     require(type(deadline) is int and 1 <= deadline <= int(DEADLINE_SECONDS * 1000), "request_refused")
@@ -291,7 +372,7 @@ def execute(request, start):
     require(scratch.is_dir() and not scratch.is_symlink() and not any(scratch.iterdir()), "scratch_refused")
     path = cached_source(request["cache_root"], request["organization_id"], request["source"])
     query = request["query"]
-    sql, params = compile_query(query, path)
+    sql, params = compile_query(query, path, request["source"]["input_id"], request["source"]["fields"])
     columns, rows = run_sql(scratch, [path], sql, params, deadline_seconds=request["deadline_ms"] / 1000, start=start)
     last = query["operations"][-1]
     limit = last.get("rows") if last["type"] == "limit" else None

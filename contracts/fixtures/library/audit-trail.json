@@ -1,0 +1,622 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "principal_id": "00000000-0000-4000-8000-000000000066"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001481",
+    "revision_id": "00000000-0000-4000-8000-000000001482",
+    "content": {
+      "title": "Audit trail viewer",
+      "description": "Recent audit events, events by action and outcome, denied actions, and a review form. Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
+      "inputs": [
+        {
+          "id": "audit_log",
+          "contract_id": "audit_log_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "time",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            },
+            {
+              "id": "actor",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "action",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "login",
+                  "export",
+                  "grant",
+                  "revoke",
+                  "publish",
+                  "delete"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "resource",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "outcome",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "success",
+                  "denied"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "decisions",
+          "contract_id": "decisions_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "recent",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "Recent events",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "audit_log"
+            ],
+            "operations": [
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "audit_log",
+                    "field_id": "time"
+                  },
+                  {
+                    "input_id": "audit_log",
+                    "field_id": "actor"
+                  },
+                  {
+                    "input_id": "audit_log",
+                    "field_id": "action"
+                  },
+                  {
+                    "input_id": "audit_log",
+                    "field_id": "resource"
+                  },
+                  {
+                    "input_id": "audit_log",
+                    "field_id": "outcome"
+                  }
+                ]
+              },
+              {
+                "type": "sort",
+                "fields": [
+                  {
+                    "field": {
+                      "input_id": "audit_log",
+                      "field_id": "time"
+                    },
+                    "direction": "desc"
+                  }
+                ],
+                "stable_tiebreak": {
+                  "input_id": "audit_log",
+                  "field_id": "actor"
+                }
+              },
+              {
+                "type": "limit",
+                "rows": 50
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "by_action",
+          "kind": "chart",
+          "renderer_version": 1,
+          "title": "Events by action",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "audit_log"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "audit_log",
+                    "field_id": "action"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "events",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "audit_log",
+                      "field_id": "actor"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "denied",
+          "kind": "summary",
+          "renderer_version": 1,
+          "title": "Denied actions",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "audit_log"
+            ],
+            "operations": [
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "audit_log",
+                  "field_id": "outcome"
+                },
+                "comparison": "eq",
+                "value": {
+                  "type": "enum",
+                  "value": "denied"
+                }
+              },
+              {
+                "type": "aggregate",
+                "group_by": [],
+                "measures": [
+                  {
+                    "id": "denied",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "audit_log",
+                      "field_id": "actor"
+                    }
+                  },
+                  {
+                    "id": "latest",
+                    "operation": "max",
+                    "field": {
+                      "input_id": "audit_log",
+                      "field_id": "time"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "timeline",
+          "kind": "timeline",
+          "renderer_version": 1,
+          "title": "Events per hour",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "audit_log"
+            ],
+            "operations": [
+              {
+                "type": "time_bucket",
+                "field": {
+                  "input_id": "audit_log",
+                  "field_id": "time"
+                },
+                "seconds": 3600,
+                "timezone": "UTC",
+                "output_field": "time"
+              },
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "audit_log",
+                    "field_id": "time"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "events",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "audit_log",
+                      "field_id": "actor"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "review",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "Record an audit review",
+          "command_id": "record_decision"
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "record_decision",
+          "record_schema_id": "decision",
+          "operation": "create",
+          "writable_fields": [
+            "status",
+            "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "recent",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "by_action",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "denied",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "timeline",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "review",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:2fb7a2db2f5e868f3973a04a2085139c9ddbe536ae3a3f44b4be3c2bcd7c8a3a"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001481",
+    "publication_id": "00000000-0000-4000-8000-000000001483",
+    "definition_revision_id": "00000000-0000-4000-8000-000000001482",
+    "definition_digest": "sha256:2fb7a2db2f5e868f3973a04a2085139c9ddbe536ae3a3f44b4be3c2bcd7c8a3a",
+    "input_contract_digests": [
+      {
+        "input_id": "audit_log",
+        "digest": "sha256:af18da78eaf8ab896e55d3903679f8448687c56028e865d091901436ffa96ff6"
+      },
+      {
+        "input_id": "decisions",
+        "digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "decision",
+        "digest": "sha256:3c075b4099b1f49f692e0ad0fb78f4f4a7888c008ff4fe852c48d9d7298251bf"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "admission_digest": "sha256:0d6d8eab34a1dec073b9a8e44d7899000d426412f17da19ad81acd6d9dd6c9cd",
+    "policy": {
+      "id": "00000000-0000-4000-8000-0000000000e0",
+      "version": 1,
+      "kind": "owner_publish"
+    },
+    "author_id": "00000000-0000-4000-8000-000000000066",
+    "approver_id": "00000000-0000-4000-8000-000000000066",
+    "approver_epoch": 1,
+    "published_at": "2026-10-30T09:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001481",
+    "work_id": "00000000-0000-4000-8000-000000001484",
+    "publication_id": "00000000-0000-4000-8000-000000001483",
+    "version": 1,
+    "context": "Prebuilt library: Audit trail viewer",
+    "bindings": [
+      {
+        "input_id": "audit_log",
+        "source_id": "00000000-0000-4000-8000-000000003012",
+        "source_revision_id": "00000000-0000-4000-8000-000000003013",
+        "source_digest": "sha256:6e12ae6560dac3b9449ffa9df19067c13085c7ca9aba0de03a53ee3543e855bd",
+        "kind": "source",
+        "contract_digest": "sha256:af18da78eaf8ab896e55d3903679f8448687c56028e865d091901436ffa96ff6"
+      },
+      {
+        "input_id": "decisions",
+        "kind": "records",
+        "contract_digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5",
+        "collection_id": "00000000-0000-4000-8000-000000001485",
+        "schema_id": "decision",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-000000001485",
+        "schema_id": "decision",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "audit_log",
+        "source_id": "00000000-0000-4000-8000-000000003012",
+        "source_revision_id": "00000000-0000-4000-8000-000000003013",
+        "source_digest": "sha256:6e12ae6560dac3b9449ffa9df19067c13085c7ca9aba0de03a53ee3543e855bd"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "source_id": "00000000-0000-4000-8000-000000003012",
+      "revision_id": "00000000-0000-4000-8000-000000003013",
+      "content_digest": "sha256:baf55fd96958365138358fdd3c6afc73cd0e7f66665d6cf607534e37037d2e3b",
+      "normalized_digest": "sha256:6e12ae6560dac3b9449ffa9df19067c13085c7ca9aba0de03a53ee3543e855bd",
+      "input_contract": {
+        "id": "audit_log",
+        "contract_id": "audit_log_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "time",
+            "value_type": {
+              "type": "timestamp"
+            },
+            "nullable": false
+          },
+          {
+            "id": "actor",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "action",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "login",
+                "export",
+                "grant",
+                "revoke",
+                "publish",
+                "delete"
+              ]
+            },
+            "nullable": false
+          },
+          {
+            "id": "resource",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "outcome",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "success",
+                "denied"
+              ]
+            },
+            "nullable": false
+          }
+        ]
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 320,
+      "timezone": "UTC",
+      "time_semantics": "event",
+      "units_confirmed": true,
+      "created_at": "2026-10-30T09:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001481",
+    "work_id": "00000000-0000-4000-8000-000000001484",
+    "mode": "published",
+    "definition_digest": "sha256:2fb7a2db2f5e868f3973a04a2085139c9ddbe536ae3a3f44b4be3c2bcd7c8a3a",
+    "publication_id": "00000000-0000-4000-8000-000000001483",
+    "view_id": "recent",
+    "operator_version": 1,
+    "source_revisions": [
+      {
+        "input_id": "audit_log",
+        "source_id": "00000000-0000-4000-8000-000000003012",
+        "source_revision_id": "00000000-0000-4000-8000-000000003013",
+        "source_digest": "sha256:6e12ae6560dac3b9449ffa9df19067c13085c7ca9aba0de03a53ee3543e855bd"
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:61889d0f15e760d4ef7bb41c41a4f0a150595a6b4cde7b050932b154d65b3036",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:887f0eab70d5b44d06e68b91fad47ce2f4780c79a6ea7b9c45a7fe432e99aa0e",
+      "predicate_digest": "sha256:887f0eab70d5b44d06e68b91fad47ce2f4780c79a6ea7b9c45a7fe432e99aa0e"
+    },
+    "digest": "sha256:3c4e0164e9734ca8076d92bb25b1fd982929dde6317e0705bcb8e54848e5cf01"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-000000001481",
+    "work_id": "00000000-0000-4000-8000-000000001484",
+    "publication_id": "00000000-0000-4000-8000-000000001483",
+    "command_id": "record_decision",
+    "schema_id": "decision",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-000000001486",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "needs_context"
+        }
+      },
+      {
+        "field_id": "note",
+        "value": {
+          "type": "text",
+          "value": "Reviewer action; synthetic only"
+        }
+      }
+    ],
+    "idempotency_key": "00000000000000000000000000001480"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001481",
+    "work_id": "00000000-0000-4000-8000-000000001484",
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "command_id": "record_decision",
+    "idempotency_key": "00000000000000000000000000001480",
+    "payload_digest": "sha256:199c9ed67536956818396a582c821b2e8c4a324ff6d832b8697f85ec1f47b3fe",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-000000001486",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-000000001487",
+    "committed_at": "2026-10-30T09:05:00Z",
+    "retry_expires_at": "2026-10-31T09:05:00Z"
+  }
+}

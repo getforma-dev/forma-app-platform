@@ -567,6 +567,277 @@ async fn campaign() {
         "authorized_member_gets_exact_result_and_receipt_digest: total 1,140,000, destination 198.51.100.7 900,000 and the five timeline buckets of the APP-011 oracle, each released after re-authorization with a contract-valid published receipt pinning the new revision's real digest; the receipt lists every source dependency of the work (events and inventory) and passes contracts/validate.py validate_bundle against the work, while a receipt cut to the read input alone is refused (source evidence dependency mismatch)",
     );
 
+    // --- ADR-011 prebuilt library (APP-094): seeded, cached, run, receipted ---
+    let seeded = operator(&fixture, &["seed-library", "--organization", ORG]);
+    assert_eq!(seeded["changed"], true);
+    assert_eq!(seeded["apps"].as_array().unwrap().len(), 13);
+    assert_eq!(seeded["audit_event"], Value::Null);
+    let again = operator(&fixture, &["seed-library", "--organization", ORG]);
+    assert_eq!(
+        (again["changed"].clone(), again["rows_inserted"].clone()),
+        (json!(false), json!(0))
+    );
+    let built = Command::new(&python)
+        .current_dir(repository().join("app/runtime"))
+        .args([
+            "-c",
+            "import json,sys,library_sources as l; print(json.dumps(l.build(sys.argv[1], sys.argv[2])))",
+            ORG,
+            root.0.join("cache").to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let built: Value = serde_json::from_slice(&built.stdout).unwrap();
+    assert_eq!(built.as_array().unwrap().len(), 13);
+    let catalog: Value = serde_json::from_slice(
+        &std::fs::read(repository().join("contracts/fixtures/library/catalog.json")).unwrap(),
+    )
+    .unwrap();
+    let entry = |library_id: &str| -> Value {
+        catalog["apps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["library_id"] == json!(library_id))
+            .unwrap()
+            .clone()
+    };
+    let ids = |library_id: &str| -> (String, String) {
+        let e = entry(library_id);
+        (
+            e["app_id"].as_str().unwrap().to_owned(),
+            e["work_id"].as_str().unwrap().to_owned(),
+        )
+    };
+    // The catalog the composer reads: every library app the member may open,
+    // with its router metadata; a member without the grants sees none.
+    let listed = stores.data.library_catalog(&member).await.unwrap();
+    assert_eq!(listed.len(), 13);
+    for item in &listed {
+        assert!(item.routing["intent_examples"].as_array().unwrap().len() >= 4);
+        assert!(!item.purpose.is_empty() && !item.title.is_empty());
+        assert_eq!(
+            item.definition_digest,
+            entry(&item.library_id)["definition_digest"]
+        );
+    }
+    let reviewer = request(&stores, ORG, REVIEWER, 1);
+    assert_eq!(
+        stores.data.library_catalog(&reviewer).await.unwrap(),
+        Vec::new()
+    );
+    check(
+        &mut checks,
+        "seed-library places all 13 library apps once (exact-match idempotent, no audit event), library_sources.build caches their revisions under the pinned digests, and library_catalog lists them with router metadata for the granted member only",
+    );
+    let (expense_app, expense_work) = ids("expense-review");
+    let outline = stores
+        .data
+        .work_outline(&member, &expense_app, &expense_work)
+        .await
+        .unwrap();
+    assert_eq!(
+        outline
+            .views
+            .iter()
+            .map(|v| v.id.as_str())
+            .collect::<Vec<_>>(),
+        ["totals", "queue", "by_category", "by_status"]
+    );
+    let mut library_receipts = serde_json::Map::new();
+    let run_view = |app: String, work: String, view: &'static str, parameters: Value| {
+        let stores = stores.clone();
+        let engine = engine.clone();
+        let member = request(&stores, ORG, PRINCIPAL, 1);
+        async move {
+            let run = stores
+                .data
+                .run_query(&member, &app, &work, view, &parameters)
+                .await
+                .unwrap();
+            let result = engine.execute(&run, DEADLINE).await.unwrap();
+            stores.data.release_result(&member, &run).await.unwrap();
+            let receipt = receipt::build(&run, &result).unwrap();
+            assert!(contract_valid(&receipt.document), "{}", receipt.document);
+            assert_eq!(
+                receipt.document["result_digest"],
+                json!(result.result_digest)
+            );
+            assert_eq!(receipt.document["view_id"], json!(view));
+            (result, receipt)
+        }
+    };
+    let (totals, totals_receipt) = run_view(
+        expense_app.clone(),
+        expense_work.clone(),
+        "totals",
+        json!({}),
+    )
+    .await;
+    assert_eq!(totals.columns, ["claims", "total_amount", "largest_claim"]);
+    assert_eq!(
+        totals.rows,
+        vec![vec![
+            json!("240"),
+            totals.rows[0][1].clone(),
+            totals.rows[0][2].clone()
+        ]]
+    );
+    assert!(
+        totals.integer_columns.contains("total_amount")
+            && totals.integer_columns.contains("largest_claim")
+    );
+    library_receipts.insert("expense_totals".into(), totals_receipt.document.clone());
+    let (queue, queue_receipt) = run_view(
+        expense_app.clone(),
+        expense_work.clone(),
+        "queue",
+        json!({}),
+    )
+    .await;
+    assert_eq!(
+        queue.columns,
+        [
+            "expense_id",
+            "time",
+            "employee",
+            "vendor",
+            "category",
+            "amount"
+        ]
+    );
+    assert_eq!((queue.rows.len(), queue.truncated_page), (50, true));
+    assert_eq!(queue_receipt.document["truncated_page"], json!(true));
+    let amounts: Vec<i64> = queue
+        .rows
+        .iter()
+        .map(|r| r[5].as_str().unwrap().parse().unwrap())
+        .collect();
+    assert!(
+        amounts.windows(2).all(|w| w[0] >= w[1]),
+        "ordered by amount desc"
+    );
+    library_receipts.insert("expense_queue".into(), queue_receipt.document.clone());
+    let (grouped, grouped_receipt) = run_view(
+        expense_app.clone(),
+        expense_work.clone(),
+        "by_category",
+        json!({}),
+    )
+    .await;
+    assert_eq!(grouped.columns, ["category", "claims", "amount"]);
+    assert_eq!(
+        grouped
+            .rows
+            .iter()
+            .map(|r| r[1].as_str().unwrap().parse::<i64>().unwrap())
+            .sum::<i64>(),
+        240
+    );
+    library_receipts.insert(
+        "expense_by_category".into(),
+        grouped_receipt.document.clone(),
+    );
+    let (vendor_app, vendor_work) = ids("vendor-spend");
+    let (unpaid, _) = run_view(vendor_app, vendor_work, "unpaid", json!({})).await;
+    assert_eq!(unpaid.columns, ["invoice_id", "vendor", "amount", "due"]);
+    assert!(!unpaid.rows.is_empty());
+    let (tickets_app, tickets_work) = ids("support-queue");
+    let (timeline, timeline_receipt) = run_view(
+        tickets_app,
+        tickets_work,
+        "timeline",
+        json!({"window": {"start": "2026-10-10T00:00:00Z", "end": "2026-10-13T00:00:00Z"}}),
+    )
+    .await;
+    assert_eq!(timeline.columns, ["time", "tickets"]);
+    assert!(timeline.rows.iter().all(|r| {
+        let day = r[0].as_str().unwrap();
+        day.ends_with("T00:00:00Z")
+            && ("2026-10-10T00:00:00Z".."2026-10-13T00:00:00Z").contains(&day)
+    }));
+    assert_eq!(
+        timeline_receipt.document["parameters"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    library_receipts.insert(
+        "tickets_timeline_windowed".into(),
+        timeline_receipt.document.clone(),
+    );
+    let (traffic_app, traffic_work) = ids("outbound-traffic");
+    let (filtered_total, filtered_receipt) = run_view(
+        traffic_app,
+        traffic_work,
+        "total",
+        json!({"destination": "198.51.100.7", "filter_epoch": 2}),
+    )
+    .await;
+    assert_eq!(
+        filtered_total.columns,
+        ["connections", "total_bytes", "largest_transfer"]
+    );
+    assert_eq!(
+        filtered_receipt.document["parameters"][0]["field_id"],
+        json!("destination")
+    );
+    assert_eq!(filtered_receipt.document["filter_epoch"], json!(2));
+    library_receipts.insert(
+        "traffic_total_filtered".into(),
+        filtered_receipt.document.clone(),
+    );
+    // A window or destination parameter for an input without those fields is
+    // refused before any engine, never recorded in a receipt it did not shape.
+    let (inventory_app, inventory_work) = ids("inventory-comparison");
+    assert_eq!(
+        stores
+            .data
+            .run_query(
+                &member,
+                &inventory_app,
+                &inventory_work,
+                "totals",
+                &window()
+            )
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        stores
+            .data
+            .run_query(
+                &member,
+                &inventory_app,
+                &inventory_work,
+                "totals",
+                &json!({"destination": "x"})
+            )
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    // The reviewer holds no grant on a library app: denied before any engine.
+    assert_eq!(
+        stores
+            .data
+            .run_query(&reviewer, &expense_app, &expense_work, "totals", &json!({}))
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    check(
+        &mut checks,
+        "library views run through run_query, the confined engine, release_result and a contract-valid receipt: a summary (count/sum/max over money), a paged table (50 rows, truncated), a grouped breakdown, a boolean filter, a windowed daily timeline and a destination-filtered total; a window or destination on an input without those fields and an ungranted member are Denied before any engine",
+    );
+
     // --- The seeded placeholder work: authorized, but never a number ---
     let placeholder = stores
         .data
@@ -840,6 +1111,7 @@ async fn campaign() {
                          "content_digest": CONTENT, "normalized_digest": NORMALIZED, "contract_digest": CONTRACT},
             "bound_work": BOUND,
             "receipts": {"total": total.document, "destination": destination_receipt.document, "timeline": timeline_receipt.document},
+            "library_receipts": library_receipts,
             "latency": latency,
             "routes": routes,
             "admission": {"peak_task_running": stats.peak_task_running, "peak_organization_running": stats.peak_organization_running,
@@ -850,7 +1122,8 @@ async fn campaign() {
                 "Synthetic local password authentication is not RDS IAM. The storage checks use synthetic registry-bound requests; the route and page checks use real APP-009 sessions minted through the product routes against the cfg(test) synthetic loopback issuer (SIMULATED provider), rendered by a recording page renderer (the SSR page is the binary's test).",
                 "The revision cache is seeded locally with the bytes APP-077 uploads (same SHA-256); the credentialed S3 fetch is unit-tested against botocore's Stubber, not S3.",
                 "The engine child runs on macOS arm64 with the locked venv, not in the linux image under Fargate; its latency is re-measured in APP-078's window.",
-                "The registered record is written by the test with the APP-077 digests and the content-derived revision id; upload-sources itself (merged separately) is not run here."
+                "The registered record is written by the test with the APP-077 digests and the content-derived revision id; upload-sources itself (merged separately) is not run here.",
+                "The library revisions (ADR-011) are normalized into the local cache by library_sources.build from the committed synthetic CSVs; their upload to the bucket is the deploy's (APP-096), under the B1 keys library_sources.py plan prints."
             ]
         })).unwrap()).unwrap();
     }
