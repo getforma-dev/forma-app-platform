@@ -417,10 +417,32 @@ async fn submit(
     if !request.well_formed() || payload::digest(&request).is_none() {
         return http::problem(StatusCode::BAD_REQUEST, "malformed_command");
     }
+    let result = commit_audited(stores, &trusted, &request).await;
+    answer(&mode, &app, &work, &request.record, result)
+}
+
+/// The audited commit behind this route, shared with the MCP `forma_commit`
+/// tool (APP-099): the caller has checked the key's shape and the request's
+/// form; storage judges everything else under the member's trusted request
+/// (`commit_record_until`: precheck, fences, declaration, version premise,
+/// one transaction, the `command.committed` audit event, idempotent by key),
+/// the outcome is logged and a committed record is announced on the event
+/// hub (subscribers are re-authorized at delivery).
+pub(crate) async fn commit_audited(
+    stores: &storage::Stores,
+    trusted: &TrustedRequest,
+    request: &CommandRequest,
+) -> Result<CommandResult, storage::Error> {
+    if !idempotency_key_shaped(&request.idempotency_key)
+        || !request.well_formed()
+        || payload::digest(request).is_none()
+    {
+        return Err(storage::Error::Denied);
+    }
     let deadline = Instant::now() + COMMAND_HANDLER_DEADLINE - STORAGE_MARGIN;
     let result = stores
         .data
-        .commit_record_until(&trusted, &request, deadline)
+        .commit_record_until(trusted, request, deadline)
         .await;
     tracing::info!(
         outcome = match &result {
@@ -441,7 +463,7 @@ async fn submit(
     if let Ok(CommandResult::Committed(outcome)) = &result {
         crate::events::hub().record_committed(&outcome.organization, &outcome.app, &outcome.work);
     }
-    answer(&mode, &app, &work, &request.record, result)
+    result
 }
 
 /// ADR-002: after a lost response the client looks the outcome up by key

@@ -42,6 +42,11 @@
 !app/src/actions/routes.rs
 !app/src/actions/tests.rs
 !app/src/sharing/mod.rs
+!app/src/mcp/mod.rs
+!app/src/mcp/drafts.rs
+!app/src/mcp/tests.rs
+!app/src/mcp/tokens.rs
+!app/src/mcp/tools.rs
 !app/src/commands/mod.rs
 !app/src/commands/payload.rs
 !app/src/commands/routes.rs
@@ -69,6 +74,7 @@
 !app/src/query/worker.rs
 !app/src/storage/mod.rs
 !app/src/storage/admission.rs
+!app/src/storage/agents.rs
 !app/src/storage/admission_qualification.rs
 !app/src/storage/authorization.rs
 !app/src/storage/catalog.rs
@@ -80,6 +86,7 @@
 !app/src/storage/definition_qualification.rs
 !app/src/storage/definitions.rs
 !app/src/storage/managed_qualification.rs
+!app/src/storage/mcp_campaign.rs
 !app/src/storage/pitch_qualification.rs
 !app/src/storage/managed_qualification/tests.rs
 !app/src/storage/pool.rs
@@ -99,6 +106,7 @@
 !app/migrations/catalog-query.json
 !app/migrations/catalog-v7.json
 !app/migrations/catalog-v8.json
+!app/migrations/catalog-v9.json
 !app/certs/rds-global-bundle.pem
 !app/runtime/runtime.py
 !app/runtime/qualification_supervisor.py

@@ -545,6 +545,13 @@ async fn main() {
     });
     let work = Arc::new(genui::query::Work::new(auth.clone(), engine, work_page));
     let work_routes = genui::query::routes::router(work.clone());
+    // APP-099 (ADR-011 pitch): Forma as an MCP server (`POST /v1/mcp`, long
+    // deadline: `forma_compose_app` waits on the model), bearer agent tokens
+    // only, over the same query engine, composer and storage operations.
+    let mcp_routes = genui::mcp::router(Arc::new(genui::mcp::Mcp::new(
+        work.clone(),
+        genui::composer::Composer::from_env(),
+    )));
     // The organization's realtime stream (`pivot/realtime`) once it exists;
     // until then the island subscribes to nothing.
     let canvas_routes = genui::query::canvas::router(Arc::new(genui::query::canvas::Canvas {
@@ -618,10 +625,13 @@ async fn main() {
                 .merge(genui::sharing::router(auth.clone()))
                 .merge(genui::events::routes::router(auth.clone()))
                 .merge(canvas_routes)
-                .merge(records_routes),
+                .merge(records_routes)
+                // APP-099: the canvas's "Connect an agent" token routes.
+                .merge(genui::mcp::tokens::router(auth.clone())),
             vec![
                 (genui::composer::routes::PATH, compose_routes),
                 (genui::actions::PATH, act_routes),
+                (genui::mcp::PATH, mcp_routes),
             ],
         ),
     };

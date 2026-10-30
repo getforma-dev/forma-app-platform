@@ -138,7 +138,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v8.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v9.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 111] = [
+const SOURCES: [(&str, &[u8]); 118] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -322,6 +322,11 @@ const SOURCES: [(&str, &[u8]); 111] = [
         include_bytes!("../imports/sandbox.rs"),
     ),
     ("app/src/lib.rs", include_bytes!("../lib.rs")),
+    ("app/src/mcp/drafts.rs", include_bytes!("../mcp/drafts.rs")),
+    ("app/src/mcp/mod.rs", include_bytes!("../mcp/mod.rs")),
+    ("app/src/mcp/tests.rs", include_bytes!("../mcp/tests.rs")),
+    ("app/src/mcp/tokens.rs", include_bytes!("../mcp/tokens.rs")),
+    ("app/src/mcp/tools.rs", include_bytes!("../mcp/tools.rs")),
     (
         "app/src/query/canvas.rs",
         include_bytes!("../query/canvas.rs"),
@@ -375,6 +380,7 @@ const SOURCES: [(&str, &[u8]); 111] = [
         "app/src/storage/admission_qualification.rs",
         include_bytes!("admission_qualification.rs"),
     ),
+    ("app/src/storage/agents.rs", include_bytes!("agents.rs")),
     (
         "app/src/storage/authorization.rs",
         include_bytes!("authorization.rs"),
@@ -409,6 +415,10 @@ const SOURCES: [(&str, &[u8]); 111] = [
     (
         "app/src/storage/managed_qualification/tests.rs",
         include_bytes!("managed_qualification/tests.rs"),
+    ),
+    (
+        "app/src/storage/mcp_campaign.rs",
+        include_bytes!("mcp_campaign.rs"),
     ),
     ("app/src/storage/mod.rs", include_bytes!("mod.rs")),
     (

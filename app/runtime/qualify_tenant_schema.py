@@ -192,6 +192,21 @@ SESSION_GRANTS = set().union(
 )
 
 
+# Migration 0009 (ADR-011 pitch, APP-099): member-minted agent tokens (only a
+# digest) and their display attributions; genui_workspace column SELECT and
+# INSERT, UPDATE(last_used_at, revoked_at) on tokens, no DELETE.
+AGENT_TABLES = ('agent_attributions','agent_tokens')
+AGENT_TOKEN_COLUMNS = ('organization_id','token_id','token_digest','principal_id','label','membership_epoch_at_mint',
+                       'registry_sha256','created_at')
+AGENT_ATTRIBUTION_COLUMNS = ('organization_id','attribution_id','token_id','app_id','work_id','record_id','record_version','created_at')
+AGENT_GRANTS = set().union(
+    _role_columns('genui_workspace','agent_tokens','SELECT',*AGENT_TOKEN_COLUMNS,'last_used_at','revoked_at'),
+    _role_columns('genui_workspace','agent_tokens','INSERT',*AGENT_TOKEN_COLUMNS),
+    _role_columns('genui_workspace','agent_tokens','UPDATE','last_used_at','revoked_at'),
+    _role_columns('genui_workspace','agent_attributions','SELECT',*AGENT_ATTRIBUTION_COLUMNS),
+    _role_columns('genui_workspace','agent_attributions','INSERT',*AGENT_ATTRIBUTION_COLUMNS),
+)
+
 # Migration 0007 (ADR-007 D7.3/D7.7/D7.8/D7.9, ADR-009 D9.8; APP-013): the record
 # command's relations and genui_data's column-limited writes. query_receipts
 # carries no application grant (APP-023 cites receipts).
@@ -332,7 +347,7 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|AGENT_GRANTS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
         # Application roles reach 0003's relations only through 0004's entitlement
         # reads, 0005's and 0007's own-chain audit append (D7.8) and 0006's narrow
@@ -1004,6 +1019,22 @@ def session_checks(pg, passed, denied):
                           (org0,)).fetchone()
     passed('0006 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; cookies and state only as genui.digest, no token, verifier or nonce column',
            tables=list(SESSION_TABLES))
+    # 0009 (APP-099): the agent relations, as the session relations: owner-held,
+    # ENABLE+FORCE RLS, the exact tenant_scope policy, the token only as a digest.
+    with pg.connect('postgres') as c:
+        rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",
+                       (list(AGENT_TABLES),)).fetchall()
+        assert rows==[(t,True,True,'genui_owner') for t in AGENT_TABLES],rows
+        rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
+          AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(AGENT_TABLES),)).fetchall()
+        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in AGENT_TABLES],rows
+        digests=c.execute("""SELECT a.attname,format_type(a.atttypid,a.atttypmod) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname='agent_tokens' AND a.attnum>0 AND a.attname LIKE 'token%%'
+          ORDER BY 1""").fetchall()
+        assert digests==[('token_digest','genui.digest'),('token_id','uuid')],digests
+    passed('0009 agent_tokens and agent_attributions are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the token only as genui.digest',
+           tables=list(AGENT_TABLES))
     flow=("""INSERT INTO genui.prelogin_flows(organization_id,flow_id,cookie_digest,state_digest,kind,code_verifier_ciphertext,client_address_class,
       created_at,expires_at) VALUES (%s,%s,%s,%s,'signin',%s,'v4:192.0.2.1',now(),now()+interval '10 minutes')""",
           (org0,str(uuid.uuid4()),sha('cookie-'+uuid.uuid4().hex),sha('state'),b'\x01'*40))

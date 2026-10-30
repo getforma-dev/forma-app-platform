@@ -60,6 +60,12 @@ app/src/actions/**
 !app/src/sharing/
 app/src/sharing/**
 !app/src/sharing/mod.rs
+!app/src/mcp/
+app/src/mcp/**
+!app/src/mcp/mod.rs
+!app/src/mcp/drafts.rs
+!app/src/mcp/tokens.rs
+!app/src/mcp/tools.rs
 !app/src/commands/
 app/src/commands/**
 !app/src/commands/mod.rs
@@ -88,6 +94,7 @@ app/src/storage/**
 !app/src/storage/definitions.rs
 !app/src/storage/queries.rs
 !app/src/storage/definition_qualification.rs
+!app/src/storage/agents.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
 !app/src/storage/actions.rs
@@ -106,7 +113,8 @@ app/src/query/**
 !app/src/query/worker.rs
 # query/tests.rs, query/route_tests.rs, query/canvas_tests.rs, storage/query_qualification.rs,
 # storage/race_qualification.rs (APP-014), storage/canvas_campaign.rs, storage/composer_qualification.rs,
-# storage/sharing_qualification.rs and storage/pitch_qualification.rs are cfg(test) only; the
+# storage/sharing_qualification.rs, storage/pitch_qualification.rs, storage/mcp_campaign.rs and
+# mcp/tests.rs (APP-099) are cfg(test) only; the
 # qualification context lists them.
 !app/src/admission/
 app/src/admission/**
@@ -199,6 +207,7 @@ app/migrations/**
 !app/migrations/0006_sessions.sql
 !app/migrations/0007_command_outcomes.sql
 !app/migrations/0008_sharing.sql
+!app/migrations/0009_agent_tokens.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
 !app/migrations/catalog-v1.json
@@ -209,6 +218,7 @@ app/migrations/**
 !app/migrations/catalog-v6.json
 !app/migrations/catalog-v7.json
 !app/migrations/catalog-v8.json
+!app/migrations/catalog-v9.json
 !app/certs/
 app/certs/**
 !app/certs/rds-global-bundle.pem

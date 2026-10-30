@@ -16,6 +16,15 @@
 //! identity and this process's registry identity. A `PreAccess` is a distinct
 //! type with no conversion into a `TrustedRequest`.
 //!
+//! APP-099 (ADR-011 pitch): the second production constructor is
+//! [`Workspace::resolve_agent_token`], for an MCP client's bearer agent token
+//! (migration 0009). It is the session path's twin: the token is a capability
+//! of the same shape behind the `fmat_` prefix, found by its domain-separated
+//! digest, and becomes a `TrustedRequest` only under the same member fence,
+//! at the member's current epoch (which must still equal the epoch at
+//! minting), with a live entitlement, an active provider binding, the
+//! principal's registered identity and this process's registry identity.
+//!
 //! Lock order (D7.9): the member fence always precedes any session-row write;
 //! sign-out calls `advance_member_epoch` directly (it takes the member row
 //! `FOR UPDATE` itself) and then deletes session rows. The expiry sweep takes
@@ -48,6 +57,10 @@ const SESSION_DOMAIN: &[u8] = b"forma:session-cookie:v1";
 const STATE_DOMAIN: &[u8] = b"forma:oauth-state:v1";
 const CONTEXT_DOMAIN: &[u8] = b"forma:prelogin-context:v1";
 const ADMISSION_PAYLOAD_DOMAIN: &[u8] = b"forma:admission-payload:v1";
+const AGENT_TOKEN_DOMAIN: &[u8] = b"forma:agent-token:v1";
+/// The visible prefix of every agent token (APP-099), so secret scanners and
+/// people recognize one; the rest is a session-shaped capability.
+pub const AGENT_TOKEN_PREFIX: &str = "fmat_";
 
 fn random<const N: usize>() -> Result<[u8; N]> {
     let mut bytes = [0u8; N];
@@ -111,6 +124,20 @@ fn fresh_state() -> Result<String> {
 /// contract exchanges (our `state`, fAuth's code and refresh token).
 pub fn capability_shaped(value: &str) -> bool {
     canonical_base64url(value, 32).is_some()
+}
+/// A fresh agent token for an organization (APP-099): `fmat_` and a
+/// 64-character capability. Shown to its member once; only its digest is
+/// stored.
+pub(super) fn fresh_agent_token(organization: &str) -> Result<String> {
+    Ok(format!("{AGENT_TOKEN_PREFIX}{}", capability(organization)?))
+}
+/// The stored digest of an agent token.
+pub(super) fn agent_token_digest(token: &str) -> String {
+    digest(AGENT_TOKEN_DOMAIN, token)
+}
+/// The scope an agent token names, or None for anything malformed.
+pub fn agent_token_organization(token: &str) -> Option<String> {
+    capability_organization(token.strip_prefix(AGENT_TOKEN_PREFIX)?)
 }
 fn digest(domain: &[u8], value: &str) -> String {
     domain_digest(domain, value.as_bytes())
@@ -279,6 +306,44 @@ pub enum Completion {
 pub struct Ended {
     pub organization: String,
     pub refresh_ref: String,
+}
+
+/// A live agent token (APP-099): the member's trusted request, which tools
+/// pass to the same storage operations the canvas routes call, and the
+/// token's identity and label for the log and the "via" chip. It grants
+/// nothing beyond the member's own request.
+pub struct AgentCaller {
+    pub request: TrustedRequest,
+    pub token_id: String,
+    pub label: String,
+}
+impl AgentCaller {
+    /// Test executable only: a caller for unit tests that never reach
+    /// storage (draft bookkeeping, JSON-RPC shape). Never compiled into a
+    /// release build.
+    #[cfg(test)]
+    pub(crate) fn for_tests(organization: &str, principal: &str, token_id: &str) -> Self {
+        Self {
+            request: TrustedRequest {
+                organization: organization.into(),
+                principal: principal.into(),
+                epoch: 1,
+                issuer: String::new(),
+                provider_tenant: String::new(),
+                provider_subject: String::new(),
+                registry_sha256: String::new(),
+            },
+            token_id: token_id.into(),
+            label: "Claude".into(),
+        }
+    }
+}
+impl fmt::Debug for AgentCaller {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AgentCaller")
+            .field("token_id", &self.token_id)
+            .finish_non_exhaustive()
+    }
 }
 
 pub enum Lookup<T> {
@@ -814,6 +879,75 @@ impl Workspace {
         result
     }
 
+    /// Resolves an MCP client's bearer agent token (APP-099) into the
+    /// member's `TrustedRequest`, exactly as [`Workspace::resolve_session`]
+    /// resolves a cookie: the row by the digest under the token's scope, the
+    /// member fence at the current epoch, which must equal the epoch at
+    /// minting (a sign-out, sign-out-all or any operator epoch change ends
+    /// every token of the member), the token not revoked, an active
+    /// organization and membership, a live entitlement, an active provider
+    /// binding, the principal's registered identity agreeing with this
+    /// process's registry and the registry identity at minting. `None` for
+    /// anything else (malformed, unknown, foreign, revoked, stale): the
+    /// caller answers the uniform 404 for all of them alike. A refused token
+    /// row is kept (its attributions keep their label); only `last_used_at`
+    /// is written, at most once a minute. A lock wait on the member's own row
+    /// is `Denied`, as for a session.
+    pub async fn resolve_agent_token(&self, token: &str) -> Result<Option<AgentCaller>> {
+        let Some(organization) = agent_token_organization(token) else {
+            return Ok(None);
+        };
+        let registry = &self.inner.registry;
+        let transaction = Transaction::begin_nonmember(&self.inner, Some(&organization)).await?;
+        let result = async {
+            let rows = transaction.query("SELECT t.token_id::text,t.principal_id::text,t.label,t.registry_sha256,t.membership_epoch_at_mint,t.revoked_at IS NULL,(t.last_used_at IS NULL OR t.last_used_at<=now()-interval '60 seconds'),p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=t.organization_id AND e.principal_id=t.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active) FROM genui.agent_tokens t JOIN genui.principals p ON p.organization_id=t.organization_id AND p.principal_id=t.principal_id JOIN genui.memberships m ON m.organization_id=t.organization_id AND m.principal_id=t.principal_id WHERE t.organization_id=$1::text::uuid AND t.token_digest=$2", &[&organization,&agent_token_digest(token)]).await?;
+            let Some(row) = rows.first() else {
+                return Ok(None);
+            };
+            let token_id = text(row, 0)?;
+            let principal = text(row, 1)?;
+            let issuer = text(row, 7)?;
+            let provider_tenant = text(row, 8)?;
+            let (organization_active, member_active, epoch) =
+                fence(&transaction, &organization, &principal, integer(row, 10)?).await?;
+            let valid = boolean(row, 5)?
+                && organization_active
+                && member_active
+                && epoch == integer(row, 4)?
+                && boolean(row, 11)?
+                && boolean(row, 12)?
+                && text(row, 3)? == registry.identity.sha256
+                && registry.agrees(&issuer, &provider_tenant, &organization);
+            if !valid {
+                return Ok(None);
+            }
+            if boolean(row, 6)? {
+                transaction.query("UPDATE genui.agent_tokens SET last_used_at=now() WHERE organization_id=$1::text::uuid AND token_id=$2::text::uuid", &[&organization,&token_id]).await?;
+            }
+            Ok(Some(AgentCaller {
+                request: TrustedRequest {
+                    organization: organization.clone(),
+                    principal,
+                    epoch,
+                    issuer,
+                    provider_tenant,
+                    provider_subject: text(row, 9)?,
+                    registry_sha256: registry.identity.sha256.clone(),
+                },
+                token_id,
+                label: text(row, 2)?,
+            }))
+        }
+        .await;
+        let lock_wait = result.is_err() && transaction.lock_timed_out();
+        let finished = transaction.finish(result.is_ok()).await;
+        if lock_wait {
+            return Err(Error::Denied);
+        }
+        finished?;
+        result
+    }
+
     /// ADR-006 `POST /auth/signout` for a workspace session: advances the
     /// member's epoch (D7.1, reason `session.sign_out`; D7.9: directly, never
     /// after `lock_member_authority`) and then deletes the record, in one
@@ -918,6 +1052,22 @@ mod tests {
         assert!(capability_shaped(&state));
         assert!(!capability_shaped(&cookie));
         assert!(!capability_shaped(&state[..42]));
+    }
+
+    #[test]
+    fn agent_tokens_are_prefixed_capabilities_with_their_own_digest_domain() {
+        let token = fresh_agent_token(ORG).unwrap();
+        assert!(token.starts_with(AGENT_TOKEN_PREFIX) && token.len() == 69);
+        assert_eq!(agent_token_organization(&token).as_deref(), Some(ORG));
+        // The bare capability (a session cookie's shape) is not a token.
+        assert_eq!(agent_token_organization(&token[5..]), None);
+        assert_eq!(agent_token_organization(&format!("{token}A")), None);
+        assert_eq!(agent_token_organization("fmat_"), None);
+        assert_eq!(agent_token_organization(""), None);
+        let digest = agent_token_digest(&token);
+        assert!(digest_shaped(&digest) && !digest.contains(&token[5..21]));
+        assert_ne!(digest, super::digest(SESSION_DOMAIN, &token));
+        assert_ne!(digest, super::digest(SESSION_DOMAIN, &token[5..]));
     }
 
     #[test]

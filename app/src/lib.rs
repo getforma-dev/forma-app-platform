@@ -19,6 +19,8 @@ pub mod directory;
 pub mod events;
 pub mod http;
 pub mod imports;
+// APP-099 (ADR-011 pitch): Forma as an MCP server; member-minted agent tokens.
+pub mod mcp;
 pub mod query;
 pub mod readiness;
 pub mod roles;

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 8,
+  "database_version": 9,
   "migrations": [
     {
       "version": 1,
@@ -41,6 +41,11 @@
       "version": 8,
       "file": "0008_sharing.sql",
       "sha256": "bc0a4dbaebc8a36e8bfe8b860b0824f0e308b09204f4089a8174449dded0b829"
+    },
+    {
+      "version": 9,
+      "file": "0009_agent_tokens.sql",
+      "sha256": "931713d4db3cc54c279ada18f18c0c44a0461d1aca1c31f37a4e332cbc2f1dd3"
     }
   ],
   "catalog": [
@@ -79,6 +84,10 @@
     {
       "file": "catalog-v8.json",
       "sha256": "03d2851b6cf55ff274ed60b7a3dcc6e4239fd9ac73e18e8430545731e5af55ed"
+    },
+    {
+      "file": "catalog-v9.json",
+      "sha256": "d5d2ac27d29f20025c09097e11dc37c349872380af0d3ebe017dddd24b1d5584"
     }
   ]
 }
