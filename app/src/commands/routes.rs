@@ -12,7 +12,6 @@ use crate::{
     },
 };
 use axum::{
-    body::to_bytes,
     extract::{Path, Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
@@ -24,9 +23,9 @@ use std::{sync::Arc, time::Duration};
 use tokio::time::Instant;
 
 /// ADR-007 D7.14: the JSON command route's body limit (the maximum canonical
-/// command: 32 values of up to 2,000 characters). The record page's form is
-/// bounded the same way.
-pub const COMMAND_BODY_LIMIT: usize = 262_144;
+/// command: 32 values of up to 2,000 characters), `http::COMMAND_BODY_LIMIT`
+/// (APP-074). The record page's form is bounded the same way.
+pub const COMMAND_BODY_LIMIT: usize = http::COMMAND_BODY_LIMIT;
 /// D7.9: `Retry-After` on `in_flight` and `busy`.
 const RETRY_AFTER_SECONDS: u64 = 2;
 /// Storage finishes before the 5 s handler deadline middleware answers 503.
@@ -315,7 +314,7 @@ async fn submit(
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };
-    let Ok(bytes) = to_bytes(body, COMMAND_BODY_LIMIT).await else {
+    let Some(bytes) = http::bounded(body, COMMAND_BODY_LIMIT).await else {
         return http::payload_too_large();
     };
     let content_type = parts
