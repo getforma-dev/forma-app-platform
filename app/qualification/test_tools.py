@@ -67,6 +67,19 @@ class SourceTests(unittest.TestCase):
             self.assertTrue((harness.REPOSITORY / name).is_file(), name)
 
 
+    def test_the_native_stage_copies_every_compile_time_input(self):
+        """APP-078 step 2 rehearsal (2026-10-30): the image built without
+        contracts/schema.json although the context allowed it. Every source the
+        entry binds must sit under some COPY source of the native stage."""
+        dockerfile = (harness.APP / "qualification/Dockerfile").read_text()
+        native = dockerfile[dockerfile.index(" AS native"):]
+        copied = [src for line in native.splitlines() if line.startswith("COPY ") and "--from=" not in line
+                  for src in line.split()[1:-1]]
+        for name in harness.source_names():
+            with self.subTest(source=name):
+                self.assertTrue(any(name == src or name.startswith(src.rstrip("/") + "/") for src in copied),
+                                "%s is a compile-time input the native stage never copies" % name)
+
 class AllowlistTests(unittest.TestCase):
     def test_directory_reincludes_are_not_files(self):
         names = check_image.allowlist()

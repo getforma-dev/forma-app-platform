@@ -328,8 +328,14 @@ class Checks:
             ("managed-issue", ["--env", "ECS_CONTAINER_METADATA_URI_V4=http://169.254.170.2/v4/app077", "--env", "PGHOST=" + DB_HOST,
                                "--env", "PGUSER=genui_migration", "--env", "PGSSLROOTCERT=/etc/ssl/certs/rds-global-bundle.pem"],
              ["admission", "issue", "--organization", NORTHSTAR, "--issued-by", "ops", "--grant", "x"], "refused_in_managed_task"),
-            ("managed-reconcile", ["--env", "ECS_CONTAINER_METADATA_URI_V4=http://169.254.170.2/v4/app077"],
-             ["admission", "reconcile", "--organization", NORTHSTAR], "refused_in_managed_task"),
+            # ADR-003 amendment 2026-10-30 (managed invitations): reconcile now passes the managed
+            # guard and stops at the database environment check (no PGHOST here), not the guard.
+            ("managed-reconcile-admitted", ["--env", "ECS_CONTAINER_METADATA_URI_V4=http://169.254.170.2/v4/app077"],
+             ["admission", "reconcile", "--organization", NORTHSTAR], "socket_host_refused"),
+            # The invitee's address never travels in argv in a managed task, even beside a digest.
+            ("managed-provider-email", ["--env", "ECS_CONTAINER_METADATA_URI_V4=http://169.254.170.2/v4/app077"],
+             ["admission", "issue", "--organization", NORTHSTAR, "--issued-by", "ops", "--grant", "x",
+              "--code-digest", "sha256:" + "0" * 64, "--provider-email", "invitee@example.invalid"], "refused_in_managed_task"),
             ("managed-unpinned-ca", ["--env", "ECS_CONTAINER_METADATA_URI_V4=http://169.254.170.2/v4/app077", "--env", "PGHOST=" + DB_HOST,
                                      "--env", "PGUSER=genui_migration", "--env", "PGSSLROOTCERT=/operator/app/operator/overrides.json"],
              ["migrate"], "ca_refused"),
