@@ -76,3 +76,5 @@ Not run: the Rust suites and Docker image campaigns (`check_image.py`, `local_ha
 ## Commits (worktree branch, not pushed)
 
 `96dd5f1` preflight always-on plan, task-image digests, stop-then-start · `ff45610` operator managed channel · `bf47174` composer and snapshot tool · `ef9c704` baseline catalog proof · plus the commit adding this directory.
+
+Second pass, 2026-10-30 (G2, G3, G5, G11 and the B1 review minors): `d3f3185` on the worktree branch rebased onto `f442c1a`; not pushed, not merged.
