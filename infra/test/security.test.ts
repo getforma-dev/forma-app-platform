@@ -569,14 +569,14 @@ test('the load balancer idles longer than the composer route and the live stream
   }
 });
 
-test('demo mode names the synthetic canary organization only, never the beta organization (ADR-011 APP-098)', () => {
+test('demo mode names exactly the pitch demo organization, Northstar (ADR-011 APP-098, deploy decision P1)', () => {
   const [, task] = one('AWS::ECS::TaskDefinition', 'Task');
   const environment = Object.fromEntries(task.Properties.ContainerDefinitions[0].Environment.map((value: any) => [value.Name, value.Value]));
   assert.equal(environment[DEMO_ORGANIZATIONS_ENV], DEMO_ORGANIZATION_ID);
   assert.equal(environment[DEMO_MODE_ENV], '1');
   const listed = environment[DEMO_ORGANIZATIONS_ENV].split(',');
-  assert.deepEqual(listed, ['00000000-0000-4000-8000-000000000002']);
-  assert.equal(listed.includes('00000000-0000-4000-8000-000000000001'), false, 'the beta organization behaves exactly as without demo mode');
+  assert.deepEqual(listed, ['00000000-0000-4000-8000-000000000001']);
+  assert.equal(listed.includes('00000000-0000-4000-8000-000000000002'), false, 'the canary organization behaves exactly as without demo mode');
   for (const id of listed) assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/, 'lowercase UUIDs, as the service parses them');
   // The demo organization is a configured tenant (role, key, prefix), so its library sources are reachable.
   const tenants = JSON.parse(resolve(environment.GENUI_TENANTS_JSON, {}));

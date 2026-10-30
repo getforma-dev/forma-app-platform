@@ -62,13 +62,13 @@ export const CANVAS_EVENTS_URL = '/v1/events';
 export const COMPOSE_DEADLINE_SECONDS = 120;
 export const ALB_IDLE_TIMEOUT_SECONDS = 130;
 // ADR-011 demo mode (APP-098 demo shortcuts register): the organizations whose
-// members' rehearsed intents are answered from the library catalog without a model
-// call (app/src/composer/mod.rs DEMO_ORGANIZATIONS_ENV). Exactly the second fixture
-// tenant (the synthetic canary organization, which already has its tenant role, key
-// and object prefix here); never the first (the beta's organization), which behaves
-// exactly as without demo mode. A dedicated third tenant is the proper fix (APP-098).
+// members' rehearsed intents are answered without a model call (app/src/demo.rs).
+// Victor, 2026-10-30, pitch deploy decision P1: Northstar, the synthetic fixture
+// organization the pitch personas' accounts belong to (docs/pitch/DEPLOY-RUNBOOK.md).
+// Superseded the earlier canary-only choice; a dedicated demo tenant is the proper
+// fix (APP-098 DS-05, APP-097).
 export const DEMO_ORGANIZATIONS_ENV = 'GENUI_DEMO_ORGANIZATIONS';
-export const DEMO_ORGANIZATION_ID = '00000000-0000-4000-8000-000000000002';
+export const DEMO_ORGANIZATION_ID = '00000000-0000-4000-8000-000000000001';
 // app/src/demo.rs requires this switch as well as the organization list
 // (the action path's rehearsed parser); both name the same demo scope.
 export const DEMO_MODE_ENV = 'GENUI_DEMO_MODE';
