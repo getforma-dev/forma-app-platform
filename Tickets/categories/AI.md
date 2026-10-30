@@ -14,3 +14,4 @@ Authorized discovery, bounded generation, explanation and evaluation.
 | 100 | [APP-100: Slack: file, approve and get notified in Slack through the governed action path](../0-backlog/APP-100.md) | [PH08](../phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095, APP-099 |
 | 101 | [APP-101: Instant pick and live transform: prebuilt apps land at once and reshape to the request](../0-backlog/APP-101.md) | [PH08](../phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-094 |
 | 102 | [APP-102: Receipt upload and the expense ledger: a photo becomes a reviewed row, every row adds up live](../0-backlog/APP-102.md) | [PH08](../phases/PH08.md) | S14 | AI | P0 | M | Backlog | APP-093, APP-095 |
+| 103 | [APP-103: Canvas utility widgets: weather, calculator and clock that a member customizes in words](../0-backlog/APP-103.md) | [PH08](../phases/PH08.md) | S14 | AI | P1 | M | Backlog | APP-094, APP-101 |
