@@ -507,10 +507,20 @@ async fn upload(
             },
         )
         .await;
+    // Review: an object whose row was definitely not written is discarded
+    // (an unknown outcome keeps it: the row may exist).
     let row = match stored {
         Ok(Some(row)) => row,
-        Ok(None) => return http::problem(StatusCode::CONFLICT, "box_full"),
-        Err(error) => return refusal(error),
+        Ok(None) => {
+            state.store.discard(&organization, &object_key).await;
+            return http::problem(StatusCode::CONFLICT, "box_full");
+        }
+        Err(error) => {
+            if error == storage::Error::Denied {
+                state.store.discard(&organization, &object_key).await;
+            }
+            return refusal(error);
+        }
     };
     let stored_ms = started.elapsed().as_millis() as u64;
     let preview = if matches!(row.kind.as_str(), "csv" | "xlsx") {
@@ -1020,8 +1030,18 @@ async fn attach(
             )
             .await
         {
-            Ok(file) => file,
-            Err(error) => return refusal(error),
+            Ok(Some(file)) => Some(file),
+            // The row was definitely not written: no object stays behind.
+            Ok(None) => {
+                state.store.discard(member.organization(), &key).await;
+                None
+            }
+            Err(error) => {
+                if error == storage::Error::Denied {
+                    state.store.discard(member.organization(), &key).await;
+                }
+                return refusal(error);
+            }
         }
     };
     let Some(copied) = copied else {
