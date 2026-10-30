@@ -2,7 +2,7 @@
 
 **Author evidence, not acceptance.** This covers plan Task 9's second half on top of the storage and worker half ([../README.md](../README.md), merged at `6f0d1c3`): the JSON query route, the work page with its view states and receipt inspector, and the engine wired into the binary. No independent review has run (Tier A for authorization at delivery, Tier B for the page and the receipt encoding, ADR-010 §4.1), so no acceptance box is checked and no ticket was moved. Nothing touched AWS. Everything ran on one Apple-silicon Mac (Darwin arm64) with local Docker; every container this slice started was removed. No `Tickets/` or `docs/` file was edited.
 
-Controlling text: [APP-012](../../../Tickets/0-backlog/APP-012.md); plan Task 9; ADR-007 D7.9, D7.10, D7.14, D7.15; design §7.2, §9, §11.3; ADR-010 §1 act 4 and §4.5 scope locks (`total` and `timeline` only; SSR pages; no new island); the storage half's open question 2 (status mapping).
+Controlling text: [APP-012](../../../Tickets/4-done/APP-012.md); plan Task 9; ADR-007 D7.9, D7.10, D7.14, D7.15; design §7.2, §9, §11.3; ADR-010 §1 act 4 and §4.5 scope locks (`total` and `timeline` only; SSR pages; no new island); the storage half's open question 2 (status mapping).
 
 ## What was built
 

@@ -2,7 +2,7 @@
 
 Date 2026-10-29. Base `f8eb4fa`. Implementation commit `01bcf41`. Status: implemented and qualified **locally** on disposable PostgreSQL 16.13 in Docker with verified TLS, the reviewed verifier and a `cfg(test)` synthetic loopback issuer. No hosted fAuth, browser, managed (RDS) or CI run; no independent review yet; ticket not moved (no `Tickets/` or `docs/` edits in this slice).
 
-Controlling text, in order: [APP-009](../../Tickets/3-in-review/APP-009.md) acceptance; [ADR-006](../../docs/architecture/ADR-006-SIGNIN-AND-VERIFICATION-PENDING.md); [ADR-007](../../docs/architecture/ADR-007-PHASE-1-WRITE-AUTHORITY.md) D7.1, D7.2, D7.3, D7.9, D7.11, D7.13–D7.15, D7.18; ADR-003; ADR-004; [plan Task 7](../../docs/planning/PHASE-1-EXECUTION-PLAN.md) (migration 0006 with `catalog-v6.json`, CHECKs `BETWEEN 1 AND 6`, no nonce column; ADR-007 controls names); the merged fAuth contract (`evidence/APP-006/upstream-auth-source/merged-contract-2026-10-29/`) and the pinned identity contract.
+Controlling text, in order: [APP-009](../../Tickets/4-done/APP-009.md) acceptance; [ADR-006](../../docs/architecture/ADR-006-SIGNIN-AND-VERIFICATION-PENDING.md); [ADR-007](../../docs/architecture/ADR-007-PHASE-1-WRITE-AUTHORITY.md) D7.1, D7.2, D7.3, D7.9, D7.11, D7.13–D7.15, D7.18; ADR-003; ADR-004; [plan Task 7](../../docs/planning/PHASE-1-EXECUTION-PLAN.md) (migration 0006 with `catalog-v6.json`, CHECKs `BETWEEN 1 AND 6`, no nonce column; ADR-007 controls names); the merged fAuth contract (`evidence/APP-006/upstream-auth-source/merged-contract-2026-10-29/`) and the pinned identity contract.
 
 ## What changed
 

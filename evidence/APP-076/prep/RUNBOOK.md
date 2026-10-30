@@ -50,6 +50,8 @@ The full URLs (since G9, `895f530`, `/workspace` links each work Victor may open
 
 ## Approvals for this trial (Victor, in chat, before 13:00)
 
+**Approved 2026-10-30:** Victor approved T1–T9 as written, in chat, together with APP-078 A1–A12 and the PR 3 merge (words quoted in APP-078's private window record). T2's spare code has its own address of Victor's, distinct from the NS address, kept only in the private recipients file.
+
 | # | Decision | Default prepared | Steps |
 | --- | --- | --- | --- |
 | T1 | Trial slot Nov 2 ~13:00–18:00 UTC, Victor present ~45 min from a second network, no fAuth operation in it; trial UUID above. | As stated (ADR-010 §8 item 9). | all |
