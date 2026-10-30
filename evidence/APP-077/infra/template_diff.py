@@ -1,15 +1,16 @@
 """Compare two synthesized GenuiFoundation templates (APP-077 evidence; no cloud call).
 
-Usage: python3 template_diff.py BASE.json NEW.json OUT.json
+Usage: python3 template_diff.py BASE.json NEW.json OUT.json [BASE_REV NEW_REV]
 """
 import hashlib
 import json
 import sys
 
 BASE, NEW, OUT = sys.argv[1:4]
+BASE_REV, NEW_REV = sys.argv[4:6] if len(sys.argv) > 5 else ("d6986c2", "the APP-077 commit")
 base, new = json.load(open(BASE)), json.load(open(NEW))
 digest = lambda value: "sha256:" + hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-report = {"scope": "APP-077 CDK template comparison: GenuiFoundation('SecurityQualification') synthesized at d6986c2 (base) and at the APP-077 commit (new), same aws-cdk-lib 2.275.0; no cloud call",
+report = {"scope": "APP-077 CDK template comparison: GenuiFoundation('SecurityQualification') synthesized at %s (base) and at %s (new), same aws-cdk-lib 2.275.0; no cloud call" % (BASE_REV, NEW_REV),
           "sections": {}}
 for section in ("Parameters", "Conditions", "Resources", "Outputs"):
     a, b = base.get(section, {}), new.get(section, {})
