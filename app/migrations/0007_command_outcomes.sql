@@ -37,13 +37,15 @@ CREATE TABLE genui.organization_sequences (
  organization_id uuid PRIMARY KEY REFERENCES genui.organizations,
  next_commit_sequence genui.safe_counter NOT NULL
 );
--- D7.9: the idempotency claim, insert-only, taken before the fences.
+-- D7.9: the idempotency claim, insert-only, taken before the fences. Its key is
+-- ADR-002's scope (organization/principal/work/command/key) with the work's app,
+-- because saved_work is keyed by organization/app/work (APP-013 review m6).
 CREATE TABLE genui.command_claims (
  organization_id uuid NOT NULL, principal_id uuid NOT NULL, app_id uuid NOT NULL, work_id uuid NOT NULL,
  command_id genui.local_id NOT NULL,
  idempotency_key text NOT NULL CHECK (octet_length(idempotency_key)=32 AND idempotency_key ~ '^[0-9a-f]{32}$'),
  payload_digest genui.digest NOT NULL, claimed_at timestamptz NOT NULL,
- PRIMARY KEY (organization_id,principal_id,work_id,command_id,idempotency_key),
+ PRIMARY KEY (organization_id,principal_id,app_id,work_id,command_id,idempotency_key),
  FOREIGN KEY (organization_id,principal_id) REFERENCES genui.memberships,
  FOREIGN KEY (organization_id,app_id,work_id) REFERENCES genui.saved_work
 );
@@ -58,10 +60,10 @@ CREATE TABLE genui.command_outcomes (
  record_id uuid NOT NULL, record_version genui.safe_counter NOT NULL, work_version genui.safe_counter NOT NULL,
  commit_sequence genui.safe_counter NOT NULL, audit_event_id uuid NOT NULL,
  committed_at timestamptz NOT NULL, retry_expires_at timestamptz NOT NULL,
- PRIMARY KEY (organization_id,principal_id,work_id,command_id,idempotency_key),
+ PRIMARY KEY (organization_id,principal_id,app_id,work_id,command_id,idempotency_key),
  UNIQUE (organization_id,commit_sequence),
  UNIQUE (organization_id,audit_event_id),
- FOREIGN KEY (organization_id,principal_id,work_id,command_id,idempotency_key) REFERENCES genui.command_claims,
+ FOREIGN KEY (organization_id,principal_id,app_id,work_id,command_id,idempotency_key) REFERENCES genui.command_claims,
  FOREIGN KEY (organization_id,app_id,work_id) REFERENCES genui.saved_work,
  CHECK (retry_expires_at = committed_at + interval '24 hours')
 );

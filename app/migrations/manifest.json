@@ -35,7 +35,7 @@
     {
       "version": 7,
       "file": "0007_command_outcomes.sql",
-      "sha256": "a773e921848d9455b76ae6427cd8c39f16d4582fbfbc500bfad01c48875ff80b"
+      "sha256": "7a0007184cad993594749139d87d4ceec88ee262c0af078471fefdd842cc11e9"
     }
   ],
   "catalog": [
@@ -69,7 +69,7 @@
     },
     {
       "file": "catalog-v7.json",
-      "sha256": "30c8941a9fbf7e5f8a40da3b98f3764bf8784b1826d26a562f2b3421373d7c21"
+      "sha256": "af4228aa9191125e691e93801c9a3221f31500ecef01964673a07c96fc66da97"
     }
   ]
 }

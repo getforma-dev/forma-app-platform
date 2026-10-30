@@ -8,9 +8,13 @@ use super::{
 };
 use crate::{
     http,
-    storage::{CommandRequest, ConflictReason, RecoveryView},
+    storage::{self, CommandRequest, CommandResult, ConflictReason, CurrentRevision, RecoveryView},
 };
-use axum::{body::to_bytes, http::header};
+use axum::{
+    body::to_bytes,
+    http::{header, StatusCode},
+    response::Response,
+};
 use serde_json::{json, Value};
 
 const FIXTURE: &str =
@@ -249,23 +253,7 @@ fn notices_are_a_closed_set_read_only_from_the_notice_query() {
 
 #[tokio::test]
 async fn conflict_problems_carry_the_recovery_view_as_canonical_json() {
-    let view = RecoveryView {
-        organization: "00000000-0000-4000-8000-0000000000c8".into(),
-        app: "00000000-0000-4000-8000-0000000000c9".into(),
-        work: "00000000-0000-4000-8000-0000000000cd".into(),
-        publication: "00000000-0000-4000-8000-0000000000cc".into(),
-        work_version: 1,
-        record_id: "00000000-0000-4000-8000-0000000000f0".into(),
-        command: "record_decision".into(),
-        idempotency_key: "0123456789abcdef0123456789abcdef".into(),
-        reason: ConflictReason::ExpectedVersion,
-        expected_record_version: 0,
-        current_record_version: 1,
-        current_values: Some(
-            json!([{"field_id": "status", "value": {"type": "enum", "value": "needs_context"}}]),
-        ),
-        stored_outcome: None,
-    };
+    let view = recovery_view();
     let response = http::problem_with(
         axum::http::StatusCode::CONFLICT,
         "conflict",
@@ -299,4 +287,512 @@ async fn conflict_problems_carry_the_recovery_view_as_canonical_json() {
         idempotency_key: view.idempotency_key.clone(),
     };
     assert!(shaped.well_formed());
+}
+
+/// The edition's JSON Schema artifact and its command-route specimen.
+const SCHEMA: &str = include_str!("../../../contracts/schema.json");
+const RECOVERY: &str = include_str!("../../../contracts/fixtures/command-recovery.json");
+/// Codes of the HTTP layer's own registry (`contracts/schema.py`: "other codes
+/// belong to the HTTP layer's own registry"): the uniform 404, the
+/// fetch-metadata and token refusal and the outage. They carry the same
+/// `{status, code}` shape and nothing else.
+const HTTP_LAYER: [&str; 3] = ["not_found", "cross_site", "unavailable"];
+
+/// The Rust equivalent of `contracts/validate.py` `validate_problem` against
+/// `schema.json` `$defs.problem`: canonical forma-json-v1 bytes, the closed
+/// member set, `status` and `code` required, `status` equal to the HTTP
+/// status, a registered code (or an HTTP-layer code with no other member),
+/// and the edition's pairings (413, 429, the waiting codes' Retry-After, the
+/// recovery view only on a 409 conflict, the current revision only on a 412
+/// stale). The `Retry-After` header, when present, equals the body's member.
+fn problem_conforms(status: u16, retry_after: Option<&str>, bytes: &[u8]) -> Result<(), String> {
+    let schema: Value = serde_json::from_str(SCHEMA).unwrap();
+    let definition = &schema["$defs"]["problem"];
+    let body = crate::admission::decode(bytes).map_err(|e| format!("not forma-json-v1: {e}"))?;
+    if crate::admission::encode(&body).unwrap() != bytes {
+        return Err("not canonical bytes".into());
+    }
+    let object = body.as_object().ok_or("not an object")?;
+    let properties = definition["properties"].as_object().unwrap();
+    assert_eq!(definition["additionalProperties"], json!(false));
+    for name in object.keys() {
+        if !properties.contains_key(name) {
+            return Err(format!("member {name} is not in $defs.problem"));
+        }
+    }
+    for name in definition["required"].as_array().unwrap() {
+        let name = name.as_str().unwrap();
+        if !object.contains_key(name) {
+            return Err(format!("'{name}' is a required property"));
+        }
+    }
+    let in_range = |value: &Value, spec: &Value| {
+        value.as_i64().is_some_and(|v| {
+            spec["minimum"].as_i64().is_none_or(|m| v >= m)
+                && spec["maximum"].as_i64().is_none_or(|m| v <= m)
+        })
+    };
+    if !in_range(&body["status"], &properties["status"]) || body["status"] != json!(status) {
+        return Err(format!(
+            "status {} is not the HTTP status {status}",
+            body["status"]
+        ));
+    }
+    let code = body["code"].as_str().ok_or("code is not text")?;
+    let registered = properties["code"]["enum"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c == code);
+    if !registered {
+        if !(HTTP_LAYER.contains(&code) && object.len() == 2) {
+            return Err(format!("code {code} is not registered"));
+        }
+        return Ok(());
+    }
+    if let Some(limit) = body.get("limit") {
+        if !properties["limit"]["enum"]
+            .as_array()
+            .unwrap()
+            .contains(limit)
+        {
+            return Err("limit is not registered".into());
+        }
+    }
+    if let Some(seconds) = body.get("retry_after_seconds") {
+        if !in_range(seconds, &properties["retry_after_seconds"]) {
+            return Err("retry_after_seconds is not a positive safe integer".into());
+        }
+    }
+    let has = |name: &str| object.contains_key(name);
+    let require = |ok: bool, message: &str| {
+        if ok {
+            Ok(())
+        } else {
+            Err(message.to_owned())
+        }
+    };
+    require(
+        code != "payload_too_large" || status == 413,
+        "payload_too_large is 413",
+    )?;
+    require(
+        code != "limit_exceeded" || status == 429,
+        "limit_exceeded is 429",
+    )?;
+    let names = code == "limit_exceeded" && has("limit") && has("retry_after_seconds");
+    let waiting = code == "in_flight" || code == "busy";
+    require(
+        !waiting || (status == 409 && has("retry_after_seconds") && !has("limit")),
+        "in_flight and busy are 409 with Retry-After seconds",
+    )?;
+    require(
+        (status == 429) == names
+            && has("limit") == names
+            && has("retry_after_seconds") == (names || waiting),
+        "a 429 names its limit and Retry-After seconds, and only a 429, in_flight or busy does",
+    )?;
+    require(
+        (code == "conflict") == has("recovery_view") && (code != "conflict" || status == 409),
+        "a conflict is 409 with the recovery view, and only a conflict carries one",
+    )?;
+    require(
+        (code == "stale") == has("current_revision") && (code != "stale" || status == 412),
+        "stale is 412 with the current revision, and only stale carries one",
+    )?;
+    if let Some(seconds) = body.get("retry_after_seconds") {
+        require(
+            retry_after == Some(seconds.to_string().as_str()),
+            "the Retry-After header equals retry_after_seconds",
+        )?;
+    }
+    Ok(())
+}
+
+async fn conforms(response: Response) -> Result<String, String> {
+    let status = response.status().as_u16();
+    let headers = response.headers().clone();
+    if headers[header::CONTENT_TYPE] != "application/problem+json" {
+        return Err("not application/problem+json".into());
+    }
+    let retry_after = headers
+        .get(header::RETRY_AFTER)
+        .map(|v| v.to_str().unwrap().to_owned());
+    let bytes = to_bytes(response.into_body(), 1 << 20).await.unwrap();
+    problem_conforms(status, retry_after.as_deref(), &bytes)?;
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    Ok(body["code"].as_str().unwrap().to_owned())
+}
+
+fn recovery_view() -> RecoveryView {
+    RecoveryView {
+        organization: "00000000-0000-4000-8000-0000000000c8".into(),
+        app: "00000000-0000-4000-8000-0000000000c9".into(),
+        work: "00000000-0000-4000-8000-0000000000cd".into(),
+        publication: "00000000-0000-4000-8000-0000000000cc".into(),
+        work_version: 1,
+        record_id: "00000000-0000-4000-8000-0000000000f0".into(),
+        command: "record_decision".into(),
+        idempotency_key: "0123456789abcdef0123456789abcdef".into(),
+        reason: ConflictReason::ExpectedVersion,
+        expected_record_version: 0,
+        current_record_version: 1,
+        current_values: Some(
+            json!([{"field_id": "status", "value": {"type": "enum", "value": "needs_context"}}]),
+        ),
+        stored_outcome: None,
+    }
+}
+
+#[test]
+fn the_rust_problem_check_accepts_the_contract_specimen_and_refuses_its_negatives() {
+    let specimen: Value = serde_json::from_str(RECOVERY).unwrap();
+    for body in specimen["problems"].as_array().unwrap() {
+        let bytes = crate::admission::encode(body).unwrap();
+        let status = body["status"].as_u64().unwrap() as u16;
+        let retry = body.get("retry_after_seconds").map(Value::to_string);
+        assert_eq!(
+            problem_conforms(status, retry.as_deref(), &bytes),
+            Ok(()),
+            "{body}"
+        );
+    }
+    for (status, retry, body, expected) in [
+        (
+            409,
+            Some("2"),
+            json!({"code": "in_flight"}),
+            "required property",
+        ),
+        (
+            409,
+            None,
+            json!({"status": 409, "code": "in_flight"}),
+            "Retry-After",
+        ),
+        (
+            409,
+            Some("2"),
+            json!({"status": 409, "code": "busy", "retry_after_seconds": 2, "limit": "task_queue"}),
+            "Retry-After",
+        ),
+        (
+            400,
+            None,
+            json!({"code": "malformed_idempotency_key"}),
+            "required property",
+        ),
+        (
+            503,
+            None,
+            json!({"status": 503, "code": "unknown_outcome", "extra": 1}),
+            "not in $defs.problem",
+        ),
+        (
+            409,
+            None,
+            json!({"status": 409, "code": "conflict"}),
+            "recovery view",
+        ),
+        (
+            404,
+            None,
+            json!({"status": 404, "code": "not_found", "limit": "task_queue"}),
+            "not registered",
+        ),
+        (
+            400,
+            None,
+            json!({"status": 400, "code": "invented"}),
+            "not registered",
+        ),
+        (
+            400,
+            None,
+            json!({"status": 409, "code": "malformed_command"}),
+            "HTTP status",
+        ),
+        (
+            409,
+            Some("3"),
+            json!({"status": 409, "code": "busy", "retry_after_seconds": 2}),
+            "header",
+        ),
+    ] {
+        let error = problem_conforms(status, retry, &crate::admission::encode(&body).unwrap())
+            .expect_err(&body.to_string());
+        assert!(error.contains(expected), "{body}: {error}");
+    }
+}
+
+/// APP-013 review M2: every problem body the command route, the outcome
+/// lookup and the record page emit validates against edition
+/// impl-2026-10-29.3's `$defs.problem` under `validate_problem`'s rules.
+#[tokio::test]
+async fn every_problem_body_the_command_routes_emit_validates_against_the_edition() {
+    let current = CurrentRevision {
+        publication: Some("00000000-0000-4000-8000-0000000000cc".into()),
+        revision: Some("00000000-0000-4000-8000-0000000000cb".into()),
+        definition_digest: Some(format!("sha256:{}", "7".repeat(64))),
+        work_version: Some(1),
+    };
+    let mut emitted = Vec::new();
+    for result in [
+        Ok(CommandResult::Conflict(recovery_view())),
+        Ok(CommandResult::Stale(current)),
+        Ok(CommandResult::InFlight),
+        Ok(CommandResult::Busy),
+        Err(storage::Error::Denied),
+        Err(storage::Error::UnknownOutcome),
+        Err(storage::Error::Unavailable),
+    ] {
+        emitted.push(conforms(routes::json_answer_for_tests(result)).await);
+    }
+    // The route's own refusals before storage (`routes::submit`), and the
+    // outcome lookup's and record page's 404 and 503.
+    for response in [
+        http::cross_site(),
+        http::not_found(),
+        http::payload_too_large(),
+        http::unavailable(),
+        http::problem(StatusCode::BAD_REQUEST, "missing_idempotency_key"),
+        http::problem(StatusCode::BAD_REQUEST, "malformed_idempotency_key"),
+        http::problem(StatusCode::BAD_REQUEST, "malformed_command"),
+    ] {
+        emitted.push(conforms(response).await);
+    }
+    let mut codes: Vec<String> = emitted
+        .into_iter()
+        .map(|r| r.unwrap_or_else(|e| panic!("{e}")))
+        .collect();
+    codes.sort();
+    codes.dedup();
+    assert_eq!(
+        codes,
+        [
+            "busy",
+            "conflict",
+            "cross_site",
+            "in_flight",
+            "malformed_command",
+            "malformed_idempotency_key",
+            "missing_idempotency_key",
+            "not_found",
+            "payload_too_large",
+            "stale",
+            "unavailable",
+            "unknown_outcome",
+        ]
+    );
+}
+
+/// APP-013 review m2: a form submission storage refuses returns to the
+/// record page with the refused notice (a live session that loaded the page
+/// learns nothing new from it); the other form answers are unchanged.
+#[test]
+fn a_refused_form_submission_redirects_to_the_record_page_with_the_refused_notice() {
+    let page = "/work/a/w/records/c/r?notice=";
+    for (result, notice) in [
+        (Err(storage::Error::Denied), Some("refused")),
+        (Ok(CommandResult::InFlight), Some("in_flight")),
+        (Ok(CommandResult::Busy), Some("busy")),
+        (Err(storage::Error::UnknownOutcome), Some("unknown")),
+        (Err(storage::Error::Unavailable), None),
+    ] {
+        let response = routes::form_answer_for_tests(result);
+        match notice {
+            Some(notice) => {
+                assert_eq!(response.status(), StatusCode::SEE_OTHER);
+                assert_eq!(
+                    response.headers()[header::LOCATION],
+                    format!("{page}{notice}").as_str()
+                );
+            }
+            None => assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE),
+        }
+    }
+}
+
+/// APP-013 review m1 and m4: the JSON body is decoded once as forma-json-v1
+/// (duplicate members, floats and non-JSON are `malformed_command`, reported
+/// before any key question), and the `Idempotency-Key` header is exactly one
+/// value used verbatim (two headers are `malformed_idempotency_key`; a padded
+/// value is not trimmed, so the key-shape check refuses it).
+#[test]
+fn json_requests_decode_once_strictly_and_take_exactly_one_verbatim_header_key() {
+    use axum::http::{HeaderMap, HeaderValue};
+    let (command, _) = fixture_request();
+    let (app, work, id) = (
+        command["app_id"].as_str().unwrap().to_owned(),
+        command["work_id"].as_str().unwrap().to_owned(),
+        command["command_id"].as_str().unwrap().to_owned(),
+    );
+    let key = "0123456789abcdef0123456789abcdef";
+    let headers = |values: &[&str]| {
+        let mut map = HeaderMap::new();
+        for value in values {
+            map.append("idempotency-key", HeaderValue::from_str(value).unwrap());
+        }
+        map
+    };
+    let parse = |map: &HeaderMap, bytes: &[u8]| {
+        routes::json_request_for_tests(map, bytes, &app, &work, &id)
+    };
+    let bytes = serde_json::to_vec(&command).unwrap();
+    assert_eq!(
+        parse(&headers(&[key]), &bytes).map(|r| r.idempotency_key),
+        Ok(key.to_owned())
+    );
+    // Duplicate members: a top-level one and one inside a value object.
+    let text = String::from_utf8(bytes.clone()).unwrap();
+    let duplicated = format!("{{\"schema_version\":1,{}", &text[1..]);
+    assert_eq!(
+        parse(&headers(&[key]), duplicated.as_bytes()).err(),
+        Some("malformed_command")
+    );
+    let inner = text.replacen(
+        "\"value\":\"needs_context\"",
+        "\"value\":\"reviewed\",\"value\":\"needs_context\"",
+        1,
+    );
+    assert_ne!(inner, text);
+    assert_eq!(
+        parse(&headers(&[key]), inner.as_bytes()).err(),
+        Some("malformed_command")
+    );
+    // serde_json's last-wins reading is what the old route judged.
+    assert!(serde_json::from_str::<Value>(&duplicated).is_ok());
+    // A non-JSON body without a key header is malformed, not keyless.
+    assert_eq!(
+        parse(&headers(&[]), b"not json").err(),
+        Some("malformed_command")
+    );
+    assert_eq!(
+        parse(&headers(&[]), b"{\"kind\":1.5}").err(),
+        Some("malformed_command")
+    );
+    // A JSON body without any key is missing it.
+    let mut keyless = command.clone();
+    keyless.as_object_mut().unwrap().remove("idempotency_key");
+    let keyless = serde_json::to_vec(&keyless).unwrap();
+    assert_eq!(
+        parse(&headers(&[]), &keyless).err(),
+        Some("missing_idempotency_key")
+    );
+    // Two headers refuse, even when they agree.
+    assert_eq!(
+        parse(&headers(&[key, key]), &keyless).err(),
+        Some("malformed_idempotency_key")
+    );
+    // A padded header is used verbatim and then fails the key shape.
+    let padded = parse(&headers(&[&format!(" {key} ")]), &keyless).unwrap();
+    assert_eq!(padded.idempotency_key, format!(" {key} "));
+    assert!(!crate::storage::idempotency_key_shaped(
+        &padded.idempotency_key
+    ));
+}
+
+/// APP-013 review M1 (the page's command choice) and m3: the record page
+/// offers the first declared command storage would admit on the record's
+/// state — a `create` on an absent record; on an existing one an `update`,
+/// or a `create` one of whose declared transitions starts at the record's
+/// current value — and no form when none would; only the offered command's
+/// writable fields are inputs.
+#[test]
+fn the_record_page_offers_only_a_command_storage_would_admit_and_only_its_writable_fields() {
+    use crate::storage::{RecordCommand, RecordDetail, RecordField};
+    let status = |value: Option<&str>| RecordField {
+        id: "status".into(),
+        value_type: json!({"type": "enum", "values": ["needs_context", "reviewed"]}),
+        nullable: false,
+        value: value.map_or(
+            json!({"type": "null"}),
+            |v| json!({"type": "enum", "value": v}),
+        ),
+        writable: false,
+    };
+    let note = RecordField {
+        id: "note".into(),
+        value_type: json!({"type": "text"}),
+        nullable: true,
+        value: json!({"type": "null"}),
+        writable: false,
+    };
+    let record_decision = RecordCommand {
+        id: "record_decision".into(),
+        operation: "create".into(),
+        writable_fields: vec!["status".into()],
+        transitions: vec![("status".into(), "needs_context".into(), "reviewed".into())],
+    };
+    let detail = |version: i64, current: Option<&str>, commands: Vec<RecordCommand>| RecordDetail {
+        record_id: "00000000-0000-4000-8000-0000000000f0".into(),
+        collection: "00000000-0000-4000-8000-0000000000ce".into(),
+        schema: "decision".into(),
+        schema_version: 1,
+        publication: "00000000-0000-4000-8000-0000000000cc".into(),
+        definition_digest: format!("sha256:{}", "7".repeat(64)),
+        work_version: 1,
+        version,
+        fields: vec![status(current), note.clone()],
+        commands,
+        can_write: true,
+    };
+    let offered = |detail: &RecordDetail| {
+        let view = super::view("a", "w", detail, "t".into(), "k".into(), None);
+        let writable: Vec<(String, bool)> = view
+            .fields
+            .iter()
+            .map(|row| (row.id.clone(), row.writable))
+            .collect();
+        (view.command, view.can_write, writable)
+    };
+    let only_status = vec![("status".into(), true), ("note".into(), false)];
+    let none = vec![("status".into(), false), ("note".into(), false)];
+    // Absent record: the create command.
+    assert_eq!(
+        offered(&detail(0, None, vec![record_decision.clone()])),
+        ("record_decision".into(), true, only_status.clone())
+    );
+    // needs_context: the declared transition can fire.
+    assert_eq!(
+        offered(&detail(
+            1,
+            Some("needs_context"),
+            vec![record_decision.clone()]
+        )),
+        ("record_decision".into(), true, only_status.clone())
+    );
+    // reviewed: no declared transition starts there, so no form.
+    assert_eq!(
+        offered(&detail(2, Some("reviewed"), vec![record_decision.clone()])),
+        (String::new(), false, none.clone())
+    );
+    // A create without transitions is never offered on an existing record;
+    // a declared update is.
+    let mut plain = record_decision.clone();
+    plain.transitions.clear();
+    let update = RecordCommand {
+        id: "edit_note".into(),
+        operation: "update".into(),
+        writable_fields: vec!["note".into()],
+        transitions: Vec::new(),
+    };
+    assert_eq!(
+        offered(&detail(2, Some("reviewed"), vec![plain.clone()])),
+        (String::new(), false, none)
+    );
+    assert_eq!(
+        offered(&detail(2, Some("reviewed"), vec![plain, update.clone()])),
+        (
+            "edit_note".into(),
+            true,
+            vec![("status".into(), false), ("note".into(), true)]
+        )
+    );
+    // An update is never offered on an absent record; a reader without
+    // record_write gets no form.
+    assert_eq!(offered(&detail(0, None, vec![update])).0, "");
+    let mut reader = detail(1, Some("needs_context"), vec![record_decision]);
+    reader.can_write = false;
+    assert!(!offered(&reader).1);
 }

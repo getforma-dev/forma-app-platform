@@ -1060,6 +1060,14 @@ def command_checks(pg, passed, denied):
           AND k.confrelid='genui.audit_events'::regclass""").fetchone()==(0,)
         assert c.execute("""SELECT count(*) FROM pg_constraint k WHERE k.contype='f' AND k.conrelid='genui.command_outcomes'::regclass
           AND k.confrelid='genui.command_claims'::regclass""").fetchone()==(1,)
+        # ADR-002 scope organization/principal/work/command/key, with the work's app (saved_work's key is
+        # organization/app/work; APP-013 review m6): the claim's and the outcome's keys, and the outcome's reference.
+        scope_key='(organization_id, principal_id, app_id, work_id, command_id, idempotency_key)'
+        keys=set(c.execute("""SELECT c.relname,k.contype,pg_get_constraintdef(k.oid) FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname IN ('command_claims','command_outcomes')
+          AND (k.contype='p' OR k.confrelid='genui.command_claims'::regclass)""").fetchall())
+        assert keys=={('command_claims','p','PRIMARY KEY '+scope_key),('command_outcomes','p','PRIMARY KEY '+scope_key),
+                      ('command_outcomes','f','FOREIGN KEY '+scope_key+' REFERENCES genui.command_claims'+scope_key)},keys
         work,app,publication,collection=c.execute("""SELECT w.work_id::text,w.app_id::text,w.publication_id::text,r.collection_id::text FROM genui.saved_work w
           JOIN genui.record_collections r USING(organization_id,app_id,work_id) WHERE w.organization_id=%s LIMIT 1""",(org0,)).fetchone()
     passed('0007 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the data role is bound to the scoped principal on claims, outcomes and revisions; ids, digests, sequences and versions are domain-typed; one commit sequence per outcome; the outcome references its claim and has no foreign key into the insert-only audit log',

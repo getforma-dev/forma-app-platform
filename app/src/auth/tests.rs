@@ -177,7 +177,7 @@ impl Reply {
     /// The uniform refusal, header for header (dates excluded: none are set).
     pub(super) fn uniform_404(&self) -> bool {
         self.status == StatusCode::NOT_FOUND
-            && self.body == "{\"code\":\"not_found\"}"
+            && self.body == "{\"code\":\"not_found\",\"status\":404}"
             && self.headers[header::CONTENT_TYPE] == "application/problem+json"
             && self.headers[header::CACHE_CONTROL] == "no-store"
             && self.headers[header::X_CONTENT_TYPE_OPTIONS] == "nosniff"
@@ -625,7 +625,10 @@ async fn anonymous_routes_refusals_and_release_router_without_harness() {
             let reply = browser.send(&app, "POST", route, "", headers).await;
             assert_eq!(
                 (reply.status, reply.body.as_str()),
-                (StatusCode::FORBIDDEN, "{\"code\":\"cross_site\"}")
+                (
+                    StatusCode::FORBIDDEN,
+                    "{\"code\":\"cross_site\",\"status\":403}"
+                )
             );
         }
         let reply = browser
@@ -665,7 +668,7 @@ async fn anonymous_routes_refusals_and_release_router_without_harness() {
         (oversize.status, oversize.body.as_str()),
         (
             StatusCode::PAYLOAD_TOO_LARGE,
-            "{\"code\":\"payload_too_large\"}"
+            "{\"code\":\"payload_too_large\",\"status\":413}"
         )
     );
     // 10 per minute per address class (the two above counted), then 429.
@@ -681,7 +684,10 @@ async fn anonymous_routes_refusals_and_release_router_without_harness() {
         assert_eq!(reply.body, "page=signin;action=-;failed=true");
     }
     let limited = limited.expect("address-class limit reached");
-    assert_eq!(limited.body, "{\"code\":\"too_many_requests\"}");
+    assert_eq!(
+        limited.body,
+        "{\"code\":\"too_many_requests\",\"status\":429}"
+    );
     assert!(limited.headers.contains_key(header::RETRY_AFTER));
     let mut forwarded = Browser::new("10.0.0.5:443", &log);
     let other = forwarded

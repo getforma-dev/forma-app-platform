@@ -116,7 +116,10 @@ async fn invite_entry_refuses_before_any_work() {
             .await;
         assert_eq!(
             (reply.status, reply.body.as_str()),
-            (StatusCode::FORBIDDEN, "{\"code\":\"cross_site\"}"),
+            (
+                StatusCode::FORBIDDEN,
+                "{\"code\":\"cross_site\",\"status\":403}"
+            ),
             "{headers:?}"
         );
     }
@@ -145,7 +148,7 @@ async fn invite_entry_refuses_before_any_work() {
         (oversize.status, oversize.body.as_str()),
         (
             StatusCode::PAYLOAD_TOO_LARGE,
-            "{\"code\":\"payload_too_large\"}"
+            "{\"code\":\"payload_too_large\",\"status\":413}"
         )
     );
     let code = unissued_code();
@@ -374,7 +377,8 @@ async fn slow_invitation_body_hits_the_five_second_deadline() {
     let (elapsed, text) = reply;
     assert!(text.starts_with("HTTP/1.1 503"), "{text}");
     assert!(
-        text.contains("application/problem+json") && text.ends_with("{\"code\":\"unavailable\"}")
+        text.contains("application/problem+json")
+            && text.ends_with("{\"code\":\"unavailable\",\"status\":503}")
     );
     assert!(
         elapsed >= Duration::from_millis(4900) && elapsed < Duration::from_secs(8),

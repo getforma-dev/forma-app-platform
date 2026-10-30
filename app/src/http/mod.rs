@@ -42,15 +42,11 @@ pub fn secure(headers: &mut HeaderMap) {
     );
 }
 
-/// A design §9 refusal: status, `application/problem+json`, `{"code":…}`.
+/// A design §9 refusal: status, `application/problem+json`,
+/// `{"code":…,"status":…}` as forma-json-v1 (contract `problem` requires
+/// `status` for every code; APP-013 review M2).
 pub fn problem(status: StatusCode, code: &'static str) -> Response {
-    let mut response = (status, format!("{{\"code\":\"{code}\"}}")).into_response();
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/problem+json"),
-    );
-    secure(response.headers_mut());
-    response
+    problem_with(status, code, serde_json::Value::Null)
 }
 /// A design §9 refusal carrying its class-specific authorized members
 /// (ADR-007 D7.15: the recovery view on 409, the current revision on 412):
@@ -156,7 +152,10 @@ mod tests {
             assert_eq!(headers[header::CACHE_CONTROL], "no-store");
             assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
             let body = to_bytes(response.into_body(), 1024).await.unwrap();
-            assert_eq!(body, format!("{{\"code\":\"{code}\"}}").as_bytes());
+            assert_eq!(
+                body,
+                format!("{{\"code\":\"{code}\",\"status\":{status}}}").as_bytes()
+            );
         }
         assert_eq!(too_many_requests(7).headers()[header::RETRY_AFTER], "7");
     }
