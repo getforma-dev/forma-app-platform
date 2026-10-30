@@ -58,6 +58,8 @@ Rust 1.93.1, `CARGO_BUILD_JOBS=4`, Apple-silicon Mac, local Docker. `OP` is the 
 | `python3 scripts/check-schema-pins.py`; `CV contracts/lock.py check`; `CV -m unittest discover -s contracts -p 'test_*.py'` | `"agree": true` (every pin 7); lock matches 27 artifacts (no locked artifact edited); 27 OK |
 | `python3 Tickets/_tools/board.py render`; `check`; `git diff --check` | OK (88 tickets); OK; clean |
 
+The fixes were committed on `59c4dc5` and then merged with the `phase-one-spikes` tip `768fb5b` (the race-campaign rework, the rustfmt fix to two exact-body assertions, the APP-076 preparation) without conflicts; on the merged tree `cargo fmt --check`, `clippy -D warnings`, `cargo test --locked` (lib 126 / 13 ignored, bin 5, doctests 3), `board.py check` and `git diff --check` pass again.
+
 No `include_str!`/`include_bytes!` input was added, so `managed_qualification.rs` `SOURCES` (81) and `SEED_INPUTS` are unchanged; `source_bundle_covers_every_compiled_source` passes in the suite.
 
 Docker: before and after every campaign `docker ps -a` showed only `gatewasm-db-test-1` and other sessions' `genui-app073-operator-…`/`genui-native-…` containers, which were left alone; the one container a failing campaign attempt of this slice left behind was removed by hand.
