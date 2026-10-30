@@ -136,6 +136,14 @@ fn the_rehearsed_parser_answers_the_four_scenario_utterances_and_nothing_else() 
         Some("1234.5".into())
     );
     assert_eq!(rehearsed::amount("room 86"), None);
+    // Multi-byte text used to slice mid-character and panic.
+    assert_eq!(rehearsed::amount("Lunch at Café"), None);
+    assert_eq!(
+        rehearsed::amount("Lunch at Café $12.50"),
+        Some("12.50".into())
+    );
+    assert_eq!(rehearsed::amount("İstanbul $12"), Some("12".into()));
+    assert_eq!(rehearsed::amount("€ 5 dollars ü"), Some("5".into()));
     assert_eq!(
         rehearsed::days_before("2026-03-01", 1),
         Some("2026-02-28".into())
@@ -422,5 +430,59 @@ fn the_notes_library_entry_creates_and_edits_plain_text_notes() {
             .map(|f| (f["id"].as_str().unwrap(), f["nullable"].as_bool().unwrap()))
             .collect::<Vec<_>>(),
         [("title", false), ("body", true)]
+    );
+}
+
+/// A body whose bytes never arrive.
+pub(crate) struct Stalled;
+impl futures_core::Stream for Stalled {
+    type Item = Result<axum::body::Bytes, std::io::Error>;
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        std::task::Poll::Pending
+    }
+}
+
+/// An anonymous POST with a body that never arrives is answered at once:
+/// the session is checked before the body is read (review: the body used to
+/// be read first, with no time bound).
+pub(crate) async fn anonymous_stalled_post(
+    app: axum::Router,
+    path: &str,
+) -> axum::http::StatusCode {
+    use tower::ServiceExt;
+    let request = axum::http::Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("sec-fetch-site", "same-origin")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from_stream(Stalled))
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(2), app.oneshot(request))
+        .await
+        .expect("answered without waiting on the body")
+        .unwrap()
+        .status()
+}
+
+#[tokio::test]
+async fn act_checks_the_session_before_reading_the_body() {
+    let auth = std::sync::Arc::new(
+        crate::auth::Auth::new(
+            None,
+            None,
+            std::sync::Arc::new(crate::auth::tests::TestPages),
+        )
+        .unwrap(),
+    );
+    let app = super::routes::router(std::sync::Arc::new(super::routes::Act::new(
+        auth,
+        super::Parser::new(None, "test-model"),
+    )));
+    assert_eq!(
+        anonymous_stalled_post(app, super::PATH).await,
+        axum::http::StatusCode::NOT_FOUND
     );
 }

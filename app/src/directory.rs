@@ -113,15 +113,8 @@ pub fn label(principal: &str) -> String {
         .unwrap_or_else(|| format!("Member {}", &principal[..8.min(principal.len())]))
 }
 
-/// Every (principal, name) known; for approver matching.
-pub fn all() -> Vec<(String, String)> {
-    names()
-        .read()
-        .map(|map| map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-        .unwrap_or_default()
-}
-
 /// Tests and campaigns: replace the directory without a file.
+#[cfg(test)]
 pub fn set_for_tests(entries: &[(&str, &str)]) {
     if let Ok(mut map) = names().write() {
         map.clear();

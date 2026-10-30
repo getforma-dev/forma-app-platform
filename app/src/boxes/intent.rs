@@ -10,7 +10,7 @@
 //! own folders by number or name: one match acts, several are a chooser,
 //! none is not a folder request. Nothing is guessed.
 use super::routes::{numbered, Boxes};
-use crate::storage::TrustedRequest;
+use crate::{actions::rehearsed::find_ignore_ascii_case, storage::TrustedRequest};
 use std::sync::{Arc, OnceLock};
 
 static INSTALLED: OnceLock<Arc<Boxes>> = OnceLock::new();
@@ -134,10 +134,11 @@ pub fn folder_ref(text: &str) -> Option<FolderRef> {
             "from ",
             "on ",
         ] {
-            if let Some(start) = lower.find(lead) {
-                let tail = &lower[start + lead.len()..];
-                if let Some(end) = tail.find(&format!(" {noun}")) {
-                    let name = text[start + lead.len()..start + lead.len() + end].trim();
+            // Indices of the lowercased text do not address `text` ("İ").
+            if let Some(start) = find_ignore_ascii_case(text, lead) {
+                let tail = &text[start + lead.len()..];
+                if let Some(end) = find_ignore_ascii_case(tail, &format!(" {noun}")) {
+                    let name = tail[..end].trim();
                     if !name.is_empty()
                         && name.chars().count() <= 60
                         && !matches!(name.to_lowercase().as_str(), "this" | "that" | "my" | "the")
@@ -157,7 +158,6 @@ pub fn purpose(text: &str) -> String {
     if let Some(at) = out.find('@') {
         out.truncate(at);
     }
-    let lower = out.to_lowercase();
     for lead in [
         " from the ",
         " from my ",
@@ -166,9 +166,10 @@ pub fn purpose(text: &str) -> String {
         " from box",
         " from ",
     ] {
-        if let Some(at) = lower.find(lead) {
-            if lower[at..].contains("folder")
-                || lower[at..].contains("box")
+        if let Some(at) = find_ignore_ascii_case(&out, lead) {
+            let after = out[at..].to_lowercase();
+            if after.contains("folder")
+                || after.contains("box")
                 || lead == " from " && text.contains('@')
             {
                 out.truncate(at);
@@ -192,8 +193,7 @@ pub fn formation(text: &str) -> Option<(Option<FolderRef>, String)> {
     if !super::COMMAND_ALIASES.contains(&command.to_lowercase().as_str()) {
         return None;
     }
-    let lower = rest.to_lowercase();
-    let at = lower.find(super::AI_KEYWORD)?;
+    let at = find_ignore_ascii_case(rest, super::AI_KEYWORD)?;
     let reference = rest[..at].trim();
     let instruction = rest[at + super::AI_KEYWORD.len()..].trim().to_owned();
     if instruction.is_empty() {
@@ -311,6 +311,24 @@ mod tests {
     }
 
     #[test]
+    fn non_ascii_text_does_not_slice_mid_character() {
+        // Lowercasing "İ" lengthens it: lowercase indices used to slice the
+        // original text mid-character and panic.
+        assert_eq!(
+            folder_ref("İİ build an app from the Café Ünits folder"),
+            Some(FolderRef::Name("Café Ünits".into()))
+        );
+        assert_eq!(
+            purpose("İİİ build a metrics app from the Q3 folder"),
+            "İİİ build a metrics app"
+        );
+        assert_eq!(
+            formation("/folder İstanbul formation brief me"),
+            Some((Some(FolderRef::Name("İstanbul".into())), "brief me".into()))
+        );
+    }
+
+    #[test]
     fn formation_splits_reference_and_instruction() {
         assert_eq!(
             formation("/folder formation brief me"),
@@ -381,6 +399,15 @@ pub async fn act(member: &TrustedRequest, utterance: &str, box_id: Option<&str>)
         }
         Resolved::None => return None,
     };
+    // The same per-member windows as the folder routes: admitted before any
+    // model call or write, on every surface (canvas, Slack, MCP).
+    let admitted = match wanted {
+        Ask::Build(_) => super::routes::admit_compose(&state, member),
+        Ask::Brief => super::routes::admit_explain(&state, member),
+    };
+    if let Err(refused) = admitted {
+        return Some(Answer::Refused(refused));
+    }
     Some(match wanted {
         Ask::Build(sentence) => {
             let purpose = purpose(&sentence);

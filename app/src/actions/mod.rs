@@ -42,7 +42,7 @@ pub mod workflows;
 #[cfg(test)]
 mod receipt_tests;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use crate::composer::model::{self, Model, ModelError, ModelRequest};
 use serde::Deserialize;
@@ -53,8 +53,6 @@ use std::{sync::Arc, time::Duration};
 pub const PATH: &str = "/v1/act";
 /// The parse call's budget.
 pub const PARSE_BUDGET: Duration = Duration::from_secs(12);
-/// The whole route, model call and storage included.
-pub const ACT_DEADLINE: Duration = Duration::from_secs(60);
 const PARSE_MAX_TOKENS: u32 = 400;
 
 /// What the member asked for, as the parser decided.

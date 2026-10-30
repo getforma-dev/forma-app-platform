@@ -196,9 +196,11 @@ impl Composer {
     pub fn enabled(&self) -> bool {
         self.model.is_some()
     }
-    /// Whether this organization is a demo organization (module notes).
+    /// Whether this organization is a demo organization (module notes):
+    /// listed here and by [`crate::demo::is_demo_org`], so `GENUI_DEMO_MODE`
+    /// off turns every composer shortcut off.
     pub fn demo_for(&self, organization: &str) -> bool {
-        self.demo.contains(organization)
+        self.demo.contains(organization) && crate::demo::is_demo_org(organization)
     }
     /// The route may compose for this organization: a model, the instant
     /// matcher (APP-101: a confident pick needs no model; without one the

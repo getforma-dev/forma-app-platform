@@ -165,17 +165,28 @@ fn json_body(headers: &HeaderMap) -> bool {
         .and_then(|v| v.split(';').next())
         .is_some_and(|v| v.trim().eq_ignore_ascii_case("application/json"))
 }
-async fn json_of(body: axum::body::Body, headers: &HeaderMap) -> Result<Value, Response> {
+/// A JSON object body (`malformed_request` for anything else).
+async fn json_of(
+    body: axum::body::Body,
+    headers: &HeaderMap,
+) -> Result<serde_json::Map<String, Value>, Response> {
     let bytes = http::bounded(body, http::JSON_BODY_LIMIT)
         .await
         .ok_or_else(http::payload_too_large)?;
     if !json_body(headers) {
         return Err(http::problem(StatusCode::BAD_REQUEST, "malformed_request"));
     }
-    crate::admission::decode(&bytes)
-        .ok()
-        .filter(Value::is_object)
-        .ok_or_else(|| http::problem(StatusCode::BAD_REQUEST, "malformed_request"))
+    match crate::admission::decode(&bytes) {
+        Ok(Value::Object(object)) => Ok(object),
+        _ => Err(http::problem(StatusCode::BAD_REQUEST, "malformed_request")),
+    }
+}
+/// The member's `MEMBER_WRITES` window (folder create, uploads, rename, share).
+fn admit_write(state: &Boxes, member: &TrustedRequest) -> Result<(), u64> {
+    state
+        .auth
+        .limits
+        .admit_member_write(member.organization(), member.principal())
 }
 fn valid(id: &str) -> bool {
     storage::valid_identifier(id)
@@ -230,11 +241,13 @@ async fn create(State(state): State<Arc<Boxes>>, request: Request) -> Response {
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
-    let value = match json_of(body, &parts.headers).await {
-        Ok(value) => value,
+    if let Err(retry) = admit_write(&state, &member) {
+        return http::too_many_requests(retry);
+    }
+    let object = match json_of(body, &parts.headers).await {
+        Ok(object) => object,
         Err(response) => return response,
     };
-    let object = value.as_object().expect("an object");
     let name = object
         .get("name")
         .and_then(Value::as_str)
@@ -272,6 +285,9 @@ async fn uploads(State(state): State<Arc<Boxes>>, request: Request) -> Response 
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    if let Err(retry) = admit_write(&state, &member) {
+        return http::too_many_requests(retry);
+    }
     let Some(stores) = &state.auth.stores else {
         return http::not_found();
     };
@@ -507,10 +523,20 @@ async fn upload(
             },
         )
         .await;
+    // Review: an object whose row was definitely not written is discarded
+    // (an unknown outcome keeps it: the row may exist).
     let row = match stored {
         Ok(Some(row)) => row,
-        Ok(None) => return http::problem(StatusCode::CONFLICT, "box_full"),
-        Err(error) => return refusal(error),
+        Ok(None) => {
+            state.store.discard(&organization, &object_key).await;
+            return http::problem(StatusCode::CONFLICT, "box_full");
+        }
+        Err(error) => {
+            if error == storage::Error::Denied {
+                state.store.discard(&organization, &object_key).await;
+            }
+            return refusal(error);
+        }
     };
     let stored_ms = started.elapsed().as_millis() as u64;
     let preview = if matches!(row.kind.as_str(), "csv" | "xlsx") {
@@ -888,11 +914,10 @@ async fn data(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
-    let value = match json_of(body, &parts.headers).await {
-        Ok(value) => value,
+    let object = match json_of(body, &parts.headers).await {
+        Ok(object) => object,
         Err(response) => return response,
     };
-    let object = value.as_object().expect("an object");
     let card = match object.get("card") {
         None => false,
         Some(Value::Bool(card)) => *card,
@@ -1020,8 +1045,18 @@ async fn attach(
             )
             .await
         {
-            Ok(file) => file,
-            Err(error) => return refusal(error),
+            Ok(Some(file)) => Some(file),
+            // The row was definitely not written: no object stays behind.
+            Ok(None) => {
+                state.store.discard(member.organization(), &key).await;
+                None
+            }
+            Err(error) => {
+                if error == storage::Error::Denied {
+                    state.store.discard(member.organization(), &key).await;
+                }
+                return refusal(error);
+            }
         }
     };
     let Some(copied) = copied else {
@@ -1063,10 +1098,13 @@ pub enum BuildRefusal {
     /// No CSV/XLSX in the box could be used.
     NoData,
     CouldNotCompose(&'static str),
+    /// A per-member window is full (`Retry-After` seconds).
+    TooMany(u64),
 }
 impl BuildRefusal {
     pub fn response(&self) -> Response {
         match self {
+            Self::TooMany(retry_after) => http::too_many_requests(*retry_after),
             Self::NotFound => http::not_found(),
             Self::Unavailable => http::unavailable(),
             Self::ComposerUnavailable => {
@@ -1085,8 +1123,33 @@ impl BuildRefusal {
             Self::ComposerUnavailable => "composer_unavailable",
             Self::NoData => "no_data_files",
             Self::CouldNotCompose(code) => code,
+            Self::TooMany(_) => "too_many_requests",
         }
     }
+}
+
+/// The composer's per-member window (`COMPOSE_MEMBER`, shared with the
+/// canvas composer), on every surface that builds from a folder.
+pub fn admit_compose(state: &Boxes, member: &TrustedRequest) -> Result<(), BuildRefusal> {
+    let key = format!("compose:{}:{}", member.organization(), member.principal());
+    state
+        .auth
+        .limits
+        .admit(&[(&key, composer::routes::COMPOSE_MEMBER)])
+        .map_err(BuildRefusal::TooMany)
+}
+/// The explanation and brief window (`EXPLAIN_MEMBER`), on every surface.
+pub fn admit_explain(state: &Boxes, member: &TrustedRequest) -> Result<(), BuildRefusal> {
+    let key = format!(
+        "box-explain:{}:{}",
+        member.organization(),
+        member.principal()
+    );
+    state
+        .auth
+        .limits
+        .admit(&[(&key, EXPLAIN_MEMBER)])
+        .map_err(BuildRefusal::TooMany)
 }
 fn ms(since: Instant) -> u64 {
     since.elapsed().as_millis() as u64
@@ -1313,13 +1376,8 @@ async fn apps(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
-    let key = format!("compose:{}:{}", member.organization(), member.principal());
-    if let Err(retry) = state
-        .auth
-        .limits
-        .admit(&[(&key, composer::routes::COMPOSE_MEMBER)])
-    {
-        return http::too_many_requests(retry);
+    if let Err(refused) = admit_compose(&state, &member) {
+        return refused.response();
     }
     let value = match json_of(body, &parts.headers).await {
         Ok(value) => value,
@@ -1344,9 +1402,7 @@ async fn apps(
     };
     let (Some(purpose), true) = (
         purpose,
-        value
-            .as_object()
-            .is_some_and(|o| o.keys().all(|k| k == "purpose" || k == "file_ids")),
+        value.keys().all(|k| k == "purpose" || k == "file_ids"),
     ) else {
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_intent");
     };
@@ -1371,6 +1427,9 @@ async fn rename(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    if let Err(retry) = admit_write(&state, &member) {
+        return http::too_many_requests(retry);
+    }
     let value = match json_of(body, &parts.headers).await {
         Ok(value) => value,
         Err(response) => return response,
@@ -1409,6 +1468,9 @@ async fn share(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    if let Err(retry) = admit_write(&state, &member) {
+        return http::too_many_requests(retry);
+    }
     let value = match json_of(body, &parts.headers).await {
         Ok(value) => value,
         Err(response) => return response,
@@ -1688,13 +1750,8 @@ async fn explain_post(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
-    let key = format!(
-        "box-explain:{}:{}",
-        member.organization(),
-        member.principal()
-    );
-    if let Err(retry) = state.auth.limits.admit(&[(&key, EXPLAIN_MEMBER)]) {
-        return http::too_many_requests(retry);
+    if let Err(refused) = admit_explain(&state, &member) {
+        return refused.response();
     }
     match explain_now(&state, &member, &app, &work).await {
         Ok(value) => document(StatusCode::OK, &value),

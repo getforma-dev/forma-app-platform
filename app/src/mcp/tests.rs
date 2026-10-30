@@ -77,7 +77,7 @@ fn expense_app() -> CatalogApp {
     }
 }
 
-fn draft() -> Draft {
+pub(crate) fn draft() -> Draft {
     Draft {
         kind: Kind::Create,
         app: expense_app().app,
@@ -372,12 +372,25 @@ fn drafts_are_the_callers_own_and_expire() {
     assert!(drafts.get_at(&caller(DIEGO, TOKEN_B), &id, now).is_none());
     assert!(drafts.get_at(&diego, &id.to_uppercase(), now).is_none());
     assert!(drafts.get_at(&diego, "00", now).is_none());
-    drafts.spend(&caller(SARAH, TOKEN_A), &id);
+    assert!(!drafts.spend(&caller(SARAH, TOKEN_A), &id));
     assert!(
         !drafts.get_at(&diego, &id, now).unwrap().spent,
         "only its owner spends it"
     );
-    drafts.spend(&diego, &id);
+    // Review: test-and-set. Exactly one commit is the first, even when
+    // several race (each used to read `spent` before any marked it).
+    let firsts = std::thread::scope(|scope| {
+        let spenders: Vec<_> = (0..8)
+            .map(|_| scope.spawn(|| drafts.spend(&diego, &id)))
+            .collect();
+        spenders
+            .into_iter()
+            .map(|spender| spender.join().unwrap())
+            .filter(|first| *first)
+            .count()
+    });
+    assert_eq!(firsts, 1);
+    assert!(!drafts.spend(&diego, &id), "a later commit replays");
     assert!(drafts.get_at(&diego, &id, now).unwrap().spent);
     // Expired after the TTL, and pruned.
     let later = now + DRAFT_TTL + Duration::from_secs(1);
@@ -483,4 +496,28 @@ fn agent_token_labels_are_closed_bodies() {
     ] {
         assert_eq!(tokens::parse_label(bad), None);
     }
+}
+
+/// Review: the limit was per token only, so a member could mint tokens to
+/// multiply their rate; the member's own window spans all their tokens.
+#[test]
+fn the_rate_is_per_token_and_per_member() {
+    let auth = Auth::new(None, None, Arc::new(crate::auth::tests::TestPages)).unwrap();
+    let admit = |caller: &AgentCaller| {
+        let (token, member) = keys(caller);
+        auth.limits
+            .admit(&[(&token, MCP_TOKEN), (&member, MCP_MEMBER)])
+            .is_ok()
+    };
+    let (a, b) = (caller(DIEGO, TOKEN_A), caller(DIEGO, TOKEN_B));
+    for _ in 0..MCP_TOKEN[0].limit {
+        assert!(admit(&a) && admit(&b));
+    }
+    assert!(!admit(&a), "the token's window");
+    let third = caller(DIEGO, "00000000-0000-4000-8000-0000000000ff");
+    assert!(!admit(&third), "a fresh token of the same member");
+    assert!(admit(&caller(
+        SARAH,
+        "00000000-0000-4000-8000-0000000000fe"
+    )));
 }

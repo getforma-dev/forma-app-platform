@@ -403,3 +403,19 @@ async fn real_open_meteo_smoke() {
         Err(weather::FetchError::NotFound)
     );
 }
+
+#[tokio::test]
+async fn customize_checks_the_session_before_reading_the_body() {
+    let auth = Arc::new(
+        crate::auth::Auth::new(None, None, Arc::new(crate::auth::tests::TestPages)).unwrap(),
+    );
+    let app = super::routes::router(Arc::new(super::routes::Widgets::new(
+        auth,
+        Customizer::new(None, "test-model"),
+        weather::OpenMeteo::new(),
+    )));
+    assert_eq!(
+        crate::actions::tests::anonymous_stalled_post(app, super::CUSTOMIZE_PATH).await,
+        axum::http::StatusCode::NOT_FOUND
+    );
+}

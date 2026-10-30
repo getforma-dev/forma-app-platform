@@ -55,29 +55,71 @@ fn value<'a>(record: &'a RecordRow, field: &str) -> Option<&'a Value> {
         .find(|item| item.get("field_id").and_then(Value::as_str) == Some(field))
         .and_then(|item| item.get("value"))
 }
-fn minor_units(record: &RecordRow, field: &str) -> i128 {
-    value(record, field)
-        .and_then(|v| v.get("minor_units"))
-        .and_then(Value::as_str)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0)
+/// A record's amount in cents: 0 when it has none, `None` when the stored
+/// value does not parse (shown, never silently counted as 0).
+fn minor_units(record: &RecordRow, field: &str) -> Option<i128> {
+    match value(record, field) {
+        None | Some(Value::Null) => Some(0),
+        Some(money) => money
+            .get("minor_units")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse().ok()),
+    }
+}
+
+/// A money total: exact, past `i128`, or including an unreadable amount.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Sum {
+    Cents(i128),
+    TooLarge,
+    Unreadable,
+}
+impl Default for Sum {
+    fn default() -> Self {
+        Self::Cents(0)
+    }
+}
+impl Sum {
+    fn add(self, amount: Option<i128>) -> Self {
+        match (self, amount) {
+            (Self::Unreadable, _) | (_, None) => Self::Unreadable,
+            (Self::TooLarge, _) => Self::TooLarge,
+            (Self::Cents(total), Some(cents)) => {
+                total.checked_add(cents).map_or(Self::TooLarge, Self::Cents)
+            }
+        }
+    }
+    fn display(self) -> String {
+        match self {
+            Self::Cents(cents) => dollars(cents),
+            Self::TooLarge => "too large".to_owned(),
+            Self::Unreadable => "unreadable amount".to_owned(),
+        }
+    }
+    /// Largest first; a total that cannot be shown sorts last.
+    fn rank(self) -> i128 {
+        match self {
+            Self::Cents(cents) => cents,
+            Self::TooLarge | Self::Unreadable => i128::MIN,
+        }
+    }
 }
 /// Cents as dollars, exactly as a record cell shows money.
 pub fn dollars(minor: i128) -> String {
     display(&json!({"type": "money", "minor_units": minor.to_string()}))
 }
 
-fn rows(totals: BTreeMap<String, (usize, i128)>, prefix: &str) -> Vec<LedgerRowProps> {
-    let mut rows: Vec<(String, usize, i128)> =
+fn rows(totals: BTreeMap<String, (usize, Sum)>, prefix: &str) -> Vec<LedgerRowProps> {
+    let mut rows: Vec<(String, usize, Sum)> =
         totals.into_iter().map(|(k, (n, t))| (k, n, t)).collect();
-    rows.sort_by(|a, b| b.2.cmp(&a.2).then(a.0.cmp(&b.0)));
+    rows.sort_by(|a, b| b.2.rank().cmp(&a.2.rank()).then(a.0.cmp(&b.0)));
     rows.into_iter()
         .enumerate()
         .map(|(index, (label, count, total))| LedgerRowProps {
             id: format!("{prefix}{index}"),
             label,
             count: count.to_string(),
-            total: dollars(total),
+            total: total.display(),
         })
         .collect()
 }
@@ -117,17 +159,25 @@ pub fn ledger_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Ledg
                 .iter()
                 .filter(|r| r.collection == collection.collection)
                 .collect();
-            let mut people: BTreeMap<String, (usize, i128)> = BTreeMap::new();
-            let mut categories: BTreeMap<String, (usize, i128)> = BTreeMap::new();
-            let mut total = 0i128;
+            let mut people: BTreeMap<String, (usize, Sum)> = BTreeMap::new();
+            let mut categories: BTreeMap<String, (usize, Sum)> = BTreeMap::new();
+            let mut total = Sum::default();
             for record in &records {
                 let cents = minor_units(record, &amount);
-                total += cents;
+                if cents.is_none() {
+                    tracing::warn!(
+                        event = "ledger.unreadable_amount",
+                        work_id = work,
+                        record_id = record.record_id,
+                        "a stored amount did not parse; the ledger shows it"
+                    );
+                }
+                total = total.add(cents);
                 let person = people
                     .entry(crate::directory::label(&record.creator))
                     .or_default();
                 person.0 += 1;
-                person.1 += cents;
+                person.1 = person.1.add(cents);
                 if !category.is_empty() {
                     let name = value(record, &category)
                         .and_then(|v| v.get("value"))
@@ -136,7 +186,7 @@ pub fn ledger_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Ledg
                         .to_owned();
                     let entry = categories.entry(name).or_default();
                     entry.0 += 1;
-                    entry.1 += cents;
+                    entry.1 = entry.1.add(cents);
                 }
             }
             let title = if collection.schema.starts_with("expense") {
@@ -154,7 +204,7 @@ pub fn ledger_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Ledg
                 category_field: category,
                 status_field: status,
                 scope: SCOPE.to_owned(),
-                total: dollars(total),
+                total: total.display(),
                 count: records.len().to_string(),
                 has_rows: !records.is_empty(),
                 has_no_rows: records.is_empty(),
@@ -163,4 +213,52 @@ pub fn ledger_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Ledg
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn record(amount: Value) -> RecordRow {
+        RecordRow {
+            record_id: "r".into(),
+            collection: "c".into(),
+            schema: "expense_claim".into(),
+            version: 1,
+            commit_sequence: 1,
+            committed_at: "2026-10-30T00:00:00Z".into(),
+            creator: "p".into(),
+            updater: "p".into(),
+            values: json!([{"field_id": "amount", "value": amount}]),
+        }
+    }
+
+    /// Review: the sums used `+=` on `i128` (an overflow panics in a debug
+    /// build and wraps in release), and an unparseable amount counted as 0.
+    #[test]
+    fn sums_are_checked_and_unreadable_amounts_are_shown() {
+        let money = |minor: &str| json!({"type": "money", "minor_units": minor});
+        assert_eq!(minor_units(&record(money("8600")), "amount"), Some(8600));
+        assert_eq!(minor_units(&record(Value::Null), "amount"), Some(0));
+        assert_eq!(minor_units(&record(money("86.00")), "amount"), None);
+        assert_eq!(minor_units(&record(json!("8600")), "amount"), None);
+        let sum = Sum::default().add(Some(8600)).add(Some(50));
+        assert_eq!(sum.display(), "$86.50");
+        let huge = Sum::default().add(Some(i128::MAX)).add(Some(1));
+        assert_eq!(huge, Sum::TooLarge);
+        assert_eq!(huge.display(), "too large");
+        assert_eq!(huge.add(Some(-5)), Sum::TooLarge);
+        let unreadable = sum.add(None).add(Some(1));
+        assert_eq!(unreadable.display(), "unreadable amount");
+        let ranked = rows(
+            [
+                ("a".to_owned(), (1, huge)),
+                ("b".to_owned(), (1, Sum::Cents(5))),
+            ]
+            .into(),
+            "p",
+        );
+        assert_eq!(ranked[0].label, "b");
+        assert_eq!(ranked[1].total, "too large");
+    }
 }

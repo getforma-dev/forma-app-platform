@@ -162,6 +162,33 @@ impl ObjectStore {
         }
     }
 
+    /// Discards an object whose file row was definitely not written (the box
+    /// was full or the member was refused), so a refused upload leaves no
+    /// object behind. Locally the file is removed. The image's store is
+    /// write-once with no delete operation (the credentialed child and its
+    /// tenant policy have none; APP-113 carries it), so there the key is
+    /// logged for the sweep instead.
+    pub async fn discard(&self, organization: &str, key: &str) {
+        if !key_shaped(organization, key) {
+            return;
+        }
+        match self {
+            Self::Local { root } => {
+                let path = root.join(key);
+                let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+                let _ = fs::remove_file(&path);
+            }
+            Self::Runtime { .. } => {
+                tracing::warn!(
+                    event = "box.object_orphaned",
+                    organization_id = organization,
+                    object_key = key,
+                    "an object without a file row was left for the sweep"
+                );
+            }
+        }
+    }
+
     /// Reads the object at `key`; its SHA-256 must be `digest` (`sha256:…`).
     pub async fn get(
         &self,
@@ -262,7 +289,11 @@ mod tests {
             store.get(ORG, &key, &sha256(b"other")).await,
             Err(StoreError::Unavailable)
         );
-        let _ = fs::set_permissions(root.join(&key), fs::Permissions::from_mode(0o600));
+        // Review: a refused upload's object is discarded (write-once again).
+        store.discard(ORG, &key).await;
+        assert!(!root.join(&key).exists());
+        store.put(ORG, &key, b"other").await.unwrap();
+        store.discard(ORG, &key).await;
         let _ = fs::remove_dir_all(&root);
     }
 }

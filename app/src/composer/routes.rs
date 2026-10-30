@@ -11,7 +11,7 @@
 //! denies anywhere (a member who may compose nothing is indistinguishable
 //! from a stranger); 403 `cross_site`; 413 `payload_too_large`; 422
 //! `invalid_intent` (the body); 429 `too_many_requests` with `Retry-After`
-//! (6 per member per hour, ADR-006 limits); 503 `composer_unavailable` when
+//! (`COMPOSE_MEMBER`: 30 per member per hour, ADR-006 limits); 503 `composer_unavailable` when
 //! no model key is configured and the organization is not a demo one
 //! (neutral; everything else in the service works); 422 `could_not_compose` when the model's output was refused by
 //! admission on every attempt, the model failed, or publication lost its
@@ -41,7 +41,6 @@ use crate::{
     },
 };
 use axum::{
-    body::to_bytes,
     extract::{Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
@@ -55,8 +54,7 @@ use std::{sync::Arc, time::Instant};
 pub const PATH: &str = "/v1/compose";
 /// The intent body bound (D7.14 form-sized).
 pub const COMPOSE_BODY_LIMIT: usize = 4096;
-/// Per member: six compositions an hour.
-/// APP-101: 30 an hour (was 6): a slash command, a chooser click or an
+/// Per member: 30 compositions an hour (APP-101; was 6): a slash command, a chooser click or an
 /// instant pick is a composition too, and most use no model call.
 pub const COMPOSE_MEMBER: &[limits::Window] = &[limits::per(30, 3600)];
 
@@ -972,14 +970,7 @@ fn json_response(body: Vec<u8>) -> Response {
     response
 }
 
-/// How a bounded body read ended short of bytes.
-#[derive(Debug, Eq, PartialEq)]
-pub(super) enum BodyRefused {
-    /// More than the bound, or the stream failed.
-    TooLarge,
-    /// The bytes did not arrive within the handler deadline (review M1).
-    Stalled,
-}
+pub(super) use crate::http::BodyRefused;
 
 /// The intent body: at most `COMPOSE_BODY_LIMIT` bytes, arriving within
 /// `deadline`; a caller that trickles or stalls holds the route no longer
@@ -988,11 +979,7 @@ pub(super) async fn read_body(
     body: axum::body::Body,
     deadline: std::time::Duration,
 ) -> Result<axum::body::Bytes, BodyRefused> {
-    match tokio::time::timeout(deadline, to_bytes(body, COMPOSE_BODY_LIMIT)).await {
-        Ok(Ok(bytes)) => Ok(bytes),
-        Ok(Err(_)) => Err(BodyRefused::TooLarge),
-        Err(_) => Err(BodyRefused::Stalled),
-    }
+    http::read_bounded(body, COMPOSE_BODY_LIMIT, deadline).await
 }
 
 /// `POST /v1/compose` (order in the module notes).

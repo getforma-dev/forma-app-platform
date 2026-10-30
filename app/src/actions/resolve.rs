@@ -104,8 +104,7 @@ impl From<Error> for Refusal {
 }
 
 fn fresh_key() -> Option<String> {
-    let bytes = capability::random_bytes::<16>()?;
-    Some(bytes.iter().map(|b| format!("{b:02x}")).collect())
+    capability::random_hex::<16>()
 }
 
 /// A typed value as people read it: money as dollars, null as a dash,
@@ -187,7 +186,7 @@ pub fn cents(raw: &str) -> Option<String> {
 }
 
 /// A `YYYY-MM-DD` text with plausible parts.
-fn date_shaped(value: &str) -> bool {
+pub(super) fn date_shaped(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 10
         && bytes[4] == b'-'

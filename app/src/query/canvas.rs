@@ -297,6 +297,11 @@ pub fn demo_organizations() -> std::collections::BTreeSet<String> {
         &std::env::var(crate::composer::DEMO_ORGANIZATIONS_ENV).unwrap_or_default(),
     )
 }
+/// Whether the canvas shows `organization` in demo mode: listed here and by
+/// [`crate::demo::is_demo_org`] (so `GENUI_DEMO_MODE` off turns it off).
+pub fn is_demo(listed: &std::collections::BTreeSet<String>, organization: &str) -> bool {
+    listed.contains(organization) && crate::demo::is_demo_org(organization)
+}
 
 /// An origin chip on an app card ("Retrieved from library", "Seeded
 /// definition", "Generated"): `kind` styles it.
@@ -1041,8 +1046,7 @@ pub fn router(canvas: Arc<Canvas>) -> Router {
 
 /// A fresh 128-bit idempotency key per render (D7.16).
 fn fresh_key() -> Option<String> {
-    let bytes = capability::random_bytes::<16>()?;
-    Some(bytes.iter().map(|b| format!("{b:02x}")).collect())
+    capability::random_hex::<16>()
 }
 
 /// What one work reads before the page or the group route shapes it: the
@@ -1356,7 +1360,7 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
     let library = library(sources);
     let organization = organization_name(&canvas, &member).await;
     let principal = member.principal();
-    let demo = canvas.demo_organizations.contains(member.organization());
+    let demo = is_demo(&canvas.demo_organizations, member.organization());
     let props = CanvasProps {
         csrf_signout: auth.csrf.token(csrf::Form::SignOut, &cookie),
         has_groups: !groups.is_empty(),

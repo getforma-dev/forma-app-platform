@@ -37,9 +37,6 @@ const UNAVAILABLE: &str = "Forma is unavailable right now. Try again in a moment
 fn elapsed_ms(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
-fn today() -> String {
-    events::timestamp(super::now())[..10].to_owned()
-}
 fn canvas_link(state: &Slack) -> String {
     text::link(&format!("{}/canvas", state.origin()), "Open in Forma")
 }
@@ -419,7 +416,7 @@ async fn act_message(state: &Slack, team: &str, user: &str, utterance: &str) -> 
         return text::ephemeral(REFUSED, None, false);
     }
     let demo = demo::is_demo_org(member.organization());
-    let today = today();
+    let today = crate::events::today();
     let parse = match state.parser.parse(utterance, &catalog, demo, &today).await {
         Ok(parse) => parse,
         Err(ParseFailure::Unavailable) => {
@@ -1018,6 +1015,7 @@ fn folder_message(state: &Slack, answer: crate::boxes::intent::Answer) -> Value 
             let message = match refused {
                 crate::boxes::routes::BuildRefusal::NoData => format!("That {noun} has no CSV or XLSX data to build from yet."),
                 crate::boxes::routes::BuildRefusal::ComposerUnavailable => UNAVAILABLE.to_owned(),
+                crate::boxes::routes::BuildRefusal::TooMany(_) => "You're going fast. Try again in a few minutes.".to_owned(),
                 crate::boxes::routes::BuildRefusal::CouldNotCompose(_) => format!("Forma could not build an app from that {noun}. Try saying what it should show."),
                 _ => REFUSED.to_owned(),
             };
