@@ -538,6 +538,19 @@ async fn stored_revision(
     Ok(admitted)
 }
 
+/// A stored revision's admitted identity and canonical content, re-admitted
+/// as `stored_revision` does, for the query path (APP-012): the content a
+/// publication pins is never taken from storage on trust.
+pub(super) async fn stored_content(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    app: &str,
+    revision: &str,
+) -> Result<(String, Vec<u8>)> {
+    let admitted = stored_revision(transaction, organization, app, revision).await?;
+    Ok((admitted.digest, admitted.canonical))
+}
+
 impl Workspace {
     /// Drafts one immutable revision of `app` from admitted content. Needs
     /// `edit_definition` on the app; organization and app come from the

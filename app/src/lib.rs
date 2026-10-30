@@ -9,6 +9,7 @@ pub mod auth_qualification;
 pub mod config;
 pub mod http;
 pub mod imports;
+pub mod query;
 pub mod readiness;
 pub mod roles;
 pub mod storage;
