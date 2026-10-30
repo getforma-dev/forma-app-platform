@@ -8,3 +8,4 @@ Bounded CSV/XLSX ingestion, interpretation and immutable evidence.
 | 18 | [APP-016: Store original and normalized immutable revisions](../0-backlog/APP-016.md) | [PH02](../phases/PH02.md) | S03 | ING | P0 | L | Backlog | APP-008, APP-010 |
 | 19 | [APP-017: Build CSV and XLSX import jobs](../0-backlog/APP-017.md) | [PH02](../phases/PH02.md) | S03 | ING | P1 | L | Backlog | APP-004, APP-015, APP-016 |
 | 20 | [APP-018: Confirm source interpretation and compatibility](../0-backlog/APP-018.md) | [PH02](../phases/PH02.md) | S03 | ING | P1 | L | Backlog | APP-017 |
+| 87 | [APP-087: Decide the parser fuel bound and close the parser packaging residuals (APP-017 preparation review)](../0-backlog/APP-087.md) | [PH02](../phases/PH02.md) | S03 | ING | P1 | M | Backlog | APP-004 |

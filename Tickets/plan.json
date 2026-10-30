@@ -157,6 +157,14 @@
       "outcome": "Measured capacity/recovery/security and operational ownership support the pilot decision.",
       "exit": "Restore/deletion/load/security/accessibility reviews pass with measured limits; runbooks and support owner exist before live rows; external recurring-use learning is kept separate from synthetic demo proof.",
       "phase": "PH06"
+    },
+    {
+      "id": "S13",
+      "name": "Post-MVP completion",
+      "entry": "Select individual tickets when their listed predecessors are Done, in the ADR-010 pick-up order; none waits for PH02–PH06 to start. Integrated slice prerequisites: the 2026-11-02 MVP (PH01 on the live beta) is accepted.",
+      "outcome": "Every acceptance sentence and review residual deferred by ADR-010 is proven on the live beta or the local harness, or dispositioned with evidence.",
+      "exit": "APP-082–086 Done; each \"(Moved from APP-xxx by ADR-010.)\" sentence verified in its owner; every review residual fixed or recorded as an accepted limit with its review file and finding id.",
+      "phase": "PH07"
     }
   ],
   "phases": [
@@ -169,16 +177,16 @@
         "Adopted typed contracts and measured native/parser/query qualification on Forma 3.2 (APP-001–006).",
         "Reproducible app scaffold, synthetic managed-store environment, tenant schema and session boundary (APP-007–009).",
         "Admitted definition, deterministic fixtures, query receipt, atomic command/outcome/audit and retry/conflict harness (APP-010–014).",
-        "Invite-first beta entry at beta.getforma.dev: owner-issued codes, persisted trial entitlement, tenant-scoped hosted signup and protected-route refusal (APP-073/074; ADR-003), qualified on managed RDS and in the beta go-live trial, then left running as the first increment of the invite-first beta, on which the YC demo is recorded after PH04 (APP-075–078; ADR-005, ADR-008)."
+        "Invite-first beta entry at beta.getforma.dev: owner-issued codes, persisted trial entitlement, tenant-scoped hosted signup and protected-route refusal (APP-073/074; ADR-003), qualified on managed RDS and in the beta go-live trial, then left running as the first increment of the invite-first beta, on which the YC demo is recorded after PH04 (APP-075–078; ADR-005, ADR-008); the November 2 MVP cut and its deferrals are ADR-010 (APP-082/083 in PH07)."
       ],
       "exit_criteria": [
         "APP-001–014 and APP-073–078 are Done with reproducible build, schema, parser/query confinement and native adoption evidence; compile refusals and numeric/resource bounds are tested.",
         "FORMA-246 conformance and FORMA-232 budget disposition are accepted by GenUI in APP-003; FORMA-247 is cleared by founder disposition on merged, CI-passing source (ADR-008) and its deferred hosted proof is FORMA-365 / APP-079 before any real organization.",
-        "The integrated query → receipt → explicit command → atomic outcome/audit → reopen path passes; identical retries do not duplicate writes, stale edits conflict, and both revocation/adoption race orders pass (APP-012–014 locally; APP-076 proves last-slot redemption, identical retry and revocation at delivery through the public beta API; both revocation/adoption-versus-commit orders on RDS with lock observations are APP-080 by ADR-008).",
+        "The integrated query → receipt → explicit command → atomic outcome/audit → reopen path passes; identical retries do not duplicate writes, stale edits conflict, and both revocation/adoption race orders pass (APP-012–014 locally; APP-076 proves identical retry and revocation at delivery through the public beta API for an admitted member; concurrent last-slot redemption through the public API is APP-083 by ADR-010; both revocation/adoption-versus-commit orders on RDS with lock observations are APP-080 by ADR-008).",
         "Tenant isolation and authoritative identity checks pass on the actual integrated path (the RDS grant/RLS matrix in APP-078; identity and the private-route refusal matrix on the live deployment in APP-076). Synthetic/local test substitutes are identified and cannot satisfy hosted integration acceptance. Until APP-080 exercises the restore, the pre-migration snapshot is retained but unproven; during the beta the only rollback for a committed migration is a reviewed forward fix (ADR-008), and the gate record names this limitation.",
-        "Public HTTPS preserves invite-first registration and server-bound organization scope; anonymous/pre-access/expired/revoked users cannot dispatch protected work. Actual hosted registration, real verification delivery and mailbox activation and code concurrency/revocation pass in installed Chrome on the live beta (APP-076); native Safari and Firefox admission is APP-079 (ADR-008). The environment runs inside the monthly figure Victor approves for the always-on beta (pending, ADR-008); until he does, ADR-003's $100/month cap governs every window. LLM calls remain disabled before APP-043."
+        "Public HTTPS preserves invite-first registration and server-bound organization scope; anonymous/pre-access/expired/revoked users cannot dispatch protected work. Actual hosted registration, real verification delivery and mailbox activation and code revocation pass in installed Chrome on the live beta (APP-076); public-API code concurrency is APP-083 and the local route-level race repeat and provider fault exercise are APP-082 (ADR-010); native Safari and Firefox admission is APP-079 (ADR-008). The environment runs inside the monthly figure Victor approves for the always-on beta (pending, ADR-008); until he does, ADR-003's $100/month cap governs every window. LLM calls remain disabled before APP-043."
       ],
-      "parallel_work": "FormaStack owns 232/246/247/248 (247/248 cleared by founder disposition) and now 365/366/367. GenUI may advance contracts, parser/query spikes, scaffold, tenant schema and fixtures when their own ticket dependencies permit; only dependent integration acceptance waits.",
+      "parallel_work": "FormaStack owns 232/246/247/248 (247/248 cleared by founder disposition) and now 365/366/367. GenUI may advance contracts, parser/query spikes, scaffold, tenant schema and fixtures when their own ticket dependencies permit; only dependent integration acceptance waits. ADR-010 sets the review tiers and the batched landing PRs until the PH01 gate.",
       "order": 1,
       "depends_on": [],
       "gate_status": "pending",
@@ -192,13 +200,15 @@
       "deliverables": [
         "Durable bounded jobs, immutable source storage, CSV/XLSX processing and confirmed interpretation (APP-015–019).",
         "Typed queries, exact arithmetic/domain operators, reproducible receipts, resource admission and linked filter epochs (APP-020–025).",
-        "Company navigation, canvas interactions, trusted renderers, accessibility, general forms and distinct new/continued work (APP-026–031, APP-081)."
+        "Company navigation, canvas interactions, trusted renderers, accessibility, general forms and distinct new/continued work (APP-026–031, APP-081).",
+        "ADR-010 preparation residuals: the parser fuel bound and packaging follow-ups (APP-087) and the ADR-009 re-review and contract-edition amendments (APP-088), before APP-015's migration and APP-017 Task A5."
       ],
       "exit_criteria": [
         "Both drop and keyboard upload exercise actual CSV/XLSX parsing, mapping confirmation and refusal paths; archive-wide memory/time/expansion limits and provenance are verified (APP-015–019).",
         "Northstar totals are 1,140,000 bytes, 900,000 unmatched and 114,000 bytes/minute; Spend Review totals are 64,000 cents with a 45,000-cent queue. Tests cover windows, units, currencies, pagination and receipt/record snapshot identity (APP-020–025).",
         "Pan/zoom/move/resize/group/fit, focus navigation and forms work through the same model. Component state accessibility checks plus keyboard and screen-reader evidence pass (APP-027–030, APP-081).",
-        "Reload, independent new work, original-node adoption, form retry/conflict and late cross-context responses preserve correct data and authority (APP-025–031, APP-081)."
+        "Reload, independent new work, original-node adoption, form retry/conflict and late cross-context responses preserve correct data and authority (APP-025–031, APP-081).",
+        "The parser fuel bound is decided as an ADR-009 amendment and the release record check is wired into the activation preflight (APP-087); ADR-009 carries the re-review's R-M1 and R-m1–R-m6 and the contract-edition decisions before migration 0008 (APP-088)."
       ],
       "parallel_work": "Imports/query work and workspace interaction can be developed concurrently after their shared contracts settle. Do not bypass PH01 identity or native gates for integrated acceptance.",
       "order": 2,
@@ -306,6 +316,32 @@
       "order": 6,
       "depends_on": [
         "PH05"
+      ],
+      "gate_status": "pending",
+      "gate_evidence": []
+    },
+    {
+      "id": "PH07",
+      "name": "Post-MVP completion",
+      "entry": "The 2026-11-02 MVP (PH01 on the live beta at beta.getforma.dev) is accepted with the ADR-010 deferrals named in its gate record. Tickets here may start as soon as their own predecessors are Done, in the ADR-010 §6 pick-up order; they do not wait for PH02–PH06.",
+      "outcome": "Every acceptance sentence and review residual deferred by ADR-010 is proven or dispositioned, and nothing deferred for the MVP remains outside a Done ticket.",
+      "deliverables": [
+        "The route-level admission races and provider fault exercise on the local public entry (APP-082; moved from APP-074).",
+        "Concurrent redemption through the public beta API on the live deployment (APP-083; moved from APP-076).",
+        "Admission and provider residuals: Victor's custody decision, the D7.8 provider audit kinds and migration, nits (APP-084).",
+        "Definition and publication residuals: server-side policy resolution, the policy subcommand, the permission digest domain (APP-085).",
+        "Managed qualification and native campaign residuals observed in the next RDS window (APP-086)."
+      ],
+      "exit_criteria": [
+        "APP-082–086 are Done; every sentence carrying a \"(Moved from APP-xxx by ADR-010.)\" marker is verified in its owner with retained evidence, and the PH01 gate record's ADR-010 limitations are closed by reference.",
+        "Every review residual listed in ADR-010 §5 is fixed with a test seen failing first, or recorded as an accepted limit in the owning evidence directory with its review file and finding id.",
+        "The ADR-003 custody decision and the ADR-007 D7.8 provider-kinds amendment are recorded, and no real-customer invitation was issued before them.",
+        "PH06 has passed (this is a completion phase; its gate closes last)."
+      ],
+      "parallel_work": "Runs beside PH02–PH06. APP-083 and APP-082 come first (they harden the live beta); APP-084 needs Victor's custody decision; APP-086's RDS half rides the first Phase 2 window. APP-087 and APP-088 are ADR-010 deferrals placed in PH02 because its gate consumes them.",
+      "order": 7,
+      "depends_on": [
+        "PH06"
       ],
       "gate_status": "pending",
       "gate_evidence": []

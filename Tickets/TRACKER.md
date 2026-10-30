@@ -14,10 +14,10 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 6 | [APP-006: Revalidate fAuth contract and integration prerequisites](4-done/APP-006.md) | [PH01](phases/PH01.md) | S01 | IAM | P0 | M | Done | APP-001 |
 | 7 | [APP-007: Scaffold reproducible browser/Rust workspace and one binary's role interfaces](4-done/APP-007.md) | [PH01](phases/PH01.md) | S02 | FND | P0 | L | Done | APP-001, APP-002 |
 | 8 | [APP-008: Establish tenant-bearing schema, database roles and deny-by-default authorization](4-done/APP-008.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Done | APP-007 |
-| 9 | [APP-073: Establish bounded invite and trial admission with owner-issued codes](3-in-review/APP-073.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | In review | APP-008 |
+| 9 | [APP-073: Establish bounded invite and trial admission with owner-issued codes](4-done/APP-073.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Done | APP-008 |
 | 10 | [APP-009: Implement fAuth-backed session lifecycle](0-backlog/APP-009.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-008, APP-073 |
 | 11 | [APP-074: Qualify invite-only signup and public beta entry locally](0-backlog/APP-074.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-006, APP-009, APP-073 |
-| 12 | [APP-010: Persist and admit a minimal typed definition and work binding](2-in-progress/APP-010.md) | [PH01](phases/PH01.md) | S02 | FND | P0 | L | In progress | APP-002, APP-008 |
+| 12 | [APP-010: Persist and admit a minimal typed definition and work binding](3-in-review/APP-010.md) | [PH01](phases/PH01.md) | S02 | FND | P0 | L | In review | APP-002, APP-008 |
 | 13 | [APP-011: Package reproducible synthetic sources and expected outcomes](4-done/APP-011.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | M | Done | APP-002, APP-007 |
 | 14 | [APP-012: Deliver a minimal authorized query with receipt](0-backlog/APP-012.md) | [PH01](phases/PH01.md) | S02 | QRY | P0 | L | Backlog | APP-003, APP-005, APP-009, APP-010, APP-011 |
 | 15 | [APP-013: Commit one declared internal record and recover outcome](0-backlog/APP-013.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | L | Backlog | APP-012 |
@@ -81,9 +81,16 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 73 | [APP-070: Independent release security and accessibility review](0-backlog/APP-070.md) | [PH06](phases/PH06.md) | S12 | VAL | P0 | M | Backlog | APP-062, APP-063, APP-064, APP-065, APP-068, APP-069 |
 | 74 | [APP-071: Publish operator/run/release/rollback and incident runbooks](0-backlog/APP-071.md) | [PH06](phases/PH06.md) | S12 | OPS | P0 | M | Backlog | APP-066, APP-067, APP-068, APP-070 |
 | 75 | [APP-072: Evaluate one real recurring workflow and second-person reuse](0-backlog/APP-072.md) | [PH06](phases/PH06.md) | S12 | VAL | P1 | M | Backlog | APP-058, APP-070, APP-071 |
-| 76 | [APP-075: Finish the managed qualification entry, image and supervisor](3-in-review/APP-075.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | In review | APP-008 |
+| 76 | [APP-075: Finish the managed qualification entry, image and supervisor](4-done/APP-075.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Done | APP-008 |
 | 77 | [APP-077: Package the operator image and tools](0-backlog/APP-077.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-008 |
 | 78 | [APP-078: Qualify the tenant foundation on managed RDS in one reserved window](0-backlog/APP-078.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Backlog | APP-075, APP-077 |
 | 79 | [APP-076: Run the beta go-live trial on the live deployment](0-backlog/APP-076.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | L | Backlog | APP-012, APP-013, APP-014, APP-074, APP-078 |
 | 80 | [APP-079: Hosted identity acceptance deferred from Phase 1](9-blocked/APP-079.md) | [PH06](phases/PH06.md) | S12 | IAM | P1 | L | Blocked | APP-076 |
 | 81 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](0-backlog/APP-080.md) | [PH05](phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-077, APP-078 |
+| 82 | [APP-082: Prove route-level admission races and provider faults on the local public entry (deferred from APP-074)](0-backlog/APP-082.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | Backlog | APP-074 |
+| 83 | [APP-083: Prove concurrent redemption through the public beta API on the live deployment (deferred from APP-076)](0-backlog/APP-083.md) | [PH07](phases/PH07.md) | S13 | VAL | P1 | S | Backlog | APP-076 |
+| 84 | [APP-084: Close the admission and provider review residuals (APP-073 reviews)](0-backlog/APP-084.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | Backlog | APP-073 |
+| 85 | [APP-085: Close the definition and publication review residuals (APP-010 review)](0-backlog/APP-085.md) | [PH07](phases/PH07.md) | S13 | FND | P2 | S | Backlog | APP-010 |
+| 86 | [APP-086: Close the managed qualification and native campaign residuals (APP-075 and APP-008 reviews)](0-backlog/APP-086.md) | [PH07](phases/PH07.md) | S13 | OPS | P2 | M | Backlog | APP-075, APP-078 |
+| 87 | [APP-087: Decide the parser fuel bound and close the parser packaging residuals (APP-017 preparation review)](0-backlog/APP-087.md) | [PH02](phases/PH02.md) | S03 | ING | P1 | M | Backlog | APP-004 |
+| 88 | [APP-088: Fold the ADR-009 re-review and contract-edition residuals into the Phase 2 record (APP-015 preparation)](0-backlog/APP-088.md) | [PH02](phases/PH02.md) | S03 | QRY | P1 | S | Backlog | None |
