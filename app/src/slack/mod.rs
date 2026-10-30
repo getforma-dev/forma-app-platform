@@ -80,6 +80,8 @@ pub const BODY_LIMIT: usize = 16 * 1024;
 /// A held draft's lifetime (DS-49's in-memory drafts, reused for Slack).
 pub const DRAFT_TTL: Duration = Duration::from_secs(600);
 const MAX_DRAFTS: usize = 1024;
+/// Live Slack drafts per member (as MCP's per-member cap).
+const MAX_DRAFTS_PER_MEMBER: usize = 20;
 
 pub const COMMANDS_PATH: &str = "/v1/slack/commands";
 pub const INTERACTIVITY_PATH: &str = "/v1/slack/interactivity";
@@ -215,7 +217,13 @@ impl Slack {
             .collect();
         let mut drafts = self.drafts.lock().ok()?;
         drafts.retain(|_, held| held.created.elapsed() < DRAFT_TTL);
-        if drafts.len() >= MAX_DRAFTS {
+        let mine = drafts
+            .values()
+            .filter(|held| {
+                held.organization == member.organization() && held.principal == member.principal()
+            })
+            .count();
+        if drafts.len() >= MAX_DRAFTS || mine >= MAX_DRAFTS_PER_MEMBER {
             return None;
         }
         drafts.insert(

@@ -77,7 +77,7 @@ fn expense_app() -> CatalogApp {
     }
 }
 
-fn draft() -> Draft {
+pub(crate) fn draft() -> Draft {
     Draft {
         kind: Kind::Create,
         app: expense_app().app,

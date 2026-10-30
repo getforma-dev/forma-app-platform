@@ -38,7 +38,7 @@ pub mod tokens;
 pub mod tools;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use crate::{
     auth::Auth,
