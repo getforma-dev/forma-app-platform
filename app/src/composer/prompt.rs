@@ -102,7 +102,7 @@ pub(crate) fn runnable_example(mut content: Value) -> Value {
         .map(|views| {
             views
                 .iter()
-                .filter(|view| runnable_view(view))
+                .filter(|view| runnable_view(&content, view))
                 .cloned()
                 .collect()
         })
@@ -136,15 +136,21 @@ pub(crate) fn runnable_example(mut content: Value) -> Value {
 }
 
 /// Whether a view is one the engine runs (or a form or note, which run
-/// nothing): `storage::queries::outline`'s rule.
-pub fn runnable_view(view: &Value) -> bool {
+/// nothing): `storage::queries::outline`'s rule. A query reads exactly one
+/// input, and that input must be a `source` input of `content` (APP-093
+/// review m2): a view over a `records` input is never listed by `outline`
+/// and `run_query` denies it, so a generated definition carrying one is
+/// refused before it is published.
+pub fn runnable_view(content: &Value, view: &Value) -> bool {
     let Some(query) = view.get("query") else {
         return true;
     };
     let single_input = query
         .get("inputs")
         .and_then(Value::as_array)
-        .is_some_and(|inputs| inputs.len() == 1);
+        .filter(|inputs| inputs.len() == 1)
+        .and_then(|inputs| inputs[0].as_str())
+        .is_some_and(|input| source_input(content, input));
     let qualified = query
         .get("operations")
         .and_then(Value::as_array)
@@ -156,6 +162,19 @@ pub fn runnable_view(view: &Value) -> bool {
             })
         });
     single_input && qualified
+}
+
+/// Whether `input` names a `source` input of `content`.
+fn source_input(content: &Value, input: &str) -> bool {
+    content
+        .get("inputs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .any(|item| {
+            item.get("id").and_then(Value::as_str) == Some(input)
+                && item.get("kind").and_then(Value::as_str) == Some("source")
+        })
 }
 
 /// The router's user message: the intent as data and the compact catalog.
