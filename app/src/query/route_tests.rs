@@ -285,7 +285,10 @@ async fn refusal_mapping_matches_design_section_nine() {
         assert_eq!(headers[header::CONTENT_TYPE], "application/problem+json");
         assert_eq!(headers[header::CACHE_CONTROL], "no-store");
         let body = to_bytes(response.into_body(), 1024).await.unwrap();
-        assert_eq!(body, format!("{{\"code\":\"{code}\",\"status\":{status}}}").as_bytes());
+        assert_eq!(
+            body,
+            format!("{{\"code\":\"{code}\",\"status\":{status}}}").as_bytes()
+        );
         if status == 429 {
             assert_eq!(headers[header::RETRY_AFTER], "2");
         } else {

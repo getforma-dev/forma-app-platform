@@ -1103,7 +1103,10 @@ async fn route_campaign(
         )
         .await;
     assert_eq!(in_url.status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(in_url.body, "{\"code\":\"invalid_parameters\",\"status\":422}");
+    assert_eq!(
+        in_url.body,
+        "{\"code\":\"invalid_parameters\",\"status\":422}"
+    );
     assert!(maya
         .get(&routes, &format!("{page}?destination=198.51.100.7"))
         .await
