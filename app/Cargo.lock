@@ -312,6 +312,7 @@ dependencies = [
  "forma-ir",
  "forma-ir-derive",
  "forma-server",
+ "futures-core",
  "genui-auth-verifier",
  "libc",
  "reqwest",

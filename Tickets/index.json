@@ -3052,7 +3052,7 @@
       "Depends on": "APP-094",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Branch / PR": "`pivot/realtime` (clone sub-branch from `pivot/pitch-mvp` 9cf52c2; not merged; evidence in `evidence/APP-095/`)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

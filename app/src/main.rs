@@ -578,7 +578,11 @@ async fn main() {
         None => app
             .merge(auth::routes::router(auth.clone()))
             .merge(commands::routes::router(command_routes))
-            .merge(work_routes),
+            .merge(work_routes)
+            // APP-095 (ADR-011 pitch): share with a teammate; the members
+            // list; the session-gated event stream re-authorized at delivery.
+            .merge(genui::sharing::router(auth.clone()))
+            .merge(genui::events::routes::router(auth.clone())),
     });
 
     // ADR-006 expiry sweep: idle and expired records are destroyed and their

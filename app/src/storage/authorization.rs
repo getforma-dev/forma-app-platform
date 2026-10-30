@@ -37,6 +37,11 @@ impl TrustedRequest {
     pub fn organization(&self) -> &str {
         &self.organization
     }
+    /// The member the session resolved to (read-only; APP-095 counts event
+    /// streams per member). Authority still comes only from storage.
+    pub fn principal(&self) -> &str {
+        &self.principal
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
