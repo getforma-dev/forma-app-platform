@@ -229,7 +229,6 @@
     }
   ],
   "ready_by_local_dependencies": [
-    "APP-009",
     "APP-084",
     "APP-087",
     "APP-088"
@@ -489,11 +488,11 @@
     {
       "id": "APP-009",
       "title": "Implement fAuth-backed session lifecycle",
-      "path": "0-backlog/APP-009.md",
+      "path": "3-in-review/APP-009.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "Backlog",
+      "Status": "In review",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S02",
@@ -505,8 +504,8 @@
       "Requirements": "R15, SR2",
       "Depends on": "APP-008, APP-073",
       "External dependencies": "None beyond listed local predecessors",
-      "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by subagents, independent review per slice)",
+      "Branch / PR": "phase-one-spikes (`2742e31`; review fixes in `30a379e`); landing PR pending",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
