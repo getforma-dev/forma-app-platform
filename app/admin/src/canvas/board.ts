@@ -344,6 +344,11 @@ export async function placeWork(app: string, work: string, labels: string[] = []
 }
 
 function onLive(event: LiveEvent): void {
+  if (event.kind === 'stream.lagged') {
+    // Hints were dropped for this stream: re-run what is shown (APP-095 review).
+    for (const work of groups.keys()) runGroup(work, true);
+    return;
+  }
   if (event.kind === 'record.committed') {
     if (groups.has(event.work_id)) runGroup(event.work_id, true);
     return;

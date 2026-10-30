@@ -52,6 +52,7 @@
 !app/src/admission/validate.rs
 !app/src/admission/tests.rs
 !app/src/query/canvas.rs
+!app/src/query/canvas_display.rs
 !app/src/query/canvas_tests.rs
 !app/src/query/mod.rs
 !app/src/query/page.rs
@@ -73,6 +74,7 @@
 !app/src/storage/definition_qualification.rs
 !app/src/storage/definitions.rs
 !app/src/storage/managed_qualification.rs
+!app/src/storage/pitch_qualification.rs
 !app/src/storage/managed_qualification/tests.rs
 !app/src/storage/pool.rs
 !app/src/storage/qualification.rs

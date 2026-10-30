@@ -454,6 +454,7 @@ async fn campaign() {
                 work: work.clone(),
                 pages: canvas_pages,
                 live_events: "/v1/events".into(),
+                demo_organizations: Default::default(),
             }))),
         composer::routes::PATH,
         composer::routes::router(Arc::new(Compose::new(auth.clone(), composer))),

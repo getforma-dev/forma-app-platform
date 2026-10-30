@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 100] = [
+const SOURCES: [(&str, &[u8]); 101] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -380,6 +380,10 @@ const SOURCES: [(&str, &[u8]); 100] = [
         include_bytes!("managed_qualification/tests.rs"),
     ),
     ("app/src/storage/mod.rs", include_bytes!("mod.rs")),
+    (
+        "app/src/storage/pitch_qualification.rs",
+        include_bytes!("pitch_qualification.rs"),
+    ),
     ("app/src/storage/pool.rs", include_bytes!("pool.rs")),
     (
         "app/src/storage/qualification.rs",

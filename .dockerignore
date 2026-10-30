@@ -86,6 +86,7 @@ app/src/storage/**
 !app/src/query/
 app/src/query/**
 !app/src/query/canvas.rs
+!app/src/query/canvas_display.rs
 !app/src/query/mod.rs
 !app/src/query/page.rs
 !app/src/query/receipt.rs
@@ -142,8 +143,10 @@ app/admin/src/work/**
 app/admin/src/canvas/**
 !app/admin/src/canvas/app.tsx
 !app/admin/src/canvas/board.ts
+!app/admin/src/canvas/chart.ts
 !app/admin/src/canvas/commands.ts
 !app/admin/src/canvas/compose.ts
+!app/admin/src/canvas/display.ts
 !app/admin/src/canvas/layout.ts
 !app/admin/src/canvas/live.ts
 !app/admin/src/canvas/queries.ts
