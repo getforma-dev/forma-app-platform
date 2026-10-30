@@ -76,6 +76,33 @@ impl Registry {
                 && binding.organization_id == organization
         })
     }
+
+    /// APP-009: the one provider tenant this organization is bound to for an
+    /// issuer, the trusted `expected_tenant` of the verifier. None when the
+    /// organization has no binding for it or (ambiguously) more than one.
+    pub fn tenant_for(&self, organization: &str, issuer: &str) -> Option<&str> {
+        let mut found = self
+            .bindings
+            .iter()
+            .filter(|b| b.organization_id == organization && b.issuer == issuer);
+        let first = found.next()?;
+        found
+            .next()
+            .is_none()
+            .then_some(first.provider_tenant_id.as_str())
+    }
+
+    /// Every organization the registry binds (the expiry sweep's scope list).
+    pub fn organizations(&self) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .bindings
+            .iter()
+            .map(|b| b.organization_id.clone())
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
 }
 
 fn private_bytes(path: &Path, limit: u64) -> Result<Vec<u8>> {

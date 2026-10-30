@@ -130,7 +130,7 @@ fn base32(text: &[u8], bytes: usize) -> Option<Vec<u8>> {
     }
     (out.len() == bytes && buffer == 0).then_some(out)
 }
-fn domain_digest(domain: &[u8], raw: &[u8]) -> String {
+pub(super) fn domain_digest(domain: &[u8], raw: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(domain);
     hash.update([0u8]);
@@ -143,7 +143,7 @@ fn domain_digest(domain: &[u8], raw: &[u8]) -> String {
     }
     out
 }
-fn digest_shaped(value: &str) -> bool {
+pub(super) fn digest_shaped(value: &str) -> bool {
     value.len() == 71
         && value.starts_with("sha256:")
         && value[7..]
@@ -218,7 +218,7 @@ fn identity_agrees(
             && (1..=256).contains(&identity.provider_subject.len()),
     )
 }
-async fn binding_active(
+pub(super) async fn binding_active(
     transaction: &Transaction<'_>,
     identity: &VerifiedNonmember,
     organization: &str,

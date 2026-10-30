@@ -1,0 +1,103 @@
+{
+  "admission_refusals": [
+    {
+      "code": "client_grant",
+      "mutation": "/content/permissions"
+    },
+    {
+      "code": "unknown_field",
+      "mutation": "/content/theme"
+    },
+    {
+      "code": "executable_content",
+      "mutation": "/content/views/0/script"
+    },
+    {
+      "code": "unregistered_operator",
+      "mutation": "/content/views/0/query/operations/0/type"
+    },
+    {
+      "code": "unregistered_renderer",
+      "mutation": "/content/views/0/kind"
+    },
+    {
+      "code": "too_many_views",
+      "mutation": "25 views"
+    }
+  ],
+  "checks": [
+    {
+      "name": "operator seed gives both organizations their owner_publish policy row and the operator backfill their five genesis heads; Spend Review exists only in the canary organization",
+      "passed": true
+    },
+    {
+      "name": "client grants, unknown fields, executable strings, unregistered operators and renderers and 25 views fail whole-output admission with their coded reason; a caller-forged admitted definition and an edition-2 definition are refused by storage; nothing is written",
+      "passed": true
+    },
+    {
+      "name": "Northstar Spend Review created through the admitted path: workspace drafts the admitted revision, control publishes it under owner_publish, workspace saves work binding Northstar's own expenses revision and a decision collection (S05 fixture)",
+      "passed": true
+    },
+    {
+      "name": "stored revision re-admits to the same digest and bytes; publication and saved work read back as canonical documents pinned to that digest",
+      "passed": true
+    },
+    {
+      "name": "the publication contains the typed input contracts and record schema (digests over their canonical bytes) and no source, revision, collection or work identity; concrete bindings exist only in the saved work",
+      "passed": true
+    },
+    {
+      "name": "contracts/validate.py validates the stored definition, publication, saved work and source revision, agrees on every definition, input-contract and record-schema digest and on the canonical bytes, and accepts the re-identified Spend Review bundle (validate_bundle)",
+      "passed": true
+    },
+    {
+      "name": "binding the canary's Spend Review source from Northstar, publishing or saving Northstar's revision under canary scope, leaving an input unbound, binding a source input as records, drafting without edit_definition, publishing as a non-owner under owner_publish and reading as a revoked or ungranted member are all Denied and write nothing",
+      "passed": true
+    },
+    {
+      "name": "workspace and data cannot write publications, control and data cannot write saved work, workspace cannot bump a saved work version, control cannot advance the workspace chain (42501 or no visible row); nothing written",
+      "passed": true
+    },
+    {
+      "name": "a SERIALIZABLE publication whose control-chain head was advanced after its snapshot fails with 40001, rolls back whole and succeeds on its single retry in a new transaction; both publications and exactly two control events exist",
+      "passed": true
+    },
+    {
+      "name": "a publication that loses to a concurrent writer on both attempts returns PublishResult::Stale naming the newest publication (412); neither attempt left a publication or event",
+      "passed": true
+    },
+    {
+      "name": "after closing every pool and building new stores, the admitted definition, its publication and the saved work reload with identical canonical bytes and digests",
+      "passed": true
+    },
+    {
+      "name": "the operator recomputes the workspace (definition.drafted, work.saved, work.bound) and control (publication.published) chains from their genesis heads to the heads; the canary chains are untouched",
+      "passed": true
+    },
+    {
+      "name": "local database and private fixture files removed",
+      "passed": true
+    }
+  ],
+  "limits": [
+    "Synthetic local password authentication is not RDS IAM.",
+    "Identities are synthetic registry-bound fixtures; no session, route or browser flow is exercised (APP-009/012/013).",
+    "The app shell, permission rows and the Northstar expenses source revision are written by fixture-only operator SQL; their product paths are APP-077 and the import tickets'.",
+    "Source digests are the APP-002 synthetic placeholders; no source bytes were imported.",
+    "The database itself is not restarted (tmpfs fixture); the restart is of every application pool and store.",
+    "The 40001 path is exercised at a statement (the control head lock); a 40001 at COMMIT is classified by the same code path but not provoked here."
+  ],
+  "managed_acceptance": false,
+  "passed": true,
+  "s05": {
+    "app_id": "00000000-0000-4000-8000-0000000000c9",
+    "definition_digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9",
+    "expenses_revision": "00000000-0000-4000-8000-0000000000e3",
+    "expenses_source": "00000000-0000-4000-8000-0000000000e2",
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "policy": "00000000-0000-4000-8000-0000000000e0"
+  },
+  "schema_version": 1,
+  "scope": "APP-010 isolated native PostgreSQL TLS definition, publication and saved-work qualification",
+  "server_version": "16.13 (Debian 16.13-1.pgdg13+1)"
+}
