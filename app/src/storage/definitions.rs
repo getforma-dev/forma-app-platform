@@ -313,9 +313,10 @@ async fn fresh(transaction: &Transaction<'_>, count: i32) -> Result<(Vec<String>
     ))
 }
 
-/// The two application chains this module appends to (D7.8).
+/// The two application chains this module appends to (D7.8); the session
+/// module appends `session.signed_in` to the workspace chain.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Chain {
+pub(super) enum Chain {
     Workspace,
     Control,
 }
@@ -327,11 +328,11 @@ impl Chain {
         }
     }
 }
-struct Event<'a> {
-    kind: &'static str,
-    app: &'a str,
-    work: Option<&'a str>,
-    outcome: Option<&'a str>,
+pub(super) struct Event<'a> {
+    pub kind: &'static str,
+    pub app: Option<&'a str>,
+    pub work: Option<&'a str>,
+    pub outcome: Option<&'a str>,
 }
 
 /// The D7.8 event hash: SHA-256 over `forma:audit-event:v1`, NUL, the previous
@@ -357,7 +358,7 @@ fn event_body(
     sequence: i64,
     kind: &str,
     actor: &str,
-    app: &str,
+    app: Option<&str>,
     work: Option<&str>,
     outcome: Option<&str>,
     occurred: &str,
@@ -389,8 +390,27 @@ async fn append(
     request: &TrustedRequest,
     event: Event<'_>,
 ) -> Result<String> {
+    append_as(
+        transaction,
+        chain,
+        &request.organization,
+        &request.principal,
+        event,
+    )
+    .await
+}
+
+/// As `append`, for an actor whose authority the caller's transaction has
+/// already fenced (the session module, after `lock_member_authority`).
+pub(super) async fn append_as(
+    transaction: &Transaction<'_>,
+    chain: Chain,
+    organization: &str,
+    actor: &str,
+    event: Event<'_>,
+) -> Result<String> {
     let role = chain.role();
-    let head = transaction.query("SELECT h.chain_sequence::bigint,h.head_hash::text,gen_random_uuid()::text,to_char(date_trunc('second',now()) AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM genui.audit_heads h WHERE h.organization_id=$1::text::uuid AND h.writer_role=$2 FOR UPDATE", &[&request.organization,&role]).await?;
+    let head = transaction.query("SELECT h.chain_sequence::bigint,h.head_hash::text,gen_random_uuid()::text,to_char(date_trunc('second',now()) AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM genui.audit_heads h WHERE h.organization_id=$1::text::uuid AND h.writer_role=$2 FOR UPDATE", &[&organization,&role]).await?;
     let head = head.first().ok_or(Error::Configuration)?;
     let sequence = integer(head, 0)?
         .checked_add(1)
@@ -401,11 +421,11 @@ async fn append(
     let occurred = text(head, 3)?;
     let body = event_body(
         chain,
-        &request.organization,
+        organization,
         &id,
         sequence,
         event.kind,
-        &request.principal,
+        actor,
         event.app,
         event.work,
         event.outcome,
@@ -414,8 +434,8 @@ async fn append(
     );
     let hash = event_hash(&previous, &body)?;
     transaction.query("INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,actor_principal_id,app_id,work_id,record_id,code_id,outcome_digest,occurred_at,previous_hash,hash) VALUES ($1::text::uuid,$2::text::uuid,$3,$4::bigint,$5,$6::text::uuid,$7::text::uuid,$8::text::uuid,NULL,NULL,$9::text,$10::text::timestamptz,$11::text,$12::text)",
-        &[&request.organization,&id,&role,&sequence,&event.kind,&request.principal,&event.app,&event.work,&event.outcome,&occurred,&previous,&hash]).await?;
-    transaction.query("UPDATE genui.audit_heads SET chain_sequence=$1::bigint,head_hash=$2::text WHERE organization_id=$3::text::uuid AND writer_role=$4", &[&sequence,&hash,&request.organization,&role]).await?;
+        &[&organization,&id,&role,&sequence,&event.kind,&actor,&event.app,&event.work,&event.outcome,&occurred,&previous,&hash]).await?;
+    transaction.query("UPDATE genui.audit_heads SET chain_sequence=$1::bigint,head_hash=$2::text WHERE organization_id=$3::text::uuid AND writer_role=$4", &[&sequence,&hash,&organization,&role]).await?;
     Ok(id)
 }
 
@@ -522,7 +542,7 @@ impl Workspace {
             }
             append(transaction, Chain::Workspace, request, Event {
                 kind: "definition.drafted",
-                app,
+                app: Some(app),
                 work: None,
                 outcome: Some(&content.digest),
             })
@@ -739,7 +759,7 @@ impl Workspace {
             }
             append(transaction, Chain::Workspace, request, Event {
                 kind: "work.saved",
-                app,
+                app: Some(app),
                 work: Some(&work),
                 outcome: None,
             })
@@ -747,7 +767,7 @@ impl Workspace {
             for binding in &bound {
                 append(transaction, Chain::Workspace, request, Event {
                     kind: "work.bound",
-                    app,
+                    app: Some(app),
                     work: Some(&work),
                     outcome: Some(binding),
                 })
@@ -966,7 +986,7 @@ impl Control {
             transaction.lease.checkpoint("publish").await;
             append(transaction, Chain::Control, request, Event {
                 kind: "publication.published",
-                app,
+                app: Some(app),
                 work: None,
                 outcome: Some(&admitted.digest),
             })
@@ -1062,7 +1082,7 @@ mod tests {
             2,
             "definition.drafted",
             "00000000-0000-4000-8000-0000000000ca",
-            "00000000-0000-4000-8000-0000000000c9",
+            Some("00000000-0000-4000-8000-0000000000c9"),
             None,
             Some(&outcome),
             "2026-10-29T12:00:00Z",

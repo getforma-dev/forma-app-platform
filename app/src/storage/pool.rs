@@ -61,7 +61,7 @@ pub struct Settings {
     host: String,
     port: u16,
     #[cfg(test)]
-    pub(super) hooks: Arc<TestHooks>,
+    pub(crate) hooks: Arc<TestHooks>,
 }
 impl Settings {
     pub fn new(
@@ -111,7 +111,7 @@ impl Settings {
 // production constructor can select these lifecycle barriers.
 #[cfg(test)]
 #[derive(Default)]
-pub(super) struct TestHooks {
+pub(crate) struct TestHooks {
     phase: std::sync::Mutex<Option<&'static str>>,
     pub reached: Notify,
     pub release: Notify,
@@ -516,7 +516,7 @@ async fn verify_schema_version(client: &Client) -> Result<()> {
         )
         .await
         .map_err(|_| Error::Unavailable)?;
-    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 5 {
+    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 6 {
         return Err(Error::Unavailable);
     }
     Ok(())

@@ -90,7 +90,7 @@ const SEED_NORTHSTAR_SHA: &str = "45639ea369193d60f45fbafbe6c3aad648881017df5761
 const SEED_SPEND_REVIEW_SHA: &str =
     "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650";
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v5.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v6.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -108,7 +108,7 @@ const RESULT_LIMIT: usize = 8192;
 /// Every source compiled into the library test executable, in this order.
 /// Embedded catalog/migration resources are pinned separately below. This is
 /// a binding of compiled inputs, not a whole-image or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 32] = [
+const SOURCES: [(&str, &[u8]); 47] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -132,6 +132,35 @@ const SOURCES: [(&str, &[u8]); 32] = [
         include_bytes!("../admission/validate.rs"),
     ),
     (
+        "app/src/auth/capability.rs",
+        include_bytes!("../auth/capability.rs"),
+    ),
+    (
+        "app/src/auth/cookies.rs",
+        include_bytes!("../auth/cookies.rs"),
+    ),
+    ("app/src/auth/csrf.rs", include_bytes!("../auth/csrf.rs")),
+    ("app/src/auth/mod.rs", include_bytes!("../auth/mod.rs")),
+    (
+        "app/src/auth/pending.rs",
+        include_bytes!("../auth/pending.rs"),
+    ),
+    ("app/src/auth/pkce.rs", include_bytes!("../auth/pkce.rs")),
+    (
+        "app/src/auth/provider.rs",
+        include_bytes!("../auth/provider.rs"),
+    ),
+    (
+        "app/src/auth/routes.rs",
+        include_bytes!("../auth/routes.rs"),
+    ),
+    (
+        "app/src/auth/synthetic_issuer.rs",
+        include_bytes!("../auth/synthetic_issuer.rs"),
+    ),
+    ("app/src/auth/tests.rs", include_bytes!("../auth/tests.rs")),
+    ("app/src/auth/vault.rs", include_bytes!("../auth/vault.rs")),
+    (
         "app/src/auth_qualification.rs",
         include_bytes!("../auth_qualification.rs"),
     ),
@@ -140,6 +169,12 @@ const SOURCES: [(&str, &[u8]); 32] = [
         include_bytes!("../auth_qualification/tests.rs"),
     ),
     ("app/src/config.rs", include_bytes!("../config.rs")),
+    (
+        "app/src/http/limits.rs",
+        include_bytes!("../http/limits.rs"),
+    ),
+    ("app/src/http/mod.rs", include_bytes!("../http/mod.rs")),
+    ("app/src/http/proxy.rs", include_bytes!("../http/proxy.rs")),
     (
         "app/src/imports/mod.rs",
         include_bytes!("../imports/mod.rs"),
@@ -191,6 +226,7 @@ const SOURCES: [(&str, &[u8]); 32] = [
         include_bytes!("qualification_cases.rs"),
     ),
     ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
+    ("app/src/storage/sessions.rs", include_bytes!("sessions.rs")),
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
     ("app/src/supervise.rs", include_bytes!("../supervise.rs")),
     (

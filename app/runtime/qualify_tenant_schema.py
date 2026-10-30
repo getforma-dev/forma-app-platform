@@ -141,6 +141,32 @@ APPLICATION_CHAIN_KINDS = {
 }
 
 
+# Migration 0006 (ADR-006, ADR-007 D7.3/D7.5/D7.11; APP-009): the three session
+# relations, genui_workspace's column SELECT/INSERT, UPDATE(last_seen_at,
+# revoked_at) and table DELETE, plus one narrow column read of
+# code_reservations (the open D7.3 question recorded in evidence/APP-009).
+SESSION_TABLES = ('prelogin_flows','pre_access_sessions','sessions')
+PRELOGIN_COLUMNS = ('organization_id','flow_id','cookie_digest','state_digest','kind','reservation_id','signup_handoff_id',
+                    'code_verifier_ciphertext','client_address_class','created_at','expires_at')
+PRE_ACCESS_COLUMNS = ('organization_id','session_id','cookie_digest','issuer','provider_tenant_id','provider_subject','email_verified',
+                      'flow_kind','pending_admission_id','pending_expires_at','refresh_token_ref','created_at','last_seen_at','expires_at')
+SESSION_COLUMNS = ('organization_id','session_id','cookie_digest','principal_id','membership_epoch_at_mint','entitlement_id',
+                   'registry_sha256','refresh_token_ref','created_at','last_seen_at','absolute_expires_at')
+PENDING_LOOKUP_COLUMNS = ('organization_id','reservation_id','kind','issuer','provider_tenant_id','provider_subject','state','expires_at')
+SESSION_GRANTS = set().union(
+    _role_columns('genui_workspace','prelogin_flows','SELECT',*PRELOGIN_COLUMNS),
+    _role_columns('genui_workspace','prelogin_flows','INSERT',*PRELOGIN_COLUMNS),
+    _role_columns('genui_workspace','pre_access_sessions','SELECT',*PRE_ACCESS_COLUMNS,'revoked_at'),
+    _role_columns('genui_workspace','pre_access_sessions','INSERT',*PRE_ACCESS_COLUMNS),
+    _role_columns('genui_workspace','pre_access_sessions','UPDATE','last_seen_at','revoked_at'),
+    _role_columns('genui_workspace','sessions','SELECT',*SESSION_COLUMNS,'revoked_at'),
+    _role_columns('genui_workspace','sessions','INSERT',*SESSION_COLUMNS),
+    _role_columns('genui_workspace','sessions','UPDATE','last_seen_at','revoked_at'),
+    {('genui_workspace',table,'DELETE',None) for table in SESSION_TABLES},
+    _role_columns('genui_workspace','code_reservations','SELECT',*PENDING_LOOKUP_COLUMNS),
+)
+
+
 def sha(value):
     return 'sha256:'+hashlib.sha256(value.encode()).hexdigest()
 
@@ -233,12 +259,14 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
         # Application roles reach 0003's relations only through 0004's entitlement
-        # reads and 0005's own-chain audit append (D7.8); never the code ledger.
+        # reads, 0005's own-chain audit append (D7.8) and 0006's narrow pending
+        # lookup (no code_id, no context digest); never codes or indexes.
         assert {t for t in actual if t[0] in APP_ROLES and t[1] in ADMISSION_TABLES+('code_index','handle_index')}==ENTITLEMENT_READS|{
-            t for t in DEFINITION_WORK_GRANTS if t[1] in ('audit_events','audit_heads')}
+            t for t in DEFINITION_WORK_GRANTS if t[1] in ('audit_events','audit_heads')}|{
+            t for t in SESSION_GRANTS if t[1]=='code_reservations'}
         schema=set(c.execute("""SELECT n.nspname,a.privilege_type FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) a
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND pg_get_userbyid(a.grantee)='genui_admit'""").fetchall())
         assert schema=={('genui','USAGE'),('genui_private','USAGE')},schema
@@ -247,8 +275,8 @@ def admission_checks(pg, passed, denied):
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND a.privilege_type='EXECUTE' AND a.grantee<>p.proowner""").fetchall())
         assert executes=={('lock_member_authority',r) for r in ('genui_workspace','genui_control','genui_data')}|{('lock_work_revision','genui_data')}|{
             (name,'genui_workspace') for name in ADMIT_FUNCTIONS},executes
-    passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns (D7.3); EXECUTE on the six functions is genui_workspace only',
-           admit_grant_count=len(ADMIT_GRANTS),definition_work_grant_count=len(DEFINITION_WORK_GRANTS))
+    passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns plus 0006 session columns (D7.3); EXECUTE on the six functions is genui_workspace only',
+           admit_grant_count=len(ADMIT_GRANTS),definition_work_grant_count=len(DEFINITION_WORK_GRANTS),session_grant_count=len(SESSION_GRANTS))
 
     # --- genui_admit attributes, memberships and function properties (D7.1, A3, A4) ---
     with pg.connect('postgres') as c:
@@ -391,6 +419,13 @@ def admission_checks(pg, passed, denied):
                     assert c.execute("UPDATE genui.audit_heads SET chain_sequence=chain_sequence WHERE organization_id=%s",(org0,)).rowcount==0
                     c.rollback()
                 passed(role+' sees and advances no admission or operator head (0005 own-chain binding)')
+                continue
+            if table=='code_reservations' and role=='genui_workspace':
+                # 0006 (APP-009's pending lookup, an open D7.3 question): the
+                # identity, kind, state and expiry columns only; never the code
+                # id or the pre-login context digest.
+                denied(role+' cannot read code_reservations.code_id',role,'SELECT code_id FROM genui.code_reservations')
+                denied(role+' cannot read code_reservations.context_digest',role,'SELECT context_digest FROM genui.code_reservations')
                 continue
             denied(role+' cannot read '+table+' directly',role,'SELECT organization_id FROM genui.'+table)
         denied(role+' cannot insert an access code directly',role,
@@ -835,6 +870,78 @@ def definition_work_checks(pg, passed, denied):
     passed('0005 role separation: workspace never publishes, control never saves work, data/worker write neither, no role writes permission rows, rewrites or deletes drafts, publications, saved work or audit events, or appends to another chain or kind')
 
 
+def session_checks(pg, passed, denied):
+    """ADR-006 and ADR-007 D7.3/D7.5 for migration 0006 (APP-009) on the actual local database.
+
+    The storage-module session transactions (flow, pre-access, admission,
+    minting under the member fence, sign-out, expiry, sweep) are the Rust
+    session campaign's; this proves the relations, grants and CHECKs they rely
+    on, as each role, every probe rolled back.
+    """
+    org0,org1=ORGANIZATIONS
+    with pg.connect('postgres') as c:
+        rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",
+                       (list(SESSION_TABLES),)).fetchall()
+        assert rows==[(t,True,True,'genui_owner') for t in sorted(SESSION_TABLES)],rows
+        policy="(organization_id = (NULLIF(current_setting('genui.organization_id'::text, true), ''::text))::uuid)"
+        rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
+          AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(SESSION_TABLES),)).fetchall()
+        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in sorted(SESSION_TABLES)],rows
+        # Cookie values only as digests: no column of the three holds a raw value.
+        digests=c.execute("""SELECT c.relname,a.attname,format_type(a.atttypid,a.atttypmod) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND a.attname LIKE '%%digest' ORDER BY 1,2""",
+                          (list(SESSION_TABLES),)).fetchall()
+        assert digests==[('pre_access_sessions','cookie_digest','genui.digest'),('prelogin_flows','cookie_digest','genui.digest'),
+                         ('prelogin_flows','state_digest','genui.digest'),('sessions','cookie_digest','genui.digest')],digests
+        assert c.execute("""SELECT count(*) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+          WHERE n.nspname='genui' AND c.relname = ANY(%s) AND a.attnum>0 AND (a.attname LIKE '%%token' OR a.attname LIKE '%%nonce%%'
+          OR a.attname LIKE '%%cookie' OR a.attname IN ('state','code_verifier','refresh_token','access_token'))""",(list(SESSION_TABLES),)).fetchone()==(0,)
+        binding=c.execute('SELECT issuer,provider_tenant_id FROM genui.provider_tenant_bindings WHERE organization_id=%s ORDER BY issuer LIMIT 1',
+                          (org0,)).fetchone()
+    passed('0006 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; cookies and state only as genui.digest, no token, verifier or nonce column',
+           tables=list(SESSION_TABLES))
+    flow=("""INSERT INTO genui.prelogin_flows(organization_id,flow_id,cookie_digest,state_digest,kind,code_verifier_ciphertext,client_address_class,
+      created_at,expires_at) VALUES (%s,%s,%s,%s,'signin',%s,'v4:192.0.2.1',now(),now()+interval '10 minutes')""",
+          (org0,str(uuid.uuid4()),sha('cookie-'+uuid.uuid4().hex),sha('state'),b'\x01'*40))
+    pre_id=str(uuid.uuid4())
+    pre=("""INSERT INTO genui.pre_access_sessions(organization_id,session_id,cookie_digest,issuer,provider_tenant_id,provider_subject,email_verified,
+      flow_kind,refresh_token_ref,created_at,last_seen_at,expires_at) VALUES (%s,%s,%s,%s,%s,'usr_schema',false,'signin',%s,now(),now(),now()+interval '30 minutes')""",
+         (org0,pre_id,sha('pre-'+uuid.uuid4().hex),binding[0],binding[1],str(uuid.uuid4())))
+    with pg.connect('genui_workspace') as c:
+        scope(c,org0)
+        for statement,params in (flow,pre):
+            assert c.execute(statement,params).rowcount==1
+        assert c.execute('UPDATE genui.pre_access_sessions SET last_seen_at=now() WHERE session_id=%s',(pre_id,)).rowcount==1
+        assert c.execute('SELECT session_id::text FROM genui.pre_access_sessions WHERE session_id=%s FOR UPDATE SKIP LOCKED',(pre_id,)).fetchall()==[(pre_id,)]
+        assert c.execute('DELETE FROM genui.pre_access_sessions WHERE session_id=%s',(pre_id,)).rowcount==1
+        assert c.execute('DELETE FROM genui.prelogin_flows').rowcount==1
+        assert c.execute("SELECT count(*) FROM genui.code_reservations WHERE kind='pending' AND state='live'").fetchone()[0]>=0
+        c.rollback()
+    passed('0006 grants: genui_workspace inserts, reads, touches, locks and deletes its own pre-login and pre-access rows (rolled back)')
+    for name,role,(statement,params),expected in (
+            ('workspace cannot rewrite a pre-login flow','genui_workspace',('UPDATE genui.prelogin_flows SET kind=kind',()),'42501'),
+            ('workspace cannot rewrite a session principal','genui_workspace',('UPDATE genui.sessions SET principal_id=principal_id',()),'42501'),
+            ('workspace cannot rewrite a pre-access identity','genui_workspace',('UPDATE genui.pre_access_sessions SET email_verified=true',()),'42501'),
+            ('workspace cannot read a code id from reservations','genui_workspace',('SELECT code_id FROM genui.code_reservations',()),'42501'),
+            ('workspace cannot read a reservation context digest','genui_workspace',('SELECT context_digest FROM genui.code_reservations',()),'42501'),
+            ('workspace cannot write a reservation','genui_workspace',("UPDATE genui.code_reservations SET state='consumed'",()),'42501'),
+            ('workspace cannot write another organization (FORCE RLS)','genui_workspace',(flow[0],(org1,)+flow[1][1:]),'42501'),
+            ('a pre-login flow lasts at most 10 minutes','genui_workspace',(flow[0].replace("interval '10 minutes'","interval '11 minutes'"),flow[1]),'23514'),
+            ('a pre-access session lasts at most 30 minutes','genui_workspace',(pre[0].replace("interval '30 minutes'","interval '31 minutes'"),pre[1]),'23514'),
+            ('a sign-in flow carries no reservation','genui_workspace',(flow[0].replace("'signin'","'signup'"),flow[1]),'23514'),
+            ('control cannot read sessions','genui_control',('SELECT session_id FROM genui.sessions',()),'42501'),
+            ('data cannot read pre-access sessions','genui_data',('SELECT session_id FROM genui.pre_access_sessions',()),'42501'),
+            ('worker cannot read pre-login flows','genui_worker',('SELECT flow_id FROM genui.prelogin_flows',()),'42501'),
+            ('control cannot write sessions','genui_control',flow,'42501'),
+            ('data cannot delete sessions','genui_data',('DELETE FROM genui.sessions',()),'42501')):
+        denied('0006 '+name,role,statement,params,expected=expected)
+    with pg.connect('genui_workspace') as c:
+        scope(c,org0)
+        assert c.execute("""SELECT count(*) FROM genui.sessions s WHERE s.absolute_expires_at>s.created_at+interval '12 hours'""").fetchone()==(0,)
+    passed('0006 role separation and bounds: only genui_workspace touches session rows, only last_seen_at/revoked_at are updatable, the pending lookup reads no code id or context digest, and the 10-minute, 30-minute and 12-hour CHECKs hold')
+
+
 def command(args, check=True):
     p = subprocess.run(args, capture_output=True, text=True, timeout=60)
     if check and p.returncode: raise RuntimeError('local Docker operation failed: '+p.stderr[-1200:])
@@ -889,13 +996,14 @@ def scope(c, org=ORGANIZATIONS[0], principal=P, epoch=1):
 
 
 def qualify():
-    report={'schema_version':1,'scope':'APP-008/APP-073/APP-010 real local PostgreSQL schema/ACL, admission-function and definition/work grant qualification',
+    report={'schema_version':1,'scope':'APP-008/APP-073/APP-010/APP-009 real local PostgreSQL schema/ACL, admission-function, definition/work and session grant qualification',
             'managed_acceptance':False,'image':IMAGE,'server_version':'16.13','network':'random loopback-only published port',
             'checks':[],'passed':False,'limits':['Local trust authentication is not RDS IAM/TLS qualification.',
             'Operator-seeded contract shapes are not source import, hosted identity or successful application business writes.',
             'Admission functions are exercised directly as genui_workspace with fixture codes written as the operator channel would; '
             'the storage-module admission path, the operator package, sessions and hosted identity are not exercised.',
             'The 0005 definition/work grants are exercised as raw role statements; the storage-module definition, publication and saved-work transactions are the Rust definition campaign.',
+            'The 0006 session grants and CHECKs are exercised as raw role statements; the session transactions and routes are the Rust session campaign (auth::tests::native_session_campaign).',
             'Native pool cancellation/reuse and actual managed trials remain separate.']}
     def passed(name, **facts): report['checks'].append({'name':name,'passed':True,**facts})
     catalog_query=json.loads((MIGRATIONS/'catalog-query.json').read_text())['sql']
@@ -1537,6 +1645,7 @@ def qualify():
             passed('operator seed refuses changed existing epoch without overwriting authority')
             admission_checks(pg,passed,denied)
             definition_work_checks(pg,passed,denied)
+            session_checks(pg,passed,denied)
             report['source_sha256']={str(p.relative_to(Path(__file__).resolve().parents[2])):hashlib.sha256(p.read_bytes()).hexdigest()
                                     for p in (Path(runtime.__file__),Path(__file__),Path(__file__).with_name('tenant_seed.py'),MIGRATIONS/'manifest.json',
                                               *(MIGRATIONS/item['file'] for item in manifest['migrations']+manifest['catalog']))}

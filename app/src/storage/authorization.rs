@@ -9,8 +9,9 @@ use std::sync::{
 use tokio::time::{timeout_at, Instant};
 use tokio_postgres::{error::SqlState, types::ToSql, Row};
 
-/// No public constructor, deserializer or clone. APP-009 must supply the
-/// reviewed session adapter before ordinary production access.
+/// No public constructor, deserializer or clone. In production only
+/// `storage::sessions::resolve_session` (APP-009) constructs one, from a live
+/// workspace session row, the member's current epoch and the registry.
 ///
 /// ```compile_fail
 /// use genui::storage::TrustedRequest;
