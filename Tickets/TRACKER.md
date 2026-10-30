@@ -110,3 +110,5 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 102 | [APP-102: Receipt upload and the expense ledger: a photo becomes a reviewed row, every row adds up live](0-backlog/APP-102.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | M | Backlog | APP-093, APP-095 |
 | 103 | [APP-103: Canvas utility widgets: weather, calculator and clock that a member customizes in words](0-backlog/APP-103.md) | [PH08](phases/PH08.md) | S14 | AI | P1 | M | Backlog | APP-094, APP-101 |
 | 104 | [APP-104: Canvas library pane, a clean board, and Figma-style controls](0-backlog/APP-104.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-094, APP-101, APP-103 |
+| 105 | [APP-105: Ad hoc pitch work of 2026-10-30: deploy fixes, live operations, canvas additions and what remains](0-backlog/APP-105.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-096, APP-099, APP-100, APP-101, APP-102, APP-103, APP-104 |
+| 106 | [APP-106: Focus mode and Unite: work on a card in a modal, and assemble an app's cards into the whole app](0-backlog/APP-106.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-104 |
