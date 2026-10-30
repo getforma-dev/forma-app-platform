@@ -321,8 +321,8 @@ pub fn working_days(start: &str, end: &str) -> Option<i64> {
 
 /// The text after `marker` up to the first stop word or punctuation.
 fn phrase_after(text: &str, marker: &str, stops: &[&str]) -> Option<String> {
-    let lower = text.to_lowercase();
-    let start = lower.find(marker)? + marker.len();
+    // Indices of the lowercased text do not address `text` ("İ").
+    let start = super::rehearsed::find_ignore_ascii_case(text, marker)? + marker.len();
     let rest = &text[start..];
     let mut out = Vec::new();
     for word in rest.split_whitespace() {
@@ -497,10 +497,11 @@ pub fn rehearsed(utterance: &str, catalog: &[CatalogApp], today: &str) -> Option
         }
         PURCHASE_SCHEMA => {
             put(&mut values, "amount", amount(utterance)?);
-            let verb = ["buy ", "purchase ", "order "]
-                .iter()
-                .find_map(|v| lower.find(v).map(|at| at + v.len()))?;
-            let item_end = lower[verb..].find(" from ").map(|at| verb + at)?;
+            let verb = ["buy ", "purchase ", "order "].iter().find_map(|v| {
+                super::rehearsed::find_ignore_ascii_case(utterance, v).map(|at| at + v.len())
+            })?;
+            let item_end = super::rehearsed::find_ignore_ascii_case(&utterance[verb..], " from ")
+                .map(|at| verb + at)?;
             put(
                 &mut values,
                 "item",
@@ -646,6 +647,25 @@ mod tests {
             working_days("2026-11-28", "2026-11-29"),
             Some(2),
             "a weekend"
+        );
+    }
+
+    #[test]
+    fn phrases_after_a_marker_survive_non_ascii_text() {
+        // Lowercasing "İ" lengthens it, so lowercase indices used to slice
+        // the original mid-character and panic.
+        assert_eq!(
+            phrase_after("İstanbul trip FOR the offsite", " for ", &[]),
+            Some("the offsite".into())
+        );
+        assert_eq!(
+            phrase_after("Café İ for Zoë and more", " for ", &["and"]),
+            Some("Zoë".into())
+        );
+        assert_eq!(phrase_after("İİİ", " for ", &[]), None);
+        assert_eq!(
+            super::super::rehearsed::find_ignore_ascii_case("İİ buy x FROM y", " from "),
+            Some(10)
         );
     }
 

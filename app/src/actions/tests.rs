@@ -136,6 +136,11 @@ fn the_rehearsed_parser_answers_the_four_scenario_utterances_and_nothing_else() 
         Some("1234.5".into())
     );
     assert_eq!(rehearsed::amount("room 86"), None);
+    // Multi-byte text used to slice mid-character and panic.
+    assert_eq!(rehearsed::amount("Lunch at Café"), None);
+    assert_eq!(rehearsed::amount("Lunch at Café $12.50"), Some("12.50".into()));
+    assert_eq!(rehearsed::amount("İstanbul $12"), Some("12".into()));
+    assert_eq!(rehearsed::amount("€ 5 dollars ü"), Some("5".into()));
     assert_eq!(
         rehearsed::days_before("2026-03-01", 1),
         Some("2026-02-28".into())
