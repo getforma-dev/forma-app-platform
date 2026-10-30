@@ -72,7 +72,7 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
         for route in ('/workspace','/auth/pending','/v1/unknown','/invite/validate'):
             try: urllib.request.urlopen(origin+route,timeout=3)
             except urllib.error.HTTPError as error:
-                assert error.code==404 and error.read()==b'{"code":"not_found"}' and error.headers['Content-Type']=='application/problem+json'
+                assert error.code==404 and error.read()==b'{"code":"not_found","status":404}' and error.headers['Content-Type']=='application/problem+json'
             else: raise AssertionError('protected route answered without a session')
         print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_html_count':7,'fresh_csp_nonces':True,'no_store':True,'signin_page':200,'invite_page':200,'protected_uniform_404':True}))
     finally:

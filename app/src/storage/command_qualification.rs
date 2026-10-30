@@ -38,6 +38,38 @@ use tower::ServiceExt;
 /// The EXP-002 decision record of the demo (design §4 act 6); a client-named
 /// record id, as the contract's `command_request` carries one.
 const EXP_002: &str = "00000000-0000-4000-8000-0000000000f0";
+/// Further decision records of the same collection. The S05 command is a
+/// `create` whose one declared transition is `needs_context → reviewed`, and
+/// a `create` on an existing record must fire a declared transition
+/// (contract edition impl-2026-10-29.3 amendment, APP-013 review M1), so each
+/// later race starts its own record at version 0.
+const IN_FLIGHT_RECORD: &str = "00000000-0000-4000-8000-0000000013a1";
+const BUSY_RECORD: &str = "00000000-0000-4000-8000-0000000013a2";
+const LOST_RECORD: &str = "00000000-0000-4000-8000-0000000013a3";
+const JSON_RECORD: &str = "00000000-0000-4000-8000-0000000013a4";
+const HTTP_IN_FLIGHT_RECORD: &str = "00000000-0000-4000-8000-0000000013a5";
+/// APP-013 review M2: `contracts/validate.py` `validate_problem` over every
+/// problem body the route answered in this campaign; the HTTP layer's own
+/// codes (outside the edition's registry) carry exactly `status` and `code`.
+const PROBLEM_CHECK: &str = r#"
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from validate import validate_problem
+HTTP_LAYER = {"not_found", "cross_site", "unavailable"}
+codes = set()
+for item in json.load(sys.stdin):
+    body = json.loads(item["body"])
+    assert body["status"] == item["status"], item
+    if body["code"] in HTTP_LAYER:
+        assert set(body) == {"status", "code"}, item
+    else:
+        validate_problem(body)
+    assert ("retry_after_seconds" in body) == (item["retry_after"] is not None), item
+    if "retry_after_seconds" in body:
+        assert item["retry_after"] == str(body["retry_after_seconds"]), item
+    codes.add(body["code"])
+print(json.dumps(sorted(codes)))
+"#;
 const IK: [&str; 10] = [
     "00000000000000000000000000000001",
     "00000000000000000000000000000002",
@@ -77,6 +109,60 @@ fn command(
         values,
         idempotency_key: key.into(),
     }
+}
+/// `command` on another record of the collection.
+fn on(record: &str, mut command: CommandRequest) -> CommandRequest {
+    command.record = record.into();
+    command
+}
+/// Runs `PROBLEM_CHECK` over the collected replies; returns the codes seen.
+fn validate_problems(replies: &[&Reply]) -> Value {
+    let repo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let input: Vec<Value> = replies
+        .iter()
+        .map(|reply| {
+            assert_eq!(
+                reply.headers[header::CONTENT_TYPE],
+                "application/problem+json",
+                "{}",
+                reply.body
+            );
+            json!({
+                "status": reply.status.as_u16(),
+                "body": reply.body,
+                "retry_after": reply.headers.get(header::RETRY_AFTER).map(|v| v.to_str().unwrap()),
+            })
+        })
+        .collect();
+    let mut child = std::process::Command::new(super::qualification::fixture_python())
+        .current_dir(&repo)
+        .args([
+            "-c",
+            PROBLEM_CHECK,
+            repo.join("contracts").to_str().unwrap(),
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("locked Python available");
+    use std::io::Write as _;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&serde_json::to_vec(&input).unwrap())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "contracts/validate.py validate_problem refused: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).unwrap()
 }
 pub(super) async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
     let operator = fixture.operator().await;
@@ -503,6 +589,22 @@ async fn campaign() {
         stores.data.commit_record(&author, &undeclared).await,
         Err(Error::Denied)
     );
+    // APP-013 review M1 (R3): through the create command, a note-only edit
+    // and a resubmission of the current values under a new key fire no
+    // declared transition and are refused: no no-op or note-only revision.
+    for note in ["note-only edit", "Approved — synthetic only"] {
+        assert_eq!(
+            stores
+                .data
+                .commit_record(
+                    &author,
+                    &command(&s05, IK[4], 2, 1, values("reviewed", note))
+                )
+                .await,
+            Err(Error::Denied),
+            "{note}"
+        );
+    }
     undeclared.values = values("reviewed", "note only change is fine");
     undeclared.command = "approve".into();
     assert_eq!(
@@ -567,7 +669,7 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, [4, 5, 7, 2, 2, 2]);
     check(
         &mut checks,
-        "an undeclared transition (reviewed → needs_context on a create command), an undeclared command, another schema version, a mistyped or unknown field, a malformed key, a member without record_write and the canary organization are refused with nothing written",
+        "an undeclared transition (reviewed → needs_context on a create command), a note-only edit and a resubmission of the current values through the create command (no declared transition fires; edition impl-2026-10-29.3 amendment), an undeclared command, another schema version, a mistyped or unknown field, a malformed key, a member without record_write and the canary organization are refused with nothing written",
     );
 
     // --- another principal cannot read or replay the outcome by key ---
@@ -619,7 +721,10 @@ async fn campaign() {
     // --- in flight: the same key while the first command holds its claim ---
     hooks.arm("record_lock");
     let paused_stores = stores.clone();
-    let paused_command = command(&s05, IK[5], 2, 1, values("reviewed", "A"));
+    let paused_command = on(
+        IN_FLIGHT_RECORD,
+        command(&s05, IK[5], 0, 1, values("needs_context", "A")),
+    );
     let a = {
         let request_command = paused_command.clone();
         tokio::spawn(async move {
@@ -641,7 +746,10 @@ async fn campaign() {
     assert_eq!(b.await.unwrap(), Ok(CommandResult::InFlight));
     // A different key behind the paused command waits on the sequence row.
     let c_stores = stores.clone();
-    let c_command = command(&s05, IK[6], 2, 1, values("reviewed", "C"));
+    let c_command = on(
+        IN_FLIGHT_RECORD,
+        command(&s05, IK[6], 0, 1, values("needs_context", "C")),
+    );
     let c = tokio::spawn(async move {
         let author = request(&c_stores, ORG, AUTHOR, 1);
         c_stores.data.commit_record(&author, &c_command).await
@@ -651,7 +759,7 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, [4, 5, 7, 2, 2, 2]);
     hooks.release.notify_one();
     let outcome3 = committed(a.await.unwrap());
-    assert_eq!((outcome3.record_version, outcome3.commit_sequence), (3, 4));
+    assert_eq!((outcome3.record_version, outcome3.commit_sequence), (1, 4));
     assert_eq!(
         stores.data.commit_record(&author, &paused_command).await,
         Ok(CommandResult::Replayed(outcome3.clone()))
@@ -661,18 +769,21 @@ async fn campaign() {
             .data
             .commit_record(
                 &author,
-                &command(&s05, IK[6], 2, 1, values("reviewed", "C")),
+                &on(
+                    IN_FLIGHT_RECORD,
+                    command(&s05, IK[6], 0, 1, values("needs_context", "C")),
+                ),
             )
             .await,
     );
     assert_eq!(
         (view.reason, view.current_record_version),
-        (ConflictReason::ExpectedVersion, 3)
+        (ConflictReason::ExpectedVersion, 1)
     );
-    assert_eq!(footprint(&fixture).await, [4, 6, 8, 3, 3, 3]);
+    assert_eq!(footprint(&fixture).await, [5, 6, 8, 3, 3, 3]);
     check(
         &mut checks,
-        "while a command holds its claim, sequence and record locks, the same key waits on the claim and a different key on the sequence row, each observed in pg_stat_activity and answered in_flight after lock_timeout (never 503) with nothing written; the released command commits version 3, the same key then replays and the different key conflicts on the moved version",
+        "while a command holds its claim, sequence and record locks, the same key waits on the claim and a different key on the sequence row, each observed in pg_stat_activity and answered in_flight after lock_timeout (never 503) with nothing written; the released command commits its record's version 1 (commit_sequence 4), the same key then replays and the different key conflicts on the moved version",
     );
 
     // --- busy: a lock wait on the authorization fence ---
@@ -680,7 +791,10 @@ async fn campaign() {
     // UPDATE): the claim's KEY SHARE reference passes and the fence's FOR
     // SHARE waits, so the command is busy. The holder rolls back, so no epoch
     // moves.
-    let busy_command = command(&s05, IK[7], 3, 1, values("reviewed", "busy"));
+    let busy_command = on(
+        BUSY_RECORD,
+        command(&s05, IK[7], 0, 1, values("needs_context", "busy")),
+    );
     let race = |statement: String, expected: CommandResult| {
         let stores = stores.clone();
         let command = busy_command.clone();
@@ -716,9 +830,9 @@ async fn campaign() {
         CommandResult::InFlight,
     )
     .await;
-    assert_eq!(footprint(&fixture).await, [4, 6, 8, 3, 3, 3]);
+    assert_eq!(footprint(&fixture).await, [5, 6, 8, 3, 3, 3]);
     let outcome4 = committed(stores.data.commit_record(&author, &busy_command).await);
-    assert_eq!(outcome4.record_version, 4);
+    assert_eq!(outcome4.record_version, 1);
     check(
         &mut checks,
         "a member row being updated by an operator transaction makes the authorization fence wait past lock_timeout: the command answers busy (409); a member row held FOR UPDATE blocks the claim's reference and answers in_flight (409); neither is a 503, nothing is written, and the command commits once the operator releases",
@@ -726,7 +840,10 @@ async fn campaign() {
 
     // --- ambiguous commit: the backend ends before COMMIT answers ---
     hooks.arm("commit");
-    let lost_command = command(&s05, IK[8], 4, 1, values("reviewed", "lost answer"));
+    let lost_command = on(
+        LOST_RECORD,
+        command(&s05, IK[8], 0, 1, values("needs_context", "lost answer")),
+    );
     let lost_stores = stores.clone();
     let lost_request = lost_command.clone();
     let lost = tokio::spawn(async move {
@@ -750,9 +867,9 @@ async fn campaign() {
             .await,
         Ok(None)
     );
-    assert_eq!(footprint(&fixture).await, [4, 7, 9, 4, 4, 4]);
+    assert_eq!(footprint(&fixture).await, [6, 7, 9, 4, 4, 4]);
     let outcome5 = committed(stores.data.commit_record(&author, &lost_command).await);
-    assert_eq!(outcome5.record_version, 5);
+    assert_eq!(outcome5.record_version, 1);
     assert_eq!(
         stores
             .data
@@ -817,21 +934,36 @@ async fn campaign() {
         page: record_page,
     }))
     .fallback(http::fallback);
-    let page_uri = format!(
-        "/work/{SPEND_APP}/{}/records/{}/{EXP_002}",
-        s05.work, s05.collection
-    );
+    let record_uri = |record: &str| {
+        format!(
+            "/work/{SPEND_APP}/{}/records/{}/{record}",
+            s05.work, s05.collection
+        )
+    };
+    let page_uri = record_uri(LOST_RECORD);
+    let demo_uri = record_uri(EXP_002);
     let shown = send(&app, "GET", &page_uri, Some(&cookie), "", &[]).await;
     assert_eq!(shown.status, StatusCode::OK, "{}", shown.body);
-    assert_eq!(field(&shown.body, "version"), "5");
+    assert_eq!(field(&shown.body, "version"), "1");
     assert_eq!(field(&shown.body, "exists"), "true");
     assert_eq!(
         field(&shown.body, "fields"),
-        "status=reviewed|note=lost answer"
+        "status=needs_context|note=lost answer"
     );
     assert_eq!(field(&shown.body, "command"), "record_decision");
     assert_eq!(field(&shown.body, "can_write"), "true");
     assert_eq!(field(&shown.body, "notice"), "-");
+    // M1: the reviewed EXP-002 has no transition left to fire, so its page
+    // offers no command and no form.
+    let decided = send(&app, "GET", &demo_uri, Some(&cookie), "", &[]).await;
+    assert_eq!(
+        (
+            field(&decided.body, "version").as_str(),
+            field(&decided.body, "command").as_str(),
+            field(&decided.body, "can_write").as_str()
+        ),
+        ("2", "", "false")
+    );
     let key = field(&shown.body, "key");
     let token = field(&shown.body, "csrf");
     assert!(idempotency_key_shaped(&key));
@@ -857,7 +989,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "the record page renders the current record (version 5, reviewed) with a fresh 32-hex key per render and the session-bound token; no session or a member without record_read is the uniform 404",
+        "the record page renders the current record (version 1, needs_context) with a fresh 32-hex key per render and the session-bound token; no session or a member without record_read is the uniform 404",
     );
 
     let action = field(&shown.body, "action");
@@ -873,7 +1005,7 @@ async fn campaign() {
             ("publication_id", &s05.publication),
             ("schema_id", "decision"),
             ("schema_version_expected", "1"),
-            ("record_id", EXP_002),
+            ("record_id", LOST_RECORD),
             ("expected_record_version", expected),
             ("expected_work_version", "1"),
             ("value.status", "reviewed"),
@@ -894,7 +1026,7 @@ async fn campaign() {
         "POST",
         &action,
         Some(&cookie),
-        &form(&key, &token, "5", "from the form"),
+        &form(&key, &token, "1", "from the form"),
         &form_headers,
     )
     .await;
@@ -902,7 +1034,7 @@ async fn campaign() {
     assert_eq!(posted.location(), format!("{page_uri}?notice=committed"));
     assert_eq!(posted.headers[header::CACHE_CONTROL], "no-store");
     let after = send(&app, "GET", &posted.location(), Some(&cookie), "", &[]).await;
-    assert_eq!(field(&after.body, "version"), "6");
+    assert_eq!(field(&after.body, "version"), "2");
     assert_eq!(field(&after.body, "notice"), "committed");
     assert_eq!(
         field(&after.body, "fields"),
@@ -914,7 +1046,7 @@ async fn campaign() {
         "POST",
         &action,
         Some(&cookie),
-        &form(&key, &token, "5", "from the form"),
+        &form(&key, &token, "1", "from the form"),
         &form_headers,
     )
     .await;
@@ -924,12 +1056,12 @@ async fn campaign() {
         "POST",
         &action,
         Some(&cookie),
-        &form(&key, &token, "5", "edited"),
+        &form(&key, &token, "1", "edited"),
         &form_headers,
     )
     .await;
     assert_eq!(edited.location(), format!("{page_uri}?notice=conflict"));
-    assert_eq!(footprint(&fixture).await, [4, 9, 11, 6, 6, 6]);
+    assert_eq!(footprint(&fixture).await, [7, 9, 11, 6, 6, 6]);
     // Refusal order: fetch metadata, the token, the key.
     assert_eq!(
         send(
@@ -937,7 +1069,7 @@ async fn campaign() {
             "POST",
             &action,
             Some(&cookie),
-            &form(&key, &token, "6", "x"),
+            &form(&key, &token, "2", "x"),
             &[("content-type", "application/x-www-form-urlencoded")]
         )
         .await
@@ -950,7 +1082,7 @@ async fn campaign() {
             "POST",
             &action,
             Some(&cookie),
-            &form(&key, "not-the-token", "6", "x"),
+            &form(&key, "not-the-token", "2", "x"),
             &form_headers
         )
         .await
@@ -962,7 +1094,7 @@ async fn campaign() {
         "POST",
         &action,
         Some(&cookie),
-        &form("", &token, "6", "x"),
+        &form("", &token, "2", "x"),
         &form_headers,
     )
     .await;
@@ -976,21 +1108,53 @@ async fn campaign() {
             "POST",
             &action,
             None,
-            &form(&key, &token, "6", "x"),
+            &form(&key, &token, "2", "x"),
             &form_headers
         )
         .await
         .status,
         StatusCode::NOT_FOUND
     );
-    assert_eq!(footprint(&fixture).await, [4, 9, 11, 6, 6, 6]);
+    // APP-013 review m2 (R12): a value storage refuses (a status outside the
+    // enum, a field the command does not write) returns to the record page
+    // with the refused notice, not a bare 404 document; nothing is written.
+    let fresh = field(
+        &send(&app, "GET", &page_uri, Some(&cookie), "", &[])
+            .await
+            .body,
+        "key",
+    );
+    for body in [
+        form(&fresh, &token, "2", "x").replace("value.status=reviewed", "value.status=approved"),
+        format!(
+            "{}&{}",
+            form(&fresh, &token, "2", "x"),
+            encode(&[
+                ("value.amount", "1"),
+                ("spec.amount", "{\"type\":\"text\"}")
+            ])
+        ),
+    ] {
+        let refused = send(&app, "POST", &action, Some(&cookie), &body, &form_headers).await;
+        assert_eq!(refused.status, StatusCode::SEE_OTHER, "{}", refused.body);
+        assert_eq!(refused.location(), format!("{page_uri}?notice=refused"));
+        let shown = send(&app, "GET", &refused.location(), Some(&cookie), "", &[]).await;
+        assert_eq!(
+            (
+                field(&shown.body, "notice").as_str(),
+                field(&shown.body, "version").as_str()
+            ),
+            ("refused", "2")
+        );
+    }
+    assert_eq!(footprint(&fixture).await, [7, 9, 11, 6, 6, 6]);
     check(
         &mut checks,
-        "the record page's form commits through the route (303 to the page with notice=committed, version 6), resubmits as replayed and conflicts when edited under the same key; a cross-site post, a wrong token, a missing key and no session are refused before any write",
+        "the record page's form commits through the route (303 to the page with notice=committed, the record's version 2), resubmits as replayed and conflicts when edited under the same key; a value storage refuses (a status outside the enum, an unwritable field) returns 303 to the page with notice=refused; a cross-site post, a wrong token, a missing key and no session are refused before any write",
     );
 
     // --- the JSON route: the S05 sequence as the island would drive it ---
-    let document = |expected: i64, note: &str| {
+    let document = |record: &str, expected: i64, note: &str| {
         serde_json::to_string(&json!({
             "kind": "command_request",
             "schema_version": 1,
@@ -1000,10 +1164,10 @@ async fn campaign() {
             "command_id": "record_decision",
             "schema_id": "decision",
             "schema_version_expected": 1,
-            "record_id": EXP_002,
+            "record_id": record,
             "expected_record_version": expected,
             "expected_work_version": 1,
-            "values": values("reviewed", note),
+            "values": values("needs_context", note),
         }))
         .unwrap()
     };
@@ -1014,7 +1178,7 @@ async fn campaign() {
         "POST",
         &action,
         Some(&cookie),
-        &document(6, "json"),
+        &document(JSON_RECORD, 0, "json"),
         &headers,
     )
     .await;
@@ -1022,7 +1186,7 @@ async fn campaign() {
     assert_eq!(first_json.headers[header::CONTENT_TYPE], "application/json");
     let body = first_json.json();
     assert_eq!(body["kind"], "command_outcome");
-    assert_eq!(body["record_version"], 7);
+    assert_eq!(body["record_version"], 1);
     assert_eq!(body["idempotency_key"], json_key);
     assert_eq!(body["principal_id"], AUTHOR);
     let replay = send(
@@ -1030,7 +1194,7 @@ async fn campaign() {
         "POST",
         &action,
         Some(&cookie),
-        &document(6, "json"),
+        &document(JSON_RECORD, 0, "json"),
         &headers,
     )
     .await;
@@ -1043,7 +1207,7 @@ async fn campaign() {
         "POST",
         &action,
         Some(&cookie),
-        &document(6, "stale json"),
+        &document(JSON_RECORD, 0, "stale json"),
         &json_headers("fedcba9876543210fedcba9876543210"),
     )
     .await;
@@ -1058,17 +1222,17 @@ async fn campaign() {
         (Some(409), Some("conflict"))
     );
     assert_eq!(problem["recovery_view"]["reason"], "expected_version");
-    assert_eq!(problem["recovery_view"]["current_record_version"], 7);
+    assert_eq!(problem["recovery_view"]["current_record_version"], 1);
     assert_eq!(
         problem["recovery_view"]["current_values"],
-        values("reviewed", "json")
+        values("needs_context", "json")
     );
     let mismatch = send(
         &app,
         "POST",
         &action,
         Some(&cookie),
-        &document(6, "other payload"),
+        &document(JSON_RECORD, 0, "other payload"),
         &headers,
     )
     .await;
@@ -1079,14 +1243,15 @@ async fn campaign() {
     );
     assert_eq!(
         mismatch.json()["recovery_view"]["stored_outcome"]["record_version"],
-        7
+        1
     );
     let moved = send(
         &app,
         "POST",
         &action,
         Some(&cookie),
-        &document(7, "moved").replace("\"expected_work_version\":1", "\"expected_work_version\":2"),
+        &document(JSON_RECORD, 1, "moved")
+            .replace("\"expected_work_version\":1", "\"expected_work_version\":2"),
         &json_headers("00000000000000000000000000000111"),
     )
     .await;
@@ -1111,38 +1276,32 @@ async fn campaign() {
         (lookup.status, lookup.body.clone()),
         (StatusCode::OK, first_json.body.clone())
     );
-    assert_eq!(
-        send(
-            &app,
-            "GET",
-            &format!("{action}/outcomes/{}", "9".repeat(32)),
-            Some(&cookie),
-            "",
-            &[]
-        )
-        .await
-        .status,
-        StatusCode::NOT_FOUND
-    );
-    assert_eq!(
-        send(
-            &app,
-            "GET",
-            &format!("{action}/outcomes/{json_key}"),
-            Some(&foreign_cookie),
-            "",
-            &[]
-        )
-        .await
-        .status,
-        StatusCode::NOT_FOUND
-    );
+    let unknown_key = send(
+        &app,
+        "GET",
+        &format!("{action}/outcomes/{}", "9".repeat(32)),
+        Some(&cookie),
+        "",
+        &[],
+    )
+    .await;
+    assert_eq!(unknown_key.status, StatusCode::NOT_FOUND);
+    let foreign_lookup = send(
+        &app,
+        "GET",
+        &format!("{action}/outcomes/{json_key}"),
+        Some(&foreign_cookie),
+        "",
+        &[],
+    )
+    .await;
+    assert_eq!(foreign_lookup.status, StatusCode::NOT_FOUND);
     let missing = send(
         &app,
         "POST",
         &action,
         Some(&cookie),
-        &document(7, "x"),
+        &document(JSON_RECORD, 1, "x"),
         &[
             ("sec-fetch-site", "same-origin"),
             ("content-type", "application/json"),
@@ -1158,7 +1317,7 @@ async fn campaign() {
         "POST",
         &action,
         Some(&cookie),
-        &document(7, "x"),
+        &document(JSON_RECORD, 1, "x"),
         &json_headers("abc"),
     )
     .await;
@@ -1179,74 +1338,210 @@ async fn campaign() {
         (malformed.status, malformed.json()["code"].as_str()),
         (StatusCode::BAD_REQUEST, Some("malformed_command"))
     );
+    // APP-013 review m1 (R4b) and m4 (R10a): a duplicated member is not
+    // forma-json-v1; two Idempotency-Key headers and a padded one are
+    // malformed keys; a non-JSON body without a key is a malformed command.
+    let document_x = document(JSON_RECORD, 1, "x");
+    let duplicated = send(
+        &app,
+        "POST",
+        &action,
+        Some(&cookie),
+        &format!("{{\"schema_version\":1,{}", &document_x[1..]),
+        &json_headers("00000000000000000000000000000777"),
+    )
+    .await;
+    let two_headers = send(
+        &app,
+        "POST",
+        &action,
+        Some(&cookie),
+        &document_x,
+        &[
+            ("sec-fetch-site", "same-origin"),
+            ("content-type", "application/json"),
+            ("idempotency-key", "00000000000000000000000000000777"),
+            ("idempotency-key", "00000000000000000000000000000777"),
+        ],
+    )
+    .await;
+    let padded = send(
+        &app,
+        "POST",
+        &action,
+        Some(&cookie),
+        &document_x,
+        &json_headers(" 00000000000000000000000000000777 "),
+    )
+    .await;
+    let not_json = send(
+        &app,
+        "POST",
+        &action,
+        Some(&cookie),
+        "not json",
+        &[
+            ("sec-fetch-site", "same-origin"),
+            ("content-type", "application/json"),
+        ],
+    )
+    .await;
+    for (reply, code) in [
+        (&duplicated, "malformed_command"),
+        (&two_headers, "malformed_idempotency_key"),
+        (&padded, "malformed_idempotency_key"),
+        (&not_json, "malformed_command"),
+    ] {
+        assert_eq!(
+            (reply.status, reply.json()["code"].as_str()),
+            (StatusCode::BAD_REQUEST, Some(code)),
+            "{}",
+            reply.body
+        );
+    }
     let oversize = format!(
         "{{\"pad\":\"{}\"}}",
         "x".repeat(commands::routes::COMMAND_BODY_LIMIT)
     );
-    assert_eq!(
-        send(
-            &app,
-            "POST",
-            &action,
-            Some(&cookie),
-            &oversize,
-            &json_headers("00000000000000000000000000000333")
-        )
-        .await
-        .status,
-        StatusCode::PAYLOAD_TOO_LARGE
-    );
-    assert_eq!(
-        send(
-            &app,
-            "POST",
-            &action,
-            Some(&cookie),
-            &document(7, "x"),
-            &[
-                ("content-type", "application/json"),
-                ("idempotency-key", "00000000000000000000000000000444")
-            ]
-        )
-        .await
-        .status,
-        StatusCode::FORBIDDEN
-    );
+    let too_large = send(
+        &app,
+        "POST",
+        &action,
+        Some(&cookie),
+        &oversize,
+        &json_headers("00000000000000000000000000000333"),
+    )
+    .await;
+    assert_eq!(too_large.status, StatusCode::PAYLOAD_TOO_LARGE);
+    let cross_site = send(
+        &app,
+        "POST",
+        &action,
+        Some(&cookie),
+        &document_x,
+        &[
+            ("content-type", "application/json"),
+            ("idempotency-key", "00000000000000000000000000000444"),
+        ],
+    )
+    .await;
+    assert_eq!(cross_site.status, StatusCode::FORBIDDEN);
     let other_app = format!(
         "/v1/work/{}/{}/commands/record_decision",
         crate::storage::qualification_cases::APP,
         s05.work
     );
+    let foreign_path = send(
+        &app,
+        "POST",
+        &other_app,
+        Some(&cookie),
+        &document_x,
+        &json_headers("00000000000000000000000000000555"),
+    )
+    .await;
+    assert_eq!(foreign_path.status, StatusCode::BAD_REQUEST);
+    let not_an_id = send(
+        &app,
+        "POST",
+        "/v1/work/not-an-id/x/commands/record_decision",
+        Some(&cookie),
+        &document_x,
+        &json_headers("00000000000000000000000000000666"),
+    )
+    .await;
+    assert_eq!(not_an_id.status, StatusCode::NOT_FOUND);
+    assert_eq!(footprint(&fixture).await, [8, 10, 12, 7, 7, 7]);
+    // M2 (R10b): the same key over HTTP while its first command holds the
+    // claim (paused at the record lock) is 409 in_flight with
+    // retry_after_seconds and Retry-After: 2; the first then commits.
+    let held_key = "00000000000000000000000000000888";
+    let held_body = document(HTTP_IN_FLIGHT_RECORD, 0, "held");
+    hooks.arm("record_lock");
+    let held = {
+        let (app, action, cookie, body) = (
+            app.clone(),
+            action.clone(),
+            cookie.clone(),
+            held_body.clone(),
+        );
+        tokio::spawn(async move {
+            send(
+                &app,
+                "POST",
+                &action,
+                Some(&cookie),
+                &body,
+                &json_headers(held_key),
+            )
+            .await
+        })
+    };
+    paused(&hooks).await;
+    let in_flight = send(
+        &app,
+        "POST",
+        &action,
+        Some(&cookie),
+        &held_body,
+        &json_headers(held_key),
+    )
+    .await;
+    assert_eq!(in_flight.status, StatusCode::CONFLICT, "{}", in_flight.body);
+    assert_eq!(in_flight.headers[header::RETRY_AFTER], "2");
     assert_eq!(
-        send(
-            &app,
-            "POST",
-            &other_app,
-            Some(&cookie),
-            &document(7, "x"),
-            &json_headers("00000000000000000000000000000555")
-        )
-        .await
-        .status,
-        StatusCode::BAD_REQUEST
+        (
+            in_flight.json()["code"].as_str(),
+            in_flight.json()["retry_after_seconds"].as_i64()
+        ),
+        (Some("in_flight"), Some(2))
     );
+    hooks.release.notify_one();
+    let held = held.await.unwrap();
+    assert_eq!(held.status, StatusCode::OK, "{}", held.body);
+    assert_eq!(held.json()["record_version"], 1);
+    assert_eq!(footprint(&fixture).await, [9, 11, 13, 8, 8, 8]);
+    let codes = validate_problems(&[
+        &keyless,
+        &stale,
+        &mismatch,
+        &moved,
+        &unknown_key,
+        &foreign_lookup,
+        &missing,
+        &short,
+        &malformed,
+        &duplicated,
+        &two_headers,
+        &padded,
+        &not_json,
+        &too_large,
+        &cross_site,
+        &foreign_path,
+        &not_an_id,
+        &in_flight,
+    ]);
     assert_eq!(
-        send(
-            &app,
-            "POST",
-            "/v1/work/not-an-id/x/commands/record_decision",
-            Some(&cookie),
-            &document(7, "x"),
-            &json_headers("00000000000000000000000000000666")
-        )
-        .await
-        .status,
-        StatusCode::NOT_FOUND
+        codes,
+        json!([
+            "conflict",
+            "cross_site",
+            "in_flight",
+            "malformed_command",
+            "malformed_idempotency_key",
+            "missing_idempotency_key",
+            "not_found",
+            "payload_too_large",
+            "stale"
+        ])
     );
-    assert_eq!(footprint(&fixture).await, [4, 10, 12, 7, 7, 7]);
     check(
         &mut checks,
-        "the JSON route answers 200 with the outcome document, 200 again on the identical retry, 409 conflict with the recovery view on a stale version or a changed payload, 412 stale on a moved work premise, 200 on the outcome lookup by key (404 for another key or another principal), 400 for a missing, short or malformed key or body, 413 over 256 KiB, 403 cross-site and 404 for a foreign path; seven commits in all",
+        "the JSON route answers 200 with the outcome document, 200 again on the identical retry, 409 conflict with the recovery view on a stale version or a changed payload, 412 stale on a moved work premise, 409 in_flight with Retry-After: 2 for the same key while its first command holds the claim, 200 on the outcome lookup by key (404 for another key or another principal), 400 for a missing, short, padded or repeated key and for a malformed, duplicate-member or non-JSON body, 413 over 256 KiB, 403 cross-site and 404 for a foreign path; eight commits in all",
+    );
+    check(
+        &mut checks,
+        "every problem body the route answered (conflict, stale, in_flight, the three 400 codes, payload_too_large, cross_site, not_found) validates under contracts/validate.py validate_problem for edition impl-2026-10-29.3 (the HTTP layer's not_found and cross_site carry exactly status and code), with Retry-After equal to retry_after_seconds",
     );
 
     // --- restart: every pool and store, then reopen ---
@@ -1265,7 +1560,7 @@ async fn campaign() {
         .unwrap();
     assert_eq!(
         (detail.version, detail.work_version, detail.schema_version),
-        (7, 1, 1)
+        (2, 1, 1)
     );
     assert_eq!(detail.publication, s05.publication);
     assert_eq!(
@@ -1276,7 +1571,10 @@ async fn campaign() {
             .collect::<Vec<_>>(),
         vec![
             ("status", json!({"type": "enum", "value": "reviewed"})),
-            ("note", json!({"type": "text", "value": "json"})),
+            (
+                "note",
+                json!({"type": "text", "value": "Approved — synthetic only"})
+            ),
         ]
     );
     assert!(detail.can_write);
@@ -1336,39 +1634,39 @@ async fn campaign() {
         .mint_session_for_tests(ORG, AUTHOR, &reference)
         .await
         .unwrap();
-    let page = send(&restarted_app, "GET", &page_uri, Some(&reopened), "", &[]).await;
+    let page = send(&restarted_app, "GET", &demo_uri, Some(&reopened), "", &[]).await;
     assert_eq!(
         (
             field(&page.body, "version").as_str(),
             field(&page.body, "fields").as_str()
         ),
-        ("7", "status=reviewed|note=json")
+        ("2", "status=reviewed|note=Approved — synthetic only")
     );
-    assert_eq!(footprint(&fixture).await, [4, 10, 12, 7, 7, 7]);
+    assert_eq!(footprint(&fixture).await, [9, 11, 13, 8, 8, 8]);
     check(
         &mut checks,
-        "after every pool and store is replaced (and the old session ended with its vault), the same record reads back at version 7 with its values, ik-1's outcome is unchanged and replays, and a fresh session reopens the page",
+        "after every pool and store is replaced (and the old session ended with its vault), the EXP-002 decision record reads back at version 2 (reviewed) with its values, ik-1's outcome is unchanged and replays, and a fresh session reopens the page",
     );
 
     // --- SR10: the chains verify; outcomes name their events ---
     let out = operator(&fixture, &["verify", "--organization", ORG]);
     assert_eq!(out["verified"], true);
-    assert_eq!(out["chains"]["data"]["events"], 7);
-    assert_eq!(out["command_outcomes"], 7);
+    assert_eq!(out["chains"]["data"]["events"], 8);
+    assert_eq!(out["command_outcomes"], 8);
     let canary = operator(&fixture, &["verify", "--organization", OTHER]);
     assert_eq!(canary["chains"]["data"]["events"], 0);
-    assert_eq!(next_sequence(&fixture).await, 9);
+    assert_eq!(next_sequence(&fixture).await, 10);
     assert_eq!(
         scalar(&fixture, &format!("SELECT count(*) FROM genui.command_outcomes o WHERE o.organization_id='{ORG}' AND NOT EXISTS (SELECT 1 FROM genui.audit_events e WHERE e.organization_id=o.organization_id AND e.event_id=o.audit_event_id AND e.writer_role='data' AND e.kind='command.committed' AND e.record_id=o.record_id AND e.outcome_digest=o.payload_digest)")).await,
         0
     );
     assert_eq!(
         scalar(&fixture, &format!("SELECT count(DISTINCT commit_sequence) FROM genui.internal_record_revisions WHERE organization_id='{ORG}'")).await,
-        8
+        9
     );
     check(
         &mut checks,
-        "the operator recomputes the data chain (seven command.committed events) to its head and every outcome names its own event with the record and payload digest; the canary's data chain is empty; the sequence is 9 after seven commits",
+        "the operator recomputes the data chain (eight command.committed events) to its head and every outcome names its own event with the record and payload digest; the canary's data chain is empty; the sequence is 10 after eight commits",
     );
 
     restarted.close().await.unwrap();

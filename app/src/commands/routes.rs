@@ -1,7 +1,8 @@
 //! The command route, the outcome lookup and the record page (module notes
 //! in `commands`). Refusal order for the `POST`: fetch metadata (403), the
 //! session (uniform 404), the bounded body (413), the synchronizer token of a
-//! form (403), the key and the shape (400), and only then storage.
+//! form (403), the body as forma-json-v1, the key and the shape (400), and
+//! only then storage.
 use super::{payload, Notice, RecordPage};
 use crate::{
     auth::{capability, cookies, csrf, Auth},
@@ -65,7 +66,14 @@ async fn session(auth: &Auth, headers: &HeaderMap) -> Option<(String, TrustedReq
     }
 }
 
-fn retry_after(mut response: Response) -> Response {
+/// D7.9 `in_flight` and `busy`: 409 with `retry_after_seconds` in the body
+/// (contract `problem`) and the same seconds in `Retry-After`.
+fn waiting(code: &'static str) -> Response {
+    let mut response = http::problem_with(
+        StatusCode::CONFLICT,
+        code,
+        json!({"retry_after_seconds": RETRY_AFTER_SECONDS}),
+    );
     response.headers_mut().insert(
         header::RETRY_AFTER,
         HeaderValue::from_str(&RETRY_AFTER_SECONDS.to_string()).expect("decimal"),
@@ -123,10 +131,8 @@ fn answer(
                     "work_version": current.work_version,
                 }}),
             ),
-            Ok(CommandResult::InFlight) => {
-                retry_after(http::problem(StatusCode::CONFLICT, "in_flight"))
-            }
-            Ok(CommandResult::Busy) => retry_after(http::problem(StatusCode::CONFLICT, "busy")),
+            Ok(CommandResult::InFlight) => waiting("in_flight"),
+            Ok(CommandResult::Busy) => waiting("busy"),
             Err(storage::Error::Denied) => http::not_found(),
             Err(storage::Error::UnknownOutcome) => {
                 http::problem(StatusCode::SERVICE_UNAVAILABLE, "unknown_outcome")
@@ -141,7 +147,9 @@ fn answer(
                 Ok(CommandResult::Stale(_)) => Notice::Stale,
                 Ok(CommandResult::InFlight) => Notice::InFlight,
                 Ok(CommandResult::Busy) => Notice::Busy,
-                Err(storage::Error::Denied) => return http::not_found(),
+                // The session loaded the page it posts from (the token is
+                // bound to it): storage's refusal of a value returns there.
+                Err(storage::Error::Denied) => Notice::Refused,
                 Err(storage::Error::UnknownOutcome) => Notice::Unknown,
                 Err(_) => return http::unavailable(),
             };
@@ -160,8 +168,41 @@ fn string(value: Option<&Value>) -> Option<String> {
     value.and_then(Value::as_str).map(str::to_owned)
 }
 
+/// The `Idempotency-Key` header: absent, or exactly one value used verbatim
+/// (APP-013 review m4: no trimming; a repeated header is malformed).
+fn header_key(headers: &HeaderMap) -> Result<Option<String>, ()> {
+    let mut values = headers.get_all("idempotency-key").iter();
+    match (values.next(), values.next()) {
+        (None, _) => Ok(None),
+        (Some(value), None) => value.to_str().map(|v| Some(v.to_owned())).map_err(|_| ()),
+        (Some(_), Some(_)) => Err(()),
+    }
+}
+
+/// A JSON command request, or the 400 code refusing it. The body is decoded
+/// once as forma-json-v1 (`admission::decode`: duplicate members, fractions
+/// and exponents refused, its 1 MiB and depth bounds above the 256 KiB
+/// limit), so a body that is not a document is `malformed_command` before any
+/// key question; then the header (exactly one, verbatim), then the key's
+/// presence, then the shape.
+fn json_request(
+    headers: &HeaderMap,
+    bytes: &[u8],
+    app: &str,
+    work: &str,
+    command: &str,
+) -> Result<CommandRequest, &'static str> {
+    let body = crate::admission::decode(bytes).map_err(|_| "malformed_command")?;
+    let key = header_key(headers).map_err(|()| "malformed_idempotency_key")?;
+    if key.is_none() && body.get("idempotency_key").is_none() {
+        return Err("missing_idempotency_key");
+    }
+    from_value(&body, app, work, command, key.as_deref()).ok_or("malformed_command")
+}
+
 /// The JSON body: the contract's `command_request`, whose app, work and
 /// command must be the path's; the key comes from the header (or the body).
+#[cfg(test)]
 fn from_json(
     bytes: &[u8],
     app: &str,
@@ -169,7 +210,21 @@ fn from_json(
     command: &str,
     header_key: Option<&str>,
 ) -> Option<CommandRequest> {
-    let body: Value = serde_json::from_slice(bytes).ok()?;
+    from_value(
+        &crate::admission::decode(bytes).ok()?,
+        app,
+        work,
+        command,
+        header_key,
+    )
+}
+fn from_value(
+    body: &Value,
+    app: &str,
+    work: &str,
+    command: &str,
+    header_key: Option<&str>,
+) -> Option<CommandRequest> {
     let object = body.as_object()?;
     let kind_ok = object.get("kind").and_then(Value::as_str) == Some("command_request")
         && integer(object.get("schema_version")) == Some(1);
@@ -327,28 +382,11 @@ async fn submit(
         .unwrap_or("")
         .trim()
         .to_ascii_lowercase();
-    let header_key = parts
-        .headers
-        .get("idempotency-key")
-        .and_then(|v| v.to_str().ok())
-        .map(str::trim)
-        .map(str::to_owned);
     let (mode, request) = match content_type.as_str() {
-        "application/json" => {
-            if header_key.is_none()
-                && serde_json::from_slice::<Value>(&bytes)
-                    .ok()
-                    .and_then(|b| b.get("idempotency_key").cloned())
-                    .is_none()
-            {
-                return http::problem(StatusCode::BAD_REQUEST, "missing_idempotency_key");
-            }
-            let Some(request) = from_json(&bytes, &app, &work, &command, header_key.as_deref())
-            else {
-                return http::problem(StatusCode::BAD_REQUEST, "malformed_command");
-            };
-            (Mode::Json, request)
-        }
+        "application/json" => match json_request(&parts.headers, &bytes, &app, &work, &command) {
+            Ok(request) => (Mode::Json, request),
+            Err(code) => return http::problem(StatusCode::BAD_REQUEST, code),
+        },
         "application/x-www-form-urlencoded" => {
             let fields: Vec<(String, String)> =
                 url::form_urlencoded::parse(&bytes).into_owned().collect();
@@ -513,6 +551,32 @@ pub(crate) fn parse_json_for_tests(
     key: Option<&str>,
 ) -> Option<CommandRequest> {
     from_json(bytes, app, work, command, key)
+}
+#[cfg(test)]
+pub(crate) fn json_request_for_tests(
+    headers: &HeaderMap,
+    bytes: &[u8],
+    app: &str,
+    work: &str,
+    command: &str,
+) -> Result<CommandRequest, &'static str> {
+    json_request(headers, bytes, app, work, command)
+}
+#[cfg(test)]
+pub(crate) fn json_answer_for_tests(result: Result<CommandResult, storage::Error>) -> Response {
+    answer(&Mode::Json, "a", "w", "r", result)
+}
+#[cfg(test)]
+pub(crate) fn form_answer_for_tests(result: Result<CommandResult, storage::Error>) -> Response {
+    answer(
+        &Mode::Form {
+            collection: "c".into(),
+        },
+        "a",
+        "w",
+        "r",
+        result,
+    )
 }
 #[cfg(test)]
 pub(crate) fn notice_for_tests(query: Option<&str>) -> Option<Notice> {

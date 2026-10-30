@@ -81,6 +81,7 @@
 !contracts/fixtures/northstar.json
 !contracts/fixtures/spend-review.json
 !contracts/fixtures/command-recovery.json
+!contracts/schema.json
 !spikes/APP-006/Cargo.toml
 !spikes/APP-006/src/lib.rs
 !app/src/imports/

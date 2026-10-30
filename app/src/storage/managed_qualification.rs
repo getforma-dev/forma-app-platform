@@ -118,7 +118,7 @@ const SEED_INPUTS: [(&str, &str, &str); 5] = [
     (
         "seed_validator_sha256",
         "contracts/validate.py",
-        "70962d749fd952091ed0af660eeceaf42cda44a5ab2e289da96a81d6c4c5b826",
+        "7c9492bc55d12c818f984f7889ab5e95024699cfda11222ebafc84d982e973d5",
     ),
 ];
 /// The shared cases' checks a pass requires, in order (`qualification_cases`).
@@ -152,7 +152,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 80] = [
+const SOURCES: [(&str, &[u8]); 81] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -392,6 +392,10 @@ const SOURCES: [(&str, &[u8]); 80] = [
     (
         "contracts/implementation-lock.json",
         include_bytes!("../../../contracts/implementation-lock.json"),
+    ),
+    (
+        "contracts/schema.json",
+        include_bytes!("../../../contracts/schema.json"),
     ),
     (
         "spikes/APP-006/Cargo.toml",

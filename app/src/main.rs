@@ -101,6 +101,7 @@ struct RecordProps {
     stale: bool,
     in_flight: bool,
     busy: bool,
+    refused: bool,
     unknown: bool,
 }
 
@@ -168,7 +169,8 @@ impl RecordPage for SsrPages {
                     stale: notice(Notice::Stale),
                     in_flight: notice(Notice::InFlight),
                     busy: notice(Notice::Busy),
-                    unknown: notice(Notice::Unknown) || notice(Notice::Refused),
+                    refused: notice(Notice::Refused),
+                    unknown: notice(Notice::Unknown),
                 },
                 &RenderCtx::new().with_title("Record"),
             ),
@@ -892,6 +894,17 @@ mod tests {
         let (_, _, body) = html(pages.record(&reader)).await;
         assert!(!body.contains("<form") && body.contains("not change it"));
         assert!(!body.contains("The record changed"));
+        // APP-013 review m2 and m3: the refused notice; a field the offered
+        // command does not write is text, not an input.
+        let mut narrow = view.clone();
+        narrow.notice = Some(Notice::Refused);
+        narrow.fields[1].writable = false;
+        let (_, _, body) = html(pages.record(&narrow)).await;
+        assert!(
+            body.contains("The command was refused") && !body.contains("could not be confirmed")
+        );
+        assert!(body.contains("name=\"value.status\"") && !body.contains("name=\"value.note\""));
+        assert!(!body.contains("name=\"spec.note\""));
     }
 
     /// APP-012: the native work page renders each view state from typed

@@ -443,7 +443,15 @@ def validate_bundle(bundle):
         require(receipt["partial"] == partial, "receipt partial must equal the partial coverage of the inputs it reads")
     declaration = next((x for x in content["commands"] if x["id"] == command["command_id"]), None)
     require(declaration is not None and declaration["record_schema_id"] == command["schema_id"], "command is undeclared")
-    require((declaration["operation"] == "create") == (command["expected_record_version"] == 0), "create expects absent record; update expects an existing version")
+    # Edition impl-2026-10-29.3 amendment (APP-013 review M1): a create command expects the absent record, or an
+    # existing version only when its declaration has transitions and the command carries a declared transition's
+    # target (storage requires that transition to fire from the current value; no command writes a no-op revision).
+    targets = {(t["field_id"], t["to"]) for t in declaration.get("transitions", [])}
+    fires = any((item["field_id"], item["value"].get("value")) in targets for item in command["values"])
+    existing = command["expected_record_version"] >= 1
+    require(declaration["operation"] != "create" or not existing or fires,
+            "create expects absent record, or an existing version along a declared transition")
+    require(declaration["operation"] != "update" or existing, "update expects an existing version")
     fields = {x["id"]: x for x in schemas[command["schema_id"]]["fields"]}
     for item in command["values"]:
         require(item["field_id"] in declaration["writable_fields"], "command field is not writable")

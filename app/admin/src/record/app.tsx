@@ -40,6 +40,7 @@ type RecordProps = {
   stale: boolean;
   inFlight: boolean;
   busy: boolean;
+  refused: boolean;
   unknown: boolean;
 };
 
@@ -70,6 +71,11 @@ function Record(props: RecordProps) {
       ) : null}
       {props.busy ? (
         <p class="notice" role="alert">The record was busy. Reload in a moment and submit again.</p>
+      ) : null}
+      {props.refused ? (
+        <p class="notice" role="alert">
+          The command was refused: a value is not one this command accepts. Nothing was changed.
+        </p>
       ) : null}
       {props.unknown ? (
         <p class="notice" role="alert">
@@ -116,13 +122,17 @@ function Record(props: RecordProps) {
           {createList(
             () => props.fields,
             (row) => row.id,
+            // Only the offered command's writable fields are inputs; storage
+            // refuses a value for any other field (APP-013 review m3).
             (row) =>
               h(
                 'p',
                 { class: 'field' },
                 h('label', null, row.id, ' ', h('span', { class: 'muted' }, row.options)),
-                h('input', { type: 'text', name: row.input, value: row.value }),
-                h('input', { type: 'hidden', name: row.specInput, value: row.spec }),
+                row.writable
+                  ? h('input', { type: 'text', name: row.input, value: row.value })
+                  : h('span', { class: 'muted' }, 'not changed by this command'),
+                row.writable ? h('input', { type: 'hidden', name: row.specInput, value: row.spec }) : null,
               ),
           )}
           <button type="submit">Submit {props.command}</button>
@@ -160,6 +170,7 @@ mount(
       stale: false,
       inFlight: false,
       busy: false,
+      refused: false,
       unknown: false,
     }),
   '#app',

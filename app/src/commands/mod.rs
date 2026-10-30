@@ -102,6 +102,7 @@ pub struct RecordView {
     /// admitting the record's state), or empty.
     pub command: String,
     pub action: String,
+    /// `record_write` on the work now and a command to offer: the form shows.
     pub can_write: bool,
     pub csrf: String,
     /// D7.16: a fresh 128-bit key per render, in the form's hidden field.
@@ -134,9 +135,10 @@ fn value_text(value: &serde_json::Value) -> String {
 }
 
 /// The page's rows from a storage detail: the form shows the first declared
-/// command that admits the record's current state (a `create` on an absent
-/// record; on an existing one an `update`, or a `create` that declares
-/// transitions).
+/// command storage would admit on the record's current state (a `create` on
+/// an absent record; on an existing one an `update`, or a `create` one of
+/// whose declared transitions starts at the field's current value, as
+/// `storage::commands::compose` requires), and no form when none would.
 pub fn view(
     app: &str,
     work: &str,
@@ -145,15 +147,25 @@ pub fn view(
     idempotency_key: String,
     notice: Option<Notice>,
 ) -> RecordView {
+    let current = |field: &str| {
+        detail
+            .fields
+            .iter()
+            .find(|f| f.id == field)
+            .and_then(|f| f.value.get("value"))
+            .and_then(serde_json::Value::as_str)
+    };
     let command = detail
         .commands
         .iter()
-        .find(|c| {
-            if detail.version == 0 {
-                c.operation == "create"
-            } else {
-                c.operation == "update" || c.operation == "create"
-            }
+        .find(|c| match (detail.version, c.operation.as_str()) {
+            (0, operation) => operation == "create",
+            (_, "update") => true,
+            (_, "create") => c
+                .transitions
+                .iter()
+                .any(|(field, from, _)| current(field) == Some(from.as_str())),
+            _ => false,
         })
         .cloned();
     let fields = detail
@@ -209,8 +221,8 @@ pub fn view(
             .as_ref()
             .map(|c| format!("/v1/work/{app}/{work}/commands/{}", c.id))
             .unwrap_or_default(),
+        can_write: detail.can_write && command.is_some(),
         command: command.map(|c| c.id).unwrap_or_default(),
-        can_write: detail.can_write,
         csrf,
         idempotency_key,
         notice,

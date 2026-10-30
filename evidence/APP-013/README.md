@@ -49,8 +49,8 @@ ADR-010 act 6 on this slice: `ik-1` at version 0 → version 1 with one audit ev
 | in `app/admin`: `npm ci --no-audit --no-fund && npm run typecheck && npm run build` | exit 0; `/record` "no interactive region, no JavaScript"; `/` Forma 26,517 of 28,420 B, JavaScript 28,173 of 76,800 B ([size-report.json](size-report.json)). The first build refused `BUILD-610` (a computed `'spec.' + row.id` attribute); the echo name became its own row prop |
 | in `app/`: `cargo +1.93.1 fmt --check` | exit 0 |
 | in `app/`: `cargo +1.93.1 clippy --locked --all-targets -- -D warnings`, and with `--features qualification-harness` | exit 0 both (`manual_contains` and `large_enum_variant` fixed; `CommandResult` keeps D7.9's shape with a documented allow) |
-| in `app/`: `cargo +1.93.1 test --locked` | lib 90 passed / 9 ignored, bin 3, doctests 3 (new: `storage::commands::tests` ×3, `commands::tests` ×5, the record page binary test) |
-| in `app/`: `cargo +1.93.1 test --locked --features qualification-harness` | lib 101 passed / 9 ignored, bin 3, doctests 3 |
+| in `app/`: `cargo +1.93.1 test --locked` | lib 90 passed / 9 ignored, bin 3, doctests 3 at the APP-013 commit (new: `storage::commands::tests` ×3, `commands::tests` ×5, the record page binary test). Refreshed 2026-10-30 after the review fixes on `phase-one-spikes` (other slices merged since): lib **110 passed / 12 ignored**, bin **4**, doctests 3 |
+| in `app/`: `cargo +1.93.1 test --locked --features qualification-harness` | lib 101 passed / 9 ignored, bin 3, doctests 3 at the APP-013 commit; refreshed 2026-10-30: lib **121 passed / 12 ignored**, bin **4**, doctests 3 |
 | in `app/`: `CARGO_TARGET_DIR=target/msrv cargo +1.85.0 check --locked --lib --tests --bins` (also with the feature); `cargo +1.93.1 check --locked --release --bin forma-app-platform` | exit 0 |
 | `PYC app/runtime/qualify_tenant_schema.py --output <scratch>` | exit 0, `passed: true`, **359 checks** (was 334), container removed ([schema-campaign.json](schema-campaign.json)). Earlier runs: the seed refused the unique index on `(organization_id, commit_sequence)` (decision 3); a stale 0005 probe ("data cannot append audit events before 0007") rewritten for 0007 |
 | in `app/`: `GENUI_NATIVE_FIXTURE_PYTHON=PYC GENUI_COMMAND_REPORT=<scratch> cargo +1.93.1 test --locked --lib storage::command_qualification::native_command_campaign -- --ignored --exact --nocapture` | 1 passed, **20 checks** ([command-campaign.json](command-campaign.json)). Earlier runs found and fixed test expectations only: the seeded footprint (three placeholder records, five source dependencies), a probe key that was all digits (uppercase was still valid), the FK-induced `in_flight` on an operator `FOR UPDATE` (check 12), one vault reference per session |
@@ -97,3 +97,30 @@ Every container these commands started was removed (the fixture `Drop`, the qual
 3. D7.9 names `Stale(CurrentRevision)`; `CurrentRevision` gained `work_version` (None for a publication's own 412). Confirm, or split a `CurrentWork` type.
 4. D7.15 says APP-013's edition precedes the Phase 2 edition; APP-015's `impl-2026-10-29.2` landed first, so this slice opens `.3`. Confirm the numbering.
 5. `query_receipts` has no application grant yet (APP-023 cites receipts); confirm APP-012 needs none for Nov 2.
+
+## Review fixes (2026-10-30)
+
+After the [independent review](independent-review.md) (its "Dispositions" section lists each finding). Re-run evidence is in [review-fixes/](review-fixes/); the files above it record the APP-013 commit and are kept as they were.
+
+| Area | Change |
+| --- | --- |
+| Operation rule (M1) | `compose` now requires a change on an existing record and, for a `create` command, a fired declared transition; a note-only edit or a resubmission of the current values through `create`, and a no-op `update`, are `Denied`. The record page offers a `create` on an existing record only when one of its transitions starts at the field's current value (`RecordCommand.transitions`), and no form when nothing would be admitted. Contract edition `impl-2026-10-29.3` records the amendment (`contracts/validate.py`, README row); its lock was rewritten, edition `.2` retained byte-identically. |
+| Problem bodies (M2) | `http::problem` writes `{"code":…,"status":…}` (forma-json-v1) for every refusal, shared with the auth and query routes; `in_flight`/`busy` carry `retry_after_seconds: 2` with `Retry-After: 2`. Checked by a Rust port of `validate_problem` against `schema.json` `$defs.problem` (unit test over every code the routes emit) and by `contracts/validate.py` `validate_problem` over every problem body the command campaign received (new check). |
+| JSON body and key (m1, m4) | The body is decoded once with `admission::decode` (duplicate members, floats, non-JSON → `malformed_command`, before any key question); `Idempotency-Key` must be one header used verbatim (two headers or a padded value → `malformed_idempotency_key`). |
+| Form (m2, m3) | A storage refusal of a form post redirects to the record page with `notice=refused` (new `refused` prop and sentence); only the offered command's writable fields are inputs. |
+| Scope (m6) | `command_claims` and `command_outcomes` keys, and the outcome's reference to its claim, include `app_id`: `(organization_id, principal_id, app_id, work_id, command_id, idempotency_key)`. 0007 sha256 `7a000718…11e9`; `catalog-v7.json` regenerated `af4228aa…da97` (v1–v6 byte-identical; [generation.json](review-fixes/generation.json)); pins agree at 7 ([schema-pins.json](review-fixes/schema-pins.json)). 0007 had been applied only to disposable databases. |
+| Image inputs | `contracts/schema.json` (now embedded by `commands::tests`) added to `managed_qualification.rs` `SOURCES` (77) and `app/qualification/Dockerfile.dockerignore`; the seed validator pin follows `contracts/validate.py` (`7c9492bc…73d5`). |
+
+| Command (as above, `PYC` the same wrapper) | Result |
+| --- | --- |
+| `PYC app/runtime/generate_schema_catalog.py --output-dir <scratch>` | container removed; v1–v6 identical; v7 differs only in the two keys, the reference and their indexes and triggers |
+| `PYC app/runtime/qualify_tenant_schema.py --output <scratch>` | `passed: true`, 359 checks (the 0007 relations check asserts the new keys), container removed ([schema-campaign.json](review-fixes/schema-campaign.json)) |
+| `… storage::command_qualification::native_command_campaign …` | 1 passed, **21 checks** (the races now use their own records; new: M1 refusals, the reviewed record offers no form, the refused form notice, duplicate-member, repeated, padded and non-JSON refusals, `in_flight` over HTTP, `validate_problem` over every problem body; eight commits) ([command-campaign.json](review-fixes/command-campaign.json)) |
+| `… storage::qualification::native_postgres_campaign …` (`GENUI_NATIVE_REPORT`) | 1 passed, 36 checks: the embedded `catalog-v7.json` matches the migrated database ([native-campaign.json](review-fixes/native-campaign.json)) |
+| `cargo fmt --check`; `cargo clippy --locked --all-targets -- -D warnings` with and without `--features qualification-harness`; `cargo +1.85.0 check --locked --lib --tests --bins` (both feature sets) | exit 0 |
+| `cargo test --locked`; with `--features qualification-harness` | lib 110 / 12 ignored, bin 4, doctests 3; lib 121 / 12 ignored, bin 4, doctests 3 |
+| `app/admin`: `npm ci && npm run build` | exit 0; `/record` no JavaScript |
+| contracts tests; `verify_vectors.mjs`; `lock.py check`; `scripts/check-schema-pins.py` | 27 OK; 6 + 13 vectors; lock matches 27 artifacts and both retained editions; `agree: true` |
+| `PYC -m unittest discover app/runtime`; scripts; fixtures; `app/qualification` | 132 OK; 17 OK; 14 OK; 6 OK |
+
+Not re-run after the fixes: the admission, definition and session campaigns, the reset trial and the HTTP smoke (`smoke_http.py`'s 404 body expectation was updated to the new bytes).

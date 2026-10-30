@@ -147,7 +147,7 @@ async fn send(
 }
 fn uniform_404(reply: &(StatusCode, HeaderMap, Vec<u8>)) -> bool {
     reply.0 == StatusCode::NOT_FOUND
-        && reply.2 == b"{\"code\":\"not_found\"}"
+        && reply.2 == b"{\"code\":\"not_found\",\"status\":404}"
         && reply.1[header::CONTENT_TYPE] == "application/problem+json"
         && reply.1[header::CACHE_CONTROL] == "no-store"
         && reply.1.get(header::SET_COOKIE).is_none()
@@ -176,7 +176,7 @@ async fn anonymous_cross_site_and_unknown_session_requests_never_reach_the_engin
     )
     .await;
     assert_eq!(cross.0, StatusCode::FORBIDDEN);
-    assert_eq!(cross.2, b"{\"code\":\"cross_site\"}");
+    assert_eq!(cross.2, b"{\"code\":\"cross_site\",\"status\":403}");
     // Anonymous, a forged session cookie, a pre-access cookie presented as a
     // session, and a filter in the URL are all the same uniform 404.
     for headers in [
@@ -285,7 +285,7 @@ async fn refusal_mapping_matches_design_section_nine() {
         assert_eq!(headers[header::CONTENT_TYPE], "application/problem+json");
         assert_eq!(headers[header::CACHE_CONTROL], "no-store");
         let body = to_bytes(response.into_body(), 1024).await.unwrap();
-        assert_eq!(body, format!("{{\"code\":\"{code}\"}}").as_bytes());
+        assert_eq!(body, format!("{{\"code\":\"{code}\",\"status\":{status}}}").as_bytes());
         if status == 429 {
             assert_eq!(headers[header::RETRY_AFTER], "2");
         } else {

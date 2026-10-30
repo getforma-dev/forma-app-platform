@@ -413,3 +413,39 @@ class EditionThreeTests(unittest.TestCase):
         for label, body, expected in problems:
             with self.subTest(case=label), self.assertRaisesRegex(ContractError, expected):
                 validate_problem(body)
+
+    def test_create_on_an_existing_record_must_name_a_declared_transition(self):
+        """Edition impl-2026-10-29.3 amendment (APP-013 review M1): a create command expects the absent record
+        (version 0), or an existing version only when its declaration has transitions and the command carries a
+        declared transition's target value; an update command expects an existing version."""
+        def moved(bundle, status, version):
+            bundle["command"]["expected_record_version"] = version
+            bundle["command"]["values"][0]["value"]["value"] = status
+            bundle["outcome"]["record_version"] = version + 1
+            bundle["outcome"]["payload_digest"] = payload_digest(bundle["command"])
+            return bundle
+        # S05 ik-2: reviewed under a new key at version 1 is the declared needs_context -> reviewed transition.
+        validate_bundle(moved(fixture("spend-review"), "reviewed", 1))
+        validate_bundle(moved(fixture("northstar"), "reviewed", 3))
+        # At version 1 without a transition target (a note-only or identical resubmission) it is refused.
+        with self.assertRaisesRegex(ContractError, "create expects absent record"):
+            validate_bundle(moved(fixture("spend-review"), "needs_context", 1))
+        # A create whose declaration has no transitions still expects the absent record.
+        bundle = moved(fixture("spend-review"), "reviewed", 1)
+        bundle["definition"]["content"]["commands"][0]["transitions"] = []
+        with self.assertRaisesRegex(ContractError, "create expects absent record"):
+            check_command(bundle)
+        # An update expects an existing version.
+        bundle = fixture("spend-review")
+        bundle["definition"]["content"]["commands"][0]["operation"] = "update"
+        with self.assertRaisesRegex(ContractError, "update expects an existing version"):
+            check_command(bundle)
+
+
+def check_command(bundle):
+    """validate_bundle after a definition edit: re-identify the definition and its pins."""
+    definition = bundle["definition"]
+    definition["digest"] = digest("app-definition", definition["content"])
+    bundle["publication"]["definition_digest"] = bundle["receipt"]["definition_digest"] = definition["digest"]
+    rehash_receipt(bundle["receipt"])
+    validate_bundle(bundle)

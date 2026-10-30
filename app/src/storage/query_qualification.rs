@@ -763,7 +763,7 @@ fn query_body(parameters: &Value) -> String {
 }
 fn raw_404(reply: &Raw) -> bool {
     reply.0 == axum::http::StatusCode::NOT_FOUND
-        && reply.2 == b"{\"code\":\"not_found\"}"
+        && reply.2 == b"{\"code\":\"not_found\",\"status\":404}"
         && reply.1[axum::http::header::CACHE_CONTROL] == "no-store"
 }
 /// A JSON 200's receipt: contract-valid, its digest recomputed, and the
@@ -1103,7 +1103,7 @@ async fn route_campaign(
         )
         .await;
     assert_eq!(in_url.status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(in_url.body, "{\"code\":\"invalid_parameters\"}");
+    assert_eq!(in_url.body, "{\"code\":\"invalid_parameters\",\"status\":422}");
     assert!(maya
         .get(&routes, &format!("{page}?destination=198.51.100.7"))
         .await
@@ -1432,7 +1432,7 @@ async fn route_campaign(
     assert_eq!(busy.0, StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(busy.1[header::RETRY_AFTER], "2");
     assert_eq!(busy.1[header::CACHE_CONTROL], "no-store");
-    assert_eq!(busy.2, b"{\"code\":\"too_many_requests\"}");
+    assert_eq!(busy.2, b"{\"code\":\"too_many_requests\",\"status\":429}");
     // The page in the same state: every view is loading, none shows a value.
     let token = auth.csrf.token(
         crate::auth::csrf::Form::Query,
@@ -1570,7 +1570,7 @@ async fn route_campaign(
                 "{label} {method} {uri}"
             );
             assert_eq!(
-                reply.2, b"{\"code\":\"unavailable\"}",
+                reply.2, b"{\"code\":\"unavailable\",\"status\":503}",
                 "{label} {method} {uri}"
             );
             assert_eq!(reply.1[header::CACHE_CONTROL], "no-store");
@@ -1589,7 +1589,7 @@ async fn route_campaign(
     ] {
         let reply = send_raw(router, raw_request(method, &uri, "", Vec::new())).await;
         assert_eq!(reply.0, StatusCode::NOT_FOUND, "anonymous {method} {uri}");
-        assert_eq!(reply.2, b"{\"code\":\"not_found\"}");
+        assert_eq!(reply.2, b"{\"code\":\"not_found\",\"status\":404}");
     }
     assert_eq!(down_counting.calls(), 0);
     down.close().await.unwrap();

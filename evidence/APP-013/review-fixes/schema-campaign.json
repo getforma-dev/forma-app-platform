@@ -1,0 +1,1996 @@
+{
+  "schema_version": 1,
+  "scope": "APP-008/APP-073/APP-010/APP-009/APP-013 real local PostgreSQL schema/ACL, admission-function, definition/work, session and command grant qualification",
+  "managed_acceptance": false,
+  "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "server_version": "16.13",
+  "network": "random loopback-only published port",
+  "checks": [
+    {
+      "name": "committed missing real table refuses and preserves exact drifted state",
+      "passed": true
+    },
+    {
+      "name": "committed disabled tenant RLS refuses and preserves exact drifted state",
+      "passed": true
+    },
+    {
+      "name": "committed extra application UPDATE refuses and preserves exact drifted state",
+      "passed": true
+    },
+    {
+      "name": "committed preexisting history1 with role drift refuses and preserves exact drifted state",
+      "passed": true
+    },
+    {
+      "name": "committed all-role application_name default refuses on fresh app/operator connections without repair",
+      "passed": true
+    },
+    {
+      "name": "committed all-role session_replication_role default refuses on fresh app/operator connections without repair",
+      "passed": true
+    },
+    {
+      "name": "committed application replica-parameter SET grant refuses while session remains origin without repair",
+      "passed": true
+    },
+    {
+      "name": "operator-enabled current replica session refuses both verifier and migration without SET repair",
+      "passed": true
+    },
+    {
+      "name": "managed-style absence of optional creator-only grants permits exact version1 verification and upgrade",
+      "passed": true
+    },
+    {
+      "name": "managed-style absence of optional creator-only grants permits exact version7 repeat",
+      "passed": true
+    },
+    {
+      "name": "required explicit migration-owner access remains exact and cannot be normalized away",
+      "passed": true
+    },
+    {
+      "name": "version1 migration refuses unsafe database search_path without executing shadow functions or repairing default",
+      "passed": true
+    },
+    {
+      "name": "legacy version view refuses before reading its marker expression",
+      "passed": true
+    },
+    {
+      "name": "version7 migration refuses unsafe database search_path without executing shadow functions or repairing default",
+      "passed": true
+    },
+    {
+      "name": "positive-control temporary catalog view executes only under implicit temp-first path; verifier and repeat leave zero marker",
+      "passed": true
+    },
+    {
+      "name": "actual read-only workspace probe refuses malicious version view before evaluation; read-write and read-only controls prove reachability",
+      "passed": true,
+      "read_only_control_sqlstate": "25006"
+    },
+    {
+      "name": "autocommit migration refuses before changing fresh database",
+      "passed": true
+    },
+    {
+      "name": "fresh checksummed version7 install and exact repeat",
+      "passed": true
+    },
+    {
+      "name": "fresh migration interruption rolls schema/history/lock-role back",
+      "passed": true
+    },
+    {
+      "name": "version1 migration interruption rolls schema/history/lock-role back",
+      "passed": true
+    },
+    {
+      "name": "legacy metadata extra column refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "legacy metadata wrong constraint refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "legacy metadata PUBLIC write refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "legacy application inheritance drift refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "legacy default privilege drift refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "preexisting history1 refuses without bootstrap bypass",
+      "passed": true
+    },
+    {
+      "name": "preexisting history1 plus role drift refuses without bootstrap bypass",
+      "passed": true
+    },
+    {
+      "name": "partial version1 state refuses without inventing migration history",
+      "passed": true
+    },
+    {
+      "name": "transactional verified version1-to-version7 migration",
+      "passed": true
+    },
+    {
+      "name": "checksummed repeat has identical schema/data dump",
+      "passed": true
+    },
+    {
+      "name": "altered recorded checksum refuses without altering database",
+      "passed": true
+    },
+    {
+      "name": "missing real table refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "missing real column refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "changed column default refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "missing check constraint refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "extra index refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "disabled RLS refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "disabled FORCE RLS refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "permissive tenant policy refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "changed table owner refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "extra workspace UPDATE refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "extra workspace column UPDATE refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "PUBLIC business read refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "application inheritance drift refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "application owner membership refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "noncreator operator grant flags refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "unknown incoming owner member refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "transitive IAM parent membership refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "unexpected incoming helper membership refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "application database CREATE refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "helper schema CREATE refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "PUBLIC function execute refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "unsafe helper search path refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "changed helper body refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "role database setting refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "extra schema object refuses without repairing drift",
+      "passed": true
+    },
+    {
+      "name": "committed disabled internal FK triggers refuse without repair",
+      "passed": true
+    },
+    {
+      "name": "one canonical complete catalog projection is readable by all four application roles",
+      "passed": true
+    },
+    {
+      "name": "autocommit seed refuses before tenant writes",
+      "passed": true
+    },
+    {
+      "name": "validated operator seed idempotence",
+      "passed": true,
+      "bundle_count": 3,
+      "seed_sha256": "92031ca3156c5048cfefcee65ebbbe5a8b526829a48982faa4b38f405184800b"
+    },
+    {
+      "name": "all real tenant relations have owner/FORCE-RLS/policies/tenant-leading indexes and FKs",
+      "passed": true,
+      "table_count": 41
+    },
+    {
+      "name": "lock definer is non-login non-inheriting minimal role with exact three UPDATE columns",
+      "passed": true
+    },
+    {
+      "name": "genui_workspace actual own-tenant positive and missing/foreign scope denial",
+      "passed": true
+    },
+    {
+      "name": "genui_workspace RLS on every granted real relation",
+      "passed": true,
+      "tables": [
+        "app_permissions",
+        "apps",
+        "definition_inputs",
+        "definition_record_schemas",
+        "definition_revisions",
+        "memberships",
+        "organization_permissions",
+        "organizations",
+        "principals",
+        "provider_tenant_bindings",
+        "publication_inputs",
+        "publication_policies",
+        "publication_record_schemas",
+        "publications",
+        "record_collections",
+        "saved_work",
+        "source_permissions",
+        "source_revisions",
+        "sources",
+        "spaces",
+        "work_bindings",
+        "work_permissions",
+        "work_source_dependencies"
+      ]
+    },
+    {
+      "name": "genui_workspace cannot SET ROLE genui_owner",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot SET ROLE genui_lock",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot SET ROLE genui_migration",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE organizations",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE memberships",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE saved_work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct UPDATE internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct INSERT publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct INSERT internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace no direct INSERT internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot TRUNCATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot bypass RLS",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace malformed scope fails closed",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "genui_workspace permitted bounded member fence, mismatched epoch refuses",
+      "passed": true
+    },
+    {
+      "name": "genui_workspace cannot execute work fence",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control actual own-tenant positive and missing/foreign scope denial",
+      "passed": true
+    },
+    {
+      "name": "genui_control RLS on every granted real relation",
+      "passed": true,
+      "tables": [
+        "app_permissions",
+        "apps",
+        "definition_inputs",
+        "definition_record_schemas",
+        "definition_revisions",
+        "memberships",
+        "organization_permissions",
+        "organizations",
+        "publication_inputs",
+        "publication_policies",
+        "publication_record_schemas",
+        "publications",
+        "source_permissions",
+        "spaces",
+        "work_permissions"
+      ]
+    },
+    {
+      "name": "genui_control cannot SET ROLE genui_owner",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot SET ROLE genui_lock",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot SET ROLE genui_migration",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE organizations",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE memberships",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE saved_work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct UPDATE internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct INSERT publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct INSERT internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control no direct INSERT internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot TRUNCATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot bypass RLS",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control malformed scope fails closed",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "genui_control permitted bounded member fence, mismatched epoch refuses",
+      "passed": true
+    },
+    {
+      "name": "genui_control cannot execute work fence",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data actual own-tenant positive and missing/foreign scope denial",
+      "passed": true
+    },
+    {
+      "name": "genui_data RLS on every granted real relation",
+      "passed": true,
+      "tables": [
+        "app_permissions",
+        "apps",
+        "definition_inputs",
+        "definition_record_schemas",
+        "definition_revisions",
+        "internal_record_revisions",
+        "internal_records",
+        "memberships",
+        "organization_permissions",
+        "organizations",
+        "publication_inputs",
+        "publication_policies",
+        "publication_record_schemas",
+        "publications",
+        "record_collections",
+        "record_source_dependencies",
+        "saved_work",
+        "source_permissions",
+        "source_revisions",
+        "sources",
+        "spaces",
+        "work_bindings",
+        "work_permissions",
+        "work_source_dependencies"
+      ]
+    },
+    {
+      "name": "genui_data cannot SET ROLE genui_owner",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot SET ROLE genui_lock",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot SET ROLE genui_migration",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE organizations",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE memberships",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE saved_work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct UPDATE internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct INSERT publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct INSERT internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data no direct INSERT internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot TRUNCATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot bypass RLS",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data malformed scope fails closed",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "genui_data permitted bounded member fence, mismatched epoch refuses",
+      "passed": true
+    },
+    {
+      "name": "genui_worker actual own-tenant positive and missing/foreign scope denial",
+      "passed": true
+    },
+    {
+      "name": "genui_worker RLS on every granted real relation",
+      "passed": true,
+      "tables": [
+        "organizations"
+      ]
+    },
+    {
+      "name": "genui_worker cannot SET ROLE genui_owner",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot SET ROLE genui_lock",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot SET ROLE genui_migration",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE organizations",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE memberships",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE saved_work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct UPDATE internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct INSERT publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct INSERT internal_records",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker no direct INSERT internal_record_revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot TRUNCATE publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot bypass RLS",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker malformed scope fails closed",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "worker cannot execute authority fence",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot execute work fence",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "data has real record read and bounded work lock, no UPDATE authority",
+      "passed": true
+    },
+    {
+      "name": "NULL or incomplete scope, unsafe epochs and stale work pin fail closed",
+      "passed": true
+    },
+    {
+      "name": "malformed genui.principal_id refuses work fence",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "malformed genui.membership_epoch refuses work fence",
+      "passed": true,
+      "sqlstate": "22P02"
+    },
+    {
+      "name": "actual NOLOGIN table owner remains subject to FORCE RLS",
+      "passed": true
+    },
+    {
+      "name": "real FK refuses foreign-only app",
+      "passed": true,
+      "sqlstate": "23503"
+    },
+    {
+      "name": "owner tenant policy refuses cross-organization write",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "unknown permission check rejects even operator seed",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "record binding refuses NULL revision policy",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "source binding refuses changed normalized digest",
+      "passed": true,
+      "sqlstate": "23503"
+    },
+    {
+      "name": "source dependency cannot name a different input binding",
+      "passed": true,
+      "sqlstate": "23503"
+    },
+    {
+      "name": "publication refuses wrong definition digest",
+      "passed": true,
+      "sqlstate": "23503"
+    },
+    {
+      "name": "membership revocation reader-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "membership revocation writer-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "organization suspension reader-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "organization suspension writer-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "saved-work version advance reader-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "saved-work version advance writer-first actual lock ordering",
+      "passed": true
+    },
+    {
+      "name": "operator seed refuses changed existing epoch without overwriting authority",
+      "passed": true
+    },
+    {
+      "name": "0003 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the two genui_private indexes carry no RLS",
+      "passed": true,
+      "tables": [
+        "access_codes",
+        "audit_events",
+        "audit_heads",
+        "code_grant_templates",
+        "code_redemptions",
+        "code_reservations",
+        "entitlements",
+        "provider_invitations"
+      ]
+    },
+    {
+      "name": "catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns plus 0006 session columns plus 0007 command columns (D7.3); EXECUTE on the six functions is genui_workspace only",
+      "passed": true,
+      "admit_grant_count": 121,
+      "definition_work_grant_count": 126,
+      "session_grant_count": 89,
+      "command_grant_count": 97
+    },
+    {
+      "name": "genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; six exact STRICT VOLATILE definers with fixed search_path and no organizations write",
+      "passed": true,
+      "incoming": [
+        [
+          "genui_migration",
+          false,
+          false,
+          true
+        ],
+        [
+          "genui_migration",
+          true,
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "name": "every INSERT holder on audit_events (genui_admit, genui_owner, since 0005 genui_workspace and genui_control, since 0007 genui_data) has its RESTRICTIVE chain/kind policy and its own-chain head UPDATE policy; the three application roles also read only their own head",
+      "passed": true,
+      "policies": [
+        [
+          "audit_events",
+          "admission_chain",
+          "RESTRICTIVE",
+          [
+            "genui_admit"
+          ],
+          "INSERT"
+        ],
+        [
+          "audit_events",
+          "control_chain",
+          "RESTRICTIVE",
+          [
+            "genui_control"
+          ],
+          "INSERT"
+        ],
+        [
+          "audit_events",
+          "data_chain",
+          "RESTRICTIVE",
+          [
+            "genui_data"
+          ],
+          "INSERT"
+        ],
+        [
+          "audit_events",
+          "operator_chain",
+          "RESTRICTIVE",
+          [
+            "genui_owner"
+          ],
+          "INSERT"
+        ],
+        [
+          "audit_events",
+          "workspace_chain",
+          "RESTRICTIVE",
+          [
+            "genui_workspace"
+          ],
+          "INSERT"
+        ],
+        [
+          "audit_heads",
+          "admission_chain",
+          "RESTRICTIVE",
+          [
+            "genui_admit"
+          ],
+          "UPDATE"
+        ],
+        [
+          "audit_heads",
+          "control_chain",
+          "RESTRICTIVE",
+          [
+            "genui_control"
+          ],
+          "UPDATE"
+        ],
+        [
+          "audit_heads",
+          "control_chain_read",
+          "RESTRICTIVE",
+          [
+            "genui_control"
+          ],
+          "SELECT"
+        ],
+        [
+          "audit_heads",
+          "data_chain",
+          "RESTRICTIVE",
+          [
+            "genui_data"
+          ],
+          "UPDATE"
+        ],
+        [
+          "audit_heads",
+          "data_chain_read",
+          "RESTRICTIVE",
+          [
+            "genui_data"
+          ],
+          "SELECT"
+        ],
+        [
+          "audit_heads",
+          "operator_chain",
+          "RESTRICTIVE",
+          [
+            "genui_owner"
+          ],
+          "UPDATE"
+        ],
+        [
+          "audit_heads",
+          "workspace_chain",
+          "RESTRICTIVE",
+          [
+            "genui_workspace"
+          ],
+          "UPDATE"
+        ],
+        [
+          "audit_heads",
+          "workspace_chain_read",
+          "RESTRICTIVE",
+          [
+            "genui_workspace"
+          ],
+          "SELECT"
+        ]
+      ]
+    },
+    {
+      "name": "audit_events.previous_hash, audit_events.hash and audit_heads.head_hash are typed genui.digest (D7.8)",
+      "passed": true,
+      "columns": [
+        [
+          "audit_events",
+          "hash",
+          "genui.digest"
+        ],
+        [
+          "audit_events",
+          "outcome_digest",
+          "genui.digest"
+        ],
+        [
+          "audit_events",
+          "previous_hash",
+          "genui.digest"
+        ],
+        [
+          "audit_heads",
+          "head_hash",
+          "genui.digest"
+        ]
+      ]
+    },
+    {
+      "name": "operator head write refuses a non-digest",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses a non-digest previous_hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses a non-digest hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator head write refuses upper-case hex",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses upper-case hex previous_hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses upper-case hex hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator head write refuses a short digest",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses a short digest previous_hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator event write refuses a short digest hash",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator issuance refuses max_redemptions above 10",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator issuance refuses expiry beyond 30 days",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator issuance refuses foreign destination",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "operator issuance refuses trial other than 30 days",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "grant template refuses admin_policy",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "grant template refuses review_publish",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "grant template refuses record_read without its exact resource shape",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "grant template refuses source_read without its exact resource shape",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "genui_workspace cannot read genui_private.code_index directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot read genui_private.handle_index directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot read access_codes directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot read audit_events directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace sees and advances no admission or operator head (0005 own-chain binding)",
+      "passed": true
+    },
+    {
+      "name": "genui_workspace cannot read code_grant_templates directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot read code_redemptions directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot read code_reservations.code_id",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot read code_reservations.context_digest",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot read entitlements.kind",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot read entitlements.revoked_at",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot read provider_invitations directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot insert an access code directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot insert a reservation directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot insert an entitlement directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot insert an audit event directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot UPDATE membership epoch directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_workspace cannot SET ROLE genui_admit",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot read genui_private.code_index directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot read genui_private.handle_index directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot read access_codes directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot read audit_events directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control sees and advances no admission or operator head (0005 own-chain binding)",
+      "passed": true
+    },
+    {
+      "name": "genui_control cannot read code_grant_templates directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot read code_redemptions directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot read code_reservations directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot read entitlements.kind",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot read entitlements.revoked_at",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot read provider_invitations directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot insert an access code directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot insert a reservation directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot insert an entitlement directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot insert an audit event directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot UPDATE membership epoch directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot SET ROLE genui_admit",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot execute resolve_code",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot execute resolve_handle",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot execute reserve_code",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot execute record_pending_admission",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot execute admit_redemption",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_control cannot execute advance_member_epoch",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot read genui_private.code_index directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot read genui_private.handle_index directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot read access_codes directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot read audit_events directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data sees and advances no admission or operator head (0005 own-chain binding)",
+      "passed": true
+    },
+    {
+      "name": "genui_data cannot read code_grant_templates directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot read code_redemptions directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot read code_reservations directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot read entitlements.kind",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot read entitlements.revoked_at",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot read provider_invitations directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot insert an access code directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot insert a reservation directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot insert an entitlement directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot insert an audit event directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot UPDATE membership epoch directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot SET ROLE genui_admit",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot execute resolve_code",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot execute resolve_handle",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot execute reserve_code",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot execute record_pending_admission",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot execute admit_redemption",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_data cannot execute advance_member_epoch",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot read genui_private.code_index directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot read genui_private.handle_index directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot read access_codes directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot read audit_events directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot read audit_heads directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot read code_grant_templates directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot read code_redemptions directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot read code_reservations directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot read entitlements directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot read provider_invitations directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot insert an access code directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot insert a reservation directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot insert an entitlement directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot insert an audit event directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot advance an audit head directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot UPDATE membership epoch directly",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot SET ROLE genui_admit",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot execute resolve_code",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot execute resolve_handle",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot execute reserve_code",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot execute record_pending_admission",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot execute admit_redemption",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_worker cannot execute advance_member_epoch",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "resolve_code/resolve_handle before scope: known digests map to their organization; unknown, malformed and retired return NULL",
+      "passed": true
+    },
+    {
+      "name": "reserve_code: reserved, expired, revoked, exhausted, too_many_reservations at 10 live (expired ones not counted); unknown, foreign, unscoped and malformed refuse with no row; presignup never counts",
+      "passed": true
+    },
+    {
+      "name": "record_pending_admission: pending (24 h, identity-bound, reservation consumed, one audit event), reservation_expired, expired, revoked, exhausted by D7.17 arithmetic, already_member writes nothing; a repeated pending admission of one identity on one code returns the live one with no new row or event; foreign scope refuses",
+      "passed": true
+    },
+    {
+      "name": "admit_redemption admitted: principal, epoch-1 membership, verbatim template grants, 30-day entitlement, redemption and one audit event in one call; single-use code with one pending admission admitted then exhausted; replay returns the stored result; changed payload, other identity, unknown and foreign pending refuse with no write",
+      "passed": true
+    },
+    {
+      "name": "admit_redemption: exhausted status at max (2 of 2), already_member consumes nothing; an expired pending admission and one whose code was revoked, expired or (operator-forced) exhausted are each marked denied_for_reconciliation with one audit event and no grant, slot or count change; retries answer expired",
+      "passed": true
+    },
+    {
+      "name": "concurrent last-slot races admit exactly one: two pending admissions (one pending, one exhausted), redemption versus new pending admission in both orders, two identical redemptions (admitted, replayed) with one slot consumed, and one identity through two codes (admitted, already_member with no write)",
+      "passed": true
+    },
+    {
+      "name": "advance_member_epoch: own epoch advances with one audit event per sign-out reason; another principal, stale epoch, foreign scope and any other reason refuse with no write; it waits on the member row and refuses after a concurrent epoch move",
+      "passed": true
+    },
+    {
+      "name": "audit chains verify per organization: every hash recomputed in chain_sequence order from the genesis head, tail equals head; a tampered event fails verification; every redemption resolves to its own admission.redeemed event",
+      "passed": true,
+      "admission_events": {
+        "00000000-0000-4000-8000-000000000001": 34,
+        "00000000-0000-4000-8000-000000000002": 2
+      }
+    },
+    {
+      "name": "genui_admit INSERT refuses writer_role workspace kind session.signed_in",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_admit INSERT refuses writer_role operator kind code.issued",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_admit INSERT refuses writer_role admission kind code.issued",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_admit INSERT refuses writer_role admission kind work.saved",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "operator INSERT refuses writer_role admission kind admission.redeemed",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "operator INSERT refuses writer_role workspace kind session.signed_in",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "operator INSERT refuses writer_role operator kind admission.pending",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_admit cannot UPDATE audit events",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "genui_admit cannot DELETE audit events",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "operator cannot UPDATE audit events",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "operator cannot DELETE audit events",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "operator cannot TRUNCATE audit events",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "RESTRICTIVE chain bindings: mismatched writer_role or kind refuses for genui_admit and the operator, matching rows are accepted, head UPDATE reaches only the own chain, audit events are never updated or deleted",
+      "passed": true
+    },
+    {
+      "name": "no admission function call wrote genui.organizations: tuple xmin/ctid/status unchanged across every call (FOR SHARE locks only)",
+      "passed": true
+    },
+    {
+      "name": "the operator seed (not a migration) gives each fixture organization its owner_publish policy row (plan Task 6)",
+      "passed": true,
+      "policy_id": "00000000-0000-4000-8000-0000000000e0"
+    },
+    {
+      "name": "0005 grants: genui_workspace inserts drafts, its own saved work and workspace-chain events, genui_control inserts control-chain events; each reads, locks and advances only its own head (rolled back)",
+      "passed": true
+    },
+    {
+      "name": "0005 creator authority and publication order (ADR-007 amendment): saved_work.created_by/creator_revoked_at with the composite memberships key and the workspace RESTRICTIVE creator check; publications.publication_sequence NOT NULL and unique per app",
+      "passed": true
+    },
+    {
+      "name": "0005 workspace cannot write publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot write publication inputs",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot write publication policies",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 control cannot write publication policies",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot create an app shell",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot save work for another creator",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot save work without a creator",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot revoke creator authority",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 control cannot rewrite a publication sequence",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 control cannot write saved work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 control cannot write definition revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 control cannot write work bindings",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 data cannot write definition revisions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 data cannot write publications",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 data cannot write saved work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 worker cannot write saved work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot write permission rows",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 control cannot write permission rows",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot write the source ledger",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot write another organization (FORCE RLS)",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot append to the control chain",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot append a control kind",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot append an admission kind",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 control cannot append to the workspace chain",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 control cannot append a workspace kind",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 data cannot append to the workspace chain (0007 binds it to the data chain)",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 data cannot append a workspace kind to its own chain",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 data cannot UPDATE audit events",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot UPDATE audit events",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 control cannot DELETE audit events",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot rewrite a draft",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 control cannot rewrite a publication",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 workspace cannot delete saved work",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0005 role separation: workspace never publishes, control never saves work, data/worker write neither, no role writes permission rows, rewrites or deletes drafts, publications, saved work or audit events, or appends to another chain or kind",
+      "passed": true
+    },
+    {
+      "name": "0006 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; cookies and state only as genui.digest, no token, verifier or nonce column",
+      "passed": true,
+      "tables": [
+        "prelogin_flows",
+        "pre_access_sessions",
+        "sessions"
+      ]
+    },
+    {
+      "name": "0006 grants: genui_workspace inserts, reads, touches, locks and deletes its own pre-login and pre-access rows (rolled back)",
+      "passed": true
+    },
+    {
+      "name": "0006 workspace cannot rewrite a pre-login flow",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 workspace cannot rewrite a session principal",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 workspace cannot rewrite a pre-access identity",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 workspace cannot read a code id from reservations",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 workspace cannot read a reservation context digest",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 workspace cannot write a reservation",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 workspace cannot write another organization (FORCE RLS)",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 a pre-login flow lasts at most 10 minutes",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "0006 a pre-access session lasts at most 30 minutes",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "0006 a sign-in flow carries no reservation",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "0006 control cannot read sessions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 data cannot read pre-access sessions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 worker cannot read pre-login flows",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 control cannot write sessions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 data cannot delete sessions",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0006 role separation and bounds: only genui_workspace touches session rows, only last_seen_at/revoked_at are updatable, the pending lookup reads no code id or context digest, and the 10-minute, 30-minute and 12-hour CHECKs hold",
+      "passed": true
+    },
+    {
+      "name": "0007 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the data role is bound to the scoped principal on claims, outcomes and revisions; ids, digests, sequences and versions are domain-typed; one commit sequence per outcome; the outcome references its claim and has no foreign key into the insert-only audit log",
+      "passed": true,
+      "tables": [
+        "organization_sequences",
+        "command_claims",
+        "command_outcomes",
+        "query_receipts"
+      ]
+    },
+    {
+      "name": "0007 grants: genui_data locks and advances its organization sequence, claims under its own principal, reads the claim and commits an outcome referencing it (rolled back); another principal sees no claim",
+      "passed": true
+    },
+    {
+      "name": "0007 an outcome needs its claim",
+      "passed": true,
+      "sqlstate": "23503"
+    },
+    {
+      "name": "0007 data cannot claim as another principal (scope P, row author)",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 data cannot update an outcome",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 data cannot delete a claim",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 data cannot update a revision",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 data cannot create a sequence row (D7.19)",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 data cannot touch receipts yet",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 data cannot append another chain",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 data cannot append another kind",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 a malformed key is refused",
+      "passed": true,
+      "sqlstate": "23514"
+    },
+    {
+      "name": "0007 workspace cannot read outcomes",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 control cannot read claims",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 worker cannot read the sequence",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 workspace cannot write the sequence",
+      "passed": true,
+      "sqlstate": "42501"
+    },
+    {
+      "name": "0007 role separation and bounds: only genui_data touches the command relations and only as the scoped principal, with no UPDATE or DELETE on claims, outcomes or revisions, no sequence creation and no other chain or kind; the key shape and the 24-hour retry horizon CHECKs hold",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "limits": [
+    "Local trust authentication is not RDS IAM/TLS qualification.",
+    "Operator-seeded contract shapes are not source import, hosted identity or successful application business writes.",
+    "Admission functions are exercised directly as genui_workspace with fixture codes written as the operator channel would; the storage-module admission path, the operator package, sessions and hosted identity are not exercised.",
+    "The 0005 definition/work grants are exercised as raw role statements; the storage-module definition, publication and saved-work transactions are the Rust definition campaign.",
+    "The 0006 session grants and CHECKs are exercised as raw role statements; the session transactions and routes are the Rust session campaign (auth::tests::native_session_campaign).",
+    "The 0007 command grants, RESTRICTIVE bindings and CHECKs are exercised as raw role statements; the command transaction, its lock order and the route are the Rust command campaign (storage::command_qualification::native_command_campaign).",
+    "Native pool cancellation/reuse and actual managed trials remain separate."
+  ],
+  "committed_drift_containers_removed": [
+    true,
+    true,
+    true,
+    true
+  ],
+  "replica_drift_container_removed": true,
+  "compatibility_container_removed": true,
+  "shadow_path_container_removed": true,
+  "fresh_container_removed": true,
+  "source_sha256": {
+    "app/runtime/runtime.py": "84eb1e78c59ba8067aa2b34293fe47b73eca0b05b0487ffd5a5e4390fbeb261a",
+    "app/runtime/qualify_tenant_schema.py": "85cc496aa326edff401f19af4f0c8e0372fa410383f2d27bb55ff555a436b2f1",
+    "app/runtime/tenant_seed.py": "73bd6b2d16c636fc3e2a8f91b71507d42aa737823084c7f6a2fe3570ee65fc2e",
+    "app/migrations/manifest.json": "b2a7be459f43bf668c265ffa5b7006b8cdb1dae3f3c743172295318cc6611b72",
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
+    "app/migrations/0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
+    "app/migrations/0005_definition_work_grants.sql": "78d837a2968a661253f5fa9ddaab1502fc17a4e84aac979d5acf6e6c969de06e",
+    "app/migrations/0006_sessions.sql": "0372a295771eda11ee5f73472c991a4b1d6955db63d68519612fb6cfa30d07ed",
+    "app/migrations/0007_command_outcomes.sql": "7a0007184cad993594749139d87d4ceec88ee262c0af078471fefdd842cc11e9",
+    "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+    "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+    "app/migrations/catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
+    "app/migrations/catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
+    "app/migrations/catalog-v5.json": "66112bd02c1cf3e04753c8fe38d7baa261ecae91f35f5254d58c8d61d6987804",
+    "app/migrations/catalog-v6.json": "2db0b8db417c4160fe41ea20bda7230772895fe2a088c3d4c38e3bcab65c27dc",
+    "app/migrations/catalog-v7.json": "af4228aa9191125e691e93801c9a3221f31500ecef01964673a07c96fc66da97"
+  },
+  "container_removed": true
+}

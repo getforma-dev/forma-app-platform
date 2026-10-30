@@ -280,6 +280,8 @@ pub struct RecordCommand {
     pub id: String,
     pub operation: String,
     pub writable_fields: Vec<String>,
+    /// The declared transitions, `(field_id, from, to)`.
+    pub transitions: Vec<(String, String, String)>,
 }
 /// A record read back for its page: current version (0 when absent), its
 /// fields and the commands its schema declares.
@@ -686,8 +688,12 @@ fn state_map(state: Option<&Value>) -> Result<BTreeMap<String, Value>> {
 
 /// The new record state: the declaration's writable, type-compatible values
 /// over the current state (or nulls for a new record); every non-nullable
-/// field present; on an existing record every changed enum field follows a
-/// declared transition of this command, or the command is an `update`.
+/// field present. On an existing record (contract edition impl-2026-10-29.3
+/// amendment, APP-013 review M1) the state must change, every changed enum
+/// field follows a declared transition of this command or the command is an
+/// `update`, and a `create` command must fire one of its declared
+/// transitions: a note-only edit or a resubmission of the current values
+/// through a `create` is refused, and no command writes a no-op revision.
 fn compose(
     spec: &[FieldSpec],
     declaration: &Declaration,
@@ -712,6 +718,7 @@ fn compose(
     }
     let null = json!({"type": "null"});
     let mut state = Vec::with_capacity(spec.len());
+    let (mut changed, mut fired) = (false, false);
     for field in spec {
         let value = supplied
             .get(&field.id)
@@ -720,19 +727,25 @@ fn compose(
             .unwrap_or_else(|| null.clone());
         require(field.nullable || value != null)?;
         if !creating {
-            if let Some(before) = current.get(&field.id) {
+            let before = current.get(&field.id).unwrap_or(&null);
+            if *before != value {
+                changed = true;
                 let is_enum = field.value_type.get("type").and_then(Value::as_str) == Some("enum");
-                if is_enum && *before != value {
+                if is_enum {
                     let from = before.get("value").and_then(Value::as_str);
                     let to = value.get("value").and_then(Value::as_str);
                     let declared = declaration.transitions.iter().any(|(f, a, b)| {
                         f == &field.id && Some(a.as_str()) == from && Some(b.as_str()) == to
                     });
                     require(declared || declaration.operation == "update")?;
+                    fired |= declared;
                 }
             }
         }
         state.push(json!({"field_id": field.id, "value": value}));
+    }
+    if !creating {
+        require(changed && (fired || declaration.operation == "update"))?;
     }
     let bytes = admission::encode(&Value::Array(state)).map_err(|_| Error::Denied)?;
     require(bytes.len() <= MAX_CANONICAL_BYTES)?;
@@ -905,6 +918,7 @@ impl Data {
                         id: id.clone(),
                         operation: declaration.operation.clone(),
                         writable_fields: declaration.writable.clone(),
+                        transitions: declaration.transitions.clone(),
                     })
                     .collect(),
                 can_write,
@@ -1096,7 +1110,9 @@ async fn commit<'a>(
         })));
     }
     // A `create` command creates (version 0); an existing record takes an
-    // `update` command or a command whose declared transitions it follows.
+    // `update` command or a `create` command that declares transitions, and
+    // `compose` requires such a `create` to fire one (contract edition
+    // impl-2026-10-29.3 amendment; APP-013 review M1).
     require(if current_version == 0 {
         declaration.operation == "create"
     } else {
@@ -1279,13 +1295,38 @@ mod tests {
         .unwrap();
         let second_state: Value = serde_json::from_slice(&second).unwrap();
         assert_eq!(second_state, values("reviewed", "Approved"));
-        // Only the note: the unchanged status is carried from the current state.
+        // APP-013 review M1: a create command on an existing record must fire
+        // a declared transition. A note-only edit and a resubmission of the
+        // current values under a new key are refused, before and after the
+        // transition fired.
         let note_only = json!([{"field_id": "note", "value": {"type": "text", "value": "n"}}]);
+        for current in [&first_state, &second_state] {
+            assert_eq!(
+                compose(&spec, &declaration, Some(current), &note_only).err(),
+                Some(Error::Denied)
+            );
+            assert_eq!(
+                compose(&spec, &declaration, Some(current), current).err(),
+                Some(Error::Denied)
+            );
+        }
+        // An update command edits any writable field, the unchanged status
+        // carried from the current state, but never writes a no-op revision.
+        let mut edit = record_decision();
+        edit.operation = "update".into();
         let third: Value = serde_json::from_slice(
-            &compose(&spec, &declaration, Some(&second_state), &note_only).unwrap(),
+            &compose(&spec, &edit, Some(&second_state), &note_only).unwrap(),
         )
         .unwrap();
         assert_eq!(third, values("reviewed", "n"));
+        assert_eq!(
+            compose(&spec, &edit, Some(&third), &note_only).err(),
+            Some(Error::Denied)
+        );
+        assert_eq!(
+            compose(&spec, &edit, Some(&third), &third).err(),
+            Some(Error::Denied)
+        );
         // reviewed -> needs_context is not declared on a create command.
         assert_eq!(
             compose(
