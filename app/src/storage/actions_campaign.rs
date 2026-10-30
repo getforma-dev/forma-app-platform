@@ -514,10 +514,24 @@ async fn campaign() {
                 live_events: "/v1/events".into(),
                 demo_organizations: [ORG.to_owned()].into_iter().collect(),
             }))),
-        vec![(
-            actions::PATH,
-            actions::routes::router(Arc::new(Act::new(auth.clone(), parser))),
-        )],
+        {
+            // APP-103: the widgets' routes on the stand (rehearsed restyles in
+            // the demo organization, the weather fixture; no model).
+            let widgets =
+                crate::widgets::routes::router(Arc::new(crate::widgets::routes::Widgets::new(
+                    auth.clone(),
+                    crate::widgets::customize::Customizer::new(None, "none"),
+                    crate::widgets::weather::OpenMeteo::new(),
+                )));
+            vec![
+                (
+                    actions::PATH,
+                    actions::routes::router(Arc::new(Act::new(auth.clone(), parser))),
+                ),
+                (crate::widgets::WEATHER_PATH, widgets.clone()),
+                (crate::widgets::CUSTOMIZE_PATH, widgets),
+            ]
+        },
     );
     let act = |cookie: &str, body: String| {
         let app = app.clone();

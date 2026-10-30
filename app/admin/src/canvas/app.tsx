@@ -219,6 +219,8 @@ function IntentBar(props: IntentProps) {
         setBusy(true);
         const widget = widgetIntent(text, report);
         if (widget) {
+          // A widget command is done once run: the bar is ready for the next one.
+          if (input) input.value = '';
           void widget.finally(() => setBusy(false));
           return;
         }

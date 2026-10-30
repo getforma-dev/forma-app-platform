@@ -99,6 +99,17 @@ function nextRow(): number {
 // the member moved something (its layout is the widgets module's, DS-06).
 const widgetItems = new Set<HTMLElement>();
 const layoutListeners: Array<() => void> = [];
+const widgetAnchor = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((entries) => {
+  if (!canvas) return;
+  for (const entry of entries) {
+    const item = entry.target as HTMLElement;
+    if (item.dataset.widgetPinned || !widgetItems.has(item)) {
+      widgetAnchor?.unobserve(item);
+      continue;
+    }
+    canvas.moveItemTo(item, Number(item.dataset.canvasX ?? ORIGIN), ORIGIN - ROW_GAP - item.offsetHeight);
+  }
+});
 
 /** The canvas host, once the board is started (null before). */
 export function canvasHost(): HTMLElement | null {
@@ -157,6 +168,13 @@ export function mountWidget(
     canvas.moveItemTo(item, x, ORIGIN - ROW_GAP - Math.max(item.offsetHeight, options.minHeight));
   }
   widgetItems.add(item);
+  // A widget the member has not moved keeps its bottom on the widget row as
+  // a restyle changes its height (a TI-84 is taller), so it never overlaps the apps.
+  if (!options.at) {
+    widgetAnchor?.observe(item);
+  } else {
+    item.dataset.widgetPinned = 'true';
+  }
   host.classList.add('has-groups');
   host.ownerDocument.getElementById('cv-empty')?.setAttribute('hidden', '');
   if (options.focus !== false) {
@@ -169,6 +187,7 @@ export function mountWidget(
 /** Removes a widget's canvas item. */
 export function unmountWidget(item: HTMLElement): void {
   if (!canvas || !widgetItems.delete(item)) return;
+  widgetAnchor?.unobserve(item);
   canvas.removeItem(item, { selectFallback: false });
 }
 
@@ -520,6 +539,7 @@ export function startBoard(document_: Document): void {
     // Moving a card by hand (drag or keyboard) pins its group's layout.
     onActiveDragStateChange: (item, dragging) => {
       if (dragging) return;
+      if (widgetItems.has(item)) item.dataset.widgetPinned = 'true';
       const group = groups.get(item.dataset.group ?? '');
       if (group) group.pinned = true;
       fitPending = false;
