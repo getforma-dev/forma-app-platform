@@ -62,7 +62,11 @@ RUN python3 -I -c "import hashlib,json,pathlib; r=pathlib.Path('/operator'); pri
 # Private scratch for the parser config and Parquet output; the task's root
 # filesystem is read-only.
 VOLUME ["/run/operator"]
+# The entry point runs isolated (-I), which ignores every PYTHON* variable, so
+# -u carries the unbuffered output: a receipt printed after a commit reaches the
+# awslogs pipe at once rather than at exit (APP-077 review m6). The PYTHON*
+# values below reach only a python3 run without -I.
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TMPDIR=/run/operator AWS_CONFIG_FILE=/dev/null AWS_SHARED_CREDENTIALS_FILE=/dev/null
 USER 65532:65532
-ENTRYPOINT ["python3", "-I", "/operator/app/operator/operator.py"]
+ENTRYPOINT ["python3", "-I", "-u", "/operator/app/operator/operator.py"]
 CMD ["verify-catalog"]

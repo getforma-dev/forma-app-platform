@@ -2,7 +2,7 @@
   "schema_version": 1,
   "scope": "APP-077 documented ECS RunTask overrides for the optional OperatorTask. Each `overrides` value is the complete RunTask `overrides` member. It carries only `command`, which ECS passes to the task definition's entryPoint; never environment, credentials, endpoints or SQL.",
   "container": "operator",
-  "entryPoint": ["python3", "-I", "/operator/app/operator/operator.py"],
+  "entryPoint": ["python3", "-I", "-u", "/operator/app/operator/operator.py"],
   "default_command": ["verify-catalog"],
   "max_override_bytes": 8192,
   "overrides": [
@@ -29,11 +29,27 @@
     {"name": "admission-revoke", "purpose": "Revoke a code by id (the id shown is an example of the exact shape).",
      "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "revoke", "--organization", "00000000-0000-4000-8000-000000000001", "--code-id", "00000000-0000-4000-8000-0000000000c0"]}]}},
     {"name": "admission-extend", "purpose": "Move a code's expiry later (the id shown is an example of the exact shape).",
-     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "extend", "--organization", "00000000-0000-4000-8000-000000000001", "--code-id", "00000000-0000-4000-8000-0000000000c0", "--expires-days", "30"]}]}}
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "extend", "--organization", "00000000-0000-4000-8000-000000000001", "--code-id", "00000000-0000-4000-8000-0000000000c0", "--expires-days", "30"]}]}},
+    {"name": "admission-defaults", "purpose": "Print the reviewed admission defaults; no database connection.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "defaults"]}]}},
+    {"name": "admission-provision", "purpose": "Create an organization with its provider tenant binding and five genesis heads (D7.7); prints the non-secret sign-in handle (ADR-006). The values shown are examples of the exact shape.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "provision", "--organization", "00000000-0000-4000-8000-0000000000e1", "--display-name", "Synthetic trial organization", "--issuer", "https://auth.example.test", "--provider-tenant", "tenant-example"]}]}},
+    {"name": "admission-create-app", "purpose": "An app shell and its owner's edit_definition grant (ADR-007 amendment of 2026-10-29). The ids shown are examples of the exact shape.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "create-app", "--organization", "00000000-0000-4000-8000-000000000001", "--app", "00000000-0000-4000-8000-0000000000f1", "--space", "00000000-0000-4000-8000-000000000384", "--owner", "00000000-0000-4000-8000-000000000066"]}]}},
+    {"name": "admission-grant-permission", "purpose": "One row of the closed GRANTABLE set (the S05 builder's path); the app/work/source arguments follow the permission's resource. The ids shown are examples of the exact shape.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "grant-permission", "--organization", "00000000-0000-4000-8000-000000000001", "--principal", "00000000-0000-4000-8000-000000000066", "--permission", "edit_definition", "--app", "00000000-0000-4000-8000-000000000065"]}]}},
+    {"name": "admission-revoke-permission", "purpose": "Remove one GRANTABLE row and advance the member's epoch. The ids shown are examples of the exact shape.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "revoke-permission", "--organization", "00000000-0000-4000-8000-000000000001", "--principal", "00000000-0000-4000-8000-000000000066", "--permission", "edit_definition", "--app", "00000000-0000-4000-8000-000000000065"]}]}},
+    {"name": "admission-revoke-creator-authority", "purpose": "End a saved work's creator authority and advance the creator's epoch. The ids shown are examples of the exact shape.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "revoke-creator-authority", "--organization", "00000000-0000-4000-8000-000000000001", "--app", "00000000-0000-4000-8000-000000000065", "--work", "00000000-0000-4000-8000-000000000069"]}]}},
+    {"name": "admission-revoke-membership", "purpose": "Revoke a member (D7.1 order). The ids shown are examples of the exact shape.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "revoke-membership", "--organization", "00000000-0000-4000-8000-000000000001", "--principal", "00000000-0000-4000-8000-000000000066"]}]}},
+    {"name": "admission-revoke-entitlement", "purpose": "Revoke a member's entitlement (D7.1 order). The ids shown are examples of the exact shape.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["admission", "revoke-entitlement", "--organization", "00000000-0000-4000-8000-000000000001", "--principal", "00000000-0000-4000-8000-000000000066"]}]}}
   ],
   "not_ecs_overrides": [
-    {"command": ["admission", "issue"], "reason": "It prints the raw access code once on standard output, and a Fargate task's standard output is the awslogs log group: issuing through ECS would retain the secret in CloudWatch Logs. The managed delivery channel is APP-078's decision; locally the command is unchanged."},
-    {"command": ["admission", "issue", "--provider-email"], "reason": "A provider invitation needs the management key and a private 0700 capability directory; neither belongs in a task override or on a read-only task filesystem."},
-    {"command": ["admission", "reconcile"], "reason": "Needs the provider management key, as above."}
+    {"command": ["admission", "issue"], "reason": "It prints the raw access code once on standard output, and a Fargate task's standard output is the awslogs log group: issuing through ECS would retain the secret in CloudWatch Logs. operator.py refuses it (refused_in_managed_task) whenever ECS_CONTAINER_METADATA_URI_V4 or ECS_CONTAINER_METADATA_URI is set, which Fargate always sets. The managed delivery channel is APP-078's decision; locally the command is unchanged."},
+    {"command": ["admission", "issue", "--provider-email"], "reason": "A provider invitation needs the management key and a private 0700 capability directory; neither belongs in a task override or on a read-only task filesystem. Refused in a managed task as above."},
+    {"command": ["admission", "reconcile"], "reason": "Needs the provider management key, as above; refused in a managed task as above."}
   ]
 }

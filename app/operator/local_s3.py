@@ -6,7 +6,13 @@ conditional `If-None-Match: *` write that answers 412 for an existing key, and
 HeadObject, plus GetObject for inspection) and enforces the two bucket-policy denials of
 infra/src/stack.ts for each tenant prefix: a PutObject without
 `x-amz-server-side-encryption: aws:kms`, or with a KMS key id other than that
-prefix's tenant key, is AccessDenied. It also refuses unsigned requests and a
+prefix's tenant key, is AccessDenied. It also models the caller's identity
+policy (APP-077 review M1, m3): `kms_grants` names the KMS actions the caller
+holds on each key, so a PUT under a key needs kms:GenerateDataKey, and a GET, or
+a HeadObject with `x-amz-checksum-mode: ENABLED`, of an SSE-KMS object needs
+kms:Decrypt (as the S3 HeadObject reference states for checksum retrieval); with
+`require_if_none_match` a PUT without `If-None-Match: *` is AccessDenied (the
+OperatorRole's s3:if-none-match condition). It refuses unsigned requests and a
 body whose `x-amz-checksum-sha256` does not match, as S3 does. Objects are
 versioned in memory; every request is recorded for assertions.
 """
@@ -18,8 +24,10 @@ import uuid
 
 
 class Stub:
-    def __init__(self, bucket, tenant_keys):
+    def __init__(self, bucket, tenant_keys, *, kms_grants, require_if_none_match=True):
         self.bucket, self.tenant_keys = bucket, dict(tenant_keys)  # prefix -> key arn
+        self.kms_grants = {arn: frozenset(actions) for arn, actions in kms_grants.items()}  # key arn -> KMS actions held
+        self.require_if_none_match = require_if_none_match
         self.objects, self.requests, self.fail_puts, self.put_count = {}, [], set(), 0
         self.lock = threading.Lock()
         stub = self
@@ -83,6 +91,9 @@ class Stub:
                 # The bucket policy's two explicit Deny statements for this prefix.
                 if sse != "aws:kms" or tenant is None or key_id != tenant:
                     return self.error(403, "AccessDenied")
+                # The caller's identity policy: PutObject only as a conditional create.
+                if stub.require_if_none_match and self.headers.get("If-None-Match") != "*":
+                    return self.error(403, "AccessDenied")
                 checksum = base64.b64encode(hashlib.sha256(body).digest()).decode()
                 if self.headers.get("x-amz-checksum-sha256") not in (None, checksum):
                     return self.error(400, "BadDigest")
@@ -91,12 +102,16 @@ class Stub:
                 with stub.lock:
                     # S3 conditional write: If-None-Match: * refuses an existing key atomically.
                     if self.headers.get("If-None-Match") == "*" and stub.objects.get(key):
-                        exists = True
+                        outcome = 412
+                    elif not stub.holds(key_id, "kms:GenerateDataKey"):  # S3 asks KMS for a data key to store it
+                        outcome = 403
                     else:
-                        exists = False
+                        outcome = 200
                         stub.objects.setdefault(key, []).append(item)
-                if exists:
+                if outcome == 412:
                     return self.error(412, "PreconditionFailed")
+                if outcome == 403:
+                    return self.error(403, "AccessDenied")
                 headers = self.object_headers(item, self.headers.get("x-amz-checksum-sha256") is not None)
                 headers.pop("Content-Type")
                 self.reply(200, headers)
@@ -117,11 +132,18 @@ class Stub:
                 if not versions:
                     return self.error(404, "NoSuchKey")
                 item = versions[-1]
-                headers = self.object_headers(item, self.headers.get("x-amz-checksum-mode") == "ENABLED")
+                checksum_mode = self.headers.get("x-amz-checksum-mode") == "ENABLED"
+                # Reading an SSE-KMS object's data, or its stored checksum, needs kms:Decrypt on its key.
+                if item["sse"] == "aws:kms" and (not head or checksum_mode) and not stub.holds(item["key_id"], "kms:Decrypt"):
+                    return self.error(403, "AccessDenied")
+                headers = self.object_headers(item, checksum_mode)
                 self.reply(200, headers, item["body"])
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    def holds(self, key_arn, action):
+        return action in self.kms_grants.get(key_arn, ())
 
     @property
     def endpoint(self):

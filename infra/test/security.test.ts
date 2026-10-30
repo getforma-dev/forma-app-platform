@@ -412,15 +412,31 @@ test('operator task role holds no role assumption and reaches only B1 source obj
   const statements = policy(role('OperatorRole'));
   assert.equal(statements.some(statement => actions(statement).some(action => action.startsWith('sts:') || action.startsWith('rds-db:') || action.startsWith('secretsmanager:') || action === 's3:DeleteObject' || action === 's3:ListBucket')), false);
   const bucket = one('AWS::S3::Bucket')[0];
-  assert.equal(statements.length, 4);
+  assert.equal(statements.length, 6);
+  for (const statement of statements) assert.equal(statement.Effect, 'Allow');
   for (const [index, keyPrefix] of ['northstarKey', 'canaryKey'].entries()) {
     const prefix = `o/00000000-0000-4000-8000-00000000000${index + 1}/s/*`;
+    const objectArn = { 'Fn::Join': ['', [{ 'Fn::GetAtt': [bucket, 'Arn'] }, `/${prefix}`]] };
     const objects = statements.filter(statement => JSON.stringify(statement.Resource).includes(prefix));
-    assert.equal(objects.length, 1); assert.deepEqual(actions(objects[0]).sort(), ['s3:GetObject', 's3:PutObject']);
-    assert.deepEqual(objects[0].Resource, { 'Fn::Join': ['', [{ 'Fn::GetAtt': [bucket, 'Arn'] }, `/${prefix}`]] });
+    // Review m3: HeadObject reads through s3:GetObject; PutObject is allowed only as a conditional create.
+    assert.equal(objects.length, 2);
+    const [get] = objects.filter(statement => actions(statement).includes('s3:GetObject'));
+    const [put] = objects.filter(statement => actions(statement).includes('s3:PutObject'));
+    assert.deepEqual(actions(get), ['s3:GetObject']); assert.equal(get.Condition, undefined); assert.deepEqual(get.Resource, objectArn);
+    assert.deepEqual(actions(put), ['s3:PutObject']); assert.deepEqual(put.Resource, objectArn);
+    assert.deepEqual(put.Condition, { StringEquals: { 's3:if-none-match': '*' } });
+    // Review M1: a checksum-mode HeadObject of an SSE-KMS object needs kms:Decrypt, so a rerun can compare
+    // an existing object. Both KMS actions are usable only through S3 in this region and only for this
+    // tenant's B1 source objects (bucket keys are off, so S3's encryption context is the object ARN).
     const key = statements.filter(statement => JSON.stringify(statement.Resource) === JSON.stringify({ 'Fn::GetAtt': [one('AWS::KMS::Key', keyPrefix)[0], 'Arn'] }));
-    assert.equal(key.length, 1); assert.deepEqual(actions(key[0]), ['kms:GenerateDataKey']);
+    assert.equal(key.length, 1); assert.deepEqual(actions(key[0]).sort(), ['kms:Decrypt', 'kms:GenerateDataKey']);
+    assert.deepEqual(key[0].Condition, {
+      StringEquals: { 'kms:ViaService': { 'Fn::Join': ['', ['s3.', { Ref: 'AWS::Region' }, '.amazonaws.com']] } },
+      StringLike: { 'kms:EncryptionContext:aws:s3:arn': objectArn },
+    });
+    assert.equal(resolve(key[0].Condition.StringEquals['kms:ViaService'], { 'AWS::Region': 'us-east-1' }), 's3.us-east-1.amazonaws.com');
   }
+  assert.equal(one('AWS::S3::Bucket')[1].Properties.BucketEncryption.ServerSideEncryptionConfiguration[0].BucketKeyEnabled, false);
   // The task role is the operator's own: not the runtime task role, not the migration task role.
   assert.notEqual(role('OperatorRole'), role('TaskRole')); assert.equal(policy(role('MigrationRole')).length, 0);
   // The bucket policy still denies any PutObject without SSE-KMS under that prefix's tenant key.
