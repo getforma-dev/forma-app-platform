@@ -101,6 +101,25 @@ impl Workspace {
         result
     }
 
+    /// The member's organization display name (the canvas top bar), under
+    /// the request's scope and the member fence, like `members`. Nothing is
+    /// written; a refused member is `Denied`.
+    pub async fn organization_name(&self, request: &TrustedRequest) -> Result<String> {
+        let cap = Instant::now() + SHARE_HANDLER_DEADLINE;
+        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
+        let result = async {
+            let permit = transaction.fence_member().await?;
+            let rows = permit.transaction().query("SELECT display_name FROM genui.organizations WHERE organization_id=$1::text::uuid", &[&request.organization]).await?;
+            match rows.first() {
+                Some(row) => text(row, 0),
+                None => Err(Error::Denied),
+            }
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
     /// `POST /v1/work/{app}/{work}/share`: shares `work` of `app` with
     /// `grantee`, a member of the sharer's own organization, granting
     /// exactly the sharer's subset (module notes). `Denied` covers a work the
