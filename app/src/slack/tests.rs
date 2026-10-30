@@ -353,7 +353,10 @@ async fn commands_answer_help_and_link_at_once_and_refuse_foreign_response_urls(
     };
     let (status, help) = send("help", "https://hooks.slack.com/commands/T0001/1/x").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(help.contains("/forma what's waiting for me"), "{help}");
+    assert!(
+        help.contains("/forma what's waiting for my approval"),
+        "{help}"
+    );
     let (_, link) = send("link", "https://hooks.slack.com/commands/T0001/1/x").await;
     assert!(link.contains("/slack/link?t="), "{link}");
     let token = link

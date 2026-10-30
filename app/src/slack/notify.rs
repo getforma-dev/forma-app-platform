@@ -9,7 +9,9 @@
 //! it) not yet announced to it is DMed once, with Approve and Reject. A member
 //! who cannot open the work learns nothing (the listing is `Denied`). The
 //! canvas commits and then shares to the approver, so the DM normally follows
-//! the share's `app.shared`.
+//! the share's `app.shared`. Recorded debt (APP-098 DS-61): the approver is
+//! derived from write access, not stored, and the once-per-version set lives
+//! in process memory.
 use super::{flows, Slack};
 use crate::{
     actions::resolve,

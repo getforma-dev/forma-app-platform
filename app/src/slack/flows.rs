@@ -28,7 +28,7 @@ const MAX_PENDING: usize = 10;
 /// The channel label the canvas chip shows (DS-59).
 pub const VIA: &str = "Slack";
 
-const HELP: &str = "Tell Forma what you need, for example:\n• `/forma I spent $86 on a client dinner at Nobu last night, Sarah approves my expenses`\n• `/forma what's waiting for me`\n• `/forma link` to connect your Slack account, `/forma unlink` to disconnect it";
+const HELP: &str = "Tell Forma what you need, for example:\n• `/forma I spent $86 on a client dinner at Nobu last night, Sarah approves my expenses`\n• `/forma what's waiting for my approval`\n• `/forma link` to connect your Slack account, `/forma unlink` to disconnect it";
 const LINK_PROMPT: &str = "Connect your Slack account to Forma first: run `/forma link` and open the link while signed in to Forma.";
 /// The one answer for anything this member may not see or do (uniform).
 const REFUSED: &str = "Forma couldn't do that. It may not exist, or it isn't yours to act on.";

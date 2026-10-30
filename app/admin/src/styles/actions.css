@@ -123,6 +123,7 @@
 .cv-status-chip[data-status="approved"] { border-color: var(--cv-ready); color: var(--cv-ready); }
 .cv-status-chip[data-status="rejected"] { border-color: var(--cv-bad); color: var(--cv-bad); }
 .cv-records-by { color: var(--cv-muted); white-space: nowrap; }
+.cv-via-chip { margin-left: 0.4rem; padding: 0 0.35rem; border: 1px solid var(--cv-muted); border-radius: 999px; font-size: 0.75em; color: var(--cv-muted); }
 .cv-records-actions { white-space: nowrap; }
 .cv-records-actions button {
   margin-right: 0.3rem;

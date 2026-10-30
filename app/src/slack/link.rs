@@ -265,7 +265,7 @@ pub async fn confirm(State(state): State<Arc<Slack>>, request: Request) -> Respo
             let user = claim.user.clone();
             tokio::spawn(async move {
                 let text = format!(
-                    "You're linked to Forma as *{}*. Try `/forma what's waiting for me`.",
+                    "You're linked to Forma as *{}*. Try `/forma what's waiting for my approval`.",
                     super::text::escape(&label)
                 );
                 if let Err(error) = slack.api.direct(&user, &text, None).await {
@@ -279,7 +279,7 @@ pub async fn confirm(State(state): State<Arc<Slack>>, request: Request) -> Respo
             page(
                 StatusCode::OK,
                 "Slack is linked",
-                "<p>Go back to Slack and try <code>/forma what's waiting for me</code>.</p>",
+                "<p>Go back to Slack and try <code>/forma what's waiting for my approval</code>.</p>",
             )
         }
         Err(storage::Error::Denied) => invalid(),
