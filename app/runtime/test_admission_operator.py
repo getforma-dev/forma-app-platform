@@ -390,6 +390,34 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.cli("provision", "--organization", org, "--display-name", "again", "--issuer", ISSUER, "--provider-tenant", "ten_x", expect=1)
         self.assertEqual(self.dump(), before)
 
+    def test_bind_provider_tenant_adds_the_real_binding_once_without_an_audit_event(self):
+        """APP-078 B1: an existing (seeded) organization gains its real provider tenant binding beside
+        the fixture one; identifiers only, idempotent, no audit event (D7.8's kinds name none)."""
+        self.ensure_backfill()
+        before = self.operator_events()
+        rows = lambda: self.query("SELECT issuer,provider_tenant_id,active FROM genui.provider_tenant_bindings WHERE organization_id=%s ORDER BY issuer", (ORG,))
+        self.assertEqual(rows(), [(ISSUER, TENANT, True)], "the fixture's existing binding, like the seed's `app008-fixture-only` on RDS")
+        args = ("bind-provider-tenant", "--organization", ORG, "--issuer", "synthetic-iss", "--provider-tenant", "ten_00000000-0000-4000-8000-00000000a001")
+        created = self.cli(*args)
+        self.assertEqual(created, {"organization_id": ORG, "binding": "created", "active_bindings": 2, "audit_event": None})
+        self.assertEqual(rows(), [(ISSUER, TENANT, True), ("synthetic-iss", "ten_00000000-0000-4000-8000-00000000a001", True)])
+        self.assertEqual(self.cli(*args), {"organization_id": ORG, "binding": "existing", "active_bindings": 2, "audit_event": None})
+        self.assertEqual(rows()[1:], [("synthetic-iss", "ten_00000000-0000-4000-8000-00000000a001", True)])
+        self.assertEqual(self.operator_events(), before, "D7.8's closed operator kinds name no binding event")
+        # The registry's own bounds, checked before any connection; an unknown organization refuses after it.
+        for bad in (("--issuer", "with space"), ("--issuer", "x" * 257), ("--provider-tenant", ""), ("--provider-tenant", "t" * 129)):
+            with self.subTest(bad=bad):
+                self.cli("bind-provider-tenant", "--organization", ORG, "--issuer", "ok-iss", "--provider-tenant", "ten_ok", *bad, expect=1)
+        unknown = self.cli("bind-provider-tenant", "--organization", "00000000-0000-4000-8000-0000000000ff", "--issuer", "ok-iss", "--provider-tenant", "ten_ok", expect=1)
+        self.assertEqual(json.loads(unknown.stderr), {"refused": "organization_unknown"})
+        # An inactive binding is not silently reactivated.
+        with self.connect("postgres", autocommit=True) as c:
+            c.execute("UPDATE genui.provider_tenant_bindings SET active=false WHERE organization_id=%s AND issuer='synthetic-iss'", (ORG,))
+        inactive = self.cli(*args, expect=1)
+        self.assertEqual(json.loads(inactive.stderr), {"refused": "provider_binding_inactive"})
+        with self.connect("postgres", autocommit=True) as c:
+            c.execute("DELETE FROM genui.provider_tenant_bindings WHERE organization_id=%s AND issuer='synthetic-iss'", (ORG,))
+
     def test_handles_issue_rotate_and_retire_route_through_resolve_handle(self):
         """APP-009 (ADR-006 §handle): only digests are stored; both handles route
         during a rotation; the last live handle never retires; one handle.rotated

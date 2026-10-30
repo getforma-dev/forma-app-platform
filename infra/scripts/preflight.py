@@ -249,12 +249,16 @@ def activate(config, report, call, clock):
     require(containers[0]['image'] == config['image_digest'] and definition['runtimePlatform']['cpuArchitecture'] == config['image_architecture'], 'live image or architecture differs from the reserved plan')
     require(containers[0].get('entryPoint', []) == [] and containers[0].get('command', []) == [], 'live service must use the reviewed image startup')
     require(containers[0].get('environmentFiles', []) == [] and
-            not any(item['name'].startswith(('GENUI_AUTH_QUALIFICATION_', 'GENUI_PROVIDER_CAPABILIT')) for item in containers[0].get('environment', [])),
-            'live qualification or capability configuration cannot bypass the reviewed secret channel')
-    # ADR-003 amendment 2026-10-30: the one injected secret is the stack's provider
-    # capability secret, under the name runtime.py serve() consumes.
-    expected_secrets = [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': outputs['ProviderCapabilitySecretArn']}]
-    require(containers[0].get('secrets', []) == expected_secrets, 'live secret injection differs from the reviewed stack')
+            not any(item['name'].startswith(('GENUI_AUTH_QUALIFICATION_', 'GENUI_PROVIDER_CAPABILIT', 'GENUI_AUTH_CONFIG', 'GENUI_IDENTITY_REGISTRY'))
+                    for item in containers[0].get('environment', [])),
+            'live qualification, capability or sign-in configuration cannot bypass the reviewed secret channel')
+    # ADR-003 amendment 2026-10-30 and APP-078 B1: exactly two injected secrets, the
+    # stack's provider capability secret and its hosted sign-in configuration, under
+    # the names runtime.py serve() consumes.
+    expected_secrets = [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': outputs['ProviderCapabilitySecretArn']},
+                        {'name': 'GENUI_AUTH_CONFIGURATION_JSON', 'valueFrom': outputs['AuthConfigurationSecretArn']}]
+    by_name = lambda entries: sorted(entries, key=lambda entry: entry['name'])
+    require(by_name(containers[0].get('secrets', [])) == by_name(expected_secrets), 'live secret injection differs from the reviewed stack')
     def current_service():
         result = call('ecs', 'describe-services', '--cluster', cluster_arn, '--services', service_arn)
         require(not result.get('failures') and len(result['services']) == 1, 'intended service is unavailable')

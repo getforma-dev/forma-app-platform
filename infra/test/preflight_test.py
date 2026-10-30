@@ -16,6 +16,10 @@ spec.loader.exec_module(preflight)
 NOW = datetime(2026, 10, 28, 12, tzinfo=timezone.utc)
 # ADR-003 amendment 2026-10-30: the stack's provider capability secret (an output).
 CAPABILITY_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:ProviderCapabilities-AbCdEf'
+# APP-078 B1: the stack's hosted sign-in configuration secret (an output).
+AUTH_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:AuthConfiguration-GhIjKl'
+INJECTED = [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': CAPABILITY_SECRET},
+            {'name': 'GENUI_AUTH_CONFIGURATION_JSON', 'valueFrom': AUTH_SECRET}]
 RETIRED = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
 
 
@@ -41,7 +45,7 @@ class Preflight(unittest.TestCase):
         outputs = {'DeploymentExpiryScheduleArn': 'arn:aws:scheduler:us-east-1:877573132739:schedule/owned-group/expiry',
                    'DeploymentExpiryGroup': 'owned-group', 'DeploymentExpiryRoleArn': 'arn:aws:iam::877573132739:role/owned-expiry',
                    'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:1',
-                   'ProviderCapabilitySecretArn': CAPABILITY_SECRET}
+                   'ProviderCapabilitySecretArn': CAPABILITY_SECRET, 'AuthConfigurationSecretArn': AUTH_SECRET}
         cluster = 'arn:aws:ecs:us-east-1:877573132739:cluster/owned-cluster'
         service = 'arn:aws:ecs:us-east-1:877573132739:service/owned-cluster/owned-service'
         stack = {'StackStatus': 'CREATE_COMPLETE', 'Parameters': [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()],
@@ -54,7 +58,7 @@ class Preflight(unittest.TestCase):
         current = {'serviceArn': service, 'clusterArn': cluster, 'taskDefinition': outputs['TaskDefinition'], 'status': 'ACTIVE', 'desiredCount': 0}
         definition = {'taskDefinitionArn': outputs['TaskDefinition'], 'runtimePlatform': {'cpuArchitecture': config['image_architecture']},
                       'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest'],
-                                                'secrets': [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': CAPABILITY_SECRET}]}]}
+                                                'secrets': list(INJECTED)}]}
         calls = []
         def call(*args):
             calls.append(args)
@@ -118,21 +122,28 @@ class Preflight(unittest.TestCase):
             self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), mutation)
 
     def test_the_capability_secret_is_the_one_exact_live_injection(self):
-        """ADR-003 amendment 2026-10-30: exactly the stack's capability secret, under runtime.py's name."""
-        for mutation in ('correct', 'missing', 'wrong_arn', 'wrong_name', 'extra', 'qualification'):
+        """ADR-003 amendment 2026-10-30 and APP-078 B1: exactly the stack's capability secret and its auth
+        configuration secret, under runtime.py's names, in either order."""
+        for mutation in ('correct', 'reordered', 'missing', 'missing_auth', 'missing_capabilities', 'wrong_arn', 'wrong_auth_arn',
+                         'swapped', 'wrong_name', 'extra', 'qualification'):
             config, report, _, _, _, calls, call = self.activation_fixture()
             def changed(*args):
                 value = call(*args)
                 if args[:2] == ('ecs', 'describe-task-definition'):
-                    secrets = [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': CAPABILITY_SECRET}]
+                    secrets = copy.deepcopy(INJECTED)
+                    if mutation == 'reordered': secrets.reverse()
                     if mutation == 'missing': secrets = []
+                    if mutation == 'missing_auth': secrets = secrets[:1]
+                    if mutation == 'missing_capabilities': secrets = secrets[1:]
                     if mutation == 'wrong_arn': secrets[0]['valueFrom'] = CAPABILITY_SECRET.replace('AbCdEf', 'GhIjKl')
+                    if mutation == 'wrong_auth_arn': secrets[1]['valueFrom'] = AUTH_SECRET.replace('GhIjKl', 'MnOpQr')
+                    if mutation == 'swapped': secrets[0]['valueFrom'], secrets[1]['valueFrom'] = secrets[1]['valueFrom'], secrets[0]['valueFrom']
                     if mutation == 'wrong_name': secrets[0]['name'] = 'GENUI_PROVIDER_CAPABILITY_DIR'
                     if mutation == 'extra': secrets.append({'name': 'PGPASSWORD', 'valueFrom': 'synthetic'})
                     if mutation == 'qualification': secrets.append({'name': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'valueFrom': RETIRED})
                     value['taskDefinition']['containerDefinitions'][0]['secrets'] = secrets
                 return value
-            if mutation == 'correct':
+            if mutation in ('correct', 'reordered'):
                 self.assertEqual(preflight.activate(config, report, changed, lambda: NOW)['desired_count'], 1)
             else:
                 with self.assertRaisesRegex(ValueError, 'secret injection differs'):
@@ -141,7 +152,7 @@ class Preflight(unittest.TestCase):
 
     def test_plain_environment_files_and_startup_cannot_bypass_the_secret_channel(self):
         for mutation in ('raw_json', 'config_file', 'future_qualification_field', 'capabilities_json', 'capability_dir',
-                         'environment_file', 'entrypoint', 'command'):
+                         'auth_configuration_json', 'auth_config_file', 'identity_registry_file', 'environment_file', 'entrypoint', 'command'):
             config, report, _, _, _, calls, call = self.activation_fixture()
             def changed(*args):
                 value = call(*args)
@@ -149,7 +160,9 @@ class Preflight(unittest.TestCase):
                     container = value['taskDefinition']['containerDefinitions'][0]
                     names = {'raw_json': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'config_file': 'GENUI_AUTH_QUALIFICATION_CONFIG_FILE',
                              'future_qualification_field': 'GENUI_AUTH_QUALIFICATION_UNREVIEWED',
-                             'capabilities_json': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'capability_dir': 'GENUI_PROVIDER_CAPABILITY_DIR'}
+                             'capabilities_json': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'capability_dir': 'GENUI_PROVIDER_CAPABILITY_DIR',
+                             'auth_configuration_json': 'GENUI_AUTH_CONFIGURATION_JSON', 'auth_config_file': 'GENUI_AUTH_CONFIG_FILE',
+                             'identity_registry_file': 'GENUI_IDENTITY_REGISTRY_FILE'}
                     if mutation in names: container['environment'] = [{'name': names[mutation], 'value': 'synthetic'}]
                     if mutation == 'environment_file': container['environmentFiles'] = [{'type': 's3', 'value': 'arn:aws:s3:::synthetic/config.env'}]
                     if mutation == 'entrypoint': container['entryPoint'] = ['sh', '-c']
@@ -414,7 +427,7 @@ class AlwaysOnPlan(unittest.TestCase):
         outputs = {'DeploymentExpiryScheduleArn': 'arn:aws:scheduler:us-east-1:877573132739:schedule/owned-group/expiry',
                    'DeploymentExpiryGroup': 'owned-group', 'DeploymentExpiryRoleArn': 'arn:aws:iam::877573132739:role/owned-expiry',
                    'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:3',
-                   'ProviderCapabilitySecretArn': CAPABILITY_SECRET}
+                   'ProviderCapabilitySecretArn': CAPABILITY_SECRET, 'AuthConfigurationSecretArn': AUTH_SECRET}
         cluster = 'arn:aws:ecs:us-east-1:877573132739:cluster/owned-cluster'
         service = 'arn:aws:ecs:us-east-1:877573132739:service/owned-cluster/owned-service'
         stack = {'StackStatus': 'UPDATE_COMPLETE', 'Parameters': [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()],
@@ -427,7 +440,7 @@ class AlwaysOnPlan(unittest.TestCase):
         current = {'serviceArn': service, 'clusterArn': cluster, 'taskDefinition': outputs['TaskDefinition'], 'status': 'ACTIVE', 'desiredCount': 0}
         definition = {'taskDefinitionArn': outputs['TaskDefinition'], 'runtimePlatform': {'cpuArchitecture': 'ARM64'},
                       'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest'],
-                                                'secrets': [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': CAPABILITY_SECRET}]}]}
+                                                'secrets': list(INJECTED)}]}
         calls = []
         def call(*args):
             calls.append(args)

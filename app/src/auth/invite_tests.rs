@@ -10,9 +10,9 @@
 use super::{
     synthetic_issuer::{InvitationState, Issuer, ParMode, ISSUER},
     tests::{
-        app, config, field, full_app, tenants, Browser, Log, Reply, TestPages, APP, APP_ORIGIN,
-        CANARY_HANDLE, CANARY_TENANT, NORTHSTAR_HANDLE, NORTHSTAR_TENANT, ORG, OTHER,
-        UNKNOWN_HANDLE,
+        app, config, deliver_auth_configuration, field, full_app, tenants, Browser, Log, Reply,
+        TestPages, APP, APP_ORIGIN, CANARY_HANDLE, CANARY_TENANT, NORTHSTAR_HANDLE,
+        NORTHSTAR_TENANT, ORG, OTHER, UNKNOWN_HANDLE,
     },
     *,
 };
@@ -902,10 +902,15 @@ async fn campaign() {
         );
         assert_eq!(bound["changed"], true);
     }
-    fixture.sql(&format!("INSERT INTO genui.provider_tenant_bindings VALUES ('{ORG}','{ISSUER}','{NORTHSTAR_TENANT}',true),('{OTHER}','{ISSUER}','{CANARY_TENANT}',true)"), "genui");
-    fixture.write_registry(&json!({"schema_version":1,"registry_version":"00000000-0000-4000-8000-000000000a74","bindings":[
-        {"issuer":ISSUER,"provider_tenant_id":NORTHSTAR_TENANT,"organization_id":ORG},
-        {"issuer":ISSUER,"provider_tenant_id":CANARY_TENANT,"organization_id":OTHER}]}));
+    // APP-078 B1: the bindings through `bind-provider-tenant`, the routing and
+    // registry from the composed AuthConfiguration secret (loopback stand-in),
+    // materialized by the supervisor's own writer.
+    let issuer = Issuer::start(tenants()).await;
+    let (auth_config, registry, _auth_secret) = deliver_auth_configuration(
+        &fixture,
+        &issuer.origin,
+        "00000000-0000-4000-8000-000000000a74",
+    );
     // ADR-003 amendment 2026-10-30: one capability secret for the environment
     // (the operator writes it), one service view of it (the supervisor's
     // writer materializes it after each operator command).
@@ -925,16 +930,11 @@ async fn campaign() {
         Some(&capabilities),
         Some(&secret),
     );
-    let stores = Arc::new(Stores::new(fixture.settings()).unwrap());
-    let issuer = Issuer::start(tenants()).await;
+    let stores = Arc::new(Stores::new(fixture.settings_with_registry(registry)).unwrap());
     let auth = Arc::new(
-        Auth::loopback(
-            config(&issuer.origin),
-            Some(stores.clone()),
-            Arc::new(TestPages),
-        )
-        .with_trusted_proxies(TrustedProxies::parse("10.72.0.0/24").unwrap())
-        .with_invitations(Some(invite::Invitations::open(&capabilities).unwrap())),
+        Auth::loopback(auth_config, Some(stores.clone()), Arc::new(TestPages))
+            .with_trusted_proxies(TrustedProxies::parse("10.72.0.0/24").unwrap())
+            .with_invitations(Some(invite::Invitations::open(&capabilities).unwrap())),
     );
     let mut c = Run {
         app: full_app(auth.clone()),
@@ -949,6 +949,7 @@ async fn campaign() {
         capabilities,
         issued: 0,
     };
+    c.record("APP-078 B1: both organizations' provider tenant bindings come from `admission_operator.py bind-provider-tenant` (created once, `existing` on repeat, no audit event: D7.8's operator kinds name none), and the provider routing and closed registry come from the composed AuthConfiguration secret value put into the loopback Secrets Manager stand-in and materialized by runtime.write_auth_configuration (the supervisor's own writer) as the two 0600 files that AuthConfig::load and the storage registry read; only the auth origin is the cfg(test) loopback issuer's (plain HTTP on 127.0.0.1) in place of the file's https origin");
     let mut secrets: Vec<String> = Vec::new();
 
     // --- 1. A valid code: digest validation, backend-only PAR, no slot --------

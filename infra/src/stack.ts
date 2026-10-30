@@ -30,6 +30,11 @@ export const OPERATOR_IMAGE_PATTERN = `^(?:|${IMAGE_DIGEST_BODY})(?![\\s\\S])`;
 // environment's provider capability map, read by runtime.py serve().
 export const CAPABILITY_SECRET_ENV = 'GENUI_PROVIDER_CAPABILITIES_JSON';
 export const CAPABILITY_SECRET_ID_ENV = 'GENUI_PROVIDER_CAPABILITY_SECRET_ID';
+// APP-078 B1: the hosted sign-in configuration (ADR-006 provider routing and the
+// closed identity registry) is one more secret injected into the service
+// container only; runtime.py serve() writes it as the two private files the
+// service reads (GENUI_AUTH_CONFIG_FILE, GENUI_IDENTITY_REGISTRY_FILE).
+export const AUTH_CONFIGURATION_ENV = 'GENUI_AUTH_CONFIGURATION_JSON';
 
 /** Reviewable deployment model. Synth/tests never create cloud resources. */
 export class GenuiFoundation extends Stack {
@@ -152,6 +157,25 @@ export class GenuiFoundation extends Stack {
       description: 'GenUI provider invitation capabilities: written by the operator, injected into the service task only (ADR-003 amendment 2026-10-30)',
       encryptionKey: capabilityKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
     });
+    // APP-078 B1: the hosted sign-in configuration. One secret per environment
+    // holding the auth configuration (auth origin, token issuer and audience, each
+    // organization's fAuth tenant slug and public client id) and the closed identity
+    // registry (`ten_` tenant -> organization bindings): nothing secret beyond what
+    // ADR-006 allows in a client configuration, but private routing all the same.
+    // The operator composes it locally (infra/scripts/window_requests.py
+    // auth-configuration) and writes it with PutSecretValue; ECS injects it into the
+    // service container only; runtime.py serve() validates it whole and writes the
+    // two 0600 files for the service child. The initial `{}` means not configured
+    // (deny-all sign-in, as before); a new value reaches the service at its next
+    // task start. CloudFormation never rewrites it while this resource's
+    // properties are unchanged, so never edit them while the beta is live.
+    const authConfigurationKey = new kms.Key(this, 'AuthConfigurationKey', {
+      description: 'GenUI hosted sign-in configuration (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const authConfiguration = new secretsmanager.Secret(this, 'AuthConfiguration', {
+      description: 'GenUI hosted sign-in configuration and identity registry: written by the operator, injected into the service task only (APP-078 B1)',
+      encryptionKey: authConfigurationKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
+    });
     const task = new ecs.FargateTaskDefinition(this, 'Task', { cpu: 2048, memoryLimitMiB: 8192, taskRole, executionRole, runtimePlatform });
     task.addVolume({ name: 'runtime-config' });
     const log = new logs.LogGroup(this, 'Logs', { retention: logs.RetentionDays.ONE_MONTH, removalPolicy: RemovalPolicy.RETAIN });
@@ -169,9 +193,13 @@ export class GenuiFoundation extends Stack {
       user: '65532:65532',
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'genui', logGroup: log }),
       environment: runtimeEnvironment,
-      // The whole map, resolved by ECS at task start: a new or removed capability
-      // reaches the service at its next task start (APP-076's runbook).
-      secrets: { [CAPABILITY_SECRET_ENV]: ecs.Secret.fromSecretsManager(capabilitySecret) },
+      // The whole map and the whole configuration, resolved by ECS at task start: a
+      // new or removed capability, or a new configuration, reaches the service at its
+      // next task start (APP-076's runbook; force a new deployment after a write).
+      secrets: {
+        [CAPABILITY_SECRET_ENV]: ecs.Secret.fromSecretsManager(capabilitySecret),
+        [AUTH_CONFIGURATION_ENV]: ecs.Secret.fromSecretsManager(authConfiguration),
+      },
       healthCheck: { command: ['CMD', 'python3', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health/live', timeout=2).read()"], interval: Duration.seconds(30), timeout: Duration.seconds(5), retries: 3, startPeriod: Duration.seconds(60) },
     });
     container.addMountPoints({ sourceVolume: 'runtime-config', containerPath: '/run/genui', readOnly: false });
@@ -303,9 +331,12 @@ export class GenuiFoundation extends Stack {
     // ADR-003 amendment 2026-10-30: the managed operator's `revoke` removes a code's
     // capability from the secret (read, then PutSecretValue of the whole map). Only
     // these two actions on this one secret, and its key only through Secrets Manager.
-    operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], resources: [capabilitySecret.secretArn] }));
+    // APP-078 B1: the same two actions on the auth configuration secret, so the
+    // operator channel can read and rewrite it; the operator's own credentials do
+    // the window's PutSecretValue from the composed private file.
+    operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], resources: [capabilitySecret.secretArn, authConfiguration.secretArn] }));
     operatorRole.addToPolicy(new iam.PolicyStatement({
-      actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn],
+      actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn, authConfigurationKey.keyArn],
       conditions: { StringEquals: { 'kms:ViaService': `secretsmanager.${this.region}.amazonaws.com` } },
     }));
     const operatorTask = new ecs.FargateTaskDefinition(this, 'OperatorTask', { cpu: 1024, memoryLimitMiB: 2048, taskRole: operatorRole, executionRole: migrationExecutionRole, runtimePlatform });
@@ -329,6 +360,8 @@ export class GenuiFoundation extends Stack {
     new CfnOutput(this, 'OperatorTaskRoleArn', { value: operatorRole.roleArn, condition: operatorTaskEnabled });
     // The operator's GENUI_PROVIDER_CAPABILITY_SECRET_ID (an identifier, not a value).
     new CfnOutput(this, 'ProviderCapabilitySecretArn', { value: capabilitySecret.secretArn });
+    // The secret the window's PutSecretValue targets (an identifier, not a value).
+    new CfnOutput(this, 'AuthConfigurationSecretArn', { value: authConfiguration.secretArn });
     new CfnOutput(this, 'DatabaseEndpoint', { value: database.instanceEndpoint.hostname });
     new CfnOutput(this, 'EvidenceBucket', { value: bucket.bucketName });
     new CfnOutput(this, 'ClusterName', { value: cluster.clusterName });

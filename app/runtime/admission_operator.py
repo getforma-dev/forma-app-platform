@@ -59,6 +59,14 @@ create (see judge_creates). Provider settings come only from the environment
 never argv); the secret's ARN from GENUI_PROVIDER_CAPABILITY_SECRET_ID or
 `--capability-secret-id`.
 
+Provider tenant bindings (APP-078 B1): `bind-provider-tenant` binds an existing
+organization (the two seeded ones) to its real provider tenant for an issuer, the
+row the callback's registry/database agreement needs (ADR-006; the seed binds only
+the fixture issuer). Identifiers only, so it runs in the managed operator task;
+it writes no audit event because ADR-007 D7.8's operator kinds are closed and
+name none (the seed's bindings have none either; a `provider_tenant.bound` kind
+would be an ADR-007 amendment).
+
 Sign-in handles (APP-009, ADR-006 §handle): `issue-handle` gives an organization
 without one its first live handle (fresh, or an exact already-issued `--handle`
 so one routing value serves every environment); `rotate-handle` adds a second
@@ -236,6 +244,10 @@ def parser():
     q = sub.add_parser("provision")
     for arg in ("--organization", "--display-name", "--issuer", "--provider-tenant"):
         q.add_argument(arg, required=True)
+    # APP-078 B1: an existing organization's binding to its real provider tenant.
+    q = sub.add_parser("bind-provider-tenant")
+    for arg in ("--organization", "--issuer", "--provider-tenant"):
+        q.add_argument(arg, required=True)
     q = sub.add_parser("issue")
     q.add_argument("--organization", required=True)
     q.add_argument("--issued-by", required=True)
@@ -312,6 +324,12 @@ def validate(args):
         require(1 <= len(args.display_name) <= 200 and args.display_name.isprintable(), "malformed_display_name")
         require(1 <= len(args.issuer) <= 512 and args.issuer.isascii() and args.issuer.isprintable(), "malformed_issuer")
         require(1 <= len(args.provider_tenant) <= 256 and args.provider_tenant.isascii() and args.provider_tenant.isprintable(), "malformed_provider_tenant")
+    if args.command == "bind-provider-tenant":
+        # The registry's own bounds (storage/registry.rs `label`): a binding the closed
+        # registry could not name is useless. The issuer is the token's `iss` claim, the
+        # value the service compares (not necessarily the provider's origin URL).
+        require(_graphic(args.issuer, 256), "malformed_issuer")
+        require(_graphic(args.provider_tenant, 128), "malformed_provider_tenant")
     if args.command == "issue":
         require(LABEL.fullmatch(args.issued_by) is not None, "malformed_issued_by")
         require(args.kind in ("trial", "member_invite"), "kind_refused")
@@ -352,6 +370,11 @@ def validate(args):
         require(LOCAL_ID.fullmatch(args.input) is not None, "malformed_input")
         require(args.work != args.from_work, "work_exists")
     return args
+
+
+def _graphic(value, bound):
+    """1..bound printable ASCII bytes with no space (the service's `label`/`bounded`)."""
+    return isinstance(value, str) and 1 <= len(value) <= bound and all(0x21 <= ord(ch) <= 0x7E for ch in value)
 
 
 LOCAL_ID = re.compile(r"[a-z][a-z0-9_]{0,63}")
@@ -502,6 +525,28 @@ def provision(c, args):
     c.commit()
     # The handle is non-secret routing (ADR-006); it is still shown only here.
     return {"organization_id": org, "handle": encode_handle(raw), "audit_heads": list(CHAINS), "sequence": sequence}
+
+
+def bind_provider_tenant(c, args):
+    """APP-078 B1: bind an existing organization to its real provider tenant for `issuer`, so the
+    callback's registry/database agreement (ADR-006) can hold for the hosted sign-in. Idempotent:
+    an identical active row is reported `existing`; an inactive one refuses (reactivation is a
+    separate decision). No audit event: D7.8's closed operator kinds name none (the row is the
+    record, as for the seed's fixture bindings)."""
+    org = args.organization
+    begin(c, org)
+    lock_organization(c, org, active=True)
+    row = lock_binding(c, org, args.issuer, args.provider_tenant)
+    if row is None:
+        c.execute("INSERT INTO genui.provider_tenant_bindings(organization_id,issuer,provider_tenant_id,active) VALUES (%s,%s,%s,true)",
+                  (org, args.issuer, args.provider_tenant))
+        state = "created"
+    else:
+        require(row == (True,), "provider_binding_inactive")
+        state = "existing"
+    active = c.execute("SELECT count(*) FROM genui.provider_tenant_bindings WHERE organization_id=%s AND active", (org,)).fetchone()[0]
+    c.commit()
+    return {"organization_id": org, "binding": state, "active_bindings": active, "audit_event": None}
 
 
 def backfill(c, args):
@@ -1652,7 +1697,7 @@ def retire_handle(c, args):
     return {"organization_id": org, "retired": True, "live_handles": live - 1}
 
 
-COMMANDS = {"provision": provision, "backfill": backfill, "issue": issue, "list": list_codes, "revoke": revoke,
+COMMANDS = {"provision": provision, "bind-provider-tenant": bind_provider_tenant, "backfill": backfill, "issue": issue, "list": list_codes, "revoke": revoke,
             "extend": extend, "revoke-entitlement": revoke_entitlement, "revoke-membership": revoke_membership, "verify": verify,
             "reconcile": reconcile, "grant-permission": grant_permission, "revoke-permission": revoke_permission,
             "create-app": create_app, "revoke-creator-authority": revoke_creator_authority,

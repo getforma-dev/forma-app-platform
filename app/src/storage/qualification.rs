@@ -389,9 +389,14 @@ impl Fixture {
         private_write(&self.registry, &serde_json::to_vec(document).unwrap());
     }
     pub fn settings(&self) -> Settings {
+        self.settings_with_registry(self.registry.clone())
+    }
+    /// APP-078 B1: the same settings reading the identity registry the
+    /// supervisor materialized from the auth configuration secret.
+    pub fn settings_with_registry(&self, registry: PathBuf) -> Settings {
         Settings::fixture(
             self.credentials.clone(),
-            self.registry.clone(),
+            registry,
             self.ca.clone(),
             "localhost",
             self.port,

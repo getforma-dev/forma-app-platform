@@ -295,11 +295,18 @@ pub(crate) struct FakeSecret {
 impl FakeSecret {
     pub(crate) const ARN: &'static str =
         "arn:aws:secretsmanager:us-east-1:000000000000:secret:genui-provider-capabilities-local-AbCdEf";
+    /// APP-078 B1: the environment's hosted sign-in configuration secret
+    /// (`AuthConfiguration` in the stack), a second stand-in instance.
+    pub(crate) const AUTH_ARN: &'static str =
+        "arn:aws:secretsmanager:us-east-1:000000000000:secret:genui-auth-configuration-local-GhIjKl";
     pub(crate) fn start() -> Self {
+        Self::start_at(Self::ARN)
+    }
+    pub(crate) fn start_at(arn: &str) -> Self {
         let app = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let mut child = Command::new(fixture_python())
             .current_dir(app.join("runtime"))
-            .args(["local_secrets.py", "--secret-arn", Self::ARN])
+            .args(["local_secrets.py", "--secret-arn", arn])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -344,6 +351,58 @@ impl FakeSecret {
             ("AWS_SHARED_CREDENTIALS_FILE", "/dev/null".into()),
             ("GENUI_PROVIDER_CAPABILITY_SECRET_ID", Self::ARN.into()),
         ]
+    }
+    /// The secret's current value (AWSCURRENT).
+    pub(crate) fn value(&self) -> String {
+        self.control(json!({"op": "get"}))["secret_string"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    }
+    /// PutSecretValue of a composed document, as the operator machine's
+    /// `aws secretsmanager put-secret-value --secret-string file://...` does
+    /// it in the window (APP-078 B1 runbook); fixture control, never AWS.
+    pub(crate) fn put(&self, text: &str) {
+        assert_eq!(
+            self.control(json!({"op": "put", "value": text}))["ok"],
+            true
+        );
+    }
+    /// What the service's next task start sees of the auth configuration
+    /// secret: `runtime.write_auth_configuration` (the supervisor's own
+    /// writer) writes `auth-config.json` and `identity-registry.json` into
+    /// `directory`, an owned 0700 directory.
+    pub(crate) fn materialize_auth(&self, directory: &std::path::Path) {
+        let text = self.value();
+        let app = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let mut child = Command::new(fixture_python())
+            .current_dir(app.join("runtime"))
+            .args([
+                "-c",
+                "import sys, runtime; print(runtime.write_auth_configuration(sys.argv[1], sys.stdin.read()))",
+            ])
+            .arg(directory)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("supervisor writer available");
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(text.as_bytes())
+            .unwrap();
+        let output = wait(child, "materialize_auth");
+        assert!(
+            output.status.success(),
+            "the supervisor refused the composed auth configuration: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "['auth-config.json', 'identity-registry.json']"
+        );
     }
     /// The secret's current map (AWSCURRENT).
     pub(crate) fn capabilities(&self) -> serde_json::Map<String, Value> {

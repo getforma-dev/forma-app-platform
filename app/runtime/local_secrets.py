@@ -23,7 +23,9 @@ code under test is the code that runs against AWS:
 Every request is recorded (target, access key id, never the value). Run as a
 script, it serves on 127.0.0.1, prints `{"port": N}` and answers one JSON
 control line per stdin line until stdin closes (used by the Rust campaigns):
-`{"op": "get"}` -> `{"secret_string": ...}`, `{"op": "deny_puts", "value": bool}`,
+`{"op": "get"}` -> `{"secret_string": ...}`, `{"op": "put", "value": text}` (a new
+AWSCURRENT version, as the operator's `aws secretsmanager put-secret-value` from the
+composed file writes it; APP-078 B1), `{"op": "deny_puts", "value": bool}`,
 `{"op": "counts"}` -> `{"get": n, "put": n}`.
 """
 import argparse
@@ -190,6 +192,9 @@ def _serve():
             command = json.loads(line)
             if command["op"] == "get":
                 reply = {"secret_string": stub.value()}
+            elif command["op"] == "put":
+                stub.set_value(command["value"])
+                reply = {"ok": True}
             elif command["op"] == "deny_puts":
                 stub.deny_puts = bool(command["value"])
                 reply = {"ok": True}

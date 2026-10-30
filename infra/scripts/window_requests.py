@@ -5,6 +5,13 @@ Each subcommand writes one reviewed request file that the operator then hands,
 unchanged, to the AWS CLI during the approved window (``--cli-input-json
 file://...``), or checks a response file the CLI returned:
 
+  auth-configuration  compose the AuthConfiguration secret value (APP-078 B1) from
+                   FormaStack's private identifiers file: the auth origin, token
+                   issuer and audience, each tenant's slug, public client id and
+                   `ten_` id bound to its organization, validated by the supervisor's
+                   own reader (runtime.auth_configuration); the document goes only to
+                   a 0600 file in an owned 0700 private directory for PutSecretValue,
+                   and only organization ids, slugs and its digest are printed
   mint-code        draw an access code locally (32 CSPRNG bytes, admission
                    operator encoding); the raw code goes only to a 0600 file in
                    an owned 0700 private directory, and only its digest is printed
@@ -83,6 +90,12 @@ def admission_operator():
 def operator_module():
     admission_operator()
     return load(REPOSITORY / 'app' / 'operator' / 'operator.py', 'genui_operator_package')
+
+
+def runtime_module():
+    admission_operator()  # puts app/runtime on the path
+    import runtime
+    return runtime
 
 
 def no_duplicates(pairs):
@@ -165,6 +178,48 @@ def mint_code(args):
                       'minted_at_utc': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
                       'handling': 'Deliver privately once; never paste into a task override, log, ticket or evidence.'}, private=True)
     return {'label': args.label, 'organization_id': args.organization, 'code_digest': digest, 'private_file': str(path)}
+
+
+# APP-078 B1: the fields of FormaStack's private identifiers file that the auth
+# configuration needs; everything else in that file is never read into the output.
+APP_ORIGIN = 'https://beta.getforma.dev'
+IDENTIFIER_FIELDS = ('issuer_origin', 'jwt_iss', 'jwt_aud', 'access_jwks', 'callback', 'tenants')
+TENANT_FIELDS = ('slug', 'tenant_id', 'client_id', 'genui_org_uuid')
+
+
+def auth_configuration(args):
+    """The AuthConfiguration secret value, composed from the private identifiers file and checked
+    with the supervisor's reader before it is written (0600, in an owned 0700 directory)."""
+    rt = runtime_module()
+    private_directory(args.output.parent)
+    identifiers = read_json(args.identifiers)
+    require(isinstance(identifiers, dict) and all(k in identifiers for k in IDENTIFIER_FIELDS), 'identifiers file lacks a required field')
+    origin = identifiers['issuer_origin']
+    # The service derives the JWKS URL and the callback itself (auth/mod.rs): the
+    # identifiers must agree with what it will compute, or sign-in cannot work.
+    require(identifiers['access_jwks'] == str(origin) + '/auth/jwks', 'access_jwks is not <issuer_origin>/auth/jwks, which the service derives')
+    require(identifiers['callback'] == args.app_origin + '/auth/callback', 'the registered callback is not <app origin>/auth/callback')
+    tenants = identifiers['tenants']
+    require(isinstance(tenants, list) and tenants, 'identifiers file names no tenant')
+    organizations, bindings = [], []
+    for tenant in tenants:
+        require(isinstance(tenant, dict) and all(k in tenant for k in TENANT_FIELDS), 'tenant entry lacks a required field')
+        require(tenant['genui_org_uuid'] in ORGANIZATIONS, 'tenant names an organization outside the two fixture organizations')
+        organizations.append({'organization_id': tenant['genui_org_uuid'], 'tenant_slug': tenant['slug'], 'client_id': tenant['client_id']})
+        bindings.append({'issuer': identifiers['jwt_iss'], 'provider_tenant_id': tenant['tenant_id'], 'organization_id': tenant['genui_org_uuid']})
+    document = {'format': rt.AUTH_CONFIGURATION_FORMAT,
+                'auth_config': {'schema_version': 1, 'auth_origin': origin, 'app_origin': args.app_origin, 'issuer': identifiers['jwt_iss'],
+                                'audience': identifiers['jwt_aud'], 'max_access_lifetime_seconds': args.max_access_lifetime_seconds,
+                                'organizations': organizations},
+                'identity_registry': {'schema_version': 1, 'registry_version': str(uuid.uuid4()), 'bindings': bindings}}
+    text = json.dumps(document, indent=2, sort_keys=True) + '\n'
+    # The supervisor's own validation (serve() refuses anything else at task start).
+    require(rt.auth_configuration(text) is not None, 'the composed document is not one serve() accepts')
+    sha = write_json(args.output, document, private=True)
+    return {'private_file': str(args.output), 'sha256': sha, 'bytes': len(text.encode()),
+            'organizations': [o['organization_id'] for o in organizations], 'tenant_slugs': [o['tenant_slug'] for o in organizations],
+            'registry_version': document['identity_registry']['registry_version'],
+            'handling': 'PutSecretValue --secret-string file://<private_file> only; never a task override, log, ticket, chat or evidence.'}
 
 
 def compose_operator_command(document, name, sets, adds):
@@ -295,6 +350,11 @@ def main(argv=None):
     sub = parser.add_subparsers(dest='command', required=True)
     p = sub.add_parser('mint-code')
     p.add_argument('--organization', required=True); p.add_argument('--label', required=True); p.add_argument('--out-dir', type=Path, required=True)
+    p = sub.add_parser('auth-configuration')
+    p.add_argument('--identifiers', type=Path, required=True, help="FormaStack's private identifiers JSON (read for its routing fields only)")
+    p.add_argument('--output', type=Path, required=True, help='0600 file in an owned 0700 private directory')
+    p.add_argument('--app-origin', default=APP_ORIGIN)
+    p.add_argument('--max-access-lifetime-seconds', type=int, default=900, help='the verifier cap; the planned fAuth access lifetime is 900 s (APP-006)')
     for name in ('operator-task', 'qualification-task'):
         p = sub.add_parser(name)
         p.add_argument('--outputs', type=Path, required=True, help='describe-stacks output after the stack update')
@@ -312,7 +372,7 @@ def main(argv=None):
     p = sub.add_parser('review-change-set')
     p.add_argument('--describe', type=Path, required=True); p.add_argument('--receipt', type=Path); p.add_argument('--output', type=Path)
     args = parser.parse_args(argv)
-    handlers = {'mint-code': mint_code, 'operator-task': operator_task, 'qualification-task': qualification_task,
+    handlers = {'mint-code': mint_code, 'auth-configuration': auth_configuration, 'operator-task': operator_task, 'qualification-task': qualification_task,
                 'change-set': change_set, 'review-change-set': review_change_set}
     try:
         result = handlers[args.command](args)

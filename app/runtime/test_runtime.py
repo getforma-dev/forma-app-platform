@@ -976,4 +976,195 @@ Path({str(report)!r}).write_text(json.dumps(out))
         self.assertEqual((process.returncode, process.stdout), (1, ''))
         self.assertEqual(process.stderr, 'managed_dependency_operation_refused\n')
 
+ORG_A = '00000000-0000-4000-8000-000000000001'
+ORG_B = '00000000-0000-4000-8000-000000000002'
+
+
+def auth_document(**changes):
+    """A synthetic, complete AuthConfiguration secret value (every identifier is a fixture value)."""
+    config = {'schema_version': 1, 'auth_origin': 'https://auth-synthetic.invalid', 'app_origin': 'https://beta.getforma.dev',
+              'issuer': 'synthetic-iss', 'audience': 'synthetic-aud', 'max_access_lifetime_seconds': 900,
+              'organizations': [{'organization_id': ORG_A, 'tenant_slug': 'northstar', 'client_id': 'northstar-platform'},
+                                {'organization_id': ORG_B, 'tenant_slug': 'canary', 'client_id': 'canary-platform'}]}
+    registry = {'schema_version': 1, 'registry_version': '00000000-0000-4000-8000-0000000000b1',
+                'bindings': [{'issuer': 'synthetic-iss', 'provider_tenant_id': 'ten_00000000-0000-4000-8000-00000000a001', 'organization_id': ORG_A},
+                             {'issuer': 'synthetic-iss', 'provider_tenant_id': 'ten_00000000-0000-4000-8000-00000000a002', 'organization_id': ORG_B}]}
+    document = {'format': runtime.AUTH_CONFIGURATION_FORMAT, 'auth_config': config, 'identity_registry': registry}
+    for key, value in changes.items():
+        head, _, tail = key.partition('__')
+        if tail:
+            document[head][tail] = value
+        else:
+            document[head] = value
+    return document
+
+
+class AuthConfigurationInjectionTests(unittest.TestCase):
+    """APP-078 B1: the injected AuthConfiguration secret becomes the two private files the service
+    reads, in a fresh 0700 directory under the runtime volume that only the service child is told about."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='genui-auth-configuration-unit-')
+        self.directory = Path(self.tmp.name); self.directory.chmod(0o700)
+        self.path = self.directory / 'credentials.json'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_document_is_validated_whole_with_the_services_bounds(self):
+        good = auth_document()
+        files = runtime.auth_configuration(json.dumps(good))
+        self.assertEqual(sorted(files), ['auth-config.json', 'identity-registry.json'])
+        self.assertEqual(json.loads(files['auth-config.json']), good['auth_config'])
+        self.assertEqual(json.loads(files['identity-registry.json']), good['identity_registry'])
+        self.assertIsNone(runtime.auth_configuration('{}'), 'the initial secret value means not configured')
+        self.assertIsNone(runtime.auth_configuration(' {} \n'))
+        # A non-default port and an uppercase client id are within the service's rules.
+        self.assertIsNotNone(runtime.auth_configuration(json.dumps(auth_document(auth_config__auth_origin='https://auth.example.test:8443'))))
+        bad = [
+            'not json', '[]', 'null', '{"a": 1}',
+            json.dumps(dict(good, format='other')),
+            json.dumps({k: v for k, v in good.items() if k != 'identity_registry'}),
+            json.dumps(dict(good, extra=1)),
+            json.dumps(auth_document(auth_config__schema_version=2)),
+            json.dumps(auth_document(auth_config__auth_origin='http://auth-synthetic.invalid')),
+            json.dumps(auth_document(auth_config__auth_origin='https://auth-synthetic.invalid/')),
+            json.dumps(auth_document(auth_config__auth_origin='https://Auth-Synthetic.invalid')),
+            json.dumps(auth_document(auth_config__auth_origin='https://user@auth-synthetic.invalid')),
+            json.dumps(auth_document(auth_config__app_origin='https://beta.getforma.dev/auth')),
+            json.dumps(auth_document(auth_config__issuer='')),
+            json.dumps(auth_document(auth_config__issuer='with space')),
+            json.dumps(auth_document(auth_config__audience='x' * 513)),
+            json.dumps(auth_document(auth_config__max_access_lifetime_seconds=0)),
+            json.dumps(auth_document(auth_config__max_access_lifetime_seconds=86401)),
+            json.dumps(auth_document(auth_config__max_access_lifetime_seconds='900')),
+            json.dumps(auth_document(auth_config__max_access_lifetime_seconds=True)),
+            json.dumps(auth_document(auth_config__organizations=[])),
+            json.dumps(auth_document(auth_config__organizations=good['auth_config']['organizations'] * 17, identity_registry__bindings=good['identity_registry']['bindings'] * 17)),
+            json.dumps(auth_document(auth_config__organizations=[dict(good['auth_config']['organizations'][0], tenant_slug='Northstar'), good['auth_config']['organizations'][1]])),
+            json.dumps(auth_document(auth_config__organizations=[dict(good['auth_config']['organizations'][0], client_id='northstar-hosted'), good['auth_config']['organizations'][1]])),
+            json.dumps(auth_document(auth_config__organizations=[dict(good['auth_config']['organizations'][0], client_id='a b'), good['auth_config']['organizations'][1]])),
+            json.dumps(auth_document(auth_config__organizations=[good['auth_config']['organizations'][0]] * 2)),
+            json.dumps(auth_document(auth_config__organizations=[dict(good['auth_config']['organizations'][0], extra=1), good['auth_config']['organizations'][1]])),
+            json.dumps(auth_document(identity_registry__schema_version=2)),
+            json.dumps(auth_document(identity_registry__registry_version='v1')),
+            json.dumps(auth_document(identity_registry__bindings=good['identity_registry']['bindings'][:1])),  # fewer bindings than routes
+            json.dumps(auth_document(identity_registry__bindings=good['identity_registry']['bindings'] + [{'issuer': 'synthetic-iss', 'provider_tenant_id': 'ten_x', 'organization_id': '00000000-0000-4000-8000-0000000000ff'}])),
+            json.dumps(auth_document(identity_registry__bindings=[dict(good['identity_registry']['bindings'][0], issuer='https://auth-synthetic.invalid'), good['identity_registry']['bindings'][1]])),  # the origin is not the token issuer
+            json.dumps(auth_document(identity_registry__bindings=[good['identity_registry']['bindings'][0], dict(good['identity_registry']['bindings'][1], provider_tenant_id=good['identity_registry']['bindings'][0]['provider_tenant_id'])])),  # a duplicated (issuer, tenant)
+            json.dumps(auth_document(identity_registry__bindings=[dict(good['identity_registry']['bindings'][0], provider_tenant_id='x' * 129), good['identity_registry']['bindings'][1]])),
+            json.dumps(auth_document(identity_registry__bindings=[dict(good['identity_registry']['bindings'][0], extra=1), good['identity_registry']['bindings'][1]])),
+            '{"format": "%s", "format": "%s", "auth_config": {}, "identity_registry": {}}' % (runtime.AUTH_CONFIGURATION_FORMAT, runtime.AUTH_CONFIGURATION_FORMAT),
+            json.dumps(auth_document(auth_config__audience='y' * 512, auth_config__issuer='z' * 512,
+                                     auth_config__organizations=[{'organization_id': '00000000-0000-4000-8000-%012x' % i, 'tenant_slug': 'slug-%02d-' % i + 'a' * 58, 'client_id': 'c' * 128} for i in range(32)],
+                                     identity_registry__bindings=[{'issuer': 'z' * 512, 'provider_tenant_id': 't' * 128, 'organization_id': '00000000-0000-4000-8000-%012x' % i} for i in range(32)])),  # over the 16 KiB file bound (and the 256-byte registry issuer)
+            'x' * (runtime.AUTH_CONFIGURATION_BYTES_MAX + 1),
+        ]
+        for text in bad:
+            with self.subTest(text=text[:80]), self.assertRaises((runtime.Refused, ValueError)):
+                runtime.auth_configuration(text)
+
+    def test_files_are_private_exact_and_never_replace_a_name(self):
+        good = auth_document()
+        target = self.directory / 'configuration'; target.mkdir(mode=0o700); target.chmod(0o700)
+        written = runtime.write_auth_configuration(str(target), json.dumps(good))
+        self.assertEqual(written, ['auth-config.json', 'identity-registry.json'])
+        for name, document in (('auth-config.json', good['auth_config']), ('identity-registry.json', good['identity_registry'])):
+            info = (target / name).lstat()
+            self.assertEqual((stat.S_IMODE(info.st_mode), info.st_uid, info.st_nlink), (0o600, os.geteuid(), 1))
+            self.assertEqual(json.loads((target / name).read_bytes()), document)
+        with self.assertRaises(FileExistsError):
+            runtime.write_auth_configuration(str(target), json.dumps(good))
+        empty = self.directory / 'empty'; empty.mkdir(mode=0o700); empty.chmod(0o700)
+        self.assertEqual(runtime.write_auth_configuration(str(empty), '{}'), [])
+        self.assertEqual(list(empty.iterdir()), [])
+        loose = self.directory / 'loose'; loose.mkdir(); loose.chmod(0o755)
+        with self.assertRaises(runtime.Refused):
+            runtime.write_auth_configuration(str(loose), json.dumps(good))
+        link = self.directory / 'link'; link.symlink_to(target, target_is_directory=True)
+        with self.assertRaises(OSError):
+            runtime.write_auth_configuration(str(link), json.dumps(good))
+        self.assertEqual(list(loose.iterdir()), [])
+
+    def child(self):
+        report = self.directory / 'report.json'; script = self.directory / 'child.py'
+        script.write_text(f'''#!{sys.executable}
+import json,os,stat
+from pathlib import Path
+out={{'raw_absent':{runtime.AUTH_CONFIGURATION_JSON_ENV!r} not in os.environ}}
+for key in ({runtime.AUTH_CONFIG_FILE_ENV!r},{runtime.IDENTITY_REGISTRY_FILE_ENV!r}):
+    p=os.environ.get(key)
+    out[key]=None if p is None else {{'path':p,'mode':stat.S_IMODE(Path(p).lstat().st_mode),'dir_mode':stat.S_IMODE(Path(p).parent.lstat().st_mode),'value':json.loads(Path(p).read_text())}}
+Path({str(report)!r}).write_text(json.dumps(out))
+'''); script.chmod(0o700)
+        return script, report
+
+    def test_serve_materializes_the_injected_configuration_for_its_child_only(self):
+        script, report = self.child()
+        good = auth_document(); text = json.dumps(good)
+        for injected in (text, '{}', None):
+            with self.subTest(injected=injected and injected[:20]):
+                env = {'GENUI_BINARY': str(script)}
+                if injected is not None:
+                    env[runtime.AUTH_CONFIGURATION_JSON_ENV] = injected
+                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
+                     patch.object(runtime, 'refresh', side_effect=lambda p: runtime.atomic_write(p, fixture())):
+                    self.assertEqual(runtime.serve(self.path), 0)
+                    self.assertNotIn(runtime.AUTH_CONFIGURATION_JSON_ENV, os.environ, 'removed from the supervisor itself')
+                    self.assertNotIn(runtime.AUTH_CONFIG_FILE_ENV, os.environ)
+                    self.assertNotIn(runtime.IDENTITY_REGISTRY_FILE_ENV, os.environ)
+                value = json.loads(report.read_text())
+                self.assertTrue(value['raw_absent'], 'the child never inherits the secret value')
+                config, registry = value[runtime.AUTH_CONFIG_FILE_ENV], value[runtime.IDENTITY_REGISTRY_FILE_ENV]
+                if injected == text:
+                    self.assertEqual((config['mode'], config['dir_mode'], config['value']), (0o600, 0o700, good['auth_config']))
+                    self.assertEqual((registry['mode'], registry['dir_mode'], registry['value']), (0o600, 0o700, good['identity_registry']))
+                    self.assertEqual(Path(config['path']).parent, Path(registry['path']).parent)
+                    self.assertTrue(Path(config['path']).parent.name.startswith(runtime.AuthConfigurationDirectory.PREFIX))
+                    self.assertEqual(Path(config['path']).parent.parent, self.directory)
+                    self.assertFalse(Path(config['path']).parent.exists(), 'removed when serve ends')
+                else:
+                    # Not configured (or absent): no routing file, the private deny-all registry as before.
+                    self.assertIsNone(config)
+                    self.assertEqual(registry['value']['bindings'], [])
+                    self.assertTrue(Path(registry['path']).name.startswith('.identity-registry-'))
+                self.assertEqual(sorted(p.name for p in self.directory.iterdir()), ['child.py', 'report.json'])
+
+    def test_a_malformed_secret_or_a_plain_file_variable_beside_it_refuses_before_launch(self):
+        text = json.dumps(auth_document())
+        explicit = self.directory / 'operator-registry.json'; explicit.write_text('{}'); explicit.chmod(0o600)
+        for env in ({runtime.AUTH_CONFIGURATION_JSON_ENV: json.dumps(auth_document(format='other'))},
+                    {runtime.AUTH_CONFIGURATION_JSON_ENV: 'not json'},
+                    {runtime.AUTH_CONFIGURATION_JSON_ENV: '[]'},
+                    {runtime.AUTH_CONFIGURATION_JSON_ENV: text, runtime.IDENTITY_REGISTRY_FILE_ENV: str(explicit)},
+                    {runtime.AUTH_CONFIGURATION_JSON_ENV: text, runtime.AUTH_CONFIG_FILE_ENV: str(explicit)}):
+            with self.subTest(env=sorted(env)):
+                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
+                     patch.object(runtime, 'refresh') as refresh, patch.object(runtime.subprocess, 'Popen') as launch:
+                    with self.assertRaises((runtime.Refused, ValueError)): runtime.serve(self.path)
+                    launch.assert_not_called(); refresh.assert_not_called()
+                    self.assertNotIn(runtime.AUTH_CONFIGURATION_JSON_ENV, os.environ)
+                self.assertEqual([p.name for p in self.directory.iterdir()], ['operator-registry.json'])
+        # The unconfigured secret beside an explicit registry keeps the explicit file (local use), as before.
+        with patch.dict(os.environ, {runtime.AUTH_CONFIGURATION_JSON_ENV: '{}', runtime.IDENTITY_REGISTRY_FILE_ENV: str(explicit)}, clear=True), \
+             patch.object(runtime.signal, 'signal'), patch.object(runtime, 'refresh'), patch.object(runtime.subprocess, 'Popen') as launch:
+            launch.return_value.poll.return_value = 0; launch.return_value.returncode = 0
+            self.assertEqual(runtime.serve(self.path), 0)
+            self.assertEqual(launch.call_args.kwargs['env'][runtime.IDENTITY_REGISTRY_FILE_ENV], str(explicit))
+            self.assertNotIn(runtime.AUTH_CONFIG_FILE_ENV, launch.call_args.kwargs['env'])
+
+    def test_every_mode_removes_the_injection(self):
+        with patch.dict(os.environ, {runtime.AUTH_CONFIGURATION_JSON_ENV: '{}'}, clear=True):
+            self.assertEqual(runtime.take_auth_configuration_injection(), '{}')
+            self.assertNotIn(runtime.AUTH_CONFIGURATION_JSON_ENV, os.environ)
+            self.assertIsNone(runtime.take_auth_configuration_injection())
+        process = subprocess.run([sys.executable, str(Path(runtime.__file__).resolve()), 'refresh'],
+                                 env={runtime.AUTH_CONFIGURATION_JSON_ENV: json.dumps(auth_document()),
+                                      'GENUI_RUNTIME_CONFIG_FILE': str(self.path)},
+                                 capture_output=True, text=True, timeout=10)
+        self.assertEqual((process.returncode, process.stdout), (1, ''))
+        self.assertEqual(process.stderr, 'managed_dependency_operation_refused\n')
+        self.assertNotIn('synthetic', process.stderr)
+
+
 if __name__ == '__main__': unittest.main()
