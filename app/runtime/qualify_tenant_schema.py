@@ -39,14 +39,20 @@ ADMIT_FUNCTIONS = {
     'admit_redemption': ('p_org uuid, p_pending_admission uuid, p_issuer text, p_provider_tenant text, p_provider_subject text, p_payload_digest text',
                          'TABLE(principal_id uuid, membership_epoch bigint, entitlement_id uuid, redemption_id uuid, outcome text)'),
     'advance_member_epoch': ('p_org uuid, p_principal uuid, p_reason text', 'bigint'),
+    # Migration 0008 (ADR-011 pitch, APP-095): the seventh definer; the sharer's
+    # own permission subset onto a teammate (recorded ADR-007 debt).
+    'share_work': ('p_org uuid, p_sharer uuid, p_grantee uuid, p_app uuid, p_work uuid, p_record_write boolean',
+                   'TABLE(scope text, resource_id uuid, permission text, inserted boolean)'),
 }
 # Relations migration 0003 adds to genui (D7.3: each states RLS, FORCE and tenant_scope).
 ADMISSION_TABLES = ('access_codes','audit_events','audit_heads','code_grant_templates','code_redemptions',
                     'code_reservations','entitlements','provider_invitations')
 # D7.8 closed chains and kinds for the roles that hold INSERT on audit_events in 0003.
 CHAIN_KINDS = {
+    # 0008 widens the admission list in place (ALTER POLICY): share_work appends
+    # permission.granted (ADR-011 pitch, APP-095; recorded ADR-007 D7.8 debt).
     'genui_admit': ('admission', ('admission.pending','admission.redeemed','admission.denied_for_reconciliation',
-                                  'session.sign_out','session.sign_out_all')),
+                                  'session.sign_out','session.sign_out_all','permission.granted')),
     # 0005 widens the operator list in place (ALTER POLICY): ADR-007 amendment 2026-10-29 (APP-010 review M2).
     'genui_owner': ('operator', ('organization.provisioned','handle.rotated','code.issued','code.revoked','code.extended',
                                  'membership.revoked','entitlement.revoked','permission.granted','permission.revoked',
@@ -74,7 +80,14 @@ ADMIT_GRANTS = set().union(
     # Review m2: no function reads principals.principal_id.
     _columns('principals','SELECT','organization_id','issuer','provider_tenant_id','provider_subject'),
     _columns('principals','INSERT','organization_id','principal_id','issuer','provider_tenant_id','provider_subject'),
-    _columns('memberships','SELECT','organization_id','principal_id','membership_epoch'),
+    # 0008 adds status (share_work judges the grantee's membership).
+    _columns('memberships','SELECT','organization_id','principal_id','status','membership_epoch'),
+    # 0008 (APP-095): the reads share_work needs to copy the sharer's subset.
+    _columns('saved_work','SELECT','organization_id','app_id','work_id','created_by','creator_revoked_at'),
+    _columns('work_source_dependencies','SELECT','organization_id','app_id','work_id','source_id'),
+    _columns('app_permissions','SELECT','organization_id','principal_id','app_id','permission'),
+    _columns('work_permissions','SELECT','organization_id','principal_id','app_id','work_id','permission'),
+    _columns('source_permissions','SELECT','organization_id','principal_id','source_id','permission'),
     _columns('memberships','INSERT','organization_id','principal_id','status','membership_epoch'),
     _columns('memberships','UPDATE','membership_epoch'),
     _columns('organization_permissions','INSERT','organization_id','principal_id','permission'),
@@ -340,7 +353,7 @@ def admission_checks(pg, passed, denied):
         writes=[r[0] for r in functions if re.search(r'\b(update|insert\s+into|delete\s+from)\s+genui\.organizations\b',r[7],re.I)]
         assert writes==[] and all(re.search(r'genui\.organizations\s+o\s+where\s+o\.organization_id\s*=\s*p_org\s+for\s+share',r[7],re.I)
                                   for r in functions if r[0] not in ('resolve_code','resolve_handle')),writes
-    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; six exact STRICT VOLATILE definers with fixed search_path and no organizations write',
+    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; seven exact STRICT VOLATILE definers (six of D7.1 and the 0008 share_work) with fixed search_path and no organizations write',
            incoming=[list(r) for r in incoming])
 
     # --- RESTRICTIVE audit bindings: INSERT holders equal policy targets (D7.8) ---
@@ -487,7 +500,7 @@ def admission_checks(pg, passed, denied):
         if role!='genui_workspace':
             for name,(arguments,_) in ADMIT_FUNCTIONS.items():
                 # Non-NULL arguments: a STRICT call on NULL constants folds away before the EXECUTE check.
-                values=','.join("'%s'::%s"%(str(uuid.uuid4()) if kind=='uuid' else 'x',kind) for kind in (a.split()[1] for a in arguments.split(', ')))
+                values=','.join("'%s'::%s"%(str(uuid.uuid4()) if kind=='uuid' else 'true' if kind=='boolean' else 'x',kind) for kind in (a.split()[1] for a in arguments.split(', ')))
                 denied(role+' cannot execute '+name,role,'SELECT genui_private.%s(%s)'%(name,values))
 
     # --- resolve_code / resolve_handle before any scope ---

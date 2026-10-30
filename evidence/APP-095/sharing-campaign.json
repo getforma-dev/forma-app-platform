@@ -1,0 +1,63 @@
+{
+  "checks": [
+    {
+      "name": "a member who is neither the work's creator nor a share_work holder cannot share it (Denied, nothing written); before the share the teammate cannot open the work",
+      "passed": true
+    },
+    {
+      "name": "the creator shares the work read-only: the teammate receives exactly discover and run on the app, record_read on the work and source_read on its one source dependency (never edit_definition, record_write or anything the creator does not hold), with one permission.granted event on the admission chain naming the sharer, the app and the work",
+      "passed": true
+    },
+    {
+      "name": "the teammate lists and opens the shared work read-only (a command is Denied without record_write); a member who was not shared cannot open or list it",
+      "passed": true
+    },
+    {
+      "name": "a repeat share inserts nothing and appends no event; sharing record_write adds exactly that row with its own event, after which the teammate's command commits",
+      "passed": true
+    },
+    {
+      "name": "sharing with oneself, a revoked member, a member of another organization, an unknown principal or a malformed id, from another organization's scope, or by a grantee who is not the creator: all Denied (the uniform 404) and nothing written in either organization",
+      "passed": true
+    },
+    {
+      "name": "a share_work holder who lost discover shares exactly its own subset (run, record_read, source_read; no discover): the grantee opens the work page but the listing and the stream's delivery check omit it, and no record_write travels unasked",
+      "passed": true
+    },
+    {
+      "name": "the members list names the other active members of the sharer's organization with neutral labels only: not the sharer, not a revoked member, never a member of another organization",
+      "passed": true
+    },
+    {
+      "name": "over HTTP: the members route answers labels only under a session and the uniform 404 without one; the share route refuses a cross-site post (403), no session, a member without authority and a nonexistent work with byte-identical uniform 404s, and a body naming a permission or not JSON with 400, writing nothing",
+      "passed": true
+    },
+    {
+      "name": "the event stream delivers record.committed for a work the subscriber can open now and nothing for a work it cannot (or of another organization); the creator's share over the route inserts exactly the missing row, answers the granted set and announces app.shared to every subscriber who can open the work; a replay announces nothing",
+      "passed": true
+    },
+    {
+      "name": "a command committed through the route announces record.committed to every subscriber who can open the work, and the composer's app.placed hook reaches them the same way",
+      "passed": true
+    },
+    {
+      "name": "sign-out closes the signed-out member's stream at the next event and refuses a new one; an operator revocation of the teammate's record_read (an epoch change) closes its stream at the next event instead of delivering and refuses the next request; a second connection of the same session replaces the first; the per-member bound answers 429",
+      "passed": true
+    },
+    {
+      "name": "the admission chain verifies with its permission.granted events (one per share that wrote a row); no other chain carries the kind",
+      "passed": true
+    }
+  ],
+  "limits": [
+    "Synthetic local password authentication is not RDS IAM.",
+    "Sessions are minted by the cfg(test) constructor after the seeded membership; the fAuth path is the session campaign's.",
+    "The owner-level share_work grant is written by fixture SQL as the operator stand-in: no operator subcommand grants share_work in Phase 1.",
+    "The event hub is in-process (ADR-007 D7.18 single task); a multi-task deployment is recorded debt."
+  ],
+  "passed": true,
+  "postgres_image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "schema_version": 1,
+  "scope": "APP-095 sharing and event stream campaign (ADR-011 pitch, pivot/realtime)",
+  "server_version": "16.13 (Debian 16.13-1.pgdg13+1)"
+}

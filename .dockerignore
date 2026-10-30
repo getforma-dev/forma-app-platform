@@ -43,6 +43,13 @@ app/src/http/**
 !app/src/auth_qualification/
 app/src/auth_qualification/**
 !app/src/auth_qualification/tests.rs
+!app/src/events/
+app/src/events/**
+!app/src/events/mod.rs
+!app/src/events/routes.rs
+!app/src/sharing/
+app/src/sharing/**
+!app/src/sharing/mod.rs
 !app/src/commands/
 app/src/commands/**
 !app/src/commands/mod.rs
@@ -63,6 +70,7 @@ app/src/storage/**
 !app/src/storage/queries.rs
 !app/src/storage/definition_qualification.rs
 !app/src/storage/sessions.rs
+!app/src/storage/sharing.rs
 !app/src/storage/tests.rs
 !app/src/storage/qualification.rs
 !app/src/storage/qualification_cases.rs
@@ -135,6 +143,7 @@ app/migrations/**
 !app/migrations/0005_definition_work_grants.sql
 !app/migrations/0006_sessions.sql
 !app/migrations/0007_command_outcomes.sql
+!app/migrations/0008_sharing.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
 !app/migrations/catalog-v1.json
@@ -144,6 +153,7 @@ app/migrations/**
 !app/migrations/catalog-v5.json
 !app/migrations/catalog-v6.json
 !app/migrations/catalog-v7.json
+!app/migrations/catalog-v8.json
 !app/certs/
 app/certs/**
 !app/certs/rds-global-bundle.pem

@@ -9,10 +9,14 @@ pub mod auth_qualification;
 // APP-013: the declared record command route, payload digest and record page.
 pub mod commands;
 pub mod config;
+// APP-095 (ADR-011 pitch): the in-process event hub and the SSE route.
+pub mod events;
 pub mod http;
 pub mod imports;
 pub mod query;
 pub mod readiness;
 pub mod roles;
+// APP-095 (ADR-011 pitch): share a work with a teammate; the members list.
+pub mod sharing;
 pub mod storage;
 pub mod supervise;

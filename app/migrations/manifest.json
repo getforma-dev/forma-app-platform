@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 7,
+  "database_version": 8,
   "migrations": [
     {
       "version": 1,
@@ -36,6 +36,11 @@
       "version": 7,
       "file": "0007_command_outcomes.sql",
       "sha256": "7a0007184cad993594749139d87d4ceec88ee262c0af078471fefdd842cc11e9"
+    },
+    {
+      "version": 8,
+      "file": "0008_sharing.sql",
+      "sha256": "c98ede67b43b95d32e976e687fddd3bc05330b6edf625dcfa0ac7ff64b52405b"
     }
   ],
   "catalog": [
@@ -70,6 +75,10 @@
     {
       "file": "catalog-v7.json",
       "sha256": "af4228aa9191125e691e93801c9a3221f31500ecef01964673a07c96fc66da97"
+    },
+    {
+      "file": "catalog-v8.json",
+      "sha256": "8c97dc4e8cb8cd4848fb862c9f8b8a7d23bf859ee34c769e8b005057f13f62dd"
     }
   ]
 }

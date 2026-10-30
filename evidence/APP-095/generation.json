@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "scope": "local catalog review candidates; not automatic baseline adoption",
+  "image": "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59",
+  "server_version": "16.13",
+  "container_removed": true,
+  "source_sha256": {
+    "0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
+    "0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
+    "0005_definition_work_grants.sql": "78d837a2968a661253f5fa9ddaab1502fc17a4e84aac979d5acf6e6c969de06e",
+    "0006_sessions.sql": "0372a295771eda11ee5f73472c991a4b1d6955db63d68519612fb6cfa30d07ed",
+    "0007_command_outcomes.sql": "7a0007184cad993594749139d87d4ceec88ee262c0af078471fefdd842cc11e9",
+    "0008_sharing.sql": "c98ede67b43b95d32e976e687fddd3bc05330b6edf625dcfa0ac7ff64b52405b",
+    "catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+    "generate_schema_catalog.py": "f6802d633a695202c28cb6d5b604ee4a14462fe57d50f48f647b3f8246783b24",
+    "qualify_tenant_schema.py": "85cc496aa326edff401f19af4f0c8e0372fa410383f2d27bb55ff555a436b2f1",
+    "runtime.py": "ee1600d202db4ee257440340bc37ae1a97269dbfc0fba3343cf3d987e57c29d2"
+  },
+  "candidate_sha256": {
+    "catalog-v7.json": "af4228aa9191125e691e93801c9a3221f31500ecef01964673a07c96fc66da97",
+    "catalog-v6.json": "2db0b8db417c4160fe41ea20bda7230772895fe2a088c3d4c38e3bcab65c27dc",
+    "catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
+    "catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+    "catalog-v5.json": "66112bd02c1cf3e04753c8fe38d7baa261ecae91f35f5254d58c8d61d6987804",
+    "catalog-v8.json": "8c97dc4e8cb8cd4848fb862c9f8b8a7d23bf859ee34c769e8b005057f13f62dd",
+    "catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6"
+  },
+  "body_bytes": {
+    "catalog-v1.json": 3829,
+    "catalog-v2.json": 125966,
+    "catalog-v3.json": 205463,
+    "catalog-v4.json": 206604,
+    "catalog-v5.json": 219611,
+    "catalog-v6.json": 245786,
+    "catalog-v7.json": 271368,
+    "catalog-v8.json": 280768
+  },
+  "file_bytes": {
+    "catalog-v1.json": 3905,
+    "catalog-v2.json": 123415,
+    "catalog-v3.json": 201584,
+    "catalog-v4.json": 202710,
+    "catalog-v5.json": 215525,
+    "catalog-v6.json": 241098,
+    "catalog-v7.json": 266132,
+    "catalog-v8.json": 275500
+  },
+  "guard_bytes": 419430
+}

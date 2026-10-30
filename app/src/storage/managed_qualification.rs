@@ -131,7 +131,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v7.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v8.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -152,7 +152,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 81] = [
+const SOURCES: [(&str, &[u8]); 87] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -241,6 +241,15 @@ const SOURCES: [(&str, &[u8]); 81] = [
         include_bytes!("../commands/tests.rs"),
     ),
     ("app/src/config.rs", include_bytes!("../config.rs")),
+    ("app/src/events/mod.rs", include_bytes!("../events/mod.rs")),
+    (
+        "app/src/events/routes.rs",
+        include_bytes!("../events/routes.rs"),
+    ),
+    (
+        "app/src/events/tests.rs",
+        include_bytes!("../events/tests.rs"),
+    ),
     (
         "app/src/http/limits.rs",
         include_bytes!("../http/limits.rs"),
@@ -280,6 +289,10 @@ const SOURCES: [(&str, &[u8]); 81] = [
     ),
     ("app/src/readiness.rs", include_bytes!("../readiness.rs")),
     ("app/src/roles.rs", include_bytes!("../roles.rs")),
+    (
+        "app/src/sharing/mod.rs",
+        include_bytes!("../sharing/mod.rs"),
+    ),
     (
         "app/src/storage/admission.rs",
         include_bytes!("admission.rs"),
@@ -335,6 +348,11 @@ const SOURCES: [(&str, &[u8]); 81] = [
     ),
     ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
     ("app/src/storage/sessions.rs", include_bytes!("sessions.rs")),
+    ("app/src/storage/sharing.rs", include_bytes!("sharing.rs")),
+    (
+        "app/src/storage/sharing_qualification.rs",
+        include_bytes!("sharing_qualification.rs"),
+    ),
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
     ("app/src/supervise.rs", include_bytes!("../supervise.rs")),
     (

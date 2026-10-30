@@ -31,6 +31,8 @@ deadpool = { version = "=0.13.1", default-features = false, features = ["managed
 tokio-postgres-rustls = { version = "=0.14.0", default-features = false, features = ["ring"] }
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pki-types = { version = "=1.15.1", features = ["std"] }
+# APP-095: the SSE body stream type (already in the lock through axum/hyper).
+futures-core = "=0.3.34"
 
 [dev-dependencies]
 tower = { version = "=0.5.3", features = ["util"] }

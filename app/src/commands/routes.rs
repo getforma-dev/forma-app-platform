@@ -436,6 +436,11 @@ async fn submit(
         },
         "command.submit"
     );
+    // APP-095: the committed record is announced in-process; subscribers are
+    // re-authorized at delivery (`events`), so nothing is disclosed here.
+    if let Ok(CommandResult::Committed(outcome)) = &result {
+        crate::events::hub().record_committed(&outcome.organization, &outcome.app, &outcome.work);
+    }
     answer(&mode, &app, &work, &request.record, result)
 }
 

@@ -14,6 +14,7 @@ mod pool;
 mod queries;
 mod registry;
 mod sessions;
+mod sharing;
 
 pub use admission::{
     code_digest, handle_digest, Admission, PendingAdmission, PendingReason, Reservation, SignOut,
@@ -41,6 +42,7 @@ pub use sessions::{
     PRE_ACCESS_ABSOLUTE_SECONDS, PRE_ACCESS_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS,
     SESSION_IDLE_SECONDS,
 };
+pub use sharing::{member_label, Granted, Member, Shared, SHARE_HANDLER_DEADLINE};
 
 use std::fmt;
 
@@ -122,5 +124,7 @@ pub(crate) mod qualification_cases;
 mod query_qualification;
 #[cfg(test)]
 mod race_qualification;
+#[cfg(test)]
+mod sharing_qualification;
 #[cfg(test)]
 mod tests;
