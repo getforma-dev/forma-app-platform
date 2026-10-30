@@ -9,7 +9,7 @@
 //! `work_page_renders_every_view_state_without_a_fabricated_zero`.
 use super::*;
 use crate::{
-    auth::{DeniedView, InviteView, Pages, PendingView, SigninView, WorkspaceView},
+    auth::{cookies, DeniedView, InviteView, Pages, PendingView, SigninView, WorkspaceView},
     query::{
         page::{card, display, CardProps, WorkProps},
         receipt::QueryReceipt,
@@ -155,6 +155,7 @@ fn uniform_404(reply: &(StatusCode, HeaderMap, Vec<u8>)) -> bool {
 
 #[tokio::test]
 async fn anonymous_cross_site_and_unknown_session_requests_never_reach_the_engine() {
+    let (_guard, log) = crate::query::tests::capture_log();
     let auth = Arc::new(Auth::new(None, None, Arc::new(NoPages)).unwrap());
     let counting = Arc::new(Counting::default());
     let pages = Arc::new(RecordingPages::default());
@@ -241,14 +242,35 @@ async fn anonymous_cross_site_and_unknown_session_requests_never_reach_the_engin
     ));
     assert_eq!(counting.calls(), 0, "no request reached the engine");
     assert!(pages.last.lock().unwrap().is_none(), "no page was rendered");
+    // APP-076 G6: the service log carries no dispatch line for any of them.
+    assert!(crate::query::tests::log_lines(&log, "query.dispatch").is_empty());
 }
 
+/// Design §§6.3 and 9 with APP-012 review m2: a full or expired queue is
+/// 429 (nothing ran); a query past its budget (interrupted, killed) and one
+/// over a page are 422 `narrow_the_query`; only an engine or protocol failure
+/// is 503 `query_failed`.
 #[tokio::test]
 async fn refusal_mapping_matches_design_section_nine() {
     let cases = [
         (engine_refusal(&QueryError::Busy), 429, "too_many_requests"),
         (
+            engine_refusal(&QueryError::Failed(Failure::QueueExpired)),
+            429,
+            "too_many_requests",
+        ),
+        (
             engine_refusal(&QueryError::NarrowTheQuery),
+            422,
+            "narrow_the_query",
+        ),
+        (
+            engine_refusal(&QueryError::Failed(Failure::Deadline)),
+            422,
+            "narrow_the_query",
+        ),
+        (
+            engine_refusal(&QueryError::Failed(Failure::Killed)),
             422,
             "narrow_the_query",
         ),
@@ -263,12 +285,7 @@ async fn refusal_mapping_matches_design_section_nine() {
             "source_unavailable",
         ),
         (
-            engine_refusal(&QueryError::Failed(Failure::Deadline)),
-            503,
-            "query_failed",
-        ),
-        (
-            engine_refusal(&QueryError::Failed(Failure::Killed)),
+            engine_refusal(&QueryError::Failed(Failure::Engine)),
             503,
             "query_failed",
         ),
@@ -394,6 +411,129 @@ fn the_page_requires_the_window_and_reads_the_form_body_only() {
         &json!({"window": {"start": "2026-10-22 10:00:00Z", "end": "2026-10-22T10:10:00Z"}})
     )
     .is_none());
+    // An impossible day is refused by the form too (review M2), and the
+    // page's destination is bounded so the run cookie always fits.
+    assert!(form_parameters(&fields(&[
+        ("csrf", "t"),
+        ("window_start", "2026-02-31T10:00"),
+        ("window_end", "2026-03-01T10:00"),
+    ]))
+    .is_err());
+    assert!(form_parameters(&fields(&[
+        ("csrf", "t"),
+        ("window_start", "2026-10-22T10:00"),
+        ("window_end", "2026-10-22T10:10"),
+        ("destination", &"d".repeat(FORM_DESTINATION_CHARACTERS)),
+    ]))
+    .is_ok());
+    assert!(form_parameters(&fields(&[
+        ("csrf", "t"),
+        ("window_start", "2026-10-22T10:00"),
+        ("window_end", "2026-10-22T10:10"),
+        ("destination", &"d".repeat(FORM_DESTINATION_CHARACTERS + 1)),
+    ]))
+    .is_err());
+}
+
+/// Reload restores (ADR-010 §1 act 4): the run cookie carries exactly the
+/// normalized parameters, tagged to the work path and the session; anything
+/// else is `Invalid` (ignored and cleared), and no cookie is `Absent`.
+#[test]
+fn the_run_cookie_restores_only_this_sessions_run_of_this_work() {
+    let auth = Auth::new(None, None, Arc::new(NoPages)).unwrap();
+    let parameters = json!({"window": {"start": "2026-10-22T10:00:00Z", "end": "2026-10-22T10:10:00Z"}, "destination": "198.51.100.7"});
+    let value = run_cookie_value(&auth, APP, WORK, "session-a", &parameters).unwrap();
+    assert!(value.len() <= cookies::RUN_MAX_VALUE);
+    assert!(value
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'));
+    let headers = |cookie: &str| {
+        let mut headers = HeaderMap::new();
+        headers.append(
+            header::COOKIE,
+            HeaderValue::from_str(&format!("{}={cookie}", cookies::RUN)).unwrap(),
+        );
+        headers
+    };
+    assert_eq!(
+        restore(&auth, &headers(&value), APP, WORK, "session-a"),
+        Restore::Parameters(parameters.clone())
+    );
+    assert_eq!(
+        restore(&auth, &HeaderMap::new(), APP, WORK, "session-a"),
+        Restore::Absent
+    );
+    // Another session, another work or app, a tampered byte, a short value,
+    // a foreign key and non-canonical parameters are all ignored.
+    assert_eq!(
+        restore(&auth, &headers(&value), APP, WORK, "session-b"),
+        Restore::Invalid
+    );
+    assert_eq!(
+        restore(
+            &auth,
+            &headers(&value),
+            APP,
+            "00000000-0000-4000-8000-0000000000f3",
+            "session-a"
+        ),
+        Restore::Invalid
+    );
+    assert_eq!(
+        restore(&auth, &headers(&value), WORK, WORK, "session-a"),
+        Restore::Invalid
+    );
+    let mut tampered = value.clone().into_bytes();
+    let last = tampered.len() - 1;
+    tampered[last] = if tampered[last] == b'A' { b'B' } else { b'A' };
+    assert_eq!(
+        restore(
+            &auth,
+            &headers(&String::from_utf8(tampered).unwrap()),
+            APP,
+            WORK,
+            "session-a"
+        ),
+        Restore::Invalid
+    );
+    assert_eq!(
+        restore(&auth, &headers(&value[..40]), APP, WORK, "session-a"),
+        Restore::Invalid
+    );
+    let other = Auth::new(None, None, Arc::new(NoPages)).unwrap();
+    assert_eq!(
+        restore(&other, &headers(&value), APP, WORK, "session-a"),
+        Restore::Invalid
+    );
+    // Parameters the form would refuse never become a cookie the page runs:
+    // a tag over them verifies, but the parameters themselves do not parse.
+    let forged = {
+        let bad =
+            json!({"window": {"start": "2026-02-31T00:00:00Z", "end": "2026-03-01T00:00:00Z"}});
+        let canonical = crate::admission::encode(&bad).unwrap();
+        format!(
+            "{}{}",
+            auth.csrf.run_tag(APP, WORK, "session-a", &canonical),
+            base64::Engine::encode(
+                &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+                &canonical
+            )
+        )
+    };
+    assert_eq!(
+        restore(&auth, &headers(&forged), APP, WORK, "session-a"),
+        Restore::Invalid
+    );
+    // The restored echo spells the window as the datetime-local control does.
+    let echo = echo_of(&parameters);
+    assert_eq!(
+        (
+            echo.window_start.as_str(),
+            echo.window_end.as_str(),
+            echo.destination.as_str()
+        ),
+        ("2026-10-22T10:00:00", "2026-10-22T10:10:00", "198.51.100.7")
+    );
 }
 
 fn view(id: &str, kind: &str) -> WorkView {
@@ -403,9 +543,16 @@ fn view(id: &str, kind: &str) -> WorkView {
         kind: kind.into(),
     }
 }
+/// A result whose integer columns are the byte counts (`total_bytes`,
+/// `bytes`), as the seeded views' typed queries make them.
 pub(crate) fn result(columns: &[&str], rows: Vec<Vec<Value>>) -> WorkerResult {
     WorkerResult {
         columns: columns.iter().map(|c| (*c).to_owned()).collect(),
+        integer_columns: columns
+            .iter()
+            .filter(|c| matches!(**c, "total_bytes" | "bytes"))
+            .map(|c| (*c).to_owned())
+            .collect(),
         result_digest: result_digest(&rows).unwrap(),
         rows,
         truncated_page: false,
@@ -448,6 +595,14 @@ fn view_states_loading_empty_failed_denied_never_zero() {
         );
     }
     assert!(idle.idle && loading.loading && denied.denied);
+    // The badge names the state, except that nothing is loading on a no-JS
+    // page: the queued-out card is labelled busy (review m7).
+    assert_eq!(
+        (idle.badge.as_str(), denied.badge.as_str()),
+        ("idle", "denied")
+    );
+    assert_eq!(loading.badge, "busy");
+    assert!(loading.message.starts_with("Busy"));
     for reason in [
         Reason::Deadline,
         Reason::Engine,
@@ -505,6 +660,8 @@ fn view_states_loading_empty_failed_denied_never_zero() {
                 json!("60000"),
             ],
             vec![json!("2026-10-22T10:01:00Z"), Value::Null, json!("120000")],
+            // A digit-only text cell (an identifier) is text, not a number.
+            vec![json!("2026-10-22T10:02:00Z"), json!("1234567"), json!("1")],
         ],
     );
     let timeline = card(
@@ -525,6 +682,12 @@ fn view_states_loading_empty_failed_denied_never_zero() {
         timeline.rows[1].cells[1].text, "unknown",
         "an unknown cell is never a zero"
     );
+    assert_eq!(
+        timeline.rows[2].cells[1].text, "1234567",
+        "a text column is never digit-grouped (review m11)"
+    );
+    assert_eq!(timeline.rows[2].cells[0].text, "2026-10-22T10:02:00Z");
+    assert_eq!(ready.badge, "ready");
 }
 
 #[test]

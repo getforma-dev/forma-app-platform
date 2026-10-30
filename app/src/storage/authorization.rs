@@ -30,6 +30,14 @@ pub struct TrustedRequest {
     pub(super) provider_subject: String,
     pub(super) registry_sha256: String,
 }
+impl TrustedRequest {
+    /// The organization the session resolved to (read-only; for the
+    /// structured query log, APP-076 G6). Authority still comes only from the
+    /// storage operations that take the whole request.
+    pub fn organization(&self) -> &str {
+        &self.organization
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Action {

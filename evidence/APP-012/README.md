@@ -107,3 +107,13 @@ Against the gate (D5): three waves of two at about 0.16 s each take about 0.5 s,
 4. **Inventory revision `…0071`** still carries placeholder digests; `total` and `timeline` never read it (only the `destinations` lookup does, refused until PH02), but the work's authorization requires `source_read` on it.
 5. **The image** was built and probed locally (linux/arm64) only; the x86_64 CI image, `check_image.py`/`qualify_image.py` against it and the Fargate behavior of `/run/genui/cache` and `/run/genui/query-scratch` on the task volume are APP-078's. `EngineSettings::image()` assumes `/usr/local/bin/python3` (the pinned `python:3.11.14-slim-bookworm` base).
 6. **RSS sampling** is every 100 ms, so a 130 ms child is sampled about once; the recorded peak (≈ 56 MB) is a floor, not a maximum.
+
+## Corrections after the independent review (2026-10-30)
+
+Recorded by the review-fixes slice ([review-fixes/README.md](review-fixes/README.md)); the text above is left as delivered.
+
+- **D4, `source_revisions`:** the receipt now lists every source dependency of the work (`work_source_dependencies`, in `input_id` order), as `contracts/validate.py` `validate_bundle`, both Northstar fixtures and `contracts/README.md` require (review M3). The engine still reads only the view's one input. `release_result` requires the same dependency list.
+- **D4, `record_snapshot_sequence`:** `organization_sequences` is on the tip (migration 0007). Phase 1 keeps the work-scoped `max(commit_sequence)`, which identifies the same visible revisions as ADR-009 D9.8's organization-wide S while no query reads a record input; the switch to D9.8's S with record inputs is APP-085 item 6 (review m8).
+- **D3:** a window bound is validated as a contract `TIMESTAMP` under the admission validator's rule (a real day in years 1 to 9999), not only by field ranges (review M2).
+- **Open question 1:** carried to APP-084 item 6 (review m9).
+- **Admission (D7.10(3)):** the queue of 20 is per organization (review M1); a request that expires in the queue is 429, not 503 (review m2).

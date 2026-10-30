@@ -1,0 +1,19 @@
+{
+  "engine_reported_ms": {
+    "max": 87,
+    "p50": 77
+  },
+  "peak_rss_bytes": 51183616,
+  "samples": 40,
+  "sequential_wall_ms": {
+    "max": 161.9,
+    "p50": 145.2,
+    "p95": 158.1,
+    "p99": 161.9
+  },
+  "wave_of_two_wall_ms": {
+    "max": 171.5,
+    "p50": 155.6,
+    "p99": 171.5
+  }
+}

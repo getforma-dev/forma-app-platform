@@ -60,7 +60,12 @@ pub(crate) fn add_cookie(response: &mut Response, value: HeaderValue) {
     response.headers_mut().append(header::SET_COOKIE, value);
 }
 pub(crate) fn clear_all(response: &mut Response) {
-    for name in [cookies::PRELOGIN, cookies::PRE_ACCESS, cookies::SESSION] {
+    for name in [
+        cookies::PRELOGIN,
+        cookies::PRE_ACCESS,
+        cookies::SESSION,
+        cookies::RUN,
+    ] {
         add_cookie(response, cookies::clear(name));
     }
 }

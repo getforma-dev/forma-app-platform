@@ -746,6 +746,14 @@ impl Workspace {
     /// revoked entitlement, an inactive provider binding, another registry
     /// identity, or a vault that no longer holds the refresh reference (a
     /// restart: D7.11, D7.18) each delete the record and report `Ended`.
+    ///
+    /// ADR-007 D7.9 (Phase 1): a lock wait past `lock_timeout` (or a lost
+    /// deadlock) during session resolution itself, such as an operator
+    /// membership change holding this member's row `FOR UPDATE` while the
+    /// fence takes it `FOR SHARE`, is `Error::Denied`, the uniform 404 like
+    /// any other session-lookup failure (it fails closed; a typed busy
+    /// answer on session routes is APP-086). Only a genuine store outage is
+    /// `Error::Unavailable` (503). APP-012 review M4.
     pub async fn resolve_session(
         &self,
         cookie: &str,
@@ -794,7 +802,15 @@ impl Workspace {
             }))
         }
         .await;
-        transaction.finish(result.is_ok()).await?;
+        // D7.9: a lock wait on this cookie's own member row is a session-lookup
+        // failure (uniform 404), not an outage; the aborted transaction is
+        // rolled back either way.
+        let lock_wait = result.is_err() && transaction.lock_timed_out();
+        let finished = transaction.finish(result.is_ok()).await;
+        if lock_wait {
+            return Err(Error::Denied);
+        }
+        finished?;
         result
     }
 

@@ -962,6 +962,11 @@ mod tests {
         };
         let result = |columns: &[&str], rows: Vec<Vec<serde_json::Value>>| WorkerResult {
             columns: columns.iter().map(|c| (*c).to_owned()).collect(),
+            integer_columns: columns
+                .iter()
+                .filter(|c| matches!(**c, "total_bytes" | "bytes"))
+                .map(|c| (*c).to_owned())
+                .collect(),
             result_digest: genui::query::worker::result_digest(&rows).unwrap(),
             rows,
             truncated_page: false,
@@ -1081,6 +1086,12 @@ mod tests {
                 assert!(!html.contains("<details"), "{id} shows a receipt");
             }
         }
+        // The queued-out card keeps the `loading` state key but is labelled
+        // busy: nothing is loading on a no-JS page (APP-012 review m7).
+        let loading = section("loading");
+        assert!(loading.contains("<span class=\"badge\">busy</span>"));
+        assert!(!loading.contains("<span class=\"badge\">loading</span>"));
+        assert!(section("idle").contains("<span class=\"badge\">idle</span>"));
         // A refused window echoes the form, says nothing ran, and runs nothing.
         let mut refused = props.clone();
         refused.form_error = true;

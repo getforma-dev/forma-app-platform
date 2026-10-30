@@ -9,9 +9,11 @@
 //! fence, the saved work's pinned publication and version under
 //! `lock_work_revision`, the publication's stored definition re-admitted
 //! (APP-010), the view's typed query, the bound source revision of its one
-//! input under that member's own `source_read`, and the record snapshot
-//! sequence. It returns a [`QueryRun`]: everything the engine child and the
-//! receipt need, and nothing a caller can forge (no public constructor).
+//! input under that member's own `source_read`, every source dependency of
+//! the work (the contract's receipt `source_revisions`; APP-012 review M3),
+//! and the record snapshot sequence. It returns a [`QueryRun`]: everything
+//! the engine child and the receipt need, and nothing a caller can forge (no
+//! public constructor).
 //!
 //! Authorization is judged before engine admission (this transaction: the
 //! engine only ever receives a `QueryRun`), at execution (the engine child
@@ -22,11 +24,14 @@
 //! release (C07).
 //!
 //! Parameters are closed (`parse_parameters`): an optional half-open
-//! `window` on the events time field, an optional `destination` equality
-//! filter and the client's `filter_epoch`. They are applied to the view's
-//! stored query here, so the engine receives one effective typed query whose
-//! digest is the receipt's `predicate_digest`; the stored view query's digest
-//! is its `query_digest`. No money, ratio or lookup is ever added.
+//! `window` on the events time field (each bound a contract `TIMESTAMP` under
+//! the admission validator's rule, so an impossible date such as `2026-02-31`
+//! or year `0000` is refused before anything runs; APP-012 review M2), an
+//! optional `destination` equality filter and the client's `filter_epoch`.
+//! They are applied to the view's stored query here, so the engine receives
+//! one effective typed query whose digest is the receipt's
+//! `predicate_digest`; the stored view query's digest is its `query_digest`.
+//! No money, ratio or lookup is ever added.
 use super::{
     authorization::{Action, Resource, Transaction},
     definitions::stored_content,
@@ -96,6 +101,7 @@ pub struct QueryRun {
     filter_epoch: i64,
     record_snapshot_sequence: i64,
     source: RunSource,
+    dependencies: Vec<RunSource>,
 }
 impl QueryRun {
     pub fn organization(&self) -> &str {
@@ -148,12 +154,22 @@ impl QueryRun {
     pub fn record_snapshot_sequence(&self) -> i64 {
         self.record_snapshot_sequence
     }
+    /// The one source revision the engine reads.
     pub fn source(&self) -> &RunSource {
         &self.source
     }
+    /// Every source dependency of the work (`work_source_dependencies`, in
+    /// `input_id` order), the read one included: the receipt's
+    /// `source_revisions` (contract `validate_bundle`: a receipt lists the
+    /// work's source dependencies; APP-012 review M3). Each was a live
+    /// revision under the member's `source_read` at the precheck.
+    pub fn dependencies(&self) -> &[RunSource] {
+        &self.dependencies
+    }
 
     /// A run for engine and receipt unit tests only; never reachable from a
-    /// request (the test executable only).
+    /// request (the test executable only). The read source is the work's one
+    /// dependency.
     #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn for_tests(
@@ -170,6 +186,12 @@ impl QueryRun {
     ) -> Self {
         let parsed = parse_parameters(parameters).expect("test parameters");
         let query = parsed.apply(&view_query).expect("test query");
+        let source = RunSource {
+            input: "events".into(),
+            source: source.0.into(),
+            revision: source.1.into(),
+            normalized_digest: source.2.into(),
+        };
         Self {
             organization: organization.into(),
             principal: principal.into(),
@@ -186,12 +208,8 @@ impl QueryRun {
             parameters: parsed.named_values(),
             filter_epoch: parsed.filter_epoch,
             record_snapshot_sequence: 0,
-            source: RunSource {
-                input: "events".into(),
-                source: source.0.into(),
-                revision: source.1.into(),
-                normalized_digest: source.2.into(),
-            },
+            dependencies: vec![source.clone()],
+            source,
         }
     }
 }
@@ -204,29 +222,13 @@ pub struct Parameters {
     pub filter_epoch: i64,
 }
 
-/// Contract `TIMESTAMP`: whole-second UTC `YYYY-MM-DDTHH:MM:SSZ` with valid
-/// field ranges (the engine compares it as a naive UTC timestamp).
+/// Contract `TIMESTAMP`: the admission validator's `Time` rule (whole-second
+/// UTC `YYYY-MM-DDTHH:MM:SSZ` naming a real calendar day in years 1 to 9999,
+/// as `contracts/validate.py` `valid_timestamp`), so a window the contract
+/// validator would refuse in a receipt never runs (APP-012 review M2). The
+/// engine compares it as a naive UTC timestamp.
 fn timestamp(value: &str) -> bool {
-    let b = value.as_bytes();
-    let digits = |range: std::ops::Range<usize>| -> Option<u32> {
-        b.get(range.clone())?
-            .iter()
-            .all(u8::is_ascii_digit)
-            .then(|| value[range].parse().ok())?
-    };
-    b.len() == 20
-        && b[4] == b'-'
-        && b[7] == b'-'
-        && b[10] == b'T'
-        && b[13] == b':'
-        && b[16] == b':'
-        && b[19] == b'Z'
-        && digits(0..4).is_some()
-        && digits(5..7).is_some_and(|m| (1..=12).contains(&m))
-        && digits(8..10).is_some_and(|d| (1..=31).contains(&d))
-        && digits(11..13).is_some_and(|h| h < 24)
-        && digits(14..16).is_some_and(|m| m < 60)
-        && digits(17..19).is_some_and(|s| s < 60)
+    admission::contract_timestamp(value)
 }
 
 /// Parses the closed parameter object; `None` for anything else (the route
@@ -405,6 +407,31 @@ async fn bound_source(
     })
 }
 
+/// Every source dependency the work records (`work_source_dependencies`), in
+/// `input_id` order: the receipt's `source_revisions` (APP-012 review M3).
+/// The precheck already required each to be a live revision under the
+/// member's `source_read`; the engine reads only the view's one input.
+async fn dependencies(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    app: &str,
+    work: &str,
+) -> Result<Vec<RunSource>> {
+    let rows = transaction.query("SELECT input_id::text,source_id::text,source_revision_id::text,source_digest::text FROM genui.work_source_dependencies WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid ORDER BY input_id", &[&organization,&app,&work]).await?;
+    let mut dependencies = Vec::with_capacity(rows.len());
+    for row in &rows {
+        dependencies.push(RunSource {
+            input: text(row, 0)?,
+            source: text(row, 1)?,
+            revision: text(row, 2)?,
+            normalized_digest: text(row, 3)?,
+        });
+    }
+    // The contract bounds a receipt at 8 source revisions.
+    require(!dependencies.is_empty() && dependencies.len() <= 8)?;
+    Ok(dependencies)
+}
+
 impl Data {
     /// Authorizes and pins one run of `view` on saved work `work` of `app`
     /// for the requesting member. Nothing executes here and nothing is
@@ -449,6 +476,16 @@ impl Data {
                 .also(Action::SourceRead, Resource::Source(&source.source))
                 .await?;
             permit.also(Action::Run, Resource::App(app)).await?;
+            // The work's dependencies must record the binding the view reads.
+            let dependencies = dependencies(transaction, org, app, work).await?;
+            require(dependencies.contains(&source))?;
+            // `record_snapshot_sequence`: the largest `commit_sequence` among
+            // the work's record revisions at this snapshot (0 when none). In
+            // Phase 1 no query reads a record input, so this identifies the
+            // same visible revisions as ADR-009 D9.8's organization-wide
+            // `next_commit_sequence - 1` (`organization_sequences`, migration
+            // 0007); the switch to D9.8's S comes with record inputs (APP-020+;
+            // APP-012 review m8).
             let rows = transaction.query("SELECT coalesce(max(commit_sequence),0)::bigint FROM genui.internal_record_revisions WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[org,&app,&work]).await?;
             let record_snapshot_sequence = integer(rows.first().ok_or(Error::Unavailable)?, 0)?;
             let query = parameters.apply(&stored).ok_or(Error::Denied)?;
@@ -469,6 +506,7 @@ impl Data {
                 filter_epoch: parameters.filter_epoch,
                 record_snapshot_sequence,
                 source,
+                dependencies,
             })
         }
         .await;
@@ -480,8 +518,9 @@ impl Data {
     /// same member, at the same epoch, with current entitlement, `record_read`
     /// on the work, `run` on the app and `source_read` on the source, must
     /// still see the run's publication, work version, definition, policy
-    /// version, binding and live revision. Any change is `Denied` and the
-    /// result is never released.
+    /// version, binding, live revision and source dependencies (the receipt's
+    /// `source_revisions`). Any change is `Denied` and the result is never
+    /// released.
     pub async fn release_result(&self, request: &TrustedRequest, run: &QueryRun) -> Result<()> {
         require(
             run.organization == request.organization
@@ -507,6 +546,7 @@ impl Data {
             )?;
             let source = bound_source(transaction, org, app, work, &run.source.input).await?;
             require(source == run.source)?;
+            require(dependencies(transaction, org, app, work).await? == run.dependencies)?;
             permit
                 .also(Action::SourceRead, Resource::Source(&source.source))
                 .await?;
@@ -518,9 +558,22 @@ impl Data {
     }
 }
 
+/// APP-005's qualified operator subset: a view whose query uses any other
+/// operator (`ratio`, `lookup`) is not listed, since the engine would only
+/// refuse it (APP-012 review m10).
+pub const QUALIFIED_OPERATORS: [&str; 6] = [
+    "filter",
+    "project",
+    "aggregate",
+    "time_bucket",
+    "sort",
+    "limit",
+];
+
 /// One view of a saved work's pinned definition that the Phase 1 query path
-/// can run: it carries a typed query over exactly one input (APP-005's
-/// qualified subset). Forms, notes and multi-input views are not listed.
+/// can run: it carries a typed query over exactly one input using only
+/// [`QUALIFIED_OPERATORS`] (APP-005's qualified subset). Forms, notes,
+/// multi-input views and views with an unqualified operator are not listed.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkView {
     pub id: String,
@@ -551,12 +604,22 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
         .and_then(Value::as_array)
         .ok_or(Error::Unavailable)?
     {
-        let single_input = view
-            .get("query")
+        let query = view.get("query");
+        let single_input = query
             .and_then(|q| q.get("inputs"))
             .and_then(Value::as_array)
             .is_some_and(|inputs| inputs.len() == 1);
-        if single_input {
+        let qualified = query
+            .and_then(|q| q.get("operations"))
+            .and_then(Value::as_array)
+            .is_some_and(|operations| {
+                operations.iter().all(|op| {
+                    op.get("type")
+                        .and_then(Value::as_str)
+                        .is_some_and(|kind| QUALIFIED_OPERATORS.contains(&kind))
+                })
+            });
+        if single_input && qualified {
             views.push(WorkView {
                 id: label(view.get("id"))?,
                 title: label(view.get("title"))?,
@@ -628,12 +691,24 @@ mod tests {
             Some(("2026-10-22T10:00:00Z".into(), "2026-10-22T10:10:00Z".into()))
         );
         assert_eq!(parse_parameters(&json!({})), Some(Parameters::default()));
+        // A leap day in a leap year is a real day (APP-012 review M2).
+        assert!(parse_parameters(
+            &json!({"window": {"start": "2028-02-29T00:00:00Z", "end": "2028-03-01T00:00:00Z"}})
+        )
+        .is_some());
         for bad in [
             json!([]),
             json!({"sql": "SELECT 1"}),
             json!({"window": {"start": "2026-10-22T10:10:00Z", "end": "2026-10-22T10:00:00Z"}}),
             json!({"window": {"start": "2026-10-22T10:00:00+01:00", "end": "2026-10-22T10:10:00Z"}}),
             json!({"window": {"start": "2026-13-22T10:00:00Z", "end": "2026-14-22T10:10:00Z"}}),
+            // Impossible dates and year 0000 (review P6): the contract
+            // validator refuses them, so they never run.
+            json!({"window": {"start": "2026-02-31T00:00:00Z", "end": "2026-03-01T00:00:00Z"}}),
+            json!({"window": {"start": "2026-02-29T00:00:00Z", "end": "2026-03-01T00:00:00Z"}}),
+            json!({"window": {"start": "2026-04-31T00:00:00Z", "end": "2026-05-01T00:00:00Z"}}),
+            json!({"window": {"start": "0000-01-01T00:00:00Z", "end": "0000-01-01T10:10:00Z"}}),
+            json!({"window": {"start": "2026-10-22T24:00:00Z", "end": "2026-10-23T00:00:00Z"}}),
             json!({"window": {"start": "2026-10-22T10:00:00Z", "end": "2026-10-22T10:10:00Z", "bounds": "closed"}}),
             json!({"destination": ""}),
             json!({"destination": 7}),
@@ -647,11 +722,14 @@ mod tests {
 
     #[test]
     fn outline_lists_only_single_input_query_views() {
+        let aggregate = json!([{"type": "aggregate", "group_by": [], "measures": []}]);
         let content = json!({"title": "Northstar", "views": [
-            {"id": "total", "title": "total", "kind": "summary", "query": {"inputs": ["events"]}},
-            {"id": "destinations", "title": "destinations", "kind": "table", "query": {"inputs": ["events", "inventory"]}},
+            {"id": "total", "title": "total", "kind": "summary", "query": {"inputs": ["events"], "operations": aggregate}},
+            {"id": "destinations", "title": "destinations", "kind": "table", "query": {"inputs": ["events", "inventory"], "operations": [{"type": "lookup"}]}},
             {"id": "record_observation", "title": "record observation", "kind": "form"},
-            {"id": "timeline", "title": "timeline", "kind": "timeline", "query": {"inputs": ["events"]}}
+            // Edition two's `rate`: one input, but a ratio the engine refuses (m10).
+            {"id": "rate", "title": "rate", "kind": "summary", "query": {"inputs": ["events"], "operations": [{"type": "aggregate", "group_by": [], "measures": []}, {"type": "ratio"}]}},
+            {"id": "timeline", "title": "timeline", "kind": "timeline", "query": {"inputs": ["events"], "operations": [{"type": "time_bucket"}, {"type": "aggregate"}, {"type": "sort"}, {"type": "limit"}]}}
         ]});
         let listed = outline(&admission::encode(&content).unwrap()).unwrap();
         assert_eq!(listed.title, "Northstar");

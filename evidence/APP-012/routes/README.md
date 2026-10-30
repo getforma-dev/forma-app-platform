@@ -144,3 +144,13 @@ bf7e20d0413bca448e047ea18e0cf1b529c1c5bd03df7d63075855032122e918  app/src/storag
 3. **The JSON route without a window** computes the whole revision (2,040,000, truthfully receipted). Should the route require a window for views without one, as the page does?
 4. **`POST /w/{app}/{work}`** (the no-JS run form) is a route the plan did not name; it carries the same refusals and a synchronizer token. Confirm, or replace it with an island when one is qualified.
 5. The demo must open the work `create-bound-work` writes (storage half open question 3); `GET /workspace` does not yet link it (the home/work listing is outside this slice). **Not trivial at integration, so not done.** The link has to name a per-organization work ID that the member may open. That needs three things: an authorized listing in `storage` (works this member's grants can read, under the same fence as `work_outline`), a list prop on the native `workspace` page, and its tests. A link to a fixed ID would show the link to members who cannot open it, and it would be fixture-specific. This still needs an owner, as the work listing in APP-025 or a small follow-up.
+
+## Corrections after the independent review (2026-10-30)
+
+Recorded by the review-fixes slice ([../review-fixes/README.md](../review-fixes/README.md)); the text above is left as delivered.
+
+- **Decision 1 (status mapping):** a request that expired in the admission queue is 429 `too_many_requests` with `Retry-After: 2` (nothing ran); a query interrupted at its deadline, late past it or killed at its memory line is 422 `narrow_the_query` (design §6.3); 503 `query_failed` is only an engine or protocol failure (review m2).
+- **Open question 2 (store saturation → 503):** corrected. A lock wait past `lock_timeout` during session resolution is on this cookie's own member row, so it is not "the same whoever asks"; `resolve_session` answers it as `Error::Denied` (the uniform 404, ADR-007 D7.9) on `GET /workspace` and the three APP-012 routes alike. 503 `unavailable` stays for a genuine store outage (campaign check 15 unchanged; new lock-wait check). Review M4.
+- **Open question 3:** no change; the whole-revision behavior is documented in the `routes.rs` header (review OQ3).
+- **Decision 6 / m7:** the queued-out card keeps the `loading` state key but is labelled `busy`; an in-flight loading state needs an island (ADR-010 §4.5 defers it).
+- **Limits, "no reload-restore":** superseded. The run form now answers `303` to the page with a run cookie, and the page runs the saved parameters under a fresh authorization (ADR-010 §1 act 4 "reload restores").
