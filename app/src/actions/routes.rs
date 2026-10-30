@@ -342,6 +342,9 @@ fn draft_document(draft: &Draft, parse_ms: u64) -> Value {
         })).collect::<Vec<_>>(),
         "command_request": draft.request.document(),
         "approver": draft.approver.as_ref().map(|a| json!({"principal_id": a.principal, "label": a.label})),
+        "approvers": draft.approvers.iter().map(|a| json!({"principal_id": a.principal, "label": a.label})).collect::<Vec<_>>(),
+        "rule": draft.rule,
+        "flags": draft.flags,
         "target": draft.target.as_ref().map(|t| json!({"record_id": t.record_id, "version": t.version, "summary": t.summary})),
         "confirm_token": draft.confirm_token,
         "parse_ms": parse_ms,
@@ -607,7 +610,9 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 "open resolved"
             );
             let range = ledger::range_of(&parse.parsed.values);
-            let view = if ledger::wants_ledger(&utterance, &parse.parsed.values) {
+            // The ledger is the expense ledger: other record apps open their records.
+            let expense = super::receipt::expense_app(&catalog).is_some_and(|e| e.app == app);
+            let view = if expense && ledger::wants_ledger(&utterance, &parse.parsed.values) {
                 "ledger"
             } else {
                 "records"
@@ -701,6 +706,22 @@ pub fn records_document_with(
                 "display": resolve::display(item.get("value")?),
             }))).collect::<Vec<_>>(),
             });
+            // APP-107: the transitions that may fire on this record now (its
+            // current value, the declared guards judged on its state), so a
+            // card offers exactly what storage would accept.
+            if let Some(command) = listing
+                .collections
+                .iter()
+                .find(|c| c.collection == r.collection)
+                .and_then(|c| c.commands.iter().find(|d| !d.transitions.is_empty()))
+            {
+                record["next"] = Value::Array(
+                    resolve::allowed_transitions(&command.transitions, &command.rules, r)
+                        .into_iter()
+                        .map(|(_, to, rule)| json!({"to": to, "rule": rule}))
+                        .collect(),
+                );
+            }
             // APP-100 (DS-59): the channel that committed this version, for
             // the canvas's origin chip; a display label only.
             if let Some(via) = crate::origins::label(&r.record_id, r.version) {
@@ -748,10 +769,23 @@ async fn records(
                 .agent_attributions(&member, &app, &work)
                 .await
                 .unwrap_or_default();
-            document(
-                StatusCode::OK,
-                &records_document_with(&listing, &attributions),
-            )
+            // APP-107: display-only annotations (a purchase request's PO
+            // reference, an invoice's PO match against the purchase requests
+            // this member may read now).
+            let (references, flags) = super::workflows::annotate(stores, &member, &listing).await;
+            let mut answer = records_document_with(&listing, &attributions);
+            if let Some(rows) = answer["records"].as_array_mut() {
+                for row in rows {
+                    let id = row["record_id"].as_str().unwrap_or("").to_owned();
+                    if let Some(reference) = references.get(&id) {
+                        row["reference"] = json!(reference);
+                    }
+                    if let Some(flags) = flags.get(&id) {
+                        row["flags"] = json!(flags);
+                    }
+                }
+            }
+            document(StatusCode::OK, &answer)
         }
         Err(storage::Error::Denied) => http::not_found(),
         Err(_) => http::unavailable(),

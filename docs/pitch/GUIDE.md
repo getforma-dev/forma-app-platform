@@ -43,6 +43,16 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 | `/weather <place>`, `/calculator`, `/clock <zone>` | Utility widgets; restyle them in words. |
 | Any other sentence | The instant pick and live reshape; a short chooser when two apps fit equally; "Build something new" generates one. |
 
+**Workflow commands (APP-107).** Each opens its app; with text after it, files or decides in that app.
+
+| Command | Does |
+| --- | --- |
+| `/pto` (`/time-off`, `/leave`, `/vacation`) | Time off: "Nov 24–26 for Thanksgiving, Sarah approves". |
+| `/purchase` (`/purchases`, `/po`) | Purchase requests; over $5,000 the manager approves, then finance. |
+| `/invoice` (`/invoices`, `/payables`) | Vendor invoices; a PO that does not match its purchase request is flagged. |
+| `/access` (`/access-request`) | Access requests; the system owner grants or denies. The access review tracker is now `/access-review`. |
+| `/discount` (`/deal-desk`, `/discounts`) | Deal desk; 10% or less approves itself by the app's rule. |
+
 **Library pane (right, `L`).**
 - Organized as Category → App → numbered cards.
 - Click to add or remove a card. "Add all" brings a whole app, "Stack" brings it as a stack, and search finds by name or number.
@@ -96,6 +106,7 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 | **Agent token** | A member-minted bearer token for MCP clients. It never exceeds the member's own rights and is revocable. |
 | **Slack link** | Binds a Slack user to a member through `/forma link`. A Slack id alone confers nothing. |
 | **MCP** | Model Context Protocol: the open standard agents use to call tools. Forma serves eight tools at `/v1/mcp`. |
+| **Folder** | A card that holds files (PDF, CSV, XLSX, images). `/folder formation <instruction>` has the AI form an app or a cited brief from it; every number and quote traces back to its file. |
 | **Stack / fence** | A pile of cards you can shuffle, and a labeled area that groups cards. Fences are not built yet. |
 | **fAuth** | Forma's identity service: hosted sign-in and the organization's identity provider. |
 | **Forma Stack** | The Rust framework underneath: server-rendered FMIR pages plus registered canvas islands. |

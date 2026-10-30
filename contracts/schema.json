@@ -439,6 +439,34 @@
       ],
       "additionalProperties": false
     },
+    "guard": {
+      "type": "object",
+      "properties": {
+        "field_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "comparison": {
+          "enum": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/value"
+        }
+      },
+      "required": [
+        "field_id",
+        "comparison",
+        "value"
+      ],
+      "additionalProperties": false
+    },
     "command_declaration": {
       "type": "object",
       "properties": {
@@ -482,6 +510,9 @@
               "to": {
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "when": {
+                "$ref": "#/$defs/guard"
               }
             },
             "required": [
@@ -493,6 +524,32 @@
           },
           "minItems": 0,
           "maxItems": 32
+        },
+        "initial": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "value": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "when": {
+                "$ref": "#/$defs/guard"
+              }
+            },
+            "required": [
+              "field_id",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
         }
       },
       "required": [

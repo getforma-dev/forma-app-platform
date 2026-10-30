@@ -1,0 +1,812 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "principal_id": "00000000-0000-4000-8000-000000000066"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001801",
+    "revision_id": "00000000-0000-4000-8000-000000001802",
+    "content": {
+      "title": "Vendor invoices",
+      "description": "Log a supplier invoice, approve it for payment and mark it paid or disputed; the server checks the PO against your purchase requests. Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
+      "inputs": [
+        {
+          "id": "ap_invoices",
+          "contract_id": "ap_invoices_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "invoice_id",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            },
+            {
+              "id": "vendor",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "invoice_number",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "po_number",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": true
+            },
+            {
+              "id": "due",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "received",
+                  "approved",
+                  "paid",
+                  "disputed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "po_match",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "match",
+                  "mismatch",
+                  "no_po"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "invoices",
+          "contract_id": "vendor_invoice_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "vendor",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "invoice_number",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "po_number",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": true
+            },
+            {
+              "id": "due_date",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "received",
+                  "approved",
+                  "paid",
+                  "disputed"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "by_status",
+          "kind": "status",
+          "renderer_version": 1,
+          "title": "Invoices by status",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "ap_invoices"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "ap_invoices",
+                    "field_id": "status"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "invoices",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "ap_invoices",
+                      "field_id": "invoice_id"
+                    }
+                  },
+                  {
+                    "id": "amount",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "ap_invoices",
+                      "field_id": "amount"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "po_mismatches",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "Invoices that do not match their PO",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "ap_invoices"
+            ],
+            "operations": [
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "ap_invoices",
+                  "field_id": "po_match"
+                },
+                "comparison": "eq",
+                "value": {
+                  "type": "enum",
+                  "value": "mismatch"
+                }
+              },
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "ap_invoices",
+                    "field_id": "invoice_id"
+                  },
+                  {
+                    "input_id": "ap_invoices",
+                    "field_id": "vendor"
+                  },
+                  {
+                    "input_id": "ap_invoices",
+                    "field_id": "invoice_number"
+                  },
+                  {
+                    "input_id": "ap_invoices",
+                    "field_id": "po_number"
+                  },
+                  {
+                    "input_id": "ap_invoices",
+                    "field_id": "amount"
+                  },
+                  {
+                    "input_id": "ap_invoices",
+                    "field_id": "status"
+                  }
+                ]
+              },
+              {
+                "type": "sort",
+                "fields": [
+                  {
+                    "field": {
+                      "input_id": "ap_invoices",
+                      "field_id": "amount"
+                    },
+                    "direction": "desc"
+                  }
+                ],
+                "stable_tiebreak": {
+                  "input_id": "ap_invoices",
+                  "field_id": "invoice_id"
+                }
+              },
+              {
+                "type": "limit",
+                "rows": 50
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "to_pay",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "Approved, not yet paid",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "ap_invoices"
+            ],
+            "operations": [
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "ap_invoices",
+                  "field_id": "status"
+                },
+                "comparison": "eq",
+                "value": {
+                  "type": "enum",
+                  "value": "approved"
+                }
+              },
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "ap_invoices",
+                    "field_id": "invoice_id"
+                  },
+                  {
+                    "input_id": "ap_invoices",
+                    "field_id": "vendor"
+                  },
+                  {
+                    "input_id": "ap_invoices",
+                    "field_id": "amount"
+                  },
+                  {
+                    "input_id": "ap_invoices",
+                    "field_id": "due"
+                  }
+                ]
+              },
+              {
+                "type": "sort",
+                "fields": [
+                  {
+                    "field": {
+                      "input_id": "ap_invoices",
+                      "field_id": "due"
+                    },
+                    "direction": "asc"
+                  }
+                ],
+                "stable_tiebreak": {
+                  "input_id": "ap_invoices",
+                  "field_id": "invoice_id"
+                }
+              },
+              {
+                "type": "limit",
+                "rows": 50
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "log",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "Log a vendor invoice",
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "renderer_version": 1,
+          "title": "PO match",
+          "text": "When an invoice names a PO, the server compares it with the purchase requests you can see and flags a mismatch; the flag is shown, it never blocks. History is labeled synthetic."
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "vendor_invoice",
+          "version": 1,
+          "fields": [
+            {
+              "id": "vendor",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "invoice_number",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "po_number",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": true
+            },
+            {
+              "id": "due_date",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "received",
+                  "approved",
+                  "paid",
+                  "disputed"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "vendor_invoice",
+          "operation": "create",
+          "writable_fields": [
+            "vendor",
+            "invoice_number",
+            "amount",
+            "po_number",
+            "due_date",
+            "status"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "received"
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "vendor_invoice",
+          "operation": "create",
+          "writable_fields": [
+            "status"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "received",
+              "to": "approved"
+            },
+            {
+              "field_id": "status",
+              "from": "received",
+              "to": "disputed"
+            },
+            {
+              "field_id": "status",
+              "from": "approved",
+              "to": "paid"
+            },
+            {
+              "field_id": "status",
+              "from": "approved",
+              "to": "disputed"
+            },
+            {
+              "field_id": "status",
+              "from": "disputed",
+              "to": "approved"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "by_status",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "po_mismatches",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "to_pay",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "log",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "how",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:a4447f244989bf5695f3ab2a2eefc51b3185740208df39df5a1077fd543d9020"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001801",
+    "publication_id": "00000000-0000-4000-8000-000000001803",
+    "definition_revision_id": "00000000-0000-4000-8000-000000001802",
+    "definition_digest": "sha256:a4447f244989bf5695f3ab2a2eefc51b3185740208df39df5a1077fd543d9020",
+    "input_contract_digests": [
+      {
+        "input_id": "ap_invoices",
+        "digest": "sha256:741f0b1c48e33a4f8f661c4b21b6e35cb7d59abe106f760786acf923b3c0ccce"
+      },
+      {
+        "input_id": "invoices",
+        "digest": "sha256:ac8663f16e5848c73e9bbecd850546f31275d96215072e652375cd0acc2a596c"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "vendor_invoice",
+        "digest": "sha256:fe9faa0e4e4f0375b9321381b4e123799dec764d6408ac888575f3ee53be248d"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "admission_digest": "sha256:9c2356a260c851510197025bd6a24b18c17c8985c4879cfaf1f92f271fb44879",
+    "policy": {
+      "id": "00000000-0000-4000-8000-0000000000e0",
+      "version": 1,
+      "kind": "owner_publish"
+    },
+    "author_id": "00000000-0000-4000-8000-000000000066",
+    "approver_id": "00000000-0000-4000-8000-000000000066",
+    "approver_epoch": 1,
+    "published_at": "2026-10-30T09:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001801",
+    "work_id": "00000000-0000-4000-8000-000000001804",
+    "publication_id": "00000000-0000-4000-8000-000000001803",
+    "version": 1,
+    "context": "Prebuilt library: Vendor invoices",
+    "bindings": [
+      {
+        "input_id": "ap_invoices",
+        "source_id": "00000000-0000-4000-8000-00000000301e",
+        "source_revision_id": "00000000-0000-4000-8000-00000000301f",
+        "source_digest": "sha256:f8d67c6f953cf91a7fbe594ca5f2e2c10b14d006809e67ac785d02c88b0d671b",
+        "kind": "source",
+        "contract_digest": "sha256:741f0b1c48e33a4f8f661c4b21b6e35cb7d59abe106f760786acf923b3c0ccce"
+      },
+      {
+        "input_id": "invoices",
+        "kind": "records",
+        "contract_digest": "sha256:ac8663f16e5848c73e9bbecd850546f31275d96215072e652375cd0acc2a596c",
+        "collection_id": "00000000-0000-4000-8000-000000001805",
+        "schema_id": "vendor_invoice",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-000000001805",
+        "schema_id": "vendor_invoice",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "ap_invoices",
+        "source_id": "00000000-0000-4000-8000-00000000301e",
+        "source_revision_id": "00000000-0000-4000-8000-00000000301f",
+        "source_digest": "sha256:f8d67c6f953cf91a7fbe594ca5f2e2c10b14d006809e67ac785d02c88b0d671b"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "source_id": "00000000-0000-4000-8000-00000000301e",
+      "revision_id": "00000000-0000-4000-8000-00000000301f",
+      "content_digest": "sha256:d350ca0a2b75e10c6b6f80dae5e1d9795d5d6cae1679f7b4ab0c765b15837b3e",
+      "normalized_digest": "sha256:f8d67c6f953cf91a7fbe594ca5f2e2c10b14d006809e67ac785d02c88b0d671b",
+      "input_contract": {
+        "id": "ap_invoices",
+        "contract_id": "ap_invoices_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "invoice_id",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "time",
+            "value_type": {
+              "type": "timestamp"
+            },
+            "nullable": false
+          },
+          {
+            "id": "vendor",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "invoice_number",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "amount",
+            "value_type": {
+              "type": "money",
+              "currency": "USD",
+              "minor_unit_exponent": 2
+            },
+            "nullable": false
+          },
+          {
+            "id": "po_number",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": true
+          },
+          {
+            "id": "due",
+            "value_type": {
+              "type": "date"
+            },
+            "nullable": false
+          },
+          {
+            "id": "status",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "received",
+                "approved",
+                "paid",
+                "disputed"
+              ]
+            },
+            "nullable": false
+          },
+          {
+            "id": "po_match",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "match",
+                "mismatch",
+                "no_po"
+              ]
+            },
+            "nullable": false
+          }
+        ]
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 150,
+      "timezone": "UTC",
+      "time_semantics": "event",
+      "units_confirmed": true,
+      "created_at": "2026-10-30T09:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001801",
+    "work_id": "00000000-0000-4000-8000-000000001804",
+    "mode": "published",
+    "definition_digest": "sha256:a4447f244989bf5695f3ab2a2eefc51b3185740208df39df5a1077fd543d9020",
+    "publication_id": "00000000-0000-4000-8000-000000001803",
+    "view_id": "by_status",
+    "operator_version": 1,
+    "source_revisions": [
+      {
+        "input_id": "ap_invoices",
+        "source_id": "00000000-0000-4000-8000-00000000301e",
+        "source_revision_id": "00000000-0000-4000-8000-00000000301f",
+        "source_digest": "sha256:f8d67c6f953cf91a7fbe594ca5f2e2c10b14d006809e67ac785d02c88b0d671b"
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:cea7fb795046e5d1bd919936463bd7e30ac7c1cd655a5737e5b3dd430dff82a7",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:9d76c8d5a036742cda3ad789a08dc671a9138195d8fb82e15edbefc3beb0ff7a",
+      "predicate_digest": "sha256:9d76c8d5a036742cda3ad789a08dc671a9138195d8fb82e15edbefc3beb0ff7a"
+    },
+    "digest": "sha256:72ea28a719ddd057f496158d577097f341c1a0b19274f151861e0fd466975122"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-000000001801",
+    "work_id": "00000000-0000-4000-8000-000000001804",
+    "publication_id": "00000000-0000-4000-8000-000000001803",
+    "command_id": "submit",
+    "schema_id": "vendor_invoice",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-000000001806",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "vendor",
+        "value": {
+          "type": "text",
+          "value": "Orchard Print"
+        }
+      },
+      {
+        "field_id": "invoice_number",
+        "value": {
+          "type": "text",
+          "value": "OP-2207"
+        }
+      },
+      {
+        "field_id": "amount",
+        "value": {
+          "type": "money",
+          "minor_units": "31800",
+          "currency": "USD",
+          "minor_unit_exponent": 2
+        }
+      },
+      {
+        "field_id": "due_date",
+        "value": {
+          "type": "date",
+          "value": "2026-11-20"
+        }
+      },
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "received"
+        }
+      }
+    ],
+    "idempotency_key": "00000000000000000000000000001800"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001801",
+    "work_id": "00000000-0000-4000-8000-000000001804",
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "command_id": "submit",
+    "idempotency_key": "00000000000000000000000000001800",
+    "payload_digest": "sha256:32e8197c9888c0fcd331ff1d21a8ea6599b5338851a8a6f36dbeec7d39600944",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-000000001806",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-000000001807",
+    "committed_at": "2026-10-30T09:05:00Z",
+    "retry_expires_at": "2026-10-31T09:05:00Z"
+  }
+}

@@ -1470,7 +1470,7 @@ mod tests {
     #[test]
     fn every_library_definition_is_admitted_and_in_the_sidecar() {
         let sidecar = library_sidecar().unwrap();
-        assert_eq!(sidecar.len(), 15);
+        assert_eq!(sidecar.len(), 20);
         let directory = repository().join("contracts/fixtures/library");
         let mut admitted_digests = std::collections::BTreeSet::new();
         for entry in &sidecar {

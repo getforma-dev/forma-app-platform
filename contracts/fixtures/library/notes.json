@@ -7,8 +7,8 @@
     "kind": "app_definition",
     "schema_version": 1,
     "organization_id": "00000000-0000-4000-8000-000000000001",
-    "app_id": "00000000-0000-4000-8000-000000001701",
-    "revision_id": "00000000-0000-4000-8000-000000001702",
+    "app_id": "00000000-0000-4000-8000-000000001981",
+    "revision_id": "00000000-0000-4000-8000-000000001982",
     "content": {
       "title": "Notes",
       "description": "Quick notes: type /note and a sentence to keep a note as a card on your canvas; each note is a typed record of your own. Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
@@ -296,9 +296,9 @@
     "kind": "publication",
     "schema_version": 1,
     "organization_id": "00000000-0000-4000-8000-000000000001",
-    "app_id": "00000000-0000-4000-8000-000000001701",
-    "publication_id": "00000000-0000-4000-8000-000000001703",
-    "definition_revision_id": "00000000-0000-4000-8000-000000001702",
+    "app_id": "00000000-0000-4000-8000-000000001981",
+    "publication_id": "00000000-0000-4000-8000-000000001983",
+    "definition_revision_id": "00000000-0000-4000-8000-000000001982",
     "definition_digest": "sha256:c0a637a28559a80809d79111cad208c7fb92e26c385564caa9fab26756247741",
     "input_contract_digests": [
       {
@@ -333,16 +333,16 @@
     "kind": "saved_work",
     "schema_version": 1,
     "organization_id": "00000000-0000-4000-8000-000000000001",
-    "app_id": "00000000-0000-4000-8000-000000001701",
-    "work_id": "00000000-0000-4000-8000-000000001704",
-    "publication_id": "00000000-0000-4000-8000-000000001703",
+    "app_id": "00000000-0000-4000-8000-000000001981",
+    "work_id": "00000000-0000-4000-8000-000000001984",
+    "publication_id": "00000000-0000-4000-8000-000000001983",
     "version": 1,
     "context": "Prebuilt library: Notes",
     "bindings": [
       {
         "input_id": "team_notes",
-        "source_id": "00000000-0000-4000-8000-00000000301a",
-        "source_revision_id": "00000000-0000-4000-8000-00000000301b",
+        "source_id": "00000000-0000-4000-8000-000000003024",
+        "source_revision_id": "00000000-0000-4000-8000-000000003025",
         "source_digest": "sha256:18eef7f4d04c6d77095f59f3ebcfbdab65b6ea0ecb870f233ccf4f577188addd",
         "kind": "source",
         "contract_digest": "sha256:f253c8d295971236de807ce7e6b0c5ca85e22b0764be10b0b05c2bfd4d75da93"
@@ -351,7 +351,7 @@
         "input_id": "notes",
         "kind": "records",
         "contract_digest": "sha256:a589177eaa4fbf619b0d760e444acca7833dadbc19ae9f07bcd73ab273ebb137",
-        "collection_id": "00000000-0000-4000-8000-000000001705",
+        "collection_id": "00000000-0000-4000-8000-000000001985",
         "schema_id": "note",
         "schema_version": 1,
         "revision_policy": "committed_snapshot"
@@ -359,7 +359,7 @@
     ],
     "record_collections": [
       {
-        "id": "00000000-0000-4000-8000-000000001705",
+        "id": "00000000-0000-4000-8000-000000001985",
         "schema_id": "note",
         "schema_version": 1
       }
@@ -367,8 +367,8 @@
     "source_dependencies": [
       {
         "input_id": "team_notes",
-        "source_id": "00000000-0000-4000-8000-00000000301a",
-        "source_revision_id": "00000000-0000-4000-8000-00000000301b",
+        "source_id": "00000000-0000-4000-8000-000000003024",
+        "source_revision_id": "00000000-0000-4000-8000-000000003025",
         "source_digest": "sha256:18eef7f4d04c6d77095f59f3ebcfbdab65b6ea0ecb870f233ccf4f577188addd"
       }
     ]
@@ -378,8 +378,8 @@
       "kind": "source_revision",
       "schema_version": 1,
       "organization_id": "00000000-0000-4000-8000-000000000001",
-      "source_id": "00000000-0000-4000-8000-00000000301a",
-      "revision_id": "00000000-0000-4000-8000-00000000301b",
+      "source_id": "00000000-0000-4000-8000-000000003024",
+      "revision_id": "00000000-0000-4000-8000-000000003025",
       "content_digest": "sha256:be5e69f59808bc756e517e0fe86f5e60317d4651196e5ea8918dcf497e3d01e0",
       "normalized_digest": "sha256:18eef7f4d04c6d77095f59f3ebcfbdab65b6ea0ecb870f233ccf4f577188addd",
       "input_contract": {
@@ -455,18 +455,18 @@
     "kind": "query_receipt",
     "schema_version": 1,
     "organization_id": "00000000-0000-4000-8000-000000000001",
-    "app_id": "00000000-0000-4000-8000-000000001701",
-    "work_id": "00000000-0000-4000-8000-000000001704",
+    "app_id": "00000000-0000-4000-8000-000000001981",
+    "work_id": "00000000-0000-4000-8000-000000001984",
     "mode": "published",
     "definition_digest": "sha256:c0a637a28559a80809d79111cad208c7fb92e26c385564caa9fab26756247741",
-    "publication_id": "00000000-0000-4000-8000-000000001703",
+    "publication_id": "00000000-0000-4000-8000-000000001983",
     "view_id": "count",
     "operator_version": 1,
     "source_revisions": [
       {
         "input_id": "team_notes",
-        "source_id": "00000000-0000-4000-8000-00000000301a",
-        "source_revision_id": "00000000-0000-4000-8000-00000000301b",
+        "source_id": "00000000-0000-4000-8000-000000003024",
+        "source_revision_id": "00000000-0000-4000-8000-000000003025",
         "source_digest": "sha256:18eef7f4d04c6d77095f59f3ebcfbdab65b6ea0ecb870f233ccf4f577188addd"
       }
     ],
@@ -484,18 +484,18 @@
       "query_digest": "sha256:9adc62141f34277afafc9f661206a4d99be4a9565ea5862d960636fb1360ba4e",
       "predicate_digest": "sha256:9adc62141f34277afafc9f661206a4d99be4a9565ea5862d960636fb1360ba4e"
     },
-    "digest": "sha256:8ca753a22e4affff87988221611588c45e95bbd98dd51d0078a0c9b3537646a7"
+    "digest": "sha256:796c96286acf9771dfe05b2f3b335433fbd01b57ef183d428bba9e210309b479"
   },
   "command": {
     "kind": "command_request",
     "schema_version": 1,
-    "app_id": "00000000-0000-4000-8000-000000001701",
-    "work_id": "00000000-0000-4000-8000-000000001704",
-    "publication_id": "00000000-0000-4000-8000-000000001703",
+    "app_id": "00000000-0000-4000-8000-000000001981",
+    "work_id": "00000000-0000-4000-8000-000000001984",
+    "publication_id": "00000000-0000-4000-8000-000000001983",
     "command_id": "add",
     "schema_id": "note",
     "schema_version_expected": 1,
-    "record_id": "00000000-0000-4000-8000-000000001706",
+    "record_id": "00000000-0000-4000-8000-000000001986",
     "expected_record_version": 0,
     "expected_work_version": 1,
     "values": [
@@ -514,24 +514,24 @@
         }
       }
     ],
-    "idempotency_key": "00000000000000000000000000001700"
+    "idempotency_key": "00000000000000000000000000001980"
   },
   "outcome": {
     "kind": "command_outcome",
     "schema_version": 1,
     "organization_id": "00000000-0000-4000-8000-000000000001",
-    "app_id": "00000000-0000-4000-8000-000000001701",
-    "work_id": "00000000-0000-4000-8000-000000001704",
+    "app_id": "00000000-0000-4000-8000-000000001981",
+    "work_id": "00000000-0000-4000-8000-000000001984",
     "principal_id": "00000000-0000-4000-8000-000000000066",
     "command_id": "add",
-    "idempotency_key": "00000000000000000000000000001700",
-    "payload_digest": "sha256:ca94f9244c71a037961c70f2f06b1b70e5732bc0f7aeb9e21ae2062607128e2b",
+    "idempotency_key": "00000000000000000000000000001980",
+    "payload_digest": "sha256:e0d13c761c89e8b6c194f5acc71173bb03ef6e6ac3a0e13c15649c3f8497a984",
     "state": "committed",
-    "record_id": "00000000-0000-4000-8000-000000001706",
+    "record_id": "00000000-0000-4000-8000-000000001986",
     "record_version": 1,
     "work_version": 1,
     "commit_sequence": 1,
-    "audit_event_id": "00000000-0000-4000-8000-000000001707",
+    "audit_event_id": "00000000-0000-4000-8000-000000001987",
     "committed_at": "2026-10-30T09:05:00Z",
     "retry_expires_at": "2026-10-31T09:05:00Z"
   }

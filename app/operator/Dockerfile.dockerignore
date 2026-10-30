@@ -65,6 +65,11 @@ contracts/fixtures/library/**
 !contracts/fixtures/library/subscription-revenue.json
 !contracts/fixtures/library/support-queue.json
 !contracts/fixtures/library/vendor-spend.json
+!contracts/fixtures/library/access-requests.json
+!contracts/fixtures/library/deal-desk.json
+!contracts/fixtures/library/purchase-requests.json
+!contracts/fixtures/library/time-off.json
+!contracts/fixtures/library/vendor-invoices.json
 !fixtures/qualify.py
 !fixtures/verify.py
 !fixtures/phase-one/v1/manifest.json

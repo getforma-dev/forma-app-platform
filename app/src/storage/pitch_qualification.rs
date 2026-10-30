@@ -380,7 +380,7 @@ async fn campaign() {
     // The library: seeded into Northstar, its revisions normalized into the
     // engine cache under the pinned digests (as the query campaign).
     let seeded = operator(&fixture, &["seed-library", "--organization", ORG]);
-    assert_eq!(seeded["apps"].as_array().unwrap().len(), 15);
+    assert_eq!(seeded["apps"].as_array().unwrap().len(), 20);
     let python = fixture_python();
     let root = Directory::new("pitch");
     let built = Command::new(&python)
@@ -581,12 +581,12 @@ async fn campaign() {
         ],
     );
     assert_eq!(granted["changed"], true);
-    assert_eq!(granted["library_apps"].as_array().unwrap().len(), 15);
+    assert_eq!(granted["library_apps"].as_array().unwrap().len(), 20);
     assert_eq!(granted["authoring_app"]["created"], true);
     let library = stand.get("/v1/library", Some(&maya_cookie)).await;
     assert_eq!(library.status, StatusCode::OK, "{}", library.text());
     let apps = library.json()["apps"].as_array().unwrap().clone();
-    assert_eq!(apps.len(), 15);
+    assert_eq!(apps.len(), 20);
     let expense = apps
         .iter()
         .find(|app| app["library_id"] == "expense-review")
@@ -616,7 +616,7 @@ async fn campaign() {
         context.authoring.as_ref().map(|a| a.app.as_str()),
         Some(AUTHORING_APP)
     );
-    assert_eq!(context.library.len(), 15);
+    assert_eq!(context.library.len(), 20);
     c.fixture.sql(&format!("UPDATE genui.apps SET owner_principal_id='{maya_id}' WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}'"), "genui");
     crate::storage::definition_qualification::grant(
         &c.fixture,
@@ -649,7 +649,7 @@ async fn campaign() {
     c.fixture.sql(&format!("DELETE FROM genui.app_permissions WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND principal_id='{maya_id}' AND permission='edit_definition'"), "genui");
     check(
         &mut checks,
-        "membership: before the grant Maya composes nothing (uniform 404, no model call) and her library is empty; grant-library-access gives her all 15 library apps (GET /v1/library lists them with can_write) and a dedicated authoring app, which the composer context chooses over a library app she owns and never replaces with one (review M2)",
+        "membership: before the grant Maya composes nothing (uniform 404, no model call) and her library is empty; grant-library-access gives her all 20 library apps (GET /v1/library lists them with can_write) and a dedicated authoring app, which the composer context chooses over a library app she owns and never replaces with one (review M2)",
     );
 
     // --- Streams open: Maya's, the teammate's, the outsider's ---
@@ -922,7 +922,7 @@ async fn campaign() {
     assert_eq!(slug_of(EXPENSE_APP).as_deref(), Some("expense-review"));
     assert_eq!(
         commands.iter().filter(|c| c["kind"] == "library").count(),
-        15
+        20
     );
     let named = stand
         .post(
@@ -985,7 +985,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "slash commands: GET /v1/commands lists the 15 library apps she may compose with their slugs (/expense-review for the expense review queue); POST /v1/work/{app}/{work}/name saved the adapted app as /big-claims (a new saved work of the same publication, slug on its context, no migration), listed as her saved command and running the same views; a taken name, a library slug, the reserved /apps and a malformed name are refused (422); the teammate, who cannot open it, does not see it",
+        "slash commands: GET /v1/commands lists the 20 library apps she may compose with their slugs (/expense-review for the expense review queue); POST /v1/work/{app}/{work}/name saved the adapted app as /big-claims (a new saved work of the same publication, slug on its context, no migration), listed as her saved command and running the same views; a taken name, a library slug, the reserved /apps and a malformed name are refused (422); the teammate, who cannot open it, does not see it",
     );
 
     // --- Share with the teammate ---

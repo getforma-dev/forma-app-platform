@@ -309,14 +309,32 @@ enum Literal {
 struct Command {
     id: String,
     record_schema_id: String,
+    create: bool,
     writable: Vec<String>,
     transitions: Vec<Transition>,
+    /// APP-107 amendment: the starting value of an enum field on a create.
+    initial: Option<Vec<Initial>>,
 }
 
 struct Transition {
     field_id: String,
     from: String,
     to: String,
+    /// APP-107 amendment: a declared guard over a field of the same record.
+    when: Option<Guard>,
+}
+
+/// APP-107 amendment (validate.py `_guard`): `field comparison literal`.
+struct Guard {
+    field_id: String,
+    ordering: bool,
+    literal: Literal,
+}
+
+struct Initial {
+    field_id: String,
+    value: String,
+    when: Option<Guard>,
 }
 
 struct Link {
@@ -1201,11 +1219,11 @@ impl Walk {
             "writable_fields",
             "transitions",
         ];
-        let map = self.object(path, value, &required, &[])?;
+        let map = self.object(path, value, &required, &["initial"])?;
         let at = |key: &str| member(path, key);
         let id = self.id(&at("id"), map.get("id"));
         let record_schema_id = self.id(&at("record_schema_id"), map.get("record_schema_id"));
-        self.choice(
+        let operation = self.choice(
             &at("operation"),
             map.get("operation"),
             &["create", "update"],
@@ -1218,24 +1236,71 @@ impl Walk {
             0..=32,
             Self::transition,
         );
+        let initial = match map.get("initial") {
+            None => Some(None),
+            Some(value) => self
+                .each(&at("initial"), Some(value), 1..=8, Self::initial)
+                .map(Some),
+        };
         Some(Command {
             id: id?,
             record_schema_id: record_schema_id?,
+            create: operation?.as_str() == "create",
             writable: writable?,
             transitions: transitions?,
+            initial: initial?,
         })
     }
 
     fn transition(&mut self, path: &str, value: &Value) -> Option<Transition> {
-        let map = self.object(path, value, &["field_id", "from", "to"], &[])?;
+        let map = self.object(path, value, &["field_id", "from", "to"], &["when"])?;
         let at = |key: &str| member(path, key);
         let field_id = self.id(&at("field_id"), map.get("field_id"));
         let from = self.id(&at("from"), map.get("from"));
         let to = self.id(&at("to"), map.get("to"));
+        let when = match map.get("when") {
+            None => Some(None),
+            Some(value) => self.guard(&at("when"), value).map(Some),
+        };
         Some(Transition {
             field_id: field_id?,
             from: from?,
             to: to?,
+            when: when?,
+        })
+    }
+
+    fn initial(&mut self, path: &str, value: &Value) -> Option<Initial> {
+        let map = self.object(path, value, &["field_id", "value"], &["when"])?;
+        let at = |key: &str| member(path, key);
+        let field_id = self.id(&at("field_id"), map.get("field_id"));
+        let initial = self.id(&at("value"), map.get("value"));
+        let when = match map.get("when") {
+            None => Some(None),
+            Some(value) => self.guard(&at("when"), value).map(Some),
+        };
+        Some(Initial {
+            field_id: field_id?,
+            value: initial?,
+            when: when?,
+        })
+    }
+
+    fn guard(&mut self, path: &str, value: &Value) -> Option<Guard> {
+        let map = self.object(path, value, &["field_id", "comparison", "value"], &[])?;
+        let at = |key: &str| member(path, key);
+        let field_id = self.id(&at("field_id"), map.get("field_id"));
+        let comparison = self.choice(
+            &at("comparison"),
+            map.get("comparison"),
+            &COMPARISONS,
+            Some(AdmissionError::UnregisteredOperator),
+        );
+        let literal = self.child(&at("value"), map.get("value"), Self::literal);
+        Some(Guard {
+            field_id: field_id?,
+            ordering: !matches!(comparison?.as_str(), "eq" | "ne"),
+            literal: literal?,
         })
     }
 
@@ -1488,6 +1553,28 @@ impl Content {
                 require(writable, &path, "transition field is not writable")?;
                 let known = values.contains(&transition.from) && values.contains(&transition.to);
                 require(known, &path, "unknown transition value")?;
+                if let Some(guard) = &transition.when {
+                    judge_guard(guard, schema, &format!("{path}.when"))?;
+                }
+            }
+            if let Some(initial) = &command.initial {
+                let path = format!("{path}.initial");
+                let filing = command.create && command.transitions.is_empty();
+                require(filing, &path, "initial values belong to a filing create")?;
+                for (slot, rule) in initial.iter().enumerate() {
+                    let path = format!("{path}[{slot}]");
+                    let Some(ValueType::Enum(values)) =
+                        schema.get(rule.field_id.as_str()).map(|f| &f.value_type)
+                    else {
+                        return Err(refused(&path, "initial requires enum field"));
+                    };
+                    let writable = command.writable.contains(&rule.field_id);
+                    require(writable, &path, "initial field is not writable")?;
+                    require(values.contains(&rule.value), &path, "unknown initial value")?;
+                    if let Some(guard) = &rule.when {
+                        judge_guard(guard, schema, &format!("{path}.when"))?;
+                    }
+                }
             }
         }
 
@@ -1800,6 +1887,34 @@ fn gcd(mut a: u128, mut b: u128) -> u128 {
         (a, b) = (b, a % b);
     }
     a
+}
+
+/// validate.py `_guard` (APP-107 amendment): a known field of the same
+/// record schema, a typed non-null literal compatible with it, and an
+/// ordering comparison only over an ordered field.
+fn judge_guard(
+    guard: &Guard,
+    schema: &BTreeMap<&str, &Field>,
+    path: &str,
+) -> Result<(), AdmissionError> {
+    let Some(field) = schema.get(guard.field_id.as_str()) else {
+        return Err(refused(path, "unknown guard field"));
+    };
+    let typed = !matches!(guard.literal, Literal::Null) && compatible(&guard.literal, field);
+    require(typed, path, "guard value type/unit mismatch")?;
+    let ordered = matches!(
+        field.value_type,
+        ValueType::Integer { .. }
+            | ValueType::Decimal { .. }
+            | ValueType::Money
+            | ValueType::Date
+            | ValueType::Timestamp
+    );
+    require(
+        !guard.ordering || ordered,
+        path,
+        "guard comparison requires an ordered field",
+    )
 }
 
 /// validate.py `compatible`: a filter literal against the field it compares.
