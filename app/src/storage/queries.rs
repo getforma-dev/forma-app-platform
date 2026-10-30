@@ -855,7 +855,7 @@ impl Data {
 const LIBRARY_CATALOG: &str = include_str!("../../../contracts/fixtures/library/catalog.json");
 
 /// The sidecar entries by definition digest.
-fn library_sidecar() -> Result<Vec<Value>> {
+pub(super) fn library_sidecar() -> Result<Vec<Value>> {
     let catalog: Value = serde_json::from_str(LIBRARY_CATALOG).map_err(|_| Error::Unavailable)?;
     catalog
         .get("apps")

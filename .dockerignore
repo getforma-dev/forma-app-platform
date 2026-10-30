@@ -85,13 +85,16 @@ app/src/storage/**
 !app/src/storage/qualification_cases.rs
 !app/src/query/
 app/src/query/**
+!app/src/query/canvas.rs
 !app/src/query/mod.rs
 !app/src/query/page.rs
 !app/src/query/receipt.rs
 !app/src/query/routes.rs
 !app/src/query/worker.rs
-# query/tests.rs, query/route_tests.rs, storage/query_qualification.rs and storage/race_qualification.rs
-# (APP-014) are cfg(test) only; the qualification context lists them.
+# query/tests.rs, query/route_tests.rs, query/canvas_tests.rs, storage/query_qualification.rs,
+# storage/race_qualification.rs (APP-014), storage/canvas_campaign.rs, storage/composer_qualification.rs,
+# storage/sharing_qualification.rs and storage/pitch_qualification.rs are cfg(test) only; the
+# qualification context lists them.
 !app/src/admission/
 app/src/admission/**
 !app/src/admission/mod.rs
@@ -134,10 +137,35 @@ app/admin/src/record/**
 !app/admin/src/work/
 app/admin/src/work/**
 !app/admin/src/work/app.tsx
+# ADR-011 pitch canvas (APP-092/094): the canvas page, its island modules and the vendored runtime canvas.
+!app/admin/src/canvas/
+app/admin/src/canvas/**
+!app/admin/src/canvas/app.tsx
+!app/admin/src/canvas/board.ts
+!app/admin/src/canvas/commands.ts
+!app/admin/src/canvas/compose.ts
+!app/admin/src/canvas/layout.ts
+!app/admin/src/canvas/live.ts
+!app/admin/src/canvas/queries.ts
+!app/admin/src/canvas/render.ts
+!app/admin/src/canvas-vendor/
+app/admin/src/canvas-vendor/**
+!app/admin/src/canvas-vendor/canvas-capacity.ts
+!app/admin/src/canvas-vendor/canvas-item.ts
+!app/admin/src/canvas-vendor/canvas-surface.ts
+!app/admin/src/canvas-vendor/canvas.css
+!app/admin/src/canvas-vendor/contracts.ts
+!app/admin/src/canvas-vendor/index.ts
+!app/admin/src/canvas-vendor/keyboard-shortcuts.ts
+!app/admin/src/canvas-vendor/runtime-adapter.ts
+!app/admin/src/canvas-vendor/widget-canvas.ts
+!app/admin/src/canvas-vendor/widget-chrome-placement.ts
+!app/admin/src/canvas-vendor/widget-chrome.ts
 !app/admin/src/forma-types.d.ts
 !app/admin/src/styles/
 app/admin/src/styles/**
 !app/admin/src/styles/app.css
+!app/admin/src/styles/canvas.css
 !app/runtime/
 app/runtime/**
 !app/runtime/runtime.py
@@ -316,6 +344,7 @@ parser/vendor/zip-9.1.3/src/read/**
 parser/vendor/zip-9.1.3/src/write/**
 !parser/vendor/zip-9.1.3/src/write/options.rs
 # APP-093: composer/prompt.rs embeds the two edition impl-2026-10-28.1 fixtures as few-shot examples (release build).
+# APP-094: storage/queries.rs embeds the library router sidecar. Both are copied by app/Dockerfile's native stage.
 !contracts/
 contracts/**
 !contracts/fixtures/
@@ -324,3 +353,6 @@ contracts/fixtures/**
 contracts/fixtures/impl-2026-10-28.1/**
 !contracts/fixtures/impl-2026-10-28.1/northstar.json
 !contracts/fixtures/impl-2026-10-28.1/spend-review.json
+!contracts/fixtures/library/
+contracts/fixtures/library/**
+!contracts/fixtures/library/catalog.json

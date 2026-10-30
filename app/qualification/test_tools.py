@@ -89,6 +89,133 @@ class SourceTests(unittest.TestCase):
                 self.assertTrue(any(name == src or name.startswith(src.rstrip("/") + "/") for src in copied),
                                 "%s is a compile-time input the native stage never copies" % name)
 
+def service_allowlist():
+    """The files the service image's context (the repository-root .dockerignore) admits."""
+    return check_image.allowlist((harness.REPOSITORY / ".dockerignore").read_text())
+
+
+def service_native_copies():
+    """The context-relative COPY sources of app/Dockerfile's native stage."""
+    dockerfile = (harness.APP / "Dockerfile").read_text()
+    native = dockerfile[dockerfile.index(" AS native"):]
+    native = native[:native.index("\nFROM ")]
+    return [src for line in native.splitlines() if line.startswith("COPY ") and "--from=" not in line
+            for src in line.split()[1:-1]]
+
+
+def compiled_rust_sources():
+    """Every .rs file under app/src that a release build compiles: the module tree from lib.rs
+    and main.rs minus every `#[cfg(test)]` module declaration (and its `#[path]`)."""
+    root = harness.APP / "src"
+    declaration = re.compile(r'(#\[cfg\(test\)\]\s*)?(?:#\[path = "([^"]+)"\]\s*)?(?:pub(?:\(crate\))? )?mod (\w+);')
+
+    def declared(path, text, tests_only):
+        module_dir = path.parent if path.name in ("mod.rs", "lib.rs", "main.rs") else path.parent / path.stem
+        for match in declaration.finditer(text):
+            gated, custom, name = match.group(1), match.group(2), match.group(3)
+            if tests_only or gated:
+                if custom:
+                    yield (path.parent / custom).resolve()
+                else:
+                    yield (module_dir / (name + ".rs")).resolve()
+                    yield (module_dir / name).resolve()
+
+    test_only = set()
+    for path in sorted(root.rglob("*.rs")):
+        test_only.update(declared(path, path.read_text(), False))
+    # A module declared inside a test-only file (any gate) is test-only too, transitively.
+    pending = [p for p in test_only if p.is_file()]
+    while pending:
+        path = pending.pop()
+        for child in declared(path, path.read_text(), True):
+            if child not in test_only:
+                test_only.add(child)
+                if child.is_file():
+                    pending.append(child)
+    compiled = []
+    for path in sorted(root.rglob("*.rs")):
+        resolved = path.resolve()
+        if resolved in test_only or any(parent in test_only for parent in resolved.parents):
+            continue
+        compiled.append(path.relative_to(harness.REPOSITORY).as_posix())
+    return compiled
+
+
+def release_includes(source):
+    """The repository-relative targets of include_str!/include_bytes! outside the file's inline
+    `#[cfg(test)] mod` block (conventionally the file's tail)."""
+    text = (harness.REPOSITORY / source).read_text()
+    cut = re.search(r"#\[cfg\(test\)\]\s*(?:pub(?:\(crate\))? )?mod \w+ \{", text)
+    if cut:
+        text = text[:cut.start()]
+    targets = []
+    for match in re.finditer(r'include_(?:str|bytes)!\(\s*"([^"]+)"', text):
+        target = ((harness.REPOSITORY / source).parent / match.group(1)).resolve()
+        targets.append(target.relative_to(harness.REPOSITORY).as_posix())
+    return targets
+
+
+class ServiceImageTests(unittest.TestCase):
+    """ADR-011 pitch integration (APP-096): the service image (app/Dockerfile, built from the
+    repository root under its .dockerignore) must carry every file the release build compiles
+    and every file that build embeds at compile time. The library agent found the catalog
+    sidecar (storage/queries.rs) and the composer fixtures (composer/prompt.rs) missing."""
+
+    def test_compiled_sources_are_derived_from_the_module_tree(self):
+        compiled = compiled_rust_sources()
+        for name in ("app/src/lib.rs", "app/src/main.rs", "app/src/query/canvas.rs", "app/src/composer/prompt.rs",
+                     "app/src/storage/queries.rs", "app/src/events/routes.rs"):
+            self.assertIn(name, compiled)
+        for name in ("app/src/query/canvas_tests.rs", "app/src/query/tests.rs", "app/src/composer/tests.rs",
+                     "app/src/storage/qualification.rs", "app/src/storage/managed_qualification/tests.rs",
+                     "app/src/auth_qualification/tests.rs", "app/src/admission/tests.rs"):
+            self.assertNotIn(name, compiled)
+
+    def test_service_context_admits_every_compiled_source_and_only_tracked_files(self):
+        import subprocess
+        names = set(service_allowlist())
+        tracked = set(subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=harness.REPOSITORY,
+                                     capture_output=True, text=True, check=True).stdout.splitlines())
+        self.assertEqual(sorted(names - tracked), [], "allowlisted but not tracked")
+        self.assertEqual(sorted(set(compiled_rust_sources()) - names), [], "compiled by the release build, absent from the context")
+        # The browser stage bundles app/admin/src whole: every tracked source there is in the context.
+        admin = {name for name in tracked if name.startswith("app/admin/src/") and not name.endswith(".md")}
+        self.assertEqual(sorted(admin - names), [], "admin sources the browser stage cannot see")
+        for required in ("app/runtime/runtime.py", "app/runtime/query_engine.py", "app/runtime/requirements.lock",
+                         "app/migrations/manifest.json", "app/certs/rds-global-bundle.pem",
+                         "contracts/fixtures/library/catalog.json", "contracts/fixtures/impl-2026-10-28.1/northstar.json"):
+            self.assertIn(required, names)
+        for excluded in ("app/runtime/admission_operator.py", "app/runtime/test_runtime.py", "app/operator/operator.py",
+                         "contracts/schema.json", "contracts/fixtures/library/expense-review.json"):
+            self.assertNotIn(excluded, names)
+        migrations = sorted("app/migrations/" + p.name for p in (harness.APP / "migrations").iterdir() if p.is_file())
+        self.assertEqual(sorted(name for name in names if name.startswith("app/migrations/")), migrations)
+
+    def test_the_service_native_stage_copies_every_compile_time_input(self):
+        """Every include_str!/include_bytes! of a compiled source must sit under some COPY source
+        of app/Dockerfile's native stage and be admitted by the context."""
+        copied = service_native_copies()
+        names = set(service_allowlist())
+        includes = {source: release_includes(source) for source in compiled_rust_sources()}
+        flat = sorted({target for targets in includes.values() for target in targets})
+        for required in ("contracts/fixtures/library/catalog.json", "contracts/fixtures/impl-2026-10-28.1/northstar.json",
+                         "contracts/fixtures/impl-2026-10-28.1/spend-review.json", "app/migrations/catalog-query.json"):
+            self.assertIn(required, flat)
+        # The inline test module's include (storage/definitions.rs, edition 2 fixture) is not a release input.
+        self.assertNotIn("contracts/fixtures/spend-review.json", flat)
+        for source, targets in includes.items():
+            for target in targets:
+                with self.subTest(source=source, target=target):
+                    self.assertTrue((harness.REPOSITORY / target).is_file(), target)
+                    self.assertIn(target, names, "%s is embedded by %s but the context excludes it" % (target, source))
+                    self.assertTrue(any(target == src or target.startswith(src.rstrip("/") + "/") for src in copied),
+                                    "%s is a compile-time input the native stage never copies" % target)
+        # Every COPY source exists in the context, so the build cannot fail on a missing path.
+        for src in copied:
+            with self.subTest(copy=src):
+                self.assertTrue(src in names or any(name.startswith(src.rstrip("/") + "/") for name in names), src)
+
+
 class AllowlistTests(unittest.TestCase):
     def test_directory_reincludes_are_not_files(self):
         names = check_image.allowlist()

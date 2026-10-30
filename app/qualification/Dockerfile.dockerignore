@@ -51,6 +51,8 @@
 !app/src/admission/digest.rs
 !app/src/admission/validate.rs
 !app/src/admission/tests.rs
+!app/src/query/canvas.rs
+!app/src/query/canvas_tests.rs
 !app/src/query/mod.rs
 !app/src/query/page.rs
 !app/src/query/receipt.rs
@@ -65,6 +67,7 @@
 !app/src/storage/catalog.rs
 !app/src/storage/command_qualification.rs
 !app/src/storage/commands.rs
+!app/src/storage/canvas_campaign.rs
 !app/src/storage/composer.rs
 !app/src/storage/composer_qualification.rs
 !app/src/storage/definition_qualification.rs

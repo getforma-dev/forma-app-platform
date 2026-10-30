@@ -12,19 +12,23 @@
 //! from a stranger); 403 `cross_site`; 413 `payload_too_large`; 422
 //! `invalid_intent` (the body); 429 `too_many_requests` with `Retry-After`
 //! (6 per member per hour, ADR-006 limits); 503 `composer_unavailable` when
-//! no model key is configured (neutral; everything else in the service
-//! works); 422 `could_not_compose` when the model's output was refused by
+//! no model key is configured and the organization is not a demo one
+//! (neutral; everything else in the service works); 422 `could_not_compose` when the model's output was refused by
 //! admission on every attempt, the model failed, or publication lost its
 //! race (neutral; nothing of the refused output is disclosed); 503
 //! `unavailable` for a store outage. The route runs under its own deadline
 //! (`COMPOSE_DEADLINE`, `http::uniform_with`) because it waits on the model.
 //!
-//! Order: fetch metadata → body bound → session → intent shape → member
-//! limit → [`compose_for`]: composer enabled → context (one fenced read) →
-//! router → (instantiate | adapt | generate) → draft → publish → save. The
+//! Order (APP-093 review M1: nothing of the long deadline is spent before the
+//! member is known): fetch metadata → session → composer available → member
+//! limit → body (bounded in size and read under `http::HANDLER_DEADLINE`, so
+//! a stalled body holds nothing past 5 s) → intent shape → [`compose_for`]:
+//! context (one fenced read) → router → (instantiate | adapt | generate) →
+//! draft → publish → save. In a demo organization (`Composer::demo_for`) a
+//! rehearsed intent skips the router model (`Composer::route`). The
 //! structured log records identities, origin, codes, confidence and
 //! per-step durations; never the intent text, a definition or the key.
-use super::{plan::Decision, Composer, GenerationFailure, Origin};
+use super::{plan::Decision, Composer, GenerationFailure, Origin, COMPOSE_DEADLINE};
 use crate::{
     auth::{cookies, csrf, Auth},
     http::{self, limits},
@@ -100,11 +104,13 @@ pub(crate) async fn compose_for(
     intent: &str,
 ) -> Result<Composed, Refused> {
     let started = Instant::now();
+    let deadline = tokio::time::Instant::now() + COMPOSE_DEADLINE;
     let refused = |code: &'static str, origin: Option<Origin>, refusal: Refused| {
         log_refused(member, code, origin, started);
         Err(refusal)
     };
-    if !composer.enabled() {
+    let demo = composer.demo_for(member.organization());
+    if !composer.available_for(member.organization()) {
         return refused("composer_unavailable", None, Refused::ComposerUnavailable);
     }
     let context = match stores.workspace.composer_context(member).await {
@@ -118,7 +124,7 @@ pub(crate) async fn compose_for(
 
     // Step 1: the router.
     let routed = Instant::now();
-    let (decision, confidence) = match composer.route(intent, &context.library).await {
+    let (decision, confidence) = match composer.route(intent, &context.library, demo).await {
         Ok(decision) => decision,
         Err(error) => {
             // The library cannot be consulted; generation is still possible.
@@ -198,6 +204,7 @@ pub(crate) async fn compose_for(
                     &context.sources,
                     member.organization(),
                     &authoring.app,
+                    deadline,
                 )
                 .await
             {
@@ -232,6 +239,11 @@ pub(crate) async fn compose_for(
                         Refused::CouldNotCompose("admission_refused"),
                     )
                 }
+                Err(GenerationFailure::OutOfTime) => refused(
+                    "out_of_time",
+                    Some(Origin::Generated),
+                    Refused::CouldNotCompose("out_of_time"),
+                ),
                 Err(GenerationFailure::Model(error)) => refused(
                     error.code(),
                     Some(Origin::Generated),
@@ -331,6 +343,17 @@ async fn draft_publish_save(
         duration_ms = elapsed_ms(step),
         "composed definition published"
     );
+    // Review M5: from here to the saved work, a cut (the route deadline, a
+    // dropped connection) or a refusal leaves a published revision without a
+    // work. The guard announces it in the log on every exit but a save.
+    let mut orphan = PublishedGuard {
+        organization: member.organization().to_owned(),
+        app: authoring.app.clone(),
+        revision: revision.revision.clone(),
+        publication: publication.publication_id.clone(),
+        origin,
+        armed: true,
+    };
     // The published inputs are the admitted content's; bind them.
     let Ok(content) = crate::admission::decode(&planned.admitted.canonical) else {
         return Err(Refused::StoreUnavailable);
@@ -340,7 +363,7 @@ async fn draft_publish_save(
     let Some(bindings) = composer_bindings(&inputs, &schemas, &context.sources) else {
         return refused("unbindable", Refused::CouldNotCompose("unbindable"));
     };
-    save(
+    let saved = save(
         stores,
         member,
         &authoring.app,
@@ -351,7 +374,40 @@ async fn draft_publish_save(
         intent,
         started,
     )
-    .await
+    .await;
+    if saved.is_ok() {
+        orphan.armed = false;
+    }
+    saved
+}
+
+/// A published revision not yet saved as a work (review M5). Dropped armed
+/// (a refusal, the route deadline cancelling the future, a lost connection),
+/// it logs `composer.publication_orphaned` with the ids, so the orphan is
+/// announced and the operator can see it; a drafted-but-unsaved publication is
+/// harmless to readers (no work names it) and is recorded as APP-097 debt.
+struct PublishedGuard {
+    organization: String,
+    app: String,
+    revision: String,
+    publication: String,
+    origin: Origin,
+    armed: bool,
+}
+impl Drop for PublishedGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            tracing::warn!(
+                event = "composer.publication_orphaned",
+                organization_id = self.organization,
+                app_id = self.app,
+                revision_id = self.revision,
+                publication_id = self.publication,
+                origin = self.origin.as_str(),
+                "published revision has no saved work"
+            );
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -372,9 +428,9 @@ async fn save(
         .await
     {
         Ok(work) => {
-            // TODO(merge pivot/realtime, APP-094/095): notify the canvas stream here with
-            // `genui::events::hub().app_placed(member.organization(), app, &work.work);`
-            // (the hub lives on `pivot/realtime`; the orchestrator wires it at merge).
+            // APP-095: the organization's event stream learns that an app was
+            // placed (ids only; every subscriber is re-authorized at delivery).
+            crate::events::hub().app_placed(member.organization(), app, &work.work);
             tracing::info!(
                 event = "composer.composed",
                 organization_id = member.organization(),
@@ -503,25 +559,43 @@ fn json_response(body: Vec<u8>) -> Response {
     response
 }
 
-/// `POST /v1/compose`.
+/// How a bounded body read ended short of bytes.
+#[derive(Debug, Eq, PartialEq)]
+pub(super) enum BodyRefused {
+    /// More than the bound, or the stream failed.
+    TooLarge,
+    /// The bytes did not arrive within the handler deadline (review M1).
+    Stalled,
+}
+
+/// The intent body: at most `COMPOSE_BODY_LIMIT` bytes, arriving within
+/// `deadline`; a caller that trickles or stalls holds the route no longer
+/// than any other handler.
+pub(super) async fn read_body(
+    body: axum::body::Body,
+    deadline: std::time::Duration,
+) -> Result<axum::body::Bytes, BodyRefused> {
+    match tokio::time::timeout(deadline, to_bytes(body, COMPOSE_BODY_LIMIT)).await {
+        Ok(Ok(bytes)) => Ok(bytes),
+        Ok(Err(_)) => Err(BodyRefused::TooLarge),
+        Err(_) => Err(BodyRefused::Stalled),
+    }
+}
+
+/// `POST /v1/compose` (order in the module notes).
 async fn compose(State(state): State<Arc<Compose>>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     if !csrf::same_origin(&parts.headers, state.auth.origin()) {
         return http::cross_site();
     }
-    let Ok(bytes) = to_bytes(body, COMPOSE_BODY_LIMIT).await else {
-        return http::payload_too_large();
-    };
+    // Review M1: the session first, so an anonymous caller spends nothing of
+    // the long deadline (the body is not read until the member is known).
     let member = match member(&state.auth, &parts.headers).await {
         Ok(member) => member,
         Err(refusal) => return refusal,
     };
     let started = Instant::now();
-    let Some(intent) = body_intent(&bytes).filter(|_| parts.uri.query().is_none()) else {
-        log_refused(&member, "invalid_intent", None, started);
-        return problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_intent");
-    };
-    if !state.composer.enabled() {
+    if !state.composer.available_for(member.organization()) {
         log_refused(&member, "composer_unavailable", None, started);
         return problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
     }
@@ -530,6 +604,23 @@ async fn compose(State(state): State<Arc<Compose>>, request: Request) -> Respons
         log_refused(&member, "too_many_requests", None, started);
         return http::too_many_requests(retry_after);
     }
+    let bytes = match read_body(body, http::HANDLER_DEADLINE).await {
+        Ok(bytes) => bytes,
+        Err(BodyRefused::TooLarge) => {
+            log_refused(&member, "payload_too_large", None, started);
+            return http::payload_too_large();
+        }
+        Err(BodyRefused::Stalled) => {
+            // A body that never arrives is answered as any refusal of this
+            // member's request shape: neutrally, with nothing composed.
+            log_refused(&member, "body_stalled", None, started);
+            return http::not_found();
+        }
+    };
+    let Some(intent) = body_intent(&bytes).filter(|_| parts.uri.query().is_none()) else {
+        log_refused(&member, "invalid_intent", None, started);
+        return problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_intent");
+    };
     let Some(stores) = state.auth.stores.as_ref() else {
         return http::not_found();
     };

@@ -26,7 +26,10 @@ use super::{
 };
 use crate::admission::{self, digest};
 use serde_json::Value;
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 use tokio::time::Instant;
 use tokio_postgres::Row;
 
@@ -43,6 +46,36 @@ const SOURCE_CANDIDATES: i64 = 64;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoringApp {
     pub app: String,
+}
+
+/// An app the member owns, for the authoring choice (`choose_authoring`).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthoringCandidate {
+    pub app: String,
+    /// The definition digest of its newest publication; `None`: never published.
+    pub newest: Option<String>,
+    /// The member holds `edit_definition` and `run` on it.
+    pub granted: bool,
+}
+
+/// The authoring app among the member's owned apps (in id order): the first
+/// granted app never published, else the first granted app whose newest
+/// publication is not a library definition (`sidecar`); never a library app.
+pub fn choose_authoring(
+    candidates: &[AuthoringCandidate],
+    sidecar: &BTreeSet<String>,
+) -> Option<String> {
+    let granted = || candidates.iter().filter(|c| c.granted);
+    granted()
+        .find(|c| c.newest.is_none())
+        .or_else(|| {
+            granted().find(|c| {
+                c.newest
+                    .as_ref()
+                    .is_some_and(|digest| !sidecar.contains(digest))
+            })
+        })
+        .map(|c| c.app.clone())
 }
 
 /// One live source revision the member may read, as the typed input
@@ -220,18 +253,27 @@ impl Workspace {
             let org = &request.organization;
             let principal = &request.principal;
 
-            // The authoring app: owned, with edit_definition and run.
-            let mut authoring = None;
-            let owned = permit.transaction().query("SELECT app_id::text FROM genui.apps WHERE organization_id=$1::text::uuid AND owner_principal_id=$2::text::uuid ORDER BY app_id", &[org,principal]).await?;
+            // The authoring app: owned, with edit_definition and run, and
+            // never a library app (APP-093 review M2: a generated revision
+            // published onto a library app displaces that library entry in
+            // this catalog). An owned app that has never been published (the
+            // dedicated authoring shell `grant-library-access` creates) is
+            // preferred; then one whose newest publication is not a library
+            // definition; a library app is never chosen.
+            let sidecar: BTreeSet<String> = super::queries::library_sidecar()?
+                .iter()
+                .filter_map(|entry| entry.get("definition_digest")?.as_str().map(str::to_owned))
+                .collect();
+            let mut candidates = Vec::new();
+            let owned = permit.transaction().query("SELECT a.app_id::text, (SELECT p.definition_digest::text FROM genui.publications p WHERE p.organization_id=a.organization_id AND p.app_id=a.app_id ORDER BY p.publication_sequence DESC LIMIT 1) FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.owner_principal_id=$2::text::uuid ORDER BY a.app_id", &[org,principal]).await?;
             for row in &owned {
                 let app = text(row, 0)?;
-                if granted(permit.also(Action::EditDefinition, Resource::App(&app)).await)?
-                    && granted(permit.also(Action::Run, Resource::App(&app)).await)?
-                {
-                    authoring = Some(AuthoringApp { app });
-                    break;
-                }
+                let newest: Option<String> = row.try_get(1).map_err(|_| Error::Unavailable)?;
+                let granted = granted(permit.also(Action::EditDefinition, Resource::App(&app)).await)?
+                    && granted(permit.also(Action::Run, Resource::App(&app)).await)?;
+                candidates.push(AuthoringCandidate { app, newest, granted });
             }
+            let authoring = choose_authoring(&candidates, &sidecar).map(|app| AuthoringApp { app });
 
             let policy = permit.transaction().query("SELECT policy_id::text FROM genui.publication_policies WHERE organization_id=$1::text::uuid AND kind='owner_publish' ORDER BY policy_version DESC,policy_id LIMIT 1", &[org]).await?;
             let owner_publish_policy = match policy.first() {

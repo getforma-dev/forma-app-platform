@@ -25,10 +25,14 @@ COPY contracts/fixtures /source/contracts/fixtures
 COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml
 COPY spikes/APP-006/src /source/spikes/APP-006/src
 # The executable path comes from Cargo's artifact metadata (the library's
-# test-profile artifact), never a guessed filename.
+# test-profile artifact), never a guessed filename. ADR-011 (APP-092): the
+# cfg(test) canvas campaign derives rust_embed over admin/dist, whose derive
+# refuses a missing folder at compile time; this image builds no browser
+# bundle and never runs that campaign, so the folder exists empty here.
 RUN --mount=type=cache,id=genui-qualification-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=genui-qualification-target-${TARGETARCH},target=/source/app/target \
     set -eu; \
+    mkdir -p /source/app/admin/dist; \
     cargo test --no-run --locked --lib --message-format=json > /source/cargo-artifacts.jsonl; \
     grep '"reason":"compiler-artifact"' /source/cargo-artifacts.jsonl \
       | grep '"name":"genui"' | grep '"kind":\["lib"\]' | grep '"test":true' \

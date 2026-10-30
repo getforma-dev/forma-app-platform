@@ -40,6 +40,37 @@ pub enum Decision {
     Generate,
 }
 
+/// ADR-011 demo mode (APP-098): the deterministic router over the same
+/// catalog the model would see, for a demo organization's rehearsed
+/// intents. Scores each library app by the intent's words (four letters or
+/// more, lowercased) found in its title and description; the best app with
+/// at least one hit is retrieved (`demo`); no hit is `Generate`
+/// (`demo_no_match`, so the real model is consulted). Never a title the
+/// intent wrote, never an app outside the catalog.
+pub fn demo_route(intent: &str, library: &[LibraryApp]) -> (Decision, &'static str) {
+    let words: Vec<String> = intent
+        .to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| word.chars().count() >= 4)
+        .map(str::to_owned)
+        .collect();
+    let mut best: Option<(usize, usize)> = None;
+    for (index, app) in library.iter().enumerate() {
+        let haystack = format!("{} {}", app.title, app.description).to_lowercase();
+        let score = words
+            .iter()
+            .filter(|word| haystack.contains(word.as_str()))
+            .count();
+        if score > 0 && best.is_none_or(|(_, top)| score > top) {
+            best = Some((index, score));
+        }
+    }
+    match best {
+        Some((index, _)) => (Decision::Retrieve { index }, "demo"),
+        None => (Decision::Generate, "demo_no_match"),
+    }
+}
+
 /// Decodes the router's text. Anything outside the closed shape, an unknown
 /// id or an unknown confidence is `Generate` (the slow path, never an
 /// error the member sees). `confidence` is reported for the log only.

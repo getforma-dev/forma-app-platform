@@ -77,6 +77,22 @@ impl Model for Script {
     }
 }
 
+/// A route deadline that bounds nothing in these tests.
+fn far() -> tokio::time::Instant {
+    tokio::time::Instant::now() + COMPOSE_DEADLINE
+}
+/// A body whose bytes never arrive.
+struct Stalled;
+impl futures_core::Stream for Stalled {
+    type Item = Result<axum::body::Bytes, std::io::Error>;
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        std::task::Poll::Pending
+    }
+}
+
 fn composer(script: &Arc<Script>) -> Composer {
     Composer::new(
         Some(script.clone() as Arc<dyn Model>),
@@ -175,6 +191,7 @@ fn a_valid_generated_definition_is_admitted_and_labeled_generated() {
             &sources(NORTHSTAR),
             ORG,
             APP,
+            far(),
         ))
         .unwrap();
     assert_eq!(generated.planned.origin, Origin::Generated);
@@ -222,7 +239,13 @@ fn hostile_outputs_are_refused_by_admission_and_retries_carry_codes_only() {
         .to_string()),
     ]);
     let failure = runtime()
-        .block_on(composer(&script).generate("x".repeat(3).as_str(), &sources(NORTHSTAR), ORG, APP))
+        .block_on(composer(&script).generate(
+            "x".repeat(3).as_str(),
+            &sources(NORTHSTAR),
+            ORG,
+            APP,
+            far(),
+        ))
         .unwrap_err();
     assert_eq!(
         failure,
@@ -306,25 +329,27 @@ fn the_composers_own_codes_cover_prose_invented_inputs_and_unrunnable_views() {
 fn a_model_failure_ends_generation_and_an_absent_key_disables_it() {
     let script = Script::new(vec![Err(ModelError::Timeout)]);
     let failure = runtime()
-        .block_on(composer(&script).generate("abc", &sources(SPEND), ORG, APP))
+        .block_on(composer(&script).generate("abc", &sources(SPEND), ORG, APP, far()))
         .unwrap_err();
     assert_eq!(failure, GenerationFailure::Model(ModelError::Timeout));
     assert_eq!(script.requests().len(), 1);
     let disabled = Composer::new(None, "r", "g");
     assert!(!disabled.enabled());
     let failure = runtime()
-        .block_on(disabled.generate("abc", &sources(SPEND), ORG, APP))
+        .block_on(disabled.generate("abc", &sources(SPEND), ORG, APP, far()))
         .unwrap_err();
     assert_eq!(failure, GenerationFailure::Model(ModelError::Unavailable));
     let library = [library_app(SPEND, APP)];
     assert_eq!(
         runtime()
-            .block_on(disabled.route("abc", &library))
+            .block_on(disabled.route("abc", &library, false))
             .unwrap_err(),
         ModelError::Unavailable
     );
     assert_eq!(
-        runtime().block_on(disabled.route("abc", &[])).unwrap(),
+        runtime()
+            .block_on(disabled.route("abc", &[], false))
+            .unwrap(),
         (Decision::Generate, "empty_library")
     );
 }
@@ -401,7 +426,7 @@ fn the_router_decides_only_within_the_catalog() {
         r#"{"choice":"00000000-0000-4000-8000-0000000000c9","confidence":"high","reason":"fits","title":"Spend"}"#.into(),
     )]);
     let routed = runtime()
-        .block_on(composer(&script).route("review spend", &library))
+        .block_on(composer(&script).route("review spend", &library, false))
         .unwrap();
     assert_eq!(routed, (Decision::Retrieve { index: 1 }, "high"));
     assert_eq!(script.requests()[0].model, "router-model");
@@ -605,8 +630,11 @@ fn the_route_refuses_in_order_and_composes_under_the_uniform_404() {
         assert_eq!(status, StatusCode::FORBIDDEN);
         assert_eq!(headers["content-type"], "application/problem+json");
         assert_eq!(bytes, br#"{"code":"cross_site","status":403}"#);
-        // Then the bound.
-        let (status, _, _) = send(
+        // Then the session (review M1: before the body is read, so an
+        // anonymous oversized or stalled body costs nothing): anonymous is
+        // the uniform 404, identical to an unknown path and to a wrong
+        // method, with no Allow header.
+        let (status, _, oversized) = send(
             &app,
             "POST",
             "/v1/compose",
@@ -614,9 +642,21 @@ fn the_route_refuses_in_order_and_composes_under_the_uniform_404() {
             vec![b'x'; routes::COMPOSE_BODY_LIMIT + 1],
         )
         .await;
-        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
-        // Then the session: anonymous is the uniform 404, identical to an
-        // unknown path and to a wrong method, with no Allow header.
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let stalled = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            let mut request = Request::builder().method("POST").uri("/v1/compose");
+            for (name, value) in &same {
+                request = request.header(*name, *value);
+            }
+            app.clone()
+                .oneshot(request.body(Body::from_stream(Stalled)).unwrap())
+                .await
+                .unwrap()
+                .status()
+        })
+        .await
+        .expect("an anonymous stalled body is refused without waiting on it");
+        assert_eq!(stalled, StatusCode::NOT_FOUND);
         let (status, headers, anonymous) =
             send(&app, "POST", "/v1/compose", &same, body.clone()).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
@@ -630,6 +670,7 @@ fn the_route_refuses_in_order_and_composes_under_the_uniform_404() {
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(anonymous, wrong_method);
         assert_eq!(anonymous, unknown);
+        assert_eq!(anonymous, oversized);
         // A stale cookie without a store is the same 404.
         let (status, _, stale) = send(
             &app,
@@ -663,6 +704,159 @@ fn the_body_is_one_intent_of_bounded_shape() {
     assert_eq!(intent(""), None);
 }
 
+#[test]
+fn the_body_read_is_bounded_in_size_and_time() {
+    runtime().block_on(async {
+        let short = std::time::Duration::from_millis(50);
+        assert_eq!(
+            routes::read_body(Body::from_stream(Stalled), short).await,
+            Err(routes::BodyRefused::Stalled)
+        );
+        assert_eq!(
+            routes::read_body(
+                Body::from(vec![b'x'; routes::COMPOSE_BODY_LIMIT + 1]),
+                short
+            )
+            .await,
+            Err(routes::BodyRefused::TooLarge)
+        );
+        assert_eq!(
+            routes::read_body(Body::from(r#"{"intent":"abc"}"#), short)
+                .await
+                .unwrap(),
+            r#"{"intent":"abc"}"#
+        );
+        assert!(http::HANDLER_DEADLINE < COMPOSE_DEADLINE);
+    });
+}
+
+#[test]
+fn the_budgets_fit_the_route_deadline_and_an_attempt_needs_room() {
+    // Review M5: the router, every generation attempt and the storage reserve
+    // fit the route; no attempt is cut between publish and save.
+    assert!(
+        ROUTER_BUDGET + GENERATION_BUDGET * (MAX_GENERATION_ATTEMPTS as u32) + STORAGE_RESERVE
+            <= COMPOSE_DEADLINE
+    );
+    assert!(MIN_GENERATION_ATTEMPT <= GENERATION_BUDGET);
+    let now = tokio::time::Instant::now();
+    let seconds = |n: u64| now + std::time::Duration::from_secs(n);
+    assert_eq!(attempt_budget(now, seconds(120)), Some(GENERATION_BUDGET));
+    assert_eq!(
+        attempt_budget(now, seconds(20)),
+        Some(std::time::Duration::from_secs(10)),
+        "cut to what remains before the reserve"
+    );
+    assert_eq!(
+        attempt_budget(now, seconds(14)),
+        None,
+        "less than one attempt"
+    );
+    assert_eq!(attempt_budget(now, seconds(10)), None);
+    assert_eq!(attempt_budget(seconds(1), now), None, "past the deadline");
+    // No room: nothing is called and the failure says so.
+    let script = Script::new(vec![Ok("unused".into())]);
+    let outcome = runtime().block_on(composer(&script).generate(
+        "abc",
+        &sources(SPEND),
+        ORG,
+        APP,
+        tokio::time::Instant::now() + std::time::Duration::from_secs(12),
+    ));
+    assert_eq!(outcome.unwrap_err(), GenerationFailure::OutOfTime);
+    assert!(script.requests().is_empty());
+}
+
+#[test]
+fn demo_organizations_answer_rehearsed_intents_from_the_catalog_and_nobody_else_does() {
+    let library = [
+        library_app(NORTHSTAR, "00000000-0000-4000-8000-000000000065"),
+        library_app(SPEND, "00000000-0000-4000-8000-0000000000c9"),
+    ];
+    let demo = "00000000-0000-4000-8000-00000000000d";
+    // The deterministic router: keywords of the intent in the catalog's
+    // titles and descriptions, never a title or an app the intent wrote.
+    assert_eq!(
+        plan::demo_route("Review expenses over $200", &library),
+        (Decision::Retrieve { index: 1 }, "demo")
+    );
+    assert_eq!(
+        plan::demo_route("Northstar investigation of egress", &library),
+        (Decision::Retrieve { index: 0 }, "demo")
+    );
+    assert_eq!(
+        plan::demo_route("zzz qqq", &library),
+        (Decision::Generate, "demo_no_match")
+    );
+    assert_eq!(
+        plan::demo_route("Review expenses", &[]),
+        (Decision::Generate, "demo_no_match")
+    );
+    // The environment value: lowercase UUIDs only.
+    assert_eq!(
+        demo_organizations(&format!(" {demo}, not-a-uuid,{},", demo.to_uppercase())),
+        [demo.to_owned()].into_iter().collect()
+    );
+    assert!(demo_organizations("").is_empty());
+    // Scoping: without a model, only the demo organization composes.
+    let disabled = Composer::new(None, "r", "g").with_demo_organizations([demo.to_owned()]);
+    assert!(!disabled.enabled());
+    assert!(disabled.demo_for(demo) && !disabled.demo_for(ORG));
+    assert!(disabled.available_for(demo) && !disabled.available_for(ORG));
+    assert!(
+        !Composer::new(None, "r", "g").available_for(demo),
+        "off by default"
+    );
+    runtime().block_on(async {
+        // Demo organization: the rehearsed intent needs no model at all; an
+        // unrehearsed one still needs the model.
+        assert_eq!(
+            disabled
+                .route("Review expenses over $200", &library, true)
+                .await,
+            Ok((Decision::Retrieve { index: 1 }, "demo"))
+        );
+        assert_eq!(
+            disabled.route("zzz qqq", &library, true).await,
+            Err(ModelError::Unavailable)
+        );
+        // A real organization: never the canned path.
+        assert_eq!(
+            disabled
+                .route("Review expenses over $200", &library, false)
+                .await,
+            Err(ModelError::Unavailable)
+        );
+        let reply =
+            r#"{"choice":"00000000-0000-4000-8000-000000000065","confidence":"high","reason":"x"}"#;
+        let script = Script::new(vec![Ok(reply.into()), Ok(reply.into())]);
+        let with_model = composer(&script).with_demo_organizations([demo.to_owned()]);
+        // Demo organization with a model: the rehearsed intent never reaches it...
+        assert_eq!(
+            with_model
+                .route("Review expenses over $200", &library, true)
+                .await,
+            Ok((Decision::Retrieve { index: 1 }, "demo"))
+        );
+        assert!(script.requests().is_empty());
+        // ...an unrehearsed one does, and the model decides as always.
+        assert_eq!(
+            with_model.route("zzz qqq", &library, true).await,
+            Ok((Decision::Retrieve { index: 0 }, "high"))
+        );
+        assert_eq!(script.requests().len(), 1);
+        // A real organization with a model: the model decides, even for the
+        // rehearsed words.
+        assert_eq!(
+            with_model
+                .route("Review expenses over $200", &library, false)
+                .await,
+            Ok((Decision::Retrieve { index: 0 }, "high"))
+        );
+        assert_eq!(script.requests().len(), 2);
+    });
+}
+
 /// A one-shot smoke against the real endpoint. Ignored: it runs only when
 /// `app/scripts/composer_smoke.sh` exports `ANTHROPIC_API_KEY` into this
 /// process from the repository's gitignored `.env` (the Haiku model for
@@ -684,12 +878,20 @@ fn real_model_smoke() {
         ];
         let started = std::time::Instant::now();
         let routed = composer
-            .route("Review expenses over $200 and record a decision on each", &library)
+            .route(
+                "Review expenses over $200 and record a decision on each",
+                &library,
+                false,
+            )
             .await;
         eprintln!("smoke: routed={routed:?} in {} ms", started.elapsed().as_millis());
         let started = std::time::Instant::now();
         let routed = composer
-            .route("Which destinations receive the most bytes each minute?", &library)
+            .route(
+                "Which destinations receive the most bytes each minute?",
+                &library,
+                false,
+            )
             .await;
         eprintln!("smoke: routed={routed:?} in {} ms", started.elapsed().as_millis());
         let started = std::time::Instant::now();
@@ -699,6 +901,7 @@ fn real_model_smoke() {
                 &sources(NORTHSTAR),
                 ORG,
                 APP,
+                far(),
             )
             .await;
         match &generated {

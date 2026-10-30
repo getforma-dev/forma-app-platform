@@ -35,7 +35,8 @@ pub mod routes;
 use crate::storage::{LibraryApp, ReadableSource};
 use model::{Model, ModelError, ModelRequest};
 use plan::{Decision, Planned, Refusal};
-use std::{sync::Arc, time::Duration};
+use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use tokio::time::Instant;
 
 #[cfg(test)]
 mod tests;
@@ -62,11 +63,30 @@ impl Origin {
 pub const MAX_GENERATION_ATTEMPTS: usize = 3;
 /// The router call's budget (the fast path targets about 1.5 s).
 pub const ROUTER_BUDGET: Duration = Duration::from_secs(12);
-/// One generation attempt's budget.
-pub const GENERATION_BUDGET: Duration = Duration::from_secs(60);
+/// One generation attempt's budget (APP-093 review M5: the router, three
+/// attempts and the storage reserve fit the route deadline).
+pub const GENERATION_BUDGET: Duration = Duration::from_secs(32);
+/// Time kept for draft, publish and save after the last model call, so the
+/// route deadline never cuts between publish and save.
+pub const STORAGE_RESERVE: Duration = Duration::from_secs(10);
+/// A generation attempt is not started with less than this left for it.
+pub const MIN_GENERATION_ATTEMPT: Duration = Duration::from_secs(5);
 /// The whole route, every model call and storage operation included
 /// (the member's request times out at this bound).
 pub const COMPOSE_DEADLINE: Duration = Duration::from_secs(120);
+/// ADR-011 demo mode (APP-098 demo shortcuts register; Victor, 2026-10-30:
+/// the pitch is a concept-car demo): the organization ids (comma-separated
+/// UUIDs) whose members' rehearsed intents are answered instantly and
+/// deterministically from the catalog (`plan::demo_route`: the intent's
+/// words against the library titles and descriptions) without a model call;
+/// text that matches nothing goes to the real model as everywhere else.
+/// Empty or unset by default: no organization; the pitch deploy's stack
+/// names the synthetic demo organization only, so a real beta organization
+/// behaves exactly as without it. Everything the canned path does is the
+/// retrieved path: it instantiates an admitted library app, labeled
+/// `retrieved`; nothing is generated and nothing bypasses admission,
+/// authorization, the audited command path, receipts or live updates.
+pub const DEMO_ORGANIZATIONS_ENV: &str = "GENUI_DEMO_ORGANIZATIONS";
 const ROUTER_MAX_TOKENS: u32 = 300;
 const GENERATION_MAX_TOKENS: u32 = 8000;
 
@@ -75,6 +95,8 @@ pub struct Composer {
     model: Option<Arc<dyn Model>>,
     router_model: String,
     generation_model: String,
+    /// `DEMO_ORGANIZATIONS_ENV`: the demo organizations (module notes).
+    demo: BTreeSet<String>,
 }
 
 /// Why generation ended without a definition.
@@ -83,6 +105,9 @@ pub enum GenerationFailure {
     /// Every attempt was refused; the codes, in order (for the log).
     Refused(Vec<&'static str>),
     Model(ModelError),
+    /// The route deadline left no room for an attempt (review M5): nothing
+    /// was called, so nothing is cut between publish and save.
+    OutOfTime,
 }
 
 /// A generation that ended in a definition, with the codes of the refused
@@ -99,11 +124,19 @@ impl Composer {
             model,
             router_model: router_model.to_owned(),
             generation_model: generation_model.to_owned(),
+            demo: BTreeSet::new(),
         }
     }
+    /// The demo organizations (module notes; `DEMO_ORGANIZATIONS_ENV`).
+    pub fn with_demo_organizations<I: IntoIterator<Item = String>>(mut self, ids: I) -> Self {
+        self.demo = ids.into_iter().collect();
+        self
+    }
     /// The environment's composer: the key from `model::KEY_ENV` only (none
-    /// or unusable: disabled; the rest of the service is unaffected) and the
-    /// model names, overridable.
+    /// or unusable: disabled; the rest of the service is unaffected), the
+    /// model names, overridable, and the demo organizations
+    /// (`DEMO_ORGANIZATIONS_ENV`: comma-separated lowercase UUIDs; anything
+    /// else in the list is ignored).
     pub fn from_env() -> Self {
         let model = model::Anthropic::from_env().map(|client| Arc::new(client) as Arc<dyn Model>);
         let name = |variable: &str, default: &str| {
@@ -117,9 +150,22 @@ impl Composer {
             &name(model::ROUTER_MODEL_ENV, model::DEFAULT_ROUTER_MODEL),
             &name(model::GENERATION_MODEL_ENV, model::DEFAULT_GENERATION_MODEL),
         )
+        .with_demo_organizations(demo_organizations(
+            &std::env::var(DEMO_ORGANIZATIONS_ENV).unwrap_or_default(),
+        ))
     }
+    /// A model is configured.
     pub fn enabled(&self) -> bool {
         self.model.is_some()
+    }
+    /// Whether this organization is a demo organization (module notes).
+    pub fn demo_for(&self, organization: &str) -> bool {
+        self.demo.contains(organization)
+    }
+    /// The route may compose for this organization: a model, or the demo
+    /// organization's canned path.
+    pub fn available_for(&self, organization: &str) -> bool {
+        self.enabled() || self.demo_for(organization)
     }
     pub fn router_model(&self) -> &str {
         &self.router_model
@@ -130,13 +176,23 @@ impl Composer {
 
     /// Step 1: the router's decision over the catalog, and its confidence
     /// word for the log. An empty library is `Generate` without a call.
+    ///
+    /// `demo` (the caller's `demo_for(organization)`): a rehearsed intent is
+    /// answered from the catalog without a model call (`plan::demo_route`,
+    /// confidence `demo`); an intent matching nothing goes to the model.
     pub async fn route(
         &self,
         intent: &str,
         library: &[LibraryApp],
+        demo: bool,
     ) -> Result<(Decision, &'static str), ModelError> {
         if library.is_empty() {
             return Ok((Decision::Generate, "empty_library"));
+        }
+        if demo {
+            if let (Decision::Retrieve { index }, _) = plan::demo_route(intent, library) {
+                return Ok((Decision::Retrieve { index }, "demo"));
+            }
         }
         let model = self.model.as_ref().ok_or(ModelError::Unavailable)?;
         let request = ModelRequest {
@@ -152,12 +208,18 @@ impl Composer {
 
     /// Step 2: generation with at most two retries, each carrying only the
     /// previous refusal's code and its fixed hint.
+    ///
+    /// `deadline` is the route's (review M5): an attempt starts only while
+    /// at least `MIN_GENERATION_ATTEMPT` remains after `STORAGE_RESERVE`, with
+    /// a budget cut to what remains, so the route deadline never falls
+    /// between publish and save.
     pub async fn generate(
         &self,
         intent: &str,
         sources: &[ReadableSource],
         organization: &str,
         app: &str,
+        deadline: Instant,
     ) -> Result<Generated, GenerationFailure> {
         let model = self
             .model
@@ -170,6 +232,13 @@ impl Composer {
         let mut refused: Vec<&'static str> = Vec::new();
         let mut previous: Option<Refusal> = None;
         for _ in 0..MAX_GENERATION_ATTEMPTS {
+            let Some(budget) = attempt_budget(Instant::now(), deadline) else {
+                return Err(if refused.is_empty() {
+                    GenerationFailure::OutOfTime
+                } else {
+                    GenerationFailure::Refused(refused)
+                });
+            };
             let feedback = previous
                 .as_ref()
                 .map(|refusal| (refusal.code, prompt::hint(refusal.code)));
@@ -178,7 +247,7 @@ impl Composer {
                 system: prompt::generation_system().to_owned(),
                 user: prompt::generation_user(intent, &contracts, feedback),
                 max_tokens: GENERATION_MAX_TOKENS,
-                budget: GENERATION_BUDGET,
+                budget,
             };
             let reply = model
                 .complete(&request)
@@ -194,6 +263,33 @@ impl Composer {
         }
         Err(GenerationFailure::Refused(refused))
     }
+}
+
+/// `DEMO_ORGANIZATIONS_ENV`'s value: the lowercase UUIDs it lists, nothing else.
+pub fn demo_organizations(value: &str) -> BTreeSet<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|id| uuid_shaped(id))
+        .map(str::to_owned)
+        .collect()
+}
+fn uuid_shaped(id: &str) -> bool {
+    id.len() == 36
+        && id.bytes().enumerate().all(|(i, b)| match i {
+            8 | 13 | 18 | 23 => b == b'-',
+            _ => b.is_ascii_digit() || (b'a'..=b'f').contains(&b),
+        })
+}
+
+/// The budget of a generation attempt started `now` under the route
+/// `deadline`: `GENERATION_BUDGET`, cut to what remains before the storage
+/// reserve; `None` when less than `MIN_GENERATION_ATTEMPT` remains.
+pub fn attempt_budget(now: Instant, deadline: Instant) -> Option<Duration> {
+    let remaining = deadline
+        .checked_duration_since(now)?
+        .checked_sub(STORAGE_RESERVE)?;
+    (remaining >= MIN_GENERATION_ATTEMPT).then(|| remaining.min(GENERATION_BUDGET))
 }
 
 /// A model name the environment may set: a bounded identifier.
