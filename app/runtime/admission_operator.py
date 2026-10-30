@@ -893,9 +893,14 @@ def create_remote(c, org, invitation_id, code_id, email, role, client):
             detail = "code_no_longer_usable"  # revoked, expired or exhausted while the create was in flight
         elif outcome.usable:
             # The file precedes the database update: a crash in between leaves a
-            # pending row that reconcile confirms from the file.
+            # pending row that reconcile confirms from the file. It records the
+            # code's stored digest so the service's invitation entry (APP-074)
+            # can find this capability for a validated code.
+            digest = c.execute("SELECT code_digest FROM genui.access_codes WHERE organization_id=%s AND code_id=%s",
+                               (org, code_id)).fetchone()[0]
             try:
-                provider.write_capability(directory, org, invitation_id, outcome.remote_id, outcome.token, timestamp(outcome.expires_at))
+                provider.write_capability(directory, org, invitation_id, outcome.remote_id, outcome.token, timestamp(outcome.expires_at),
+                                          code_digest=digest)
                 stored = True
             except Refused:
                 detail = "capability_unwritable"

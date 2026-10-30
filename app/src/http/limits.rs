@@ -2,7 +2,9 @@
 //! counters live in the single task's memory, a recorded limitation, not a
 //! table). A check either admits every named key or records nothing, so a
 //! refused request consumes no budget. Memory is bounded: past `MAX_KEYS`
-//! live keys a new key is refused (fail closed) until old windows lapse.
+//! live keys a new key is refused (fail closed) until old windows lapse. A
+//! key is retained exactly as long as its own longest window (APP-009 review
+//! m4), so the fail-closed refusal never outlives the budgets it protects.
 use std::{
     collections::{HashMap, VecDeque},
     sync::Mutex,
@@ -27,13 +29,24 @@ pub const fn per(limit: usize, seconds: u64) -> Window {
 pub const SIGNIN_ADDRESS: &[Window] = &[per(10, 60), per(60, 3600)];
 /// ADR-006 `POST /signin/{handle}`: 600/hour across the service.
 pub const SIGNIN_GLOBAL: &[Window] = &[per(600, 3600)];
+/// ADR-006 `POST /invite/validate`: 5/minute and 20/day per address class
+/// (under fAuth's registration burst of 5).
+pub const INVITE_ADDRESS: &[Window] = &[per(5, 60), per(20, 86_400)];
+/// ADR-006 `POST /invite/validate`: 200/day across the service.
+pub const INVITE_GLOBAL: &[Window] = &[per(200, 86_400)];
 /// ADR-006 resend: a 60-second per-account cooldown mirrored ahead of fAuth's
 /// own, and at most 5 per pending identity per 24 hours (D7.17).
 pub const RESEND_ACCOUNT: &[Window] = &[per(1, 60), per(5, 86_400)];
 
+/// One key's recorded events and its retention (its longest window).
+struct Log {
+    keep: Duration,
+    times: VecDeque<Instant>,
+}
+
 #[derive(Default)]
 pub struct Limiter {
-    events: Mutex<HashMap<String, VecDeque<Instant>>>,
+    events: Mutex<HashMap<String, Log>>,
 }
 impl Limiter {
     /// `Ok(())` admits and records one event under every key; `Err(seconds)`
@@ -54,7 +67,7 @@ impl Limiter {
         Self::judge(&events, checks, now)
     }
     fn judge(
-        events: &HashMap<String, VecDeque<Instant>>,
+        events: &HashMap<String, Log>,
         checks: &[(&str, &[Window])],
         now: Instant,
     ) -> Result<(), u64> {
@@ -65,6 +78,7 @@ impl Limiter {
             };
             for window in *windows {
                 let recent: Vec<&Instant> = log
+                    .times
                     .iter()
                     .filter(|t| now.saturating_duration_since(**t) < window.period)
                     .collect();
@@ -87,9 +101,9 @@ impl Limiter {
             |windows: &[Window]| windows.iter().map(|w| w.period).max().unwrap_or_default();
         if events.len() >= MAX_KEYS {
             events.retain(|_, log| {
-                log.back().is_some_and(|t| {
-                    now.saturating_duration_since(*t) < Duration::from_secs(86_400)
-                })
+                log.times
+                    .back()
+                    .is_some_and(|t| now.saturating_duration_since(*t) < log.keep)
             });
         }
         for (key, _) in checks {
@@ -100,15 +114,20 @@ impl Limiter {
         for (key, windows) in checks {
             let keep = longest(windows);
             let cap = windows.iter().map(|w| w.limit).max().unwrap_or(1);
-            let log = events.entry((*key).to_owned()).or_default();
+            let log = events.entry((*key).to_owned()).or_insert_with(|| Log {
+                keep,
+                times: VecDeque::new(),
+            });
+            log.keep = log.keep.max(keep);
             while log
+                .times
                 .front()
-                .is_some_and(|t| now.saturating_duration_since(*t) >= keep)
-                || log.len() >= cap
+                .is_some_and(|t| now.saturating_duration_since(*t) >= log.keep)
+                || log.times.len() >= cap
             {
-                log.pop_front();
+                log.times.pop_front();
             }
-            log.push_back(now);
+            log.times.push_back(now);
         }
         Ok(())
     }
@@ -156,7 +175,7 @@ mod tests {
                 )
                 .is_ok());
         }
-        assert_eq!(limiter.events.lock().unwrap()["global"].len(), 20);
+        assert_eq!(limiter.events.lock().unwrap()["global"].times.len(), 20);
         // A minute later the per-minute window frees; the hour still counts.
         let later = start + Duration::from_secs(61);
         assert!(limiter
@@ -184,5 +203,40 @@ mod tests {
                 start + Duration::from_secs(61 * 5)
             )
             .is_err());
+    }
+
+    /// APP-009 review m4: with `MAX_KEYS` sign-in classes recorded, a new
+    /// class is refused only while those keys' own windows (at most an hour)
+    /// are live, not for a day.
+    #[test]
+    fn full_key_table_frees_with_each_keys_longest_window() {
+        let limiter = Limiter::default();
+        let start = Instant::now();
+        for i in 0..MAX_KEYS {
+            assert!(limiter
+                .admit_at(&[(&format!("signin:c{i}"), SIGNIN_ADDRESS)], start)
+                .is_ok());
+        }
+        assert_eq!(
+            limiter.admit_at(
+                &[("signin:new", SIGNIN_ADDRESS)],
+                start + Duration::from_secs(60)
+            ),
+            Err(60),
+            "fail closed while the hour windows are live"
+        );
+        assert!(limiter
+            .admit_at(
+                &[("signin:new", SIGNIN_ADDRESS)],
+                start + Duration::from_secs(3_601)
+            )
+            .is_ok());
+        // A resend key keeps its 24-hour window.
+        let resend = Limiter::default();
+        assert!(resend.admit_at(&[("acct", RESEND_ACCOUNT)], start).is_ok());
+        assert_eq!(
+            resend.events.lock().unwrap()["acct"].keep,
+            Duration::from_secs(86_400)
+        );
     }
 }

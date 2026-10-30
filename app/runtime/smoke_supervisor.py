@@ -140,8 +140,9 @@ def run_mode(mode, binary, directory):
         status = None
         try:
             if mode != 'disabled':
-                # ADR-007 D7.13 (APP-009): the release binary refuses any operator
-                # qualification configuration, valid or malformed, before binding.
+                # ADR-007 D7.13 (APP-009 review m6): the supervisor refuses any
+                # operator qualification configuration, valid or malformed, before
+                # refreshing credentials or starting the native child.
                 assert process.wait(timeout=10) != 0, 'qualification configuration was accepted'
             else:
                 deadline = time.monotonic() + 15
@@ -182,14 +183,18 @@ def run_mode(mode, binary, directory):
             stop.set(); inspector.join(timeout=2); reader.join(timeout=2)
             process.stdout.close()
         assert not forced, 'supervisor did not cleanly stop within its bound'
-        assert observations and not failures, 'native environment/files were not verified'
+        if mode == 'disabled':
+            assert observations and not failures, 'native environment/files were not verified'
+        else:
+            assert not observations and not native_pids and not failures, 'a native child started under an injection'
         assert all(value.encode() not in output for value in secret_values), 'synthetic secret output'
         assert not any(Path(f'/proc/{pid}').exists() for pid in native_pids), 'native child remains'
         assert not list(private.iterdir()), 'owned auth/registry/credential files remain'
         if mode != 'disabled':
-            assert b'FORMA_LISTENING' not in output and b'not part of this binary' in output
+            assert b'FORMA_LISTENING' not in output and b'managed_dependency_operation_refused' in output
         return {'mode':mode,'callback_status':status,'refused_before_bind':mode != 'disabled',
-                'native_environment_observed':True,'raw_secret_in_child_environment':False,
+                'refused_by_supervisor_before_child':mode != 'disabled',
+                'native_environment_observed':mode == 'disabled','raw_secret_in_child_environment':False,
                 'private_file_modes':'0600','empty_registry_observed':True,'secret_output':False,
                 'owned_files_removed':True,'native_child_removed':True,'passed':True}
 

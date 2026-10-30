@@ -646,22 +646,19 @@ class QualificationSecretTests(unittest.TestCase):
     def auth_files(self):
         return list(self.directory.glob('.auth-qualification-*'))
 
-    def test_transport_consumption_byte_limit_and_no_duplicate_auth_policy(self):
-        for raw in (self.PAYLOAD, '\u00e9' * 4096, '{invalid-json-for-rust-to-refuse'):
-            with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: raw}, clear=True):
-                self.assertEqual(runtime.take_qualification_json('serve'), raw.encode('utf-8'))
-                self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
-        for raw in ('', ' \n ', 'x' * 8193, '\u00e9' * 4097, '\udcff'):
-            with self.subTest(kind=len(raw)), patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: raw}, clear=True):
+    def test_injection_is_removed_and_refused_in_every_mode(self):
+        """APP-009 review m6 (ADR-007 D7.13): the harness configuration is
+        refused, never written to a file; the raw value leaves the environment."""
+        for env in ({runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, {runtime.QUALIFICATION_JSON_ENV: ''},
+                    {runtime.QUALIFICATION_FILE_ENV: '/run/genui/x'},
+                    {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD, runtime.QUALIFICATION_FILE_ENV: ''}):
+            with self.subTest(env=sorted(env)), patch.dict(os.environ, env, clear=True):
                 with self.assertRaises(runtime.Refused) as error:
-                    runtime.take_qualification_json('serve')
+                    runtime.refuse_qualification_injection()
                 self.assertEqual(str(error.exception), 'runtime configuration refused')
                 self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
         with patch.dict(os.environ, {}, clear=True):
-            self.assertIsNone(runtime.take_qualification_json('serve'))
-        with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD, runtime.QUALIFICATION_FILE_ENV: ''}, clear=True):
-            with self.assertRaises(runtime.Refused): runtime.take_qualification_json('serve')
-            self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
+            self.assertIsNone(runtime.refuse_qualification_injection())
 
     def test_new_real_private_file_is_exact_and_cleanup_preserves_other_files(self):
         self.path.write_text('unrelated-existing-credential-file')
@@ -743,32 +740,28 @@ class QualificationSecretTests(unittest.TestCase):
         self.assertEqual(self.auth_files(), [])
         self.assertEqual(self.path.read_text(), 'existing-preserve')
 
-    def test_failed_preparation_does_not_refresh_launch_or_delete_existing_credentials(self):
+    def test_serve_refuses_injection_before_refresh_launch_or_any_file(self):
         self.path.write_text('existing-preserve')
-        self.directory.chmod(0o755)
-        with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, clear=True), \
-             patch.object(runtime.signal, 'signal'), patch.object(runtime, 'refresh') as refresh, patch.object(runtime.subprocess, 'Popen') as child:
-            with self.assertRaises(runtime.Refused): runtime.serve(self.path)
-            refresh.assert_not_called(); child.assert_not_called()
-            self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
-        self.directory.chmod(0o700)
+        for env in ({runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, {runtime.QUALIFICATION_FILE_ENV: str(self.directory / 'x.json')}):
+            with self.subTest(env=sorted(env)), patch.dict(os.environ, env, clear=True), \
+                 patch.object(runtime.signal, 'signal'), patch.object(runtime, 'refresh') as refresh, \
+                 patch.object(runtime.subprocess, 'Popen') as child:
+                with self.assertRaises(runtime.Refused): runtime.serve(self.path)
+                refresh.assert_not_called(); child.assert_not_called()
+                self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
         self.assertEqual(self.path.read_text(), 'existing-preserve')
         self.assertEqual(self.auth_files(), [])
+        self.assertEqual(sorted(p.name for p in self.directory.iterdir()), ['credentials.json'])
 
     def child_script(self, exit_code=0, wait_for_termination=False):
         script = self.directory / 'child.py'
         report = self.directory / 'child-report.json'
         source = f'''#!{sys.executable}
-import json, os, signal, stat, time
+import json, os, signal, time
 from pathlib import Path
 if {wait_for_termination!r}: signal.signal(signal.SIGTERM, signal.SIG_IGN)
-path = os.environ.get({runtime.QUALIFICATION_FILE_ENV!r})
-info = None if path is None else Path(path).stat()
-content_ok = path is None or Path(path).read_text() == {self.PAYLOAD!r}
 result = {{'raw_env_absent': {runtime.QUALIFICATION_JSON_ENV!r} not in os.environ,
-           'path_present': path is not None, 'content_ok': content_ok,
-           'mode': None if info is None else stat.S_IMODE(info.st_mode),
-           'owned': info is None or info.st_uid == os.geteuid()}}
+           'path_present': {runtime.QUALIFICATION_FILE_ENV!r} in os.environ}}
 Path({str(report)!r}).write_text(json.dumps(result))
 if {wait_for_termination!r}:
     while True: time.sleep(0.05)
@@ -777,54 +770,33 @@ raise SystemExit({exit_code})
         script.write_text(source); script.chmod(0o700)
         return script, report
 
-    def test_real_successful_and_failed_children_receive_only_private_path(self):
+    def test_real_children_receive_no_qualification_handoff(self):
         for exit_code in (0, 7):
             with self.subTest(exit_code=exit_code):
                 script, report = self.child_script(exit_code)
-                env = {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD, 'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
+                env = {'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
                 with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
                      patch.object(runtime, 'refresh', side_effect=lambda path: runtime.atomic_write(path, self.value)) as refresh:
                     self.assertEqual(runtime.serve(self.path), exit_code)
-                    self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
-                    self.assertNotIn(runtime.QUALIFICATION_FILE_ENV, os.environ)
                     refresh.assert_called_once()
-                self.assertEqual(json.loads(report.read_text()), {'raw_env_absent': True, 'path_present': True, 'content_ok': True, 'mode': 0o600, 'owned': True})
+                self.assertEqual(json.loads(report.read_text()), {'raw_env_absent': True, 'path_present': False})
                 self.assertEqual(self.auth_files(), [])
                 self.assertFalse(self.path.exists())
 
-    def test_absent_json_preserves_default_and_explicit_path_is_never_owned(self):
-        for explicit in (False, True):
-            with self.subTest(explicit=explicit):
-                script, report = self.child_script()
-                existing = self.directory / 'explicit.json'
-                existing.write_text(self.PAYLOAD); existing.chmod(0o600)
-                env = {'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
-                if explicit: env[runtime.QUALIFICATION_FILE_ENV] = str(existing)
-                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
-                     patch.object(runtime, 'refresh', side_effect=lambda path: runtime.atomic_write(path, self.value)):
-                    self.assertEqual(runtime.serve(self.path), 0)
-                value = json.loads(report.read_text())
-                self.assertTrue(value['raw_env_absent'])
-                self.assertEqual(value['path_present'], explicit)
-                self.assertEqual(existing.read_text(), self.PAYLOAD)
-                self.assertEqual(self.auth_files(), [])
-
-    def test_startup_failure_and_cancel_after_write_clean_file_without_secret_output(self):
+    def test_startup_failure_and_cancel_leave_no_files_or_secret_output(self):
         for failure in ('refresh', 'launch', 'interrupt'):
             with self.subTest(failure=failure):
                 stop = threading.Event()
                 output = io.StringIO()
                 def refresh(path):
-                    self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
-                    self.assertEqual(len(self.auth_files()), 1)
                     if failure == 'refresh':
                         stop.set(); raise OSError(self.PAYLOAD)
                     if failure == 'interrupt': raise KeyboardInterrupt()
                     runtime.atomic_write(path, self.value)
                 def launch(*args, **kwargs):
-                    self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, kwargs['env'])
+                    self.assertNotIn(runtime.QUALIFICATION_FILE_ENV, kwargs['env'])
                     stop.set(); raise OSError(self.PAYLOAD)
-                with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, clear=True), \
+                with patch.dict(os.environ, {}, clear=True), \
                      patch.object(runtime.signal, 'signal'), patch.object(runtime.threading, 'Event', return_value=stop), \
                      patch.object(runtime, 'refresh', side_effect=refresh), patch.object(runtime.subprocess, 'Popen', side_effect=launch), \
                      contextlib.redirect_stderr(output):
@@ -833,6 +805,7 @@ raise SystemExit({exit_code})
                     else: self.assertEqual(runtime.serve(self.path), 0)
                 self.assertNotIn(self.PAYLOAD, output.getvalue())
                 self.assertEqual(self.auth_files(), [])
+                self.assertEqual(list(self.directory.glob('.identity-registry-*')), [])
 
     def test_real_cancelled_child_ignoring_term_is_killed_and_cleanup_is_bounded(self):
         script, report = self.child_script(wait_for_termination=True)
@@ -842,7 +815,7 @@ raise SystemExit({exit_code})
             while not report.exists() and time.monotonic() < deadline: time.sleep(0.01)
             stop.set()
         watcher = threading.Thread(target=cancel_when_started, daemon=True)
-        env = {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD, 'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
+        env = {'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
         started = time.monotonic()
         watcher.start()
         with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
@@ -856,16 +829,17 @@ raise SystemExit({exit_code})
         self.assertEqual(self.auth_files(), [])
         self.assertFalse(self.path.exists())
 
-    def test_actual_nonserve_commands_refuse_injection_before_managed_operations(self):
-        for mode in ('refresh', 'probe', 'migrate', 'qualify', 'cleanup'):
-            with self.subTest(mode=mode):
-                process = subprocess.run([sys.executable, str(Path(runtime.__file__).resolve()), mode],
-                                         env={runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD},
-                                         capture_output=True, text=True, timeout=3)
-                self.assertEqual(process.returncode, 1)
-                self.assertEqual(process.stdout, '')
-                self.assertEqual(process.stderr, 'managed_dependency_operation_refused\n')
-                self.assertNotIn(self.PAYLOAD, process.stdout + process.stderr)
-
+    def test_actual_commands_refuse_injection_before_managed_operations(self):
+        for mode in ('refresh', 'probe', 'migrate', 'qualify', 'cleanup', 'serve'):
+            for env in ({runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, {runtime.QUALIFICATION_FILE_ENV: '/run/genui/x'}):
+                with self.subTest(mode=mode, env=sorted(env)):
+                    process = subprocess.run([sys.executable, str(Path(runtime.__file__).resolve()), mode],
+                                             env=dict(env, GENUI_RUNTIME_CONFIG_FILE=str(self.path), GENUI_BINARY='/nonexistent'),
+                                             capture_output=True, text=True, timeout=5)
+                    self.assertEqual(process.returncode, 1)
+                    self.assertEqual(process.stdout, '')
+                    self.assertEqual(process.stderr, 'managed_dependency_operation_refused\n')
+                    self.assertNotIn(self.PAYLOAD, process.stdout + process.stderr)
+        self.assertEqual(sorted(self.directory.iterdir()), [])
 
 if __name__ == '__main__': unittest.main()

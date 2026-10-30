@@ -3,6 +3,13 @@
 //! PostgreSQL 16.13 with verified TLS (the APP-008 Docker fixture), the real
 //! operator command, the reviewed verifier and the cfg(test) synthetic
 //! loopback issuer. SIMULATED provider; synthetic identifiers only.
+//!
+//! Since APP-074 the invited signup goes through the real `POST
+//! /invite/validate` route (the labeled stand-in is gone): codes are issued
+//! with a server-only provider invitation through the loopback management
+//! stand-in (`fake_fauth.py`), whose capability file the route reads, and the
+//! synthetic issuer's hosted registration consumes that invitation. The
+//! browser, page and fixture helpers are shared with `auth::invite_tests`.
 use super::{
     pkce::Pkce,
     provider::{Client, Failure, Resend},
@@ -14,7 +21,7 @@ use super::{
     vault::AccessFailure,
     *,
 };
-use crate::{http, storage::FlowKind};
+use crate::http;
 use axum::{
     body::{to_bytes, Body},
     extract::ConnectInfo,
@@ -34,27 +41,33 @@ use tower::ServiceExt;
 
 /// The two fixture organizations (tenant_seed.py) and their synthetic fAuth
 /// tenants. The live identifiers are APP-076's; these are local only.
-const ORG: &str = "00000000-0000-4000-8000-000000000001";
-const OTHER: &str = "00000000-0000-4000-8000-000000000002";
-const APP: &str = "00000000-0000-4000-8000-000000000065";
-const NORTHSTAR_TENANT: &str = "ten_00000000-0000-4000-8000-00000000a001";
-const CANARY_TENANT: &str = "ten_00000000-0000-4000-8000-00000000a002";
+pub(super) const ORG: &str = "00000000-0000-4000-8000-000000000001";
+pub(super) const OTHER: &str = "00000000-0000-4000-8000-000000000002";
+pub(super) const APP: &str = "00000000-0000-4000-8000-000000000065";
+pub(super) const NORTHSTAR_TENANT: &str = "ten_00000000-0000-4000-8000-00000000a001";
+pub(super) const CANARY_TENANT: &str = "ten_00000000-0000-4000-8000-00000000a002";
 /// The sign-in handles this slice issued for the two fixture organizations
 /// (non-secret routing; evidence/APP-009/handles.json). The campaign installs
 /// them with `admission_operator.py issue-handle --handle`.
 pub(crate) const NORTHSTAR_HANDLE: &str = "se45m37vabqrfvbh3gbwn22qkm";
 pub(crate) const CANARY_HANDLE: &str = "z33gibxjspwxcnopbsdxqtijey";
 /// Well formed, never issued.
-const UNKNOWN_HANDLE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaa";
-const APP_ORIGIN: &str = "https://beta.getforma.dev";
+pub(super) const UNKNOWN_HANDLE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaa";
+pub(super) const APP_ORIGIN: &str = "https://beta.getforma.dev";
 
-struct TestPages;
+pub(super) struct TestPages;
 fn page(text: String) -> Response {
     let mut response = (StatusCode::OK, text).into_response();
     http::secure(response.headers_mut());
     response
 }
 impl Pages for TestPages {
+    fn invite(&self, v: &InviteView) -> Response {
+        page(format!(
+            "page=invite;failed={};limited={}",
+            v.failed, v.limited
+        ))
+    }
     fn signin(&self, v: &SigninView) -> Response {
         page(format!(
             "page=signin;action={};failed={}",
@@ -83,7 +96,7 @@ impl Pages for TestPages {
         ))
     }
 }
-fn field(body: &str, name: &str) -> String {
+pub(super) fn field(body: &str, name: &str) -> String {
     let prefix = format!("{name}=");
     body.split(';')
         .find_map(|part| part.strip_prefix(&prefix))
@@ -91,7 +104,7 @@ fn field(body: &str, name: &str) -> String {
         .to_owned()
 }
 
-fn config(origin: &str) -> AuthConfig {
+pub(super) fn config(origin: &str) -> AuthConfig {
     AuthConfig {
         auth_origin: origin.into(),
         app_origin: APP_ORIGIN.into(),
@@ -113,7 +126,7 @@ fn config(origin: &str) -> AuthConfig {
         ],
     }
 }
-fn tenants() -> Vec<Tenant> {
+pub(super) fn tenants() -> Vec<Tenant> {
     vec![
         Tenant {
             slug: "northstar",
@@ -129,7 +142,7 @@ fn tenants() -> Vec<Tenant> {
 }
 /// The same composition as the binary: ADR-006 routes, the uniform 404 for
 /// unknown paths and methods, the 5 s handler deadline.
-fn app(auth: Arc<Auth>) -> Router {
+pub(super) fn app(auth: Arc<Auth>) -> Router {
     routes::router(auth)
         .fallback(http::fallback)
         .method_not_allowed_fallback(http::fallback)
@@ -137,32 +150,32 @@ fn app(auth: Arc<Auth>) -> Router {
 }
 
 #[derive(Clone)]
-struct Reply {
-    status: StatusCode,
-    headers: HeaderMap,
-    body: String,
+pub(super) struct Reply {
+    pub(super) status: StatusCode,
+    pub(super) headers: HeaderMap,
+    pub(super) body: String,
 }
 impl Reply {
-    fn location(&self) -> String {
+    pub(super) fn location(&self) -> String {
         match self.headers.get(header::LOCATION) {
             Some(value) => value.to_str().unwrap().to_owned(),
             None => panic!("no Location: {} {}", self.status, self.body),
         }
     }
-    fn set_cookies(&self) -> Vec<String> {
+    pub(super) fn set_cookies(&self) -> Vec<String> {
         self.headers
             .get_all(header::SET_COOKIE)
             .iter()
             .map(|v| v.to_str().unwrap().to_owned())
             .collect()
     }
-    fn sets(&self, name: &str) -> Option<String> {
+    pub(super) fn sets(&self, name: &str) -> Option<String> {
         self.set_cookies()
             .into_iter()
             .find(|c| c.starts_with(&format!("{name}=")))
     }
     /// The uniform refusal, header for header (dates excluded: none are set).
-    fn uniform_404(&self) -> bool {
+    pub(super) fn uniform_404(&self) -> bool {
         self.status == StatusCode::NOT_FOUND
             && self.body == "{\"code\":\"not_found\"}"
             && self.headers[header::CONTENT_TYPE] == "application/problem+json"
@@ -172,26 +185,26 @@ impl Reply {
     }
 }
 
-type Log = Arc<Mutex<Vec<Reply>>>;
+pub(super) type Log = Arc<Mutex<Vec<Reply>>>;
 /// A browser: a cookie jar that obeys Set-Cookie (Max-Age=0 removes), a peer
 /// address, and same-origin fetch metadata on every POST unless overridden.
-struct Browser {
-    jar: HashMap<String, String>,
-    peer: SocketAddr,
-    log: Log,
+pub(super) struct Browser {
+    pub(super) jar: HashMap<String, String>,
+    pub(super) peer: SocketAddr,
+    pub(super) log: Log,
 }
 impl Browser {
-    fn new(peer: &str, log: &Log) -> Self {
+    pub(super) fn new(peer: &str, log: &Log) -> Self {
         Self {
             jar: HashMap::new(),
             peer: peer.parse().unwrap(),
             log: log.clone(),
         }
     }
-    fn cookie(&self, name: &str) -> Option<String> {
+    pub(super) fn cookie(&self, name: &str) -> Option<String> {
         self.jar.get(name).cloned()
     }
-    async fn send(
+    pub(super) async fn send(
         &mut self,
         app: &Router,
         method: &str,
@@ -233,10 +246,10 @@ impl Browser {
         self.log.lock().unwrap().push(reply.clone());
         reply
     }
-    async fn get(&mut self, app: &Router, uri: &str) -> Reply {
+    pub(super) async fn get(&mut self, app: &Router, uri: &str) -> Reply {
         self.send(app, "GET", uri, "", &[]).await
     }
-    async fn post(&mut self, app: &Router, uri: &str, body: &str) -> Reply {
+    pub(super) async fn post(&mut self, app: &Router, uri: &str, body: &str) -> Reply {
         self.send(app, "POST", uri, body, &[("sec-fetch-site", "same-origin")])
             .await
     }
@@ -474,6 +487,39 @@ async fn vault_refresh_is_serialized_rotating_and_never_retried() {
     assert!(!vault.contains(&reference));
 }
 
+/// APP-009 review m5: a vault entry referenced by no row (a callback
+/// cancelled between the vault insert and its row) is ended by the expiry
+/// sweep once it is older than the 12-hour absolute session; younger
+/// entries stay. The sweep logs the provider session out.
+#[tokio::test]
+async fn sweep_ends_vault_entries_older_than_the_absolute_session() {
+    let issuer = Issuer::start(tenants()).await;
+    let client = Client::loopback(&issuer.origin).unwrap();
+    issuer.user("usr_orphan", "orphan@example.test", false);
+    let auth = Auth::loopback(config(&issuer.origin), None, Arc::new(TestPages));
+    let orphan = auth
+        .vault
+        .insert(
+            "northstar",
+            &issued_token(&issuer, &client, "usr_orphan").await,
+        )
+        .unwrap();
+    let young = auth
+        .vault
+        .insert(
+            "northstar",
+            &issued_token(&issuer, &client, "usr_orphan").await,
+        )
+        .unwrap();
+    auth.vault
+        .backdate(&orphan, crate::storage::SESSION_ABSOLUTE_SECONDS + 1);
+    auth.vault.backdate(&young, 3_600);
+    let logouts = issuer.count(|c| &c.logout);
+    auth.sweep().await;
+    assert!(!auth.vault.contains(&orphan) && auth.vault.contains(&young));
+    assert_eq!(issuer.count(|c| &c.logout), logouts + 1);
+}
+
 /// The reviewed verifier against the synthetic issuer: unknown keys fail
 /// closed and refetch at most once per refresh interval (bounded JWKS).
 #[tokio::test]
@@ -542,6 +588,23 @@ async fn anonymous_routes_refusals_and_release_router_without_harness() {
     );
     let malformed = browser.get(&app, "/signin/NOT-A-HANDLE").await;
     assert_eq!(malformed.body, "page=signin;action=-;failed=false");
+    // APP-009 review m2: an undecodable path segment is a malformed handle,
+    // never axum's plain-text rejection.
+    let undecodable = browser.get(&app, "/signin/%ff").await;
+    assert_eq!(
+        (undecodable.status, undecodable.body.as_str()),
+        (StatusCode::OK, "page=signin;action=-;failed=false")
+    );
+    assert_eq!(undecodable.headers[header::CACHE_CONTROL], "no-store");
+    assert_eq!(
+        undecodable.headers[header::X_CONTENT_TYPE_OPTIONS],
+        "nosniff"
+    );
+    let posted = browser.post(&app, "/signin/%ff", "").await;
+    assert_eq!(
+        (posted.status, posted.body.as_str()),
+        (StatusCode::BAD_REQUEST, "page=signin;action=-;failed=true")
+    );
     browser
         .jar
         .insert(cookies::ORGANIZATION_HINT.into(), CANARY_HANDLE.into());
@@ -710,7 +773,9 @@ async fn anonymous_routes_refusals_and_release_router_without_harness() {
 // --- the Docker campaign -------------------------------------------------------
 
 use crate::storage::{
-    admission_qualification::{accepted, cli_command, lock_wait, operator, wait},
+    admission_qualification::{
+        accepted, cli_command, lock_wait, operator, operator_with, wait, FakeProvider,
+    },
     code_digest,
     qualification::Fixture,
     Lookup, SignOut, Stores,
@@ -748,6 +813,11 @@ struct Campaign {
     app: Router,
     log: Log,
     checks: Vec<Value>,
+    /// The loopback management stand-in for the Northstar tenant; the
+    /// operator writes each code's capability where the route reads it.
+    provider: FakeProvider,
+    /// digest → (raw code, invitation email), kept by the test only.
+    codes: Mutex<HashMap<String, (String, String)>>,
 }
 impl Campaign {
     fn browser(&self, peer: &str) -> Browser {
@@ -767,9 +837,17 @@ impl Campaign {
             .get(&self.app, &format!("/auth/callback?{query}"))
             .await
     }
+    /// A one-redemption Northstar code with its server-only provider
+    /// invitation: issued by the real operator command against the loopback
+    /// management stand-in, which writes the capability file the invitation
+    /// route reads; the synthetic issuer learns the same invitation (one
+    /// simulated provider). Returns (code id, digest).
     fn issue_code(&self) -> (String, String) {
-        let out = operator(
+        let mut codes = self.codes.lock().unwrap();
+        let email = format!("code-{}@invite.example.test", codes.len());
+        let out = operator_with(
             &self.fixture,
+            &self.provider,
             &[
                 "issue",
                 "--organization",
@@ -780,58 +858,50 @@ impl Campaign {
                 &format!("discover:{APP}"),
                 "--grant",
                 &format!("run:{APP}"),
+                "--provider-email",
+                &email,
+                "--provider-role",
+                "user",
+                "--provider-issuer",
+                ISSUER,
+                "--provider-tenant",
+                NORTHSTAR_TENANT,
             ],
         );
+        let invitation = &out["provider_invitation"];
+        assert_eq!(invitation["capability_stored"], true, "{invitation}");
+        let path = self.provider.capabilities.join(format!(
+            "{ORG}.{}.capability",
+            invitation["invitation_id"].as_str().unwrap()
+        ));
+        let record: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        self.issuer.invitation(
+            record["invite_token"].as_str().unwrap(),
+            "northstar",
+            &email,
+        );
         let code = out["code"].as_str().unwrap();
-        (
-            out["code_id"].as_str().unwrap().to_owned(),
-            code_digest(code).unwrap(),
-        )
+        let digest = code_digest(code).unwrap();
+        assert_eq!(record["code_digest"], digest.as_str());
+        codes.insert(digest.clone(), (code.to_owned(), email));
+        (out["code_id"].as_str().unwrap().to_owned(), digest)
     }
-    /// LABELED LOCAL STAND-IN for APP-074's `POST /invite/validate` (ADR-006
-    /// acceptance ownership): the same signup flow kind, reserving the code
-    /// in the flow's own transaction, and the same form-encoded PAR with the
-    /// confidential `invite_token` in the backend body only. Not APP-074's route.
+    /// The invited signup through the real APP-074 route: `POST
+    /// /invite/validate` with the raw code (the backend PAR carries the
+    /// capability's `invite_token`), then the hosted registration of
+    /// `subject` for the invitation's email, then the callback. The test
+    /// clears the in-process limits first (many invited signups per minute).
     async fn invited_signup(&self, browser: &mut Browser, digest: &str, subject: &str) -> Reply {
-        let provider = self.auth.provider.as_ref().unwrap();
-        let pkce = Pkce::fresh().unwrap();
-        let sealed = self
-            .auth
-            .sealer
-            .seal(&routes::verifier_context(ORG), pkce.verifier.as_bytes())
-            .unwrap();
-        let flow = self
-            .stores
-            .workspace
-            .begin_flow(
-                ORG,
-                FlowKind::SignUp {
-                    code_digest: digest,
-                    handoff: None,
-                },
-                &sealed,
-                "v4:192.0.2.10",
-            )
-            .await
-            .unwrap()
-            .expect("code reserves");
-        let uri = provider
-            .client
-            .par(
-                "northstar",
-                "northstar-platform",
-                CALLBACK,
-                &flow.state,
-                &pkce.challenge,
-                Some("synthetic-invitation-token"),
-            )
-            .await
-            .unwrap();
-        browser.jar.insert(cookies::PRELOGIN.into(), flow.cookie);
-        let url = provider
-            .client
-            .authorize_url("northstar", "northstar-platform", &uri);
-        let query = self.issuer.login(&url, subject).expect("hosted signup");
+        let (code, email) = self.codes.lock().unwrap()[digest].clone();
+        self.auth.limits.clear();
+        let entry = browser
+            .post(&self.app, "/invite/validate", &format!("code={code}"))
+            .await;
+        assert_eq!(entry.status, StatusCode::SEE_OTHER, "{}", entry.body);
+        let query = self
+            .issuer
+            .register(&entry.location(), subject, &email)
+            .expect("hosted signup");
         browser
             .get(&self.app, &format!("/auth/callback?{query}"))
             .await
@@ -929,11 +999,17 @@ async fn campaign() {
     let hooks = settings.hooks.clone();
     let stores = Arc::new(Stores::new(settings).unwrap());
     let issuer = Issuer::start(tenants()).await;
-    let auth = Arc::new(Auth::loopback(
-        config(&issuer.origin),
-        Some(stores.clone()),
-        Arc::new(TestPages),
-    ));
+    let provider = FakeProvider::start_at(&fixture, NORTHSTAR_TENANT, "provider", None);
+    let auth = Arc::new(
+        Auth::loopback(
+            config(&issuer.origin),
+            Some(stores.clone()),
+            Arc::new(TestPages),
+        )
+        .with_invitations(Some(
+            invite::Invitations::open(&provider.capabilities).unwrap(),
+        )),
+    );
     let mut c = Campaign {
         app: app(auth.clone()),
         fixture,
@@ -942,6 +1018,8 @@ async fn campaign() {
         auth,
         log: Arc::default(),
         checks,
+        provider,
+        codes: Mutex::default(),
     };
 
     // --- 1. Neutral sign-in entry --------------------------------------------
@@ -2050,6 +2128,57 @@ async fn campaign() {
     );
     c.record("restart_invalidates_refresh_tokens: a new process (new key, empty vault) admits no earlier workspace session, completes no earlier pre-login flow, accepts no earlier synchronizer token, and sends an earlier pending identity to a fresh sign-in");
 
+    // --- 14b. A new arrival supersedes the browser's earlier session ----------
+    // APP-009 review m1: a second sign-in in the same browser ends the first
+    // workspace session (row, epoch advance, provider logout); a pending or
+    // denied arrival also ends it and clears its cookie.
+    c.auth.limits.clear();
+    let (mo, mut mo_browser) = c.member("mo").await;
+    let mo_principal = c.principal(&mo).await;
+    let first = mo_browser.cookie(cookies::SESSION).unwrap();
+    let epoch = c.epoch(&mo_principal).await;
+    let logouts = c.issuer.count(|x| &x.logout);
+    let again = c.sign_in(&mut mo_browser, NORTHSTAR_HANDLE, &mo).await;
+    assert_eq!(again.location(), "/workspace");
+    let second = mo_browser.cookie(cookies::SESSION).unwrap();
+    assert_ne!(first, second);
+    assert_eq!(
+        scalar(
+            &c.fixture,
+            &format!("SELECT count(*) FROM genui.sessions WHERE principal_id='{mo_principal}'")
+        )
+        .await,
+        1
+    );
+    assert_eq!(c.epoch(&mo_principal).await, epoch + 1);
+    assert_eq!(c.issuer.count(|x| &x.logout), logouts + 1);
+    let mut superseded = c.browser("192.0.2.43:6300");
+    superseded.jar.insert(cookies::SESSION.into(), first);
+    assert!(superseded.get(&c.app, "/workspace").await.uniform_404());
+    assert_eq!(
+        field(&mo_browser.get(&c.app, "/workspace").await.body, "page"),
+        "workspace"
+    );
+    let nia = "usr_00000000-0000-4000-8000-0000000000a1";
+    c.issuer.user(nia, "nia@example.test", false);
+    let (_, digest_nia) = c.issue_code();
+    let pending = c.invited_signup(&mut mo_browser, &digest_nia, nia).await;
+    assert_eq!(pending.location(), "/auth/pending");
+    assert!(pending
+        .sets(cookies::SESSION)
+        .unwrap()
+        .ends_with("Max-Age=0"));
+    assert!(mo_browser.cookie(cookies::SESSION).is_none());
+    assert_eq!(
+        scalar(
+            &c.fixture,
+            &format!("SELECT count(*) FROM genui.sessions WHERE principal_id='{mo_principal}'")
+        )
+        .await,
+        0
+    );
+    c.record("a new arrival supersedes the browser's earlier workspace session: a second sign-in ends the first (row deleted with an epoch advance, refresh token logged out, old cookie uniform 404), and a pending arrival of another identity ends it and clears its cookie");
+
     // --- 15. Expiry sweep ------------------------------------------------------
     let (lu, mut lu_browser) = c.member("lu").await;
     let lu_principal = c.principal(&lu).await;
@@ -2110,7 +2239,7 @@ async fn campaign() {
             "resend_outcomes": outcomes, "refused_token_modes": refused_modes,
             "sessions_at_end": all, "checks": c.checks, "passed": true,
             "limits": ["The provider is the cfg(test) synthetic loopback issuer (simulated transport and hosted page), never the deployed fAuth; hosted PAR, mail delivery and browsers are APP-074/076.",
-                       "The invited-signup entry is a labeled local stand-in for APP-074's POST /invite/validate.",
+                       "The invited signup runs through APP-074's POST /invite/validate; provider invitations come from the loopback management stand-in app/runtime/fake_fauth.py (simulated transport).",
                        "Synthetic local password authentication is not RDS IAM; identifiers are synthetic.",
                        "Rendering uses a test page renderer; the SSR pages are covered by the binary's own test and the HTTP probes."]
         })).unwrap()).unwrap();

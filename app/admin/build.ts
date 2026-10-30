@@ -7,6 +7,7 @@ await build({
   entryPoints: [
     { entry: 'src/home/app.tsx', outfile: 'home.js' },
     { entry: 'src/about/app.tsx', outfile: 'about.js' },
+    { entry: 'src/invite/app.tsx', outfile: 'invite.js' },
     { entry: 'src/signin/app.tsx', outfile: 'signin.js' },
     { entry: 'src/pending/app.tsx', outfile: 'pending.js' },
     { entry: 'src/denied/app.tsx', outfile: 'denied.js' },
@@ -16,10 +17,12 @@ await build({
     { input: 'src/styles/app.css', outfile: 'app.css' },
   ],
   // APP-009 (ADR-006): the sign-in page also serves /signin/{handle}; the
-  // denial page is rendered by the callback and the pending route.
+  // denial page is rendered by the callback and the pending route. APP-074:
+  // the invitation entry also renders POST /invite/validate's refusals.
   routes: {
     '/': { js: ['home'], css: ['app'] },
     '/about': { js: ['about'], css: ['app'] },
+    '/invite': { js: ['invite'], css: ['app'] },
     '/signin': { js: ['signin'], css: ['app'] },
     '/auth/pending': { js: ['pending'], css: ['app'] },
     '/auth/callback': { js: ['denied'], css: ['app'] },
@@ -33,6 +36,7 @@ await build({
   ...(isSsr ? { ssrEntryPoints: {
     home: 'src/home/app.tsx',
     about: 'src/about/app.tsx',
+    invite: 'src/invite/app.tsx',
     signin: 'src/signin/app.tsx',
     pending: 'src/pending/app.tsx',
     denied: 'src/denied/app.tsx',

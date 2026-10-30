@@ -1,9 +1,11 @@
 //! The shared HTTP contract (ADR-007 D7.14, D7.15; design §9; ADR-006):
 //! `application/problem+json` refusals carrying only a stable `code`, the
 //! uniform 404 for unknown and protected paths alike, `no-store` and
-//! `nosniff` on every non-page response, form bodies bounded at 4 KiB with
-//! 413 `payload_too_large`, and the 5 s handler deadline. APP-009 adds what
-//! its routes need; APP-074 extends the limits and the trusted proxy.
+//! `nosniff` on every non-page response, form bodies bounded at 4 KiB and
+//! JSON bodies at 64 KiB (256 KiB on the command route) with 413
+//! `payload_too_large`, and the 5 s handler deadline. APP-009 added what its
+//! routes need; APP-074 adds the invitation limits, the JSON bounds and the
+//! trusted-proxy restriction to the load balancer's peers.
 pub mod limits;
 pub mod proxy;
 
@@ -18,6 +20,10 @@ use std::time::Duration;
 
 /// D7.14: auth and admission forms.
 pub const FORM_BODY_LIMIT: usize = 4096;
+/// D7.14: JSON query routes.
+pub const JSON_BODY_LIMIT: usize = 64 * 1024;
+/// D7.14: the JSON command route (32 values of up to 2,000 characters).
+pub const COMMAND_BODY_LIMIT: usize = 256 * 1024;
 /// D7.14: every handler.
 pub const HANDLER_DEADLINE: Duration = Duration::from_secs(5);
 
@@ -101,6 +107,13 @@ pub async fn form(body: Body) -> Option<Vec<(String, String)>> {
     Some(url::form_urlencoded::parse(&bytes).into_owned().collect())
 }
 
+/// A request body of at most `limit` bytes (`JSON_BODY_LIMIT` or
+/// `COMMAND_BODY_LIMIT` for the JSON routes). `None` (anything larger) is
+/// answered with 413 `payload_too_large`; the caller parses the bytes.
+pub async fn bounded(body: Body, limit: usize) -> Option<axum::body::Bytes> {
+    to_bytes(body, limit).await.ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,5 +151,21 @@ mod tests {
         assert!(form(Body::from(vec![b'a'; FORM_BODY_LIMIT + 1]))
             .await
             .is_none());
+    }
+
+    #[tokio::test]
+    async fn json_bodies_are_bounded_at_64_and_256_kibibytes() {
+        for limit in [JSON_BODY_LIMIT, COMMAND_BODY_LIMIT] {
+            assert_eq!(
+                bounded(Body::from(vec![b'{'; limit]), limit)
+                    .await
+                    .map(|b| b.len()),
+                Some(limit)
+            );
+            assert!(bounded(Body::from(vec![b'{'; limit + 1]), limit)
+                .await
+                .is_none());
+        }
+        assert_eq!((JSON_BODY_LIMIT, COMMAND_BODY_LIMIT), (65_536, 262_144));
     }
 }

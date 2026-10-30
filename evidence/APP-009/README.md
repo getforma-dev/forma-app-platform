@@ -116,3 +116,7 @@ Northstar `…0001`: `se45m37vabqrfvbh3gbwn22qkm`; Canary `…0002`: `z33gibxjsp
 5. `runtime.py` still accepts `GENUI_AUTH_QUALIFICATION_CONFIG_JSON` and hands the file to the child, which a release binary now refuses; remove the injection path, or keep it for a feature-built qualification executable?
 6. ADR-006 fixes no status for the neutral failure and denial pages (decision 5); pin them if wanted.
 7. Should the verifier crate expose a sealed verified-identity type so storage need not trust its caller's `VerifiedIdentity` (APP-006 owner)?
+
+## Amendment (2026-10-29, after the independent review; APP-074 slice)
+
+The counts above are pre-merge. After the integration merge `9a1e8c4` the true values are: `catalog-v6.json` sha256 `2db0b8db417c4160fe41ea20bda7230772895fe2a088c3d4c38e3bcab65c27dc` (not `14ef47cf…`), the schema campaign **341** checks (not 334), `managed_qualification.rs` `SOURCES` **57** (not 47) and the library tests **82** passed (not 77), as the [independent review](independent-review.md) re-measured at `4433246` (finding m7). The review's major M1 and minors m1–m6 are fixed in the APP-074 slice (dispositions at the end of the review); its new counts are recorded in `evidence/APP-074/local/README.md`. The labeled local stand-in for `POST /invite/validate` (decision 9, limits) is replaced there by the real route: the session campaign's invited signups now go through it.

@@ -4,6 +4,10 @@
 //! written to disk, a row, a log or a response; a restart empties the vault
 //! (D7.18). Refresh is serialized per entry, replaces both tokens atomically
 //! and never presents a token again after any answer but success (ADR-006).
+//! Every entry records its creation time; the expiry sweep removes entries
+//! older than the workspace session's 12-hour absolute lifetime, which no
+//! live row can reference (APP-009 review m5: an entry inserted by a callback
+//! cancelled before its row committed is otherwise referenced by nothing).
 use super::{
     capability::{random_uuid, Sealer},
     provider::{Client, RefreshFailure, Token},
@@ -35,6 +39,7 @@ struct Tokens {
 }
 struct Entry {
     slug: String,
+    created_at: u64,
     tokens: tokio::sync::Mutex<Tokens>,
 }
 
@@ -85,6 +90,7 @@ impl Vault {
             reference.clone(),
             Arc::new(Entry {
                 slug: slug.to_owned(),
+                created_at: now(),
                 tokens: tokio::sync::Mutex::new(tokens),
             }),
         );
@@ -167,6 +173,34 @@ impl Vault {
         }
         let refresh = self.open(reference, "refresh", &tokens.refresh)?;
         Some((entry.slug.clone(), refresh))
+    }
+    /// References of entries created more than `max_age_seconds` ago.
+    pub fn stale(&self, max_age_seconds: u64) -> Vec<String> {
+        let cutoff = now().saturating_sub(max_age_seconds);
+        self.entries
+            .lock()
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter(|(_, entry)| entry.created_at < cutoff)
+                    .map(|(reference, _)| reference.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+    /// Test-only: move an entry's creation time into the past.
+    #[cfg(test)]
+    pub fn backdate(&self, reference: &str, seconds: u64) {
+        let mut entries = self.entries.lock().unwrap();
+        let entry = entries.remove(reference).unwrap();
+        let entry = Arc::try_unwrap(entry).ok().unwrap();
+        entries.insert(
+            reference.to_owned(),
+            Arc::new(Entry {
+                created_at: entry.created_at - seconds,
+                ..entry
+            }),
+        );
     }
     fn open(&self, reference: &str, kind: &str, sealed: &[u8]) -> Option<String> {
         String::from_utf8(self.sealer.open(&Self::context(reference, kind), sealed)?).ok()

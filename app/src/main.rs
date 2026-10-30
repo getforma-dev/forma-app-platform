@@ -9,10 +9,11 @@ use axum::{
 use forma_ir::PageProps;
 use forma_server::{
     assets, load_ir_modules, render_browser_shell, sw, PageConfig, PageHandle, PageResponse,
-    RenderCtx, RenderError, RouteMode,
+    PolicyExtensions, RenderCtx, RenderError, RouteMode,
 };
 use genui::auth::{
-    self, Auth, AuthConfig, DeniedView, PendingView, ResendResult, SigninView, WorkspaceView,
+    self, Auth, AuthConfig, DeniedView, InviteView, PendingView, ResendResult, SigninView,
+    WorkspaceView,
 };
 use rust_embed::Embed;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
@@ -28,6 +29,13 @@ struct HomeProps {
 #[derive(PageProps)]
 struct AboutProps {}
 // APP-009 (ADR-006) pages: typed props only; no page reads a request value.
+// APP-074: the invitation entry never shows a submitted code back.
+#[derive(PageProps)]
+struct InviteProps {
+    failed: bool,
+    limited: bool,
+    described_by: String,
+}
 #[derive(PageProps)]
 struct SigninProps {
     action: String,
@@ -65,12 +73,47 @@ struct AppState {
 /// The APP-009 pages, rendered as complete `PageResponse`s (fresh nonce,
 /// CSP and `no-store` together). The auth module decides status and cookies.
 struct SsrPages {
+    /// The configured fAuth origin: the two anonymous forms' `POST` answers
+    /// `303` there, and Chromium and WebKit judge `form-action` on every hop
+    /// of a form submission's redirect chain (APP-009 review M1).
+    auth_origin: Option<String>,
+    invite: PageHandle<InviteProps>,
     signin: PageHandle<SigninProps>,
     pending: PageHandle<PendingProps>,
     denied: PageHandle<DeniedProps>,
     workspace: PageHandle<WorkspaceProps>,
 }
+impl SsrPages {
+    /// A page whose form hands off to the auth origin: `form-action 'self'`
+    /// plus that exact origin (forma-server `PolicyExtensions::form_action`).
+    /// Without a configured origin the form fails neutrally and stays `'self'`.
+    fn handoff(&self, title: &str) -> RenderCtx {
+        let ctx = RenderCtx::new().with_title(title);
+        match &self.auth_origin {
+            Some(origin) => ctx.with_policy(PolicyExtensions::new().form_action(origin.clone())),
+            None => ctx,
+        }
+    }
+}
 impl auth::Pages for SsrPages {
+    fn invite(&self, view: &InviteView) -> Response {
+        respond(
+            "/invite",
+            self.invite.render(
+                &InviteProps {
+                    failed: view.failed,
+                    limited: view.limited,
+                    described_by: if view.failed || view.limited {
+                        "invite-error"
+                    } else {
+                        "invite-help"
+                    }
+                    .into(),
+                },
+                &self.handoff("Enter your invitation code"),
+            ),
+        )
+    }
     fn signin(&self, view: &SigninView) -> Response {
         respond(
             "/signin",
@@ -80,7 +123,7 @@ impl auth::Pages for SsrPages {
                     has_action: view.action.is_some(),
                     failed: view.failed,
                 },
-                &RenderCtx::new().with_title("Sign in"),
+                &self.handoff("Sign in"),
             ),
         )
     }
@@ -227,6 +270,10 @@ async fn main() {
         Err(std::env::VarError::NotPresent) => None,
         Err(_) => refuse("auth configuration file refused"),
     };
+    // ADR-007 D7.14: the load balancer's peers; APP-073's private provider
+    // invitation capabilities (absent: no code obtains a signup handoff).
+    let proxies = genui::http::proxy::TrustedProxies::from_env().unwrap_or_else(|r| refuse(r));
+    let invitations = auth::invite::Invitations::from_env().unwrap_or_else(|r| refuse(r));
     // A render that fails comes back to `home` as a coded error, which `home`
     // logs through `tracing`; forma-server's own security events go there too.
     // Without a subscriber those lines go nowhere. Keep this.
@@ -247,6 +294,7 @@ async fn main() {
     for route in [
         "/",
         "/about",
+        "/invite",
         "/signin",
         "/auth/pending",
         "/auth/callback",
@@ -280,6 +328,10 @@ async fn main() {
         None => refuse("missing declared route /about"),
     };
     let auth_pages = Arc::new(SsrPages {
+        auth_origin: auth_config.as_ref().map(|c| c.auth_origin.clone()),
+        invite: pages
+            .bind::<InviteProps>("invite")
+            .unwrap_or_else(bind_errors),
         signin: pages
             .bind::<SigninProps>("signin")
             .unwrap_or_else(bind_errors),
@@ -311,7 +363,10 @@ async fn main() {
     // refuses the operator qualification configuration here.
     let qualification = qualification_router();
     let auth = Arc::new(
-        Auth::new(auth_config, stores.clone(), auth_pages).unwrap_or_else(|reason| refuse(reason)),
+        Auth::new(auth_config, stores.clone(), auth_pages)
+            .unwrap_or_else(|reason| refuse(reason))
+            .with_trusted_proxies(proxies)
+            .with_invitations(invitations),
     );
     let readiness = genui::readiness::Readiness::start(
         credential_path.into(),
@@ -468,13 +523,37 @@ mod tests {
         assert_eq!(require_ssr(None), Err("missing route"));
     }
 
+    const AUTH_ORIGIN: &str = "https://auth.getforma.dev";
+    fn policy(headers: &axum::http::HeaderMap) -> String {
+        headers[header::CONTENT_SECURITY_POLICY]
+            .to_str()
+            .unwrap()
+            .to_owned()
+    }
+    fn form_action(headers: &axum::http::HeaderMap) -> String {
+        policy(headers)
+            .split(';')
+            .map(str::trim)
+            .find(|d| d.starts_with("form-action"))
+            .unwrap()
+            .to_owned()
+    }
+
     fn pages() -> SsrPages {
         let manifest = assets::try_load_manifest::<Assets>().expect("admin/dist built");
-        for route in ["/signin", "/auth/pending", "/auth/callback", "/workspace"] {
+        for route in [
+            "/invite",
+            "/signin",
+            "/auth/pending",
+            "/auth/callback",
+            "/workspace",
+        ] {
             require_ssr(manifest.route(route).map(|entry| entry.mode)).unwrap();
         }
         let pages = load_ir_modules::<Assets>(&manifest).unwrap();
         let ssr = SsrPages {
+            auth_origin: Some(AUTH_ORIGIN.into()),
+            invite: pages.bind::<InviteProps>("invite").unwrap(),
             signin: pages.bind::<SigninProps>("signin").unwrap(),
             pending: pages.bind::<PendingProps>("pending").unwrap(),
             denied: pages.bind::<DeniedProps>("denied").unwrap(),
@@ -491,6 +570,53 @@ mod tests {
         let headers = response.headers().clone();
         let body = to_bytes(response.into_body(), 1 << 20).await.unwrap();
         (status, headers, String::from_utf8(body.to_vec()).unwrap())
+    }
+
+    /// APP-074: the invitation entry renders natively with no script and
+    /// `no-store`; one labeled, keyboard-reachable code field posts to
+    /// `/invite/validate`; the neutral refusal and the limit are announced
+    /// and tied to the field; no code value is ever rendered.
+    #[tokio::test]
+    async fn invite_page_renders_entry_refusal_and_limit_without_javascript() {
+        let pages = pages();
+        let (status, headers, body) = html(pages.invite(&InviteView {
+            failed: false,
+            limited: false,
+        }))
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(headers[header::CACHE_CONTROL]
+            .to_str()
+            .unwrap()
+            .contains("no-store"));
+        assert!(headers.contains_key(header::CONTENT_SECURITY_POLICY));
+        assert_eq!(
+            form_action(&headers),
+            format!("form-action 'self' {AUTH_ORIGIN}"),
+            "the 303 to the auth origin is a hop of this form's submission"
+        );
+        assert!(body.contains("action=\"/invite/validate\""));
+        assert!(body.contains("method=\"post\""));
+        assert!(body.contains("for=\"invite-code\"") && body.contains("id=\"invite-code\""));
+        assert!(body.contains("name=\"code\"") && body.contains("autocomplete=\"off\""));
+        assert!(!body.contains("<script src") && !body.contains("value=\""));
+        assert!(!body.contains("role=\"alert\""));
+        assert!(body.contains("aria-describedby=\"invite-help\""));
+        let (_, _, refused) = html(pages.invite(&InviteView {
+            failed: true,
+            limited: false,
+        }))
+        .await;
+        assert!(refused.contains("role=\"alert\"") && refused.contains("could not be used"));
+        assert!(refused.contains("aria-describedby=\"invite-error\""));
+        assert!(refused.contains("id=\"invite-error\"") && refused.contains("<form"));
+        let (_, _, limited) = html(pages.invite(&InviteView {
+            failed: false,
+            limited: true,
+        }))
+        .await;
+        assert!(limited.contains("Too many attempts") && limited.contains("role=\"alert\""));
+        assert!(!limited.contains("could not be used"));
     }
 
     /// The four APP-009 pages render natively with their typed props, no
@@ -510,6 +636,12 @@ mod tests {
             .unwrap()
             .contains("no-store"));
         assert!(headers.contains_key(header::CONTENT_SECURITY_POLICY));
+        // APP-009 review M1: the sign-in form's 303 goes to the auth origin.
+        assert_eq!(
+            form_action(&headers),
+            format!("form-action 'self' {AUTH_ORIGIN}")
+        );
+        assert!(policy(&headers).contains("frame-ancestors 'none'"));
         assert!(body.contains("action=\"/signin/mrswmz3infvgw3dnnzxxa4lsom\""));
         assert!(body.contains("method=\"post\""));
         assert!(!body.contains("<script src"));
@@ -520,7 +652,7 @@ mod tests {
         }))
         .await;
         assert!(body.contains("could not continue") && !body.contains("<form"));
-        let (_, _, body) = html(pages.pending(&PendingView {
+        let (_, pending_headers, body) = html(pages.pending(&PendingView {
             csrf_resend: "R".repeat(43),
             csrf_signout: "S".repeat(43),
             resend_available: true,
@@ -530,6 +662,11 @@ mod tests {
         }))
         .await;
         assert!(body.contains("action=\"/auth/pending/resend\""));
+        assert_eq!(
+            form_action(&pending_headers),
+            "form-action 'self'",
+            "same-origin forms keep the strict default"
+        );
         assert!(body.contains(&format!("value=\"{}\"", "R".repeat(43))));
         assert!(body.contains(&format!("value=\"{}\"", "S".repeat(43))));
         assert!(body.contains(">23<") && body.contains("was requested"));

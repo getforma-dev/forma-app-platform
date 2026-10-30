@@ -228,6 +228,8 @@ test('app environment contains identities only and one private ephemeral credent
   assert.equal(container.EntryPoint, undefined); assert.equal(container.Command, undefined);
   const environment = Object.fromEntries(container.Environment.map((value: any) => [value.Name, value.Value]));
   assert.equal(environment.GENUI_RUNTIME_CONFIG_FILE, '/run/genui/credentials.json'); assert.equal(environment.GENUI_RDS_CA_FILE, '/etc/ssl/certs/rds-global-bundle.pem'); assert.equal(environment.FORMA_BIND_ADDRESS, '0.0.0.0'); assert.equal(environment.FORMA_PORT, '3000');
+  // D7.14: the trusted proxies are exactly the ALB's public subnets.
+  assert.equal(environment.GENUI_TRUSTED_PROXY_CIDRS, '10.72.0.0/24,10.72.1.0/24');
   assert.equal(Object.keys(environment).some(name => /PASSWORD|TOKEN|CREDENTIAL$/.test(name)), false);
   const database = JSON.parse(resolve(environment.GENUI_DATABASE_ROLES_JSON, {}));
   assert.deepEqual(Object.keys(database).sort(), ['control', 'data', 'worker', 'workspace']);
