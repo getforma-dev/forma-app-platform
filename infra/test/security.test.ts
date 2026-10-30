@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { readFileSync } from 'node:fs';
-import { ALB_IDLE_TIMEOUT_SECONDS, AUTH_CONFIGURATION_ENV, DEMO_MODE_ENV, DEMO_ORGANIZATIONS_ENV, DEMO_ORGANIZATION_ID, AUTH_CONFIGURATION_SECRET_ID_ENV, CANVAS_EVENTS_URL, CANVAS_EVENTS_URL_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, COMPOSE_DEADLINE_SECONDS, COMPOSER_KEY_ENV, GenuiFoundation, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_URL_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
+import { ALB_IDLE_TIMEOUT_SECONDS, AUTH_CONFIGURATION_ENV, DEMO_MODE_ENV, DEMO_ORGANIZATIONS_ENV, DEMO_ORGANIZATION_ID, AUTH_CONFIGURATION_SECRET_ID_ENV, CANVAS_EVENTS_URL, CANVAS_EVENTS_URL_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, COMPOSE_DEADLINE_SECONDS, COMPOSER_KEY_ENV, GenuiFoundation, SLACK_APP_PLACEHOLDER, SLACK_BOT_TOKEN_ENV, SLACK_SIGNING_SECRET_ENV, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_URL_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
 
 const template = Template.fromStack(new GenuiFoundation(new App(), 'SecurityQualification'));
 const document = template.toJSON();
@@ -49,8 +49,9 @@ test('managed data stays private, encrypted, retained and versioned', () => {
   template.hasResourceProperties('AWS::RDS::DBParameterGroup', { Parameters: { 'rds.force_ssl': '1' } });
   // Two tenant keys, the capability secret's key, the auth configuration's key (APP-078 B1), and the operator
   // invitation input's key (ADR-003 amendment 2026-10-30, managed invitations). The fAuth management secret is
-  // FormaStack's, attached by ARN: the stack creates no copy and no key for it.
-  template.resourceCountIs('AWS::KMS::Key', 6);
+  // FormaStack's, attached by ARN: the stack creates no copy and no key for it. Plus the composer model key's and
+  // (APP-100) the Slack app's.
+  template.resourceCountIs('AWS::KMS::Key', 7);
   for (const [, key] of entries('AWS::KMS::Key')) assert.equal(key.Properties.EnableKeyRotation, true);
   template.hasResourceProperties('AWS::S3::Bucket', { VersioningConfiguration: { Status: 'Enabled' }, PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }, OwnershipControls: { Rules: [{ ObjectOwnership: 'BucketOwnerEnforced' }] } });
   for (const type of ['AWS::RDS::DBInstance', 'AWS::S3::Bucket', 'AWS::KMS::Key', 'AWS::Logs::LogGroup', 'AWS::SecretsManager::Secret']) for (const [, item] of entries(type)) {
@@ -229,7 +230,7 @@ test('only migration execution role receives admin secret; migration has no tena
     { Ref: one('AWS::SecretsManager::Secret', 'OperatorInvitationInput')[0] },
     { Ref: 'ProviderManagementSecretArn' },
   ]);
-  assert.deepEqual(secretReads(role('ExecutionRole')).map(statement => statement.Resource), [{ Ref: one('AWS::SecretsManager::Secret', 'ProviderCapabilities')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'AuthConfiguration')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'ComposerModel')[0] }]);
+  assert.deepEqual(secretReads(role('ExecutionRole')).map(statement => statement.Resource), [{ Ref: one('AWS::SecretsManager::Secret', 'ProviderCapabilities')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'AuthConfiguration')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'ComposerModel')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'SlackApp')[0] }]);
   const migration = one('AWS::ECS::TaskDefinition', 'MigrationTask')[1].Properties;
   assert.deepEqual(document.Outputs.MigrationTaskRoleArn.Value, { 'Fn::GetAtt': [role('MigrationRole'), 'Arn'] });
   assert.deepEqual(document.Outputs.MigrationExecutionRoleArn.Value, { 'Fn::GetAtt': [role('MigrationExecutionRole'), 'Arn'] });
@@ -251,6 +252,9 @@ test('app environment contains identities only and one private ephemeral credent
     { Name: CAPABILITY_SECRET_ENV, ValueFrom: { Ref: one('AWS::SecretsManager::Secret', 'ProviderCapabilities')[0] } },
     { Name: AUTH_CONFIGURATION_ENV, ValueFrom: { Ref: one('AWS::SecretsManager::Secret', 'AuthConfiguration')[0] } },
     { Name: COMPOSER_KEY_ENV, ValueFrom: { Ref: one('AWS::SecretsManager::Secret', 'ComposerModel')[0] } },
+    // APP-100: the Slack app secret's two JSON keys, each as the one variable the service reads.
+    { Name: SLACK_BOT_TOKEN_ENV, ValueFrom: { 'Fn::Join': ['', [{ Ref: one('AWS::SecretsManager::Secret', 'SlackApp')[0] }, ':bot_token::']] } },
+    { Name: SLACK_SIGNING_SECRET_ENV, ValueFrom: { 'Fn::Join': ['', [{ Ref: one('AWS::SecretsManager::Secret', 'SlackApp')[0] }, ':signing_secret::']] } },
   ]);
   assert.equal(COMPOSER_KEY_ENV in environment_names(container), false, 'the key is a secret, never a plain environment entry');
   assert.deepEqual(container.MountPoints, [{ ContainerPath: '/run/genui', ReadOnly: false, SourceVolume: 'runtime-config' }]);
@@ -280,7 +284,8 @@ test('the retired qualification secret has no parameter, condition, read policy 
   // The migration secret, the capability secret, the auth configuration secret (APP-078 B1) and the operator
   // invitation input (ADR-003 amendment 2026-10-30, managed invitations) only; FormaStack's management secret is
   // attached by ARN, never created here.
-  template.resourceCountIs('AWS::SecretsManager::Secret', 5);
+  // Plus (APP-100) the Slack app's credentials.
+  template.resourceCountIs('AWS::SecretsManager::Secret', 6);
 });
 
 test('the capability secret is KMS-encrypted, retained, starts empty and is injected into the service task only (ADR-003 amendment 2026-10-30)', () => {
@@ -374,7 +379,39 @@ test('the invitation input secret is KMS-encrypted, retained, starts empty and r
   }
   // The service's execution role still resolves exactly its three secrets, none of the operator's.
   const serviceReads = policy(executionRole).filter(statement => actions(statement).some(action => action.startsWith('secretsmanager:'))).map(statement => statement.Resource);
-  assert.deepEqual(serviceReads, [{ Ref: one('AWS::SecretsManager::Secret', 'ProviderCapabilities')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'AuthConfiguration')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'ComposerModel')[0] }]);
+  assert.deepEqual(serviceReads, [{ Ref: one('AWS::SecretsManager::Secret', 'ProviderCapabilities')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'AuthConfiguration')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'ComposerModel')[0] }, { Ref: one('AWS::SecretsManager::Secret', 'SlackApp')[0] }]);
+});
+
+test('the Slack app secret is KMS-encrypted, retained, starts as no app and is injected into the service task only as the two Slack variables (APP-100, ADR-011)', () => {
+  const [secretId, secret] = one('AWS::SecretsManager::Secret', 'SlackApp');
+  const [keyId, key] = one('AWS::KMS::Key', 'SlackAppKey');
+  assert.deepEqual(secret.Properties.KmsKeyId, { 'Fn::GetAtt': [keyId, 'Arn'] });
+  assert.equal(secret.Properties.SecretString, SLACK_APP_PLACEHOLDER);
+  assert.deepEqual(JSON.parse(SLACK_APP_PLACEHOLDER), { bot_token: '', signing_secret: '' }, 'both keys present and empty: no Slack app, and ECS can resolve both keys');
+  assert.equal(secret.Properties.GenerateSecretString, undefined);
+  for (const item of [secret, key]) { assert.equal(item.DeletionPolicy, 'Retain'); assert.equal(item.UpdateReplacePolicy, 'Retain'); }
+  assert.equal(key.Properties.EnableKeyRotation, true);
+  assert.deepEqual(document.Outputs.SlackAppSecretArn.Value, { Ref: secretId });
+  for (const [id, task] of entries('AWS::ECS::TaskDefinition')) {
+    const body = JSON.stringify(task.Properties.ContainerDefinitions.map((container: any) => container.Secrets ?? []));
+    assert.equal(body.includes(secretId), id.startsWith('Task'), id);
+    for (const name of [SLACK_BOT_TOKEN_ENV, SLACK_SIGNING_SECRET_ENV]) {
+      assert.equal(body.includes(name), id.startsWith('Task'), id);
+      for (const container of task.Properties.ContainerDefinitions) assert.equal(environment_names(container).includes(name), false, id);
+    }
+  }
+  assert.equal(policy(role('TaskRole')).some(statement => actions(statement).some(action => action.startsWith('secretsmanager:') || action.startsWith('kms:'))), false);
+  const decrypts = key.Properties.KeyPolicy.Statement.filter((statement: any) => statement.Principal?.AWS?.['Fn::GetAtt']);
+  assert.deepEqual(decrypts.map((statement: any) => [statement.Principal.AWS['Fn::GetAtt'][0], statement.Action]), [[role('ExecutionRole'), 'kms:Decrypt']]);
+  for (const statement of decrypts) assert.deepEqual(Object.keys(statement.Condition.StringEquals), ['kms:ViaService']);
+  // Every IAM grant on the secret: the execution role reads it; the operator role reads and writes it, nothing else.
+  const grants = entries('AWS::IAM::Policy').flatMap(([, item]) => item.Properties.PolicyDocument.Statement
+    .filter((statement: any) => JSON.stringify(statement.Resource).includes(secretId))
+    .map((statement: any) => [item.Properties.Roles.map((value: any) => value.Ref), actions(statement).sort(), item.Condition ?? null]));
+  assert.deepEqual(grants.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))), [
+    [[role('ExecutionRole')], ['secretsmanager:DescribeSecret', 'secretsmanager:GetSecretValue'], null],
+    [[role('OperatorRole')], ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], 'OperatorTaskEnabled'],
+  ].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
 });
 
 test('the composer model key secret is KMS-encrypted, retained, starts as no key and is injected into the service task only (APP-093, ADR-011)', () => {
@@ -489,7 +526,7 @@ test('the rollback revision runs the same image with no secret injected, so it s
     assert.deepEqual(container[field], current[field], field);
   }
   assert.equal(container.Secrets, undefined);
-  assert.equal(current.Secrets.length, 3);
+  assert.equal(current.Secrets.length, 5);
   assert.equal(container.LogConfiguration.Options['awslogs-stream-prefix'], 'genui-rollback');
   const environment = Object.fromEntries(container.Environment.map((value: any) => [value.Name, value.Value]));
   assert.equal(Object.keys(environment).some(name => name.startsWith('GENUI_AUTH_CONFIG') || name.startsWith('GENUI_IDENTITY_REGISTRY') || name.startsWith('GENUI_PROVIDER_CAPABILIT')), false);
@@ -676,8 +713,8 @@ test('operator task role holds no role assumption and reaches only B1 source obj
   const all = policy(role('OperatorRole'));
   // ADR-003 amendment 2026-10-30 and APP-078 B1: plus exactly Get/PutSecretValue on the capability and auth
   // configuration secrets and their keys via Secrets Manager.
-  const secretRefs = ['ProviderCapabilities', 'AuthConfiguration', 'ComposerModel'].map(prefix => ({ Ref: one('AWS::SecretsManager::Secret', prefix)[0] }));
-  const keyArns = ['ProviderCapabilityKey', 'AuthConfigurationKey', 'ComposerModelKey'].map(prefix => ({ 'Fn::GetAtt': [one('AWS::KMS::Key', prefix)[0], 'Arn'] }));
+  const secretRefs = ['ProviderCapabilities', 'AuthConfiguration', 'ComposerModel', 'SlackApp'].map(prefix => ({ Ref: one('AWS::SecretsManager::Secret', prefix)[0] }));
+  const keyArns = ['ProviderCapabilityKey', 'AuthConfigurationKey', 'ComposerModelKey', 'SlackAppKey'].map(prefix => ({ 'Fn::GetAtt': [one('AWS::KMS::Key', prefix)[0], 'Arn'] }));
   const custody = all.filter(statement => JSON.stringify(statement.Resource) === JSON.stringify(secretRefs)
     || JSON.stringify(statement.Resource) === JSON.stringify(keyArns));
   assert.deepEqual(custody.map(statement => [actions(statement).sort(), statement.Condition ?? null]), [

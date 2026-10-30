@@ -17,6 +17,8 @@ import { parametersOf, runView } from './queries';
 import { buildForm, buildGroup, el, groupJson, isUuid, renderNoValue, type FormJson } from './render';
 import { recordsCardsOf, refreshRecords, wireRecordsCard } from './records';
 import { refreshCommands } from './slash';
+import { ledgerCardsOf, refreshLedger, wireLedgerCard } from './ledger';
+import { wireReceiptAttach } from './receipt';
 
 type Group = {
   app: string;
@@ -27,8 +29,8 @@ type Group = {
   pinned: boolean;
 };
 
-const WIDTH: Record<string, number> = { app: 340, summary: 400, timeline: 620, form: 360, records: 680 };
-const HEIGHT: Record<string, number> = { app: 300, summary: 250, timeline: 340, form: 300, records: 260 };
+const WIDTH: Record<string, number> = { app: 340, summary: 400, timeline: 620, form: 360, records: 680, ledger: 520 };
+const HEIGHT: Record<string, number> = { app: 300, summary: 250, timeline: 340, form: 300, records: 260, ledger: 280 };
 const GAP = 28;
 const ROW_GAP = 72;
 const ORIGIN = 64;
@@ -105,6 +107,111 @@ function nextRow(): number {
   return bottom;
 }
 
+// --- APP-103: utility widgets (`./widgets`) share the canvas surface. ---
+// A widget is a client-side card with no governed data; the board only
+// mounts it, keeps it out of the app rows and tells the widgets module when
+// the member moved something (its layout is the widgets module's, DS-06).
+const widgetItems = new Set<HTMLElement>();
+const layoutListeners: Array<() => void> = [];
+const widgetAnchor = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((entries) => {
+  if (!canvas) return;
+  for (const entry of entries) {
+    const item = entry.target as HTMLElement;
+    if (item.dataset.widgetPinned || !widgetItems.has(item)) {
+      widgetAnchor?.unobserve(item);
+      continue;
+    }
+    canvas.moveItemTo(item, Number(item.dataset.canvasX ?? ORIGIN), ORIGIN - ROW_GAP - item.offsetHeight);
+  }
+});
+
+/** The canvas host, once the board is started (null before). */
+export function canvasHost(): HTMLElement | null {
+  return canvas ? host : null;
+}
+
+/** Whether this page runs the pitch's demo mode (`GENUI_DEMO_MODE`). */
+export function isDemoCanvas(): boolean {
+  return demo();
+}
+
+/** Calls `listener` whenever the board saves the layout (after a move). */
+export function onLayoutSaved(listener: () => void): void {
+  layoutListeners.push(listener);
+}
+
+/** The canvas item the member selected last, if any. */
+export function activeCanvasItem(): HTMLElement | null {
+  return canvas?.activeItem() ?? null;
+}
+
+/**
+ * The widget row sits above the app rows (which flow down from ORIGIN), so
+ * the apps' re-flow never overlaps a widget: left to right, bottoms aligned
+ * one row gap above the first app row.
+ */
+function nextWidgetX(): number {
+  let x = ORIGIN;
+  for (const item of widgetItems) {
+    x = Math.max(x, Number(item.dataset.canvasX ?? ORIGIN) + item.offsetWidth + GAP);
+  }
+  return x;
+}
+
+/**
+ * Mounts a widget card at `at` (a restored position) or at the next free
+ * spot, and returns its canvas item (null before the board starts).
+ */
+export function mountWidget(
+  content: HTMLElement,
+  options: { id: string; title: string; width: number; minHeight: number; at?: { x: number; y: number }; focus?: boolean },
+): HTMLElement | null {
+  if (!canvas || !host) return null;
+  const item = createCanvasItem({
+    instanceId: options.id,
+    displayName: options.title,
+    preferredWidth: options.width,
+    minHeight: options.minHeight,
+    content,
+  });
+  item.classList.add('cv-item', 'cv-item-widget');
+  const x = nextWidgetX();
+  canvas.mountItem(item, options.at ?? { x, y: ORIGIN - ROW_GAP - options.minHeight }, { focus: false });
+  if (!options.at) {
+    item.classList.add('is-placing');
+    canvas.moveItemTo(item, x, ORIGIN - ROW_GAP - Math.max(item.offsetHeight, options.minHeight));
+  }
+  widgetItems.add(item);
+  // A widget the member has not moved keeps its bottom on the widget row as
+  // a restyle changes its height (a TI-84 is taller), so it never overlaps the apps.
+  if (!options.at) {
+    widgetAnchor?.observe(item);
+  } else {
+    item.dataset.widgetPinned = 'true';
+  }
+  host.classList.add('has-groups');
+  host.ownerDocument.getElementById('cv-empty')?.setAttribute('hidden', '');
+  if (options.focus !== false) {
+    canvas.setActive(item);
+    canvas.centerItem(item);
+  }
+  return item;
+}
+
+/** Removes a widget's canvas item. */
+export function unmountWidget(item: HTMLElement): void {
+  if (!canvas || !widgetItems.delete(item)) return;
+  widgetAnchor?.unobserve(item);
+  canvas.removeItem(item, { selectFallback: false });
+}
+
+/** A widget item's position on the canvas. */
+export function widgetSpot(item: HTMLElement): { x: number; y: number } | null {
+  if (!canvas || !widgetItems.has(item)) return null;
+  const state = canvas.getItemState(item);
+  return { x: state.x, y: state.y };
+}
+
 function saveSoon(): void {
   if (!canvas) return;
   clearTimeout(saveTimer);
@@ -122,6 +229,7 @@ function saveSoon(): void {
       saveLayout(group.app, group.work, items);
     }
     saveCamera(canvas.getCamera());
+    for (const listener of layoutListeners) listener();
   }, 400);
 }
 
@@ -161,6 +269,7 @@ export function runGroup(work: string, live = false): void {
   const parameters = parametersOf(form);
   // ADR-011 scenarios: the group's records cards re-read their listing too.
   for (const card of recordsCardsOf(group.items)) void refreshRecords(card, live);
+  for (const card of ledgerCardsOf(group.items)) void refreshLedger(card, live);
   for (const item of group.items) {
     const card = item.querySelector<HTMLElement>('.cv-view');
     if (!card) continue;
@@ -278,6 +387,7 @@ function adopt(section: HTMLElement, y: number, animate: boolean): Group | null 
     const form = card.querySelector<HTMLFormElement>('form.cv-command');
     if (form) wireCommand(form, group, card);
     if (card.dataset.kind === 'records') wireRecordsCard(card);
+    if (card.dataset.kind === 'ledger') wireLedgerCard(card);
   }
   return group;
 }
@@ -286,7 +396,18 @@ function adopt(section: HTMLElement, y: number, animate: boolean): Group | null 
 export async function refreshGroupRecords(work: string, live = false): Promise<void> {
   const group = groups.get(work);
   if (!group) return;
-  await Promise.all(recordsCardsOf(group.items).map((card) => refreshRecords(card, live)));
+  await Promise.all([
+    ...recordsCardsOf(group.items).map((card) => refreshRecords(card, live)),
+    ...ledgerCardsOf(group.items).map((card) => refreshLedger(card, live)),
+  ]);
+}
+
+/** APP-102: centers a card's canvas item and flashes it (the ledger an `open` asked for). */
+export function focusCard(card: HTMLElement): void {
+  const item = card.closest<HTMLElement>('.cv-item');
+  if (!canvas || !item) return;
+  canvas.centerItem(item);
+  flash(item);
 }
 
 async function fetchGroup(app: string, work: string) {
@@ -701,6 +822,7 @@ function wireTools(document_: Document): void {
 /** Activates the canvas once, after the page's islands are active. */
 export function startBoard(document_: Document): void {
   if (canvas) return;
+  wireReceiptAttach(document_);
   host = document_.getElementById('cv-canvas');
   if (!host) return;
   const surface = createCanvasSurface(host, { className: 'cv-surface', navigatorLabel: 'Canvas navigator' });
@@ -714,6 +836,7 @@ export function startBoard(document_: Document): void {
     // Moving a card by hand (drag or keyboard) pins its group's layout.
     onActiveDragStateChange: (item, dragging) => {
       if (dragging) return;
+      if (widgetItems.has(item)) item.dataset.widgetPinned = 'true';
       const group = groups.get(item.dataset.group ?? '');
       if (group) group.pinned = true;
       fitPending = false;

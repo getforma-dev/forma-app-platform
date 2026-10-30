@@ -469,7 +469,14 @@ async fn campaign() {
         page: pages.bind::<CanvasProps>("canvas").unwrap(),
     });
     pages.finalize().unwrap();
-    let routes = crate::http::uniform_with(
+    // APP-103 widgets on the stand too (the weather fixture, no model), so
+    // the canvas's `/` list and `/weather` can be walked here (APP-101).
+    let widgets = crate::widgets::routes::router(Arc::new(crate::widgets::routes::Widgets::new(
+        auth.clone(),
+        crate::widgets::customize::Customizer::new(None, "none"),
+        crate::widgets::weather::OpenMeteo::new(),
+    )));
+    let routes = crate::http::uniform_with_many(
         axum::Router::new()
             .route(
                 "/_assets/{*filename}",
@@ -492,8 +499,14 @@ async fn campaign() {
                 live_events: "/v1/events".into(),
                 demo_organizations: Default::default(),
             }))),
-        composer::routes::PATH,
-        composer::routes::router(Arc::new(Compose::new(auth.clone(), composer))),
+        vec![
+            (
+                composer::routes::PATH,
+                composer::routes::router(Arc::new(Compose::new(auth.clone(), composer))),
+            ),
+            (crate::widgets::WEATHER_PATH, widgets.clone()),
+            (crate::widgets::CUSTOMIZE_PATH, widgets),
+        ],
     );
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
         .await

@@ -17,6 +17,7 @@ app/src/**
 !app/src/supervise.rs
 !app/src/demo.rs
 !app/src/directory.rs
+!app/src/origins.rs
 !app/src/imports/
 app/src/imports/**
 !app/src/imports/mod.rs
@@ -51,8 +52,11 @@ app/src/events/**
 !app/src/events/routes.rs
 !app/src/actions/
 app/src/actions/**
+!app/src/actions/ledger.rs
 !app/src/actions/mod.rs
 !app/src/actions/prompt.rs
+!app/src/actions/receipt.rs
+!app/src/actions/receipt_tests.rs
 !app/src/actions/rehearsed.rs
 !app/src/actions/resolve.rs
 !app/src/actions/routes.rs
@@ -60,6 +64,31 @@ app/src/actions/**
 !app/src/sharing/
 app/src/sharing/**
 !app/src/sharing/mod.rs
+!app/src/mcp/
+app/src/mcp/**
+!app/src/mcp/mod.rs
+!app/src/mcp/drafts.rs
+!app/src/mcp/tokens.rs
+!app/src/mcp/tools.rs
+!app/src/slack/
+app/src/slack/**
+!app/src/slack/mod.rs
+!app/src/slack/api.rs
+!app/src/slack/flows.rs
+!app/src/slack/link.rs
+!app/src/slack/notify.rs
+!app/src/slack/signature.rs
+!app/src/slack/text.rs
+# slack/tests.rs and storage/slack_campaign.rs are cfg(test) only; the qualification context lists them.
+# APP-103: canvas widgets (weather, customize in words).
+!app/src/widgets/
+app/src/widgets/**
+!app/src/widgets/customize.rs
+!app/src/widgets/mod.rs
+!app/src/widgets/routes.rs
+!app/src/widgets/state.rs
+!app/src/widgets/tests.rs
+!app/src/widgets/weather.rs
 !app/src/commands/
 app/src/commands/**
 !app/src/commands/mod.rs
@@ -92,6 +121,7 @@ app/src/storage/**
 !app/src/storage/definitions.rs
 !app/src/storage/queries.rs
 !app/src/storage/definition_qualification.rs
+!app/src/storage/agents.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
 !app/src/storage/actions.rs
@@ -103,6 +133,7 @@ app/src/storage/**
 app/src/query/**
 !app/src/query/canvas.rs
 !app/src/query/canvas_display.rs
+!app/src/query/canvas_ledger.rs
 !app/src/query/mod.rs
 !app/src/query/page.rs
 !app/src/query/receipt.rs
@@ -110,7 +141,8 @@ app/src/query/**
 !app/src/query/worker.rs
 # query/tests.rs, query/route_tests.rs, query/canvas_tests.rs, storage/query_qualification.rs,
 # storage/race_qualification.rs (APP-014), storage/canvas_campaign.rs, storage/composer_qualification.rs,
-# storage/sharing_qualification.rs and storage/pitch_qualification.rs are cfg(test) only; the
+# storage/sharing_qualification.rs, storage/pitch_qualification.rs, storage/mcp_campaign.rs and
+# mcp/tests.rs (APP-099) are cfg(test) only; the
 # qualification context lists them.
 !app/src/admission/
 app/src/admission/**
@@ -168,7 +200,17 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/queries.ts
 !app/admin/src/canvas/render.ts
 !app/admin/src/canvas/actions.ts
+!app/admin/src/canvas/ledger.ts
+!app/admin/src/canvas/receipt.ts
 !app/admin/src/canvas/records.ts
+!app/admin/src/canvas/widgets/
+app/admin/src/canvas/widgets/**
+!app/admin/src/canvas/widgets/index.ts
+!app/admin/src/canvas/widgets/calculator.ts
+!app/admin/src/canvas/widgets/clock.ts
+!app/admin/src/canvas/widgets/weather.ts
+!app/admin/src/canvas/widgets/state.ts
+!app/admin/src/canvas/widgets/card.ts
 !app/admin/src/canvas-vendor/
 app/admin/src/canvas-vendor/**
 !app/admin/src/canvas-vendor/canvas-capacity.ts
@@ -188,6 +230,8 @@ app/admin/src/styles/**
 !app/admin/src/styles/app.css
 !app/admin/src/styles/canvas.css
 !app/admin/src/styles/actions.css
+!app/admin/src/styles/ledger.css
+!app/admin/src/styles/widgets.css
 !app/runtime/
 app/runtime/**
 !app/runtime/runtime.py
@@ -203,6 +247,8 @@ app/migrations/**
 !app/migrations/0006_sessions.sql
 !app/migrations/0007_command_outcomes.sql
 !app/migrations/0008_sharing.sql
+!app/migrations/0010_agent_tokens.sql
+!app/migrations/0009_slack_links.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
 !app/migrations/catalog-v1.json
@@ -213,6 +259,8 @@ app/migrations/**
 !app/migrations/catalog-v6.json
 !app/migrations/catalog-v7.json
 !app/migrations/catalog-v8.json
+!app/migrations/catalog-v9.json
+!app/migrations/catalog-v10.json
 !app/certs/
 app/certs/**
 !app/certs/rds-global-bundle.pem

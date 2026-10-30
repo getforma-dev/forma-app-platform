@@ -365,33 +365,77 @@ async fn query(
         refused("invalid_parameters");
         return invalid_parameters();
     };
+    match run_released(&work, &member, &app, &saved, &view, &parameters, started).await {
+        Ok(document) => match serde_json::to_vec(&document) {
+            Ok(body) => json_response(body),
+            Err(_) => engine_refusal(&QueryError::Failed(Failure::Engine)),
+        },
+        Err(ViewRefusal::Storage(error)) => storage_refusal(&error),
+        Err(ViewRefusal::Engine(error)) => engine_refusal(&error),
+        Err(ViewRefusal::NoEngine) => http::unavailable(),
+    }
+}
+
+/// Why one view run produced no released document.
+#[derive(Debug)]
+pub(crate) enum ViewRefusal {
+    /// Authorization or release refused it, or the store failed.
+    Storage(Error),
+    /// The engine refused or failed it, or its receipt was nonconforming.
+    Engine(QueryError),
+    /// No engine is configured.
+    NoEngine,
+}
+
+/// One authorized, executed, receipted and released view run (the JSON
+/// query route's body), shared with the MCP `forma_run_view` tool (APP-099):
+/// `Data::run_query` (authorization), the engine, the receipt checked against
+/// the contract's rule, and `Data::release_result` last, immediately before
+/// the document is handed back (C07). `parameters` must already have passed
+/// `storage::parse_parameters`.
+pub(crate) async fn run_released(
+    work: &Work,
+    member: &TrustedRequest,
+    app: &str,
+    saved: &str,
+    view: &str,
+    parameters: &Value,
+    started: Instant,
+) -> Result<Value, ViewRefusal> {
     let Some(stores) = &work.auth.stores else {
-        return http::not_found();
+        return Err(ViewRefusal::Storage(Error::Denied));
     };
     let run = match stores
         .data
-        .run_query(&member, &app, &saved, &view, &parameters)
+        .run_query(member, app, saved, view, parameters)
         .await
     {
         Ok(run) => run,
         Err(error) => {
-            refused(release_code(&error));
-            return storage_refusal(&error);
+            log_refused(
+                member.organization(),
+                app,
+                saved,
+                view,
+                release_code(&error),
+                started,
+            );
+            return Err(ViewRefusal::Storage(error));
         }
     };
     let Some(executor) = &work.executor else {
-        return http::unavailable();
+        return Err(ViewRefusal::NoEngine);
     };
-    let result = match executor.execute(&run, INTERACTIVE_DEADLINE).await {
-        Ok(result) => result,
-        Err(error) => return engine_refusal(&error),
-    };
+    let result = executor
+        .execute(&run, INTERACTIVE_DEADLINE)
+        .await
+        .map_err(ViewRefusal::Engine)?;
     // A receipt outside the contract's receipt rule is never delivered.
     let Some(receipt) = receipt::build(&run, &result) else {
         super::worker::log_failed_after_dispatch(&run, "receipt_nonconforming", result.wall);
-        return engine_refusal(&QueryError::Failed(Failure::Engine));
+        return Err(ViewRefusal::Engine(QueryError::Failed(Failure::Engine)));
     };
-    let Ok(body) = serde_json::to_vec(&json!({
+    let document = json!({
         "view_id": run.view(),
         "columns": result.columns,
         // APP-093 review M4: each column's value type, for display only.
@@ -399,16 +443,12 @@ async fn query(
         "rows": result.rows,
         "truncated_page": result.truncated_page,
         "receipt": receipt.document,
-    })) else {
-        return engine_refusal(&QueryError::Failed(Failure::Engine));
-    };
+    });
     // C07: the last authorization check, immediately before the body.
-    let released = stores.data.release_result(&member, &run).await;
+    let released = stores.data.release_result(member, &run).await;
     log_release(&run, &receipt, &released, started);
-    if let Err(error) = released {
-        return storage_refusal(&error);
-    }
-    json_response(body)
+    released.map_err(ViewRefusal::Storage)?;
+    Ok(document)
 }
 
 fn action(app: &str, saved: &str) -> String {

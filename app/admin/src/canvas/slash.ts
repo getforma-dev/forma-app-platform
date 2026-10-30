@@ -13,7 +13,7 @@
 //
 // Nothing from the server is rendered as markup: titles and purposes are
 // text nodes; ids are checked UUIDs.
-import { submitUtterance } from './actions';
+import { submitAction } from './actions';
 import { placeUtilityCard, placeWork } from './board';
 import { submitIntent, type Choice } from './compose';
 import { el, isUuid } from './render';
@@ -62,6 +62,9 @@ export function allCommands(): CanvasCommand[] {
 /** Text that reads like a record entry or a decision (the action path's lane). */
 const ENTRY = /\b(approve|approved|reject|rejected|decline|deny|accept|file|submit|spent|paid|log|record|add|sign off)\b|\$\s?\d/i;
 
+/** The slug whose bare form opens the ledger (`actions::ledger::bare_command`). */
+const LEDGER = ['expense'];
+
 type ServerCommand = {
   slug: string; aliases: string[]; title: string; purpose: string;
   kind: 'library' | 'saved'; app_id: string; work_id?: string; record: boolean;
@@ -77,11 +80,17 @@ function serverCommand(entry: ServerCommand): CanvasCommand {
       const rest = text.trim();
       if (entry.kind === 'saved' && entry.work_id) {
         report(await placeWork(entry.app_id, entry.work_id));
-        if (rest && entry.record && ENTRY.test(rest)) await submitUtterance(rest, report, entry.app_id);
+        if (rest && entry.record && ENTRY.test(rest)) await submitAction(rest, report, entry.app_id);
+        return;
+      }
+      // `/expense` alone opens the expense ledger; `/expense <words>` is
+      // always the action path for that app (APP-102 with APP-101).
+      if (LEDGER.includes(entry.slug)) {
+        await (rest ? submitAction(rest, report, entry.app_id) : submitAction('/expense', report));
         return;
       }
       if (rest && entry.record && ENTRY.test(rest)) {
-        await submitUtterance(rest, report, entry.app_id);
+        await submitAction(rest, report, entry.app_id);
         return;
       }
       await submitIntent(rest.length >= 3 ? rest : entry.title, report, { app_id: entry.app_id });

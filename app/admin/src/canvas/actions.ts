@@ -11,10 +11,12 @@
 // `place` falls back to the composer (`compose.ts`). The utterance travels
 // only in a JSON body, never in a URL; the card shows typed values the
 // server composed, never the model's text.
-import { placeWork, refreshGroupRecords } from './board';
+import { focusCard, placeWork, refreshGroupRecords } from './board';
 import { submitIntent } from './compose';
 import { runSlash } from './slash';
 import { label } from './display';
+import { ledgerCardFor, setLedgerRange } from './ledger';
+import { RECEIPT_PROMPT, restoreReceipt, takeReceipt, type PendingReceipt } from './receipt';
 import { el, isUuid } from './render';
 
 export const ACT_URL = '/v1/act';
@@ -36,10 +38,13 @@ export type Draft = {
   target: { record_id: string; version: number; summary: string } | null;
   confirm_token: string;
   parse_ms: number;
+  /** APP-102: the draft was read from an attached receipt. */
+  receipt?: boolean;
 };
+export type LedgerRange = { from: string; to: string };
 export type ActAnswer =
   | { action: 'draft'; draft: Draft }
-  | { action: 'open'; app_id: string; work_id: string; title: string; placed: boolean }
+  | { action: 'open'; app_id: string; work_id: string; title: string; placed: boolean; view: 'ledger' | 'records'; range: LedgerRange | null }
   | { action: 'place' };
 
 export type Posted =
@@ -54,6 +59,8 @@ const MESSAGES: Record<string, string> = {
   composer_unavailable: 'The model is not configured on this server. Nothing was changed.',
   too_many_requests: 'Too many requests in a short time. Try again in a moment.',
   failed: 'The action could not be prepared right now. Nothing was changed.',
+  invalid_receipt: 'That file can’t be read as a receipt. Attach a JPEG, PNG or WebP photo under 5 MB. Nothing was sent to the model.',
+  payload_too_large: 'That photo is larger than 5 MB. Nothing was changed.',
 };
 
 function answerOf(body: unknown): ActAnswer | null {
@@ -61,8 +68,13 @@ function answerOf(body: unknown): ActAnswer | null {
   const value = body as Record<string, unknown>;
   if (value.action === 'place') return { action: 'place' };
   if (value.action === 'open') {
+    const range = value.range as Record<string, unknown> | null | undefined;
     return isUuid(value.app_id) && isUuid(value.work_id)
-      ? { action: 'open', app_id: value.app_id, work_id: value.work_id, title: String(value.title ?? ''), placed: value.placed === true }
+      ? {
+        action: 'open', app_id: value.app_id, work_id: value.work_id, title: String(value.title ?? ''), placed: value.placed === true,
+        view: value.view === 'ledger' ? 'ledger' : 'records',
+        range: range && typeof range.from === 'string' && typeof range.to === 'string' ? { from: range.from, to: range.to } : null,
+      }
       : null;
   }
   if (value.action !== 'create' && value.action !== 'decide') return null;
@@ -73,16 +85,13 @@ function answerOf(body: unknown): ActAnswer | null {
   return { action: 'draft', draft };
 }
 
-async function post(body: Record<string, unknown>): Promise<ActAnswer> {
+async function post(body: Record<string, unknown> | FormData): Promise<ActAnswer> {
   let response: Response;
   try {
-    response = await fetch(ACT_URL, {
-      method: 'POST',
-      credentials: 'same-origin',
-      cache: 'no-store',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    // A receipt goes multipart (the browser sets the boundary); words alone as JSON.
+    response = await fetch(ACT_URL, body instanceof FormData
+      ? { method: 'POST', credentials: 'same-origin', cache: 'no-store', body }
+      : { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   } catch {
     throw new Error(MESSAGES.failed);
   }
@@ -97,9 +106,16 @@ async function post(body: Record<string, unknown>): Promise<ActAnswer> {
   return answer;
 }
 
-/** The utterance as an action (the server parses and drafts); APP-101: `app` pins a slash command's app. */
-export function requestAction(utterance: string, app: string | null = null): Promise<ActAnswer> {
-  return post(app ? { utterance, app_id: app } : { utterance });
+/**
+ * The utterance as an action (the server parses and drafts); with a receipt,
+ * multipart; APP-101: `app` pins a slash command's app (JSON only).
+ */
+export function requestAction(utterance: string, receipt: PendingReceipt | null = null, app: string | null = null): Promise<ActAnswer> {
+  if (!receipt) return post(app ? { utterance, app_id: app } : { utterance });
+  const form = new FormData();
+  if (utterance && utterance !== RECEIPT_PROMPT) form.append('utterance', utterance);
+  form.append('receipt', receipt.blob, receipt.name);
+  return post(form);
 }
 
 /** A structured decision (no model): the server drafts the `decide` command. */
@@ -201,7 +217,7 @@ function host(document_: Document): HTMLElement {
 }
 
 /** Shows the confirmation card; resolves with the member's choice. */
-function confirmCard(document_: Document, draft: Draft, utterance: string): Promise<'confirm' | 'edit' | 'cancel'> {
+function confirmCard(document_: Document, draft: Draft, utterance: string, receipt: PendingReceipt | null = null): Promise<'confirm' | 'edit' | 'cancel'> {
   return new Promise((resolve) => {
     const container = host(document_);
     const list = el(document_, 'dl', { class: 'cv-confirm-values' });
@@ -228,6 +244,11 @@ function confirmCard(document_: Document, draft: Draft, utterance: string): Prom
         el(document_, 'h3', { id: 'cv-confirm-title' }, heading),
         el(document_, 'span', { class: 'badge' }, draft.action === 'create' ? 'draft' : 'decision')),
       el(document_, 'p', { class: 'cv-confirm-quote' }, `“${utterance}”`),
+      receipt
+        ? el(document_, 'figure', { class: 'cv-confirm-receipt' },
+          el(document_, 'img', { src: receipt.thumb, alt: 'The attached receipt' }),
+          el(document_, 'figcaption', {}, 'Read from this receipt. The photo is not stored; the record notes “receipt: attached”.'))
+        : null,
       list,
       chips,
       el(document_, 'p', { class: 'cv-confirm-note' }, 'Nothing is written until you confirm. The command is committed through the audited path with a server-minted key.'),
@@ -253,18 +274,33 @@ function confirmCard(document_: Document, draft: Draft, utterance: string): Prom
  */
 export async function submitUtterance(text: string, report: (message: string) => void, app: string | null = null): Promise<void> {
   // APP-101: `/name rest` is the explicit lane (`slash.ts`): no guessing.
-  if (!app && text.startsWith('/')) {
+  if (!app && text.startsWith('/') && document.getElementById('intent-form')?.getAttribute('data-receipt') !== 'attached') {
     await runSlash(text, report);
     return;
   }
+  await submitAction(text, report, app);
+}
+
+/**
+ * The action path itself (no slash routing): `app` pins a slash command's
+ * app; `/expense` alone opens the expense ledger (the server's bare command).
+ */
+export async function submitAction(text: string, report: (message: string) => void, app: string | null = null): Promise<void> {
+  const receipt = app ? null : takeReceipt(document);
   const pin = app ? { app_id: app } : null;
-  report('Understanding…');
+  report(receipt ? 'Reading the receipt…' : 'Understanding…');
   const started = performance.now();
   let answer: ActAnswer;
   try {
-    answer = await requestAction(text, app);
+    answer = await requestAction(text, receipt, app);
   } catch (error) {
     const message = error instanceof Error ? error.message : MESSAGES.failed;
+    if (receipt) {
+      // The member may fix the words or the file and send again.
+      if (message !== MESSAGES.invalid_receipt && message !== MESSAGES.payload_too_large) restoreReceipt(document, receipt);
+      report(message);
+      return;
+    }
     if (message === MESSAGES.not_connected) {
       await submitIntent(text, report, pin);
       return;
@@ -280,14 +316,23 @@ export async function submitUtterance(text: string, report: (message: string) =>
   }
   if (answer.action === 'open') {
     report(answer.placed ? 'Placing it on your canvas…' : 'Bringing it up…');
-    report(await placeWork(answer.app_id, answer.work_id));
+    const placed = await placeWork(answer.app_id, answer.work_id);
     void refreshGroupRecords(answer.work_id, true);
+    const ledger = answer.view === 'ledger' ? ledgerCardFor(answer.app_id, answer.work_id) : null;
+    if (ledger) {
+      setLedgerRange(ledger, answer.range);
+      focusCard(ledger);
+      report(answer.range ? `Expense ledger, ${answer.range.from} to ${answer.range.to}.` : 'Expense ledger.');
+      return;
+    }
+    report(placed);
     return;
   }
   const draft = answer.draft;
   report(draft.action === 'create' ? `Understood in ${parse} ms. Review the record, then confirm.` : `Understood in ${parse} ms. Review the decision, then confirm.`);
-  const choice = await confirmCard(document, draft, text);
+  const choice = await confirmCard(document, draft, text, receipt);
   if (choice === 'edit') {
+    if (receipt) restoreReceipt(document, receipt);
     const input = document.getElementById('intent-input') as HTMLInputElement | null;
     if (input) {
       input.value = text;

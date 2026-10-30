@@ -7,6 +7,7 @@
 //! trusted request from headers or verifier strings.
 mod actions;
 mod admission;
+mod agents;
 mod authorization;
 mod catalog;
 mod commands;
@@ -22,6 +23,9 @@ pub use actions::{CollectionSummary, DryRun, RecordRow, RecordsListing, RECORDS_
 pub use admission::{
     code_digest, handle_digest, Admission, PendingAdmission, PendingReason, Reservation, SignOut,
     VerifiedNonmember,
+};
+pub use agents::{
+    agent_label_shaped, AgentAttribution, AgentToken, MintedAgentToken, MAX_LIVE_AGENT_TOKENS,
 };
 pub use authorization::{Action, Publication, Record, TrustedRequest};
 pub use commands::{
@@ -45,10 +49,10 @@ pub use queries::{
 };
 pub use registry::RegistryIdentity;
 pub use sessions::{
-    capability_organization, capability_shaped, AdmittedMember, Completion, Ended, FlowKind,
-    FlowRecord, FlowStart, Lookup, PreAccess, PreAccessStart, SignedOut, PRELOGIN_SECONDS,
-    PRE_ACCESS_ABSOLUTE_SECONDS, PRE_ACCESS_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS,
-    SESSION_IDLE_SECONDS,
+    agent_token_organization, capability_organization, capability_shaped, slack_id, AdmittedMember,
+    AgentCaller, Completion, Ended, FlowKind, FlowRecord, FlowStart, Lookup, PreAccess,
+    PreAccessStart, SignedOut, AGENT_TOKEN_PREFIX, PRELOGIN_SECONDS, PRE_ACCESS_ABSOLUTE_SECONDS,
+    PRE_ACCESS_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS, SESSION_IDLE_SECONDS,
 };
 pub use sharing::{
     member_label, Granted, Member, Openable, Shared, Standing, JUDGMENT_LIMIT,
@@ -132,6 +136,8 @@ mod definition_qualification;
 #[cfg(test)]
 mod managed_qualification;
 #[cfg(test)]
+mod mcp_campaign;
+#[cfg(test)]
 pub(crate) mod qualification;
 #[cfg(test)]
 pub(crate) mod qualification_cases;
@@ -141,5 +147,7 @@ mod query_qualification;
 mod race_qualification;
 #[cfg(test)]
 mod sharing_qualification;
+#[cfg(test)]
+mod slack_campaign;
 #[cfg(test)]
 mod tests;

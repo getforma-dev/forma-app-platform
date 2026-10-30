@@ -1,7 +1,12 @@
 import { h, mount, createShow, createList, createSignal, activateIslands } from '@getforma/core';
 import { submitUtterance } from './actions';
+import { startAgents } from './agents';
 import { startBoard } from './board';
-import { startSlash } from './slash';
+import { registerCommands, startSlash } from './slash';
+// APP-103 utility widgets, registered as canvas slash commands (APP-101):
+// `/weather`, `/calculator`, `/clock` in the `/` list and `/apps`; a command
+// with words restyles the selected widget of that kind (`runWidget`).
+import { restoreWidgets, runWidget, WIDGET_COMMANDS } from './widgets/index';
 
 // ADR-011 pitch canvas (APP-092, APP-094): the signed-in workspace as one
 // canvas. Every group, card, value and receipt row below is resolved by the
@@ -129,6 +134,25 @@ type RecordsCard = {
   definitionDigest: string;
   workVersion: string;
 };
+// APP-102: the expense ledger card (`query::canvas_ledger`).
+type LedgerRow = { id: string; label: string; count: string; total: string };
+type LedgerCard = {
+  id: string;
+  title: string;
+  url: string;
+  collection: string;
+  amountField: string;
+  dateField: string;
+  categoryField: string;
+  statusField: string;
+  scope: string;
+  total: string;
+  count: string;
+  hasRows: boolean;
+  hasNoRows: boolean;
+  people: LedgerRow[];
+  categories: LedgerRow[];
+};
 type Group = {
   id: string;
   app: string;
@@ -149,6 +173,8 @@ type Group = {
   forms: FormCard[];
   hasRecords: boolean;
   records: RecordsCard[];
+  hasLedger: boolean;
+  ledger: LedgerCard[];
 };
 type CanvasProps = {
   csrfSignout: string;
@@ -538,6 +564,54 @@ function Canvas(props: CanvasProps) {
                   <p class="cv-outcome" role="status" data-outcome></p>
                 </article>
               ))}
+              {createList(() => group.ledger, ledger => ledger.id, ledger => (
+                <article
+                  class="cv-card cv-ledger"
+                  data-card={ledger.id}
+                  data-kind="ledger"
+                  data-records={ledger.url}
+                  data-collection={ledger.collection}
+                  data-amount={ledger.amountField}
+                  data-date={ledger.dateField}
+                  data-category={ledger.categoryField}
+                  data-status-field={ledger.statusField}
+                  data-state="ready"
+                  aria-label={ledger.title}
+                >
+                  <header class="cv-card-head">
+                    <h3>{ledger.title}</h3>
+                    <span class="badge">{ledger.scope}</span>
+                  </header>
+                  <div class="cv-ledger-controls" data-controls></div>
+                  <div class="cv-card-body" data-body>
+                    <p class="cv-ledger-total"><span class="cv-ledger-total-value num">{ledger.total}</span> <span class="cv-muted">across {ledger.count} records · all dates · every status</span></p>
+                    {createShow(() => ledger.hasNoRows, () => (
+                      <p class="cv-message" role="status">No records yet.</p>
+                    ))}
+                    {createShow(() => ledger.hasRows, () => (
+                      <div class="cv-ledger-split">
+                        <table class="cv-ledger-table">
+                          <caption>By person</caption>
+                          <tbody>
+                            {createList(() => ledger.people, row => row.id, row => (
+                              <tr><th scope="row">{row.label}</th><td class="num">{row.count}</td><td class="num">{row.total}</td></tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <table class="cv-ledger-table">
+                          <caption>By category</caption>
+                          <tbody>
+                            {createList(() => ledger.categories, row => row.id, row => (
+                              <tr><th scope="row">{row.label}</th><td class="num">{row.count}</td><td class="num">{row.total}</td></tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
+                  <p class="cv-records-provenance" data-provenance><span class="cv-verified">Records</span> <span class="cv-receipt-meta">{ledger.scope}; totals computed in this view</span></p>
+                </article>
+              ))}
             </section>
           ))}
         </div>
@@ -561,6 +635,13 @@ function Canvas(props: CanvasProps) {
 await activateIslands({ IntentBar });
 startBoard(document);
 startSlash(document);
+registerCommands(WIDGET_COMMANDS.map((command) => ({
+  ...command,
+  run: (text: string, report?: (message: string) => void) =>
+    runWidget(command.slug as 'weather' | 'calculator' | 'clock', text).then((message) => report?.(message)),
+})));
+startAgents(document);
+restoreWidgets();
 
 mount(
   () =>
