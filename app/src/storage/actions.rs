@@ -171,7 +171,7 @@ impl Data {
                             id: id.clone(),
                             operation: declaration.operation.clone(),
                             writable_fields: declaration.writable.clone(),
-                            transitions: declaration.transitions.clone(),
+                            transitions: declaration.transitions(),
                             rules: declaration.rules.clone(),
                         })
                         .collect(),
@@ -275,7 +275,7 @@ impl Data {
                 command.schema_version_expected,
             )
             .await?;
-            let (current_version, current_values, _) = current_state(
+            let (current_version, current_values, creator) = current_state(
                 transaction,
                 org,
                 app,
@@ -291,13 +291,14 @@ impl Data {
             require(if current_version == 0 {
                 declaration.operation == "create"
             } else {
-                declaration.operation == "update" || !declaration.transitions.is_empty()
+                declaration.operation == "update" || declaration.has_transitions()
             })?;
             let bytes = compose(
                 &published.fields,
                 declaration,
                 current_values.as_ref(),
                 &command.values,
+                creator.as_deref() == Some(request.principal.as_str()),
             )?;
             let state = crate::admission::decode(&bytes).map_err(|_| Error::Unavailable)?;
             Ok(DryRun::Valid {

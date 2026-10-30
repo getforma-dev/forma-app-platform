@@ -477,3 +477,32 @@ class BoxNormalizer(unittest.TestCase):
             self.assertEqual(completed.returncode, 1)
             self.assertEqual(json.loads(completed.stdout), {"refused": code})
             self.assertFalse((directory / "x.parquet").exists())
+
+    def test_unsorted_and_null_times_normalize_in_time_order(self):
+        """APP-113 review: a CSV whose times are not ascending, and a nullable `time` with
+        nulls, normalize (they were refused and crashed); the rows land in time order, nulls
+        last, ties in file order, so any order of the same rows gives the same digest."""
+        import box_normalize
+        directory = Path(tempfile.mkdtemp(prefix="box-normalize-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        contract = {"id": "events", "contract_id": "events_x", "contract_version": 1, "kind": "source",
+                    "fields": [{"id": "time", "value_type": {"type": "timestamp"}, "nullable": True},
+                               {"id": "n", "value_type": {"type": "integer", "unit": "count"}, "nullable": False}]}
+        sorted_csv = "time,n\n2026-01-01T00:00:00Z,1\n2026-01-02T00:00:00Z,2\n2026-01-02T00:00:00Z,3\n,4\n,5\n"
+        shuffled = "time,n\n,4\n2026-01-02T00:00:00Z,2\n2026-01-01T00:00:00Z,1\n,5\n2026-01-02T00:00:00Z,3\n"
+        digests = []
+        for name, text in (("sorted", sorted_csv), ("shuffled", shuffled)):
+            target = directory / (name + ".parquet")
+            digest, count = box_normalize.normalize(contract, text.encode(), target)
+            self.assertEqual(count, 5)
+            digests.append(digest)
+            request = {"contract": contract, "csv": text, "target": str(directory / (name + "-child.parquet"))}
+            completed = subprocess.run([sys.executable, "-I", str(HERE / "runtime.py"), "normalize"], input=json.dumps(request).encode(),
+                                       capture_output=True, env={}, timeout=60)
+            self.assertEqual(completed.returncode, 0, completed.stdout)
+            self.assertEqual(json.loads(completed.stdout)["normalized_digest"], digest)
+        self.assertEqual(digests[0], digests[1])
+        import duckdb
+        rows = duckdb.connect().execute("SELECT n FROM read_parquet(?)", [str(directory / "shuffled.parquet")]).fetchall()
+        self.assertEqual([r[0] for r in rows], [1, 2, 3, 4, 5])
+        self.assertIs(library_sources.normalize, box_normalize.normalize)

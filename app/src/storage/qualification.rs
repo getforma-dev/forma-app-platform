@@ -916,9 +916,9 @@ async fn campaign() {
     fixture.sql("GRANT genui_owner TO genui_worker", "genui");
     assert!(Lease::acquire(&identity.worker.inner).await.is_err());
     fixture.sql("REVOKE genui_owner FROM genui_worker", "genui");
-    fixture.sql("ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check; UPDATE genui_meta.schema_version SET version=12;","genui");
+    fixture.sql("ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check; UPDATE genui_meta.schema_version SET version=13;","genui");
     assert!(Lease::acquire(&identity.worker.inner).await.is_err());
-    fixture.sql("UPDATE genui_meta.schema_version SET version=11; ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK(version BETWEEN 1 AND 11);","genui");
+    fixture.sql("UPDATE genui_meta.schema_version SET version=12; ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK(version BETWEEN 1 AND 12);","genui");
     let lease = Lease::acquire(&identity.worker.inner).await.unwrap();
     drop(lease);
     identity.close().await.unwrap();
@@ -1025,7 +1025,7 @@ async fn campaign() {
     version.close().await.unwrap();
     let version_fresh = Stores::new(fixture.settings()).unwrap();
     refuse_all_roles(&version_fresh).await;
-    fixture.sql("UPDATE genui_meta.schema_version SET version=11", "genui");
+    fixture.sql("UPDATE genui_meta.schema_version SET version=12", "genui");
     version_fresh.readiness().await.unwrap();
     version_fresh.close().await.unwrap();
     drop(operator);

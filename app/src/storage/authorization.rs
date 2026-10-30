@@ -432,6 +432,17 @@ impl<'a> Transaction<'a> {
     }
 }
 
+/// APP-113 review (storage 4, 7): the `record_read` clause of `permissions`
+/// as an SQL predicate over a `genui.saved_work` row aliased `w` and a
+/// principal given as an SQL expression (a placeholder or a column): a work
+/// grant or the unrevoked creator's authority, `run` on the app, and live
+/// `source_read` on every dependency. Listings filter candidates with it
+/// before their `LIMIT`, and a box file grant counts only while it holds for
+/// the grant's work; the authoritative judgment stays `precheck`/`also`.
+pub(super) fn record_read_clause(principal: &str) -> String {
+    format!("(EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id={principal} AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission='record_read') OR (w.created_by={principal} AND w.creator_revoked_at IS NULL)) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id={principal} AND a.app_id=w.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id={principal} AND s.source_id=d.source_id AND s.permission='source_read')))")
+}
+
 fn text(row: &Row, index: usize) -> Result<String> {
     row.try_get(index).map_err(|_| Error::Unavailable)
 }

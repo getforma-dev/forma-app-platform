@@ -5,12 +5,13 @@
 //!
 //! - `POST /v1/agent-tokens`: body `{"label": "Claude"}` (1 to 40 plain
 //!   characters), `application/json`, at most 4 KiB. 201 `{"token_id",
-//!   "label", "created_at", "token", "mcp_url"}`: the raw token, shown this
+//!   "label", "created_at", "expires_at", "token", "mcp_url"}`: the raw token, shown this
 //!   once and never again (only its digest is stored, never logged). 409
 //!   `too_many_agent_tokens` at `MAX_LIVE_AGENT_TOKENS` live tokens; 429 at
 //!   `MINT_MEMBER`.
 //! - `GET /v1/agent-tokens`: `{"tokens": [{"token_id", "label",
-//!   "created_at", "last_used_at"}], "mcp_url"}`, the member's live tokens.
+//!   "created_at", "expires_at", "last_used_at"}], "mcp_url"}`, the
+//!   member's live tokens (APP-113: a token expires 30 days after minting).
 //! - `DELETE /v1/agent-tokens/{id}`: 204; another member's, a revoked, a
 //!   foreign and a nonexistent token id alike are the uniform 404.
 //!
@@ -131,6 +132,7 @@ async fn mint(State(auth): State<Arc<Auth>>, request: Request) -> Response {
                     "token_id": minted.token_id,
                     "label": minted.label,
                     "created_at": minted.created_at,
+                    "expires_at": minted.expires_at,
                     "token": minted.token,
                     "mcp_url": mcp_url(&auth),
                 }),
@@ -157,7 +159,8 @@ async fn list(State(auth): State<Arc<Auth>>, request: Request) -> Response {
             &json!({
                 "tokens": tokens.iter().map(|t| json!({
                     "token_id": t.token_id, "label": t.label,
-                    "created_at": t.created_at, "last_used_at": t.last_used_at,
+                    "created_at": t.created_at, "expires_at": t.expires_at,
+                    "last_used_at": t.last_used_at,
                 })).collect::<Vec<_>>(),
                 "mcp_url": mcp_url(&auth),
             }),

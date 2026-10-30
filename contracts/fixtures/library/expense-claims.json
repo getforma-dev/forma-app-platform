@@ -399,7 +399,13 @@
             "note",
             "status"
           ],
-          "transitions": []
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "submitted"
+            }
+          ]
         },
         {
           "id": "decide",
@@ -457,7 +463,7 @@
         }
       ]
     },
-    "digest": "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de"
+    "digest": "sha256:0c96d5874075db5caba022c8ab7f3a937ea080e23125c21db003687cecb59ab7"
   },
   "publication": {
     "kind": "publication",
@@ -466,7 +472,7 @@
     "app_id": "00000000-0000-4000-8000-000000001681",
     "publication_id": "00000000-0000-4000-8000-000000001683",
     "definition_revision_id": "00000000-0000-4000-8000-000000001682",
-    "definition_digest": "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de",
+    "definition_digest": "sha256:0c96d5874075db5caba022c8ab7f3a937ea080e23125c21db003687cecb59ab7",
     "input_contract_digests": [
       {
         "input_id": "expense_claims",
@@ -648,7 +654,7 @@
     "app_id": "00000000-0000-4000-8000-000000001681",
     "work_id": "00000000-0000-4000-8000-000000001684",
     "mode": "published",
-    "definition_digest": "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de",
+    "definition_digest": "sha256:0c96d5874075db5caba022c8ab7f3a937ea080e23125c21db003687cecb59ab7",
     "publication_id": "00000000-0000-4000-8000-000000001683",
     "view_id": "totals",
     "operator_version": 1,
@@ -674,7 +680,7 @@
       "query_digest": "sha256:68b5b5d1cbd12c0fb5af50aac9149159139aa50277f521859af43ea3f11ff760",
       "predicate_digest": "sha256:68b5b5d1cbd12c0fb5af50aac9149159139aa50277f521859af43ea3f11ff760"
     },
-    "digest": "sha256:2c5cb374485608ae9e67226acec1880cab53f7fd2365486236a768be069c471b"
+    "digest": "sha256:b692e85878037b9bb6faa28eed3716df518dd6075867e96b37ff210b6db1c4d9"
   },
   "command": {
     "kind": "command_request",
@@ -730,7 +736,7 @@
         "field_id": "status",
         "value": {
           "type": "enum",
-          "value": "approved"
+          "value": "submitted"
         }
       }
     ],
@@ -745,7 +751,7 @@
     "principal_id": "00000000-0000-4000-8000-000000000066",
     "command_id": "submit",
     "idempotency_key": "00000000000000000000000000001680",
-    "payload_digest": "sha256:4516315dfa586e841ad70d654abbf147f297a62fd6279c967f848223dcb3cddd",
+    "payload_digest": "sha256:060cd6dc1b77dc53857468d0b789349cc52fa52977efb0905c2d2e7005d1e156",
     "state": "committed",
     "record_id": "00000000-0000-4000-8000-000000001686",
     "record_version": 1,

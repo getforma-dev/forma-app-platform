@@ -19,7 +19,7 @@
 //!
 //! APP-099 (ADR-011 pitch): the second production constructor is
 //! [`Workspace::resolve_agent_token`], for an MCP client's bearer agent token
-//! (migration 0009). It is the session path's twin: the token is a capability
+//! (migration 0010). It is the session path's twin: the token is a capability
 //! of the same shape behind the `fmat_` prefix, found by its domain-separated
 //! digest, and becomes a `TrustedRequest` only under the same member fence,
 //! at the member's current epoch (which must still equal the epoch at
@@ -1021,7 +1021,8 @@ impl Workspace {
     /// resolves a cookie: the row by the digest under the token's scope, the
     /// member fence at the current epoch, which must equal the epoch at
     /// minting (a sign-out, sign-out-all or any operator epoch change ends
-    /// every token of the member), the token not revoked, an active
+    /// every token of the member), the token neither revoked nor past its
+    /// `expires_at` (0012: 30 days from minting), an active
     /// organization and membership, a live entitlement, an active provider
     /// binding, the principal's registered identity agreeing with this
     /// process's registry and the registry identity at minting. `None` for
@@ -1037,7 +1038,7 @@ impl Workspace {
         let registry = &self.inner.registry;
         let transaction = Transaction::begin_nonmember(&self.inner, Some(&organization)).await?;
         let result = async {
-            let rows = transaction.query("SELECT t.token_id::text,t.principal_id::text,t.label,t.registry_sha256,t.membership_epoch_at_mint,t.revoked_at IS NULL,(t.last_used_at IS NULL OR t.last_used_at<=now()-interval '60 seconds'),p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=t.organization_id AND e.principal_id=t.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active) FROM genui.agent_tokens t JOIN genui.principals p ON p.organization_id=t.organization_id AND p.principal_id=t.principal_id JOIN genui.memberships m ON m.organization_id=t.organization_id AND m.principal_id=t.principal_id WHERE t.organization_id=$1::text::uuid AND t.token_digest=$2", &[&organization,&agent_token_digest(token)]).await?;
+            let rows = transaction.query("SELECT t.token_id::text,t.principal_id::text,t.label,t.registry_sha256,t.membership_epoch_at_mint,(t.revoked_at IS NULL AND t.expires_at>clock_timestamp()),(t.last_used_at IS NULL OR t.last_used_at<=now()-interval '60 seconds'),p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=t.organization_id AND e.principal_id=t.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active) FROM genui.agent_tokens t JOIN genui.principals p ON p.organization_id=t.organization_id AND p.principal_id=t.principal_id JOIN genui.memberships m ON m.organization_id=t.organization_id AND m.principal_id=t.principal_id WHERE t.organization_id=$1::text::uuid AND t.token_digest=$2", &[&organization,&agent_token_digest(token)]).await?;
             let Some(row) = rows.first() else {
                 return Ok(None);
             };

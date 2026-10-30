@@ -419,10 +419,11 @@ DECISION_RECORDS = {
     "seed": {"command_id": "record_decision", "values": [{"field_id": "status", "value": {"type": "enum", "value": "needs_context"}},
                                                          {"field_id": "note", "value": {"type": "text", "value": DECISION_NOTE}}]},
 }
-# ADR-011 scenarios (APP-093/095): the expense claims app. One claim per record; `submit` creates it (the action
-# path always sets status `submitted`), `decide` moves it along the two declared transitions only (storage's
-# compose rules: a create on an existing record must fire a declared transition; `decide` writes status and note
-# alone, so it can never create a claim). Amounts are USD cents; the seeded claim is an older, already approved one.
+# ADR-011 scenarios (APP-093/095): the expense claims app. One claim per record; `submit` creates it at the declared
+# initial status `submitted` (APP-113 review: before, `submit` could file a claim as `approved`), `decide` moves it
+# along the two declared transitions only (storage's compose rules: a create on an existing record must fire a
+# declared transition, never by the claim's filer; `decide` writes status and note alone, so it can never create a
+# claim). Amounts are USD cents; the seeded claim is an older one still waiting on a decision.
 EXPENSE_CLAIM_FIELDS = [money("amount"), field("merchant", "text"), enum("category", "meals", "travel", "software", "office", "other"),
                         field("spent_on", "date"), field("note", "text", nullable=True), enum("status", "submitted", "approved", "rejected")]
 EXPENSE_CLAIMS_RECORDS = {
@@ -430,7 +431,8 @@ EXPENSE_CLAIMS_RECORDS = {
     "fields": EXPENSE_CLAIM_FIELDS,
     "commands": [
         {"id": "submit", "record_schema_id": "expense_claim", "operation": "create",
-         "writable_fields": ["amount", "merchant", "category", "spent_on", "note", "status"], "transitions": []},
+         "writable_fields": ["amount", "merchant", "category", "spent_on", "note", "status"], "transitions": [],
+         "initial": [{"field_id": "status", "value": "submitted"}]},
         {"id": "decide", "record_schema_id": "expense_claim", "operation": "create", "writable_fields": ["status", "note"],
          "transitions": [{"field_id": "status", "from": "submitted", "to": "approved"}, {"field_id": "status", "from": "submitted", "to": "rejected"}]},
     ],
@@ -440,7 +442,7 @@ EXPENSE_CLAIMS_RECORDS = {
         {"field_id": "category", "value": {"type": "enum", "value": "meals"}},
         {"field_id": "spent_on", "value": {"type": "date", "value": "2026-10-21"}},
         {"field_id": "note", "value": {"type": "text", "value": "Team coffee; synthetic only"}},
-        {"field_id": "status", "value": {"type": "enum", "value": "approved"}}]},
+        {"field_id": "status", "value": {"type": "enum", "value": "submitted"}}]},
 }
 
 # APP-109: quick notes. One note per record (a title and a plain-text body, at most 2,000 characters each, storage's text

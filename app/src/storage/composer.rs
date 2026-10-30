@@ -281,10 +281,16 @@ impl Workspace {
                 None => None,
             };
 
-            // Readable live source revisions, as typed input contracts.
+            // Readable live source revisions, as typed input contracts. The
+            // member's `source_read` filters in SQL before the cap (APP-113
+            // review: an organization's other sources never crowd out the
+            // member's own); library and operator revisions first, then
+            // folder registrations newest first (`source_revisions` carries
+            // no time; a folder registration's is `box_file_sources`), so the
+            // bindings below take the newest readable revision of a contract.
             let mut sources = Vec::new();
             let mut readable: BTreeMap<String, bool> = BTreeMap::new();
-            let revisions = permit.transaction().query("SELECT source_id::text,revision_id::text,contract_digest::text,canonical_envelope FROM genui.source_revisions WHERE organization_id=$1::text::uuid AND deleted_at IS NULL ORDER BY source_id,revision_id LIMIT $2", &[org,&SOURCE_CANDIDATES]).await?;
+            let revisions = permit.transaction().query("SELECT r.source_id::text,r.revision_id::text,r.contract_digest::text,r.canonical_envelope FROM genui.source_revisions r LEFT JOIN genui.box_file_sources f ON f.organization_id=r.organization_id AND f.source_id=r.source_id AND f.revision_id=r.revision_id WHERE r.organization_id=$1::text::uuid AND r.deleted_at IS NULL AND EXISTS(SELECT 1 FROM genui.source_permissions p JOIN genui.sources s USING(organization_id,source_id) WHERE p.organization_id=r.organization_id AND p.principal_id=$3::text::uuid AND p.source_id=r.source_id AND p.permission='source_read') ORDER BY f.created_at DESC NULLS FIRST,r.source_id,r.revision_id LIMIT $2", &[org,&SOURCE_CANDIDATES,principal]).await?;
             for row in &revisions {
                 let source = text(row, 0)?;
                 let allowed = match readable.get(&source) {
@@ -322,9 +328,10 @@ impl Workspace {
                 });
             }
 
-            // The library: newest publication per app, discover and run.
+            // The library: newest publication per app, discover and run
+            // (filtered in SQL before the cap, re-judged below).
             let mut library = Vec::new();
-            let publications = permit.transaction().query("SELECT DISTINCT ON (app_id) app_id::text,publication_id::text,definition_revision_id::text,definition_digest::text FROM genui.publications WHERE organization_id=$1::text::uuid ORDER BY app_id,publication_sequence DESC LIMIT $2", &[org,&LIBRARY_CANDIDATES]).await?;
+            let publications = permit.transaction().query("SELECT DISTINCT ON (u.app_id) u.app_id::text,u.publication_id::text,u.definition_revision_id::text,u.definition_digest::text FROM genui.publications u WHERE u.organization_id=$1::text::uuid AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=u.organization_id AND a.principal_id=$3::text::uuid AND a.app_id=u.app_id AND a.permission='discover') AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=u.organization_id AND a.principal_id=$3::text::uuid AND a.app_id=u.app_id AND a.permission='run') ORDER BY u.app_id,u.publication_sequence DESC LIMIT $2", &[org,&LIBRARY_CANDIDATES,principal]).await?;
             for row in &publications {
                 let app = text(row, 0)?;
                 if !granted(permit.also(Action::Discover, Resource::App(&app)).await)?

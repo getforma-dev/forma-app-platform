@@ -253,25 +253,37 @@ def _definition(content):
                 require(field["value_type"]["target_input"] in inputs, "unknown reference target")
     for command in commands.values():
         require(command["record_schema_id"] in records, "unknown record schema")
-        writable = record_fields[command["record_schema_id"]]
-        require(set(command["writable_fields"]) <= writable.keys(), "unknown writable field")
+        schema_fields = record_fields[command["record_schema_id"]]
+        require(set(command["writable_fields"]) <= schema_fields.keys(), "unknown writable field")
+        # APP-113 review: one declaration per (field, from, to); storage's rules would otherwise judge
+        # the duplicates' guards together (any of them holding lets the transition fire).
+        moves = [(t["field_id"], t["from"], t["to"]) for t in command["transitions"]]
+        require(len(set(moves)) == len(moves), "duplicate transition")
         for transition in command["transitions"]:
-            field = writable.get(transition["field_id"])
+            field = schema_fields.get(transition["field_id"])
             require(field is not None and field["value_type"]["type"] == "enum", "transition requires enum field")
             require(transition["field_id"] in command["writable_fields"], "transition field is not writable")
             require({transition["from"], transition["to"]} <= set(field["value_type"]["values"]), "unknown transition value")
             if "when" in transition:
-                _guard(transition["when"], writable)
+                _guard(transition["when"], schema_fields)
         # APP-107 amendment: the starting value of an enum field on a create, chosen by declared guards.
         if "initial" in command:
             require(command["operation"] == "create" and not command["transitions"], "initial values belong to a filing create")
             for rule in command["initial"]:
-                field = writable.get(rule["field_id"])
+                field = schema_fields.get(rule["field_id"])
                 require(field is not None and field["value_type"]["type"] == "enum", "initial requires enum field")
                 require(rule["field_id"] in command["writable_fields"], "initial field is not writable")
                 require(rule["value"] in field["value_type"]["values"], "unknown initial value")
                 if "when" in rule:
-                    _guard(rule["when"], writable)
+                    _guard(rule["when"], schema_fields)
+        # APP-113 review: a create that may write an enum field another command of the same record schema
+        # governs by declared transitions must declare that field's `initial` value, so no filing create
+        # starts a record at a decision outcome (storage refuses such a start for undeclared fields too).
+        if command["operation"] == "create" and not command["transitions"]:
+            governed = {t["field_id"] for other in commands.values() if other is not command
+                        and other["record_schema_id"] == command["record_schema_id"] for t in other["transitions"]}
+            declared = {rule["field_id"] for rule in command.get("initial", [])}
+            require(governed & set(command["writable_fields"]) <= declared, "create writing a governed enum field requires initial")
     for view in views.values():
         if view["kind"] == "form":
             require(view.get("command_id") in commands and "query" not in view, "form requires declared command without query")
@@ -486,7 +498,12 @@ def validate_bundle(bundle):
     # Edition impl-2026-10-29.3 amendment (APP-013 review M1): a create command expects the absent record, or an
     # existing version only when its declaration has transitions and the command carries a declared transition's
     # target (storage requires that transition to fire from the current value; no command writes a no-op revision).
-    targets = {(t["field_id"], t["to"]) for t in declaration.get("transitions", [])}
+    # APP-113 review: a guarded transition fires only when its guard holds, as storage judges it on the
+    # composed record; the bundle carries only the command's values, so a guard is judged when its field
+    # is among them (a guard over a field the command does not write is storage's to judge).
+    supplied = {item["field_id"]: item["value"] for item in command["values"]}
+    targets = {(t["field_id"], t["to"]) for t in declaration.get("transitions", [])
+               if "when" not in t or t["when"]["field_id"] not in supplied or guard_holds(t["when"], supplied)}
     fires = any((item["field_id"], item["value"].get("value")) in targets for item in command["values"])
     existing = command["expected_record_version"] >= 1
     require(declaration["operation"] != "create" or not existing or fires,

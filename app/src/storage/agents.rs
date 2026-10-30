@@ -1,5 +1,5 @@
 //! APP-099 (ADR-011 pitch, `pivot/mcp`): the member's agent tokens and their
-//! display attributions (migration 0009). Resolving a token into a
+//! display attributions (migration 0010; `expires_at` since 0012). Resolving a token into a
 //! `TrustedRequest` is `sessions` (the only constructor); this module mints,
 //! lists and revokes a member's own tokens under the member's own trusted
 //! request (the canvas session), and records and reads which token produced
@@ -26,15 +26,23 @@ use tokio_postgres::Row;
 
 /// ADR-007 D7.14 handler deadline; each transaction here stays inside it.
 const AGENT_HANDLER_DEADLINE: Duration = Duration::from_secs(5);
-/// At most this many live (unrevoked) tokens per member.
+/// At most this many live tokens per member.
 pub const MAX_LIVE_AGENT_TOKENS: i64 = 10;
+/// A token lives this many days from minting (APP-113 review; 0012).
+pub const AGENT_TOKEN_DAYS: i32 = 30;
+/// A token that `sessions::resolve_agent_token` would still accept, as far
+/// as its own row says: unrevoked, unexpired, minted at the member's current
+/// epoch (`$3`) under this registry identity (`$4`). Counts and the canvas
+/// list use it, so a token a sign-out or a registry change ended neither
+/// fills the member's quota nor shows as connected (APP-113 review).
+const LIVE: &str = "revoked_at IS NULL AND expires_at>now() AND membership_epoch_at_mint=$3::bigint AND registry_sha256=$4::text";
 /// At most this many attributions are read for one work.
 const ATTRIBUTION_LIMIT: i64 = 500;
 
 const CURRENT: &str = "SELECT 1 FROM genui.organizations o JOIN genui.memberships m USING(organization_id) WHERE o.organization_id=$1::text::uuid AND m.principal_id=$2::text::uuid AND o.status='active' AND m.status='active' AND m.membership_epoch=$3::bigint AND EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=m.organization_id AND e.principal_id=m.principal_id AND e.status='active' AND e.expires_at>clock_timestamp())";
 
 /// A label the member gives a token: 1 to 40 characters, a letter or digit
-/// first, then letters, digits, spaces, `.`, `_` or `-` (the 0009 CHECK).
+/// first, then letters, digits, spaces, `.`, `_` or `-` (the 0010 CHECK).
 pub fn agent_label_shaped(label: &str) -> bool {
     let bytes = label.as_bytes();
     (1..=40).contains(&bytes.len())
@@ -49,6 +57,7 @@ pub struct MintedAgentToken {
     pub token_id: String,
     pub label: String,
     pub created_at: String,
+    pub expires_at: String,
     pub token: String,
 }
 impl std::fmt::Debug for MintedAgentToken {
@@ -65,6 +74,7 @@ pub struct AgentToken {
     pub token_id: String,
     pub label: String,
     pub created_at: String,
+    pub expires_at: String,
     pub last_used_at: Option<String>,
 }
 
@@ -96,8 +106,10 @@ async fn current(transaction: &Transaction<'_>, request: &TrustedRequest) -> Res
 
 impl Workspace {
     /// Mints an agent token for the member (`POST /v1/agent-tokens`): the
-    /// currency read, at most `MAX_LIVE_AGENT_TOKENS` live tokens, then one
-    /// row bound to the member, the request's epoch and registry identity.
+    /// currency read, the member's token writes serialized, at most
+    /// `MAX_LIVE_AGENT_TOKENS` live tokens, then one row bound to the member,
+    /// the request's epoch and registry identity, expiring in
+    /// `AGENT_TOKEN_DAYS` days.
     pub async fn mint_agent_token(
         &self,
         request: &TrustedRequest,
@@ -109,25 +121,27 @@ impl Workspace {
         let transaction = Transaction::begin_until(&self.inner, request, cap).await?;
         let result = async {
             current(&transaction, request).await?;
-            let live = transaction.query("SELECT count(*) FROM genui.agent_tokens WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND revoked_at IS NULL", &[&request.organization,&request.principal]).await?;
+            super::boxes::serialize_member(&transaction, request, "agent_tokens").await?;
+            let live = transaction.query(&format!("SELECT count(*) FROM genui.agent_tokens WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND {LIVE}"), &[&request.organization,&request.principal,&request.epoch,&request.registry_sha256]).await?;
             let live: i64 = live
                 .first()
                 .ok_or(Error::Unavailable)?
                 .try_get(0)
                 .map_err(|_| Error::Unavailable)?;
             require(live < MAX_LIVE_AGENT_TOKENS)?;
-            let rows = transaction.query("INSERT INTO genui.agent_tokens(organization_id,token_id,token_digest,principal_id,label,membership_epoch_at_mint,registry_sha256,created_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text,$3::text::uuid,$4::text,$5::bigint,$6::text,now()) RETURNING token_id::text,to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')",
-                &[&request.organization,&agent_token_digest(&token),&request.principal,&label,&request.epoch,&request.registry_sha256]).await?;
+            let rows = transaction.query("INSERT INTO genui.agent_tokens(organization_id,token_id,token_digest,principal_id,label,membership_epoch_at_mint,registry_sha256,created_at,expires_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text,$3::text::uuid,$4::text,$5::bigint,$6::text,now(),now()+make_interval(days=>$7)) RETURNING token_id::text,to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),to_char(expires_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')",
+                &[&request.organization,&agent_token_digest(&token),&request.principal,&label,&request.epoch,&request.registry_sha256,&AGENT_TOKEN_DAYS]).await?;
             let row = rows.first().ok_or(Error::Unavailable)?;
-            Ok((text(row, 0)?, text(row, 1)?))
+            Ok((text(row, 0)?, text(row, 1)?, text(row, 2)?))
         }
         .await;
         transaction.finish(result.is_ok()).await?;
-        let (token_id, created_at) = result?;
+        let (token_id, created_at, expires_at) = result?;
         Ok(MintedAgentToken {
             token_id,
             label: label.to_owned(),
             created_at,
+            expires_at,
             token,
         })
     }
@@ -138,13 +152,14 @@ impl Workspace {
         let transaction = Transaction::begin_until(&self.inner, request, cap).await?;
         let result = async {
             current(&transaction, request).await?;
-            let rows = transaction.query("SELECT token_id::text,label,to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),to_char(last_used_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM genui.agent_tokens WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND revoked_at IS NULL ORDER BY created_at DESC,token_id LIMIT $3", &[&request.organization,&request.principal,&MAX_LIVE_AGENT_TOKENS]).await?;
+            let rows = transaction.query(&format!("SELECT token_id::text,label,to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),to_char(last_used_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),to_char(expires_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM genui.agent_tokens WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND {LIVE} ORDER BY created_at DESC,token_id LIMIT $5"), &[&request.organization,&request.principal,&request.epoch,&request.registry_sha256,&MAX_LIVE_AGENT_TOKENS]).await?;
             rows.iter()
                 .map(|row| {
                     Ok(AgentToken {
                         token_id: text(row, 0)?,
                         label: text(row, 1)?,
                         created_at: text(row, 2)?,
+                        expires_at: text(row, 4)?,
                         last_used_at: optional(row, 3)?,
                     })
                 })

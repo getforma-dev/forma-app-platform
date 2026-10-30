@@ -708,7 +708,9 @@ pub async fn register_file(
         RegisterError::Refused(code) => DataRefusal::Parse(code),
         RegisterError::Unavailable => DataRefusal::Unavailable,
     })?;
-    stores
+    // APP-113 (storage 6): a repeat of the same normalized content returns
+    // the stored registration, so the answer names what storage holds.
+    let stored = stores
         .workspace
         .register_box_data(
             member,
@@ -734,23 +736,12 @@ pub async fn register_file(
         organization_id = member.organization(),
         box_id = file.box_id,
         file_id = file.file_id,
-        source_id = normalized.source_id,
-        revision_id = normalized.revision_id,
-        rows = normalized.row_count,
+        source_id = stored.source_id,
+        revision_id = stored.revision_id,
+        rows = stored.row_count,
         "box data registered"
     );
-    Ok((
-        FileData {
-            source_id: normalized.source_id,
-            revision_id: normalized.revision_id,
-            normalized_digest: normalized.normalized_digest,
-            row_count: normalized.row_count,
-            contract: normalized.contract,
-            contract_digest: normalized.contract_digest,
-            created_at: register::utc_now(),
-        },
-        table,
-    ))
+    Ok((stored, table))
 }
 
 /// A saved work placed from a box (data card or derived app).
