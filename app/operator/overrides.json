@@ -8,6 +8,8 @@
   "overrides": [
     {"name": "verify-catalog", "purpose": "Read-only catalog proof; the task definition's default command.",
      "overrides": {"containerOverrides": [{"name": "operator", "command": ["verify-catalog"]}]}},
+    {"name": "verify-catalog-baseline", "purpose": "APP-078: read-only proof that the live database equals one reviewed earlier catalog (here version 1, the deployed APP-007 baseline) and is in origin replication mode, before any snapshot or migration.",
+     "overrides": {"containerOverrides": [{"name": "operator", "command": ["verify-catalog", "--version", "1"]}]}},
     {"name": "migrate", "purpose": "Canonical apply_migrations for every landed migration; a repeat is unchanged.",
      "overrides": {"containerOverrides": [{"name": "operator", "command": ["migrate"]}]}},
     {"name": "seed", "purpose": "tenant_seed.seed with validated envelopes in one transaction; exact-match idempotent.",

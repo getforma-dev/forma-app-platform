@@ -654,6 +654,23 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(self.operator("seed", expect=1), "catalog_refused")
         self.assertEqual(self.query("SELECT count(*) FROM pg_namespace WHERE nspname LIKE 'genui%%'"), [(0,)])
 
+    def test_1b_baseline_version_one_is_proven_read_only_before_migration(self):
+        # APP-078: the deployed RDS is at the APP-007 version 1 foundation. Reproduce it with the
+        # reviewed 0001 source (what apply_migrations runs on an empty database), then prove it.
+        sys.path.insert(0, str(REPOSITORY / "app/runtime"))
+        import runtime
+        sources = runtime.migration_sources(runtime.migration_directory())
+        with self.connect("genui_migration") as c:
+            c.execute(sources[0][2])
+        before = self.dump()
+        self.assertEqual(self.operator("verify-catalog", "--version", "1"), {"command": "verify-catalog", "catalog_version": 1, "read_only": True})
+        self.assertEqual(self.dump(), before)
+        self.assertEqual(self.operator("verify-catalog", expect=1), "catalog_refused")  # not the latest
+        self.assertEqual(self.operator("verify-catalog", "--version", "2", expect=1), "catalog_refused")
+        self.assertEqual(self.operator("verify-catalog", "--version", "0", expect=1), "version_refused")
+        self.assertEqual(self.operator("verify-catalog", "--version", str(len(sources) + 1), expect=1), "version_refused")
+        self.assertEqual(self.operator("verify-catalog", "--version", "one", expect=1), "usage")
+
     def test_2_migrate_applies_every_landed_migration_and_a_repeat_is_unchanged(self):
         sys.path.insert(0, str(REPOSITORY / "app/runtime"))
         import runtime

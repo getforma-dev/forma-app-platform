@@ -139,8 +139,11 @@ class Parser(argparse.ArgumentParser):
 def parser():
     p = Parser(prog="operator.py", add_help=False)
     sub = p.add_subparsers(dest="command", required=True)
-    for name in ("migrate", "verify-catalog", "seed"):
+    for name in ("migrate", "seed"):
         sub.add_parser(name, add_help=False)
+    # `--version N` proves one reviewed earlier catalog read-only (APP-078: the
+    # live baseline before any mutation); without it the latest is required.
+    sub.add_parser("verify-catalog", add_help=False).add_argument("--version", type=int)
     sub.add_parser("upload-sources", add_help=False).add_argument("--plan", action="store_true")
     return p
 
@@ -221,13 +224,16 @@ def migrate():
             "migrations": [{"version": version, "sha256": digest} for version, digest, _ in sources]}
 
 
-def verify_catalog():
+def verify_catalog(expected=None):
     runtime, directory = pinned_directory()
+    if expected is not None:
+        # Only a version with a reviewed catalog resource; checked before connecting.
+        require(1 <= expected <= len(runtime.migration_sources(directory)), "version_refused")
     connection = connect(read_only=True)
     try:
         check_identity(connection)
         try:
-            version = runtime.verify_schema_catalog(connection, directory)
+            version = runtime.verify_schema_catalog(connection, directory, expected)
         except ValueError as error:
             raise Refused("catalog_refused") from error
         # Only after the catalog proof is the version row an expected relation.
@@ -566,7 +572,7 @@ def main(argv=None):
         if args.command == "admission":
             # admission_operator prints its own JSON result or fixed refusal.
             return admission(args.rest)
-        result = {"migrate": lambda: migrate(), "verify-catalog": lambda: verify_catalog(), "seed": lambda: seed(),
+        result = {"migrate": lambda: migrate(), "verify-catalog": lambda: verify_catalog(args.version), "seed": lambda: seed(),
                   "upload-sources": lambda: upload_sources(args)}[args.command]()
     except Refused as refusal:
         print(json.dumps({"refused": str(refusal)}), file=sys.stderr)
