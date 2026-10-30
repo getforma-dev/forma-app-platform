@@ -22,7 +22,9 @@
 //! foreign-organization or revoked token, a member whose epoch moved or who
 //! is no longer active, a store error) is the uniform 404, byte-identical.
 //! Cookies are never read: a browser cannot ride a session into this
-//! endpoint. Then the token's limit (`MCP_TOKEN`, 429 with `Retry-After`),
+//! endpoint. Then the token's and the member's limits (`MCP_TOKEN`,
+//! `MCP_MEMBER`: minting more tokens does not raise a member's rate; 429
+//! with `Retry-After`),
 //! an `MCP-Protocol-Version` header naming an unsupported version (400), the
 //! body (at most `MCP_BODY_LIMIT`, read within the handler deadline; 413),
 //! and `Content-Type: application/json` (415). The route runs under the long
@@ -62,6 +64,8 @@ pub const PATH: &str = "/v1/mcp";
 pub const MCP_BODY_LIMIT: usize = http::JSON_BODY_LIMIT;
 /// Per agent token: 120 messages an hour.
 pub const MCP_TOKEN: &[limits::Window] = &[limits::per(120, 3600)];
+/// Per member, across all their agent tokens: 240 messages an hour.
+pub const MCP_MEMBER: &[limits::Window] = &[limits::per(240, 3600)];
 /// Supported MCP protocol revisions, newest first.
 pub const PROTOCOL_VERSIONS: [&str; 3] = ["2025-11-25", "2025-06-18", "2025-03-26"];
 
@@ -306,6 +310,15 @@ fn log(caller: &AgentCaller, method: &str, tool: &str, outcome: &str, started: I
     );
 }
 
+/// The rate keys of a call: its token, and its member across all tokens.
+pub(crate) fn keys(caller: &AgentCaller) -> (String, String) {
+    let organization = caller.request.organization();
+    (
+        format!("mcp:{organization}:{}", caller.token_id),
+        format!("mcp-member:{organization}:{}", caller.request.principal()),
+    )
+}
+
 /// `POST /v1/mcp` (order in the module notes).
 async fn handle(State(state): State<Arc<Mcp>>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
@@ -318,8 +331,11 @@ async fn handle(State(state): State<Arc<Mcp>>, request: Request) -> Response {
         Err(refusal) => return refusal,
     };
     let started = Instant::now();
-    let key = format!("mcp:{}:{}", caller.request.organization(), caller.token_id);
-    if let Err(retry_after) = auth.limits.admit(&[(&key, MCP_TOKEN)]) {
+    let (token_key, member_key) = keys(&caller);
+    if let Err(retry_after) = auth
+        .limits
+        .admit(&[(&token_key, MCP_TOKEN), (&member_key, MCP_MEMBER)])
+    {
         log(&caller, "", "", "too_many_requests", started);
         return http::too_many_requests(retry_after);
     }

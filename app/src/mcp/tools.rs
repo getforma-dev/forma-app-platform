@@ -1170,14 +1170,17 @@ async fn share(
     // No teammate of that name is the uniform denial too (a member of
     // another organization is never named).
     let grantee = resolve::match_approver(&name, &members).ok_or_else(Output::not_found)?;
-    let shared = stores
-        .workspace
-        .share_work(member, &app, &work, &grantee.principal, record_write)
-        .await
-        .map_err(storage_output)?;
-    if shared.changed() {
-        events::hub().app_shared(member.organization(), &app, &work);
-    }
+    // The canvas route's own path, the composition's adaptation included.
+    let shared = crate::sharing::share_with_lineage(
+        stores,
+        member,
+        &app,
+        &work,
+        &grantee.principal,
+        record_write,
+    )
+    .await
+    .map_err(storage_output)?;
     Ok(Output::ok(
         "ok",
         format!(
