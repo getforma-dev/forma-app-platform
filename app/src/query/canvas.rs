@@ -107,8 +107,14 @@ pub struct CanvasCardProps {
     pub message: String,
     /// `POST` target of the island: the existing JSON query route.
     pub query: String,
-    /// Comma-separated exact-integer columns (digit-grouped, nothing else).
+    /// Comma-separated exact-integer columns (integer, money minor units,
+    /// decimal coefficient), kept for existing consumers.
     pub integer_columns: String,
+    /// The view's result column value types as compact JSON, the same
+    /// object the query route returns as `column_types` (`{"total_amount":
+    /// {"type": "money", "currency": "USD", "minor_unit_exponent": 2}}`):
+    /// what the island formats by (APP-093 review M4).
+    pub column_types: String,
     pub has_summary: bool,
     pub summary: Vec<PairProps>,
     pub has_table: bool,
@@ -225,6 +231,7 @@ pub fn canvas_card(
         message: card.message,
         query: format!("/v1/work/{app}/{work}/queries/{}", view.id),
         integer_columns: view.integer_columns.join(","),
+        column_types: super::worker::column_types_json(&view.column_types).to_string(),
         has_summary: card.has_summary,
         summary: card.summary,
         has_table: card.has_table,

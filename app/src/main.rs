@@ -1076,6 +1076,7 @@ mod tests {
             title: id.into(),
             kind: kind.into(),
             integer_columns: Vec::new(),
+            column_types: Default::default(),
         };
         let result = |columns: &[&str], rows: Vec<Vec<serde_json::Value>>| WorkerResult {
             columns: columns.iter().map(|c| (*c).to_owned()).collect(),
@@ -1084,6 +1085,7 @@ mod tests {
                 .filter(|c| matches!(**c, "total_bytes" | "bytes"))
                 .map(|c| (*c).to_owned())
                 .collect(),
+            column_types: Default::default(),
             result_digest: genui::query::worker::result_digest(&rows).unwrap(),
             rows,
             truncated_page: false,
@@ -1106,15 +1108,40 @@ mod tests {
                 json!("60000"),
             ]],
         );
-        let (ready_receipt, empty_receipt, timeline_receipt) = (
+        // APP-093 review M4: a money column is shown as currency, its exact
+        // minor units kept as the hover title.
+        let mut spend = result(
+            &["claims", "total_amount"],
+            vec![vec![json!("240"), json!("26262004")]],
+        );
+        spend.column_types = [
+            (
+                "claims".to_owned(),
+                genui::query::worker::ColumnType::Integer,
+            ),
+            (
+                "total_amount".to_owned(),
+                genui::query::worker::ColumnType::Money {
+                    currency: "USD".into(),
+                    minor_unit_exponent: 2,
+                },
+            ),
+        ]
+        .into();
+        let (ready_receipt, empty_receipt, timeline_receipt, spend_receipt) = (
             receipt(&total, "sha256:receipt-ready"),
             receipt(&nothing, "sha256:receipt-empty"),
             receipt(&buckets, "sha256:receipt-timeline"),
+            receipt(&spend, "sha256:receipt-spend"),
         );
         let cards = vec![
             work::card(
                 &view("ready", "summary"),
                 Outcome::Released(&total, &ready_receipt),
+            ),
+            work::card(
+                &view("spend", "summary"),
+                Outcome::Released(&spend, &spend_receipt),
             ),
             work::card(
                 &view("timeline", "timeline"),
@@ -1180,8 +1207,12 @@ mod tests {
         assert!(ready.contains("data-state=\"ready\"") && ready.contains(">1,140,000<"));
         assert!(ready.contains("sha256:receipt-ready") && ready.contains("<details"));
         assert!(ready.contains(&total.result_digest));
+        let spend = section("spend");
+        assert!(spend.contains(">$262,620.04<") && spend.contains("title=\"26262004\""));
+        assert!(!spend.contains(">26,262,004<"));
         let timeline = section("timeline");
         assert!(timeline.contains("<table") && timeline.contains(">60,000<"));
+        assert!(timeline.contains("title=\"60000\""));
         assert!(timeline.contains(">minute<") && timeline.contains("sha256:receipt-timeline"));
         let empty = section("empty");
         assert!(empty.contains("data-state=\"empty\"") && empty.contains("No rows matched"));
@@ -1254,6 +1285,7 @@ mod tests {
             title: id.into(),
             kind: kind.into(),
             integer_columns: integers.iter().map(|c| (*c).to_owned()).collect(),
+            column_types: Default::default(),
         };
         let result = |columns: &[&str], rows: Vec<Vec<serde_json::Value>>| WorkerResult {
             columns: columns.iter().map(|c| (*c).to_owned()).collect(),
@@ -1262,6 +1294,7 @@ mod tests {
                 .filter(|c| matches!(**c, "total_bytes" | "bytes"))
                 .map(|c| (*c).to_owned())
                 .collect(),
+            column_types: Default::default(),
             result_digest: genui::query::worker::result_digest(&rows).unwrap(),
             rows,
             truncated_page: false,

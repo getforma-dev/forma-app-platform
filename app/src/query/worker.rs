@@ -45,7 +45,7 @@ use crate::{
 use serde_json::{json, Value};
 use sha2::{Digest as _, Sha256};
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs,
     io::{Cursor, Read},
     os::unix::fs::{DirBuilderExt, MetadataExt},
@@ -161,10 +161,16 @@ impl EngineSettings {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkerResult {
     pub columns: Vec<String>,
-    /// The columns whose values are exact integers, derived from the typed
-    /// query the engine ran (`integer_columns`); only these are digit-grouped
-    /// by the page (review m11).
+    /// The columns whose values are exact integer strings (an `integer`, a
+    /// `money` column's minor units or a `decimal` column's coefficient),
+    /// derived from the typed query the engine ran (`integer_columns`).
+    /// Kept for existing consumers; [`WorkerResult::column_types`] says how
+    /// each one is displayed (review m11, APP-093 review M4).
     pub integer_columns: BTreeSet<String>,
+    /// Every result column's value type, from the re-admitted definition's
+    /// input fields followed through the query's operators
+    /// ([`typed_column_types`]): what the page and the canvas format by.
+    pub column_types: BTreeMap<String, ColumnType>,
     pub rows: Vec<Vec<Value>>,
     pub truncated_page: bool,
     /// `forma:result:v1` over `{"columns_are_query_defined": true, "rows": rows}`.
@@ -567,7 +573,8 @@ impl Engine {
                 return Err(QueryError::Failed(Failure::Engine));
             }
             let mut result = parse_result(&output.stdout)?;
-            result.integer_columns = typed_integer_columns(run.query(), run.fields());
+            result.column_types = typed_column_types(run.query(), run.fields());
+            result.integer_columns = integer_backed(&result.column_types);
             result.wall = started.elapsed();
             result.peak_rss_bytes = output.peak_rss_bytes;
             Ok(result)
@@ -761,12 +768,120 @@ fn parse_result(stdout: &[u8]) -> Result<WorkerResult, QueryError> {
         result_digest: result_digest(&rows).ok_or(failed)?,
         columns,
         integer_columns: BTreeSet::new(),
+        column_types: BTreeMap::new(),
         rows,
         truncated_page,
         engine_elapsed_ms: elapsed,
         wall: Duration::ZERO,
         peak_rss_bytes: 0,
     })
+}
+
+/// A result column's value type (APP-093 review M4): the contract value
+/// type of the input field it comes from, followed through the operators, or
+/// the type an aggregate produces. The engine's values stay exact strings;
+/// this only says how they are displayed: a `money` column holds minor units
+/// (`26262004` with exponent 2 is $262,620.04), a `decimal` column its
+/// coefficient at `scale`, an `integer` column an exact integer; `text`
+/// (and `enum`), `date`, `timestamp` and `boolean` are shown verbatim.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ColumnType {
+    Integer,
+    Money {
+        currency: String,
+        minor_unit_exponent: u32,
+    },
+    Decimal {
+        scale: u32,
+    },
+    Text,
+    Date,
+    Timestamp,
+    Boolean,
+}
+
+/// The largest exponent or scale a column type may carry (the engine's
+/// columns are signed 64-bit integers: at most 19 digits).
+const MAX_SCALE: u64 = 18;
+
+impl ColumnType {
+    /// The column type of a contract `value_type`; `None` for a type no
+    /// result column has (`reference`) or an out-of-range exponent or scale.
+    pub fn from_value_type(value_type: &Value) -> Option<Self> {
+        let bounded = |key: &str| {
+            value_type
+                .get(key)
+                .and_then(Value::as_u64)
+                .filter(|n| *n <= MAX_SCALE)
+                .and_then(|n| u32::try_from(n).ok())
+        };
+        Some(match value_type.get("type").and_then(Value::as_str)? {
+            "integer" => Self::Integer,
+            "money" => Self::Money {
+                currency: value_type
+                    .get("currency")
+                    .and_then(Value::as_str)
+                    .filter(|c| c.len() == 3 && c.bytes().all(|b| b.is_ascii_uppercase()))?
+                    .to_owned(),
+                minor_unit_exponent: bounded("minor_unit_exponent")?,
+            },
+            "decimal" => Self::Decimal {
+                scale: bounded("scale")?,
+            },
+            "text" | "enum" => Self::Text,
+            "date" => Self::Date,
+            "timestamp" => Self::Timestamp,
+            "boolean" => Self::Boolean,
+            _ => return None,
+        })
+    }
+    /// Whether the column's values are exact integer strings (the
+    /// `integer_columns` of earlier consumers).
+    pub fn integer_backed(&self) -> bool {
+        matches!(
+            self,
+            Self::Integer | Self::Money { .. } | Self::Decimal { .. }
+        )
+    }
+    /// The data contract of the query route and the canvas group JSON:
+    /// `{"type": "money", "currency": "USD", "minor_unit_exponent": 2}`,
+    /// `{"type": "decimal", "scale": 2}`, or `{"type": <name>}`.
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Integer => json!({"type": "integer"}),
+            Self::Money {
+                currency,
+                minor_unit_exponent,
+            } => {
+                json!({"type": "money", "currency": currency, "minor_unit_exponent": minor_unit_exponent})
+            }
+            Self::Decimal { scale } => json!({"type": "decimal", "scale": scale}),
+            Self::Text => json!({"type": "text"}),
+            Self::Date => json!({"type": "date"}),
+            Self::Timestamp => json!({"type": "timestamp"}),
+            Self::Boolean => json!({"type": "boolean"}),
+        }
+    }
+}
+
+/// `column_types` as the query route returns it: one member per typed
+/// result column, `{column: ColumnType::to_json}`.
+pub fn column_types_json(types: &BTreeMap<String, ColumnType>) -> Value {
+    Value::Object(
+        types
+            .iter()
+            .map(|(name, kind)| (name.clone(), kind.to_json()))
+            .collect(),
+    )
+}
+
+/// The integer-backed columns of `types` (`integer_columns`).
+pub fn integer_backed(types: &BTreeMap<String, ColumnType>) -> BTreeSet<String> {
+    types
+        .iter()
+        .filter(|(_, kind)| kind.integer_backed())
+        .map(|(name, _)| name.clone())
+        .collect()
 }
 
 /// The columns of an effective typed query whose values are exact integers,
@@ -779,31 +894,32 @@ pub fn integer_columns(query: &Value) -> BTreeSet<String> {
     typed_integer_columns(query, &crate::storage::events_fields())
 }
 
-/// Whether a contract value type's column is an exact integer the page may
-/// digit-group: `integer`, and `money` and `decimal`, whose columns hold the
-/// minor units or the coefficient (`app/runtime/library_sources.py`).
-fn integer_type(value_type: &str) -> bool {
-    matches!(value_type, "integer" | "money" | "decimal")
+/// [`integer_columns`] for any input contract (ADR-011 library): the
+/// integer-backed columns (`integer`, `money` minor units, `decimal`
+/// coefficient) of [`typed_column_types`].
+pub fn typed_integer_columns(query: &Value, fields: &[Value]) -> BTreeSet<String> {
+    integer_backed(&typed_column_types(query, fields))
 }
 
-/// [`integer_columns`] for any input contract (ADR-011 library): the
-/// integer-typed `fields` of the run's input, followed through the same
-/// operators.
-pub fn typed_integer_columns(query: &Value, fields: &[Value]) -> BTreeSet<String> {
-    let mut integers: BTreeSet<String> = BTreeSet::new();
+/// Every result column's [`ColumnType`] for a typed query over an input
+/// whose contract `fields` are given (from the re-admitted definition, never
+/// the client): the fields' own types, followed through `project` (kept
+/// fields), `aggregate` (group fields keep their type; `count` is an
+/// integer, `sum` keeps its numeric field's type, so a sum of money is money
+/// in the same currency and exponent, `min`/`max` keep their field's type),
+/// `time_bucket` (its output is a timestamp) and `filter`/`sort`/`limit`
+/// (nothing changes). A column whose type cannot be derived is absent, and
+/// is shown verbatim.
+pub fn typed_column_types(query: &Value, fields: &[Value]) -> BTreeMap<String, ColumnType> {
+    let mut types: BTreeMap<String, ColumnType> = BTreeMap::new();
     let mut present: BTreeSet<String> = BTreeSet::new();
     for item in fields {
         let Some(name) = item.get("id").and_then(Value::as_str) else {
             continue;
         };
         present.insert(name.to_owned());
-        if item
-            .get("value_type")
-            .and_then(|t| t.get("type"))
-            .and_then(Value::as_str)
-            .is_some_and(integer_type)
-        {
-            integers.insert(name.to_owned());
+        if let Some(kind) = item.get("value_type").and_then(ColumnType::from_value_type) {
+            types.insert(name.to_owned(), kind);
         }
     }
     let field = |reference: &Value| {
@@ -828,7 +944,7 @@ pub fn typed_integer_columns(query: &Value, fields: &[Value]) -> BTreeSet<String
                     .filter_map(field)
                     .collect();
                 present.retain(|name| kept.contains(name));
-                integers.retain(|name| kept.contains(name));
+                types.retain(|name, _| kept.contains(name));
             }
             Some("aggregate") => {
                 let groups: Vec<String> = operation
@@ -838,11 +954,11 @@ pub fn typed_integer_columns(query: &Value, fields: &[Value]) -> BTreeSet<String
                     .flatten()
                     .filter_map(field)
                     .collect();
-                let mut next_integers = BTreeSet::new();
+                let mut next_types = BTreeMap::new();
                 let mut next_present: BTreeSet<String> = groups.iter().cloned().collect();
                 for name in &groups {
-                    if integers.contains(name) {
-                        next_integers.insert(name.clone());
+                    if let Some(kind) = types.get(name) {
+                        next_types.insert(name.clone(), kind.clone());
                     }
                 }
                 for measure in operation
@@ -855,19 +971,28 @@ pub fn typed_integer_columns(query: &Value, fields: &[Value]) -> BTreeSet<String
                         continue;
                     };
                     next_present.insert(id.to_owned());
-                    let integer = match measure.get("operation").and_then(Value::as_str) {
-                        Some("count" | "sum") => true,
-                        Some("min" | "max") => measure
-                            .get("field")
-                            .and_then(field)
-                            .is_some_and(|name| integers.contains(&name)),
-                        _ => false,
+                    let source = measure
+                        .get("field")
+                        .and_then(field)
+                        .and_then(|name| types.get(&name));
+                    let kind = match measure.get("operation").and_then(Value::as_str) {
+                        Some("count") => Some(ColumnType::Integer),
+                        // The engine sums only numeric fields; the sum keeps
+                        // the field's unit, currency, exponent or scale.
+                        Some("sum") => source.filter(|kind| kind.integer_backed()).cloned(),
+                        Some("min" | "max") => source.cloned(),
+                        _ => None,
                     };
-                    if integer {
-                        next_integers.insert(id.to_owned());
+                    match kind {
+                        Some(kind) => {
+                            next_types.insert(id.to_owned(), kind);
+                        }
+                        None => {
+                            next_types.remove(id);
+                        }
                     }
                 }
-                integers = next_integers;
+                types = next_types;
                 present = next_present;
             }
             Some("time_bucket") => {
@@ -876,16 +1001,16 @@ pub fn typed_integer_columns(query: &Value, fields: &[Value]) -> BTreeSet<String
                     operation.get("output_field").and_then(Value::as_str),
                 ) {
                     present.remove(&source);
-                    integers.remove(&source);
+                    types.remove(&source);
                     present.insert(output.to_owned());
-                    integers.remove(output);
+                    types.insert(output.to_owned(), ColumnType::Timestamp);
                 }
             }
             _ => {}
         }
     }
-    integers.retain(|name| present.contains(name));
-    integers
+    types.retain(|name, _| present.contains(name));
+    types
 }
 
 /// `forma:result:v1` of APP-005's result document.

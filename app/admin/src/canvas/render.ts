@@ -35,11 +35,104 @@ export function display(value: string): string {
   return (negative ? '-' : '') + grouped;
 }
 
-/** A cell's text (`page::cell_text`): an unknown cell is "unknown", never zero. */
-export function cellText(value: unknown, integer: boolean): string {
-  if (typeof value === 'string') return integer ? display(value) : value;
+/**
+ * A result column's value type (`query::worker::ColumnType::to_json`), as the
+ * query route's `column_types` and the canvas card's `column_types` JSON carry
+ * it (APP-093 review M4).
+ */
+export type ColumnType =
+  | { type: 'money'; currency: string; minor_unit_exponent: number }
+  | { type: 'decimal'; scale: number }
+  | { type: 'integer' | 'text' | 'date' | 'timestamp' | 'boolean' };
+export type ColumnTypes = Record<string, ColumnType>;
+
+const MAX_SCALE = 18;
+function scaleOf(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_SCALE ? value : null;
+}
+
+/** A well-formed `column_types` object, or null (then the integer fallback). */
+export function columnTypes(value: unknown): ColumnTypes | null {
+  if (typeof value === 'string') {
+    if (!value) return null;
+    try {
+      return columnTypes(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const types: ColumnTypes = {};
+  for (const [column, kind] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof kind !== 'object' || kind === null) continue;
+    const item = kind as Record<string, unknown>;
+    if (item.type === 'money' && typeof item.currency === 'string' && scaleOf(item.minor_unit_exponent) !== null) {
+      types[column] = { type: 'money', currency: item.currency, minor_unit_exponent: item.minor_unit_exponent as number };
+    } else if (item.type === 'decimal' && scaleOf(item.scale) !== null) {
+      types[column] = { type: 'decimal', scale: item.scale as number };
+    } else if (item.type === 'integer' || item.type === 'text' || item.type === 'date' || item.type === 'timestamp' || item.type === 'boolean') {
+      types[column] = { type: item.type };
+    }
+  }
+  return Object.keys(types).length ? types : null;
+}
+
+/** Whether a column's values are exact integer strings (bars, alignment). */
+export function integerBacked(kind: ColumnType | undefined): boolean {
+  return kind !== undefined && (kind.type === 'integer' || kind.type === 'money' || kind.type === 'decimal');
+}
+
+/** `digits` with the point `scale` places from the right, the whole part grouped (`page::scaled`). */
+function scaled(digits: string, scale: number): string {
+  const padded = digits.padStart(scale + 1, '0');
+  const whole = display(padded.slice(0, padded.length - scale).replace(/^0+/, '')) || '0';
+  const fraction = padded.slice(padded.length - scale);
+  return fraction ? `${whole}.${fraction}` : whole;
+}
+
+function currencyPrefix(currency: string): string {
+  if (currency === 'USD') return '$';
+  if (currency === 'EUR') return '€';
+  if (currency === 'GBP') return '£';
+  return `${currency} `;
+}
+
+/**
+ * An exact engine value as its column type displays it (`page::format_value`):
+ * money minor units as currency (`26262004`, USD, 2 → `$262,620.04`), a decimal
+ * coefficient at its scale, an integer grouped; text (digits included), dates,
+ * timestamps and booleans verbatim. Only digits are placed; no arithmetic.
+ */
+export function formatValue(value: string, kind: ColumnType): string {
+  if (!integerBacked(kind)) return value;
+  const negative = value.startsWith('-');
+  const digits = negative ? value.slice(1) : value;
+  if (!digits || !/^[0-9]+$/.test(digits)) return value;
+  const sign = negative ? '-' : '';
+  if (kind.type === 'money') return `${sign}${currencyPrefix(kind.currency)}${scaled(digits, kind.minor_unit_exponent)}`;
+  if (kind.type === 'decimal') return `${sign}${scaled(digits, kind.scale)}`;
+  return `${sign}${display(digits)}`;
+}
+
+/**
+ * A cell's text (`page::cell_text`): formatted by its column type when the
+ * result carries one, else grouped only for an integer column; an unknown
+ * cell is "unknown", never zero.
+ */
+export function cellText(value: unknown, integer: boolean, kind?: ColumnType): string {
+  if (typeof value === 'string') {
+    if (kind) return formatValue(value, kind);
+    return integer ? display(value) : value;
+  }
   if (typeof value === 'boolean') return String(value);
   return 'unknown';
+}
+
+/** A cell's exact engine string, kept as its hover title. */
+function rawText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'boolean') return String(value);
+  return '';
 }
 
 function text(document_: unknown, key: string): string {
@@ -161,6 +254,8 @@ export function renderNoValue(card: HTMLElement, state: string, badge: string, m
 export type QueryResponse = {
   view_id: string;
   columns: string[];
+  /** Each column's value type (APP-093 review M4); absent from older servers. */
+  column_types?: unknown;
   rows: unknown[][];
   truncated_page: boolean;
   receipt: Record<string, unknown>;
@@ -184,6 +279,7 @@ export function released(value: unknown): QueryResponse | null {
 export function renderReleased(card: HTMLElement, result: QueryResponse): void {
   const document_ = card.ownerDocument;
   const integers = new Set((card.dataset.integers ?? '').split(',').filter(Boolean));
+  const types = columnTypes(result.column_types) ?? columnTypes(card.dataset.columnTypes ?? '');
   const kind = card.dataset.kind ?? '';
   const empty = result.rows.every((row) => row.every((cell) => cell === null));
   const children: Node[] = [];
@@ -193,11 +289,13 @@ export function renderReleased(card: HTMLElement, result: QueryResponse): void {
   } else {
     setState(card, 'ready', 'ready');
     children.push(el(document_, 'p', { class: 'cv-message', role: 'status' }, result.truncated_page ? 'Showing the first page of rows.' : ''));
-    const integer = (index: number) => integers.has(result.columns[index] ?? '');
+    const typeOf = (index: number): ColumnType | undefined => types?.[result.columns[index] ?? ''];
+    const integer = (index: number) => (types ? integerBacked(typeOf(index)) : integers.has(result.columns[index] ?? ''));
     if (kind === 'summary' && result.rows.length === 1) {
       const dl = el(document_, 'dl', { class: 'cv-summary' });
       result.columns.forEach((column, index) => {
-        dl.append(el(document_, 'div', {}, el(document_, 'dt', {}, column), el(document_, 'dd', { class: 'value' }, cellText(result.rows[0]?.[index], integer(index)))));
+        const value = result.rows[0]?.[index];
+        dl.append(el(document_, 'div', {}, el(document_, 'dt', {}, column), el(document_, 'dd', { class: 'value', title: rawText(value) }, cellText(value, integer(index), typeOf(index)))));
       });
       children.push(dl);
     } else {
@@ -212,7 +310,7 @@ export function renderReleased(card: HTMLElement, result: QueryResponse): void {
       for (const row of result.rows) {
         const tr = el(document_, 'tr', {});
         row.forEach((cell, index) => {
-          const td = el(document_, 'td', { class: 'value' }, cellText(cell, integer(index)));
+          const td = el(document_, 'td', { class: 'value', title: rawText(cell) }, cellText(cell, integer(index), typeOf(index)));
           if (index === barColumn && max > 0 && typeof cell === 'string') {
             const share = Math.max(0, Math.min(1, Number(cell) / max));
             td.classList.add('has-bar');
@@ -234,6 +332,8 @@ export function renderReleased(card: HTMLElement, result: QueryResponse): void {
 export type CardJson = {
   id: string; view: string; title: string; kind: string; state: string; badge: string;
   message: string; query: string; integer_columns: string;
+  /** The view's `column_types` as compact JSON (APP-093 review M4). */
+  column_types?: string;
 };
 export type FieldJson = {
   id: string; kind: string; label: string; input: string; value: string; spec: string;

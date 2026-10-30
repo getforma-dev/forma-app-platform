@@ -394,6 +394,8 @@ async fn query(
     let Ok(body) = serde_json::to_vec(&json!({
         "view_id": run.view(),
         "columns": result.columns,
+        // APP-093 review M4: each column's value type, for display only.
+        "column_types": super::worker::column_types_json(&result.column_types),
         "rows": result.rows,
         "truncated_page": result.truncated_page,
         "receipt": receipt.document,

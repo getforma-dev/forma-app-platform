@@ -353,6 +353,34 @@ class LibraryEngine(unittest.TestCase):
             self.assertEqual((result["outcome"], result["reason"]), ("refused", "literal_not_qualified"), wrong)
         self.assertNotIn("rows", result)
 
+    def test_integer_literals_are_ascii_digits_or_refused_with_a_code(self):
+        """APP-093 review m4: an integer, money or decimal literal is `-?[0-9]+` (ASCII) or the fixed
+        refusal `literal_not_qualified`, never `failed/engine` and never a Unicode digit read as a number."""
+        money = {"operator_version": 1, "inputs": ["vendor_invoices"], "null_policy": "unknown", "operations": [
+            {"type": "filter", "field": {"input_id": "vendor_invoices", "field_id": "amount"}, "comparison": "gte",
+             "value": {"type": "money", "minor_units": "500000", "currency": "USD", "minor_unit_exponent": 2}},
+            {"type": "aggregate", "group_by": [], "measures": [{"id": "large", "operation": "count", "field": {"input_id": "vendor_invoices", "field_id": "invoice_id"}}]}]}
+        source = next(a for a in CATALOG["apps"] if a["library_id"] == "vendor-spend")["sources"][0]
+        bad_texts = ("12.5", "", "-", "1e3", "\u0661\u0662\u0663", "\uff15", " 5", "5 ", "5\n", "+5", "--5", "0x10", "1_000")
+        for text in bad_texts:
+            bad = copy.deepcopy(money)
+            bad["operations"][0]["value"]["minor_units"] = text
+            result = self.child(self.request(source, bad))
+            self.assertEqual((result["outcome"], result["reason"]), ("refused", "literal_not_qualified"), repr(text))
+            self.assertNotIn("rows", result)
+        signed = copy.deepcopy(money)
+        signed["operations"][0]["value"]["minor_units"] = "-1"
+        result = self.child(self.request(source, signed))
+        self.assertEqual(result["rows"], [[str(len(self.rows[source["source_id"]]))]])
+        # The integer (with unit) and decimal (with scale) literals share the grammar.
+        cases = ((({"type": "integer", "unit": "each"}), "value"), (({"type": "decimal", "unit": "percent", "scale": 2}), "coefficient"))
+        for value_type, key in cases:
+            for text in bad_texts:
+                with self.assertRaises(query_engine.Refused) as refused:
+                    query_engine.literal_parameter(dict(value_type, **{key: text}), value_type)
+                self.assertEqual(query_engine.refusal_code(str(refused.exception)), "literal_not_qualified", repr(text))
+            self.assertEqual(query_engine.literal_parameter(dict(value_type, **{key: "-42"}), value_type), (-42, ""))
+
     def test_timelines_bucket_in_place_and_the_window_is_a_parameter(self):
         source, query = self.view("support-queue", "timeline")
         result = self.child(self.request(source, query))

@@ -132,6 +132,7 @@ fn view(id: &str, kind: &str, integers: &[&str]) -> WorkView {
         title: id.into(),
         kind: kind.into(),
         integer_columns: integers.iter().map(|c| (*c).to_owned()).collect(),
+        column_types: Default::default(),
     }
 }
 
