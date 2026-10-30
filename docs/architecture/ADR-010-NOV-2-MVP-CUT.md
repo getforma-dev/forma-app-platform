@@ -47,7 +47,7 @@ The demo design's six acts (`design/forma-northstar-demo/design.md` §3–4; `SC
 | APP-075 | Done (same PR) | Kept whole; its campaign residuals go to APP-086. |
 | APP-010 | Re-check found no blocking findings | Kept whole; moved to In review by this record with items checked as supported locally (the S05 fixture goes through the operator path; the RDS application is APP-078's). Residuals r1, m3, m7 and the coordinator choices go to APP-085. |
 | APP-009 | Being implemented (worktree) | Kept whole: all six items are identity. Tier A review. |
-| APP-077 | Implemented, awaiting review (worktree, `1c581f2`) | Kept whole; `upload-sources` is what makes APP-012's receipt truthful. Tier B review. |
+| APP-077 | Implemented and merged on the branch (`34a42eb`), Tier B review pending; ticket still Backlog until the orchestrator moves it | Kept whole; `upload-sources` is what makes APP-012's receipt truthful. Tier B review. |
 | APP-074 | Backlog | **Trimmed.** Items 4 and 7 move verbatim to APP-082. Items 1, 2, 3, 5 and 6 stay (public entry, denials, replay refusals, abuse limits, trusted proxy and bounds). |
 | APP-012 | Backlog | Kept whole. Scope lock: the minimal queries are the Northstar `total` and `timeline` views (plan Task 9); ratio, CIDR and money views are refused and belong to PH02. Log entry added. |
 | APP-013 | Backlog | Kept whole (Tier A: transactional command). |

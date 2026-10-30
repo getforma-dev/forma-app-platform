@@ -2,7 +2,7 @@
 
 Prepared 2026-10-29 (evening UTC) by the GenUI planning lead under [ADR-010](../architecture/ADR-010-NOV-2-MVP-CUT.md). Status: plan, not evidence. The orchestrator is the GenUI owner and single GenUI operator; implementers and reviewers are separate agents in worktrees under `.claude/worktrees/`. Times are UTC. The MVP is defined in ADR-010 §1; the invariants in §2; the review tiers (A/B/C), evidence rule and batched landing in §4.
 
-**Starting state (2026-10-29, after `0f9025d`):** PH01 Done: APP-001–008, 011, 073, 075 (PR 2 landed on `main` at `699b8a9`). In review: APP-010 (re-check clean; lands in PR 3). Ready by dependencies: APP-009 (being implemented, worktree `agent-a4241d58b67f65c4e`), APP-077 (implemented at `1c581f2` in worktree `agent-a0d2a0e69a03496cf`, awaiting review). Backlog: APP-074, 012, 013, 014, 078, 076. fAuth is live (FORMA-367) and the mail image qualified (FORMA-366); both gates cleared. Victor approved the always-on figure (about $150–170/month) and the SES sandbox with pre-verified recipients.
+**Starting state (2026-10-29, after `0f9025d`):** PH01 Done: APP-001–008, 011, 073, 075 (PR 2 landed on `main` at `699b8a9`). In review: APP-010 (re-check clean; lands in PR 3). Ready by dependencies: APP-009 (being implemented, worktree `agent-a4241d58b67f65c4e`), APP-077 (implemented and merged on the branch at `34a42eb`; Tier B review pending; the ticket is still Backlog and moves to In progress/In review with the review). Backlog: APP-074, 012, 013, 014, 078, 076. fAuth is live (FORMA-367) and the mail image qualified (FORMA-366); both gates cleared. Victor approved the always-on figure (about $150–170/month) and the SES sandbox with pre-verified recipients.
 
 ## Critical path
 
@@ -31,7 +31,7 @@ Resource rules: `CARGO_BUILD_JOBS=2`, at most three aggregate Cargo jobs; one Do
 | # | Task | Lane | Parallel with | Needs |
 | --- | --- | --- | --- | --- |
 | 1 | Commit ADR-010 and the board (done: `0f9025d`); commit the planning docs; do not push until PR 3 is cut. | L0 | — | — |
-| 2 | APP-077 Tier B review of `1c581f2` (operator image, `upload-sources` B1 layout, overrides ≤ 8,192 B, `OperatorTask` count zero, no role-assumption grant); reviewer applies small fixes; evidence under `evidence/APP-077/`. | L2 | 3, 4 | — |
+| 2 | APP-077 Tier B review of the merged `34a42eb` (operator image, `upload-sources` B1 layout, overrides ≤ 8,192 B, `OperatorTask` count zero, no role-assumption grant); reviewer applies small fixes; evidence under `evidence/APP-077/`. | L2 | 3, 4 | — |
 | 3 | APP-009 implementation continues (plan Task 7): migration 0006, `auth/*`, `sessions.rs`, ADR-006 routes, SSR sign-in/pending pages, release router without the harness. Target: implementer reports by Oct 30 ~10:00. | L1 | 2, 4 | — |
 | 4 | APP-012 storage/worker half starts in its own worktree (plan Task 9): `query_engine.py` modes, `queries.rs`, `worker.rs`, `receipt.rs`, oracle tests for `total`/`timeline`, duckdb 2.0.0 pins; the route and page wait for APP-009's `resolve_session`. | L1 | 2, 3 | APP-010 merged (yes) |
 | 5 | Send Victor the ADR-010 judgment calls (§8) and the Nov 1 window request (slot, cost inside the approved figure, "no fAuth operation during it"). | L0 | — | — |
@@ -40,7 +40,7 @@ Resource rules: `CARGO_BUILD_JOBS=2`, at most three aggregate Cargo jobs; one Do
 
 | # | Task | Lane | Parallel with | Needs |
 | --- | --- | --- | --- | --- |
-| 6 | Merge APP-077 after its review; move APP-077 to In review. | L0 | 7 | 2 |
+| 6 | Apply the APP-077 reviewer's fixes if any; move APP-077 to In review with the review recorded. | L0 | 7 | 2 |
 | 7 | APP-009 Tier A review → fixes → re-check (same reviewer). Target merged by ~18:00; APP-009 to In review. | L2, L1 | 8, 9 | 3 |
 | 8 | APP-074 local implementation starts as soon as APP-009's branch builds (plan Task 8, items 1, 2, 3, 5, 6 only): landing and invite pages, `/invite`, `/invite/validate`, PAR handoff against the synthetic issuer, limits, trusted proxy, uniform 404 fallback. | L1 | 7, 9 | APP-009 branch |
 | 9 | APP-012 route and page half once APP-009 merges; Tier A review of the worker confinement and authorization-at-delivery, Tier B of the page in the same review. | L1, L2 | 7, 8 | 7 |

@@ -4,11 +4,11 @@
 
 Victor set a hard MVP deadline of **2026-11-02**. [ADR-010](docs/architecture/ADR-010-NOV-2-MVP-CUT.md) records the cut; [MVP-NOV-2-PLAN](docs/planning/MVP-NOV-2-PLAN.md) is the day-by-day order for the orchestrator. In one paragraph: the MVP is Phase 1 on the live beta (ADR-008) — invite → verified sign-in → entitlement → authorized query with receipt → explicit command → atomic outcome/audit → restart/reopen at `beta.getforma.dev`, the canary denied, the service left running — which is the demo's acts 1, 4 (run) and 6 (record) in reduced form on operator-seeded sources and seeded typed definitions labeled as such; acts 2, 3 and 5 are not shown and not simulated; nothing in identity, isolation, receipts, transactional commands or idempotency is cut.
 
-State after `0f9025d`: PH01 Done = APP-001–008, 011, 073, 075 (PR 2 landed on `main` at `699b8a9` from `b066247`, eleven workflows green). APP-010 In review (re-check clean, lands in PR 3). APP-009 in implementation (worktree `agent-a4241d58b67f65c4e`), APP-077 implemented at `1c581f2` awaiting its Tier B review (worktree `agent-a0d2a0e69a03496cf`). Backlog: APP-074 (trimmed: items 4 and 7 are APP-082's), 012, 013, 014, 078, 076 (trimmed: item 7 is APP-083's). The board has 88 tickets, 7 phases (PH07 "Post-MVP completion", sprint S13) and 13 sprints; `board.py check` is OK.
+State after `0f9025d`: PH01 Done = APP-001–008, 011, 073, 075 (PR 2 landed on `main` at `699b8a9` from `b066247`, eleven workflows green). APP-010 In review (re-check clean, lands in PR 3). APP-009 in implementation (worktree `agent-a4241d58b67f65c4e`), APP-077 implemented and merged on the branch at `34a42eb`, Tier B review pending (ticket still Backlog). Backlog: APP-074 (trimmed: items 4 and 7 are APP-082's), 012, 013, 014, 078, 076 (trimmed: item 7 is APP-083's). The board has 88 tickets, 7 phases (PH07 "Post-MVP completion", sprint S13) and 13 sprints; `board.py check` is OK.
 
 Ordered next tasks (MVP plan task numbers):
 
-1. Tier B review of APP-077 at `1c581f2`; merge; APP-077 In review (tasks 2, 6).
+1. Tier B review of APP-077 at `34a42eb` (already merged on the branch); apply fixes; move APP-077 to In review (tasks 2, 6).
 2. Finish APP-009 (plan Task 7); Tier A review → fix → re-check; merge (tasks 3, 7).
 3. Start APP-012's storage/worker half now; its route/page after APP-009 merges; Tier A for the worker confinement and delivery authorization (tasks 4, 9, 12).
 4. APP-074 local, items 1, 2, 3, 5, 6 only, after APP-009 builds; Tier A (tasks 8, 14).
