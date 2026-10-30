@@ -12,14 +12,14 @@
       "canvas": false,
       "files": [
         {
-          "file": "home.936fa051.js",
+          "file": "home.bf913de5.js",
           "raw": 79448,
-          "gzip": 26637,
-          "brotli": 23886,
+          "gzip": 26638,
+          "brotli": 23871,
           "forma": {
             "raw": 79081,
-            "gzip": 26514,
-            "brotli": 23776
+            "gzip": 26515,
+            "brotli": 23761
           },
           "router": {
             "raw": 0,
@@ -29,17 +29,17 @@
         }
       ],
       "raw": 79448,
-      "gzip": 26637,
-      "brotli": 23886,
+      "gzip": 26638,
+      "brotli": 23871,
       "forma": {
         "raw": 79081,
-        "gzip": 26514,
-        "brotli": 23776
+        "gzip": 26515,
+        "brotli": 23761
       },
       "core": {
         "raw": 79081,
-        "gzip": 26514,
-        "brotli": 23776
+        "gzip": 26515,
+        "brotli": 23761
       },
       "router": {
         "raw": 0,
@@ -53,13 +53,13 @@
       },
       "worker": {
         "raw": 3221,
-        "gzip": 1531,
-        "brotli": 1302
+        "gzip": 1530,
+        "brotli": 1306
       },
       "javascript": {
         "raw": 82669,
         "gzip": 28168,
-        "brotli": 25188
+        "brotli": 25177
       },
       "ceilings": {
         "forma": 28420,
@@ -70,6 +70,51 @@
     },
     {
       "route": "/about",
+      "class": "no-interactive-region",
+      "canvas": false,
+      "files": [],
+      "raw": 0,
+      "gzip": 0,
+      "brotli": 0,
+      "forma": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "core": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "router": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "application": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "worker": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "javascript": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "ceilings": {
+        "forma": 0,
+        "javascript": 0
+      },
+      "exceeded": [],
+      "over": false
+    },
+    {
+      "route": "/invite",
       "class": "no-interactive-region",
       "canvas": false,
       "files": [],
@@ -294,6 +339,51 @@
       "over": false
     },
     {
+      "route": "/record",
+      "class": "no-interactive-region",
+      "canvas": false,
+      "files": [],
+      "raw": 0,
+      "gzip": 0,
+      "brotli": 0,
+      "forma": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "core": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "router": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "application": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "worker": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "javascript": {
+        "raw": 0,
+        "gzip": 0,
+        "brotli": 0
+      },
+      "ceilings": {
+        "forma": 0,
+        "javascript": 0
+      },
+      "exceeded": [],
+      "over": false
+    },
+    {
       "route": "/w/{app}/{work}",
       "class": "no-interactive-region",
       "canvas": false,
@@ -342,7 +432,7 @@
   "worker": {
     "file": "sw.js",
     "raw": 3221,
-    "gzip": 1531,
-    "brotli": 1302
+    "gzip": 1530,
+    "brotli": 1306
   }
 }

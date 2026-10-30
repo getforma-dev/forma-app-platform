@@ -60,34 +60,38 @@
       "passed": true
     },
     {
+      "name": "store outage maps alike on GET /workspace and the APP-012 routes: with the workspace store unreachable, the member's live cookie and a forged cookie both get 503 unavailable (no-store) on GET /workspace, the JSON route, the page and its run form (8 requests in 1 ms, inside the 5 s handler deadline, so the answer is the storage mapping), without a cookie the uniform 404; the engine is never reached",
+      "passed": true
+    },
+    {
       "name": "local database and private fixture files removed",
       "passed": true
     }
   ],
   "latency": {
     "authorized_path_wall_ms": {
-      "max": 254.0,
-      "p50": 247.9,
-      "p95": 251.9,
+      "max": 342.0,
+      "p50": 259.8,
+      "p95": 266.4,
       "samples": 20
     },
     "child": {
       "engine_reported_ms": {
-        "max": 88,
-        "p50": 78
+        "max": 113,
+        "p50": 80
       },
-      "peak_rss_bytes": 54394880,
+      "peak_rss_bytes": 54099968,
       "samples": 40,
       "sequential_wall_ms": {
-        "max": 147.6,
-        "p50": 138.1,
-        "p95": 145.2,
-        "p99": 147.6
+        "max": 193.3,
+        "p50": 141.2,
+        "p95": 148.9,
+        "p99": 193.3
       },
       "wave_of_two_wall_ms": {
-        "max": 152.0,
-        "p50": 147.9,
-        "p99": 152.0
+        "max": 152.6,
+        "p50": 147.7,
+        "p99": 152.6
       }
     }
   },
@@ -283,7 +287,7 @@
       "destination": {
         "app_id": "00000000-0000-4000-8000-000000000065",
         "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
-        "digest": "sha256:e73e893c131d94aee9700f4ea739b1787ac2b83787b343e026c0234aec1b4255",
+        "digest": "sha256:d9f2beec448b3a4be409baadb1206d8169bb085db82d2e8419d17149318c73e9",
         "filter_epoch": 1,
         "kind": "query_receipt",
         "membership_epoch": 1,
@@ -315,7 +319,7 @@
         ],
         "partial": false,
         "policy_epoch": 1,
-        "principal_id": "d731233c-2234-492c-a9b0-992d698f5e98",
+        "principal_id": "98aa4c4b-6bab-4b9b-b9e0-9e625eaa4548",
         "provenance": {
           "predicate_digest": "sha256:4ff14af639531c302342be991cc5127338ab7edc0e67b484481347ea62d8bb47",
           "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
@@ -340,7 +344,7 @@
       "timeline": {
         "app_id": "00000000-0000-4000-8000-000000000065",
         "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
-        "digest": "sha256:fd60b95dd3d43e5feb634ebdd51aa77a0c1497dac39dad23253931fa3ab1cde3",
+        "digest": "sha256:514a1eab788827ddbbd5f8aace3b79a1de09cf946038cfc0a3ac98420efc0265",
         "filter_epoch": 0,
         "kind": "query_receipt",
         "membership_epoch": 1,
@@ -365,7 +369,7 @@
         ],
         "partial": false,
         "policy_epoch": 1,
-        "principal_id": "d731233c-2234-492c-a9b0-992d698f5e98",
+        "principal_id": "98aa4c4b-6bab-4b9b-b9e0-9e625eaa4548",
         "provenance": {
           "predicate_digest": "sha256:93e239a0bf50df6c543799243ff7e426250893e01914f7f330ef0d5c08adfe9a",
           "query_digest": "sha256:b3d11fb7d535628a5eaf5b2bf2e3c5d6e34e285d53bc964be349837381e942e7"
@@ -390,7 +394,7 @@
       "total": {
         "app_id": "00000000-0000-4000-8000-000000000065",
         "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
-        "digest": "sha256:58b45f207d52433abb895c36ccb6993a1eeb8e4edd94df1ba863dc04e0c36db1",
+        "digest": "sha256:6b79c713eae63de5155935a8cb8dc3602fd7f2f41c2eafa6d1d51b06effc8155",
         "filter_epoch": 0,
         "kind": "query_receipt",
         "membership_epoch": 1,
@@ -415,7 +419,7 @@
         ],
         "partial": false,
         "policy_epoch": 1,
-        "principal_id": "d731233c-2234-492c-a9b0-992d698f5e98",
+        "principal_id": "98aa4c4b-6bab-4b9b-b9e0-9e625eaa4548",
         "provenance": {
           "predicate_digest": "sha256:cb3af210e42e9eef5c055488404710cb6d1a3bc3fdb33f240a67399c49b07e9d",
           "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
@@ -440,7 +444,7 @@
       "whole_revision": {
         "app_id": "00000000-0000-4000-8000-000000000065",
         "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
-        "digest": "sha256:6a5a27166500bb23c50d7d20dab3e9e119b10e4ac48afd218828aa9c57294e59",
+        "digest": "sha256:2acee6cbdef55bd65282c13b250a778df8d344b6670aa1992e66b406cc913698",
         "filter_epoch": 0,
         "kind": "query_receipt",
         "membership_epoch": 1,
@@ -450,7 +454,7 @@
         "parameters": [],
         "partial": false,
         "policy_epoch": 1,
-        "principal_id": "d731233c-2234-492c-a9b0-992d698f5e98",
+        "principal_id": "98aa4c4b-6bab-4b9b-b9e0-9e625eaa4548",
         "provenance": {
           "predicate_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66",
           "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
@@ -472,6 +476,60 @@
         "view_id": "total",
         "work_id": "00000000-0000-4000-8000-0000000000f6"
       }
+    },
+    "store_outage": {
+      "dispatch_calls": 0,
+      "elapsed_ms": 1,
+      "requests": [
+        {
+          "cookie": "member",
+          "method": "GET",
+          "route": "/workspace",
+          "status": 503
+        },
+        {
+          "cookie": "member",
+          "method": "POST",
+          "route": "/v1/work/{app}/{work}/queries/total",
+          "status": 503
+        },
+        {
+          "cookie": "member",
+          "method": "GET",
+          "route": "/w/{app}/{work}",
+          "status": 503
+        },
+        {
+          "cookie": "member",
+          "method": "POST",
+          "route": "/w/{app}/{work}",
+          "status": 503
+        },
+        {
+          "cookie": "forged",
+          "method": "GET",
+          "route": "/workspace",
+          "status": 503
+        },
+        {
+          "cookie": "forged",
+          "method": "POST",
+          "route": "/v1/work/{app}/{work}/queries/total",
+          "status": 503
+        },
+        {
+          "cookie": "forged",
+          "method": "GET",
+          "route": "/w/{app}/{work}",
+          "status": 503
+        },
+        {
+          "cookie": "forged",
+          "method": "POST",
+          "route": "/w/{app}/{work}",
+          "status": 503
+        }
+      ]
     }
   },
   "schema_version": 1,

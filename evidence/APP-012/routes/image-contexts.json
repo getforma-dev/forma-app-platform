@@ -1,24 +1,27 @@
 {
+  "sources_count": 79,
+  "qualification_missing_sources": [],
+  "qualification_missing_lib_sources": [],
   "service_missing": [],
-  "qualification_missing": [],
-  "app012_new_files_in_service": [
-    "app/src/query/page.rs",
-    "app/src/query/routes.rs",
+  "service_test_only_present": [
+    "app/src/auth/invite_tests.rs",
+    "app/src/auth/synthetic_issuer.rs",
+    "app/src/auth/tests.rs",
+    "app/src/auth_qualification.rs",
+    "app/src/auth_qualification/tests.rs",
+    "app/src/commands/tests.rs",
+    "app/src/storage/command_qualification.rs",
+    "app/src/storage/definition_qualification.rs",
+    "app/src/storage/qualification_cases.rs",
+    "app/src/storage/tests.rs"
+  ],
+  "new_in_service": [
+    "app/admin/src/forma-types.d.ts",
+    "app/admin/src/record/app.tsx",
     "app/admin/src/work/app.tsx",
-    "app/admin/src/forma-types.d.ts"
-  ],
-  "app012_new_files_in_qualification": [
+    "app/src/commands/routes.rs",
     "app/src/query/page.rs",
-    "app/src/query/routes.rs",
-    "app/src/query/route_tests.rs"
+    "app/src/query/routes.rs"
   ],
-  "service_test_only_excluded": [
-    "app/src/admission/tests.rs",
-    "app/src/query/route_tests.rs",
-    "app/src/query/tests.rs",
-    "app/src/storage/admission_qualification.rs",
-    "app/src/storage/managed_qualification.rs",
-    "app/src/storage/managed_qualification/tests.rs",
-    "app/src/storage/query_qualification.rs"
-  ]
+  "leaks": []
 }

@@ -397,6 +397,22 @@ impl Fixture {
             self.port,
         )
     }
+    /// APP-012: the same settings against a closed loopback port, so every
+    /// acquisition fails at connect: a store outage that depends on no
+    /// identity.
+    pub fn unreachable_settings(&self) -> Settings {
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .unwrap()
+            .port();
+        Settings::fixture(
+            self.credentials.clone(),
+            self.registry.clone(),
+            self.ca.clone(),
+            "127.0.0.1",
+            port,
+        )
+    }
     fn request(
         &self,
         stores: &Stores,

@@ -61,11 +61,15 @@
       "passed": true
     },
     {
+      "name": "a new arrival supersedes the browser's earlier workspace session: a second sign-in ends the first (row deleted with an epoch advance, refresh token logged out, old cookie uniform 404), and a pending arrival of another identity ends it and clears its cookie",
+      "passed": true
+    },
+    {
       "name": "the expiry sweep deletes idle or expired records in every registry organization and revokes their refresh tokens",
       "passed": true
     },
     {
-      "name": "no_provider_token_or_set_cookie_reaches_browser: 149 responses carry none of 185 issued codes, tokens or request URIs (outside the authorize redirect), no token JSON and no issuer Set-Cookie",
+      "name": "no_provider_token_or_set_cookie_reaches_browser: 171 responses carry none of 201 issued codes, tokens or request URIs (outside the authorize redirect), no token JSON and no issuer Set-Cookie",
       "passed": true
     }
   ],
@@ -76,7 +80,7 @@
   "hosted_acceptance": false,
   "limits": [
     "The provider is the cfg(test) synthetic loopback issuer (simulated transport and hosted page), never the deployed fAuth; hosted PAR, mail delivery and browsers are APP-074/076.",
-    "The invited-signup entry is a labeled local stand-in for APP-074's POST /invite/validate.",
+    "The invited signup runs through APP-074's POST /invite/validate; provider invitations come from the loopback management stand-in app/runtime/fake_fauth.py (simulated transport).",
     "Synthetic local password authentication is not RDS IAM; identifiers are synthetic.",
     "Rendering uses a test page renderer; the SSR pages are covered by the binary's own test and the HTTP probes."
   ],

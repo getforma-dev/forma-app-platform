@@ -74,6 +74,62 @@ eb0fc79ec8dd522f8fc93d8105f58e37cb07260b88ca2d3b88cbdd0b4d7f32bb  app/admin/src/
 
 Docker: `docker ps -a` showed only `gatewasm-db-test-1` before and after each campaign. Another session's `genui-native-…` containers appeared between runs; this slice waited for them to finish (one campaign at a time) and did not touch them.
 
+## Integration onto `b497ede` (2026-10-29)
+
+This branch (`3e17429`, `380b7d4`, on `6f0d1c3`) was merged with `--no-ff` onto the phase-one-spikes tip `b497ede`. The tip holds APP-013 (commands, migration 0007, the record page), APP-074 (invite entry, with the APP-009 review fixes) and the APP-078 preparation. The hashes and counts in the sections above are this branch as delivered. This section records the merged result. The JSON files beside this README (`query-campaign.json`, `session-campaign.json`, `size-report.json`, `image-contexts.json`) are re-recorded from the merged tree.
+
+Conflicts and how they were resolved (both sides kept every time):
+
+| File | Resolution |
+| --- | --- |
+| `app/src/auth/csrf.rs` | `Form::Command` (APP-013) and `Form::Query` (APP-012), each with its own name (`command`, `query`). |
+| `app/src/auth/mod.rs` | `mod invite_tests` (APP-074) kept; `synthetic_issuer` and `tests` are `pub(crate)` (APP-012). |
+| `app/src/auth/tests.rs` | APP-074's harness kept: the real `POST /invite/validate`, the operator-issued code with its provider capability, the `codes` map. That harness is now `pub(crate)` for the query campaign. `issue_code_in(organization)` picks the Northstar stand-in or the new optional `canary` stand-in, along with that tenant and slug. Both stand-ins share one capability directory, as in `invite_tests`. `member_in(organization, label)` signs in with the matching handle. APP-012's labeled local stand-in for `/invite/validate` (`invited_signup_in`) is gone: the code names its organization, so the real route serves both organizations. |
+| `app/src/storage/query_qualification.rs` (auto-merged, then adapted) | The route campaign starts both loopback management stand-ins and passes `Auth::with_invitations` over their shared capability directory. Its Canary member comes through the real invitation route. |
+| `app/src/main.rs` | Required SSR routes include `/record` and `/w/{app}/{work}`. APP-074's trusted proxies and invitations are kept on `Auth`. APP-013's `command_routes` take `auth_pages`. APP-012's `work_page` is bound before `finalize`, and `Engine::new(EngineSettings::image())` runs whenever the store is configured. The product router merges `auth`, `commands` and `work_routes`, and never sits beside the qualification harness. Both binary tests are kept (record page, work page). The work-page test also binds `invite` and `record`, so `finalize` judges the whole build. |
+| `app/admin/build.ts` | Pages `/`, `/about`, `/invite`, `/signin`, `/auth/pending`, `/auth/callback`, `/workspace`, `/record`, `/w/{app}/{work}`. The `record` and `work` entry points and SSR entries are both kept. |
+| `app/admin/src/styles/app.css` | Additive: APP-074's `.notice`/`.entry`/`.help`/`.entry-links` rules, then APP-012's work-page rules. No selector overlaps; the record page uses `.page`, `.notice`, `.record` and `.command`. |
+| `.dockerignore` | Union of the allowlists: `record/app.tsx`, and `work/app.tsx` plus `forma-types.d.ts`. The qualification ignore file merged cleanly. |
+| `app/src/storage/managed_qualification.rs` | `SOURCES` is the union, **79** entries: 76 on the tip plus `query/page.rs`, `query/routes.rs`, `query/route_tests.rs`. The `SEED_INPUTS` hashes were recomputed: all five equal the repository files (setup.json `7460…ec7c`, northstar.json `4563…d592`, spend-review.json `4a45…5650`, tenant_seed.py `73bd…fc2e`, validate.py `7096…b826`). No change was needed. |
+| `app/src/query/route_tests.rs` (compile fix) | `NoPages` implements the new `Pages::invite` (APP-074). |
+
+Open question 2 was decided and implemented, and open question 5 was assessed and not done (see Open questions). `GET /workspace` (`app/src/auth/routes.rs`) now answers `Err(Error::Denied)` with the uniform 404 and every other `resolve_session` error with 503 `unavailable`. That is the same rule as the query routes' `storage_refusal`, which was already correct and is unchanged. New campaign check 15 (`store_outage` in [query-campaign.json](query-campaign.json)) builds a second `Stores` against a closed loopback port, using `Fixture::unreachable_settings`, after the first `Stores` has closed. On `GET /workspace`, `POST /v1/work/{app}/{work}/queries/total`, `GET /w/{app}/{work}` and `POST /w/{app}/{work}`, the member's live cookie and a well-formed forged cookie both get 503 `unavailable` with `no-store`. All 8 requests finished in 1 ms, well before the 5 s deadline, so the 503 comes from the storage mapping and not the deadline. Without a cookie the answer is the uniform 404. The engine dispatch count stays 0.
+
+Merged-tree results (Rust 1.93.1, `CARGO_BUILD_JOBS=2`; Node 22, npm 11). `PYC` is the runtime venv with the contracts site-packages, as in APP-013. `OP` is a Python 3.11.0 venv whose `pip freeze` equals `app/operator/requirements.lock` exactly.
+
+| Command | Result |
+| --- | --- |
+| in `app/admin`: `npm ci && npm run typecheck && npm run build` | exit 0. `record.ir` 3,906 B and `work.ir` 3,573 B, 0 islands each. Every route except `/` has "no interactive region, no JavaScript". `/` is Forma 26,515 of 28,420 B and JavaScript 28,168 of 76,800 B. Page budgets: no route `over` and none `exceeded` ([size-report.json](size-report.json)). |
+| in `app/`: `cargo fmt --check`; `cargo clippy --locked --all-targets -- -D warnings`, and with `--features qualification-harness` | exit 0 all |
+| in `app/`: `cargo test --locked`; with `--features qualification-harness` | lib 112 passed / 12 ignored, bin 5, doctests 3; with the feature, lib 123 passed / 12 ignored, bin 5, doctests 3 |
+| in `app/`: `CARGO_TARGET_DIR=target/msrv cargo +1.85.0 check --locked --lib --tests --bins` (also with the feature); `cargo check --locked --release --bin forma-app-platform` | exit 0 |
+| `PYC -m unittest discover -s app/runtime` (includes the Docker PostgreSQL operator tests) | 132 OK |
+| `GENUI_OPERATOR_TEST_PARSER=<main>/parser/target OP -m unittest discover -s app/operator -p 'test_*.py'` | 38 OK |
+| `python3 -m unittest discover -s scripts -p 'test_*.py'`; `PYC -m unittest discover -s fixtures -p 'test_*.py'`; `OP -m unittest discover -s infra/test -p '*_test.py'` | 17 OK; 14 OK; 54 OK |
+| in `infra/`: `npm ci && npm run typecheck && npm test` | exit 0; 26 of 26 pass |
+| `python3 scripts/check-schema-pins.py` | `"agree": true`, every pin 7 |
+| `<main>/contracts/.venv/bin/python contracts/lock.py check`; contracts unittest; `node contracts/verify_vectors.mjs` | lock matches 27 artifacts (edition `impl-2026-10-29.3`); 26 OK; 6 + 13 vectors match |
+| `python3 Tickets/_tools/board.py check`; `git diff --check` | OK (88 tickets); clean |
+| `PYC app/runtime/qualify_tenant_schema.py --output <scratch>` | `passed: true`, 359 checks, container removed |
+| in `app/`, one at a time: `native_postgres_campaign`, `native_admission_campaign`, `native_definition_campaign`, `auth::tests::native_session_campaign`, `auth::invite_tests::native_invite_campaign`, `native_command_campaign` (`GENUI_NATIVE_FIXTURE_PYTHON=PYC`) | 1 passed each: 36, 27, 18, **18** ([session-campaign.json](session-campaign.json); APP-074's count on the tip), 11, 20 checks |
+| in `app/`: `GENUI_NATIVE_FIXTURE_PYTHON=OP GENUI_QUERY_PYTHON=OP … native_query_campaign -- --ignored --exact` | 1 passed, **15 checks** ([query-campaign.json](query-campaign.json)): the 14 above plus the store-outage check. Authorized path p50 259.8 ms, p95 266.4 ms (20 samples). |
+| in `app/`: `GENUI_QUERY_PYTHON=OP … query::tests::engine_child_campaign -- --ignored --exact` | 1 passed. The child alone: sequential p50 136.9 ms, p99 147.4 ms; in waves of two, p99 152.4 ms; peak RSS 54.5 MB. |
+| `PYC fixtures/reset_trial.py --output <scratch>` | `passed: true`, all owned resources removed |
+| `PYC app/runtime/smoke_http.py --binary app/target/debug/forma-app-platform` | passed: native HTML count 7, CSP nonces fresh, `no-store`, protected routes the uniform 404, startup refusals unchanged |
+| BuildKit context exports: the root ignore file (`FROM scratch; COPY . /`) and the qualification Dockerfile's `inputs` target | All 79 `SOURCES` paths and every library source are in the qualification context. Every non-test tracked source is in the service context, and nothing leaks from `Tickets/`, `docs/`, `evidence/`, venvs or build output ([image-contexts.json](image-contexts.json)). The test-only files in the service context were already on the tip's allowlist, and this merge changed none of them. |
+
+Docker: `docker ps -a` showed only `gatewasm-db-test-1`, another session's container, before and after every campaign. No image was built.
+
+Merged-source SHA-256 for the files the merge changed (the others are as listed above):
+
+```
+2e55fbf89c0865c58eb89b208f5331d14b1631d0f733890c90104b44bba57850  app/src/query/route_tests.rs
+dd220e4bffb11e174bd52b6c2189fb9a8ed1342c252e775664e2892d8adfef1a  app/src/main.rs
+978a50b49cc44fc20cdacd6dd83a389a151e347216e67a31fe361c73206b0784  app/src/auth/routes.rs
+e98ebaf8a6f3537ec5005d69635377d348b0484f35a4891dddac5b87457c1540  app/src/auth/tests.rs
+bf7e20d0413bca448e047ea18e0cf1b529c1c5bd03df7d63075855032122e918  app/src/storage/query_qualification.rs
+```
+
 ## Limits
 
 - Sessions come from the simulated loopback issuer, not the deployed fAuth; the campaign renders through a recording renderer (the SSR page itself is the binary test). No browser was used; installed Chrome and the hosted path are APP-076's.
@@ -84,7 +140,7 @@ Docker: `docker ps -a` showed only `gatewasm-db-test-1` before and after each ca
 ## Open questions
 
 1. **New problem codes** `invalid_parameters`, `query_refused`, `source_unavailable`, `query_failed`: confirm, or fold them into fewer codes; the ADR-007 D7.15 contract edition (APP-013) could list them.
-2. **Store saturation → 503** (decision 1) differs from `GET /workspace`, which answers any `resolve_session` error with 404. Align APP-009's route, or keep 404 there.
+2. **Store saturation → 503** (decision 1) differed from `GET /workspace`, which answered any `resolve_session` error with 404. **Aligned at integration (2026-10-29):** both now use one rule. The uniform 404 is for no cookie and for an invalid session (absent, ended, or `Error::Denied`). 503 `unavailable` is for every other storage error (`Unavailable`, `Deadline`, `Configuration`, `UnknownOutcome`). Those errors come from the store and are the same whoever asks, so a 503 says nothing about the cookie that was sent. Query campaign check 15 covers it. Still answering 404 for every `resolve_session` error, unchanged here: `POST /auth/signout-all` (APP-009) and the APP-013 command and record routes (`commands::routes::session`). Aligning them belongs to their owners.
 3. **The JSON route without a window** computes the whole revision (2,040,000, truthfully receipted). Should the route require a window for views without one, as the page does?
 4. **`POST /w/{app}/{work}`** (the no-JS run form) is a route the plan did not name; it carries the same refusals and a synchronizer token. Confirm, or replace it with an island when one is qualified.
-5. The demo must open the work `create-bound-work` writes (storage half open question 3); `GET /workspace` does not yet link it (the home/work listing is outside this slice).
+5. The demo must open the work `create-bound-work` writes (storage half open question 3); `GET /workspace` does not yet link it (the home/work listing is outside this slice). **Not trivial at integration, so not done.** The link has to name a per-organization work ID that the member may open. That needs three things: an authorized listing in `storage` (works this member's grants can read, under the same fence as `work_outline`), a list prop on the native `workspace` page, and its tests. A link to a fixed ID would show the link to members who cannot open it, and it would be fixture-specific. This still needs an owner, as the work listing in APP-025 or a small follow-up.

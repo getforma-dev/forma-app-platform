@@ -1502,6 +1502,103 @@ async fn route_campaign(
                  "peak_organization_running": load.peak_organization_running, "rejected": load.rejected},
     });
     stores.close().await.unwrap();
+
+    // --- Store outage: 503 for everyone, the uniform 404 only without a session ---
+    // A second Stores against a closed port (after the first closed: pool
+    // capacity is process-wide). Every resolve_session fails at connect, so
+    // GET /workspace, the JSON route, the page and its run form answer 503
+    // `unavailable` for the member's live cookie and for a forged one alike
+    // (no identity is judged), and the uniform 404 without a cookie.
+    let down = Arc::new(Stores::new(c.fixture.unreachable_settings()).unwrap());
+    let down_auth = Arc::new(Auth::loopback(
+        harness::config(&c.issuer.origin),
+        Some(down.clone()),
+        Arc::new(harness::TestPages),
+    ));
+    let down_counting = Arc::new(Counting {
+        engine: Some(engine.clone() as Arc<dyn Executor>),
+        ..Counting::default()
+    });
+    let down_routes = compose(Arc::new(Work::new(
+        down_auth.clone(),
+        Some(down_counting.clone() as Arc<dyn Executor>),
+        pages.clone(),
+    )));
+    let down_app = harness::app(down_auth.clone());
+    // A well-formed session capability for Northstar that was never issued.
+    let mut raw: Vec<u8> = (0..16)
+        .map(|i| u8::from_str_radix(&ORG.replace('-', "")[2 * i..2 * i + 2], 16).unwrap())
+        .collect();
+    raw.extend([0x5a; 32]);
+    let forged = format!(
+        "{}={}",
+        crate::auth::cookies::SESSION,
+        base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, raw)
+    );
+    assert!(
+        crate::storage::capability_organization(&forged[forged.find('=').unwrap() + 1..]).is_some()
+    );
+    let started = std::time::Instant::now();
+    let mut outage = Vec::new();
+    for (label, cookie) in [("member", cookies.as_str()), ("forged", forged.as_str())] {
+        for (router, method, uri, body) in [
+            (down_app.clone(), "GET", "/workspace".to_owned(), Vec::new()),
+            (
+                down_routes.clone(),
+                "POST",
+                format!("/v1/work/{APP}/{load_work}/queries/total"),
+                query_body(&window()).into_bytes(),
+            ),
+            (
+                down_routes.clone(),
+                "GET",
+                format!("/w/{APP}/{load_work}"),
+                Vec::new(),
+            ),
+            (
+                down_routes.clone(),
+                "POST",
+                format!("/w/{APP}/{load_work}"),
+                b"csrf=x&window_start=2026-10-22T10:00&window_end=2026-10-22T10:10&destination="
+                    .to_vec(),
+            ),
+        ] {
+            let reply = send_raw(router, raw_request(method, &uri, cookie, body)).await;
+            assert_eq!(
+                reply.0,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "{label} {method} {uri}"
+            );
+            assert_eq!(
+                reply.2, b"{\"code\":\"unavailable\"}",
+                "{label} {method} {uri}"
+            );
+            assert_eq!(reply.1[header::CACHE_CONTROL], "no-store");
+            outage.push(json!({"cookie": label, "method": method, "route": uri.replace(APP, "{app}").replace(load_work, "{work}"), "status": 503}));
+        }
+    }
+    let outage_ms = started.elapsed().as_millis();
+    for (router, method, uri) in [
+        (down_app.clone(), "GET", "/workspace".to_owned()),
+        (
+            down_routes.clone(),
+            "POST",
+            format!("/v1/work/{APP}/{load_work}/queries/total"),
+        ),
+        (down_routes.clone(), "GET", format!("/w/{APP}/{load_work}")),
+    ] {
+        let reply = send_raw(router, raw_request(method, &uri, "", Vec::new())).await;
+        assert_eq!(reply.0, StatusCode::NOT_FOUND, "anonymous {method} {uri}");
+        assert_eq!(reply.2, b"{\"code\":\"not_found\"}");
+    }
+    assert_eq!(down_counting.calls(), 0);
+    down.close().await.unwrap();
+    check(
+        checks,
+        &format!("store outage maps alike on GET /workspace and the APP-012 routes: with the workspace store unreachable, the member's live cookie and a forged cookie both get 503 unavailable (no-store) on GET /workspace, the JSON route, the page and its run form ({} requests in {outage_ms} ms, inside the 5 s handler deadline, so the answer is the storage mapping), without a cookie the uniform 404; the engine is never reached", outage.len()),
+    );
+    let mut report = report;
+    report["store_outage"] = json!({"requests": outage, "elapsed_ms": outage_ms, "dispatch_calls": down_counting.calls()});
     let Campaign { fixture, .. } = c;
     (fixture, report)
 }
