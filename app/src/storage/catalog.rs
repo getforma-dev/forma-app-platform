@@ -1,6 +1,6 @@
 //! The migration owner's canonical logical catalog contract, embedded at build
 //! time. No request or runtime path can provide an alternative SQL statement.
-use super::{Error, Result};
+use super::{pool::trace, Error, Result};
 use serde::Deserialize;
 use serde_json::Value;
 use tokio_postgres::Client;
@@ -49,25 +49,26 @@ impl Catalog {
         client
             .batch_execute("BEGIN READ ONLY; SET LOCAL search_path=pg_catalog,pg_temp")
             .await
-            .map_err(|_| Error::Unavailable)?;
+            .map_err(trace::unavailable)?;
         let row = client
             .query_one(&self.sql, &[])
             .await
-            .map_err(|_| Error::Unavailable)?;
+            .map_err(trace::unavailable)?;
         let body = row
             .try_get::<_, Option<String>>(0)
-            .map_err(|_| Error::Unavailable)?
-            .ok_or(Error::Unavailable)?;
+            .map_err(trace::unavailable)?
+            .ok_or_else(|| trace::refuse("catalog_null"))?;
         if body.len() > BOUND {
-            return Err(Error::Unavailable);
+            return Err(trace::refuse("catalog_oversize"));
         }
-        let actual: Value = serde_json::from_str(&body).map_err(|_| Error::Unavailable)?;
+        let actual: Value =
+            serde_json::from_str(&body).map_err(|_| trace::refuse("catalog_json"))?;
         if actual != self.expected {
-            return Err(Error::Unavailable);
+            return Err(trace::refuse("catalog_mismatch"));
         }
         client
             .batch_execute("ROLLBACK")
             .await
-            .map_err(|_| Error::Unavailable)
+            .map_err(trace::unavailable)
     }
 }

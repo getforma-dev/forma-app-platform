@@ -522,6 +522,7 @@ fn reports_are_sanitized_closed_and_bounded() {
         "scope",
         "passed",
         "error",
+        "refusal",
         "checks",
         "cleanup_applicable",
         "cleanup_confirmed",
@@ -557,6 +558,14 @@ fn reports_are_sanitized_closed_and_bounded() {
         ),
         (
             Err(Failure::Case),
+            Cleanup::Confirmed,
+            false,
+            Some("case_refused"),
+            true,
+            true,
+        ),
+        (
+            Err(Failure::Refused(Refusal::Panic(3))),
             Cleanup::Confirmed,
             false,
             Some("case_refused"),
@@ -601,6 +610,11 @@ fn reports_are_sanitized_closed_and_bounded() {
         assert_eq!(value["cleanup_applicable"], applicable);
         assert_eq!(value["cleanup_confirmed"], confirmed);
         assert_eq!(value["checks"].as_array().unwrap().is_empty(), !passed);
+        // APP-086: a closed refusal exactly when a case refused.
+        assert_eq!(value["refusal"].is_null(), error != Some("case_refused"));
+        if !value["refusal"].is_null() {
+            assert_closed_refusal(&value["refusal"], &[]);
+        }
         let mut out = Vec::new();
         assert_eq!(emit(value, None, &mut out), passed);
         let line = String::from_utf8(out).unwrap();
@@ -643,7 +657,7 @@ async fn supervise_proves_cleanup_on_success_panic_and_cooperative_timeout() {
         deadline,
         |stores| async move {
             assert_eq!(stores.registry_identity().version, RUN);
-            vec![json!({"name":"synthetic","passed":true})]
+            Ok(vec![json!({"name":"synthetic","passed":true})])
         },
         || Ok(()),
     )
@@ -665,7 +679,7 @@ async fn supervise_proves_cleanup_on_success_panic_and_cooperative_timeout() {
         Instant::now() + Duration::from_secs(6),
         |_| async move {
             tokio::time::sleep(Duration::from_secs(60)).await;
-            Vec::new()
+            Ok(Vec::new())
         },
         || Ok(()),
     )
@@ -677,7 +691,7 @@ async fn supervise_proves_cleanup_on_success_panic_and_cooperative_timeout() {
     let (result, cleanup) = supervise(
         inputs.settings(),
         deadline,
-        |_| async move { Vec::new() },
+        |_| async move { Ok(Vec::new()) },
         || Err(Failure::Configuration),
     )
     .await;
@@ -695,7 +709,7 @@ async fn supervise_never_confirms_cleanup_for_an_unacknowledged_abort() {
         Instant::now() + Duration::from_millis(5500),
         |_| async move {
             std::thread::sleep(Duration::from_secs(4));
-            Vec::new()
+            Ok(Vec::new())
         },
         || Ok(()),
     )
@@ -729,6 +743,255 @@ async fn refusals_before_store_construction_are_not_applicable() {
     .await;
     assert_eq!(result.err(), Some(Failure::Configuration));
     assert_eq!(cleanup, Cleanup::NotApplicable);
+}
+
+// ---------------------------------------------------------------------------
+// APP-086 refusal diagnostics.
+
+/// Every member is present, every string is a closed lowercase code, a
+/// storage error variant or a five-character SQLSTATE, and no `forbidden`
+/// text appears anywhere in the encoded refusal.
+fn assert_closed_refusal(refusal: &Value, forbidden: &[&str]) {
+    fn strings<'a>(value: &'a Value, out: &mut Vec<&'a str>) {
+        match value {
+            Value::String(text) => out.push(text),
+            Value::Array(items) => items.iter().for_each(|item| strings(item, out)),
+            Value::Object(members) => members.values().for_each(|item| strings(item, out)),
+            _ => (),
+        }
+    }
+    let keys: BTreeSet<&str> = refusal
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(keys, REFUSAL_KEYS.into_iter().collect());
+    let pool_keys: BTreeSet<&str> = [
+        "pool",
+        "stage",
+        "step",
+        "error",
+        "sqlstate",
+        "cause",
+        "elapsed_ms",
+    ]
+    .into_iter()
+    .collect();
+    for pool in refusal["pools"].as_array().into_iter().flatten() {
+        let keys: BTreeSet<&str> = pool
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(keys, pool_keys);
+    }
+    let mut found = Vec::new();
+    strings(refusal, &mut found);
+    for text in found {
+        let code = !text.is_empty()
+            && text
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+        let variant = [
+            "Configuration",
+            "Denied",
+            "Unavailable",
+            "Deadline",
+            "UnknownOutcome",
+        ]
+        .contains(&text);
+        let sqlstate = text.len() == 5
+            && text
+                .bytes()
+                .all(|b| b.is_ascii_digit() || b.is_ascii_uppercase());
+        assert!(
+            code || variant || sqlstate,
+            "unexpected refusal text {text}"
+        );
+    }
+    let encoded = refusal.to_string();
+    for text in forbidden {
+        assert!(!encoded.contains(text), "refusal contains {text}");
+    }
+}
+
+/// A loopback port with no listener (bound, then released).
+fn closed_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
+}
+fn loopback_settings(inputs: &Inputs, port: u16) -> Settings {
+    Settings::fixture(
+        inputs.paths.credentials.clone(),
+        inputs.paths.registry.clone(),
+        inputs.paths.ca.clone(),
+        "127.0.0.1",
+        port,
+    )
+}
+const SECRETS: [&str; 4] = ["unit-workspace", "unit-control", "unit-data", "unit-worker"];
+
+/// Child mode `readiness_refusal`: the production cases against a loopback
+/// port that refuses every transport. A child process, so the transport
+/// permits it briefly holds never meet another test's cleanup proof.
+fn readiness_refusal_child() -> (Value, Option<Watchdog>) {
+    let inputs = Inputs::new();
+    // The credential host matches the loopback target, whose port refuses
+    // every transport: all four pools fail inside acquire's connect step.
+    write(&inputs.paths.credentials, &credentials("127.0.0.1"), 0o600);
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+    let (result, cleanup) = runtime.block_on(supervise(
+        Ok(loopback_settings(&inputs, closed_port())),
+        Instant::now() + Duration::from_secs(30),
+        production_cases,
+        || Ok(()),
+    ));
+    assert_eq!(cleanup, Cleanup::Confirmed);
+    assert_eq!(pool::slots().0, 0);
+    assert!(matches!(
+        result,
+        Err(Failure::Refused(Refusal::Readiness(_)))
+    ));
+    (report(None, result, cleanup), None)
+}
+
+#[test]
+fn a_readiness_refusal_names_the_pool_stage_and_closed_cause() {
+    let output = child("readiness_refusal");
+    assert_ne!(output.code, Some(0));
+    let value = result_line(&output.stdout).expect("result line");
+    assert_eq!(value["error"], "case_refused");
+    assert_eq!(value["passed"], false);
+    assert_eq!(value["cleanup_confirmed"], true);
+    assert_eq!(value["checks"], json!([]));
+    let refusal = &value["refusal"];
+    for (key, expected) in [
+        ("case", json!("readiness")),
+        ("reason", json!("stage_failed")),
+        ("pool", json!("workspace")),
+        ("stage", json!("acquire")),
+        ("step", json!("connect")),
+        ("error", json!("Unavailable")),
+        ("cause", json!("io_connection_refused")),
+        ("sqlstate", Value::Null),
+        ("checks_passed", json!(0)),
+    ] {
+        assert_eq!(refusal[key], expected, "{key}");
+    }
+    let pools = refusal["pools"].as_array().unwrap();
+    assert_eq!(pools.len(), 4);
+    for (probe, name) in pools.iter().zip(POOLS) {
+        assert_eq!(probe["pool"], name);
+        assert_eq!(probe["stage"], "acquire");
+        assert_eq!(probe["error"], "Unavailable");
+        assert_eq!(probe["cause"], "io_connection_refused");
+    }
+    let mut forbidden = SECRETS.to_vec();
+    forbidden.extend([
+        "127.0.0.1",
+        HOST,
+        "genui_",
+        "SELECT",
+        "password",
+        "error connecting",
+        "refused (os error",
+    ]);
+    assert_closed_refusal(refusal, &forbidden);
+    // Nothing forbidden on either stream of the real output boundary.
+    for text in &forbidden {
+        assert!(
+            !output.stdout.contains(text) && !output.stderr.contains(text),
+            "{text}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn configuration_stage_refusals_name_their_closed_cause() {
+    // No transport is ever opened: each refusal precedes `connect`.
+    let inputs = Inputs::new();
+    let port = closed_port();
+    // The credential file names the RDS host, the settings the loopback one.
+    let stores = Stores::new(loopback_settings(&inputs, port)).unwrap();
+    let probes = stores.readiness_diagnosis().await;
+    stores.close().await.unwrap();
+    for probe in probes {
+        assert_eq!(probe.stage, "acquire");
+        assert_eq!(probe.step, Some("configuration"));
+        assert_eq!(probe.error, Some(crate::storage::Error::Configuration));
+        assert_eq!(probe.cause, Some("credentials_host_mismatch"));
+    }
+    // Credentials that expire within the transaction margin.
+    let mut expiring: Value = serde_json::from_slice(&credentials("127.0.0.1")).unwrap();
+    let soon = now_seconds() + 5;
+    expiring["expires_at"] = json!(soon);
+    for role in ["workspace", "control", "data", "worker"] {
+        expiring["database"]["roles"][role]["expires_at"] = json!(soon);
+    }
+    write(
+        &inputs.paths.credentials,
+        &serde_json::to_vec(&expiring).unwrap(),
+        0o600,
+    );
+    let stores = Stores::new(loopback_settings(&inputs, port)).unwrap();
+    let probes = stores.readiness_diagnosis().await;
+    stores.close().await.unwrap();
+    assert!(probes
+        .iter()
+        .all(|probe| probe.cause == Some("credentials_expiring")
+            && probe.error == Some(crate::storage::Error::Configuration)));
+    // An unreadable credential file (mode 0644 refused by Config::load).
+    write(&inputs.paths.credentials, &credentials("127.0.0.1"), 0o644);
+    let stores = Stores::new(loopback_settings(&inputs, port)).unwrap();
+    let probes = stores.readiness_diagnosis().await;
+    stores.close().await.unwrap();
+    assert!(probes
+        .iter()
+        .all(|probe| probe.cause == Some("credentials_file")));
+    let value = Refusal::Readiness(Box::new(probes)).value();
+    assert_eq!(value["error"], "Configuration");
+    assert_closed_refusal(&value, &SECRETS);
+    assert_eq!(pool::slots().0, 0);
+}
+
+#[tokio::test]
+async fn a_later_case_panic_names_the_first_case_without_a_passed_check() {
+    let mut checks = Vec::new();
+    let outcome = Unwind(Box::pin(async {
+        for name in &CHECKS[..2] {
+            cases::check(&mut checks, name);
+        }
+        panic!("{}", sentinel());
+    }))
+    .await;
+    assert!(outcome.is_err());
+    assert_eq!(checks.len(), 2);
+    let value = report(
+        None,
+        Err(Failure::Refused(Refusal::Panic(checks.len()))),
+        Cleanup::Confirmed,
+    );
+    assert_eq!(value["error"], "case_refused");
+    let refusal = &value["refusal"];
+    assert_eq!(refusal["case"], "rls_and_write_refusal");
+    assert_eq!(refusal["reason"], "panic");
+    assert_eq!(refusal["checks_passed"], 2);
+    assert_closed_refusal(refusal, &[&sentinel()]);
+    for (passed, case) in CASES.iter().enumerate() {
+        assert_eq!(Refusal::Panic(passed).value()["case"], *case);
+    }
+    assert_eq!(Refusal::Panic(6).value()["case"], "after_last_check");
+    // A completed future passes its value through.
+    assert_eq!(Unwind(Box::pin(async { 7 })).await, Ok(7));
 }
 
 fn sentinel() -> String {
@@ -772,6 +1035,7 @@ fn child_entry() -> std::result::Result<(), &'static str> {
             ));
             (report(None, outcome, cleanup), None)
         }),
+        "readiness_refusal" => guarded(|_| readiness_refusal_child()),
         "watchdog" => {
             let watchdog = Watchdog::start(Instant::now() + Duration::from_secs(1)).unwrap();
             std::thread::sleep(Duration::from_secs(20));
@@ -861,6 +1125,7 @@ fn case_panic_output_is_sanitized_and_cleanup_is_proven() {
     assert!(!output.stderr.contains("panicked"));
     let result = result_line(&output.stdout).expect("result line");
     assert_eq!(result["error"], "case_refused");
+    assert_eq!(result["refusal"]["reason"], "task_panic");
     assert_eq!(result["passed"], false);
     assert_eq!(result["cleanup_confirmed"], true);
     assert_ne!(output.code, Some(0));

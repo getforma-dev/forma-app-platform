@@ -23,8 +23,11 @@ qualification supervisor with exactly two labeled substitutions: credential
 refresh writes the synthetic local-password envelope instead of STS/IAM
 tokens, and the reviewed-CA pin is the synthetic CA's hash.
 
-Negative runs: unarmed, root UID, wrong argument list, an untrusted CA, and a
-trusted CA whose certificate does not name the hostname.
+Negative runs: unarmed, root UID, wrong argument list, an untrusted CA, a
+wrong password for one role, and a trusted CA whose certificate does not name
+the hostname. The three case refusals must carry the closed APP-086
+`refusal` naming the failing pool, stage, step, storage error and cause (TLS
+class or SQLSTATE), and no run's output may contain its credentials.
 
 Usage: python3 app/qualification/local_harness.py --image IMAGE --output REPORT
 """
@@ -58,6 +61,41 @@ ROLES = ("workspace", "control", "data", "worker")
 RESULT = "APP008_MANAGED_RESULT "
 SUMMARY = "APP075_SUPERVISOR "
 FILES = "APP075_HARNESS_FILES "
+# APP-086: the closed `refusal` member of a case_refused result.
+REFUSAL_KEYS = frozenset({"case", "reason", "pool", "stage", "step", "error", "sqlstate", "cause", "elapsed_ms", "pools",
+                          "checks_passed"})
+POOL_KEYS = frozenset({"pool", "stage", "step", "error", "sqlstate", "cause", "elapsed_ms"})
+STORAGE_ERRORS = frozenset({"Configuration", "Denied", "Unavailable", "Deadline", "UnknownOutcome"})
+WRONG_PASSWORD_ROLE = "control"
+
+
+def closed_refusal(refusal, forbidden=()):
+    """True when `refusal` has exactly the closed members, each null or of
+    its closed form (a lowercase code, a storage error variant, a
+    five-character SQLSTATE or a non-negative integer), and no `forbidden`
+    text appears anywhere in it."""
+    code = lambda v: v is None or (isinstance(v, str) and re.fullmatch(r"[a-z0-9_]+", v) is not None)
+    count = lambda v: v is None or (type(v) is int and v >= 0)
+    form = {"case": code, "reason": code, "pool": code, "stage": code, "step": code, "cause": code,
+            "error": lambda v: v is None or v in STORAGE_ERRORS,
+            "sqlstate": lambda v: v is None or (isinstance(v, str) and re.fullmatch(r"[0-9A-Z]{5}", v) is not None),
+            "elapsed_ms": count, "checks_passed": count}
+    def closed(value, keys):
+        return isinstance(value, dict) and set(value) == keys and all(form[key](value[key]) for key in keys if key != "pools")
+    if not closed(refusal, REFUSAL_KEYS):
+        return False
+    pools = refusal["pools"]
+    if pools is not None and not (isinstance(pools, list) and all(closed(pool, POOL_KEYS) for pool in pools)):
+        return False
+    encoded = json.dumps(refusal)
+    return not any(text in encoded for text in forbidden)
+
+
+def refusal_names(refusal, **expected):
+    """The refusal's named members equal `expected` (a missing refusal never does)."""
+    return isinstance(refusal, dict) and all(refusal.get(key) == value for key, value in expected.items())
+
+
 def confinement(uid=65532):
     """No network beyond the internal one, read-only root, no capabilities;
     the private run directory is a fresh 0700 tmpfs owned by the run UID."""
@@ -313,11 +351,11 @@ class Harness:
             raise RuntimeError("qualification image changed during the run")
         return tag
 
-    def entry(self, image, *, args=ARGUMENTS, user="65532:65532", armed=True, ca_sha=None, name):
+    def entry(self, image, *, args=ARGUMENTS, user="65532:65532", armed=True, ca_sha=None, passwords=None, name):
         run_id = str(uuid.uuid4())
         files = {"app008-managed-run.json": manifest_bytes(run_id, ca_sha or self.ca_sha, self.pins),
                  "app008-managed-registry.json": registry_bytes(run_id),
-                 "credentials.json": json.dumps(credential_envelope(self.passwords, {}), separators=(",", ":")).encode()}
+                 "credentials.json": json.dumps(credential_envelope(passwords or self.passwords, {}), separators=(",", ":")).encode()}
         payload = json.dumps({"exe": EXECUTABLE, "args": list(args),
                               "files": {k: base64.b64encode(v).decode() for k, v in files.items()}}).encode()
         container = "%s-%s" % (self.label, name)
@@ -330,7 +368,12 @@ class Harness:
         started = time.time()
         completed = docker(*command, input=payload, check=False, timeout=660)
         output = parse_output(completed.stdout)
+        # APP-086: the result line and stderr must carry none of the run's
+        # credentials (only the verdict is kept, never the text itself).
+        streams = completed.stdout + completed.stderr
+        secrets_absent = not any(value.encode() in streams for value in (passwords or self.passwords).values())
         return {"name": name, "run_id": run_id, "manifest_sha256": sha256(files["app008-managed-run.json"]),
+                "secrets_absent_from_output": secrets_absent,
                 "registry_sha256": sha256(files["app008-managed-registry.json"]), "exit_code": completed.returncode,
                 "seconds": round(time.time() - started, 2), "user": user, "armed": armed, "arguments": list(args),
                 "facts": output["facts"], "result": output["results"][-1] if output["results"] else None,
@@ -372,6 +415,10 @@ class Harness:
         runs.append(self.entry(positive_image, name="root-uid", user="0:0"))
         runs.append(self.entry(positive_image, name="wrong-arguments", args=ARGUMENTS[:3] + ARGUMENTS[4:]))
         runs.append(self.entry(untrusted_image, name="untrusted-ca", ca_sha=self.wrong_sha))
+        # APP-086: one role's credential is wrong, so only that pool's
+        # readiness fails, at acquire/connect with the server's SQLSTATE.
+        runs.append(self.entry(positive_image, name="wrong-password",
+                               passwords={**self.passwords, WRONG_PASSWORD_ROLE: secrets.token_urlsafe(24)}))
         self.server_certificate("localhost")
         self.sql("SELECT pg_reload_conf();", "genui")
         runs.append(self.entry(positive_image, name="hostname-mismatch"))
@@ -399,11 +446,33 @@ class Harness:
                and summary.get("passed") is True and summary.get("files_removed") is True and summary.get("refreshes", 0) >= 1)
         for name, error, applicable in (("unarmed", "configuration_refused", False), ("root-uid", "configuration_refused", False),
                                         ("wrong-arguments", "configuration_refused", False),
-                                        ("untrusted-ca", "case_refused", True), ("hostname-mismatch", "case_refused", True)):
+                                        ("untrusted-ca", "case_refused", True), ("wrong-password", "case_refused", True),
+                                        ("hostname-mismatch", "case_refused", True)):
             item = runs[name]["result"] or {}
             expect(name + " refused with " + error, runs[name]["exit_code"] != 0 and item.get("passed") is False
                    and item.get("error") == error and item.get("cleanup_applicable") is applicable
                    and item.get("cleanup_confirmed") is applicable and item.get("checks") == [])
+        # APP-086: `refusal` is null unless a case refused; then it names the
+        # pool, stage, step, storage error and closed cause, and nothing else.
+        forbidden = [HOST, "genui_", "SELECT", "password", "127.0.0.1"]
+        expect("passing and configuration-refused results carry a null refusal",
+               all("refusal" in (runs[name]["result"] or {}) and (runs[name]["result"] or {}).get("refusal") is None
+                   for name in ("positive", "supervised_positive", "unarmed", "root-uid", "wrong-arguments")))
+        expect("no run's output carries any of its credentials",
+               all(item.get("secrets_absent_from_output") is True for item in self.report["runs"] if "secrets_absent_from_output" in item))
+        for name, pool, step, cause, sqlstate, failed in (
+                ("untrusted-ca", "workspace", "connect", "tls_unknown_issuer", None, 4),
+                ("wrong-password", WRONG_PASSWORD_ROLE, "connect", "db_error", "28P01", 1),
+                ("hostname-mismatch", "workspace", "connect", "tls_name_mismatch", None, 4)):
+            refusal = (runs[name]["result"] or {}).get("refusal")
+            pools = (refusal or {}).get("pools") or []
+            expect("%s refusal names readiness/%s/acquire/%s, Unavailable, %s%s" % (name, pool, step, cause, "/" + sqlstate if sqlstate else ""),
+                   closed_refusal(refusal, forbidden)
+                   and refusal_names(refusal, case="readiness", reason="stage_failed", pool=pool, stage="acquire", step=step,
+                                     error="Unavailable", cause=cause, sqlstate=sqlstate, checks_passed=0)
+                   and [p.get("pool") for p in pools] == list(ROLES)
+                   and sum(1 for p in pools if p.get("error") is not None) == failed
+                   and all(p.get("stage") == "done" and p.get("error") is None for p in pools if p.get("pool") != pool) == (failed == 1))
         self.report["expectations"] = expectations
         self.report["passed"] = all(item["met"] for item in expectations)
 

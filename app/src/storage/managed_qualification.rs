@@ -49,7 +49,26 @@
 //! watchdog is re-armed at the original deadline until that line is written.
 //! `passed:true` requires confirmed cleanup and exactly the six named
 //! [`CHECKS`], in order, each passed.
-use super::{pool, qualification_cases as cases, valid_id, Settings, Stores, TrustedRequest};
+//!
+//! # Refusal diagnostics (APP-086)
+//!
+//! `refusal` is non-null exactly when `error` is `case_refused`. Readiness
+//! runs first as [`Stores::readiness_diagnosis`]: per role pool, the stages
+//! `acquire`, `verify_baseline`, `verify_identity`, `catalog_verify`,
+//! `verify_schema_version` and `finish`. A failure reports
+//! `{"case":"readiness","reason":"stage_failed","pool","stage","step","error",
+//! "sqlstate","cause","elapsed_ms","pools":[..four pools..],"checks_passed":0}`
+//! where `error` is the storage error variant, `step` the innermost step
+//! (within `acquire`: `configuration`, `pool_get`, `transport_permits`,
+//! `connect`, `verify_identity`, `catalog_verify`, `verify_schema_version`,
+//! `reset`, `generation_recheck`), `cause` a closed code and `sqlstate` the
+//! server's five-character SQLSTATE. A later panic reports the first case
+//! without a passed check (one of [`CASES`]) with reason `panic`. Every value
+//! is a compile-time literal, a validated SQLSTATE, an integer or null.
+use super::{
+    pool::{self, trace::Probe},
+    qualification_cases as cases, valid_id, Settings, Stores, TrustedRequest,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -447,10 +466,14 @@ struct Validated {
     deadline: Instant,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum Failure {
     Configuration,
+    /// The case task ended without a result (a panic outside the cases'
+    /// own guard); the case is unattributed.
     Case,
+    /// A shared case refused, with its closed diagnostic (APP-086).
+    Refused(Refusal),
     Deadline,
     Cleanup,
     EntryPanic,
@@ -459,7 +482,7 @@ impl Failure {
     fn code(self) -> &'static str {
         match self {
             Self::Configuration => "configuration_refused",
-            Self::Case => "case_refused",
+            Self::Case | Self::Refused(_) => "case_refused",
             Self::Deadline => "original_deadline_reached",
             Self::Cleanup => "cleanup_unconfirmed",
             Self::EntryPanic => "entry_panic",
@@ -467,6 +490,121 @@ impl Failure {
     }
 }
 type Result<T> = std::result::Result<T, Failure>;
+
+/// Closed short names of the shared cases, one per [`CHECKS`] entry, in order.
+const CASES: [&str; 6] = [
+    "readiness",
+    "scoped_reads",
+    "rls_and_write_refusal",
+    "binding_denials",
+    "action_matrix",
+    "backend_reuse",
+];
+/// Role pools in [`Stores::readiness_diagnosis`] order.
+const POOLS: [&str; 4] = ["workspace", "control", "data", "worker"];
+/// Every member of the `refusal` object, in every variant.
+const REFUSAL_KEYS: [&str; 11] = [
+    "case",
+    "reason",
+    "pool",
+    "stage",
+    "step",
+    "error",
+    "sqlstate",
+    "cause",
+    "elapsed_ms",
+    "pools",
+    "checks_passed",
+];
+
+/// APP-086: why a case refused, from closed values only. The readiness
+/// variant carries each pool's [`Probe`]: `&'static str` stage, step and
+/// cause literals, the storage error variant, a validated SQLSTATE and an
+/// elapsed time. Nothing derived from a hostname, credential, SQL text, row
+/// value, driver message or panic payload can reach it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum Refusal {
+    /// A readiness stage failed in at least one role pool.
+    Readiness(Box<[Probe; 4]>),
+    /// A shared case panicked after this many of the six checks passed;
+    /// the case named is the first without a passed check.
+    Panic(usize),
+    /// The case task panicked outside the cases' guard.
+    TaskPanic,
+    /// The cases returned without exactly the six passed checks.
+    Incomplete,
+}
+fn storage_error(error: super::Error) -> &'static str {
+    match error {
+        super::Error::Configuration => "Configuration",
+        super::Error::Denied => "Denied",
+        super::Error::Unavailable => "Unavailable",
+        super::Error::Deadline => "Deadline",
+        super::Error::UnknownOutcome => "UnknownOutcome",
+    }
+}
+fn probe_value(pool: &'static str, probe: &Probe) -> Value {
+    json!({"pool":pool,"stage":probe.stage,"step":probe.step,"error":probe.error.map(storage_error),
+        "sqlstate":probe.sqlstate.as_ref().and_then(|code| std::str::from_utf8(code).ok()),
+        "cause":probe.cause,"elapsed_ms":probe.elapsed_ms})
+}
+impl Refusal {
+    fn value(&self) -> Value {
+        let empty = |case: &str, reason: &str, passed: Option<usize>| {
+            json!({"case":case,"reason":reason,"pool":null,"stage":null,"step":null,"error":null,
+                "sqlstate":null,"cause":null,"elapsed_ms":null,"pools":null,"checks_passed":passed})
+        };
+        match self {
+            Self::Readiness(probes) => {
+                // The first pool (in role order) with a non-deadline error
+                // names the refusal; otherwise the first that ran out of time.
+                let failed = |deadline: bool| {
+                    probes.iter().position(|probe| {
+                        probe.error.is_some()
+                            && (probe.error == Some(super::Error::Deadline)) == deadline
+                    })
+                };
+                let primary = failed(false).or_else(|| failed(true)).unwrap_or(0);
+                let mut value = probe_value(POOLS[primary], &probes[primary]);
+                value["case"] = json!(CASES[0]);
+                value["reason"] = json!("stage_failed");
+                value["pools"] = probes
+                    .iter()
+                    .zip(POOLS)
+                    .map(|(probe, pool)| probe_value(pool, probe))
+                    .collect();
+                value["checks_passed"] = json!(0);
+                value
+            }
+            Self::Panic(passed) => empty(
+                CASES.get(*passed).copied().unwrap_or("after_last_check"),
+                "panic",
+                Some(*passed),
+            ),
+            Self::TaskPanic => empty("unattributed", "task_panic", None),
+            Self::Incomplete => empty("unattributed", "incomplete_checks", None),
+        }
+    }
+}
+
+/// Polls a case future, turning a panic into `Err(())`. The payload is
+/// dropped unread (the entry's silent hook already suppressed its message),
+/// and the future is never polled again.
+struct Unwind<F>(std::pin::Pin<Box<F>>);
+impl<F: Future> Future for Unwind<F> {
+    type Output = std::result::Result<F::Output, ()>;
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        match catch_unwind(AssertUnwindSafe(|| self.0.as_mut().poll(cx))) {
+            Ok(std::task::Poll::Pending) => std::task::Poll::Pending,
+            Ok(std::task::Poll::Ready(value)) => std::task::Poll::Ready(Ok(value)),
+            Err(_) => std::task::Poll::Ready(Err(())),
+        }
+    }
+}
+type CaseResult = std::result::Result<Vec<Value>, Refusal>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Cleanup {
@@ -730,7 +868,7 @@ async fn supervise<F, Fut>(
 ) -> (Result<Vec<Value>>, Cleanup)
 where
     F: FnOnce(Arc<Stores>) -> Fut,
-    Fut: Future<Output = Vec<Value>> + Send + 'static,
+    Fut: Future<Output = CaseResult> + Send + 'static,
 {
     let Ok(settings) = settings else {
         return (Err(Failure::Configuration), Cleanup::NotApplicable);
@@ -742,7 +880,8 @@ where
     let mut task = tokio::spawn(cases(stores.clone()));
     let (result, task_finished) = match timeout_at(before(deadline, CASE_RESERVE), &mut task).await
     {
-        Ok(Ok(checks)) => (Ok(checks), true),
+        Ok(Ok(Ok(checks))) => (Ok(checks), true),
+        Ok(Ok(Err(refusal))) => (Err(Failure::Refused(refusal)), true),
         // The JoinError (and any panic payload in it) is dropped unread.
         Ok(Err(_)) => (Err(Failure::Case), true),
         Err(_) => {
@@ -774,25 +913,41 @@ where
     (result, cleanup)
 }
 
-async fn production_cases(stores: Arc<Stores>) -> Vec<Value> {
+/// APP-086: readiness's stages run first, per role pool, under the aggregate
+/// probe's own concurrency and deadline, so a refusal names the pool, stage
+/// and closed cause. Only when every pool passes do the shared cases run
+/// (the aggregate readiness check first, unchanged); a panic in any of them
+/// names the first case without a passed check.
+async fn production_cases(stores: Arc<Stores>) -> CaseResult {
     let mut checks = Vec::new();
-    cases::readiness(&stores, &mut checks).await;
-    let registry_sha256 = stores.registry_identity().sha256.clone();
-    cases::read_only_and_reuse(
-        &stores,
-        |organization, principal, epoch| TrustedRequest {
-            organization: organization.into(),
-            principal: principal.into(),
-            epoch,
-            issuer: ISSUER.into(),
-            provider_tenant: format!("ten_{organization}"),
-            provider_subject: format!("usr_{principal}"),
-            registry_sha256: registry_sha256.clone(),
-        },
-        &mut checks,
-    )
-    .await;
-    checks
+    let shared = Unwind(Box::pin(async {
+        let probes = stores.readiness_diagnosis().await;
+        if probes.iter().any(|probe| probe.error.is_some()) {
+            return Err(Refusal::Readiness(Box::new(probes)));
+        }
+        cases::readiness(&stores, &mut checks).await;
+        let registry_sha256 = stores.registry_identity().sha256.clone();
+        cases::read_only_and_reuse(
+            &stores,
+            |organization, principal, epoch| TrustedRequest {
+                organization: organization.into(),
+                principal: principal.into(),
+                epoch,
+                issuer: ISSUER.into(),
+                provider_tenant: format!("ten_{organization}"),
+                provider_subject: format!("usr_{principal}"),
+                registry_sha256: registry_sha256.clone(),
+            },
+            &mut checks,
+        )
+        .await;
+        Ok(())
+    }));
+    match shared.await {
+        Ok(Ok(())) => Ok(checks),
+        Ok(Err(refusal)) => Err(refusal),
+        Err(()) => Err(Refusal::Panic(checks.len())),
+    }
 }
 
 /// Exactly the six named checks, in order, each `{"name":..,"passed":true}`.
@@ -806,14 +961,23 @@ fn complete(checks: &[Value]) -> bool {
 
 fn report(validated: Option<&Validated>, result: Result<Vec<Value>>, cleanup: Cleanup) -> Value {
     let (passed, checks, error) = match result {
-        Ok(_) if cleanup != Cleanup::Confirmed => {
-            (false, Vec::new(), Some(Failure::Cleanup.code()))
-        }
-        Ok(checks) if complete(&checks) => (true, checks, None),
-        Ok(_) => (false, Vec::new(), Some(Failure::Case.code())),
-        Err(error) => (false, Vec::new(), Some(error.code())),
+        Ok(_) if cleanup != Cleanup::Confirmed => (false, Vec::new(), Err(Failure::Cleanup)),
+        Ok(checks) if complete(&checks) => (true, checks, Ok(())),
+        Ok(_) => (
+            false,
+            Vec::new(),
+            Err(Failure::Refused(Refusal::Incomplete)),
+        ),
+        Err(error) => (false, Vec::new(), Err(error)),
     };
-    json!({"schema_version":1,"scope":SCOPE,"passed":passed,"error":error,"checks":checks,
+    // Non-null exactly when the error is `case_refused` (APP-086).
+    let refusal = match &error {
+        Err(Failure::Refused(refusal)) => Some(refusal.value()),
+        Err(Failure::Case) => Some(Refusal::TaskPanic.value()),
+        _ => None,
+    };
+    let error = error.err().map(Failure::code);
+    json!({"schema_version":1,"scope":SCOPE,"passed":passed,"error":error,"refusal":refusal,"checks":checks,
         "cleanup_applicable":cleanup != Cleanup::NotApplicable,
         "cleanup_confirmed":cleanup == Cleanup::Confirmed,
         "run_id":validated.map(|v|&v.manifest.run_id),

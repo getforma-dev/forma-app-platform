@@ -80,6 +80,50 @@ class SourceTests(unittest.TestCase):
                 self.assertTrue(any(name == src or name.startswith(src.rstrip("/") + "/") for src in copied),
                                 "%s is a compile-time input the native stage never copies" % name)
 
+def refusal(**changes):
+    """A readiness refusal shaped like the entry's (APP-086)."""
+    pools = [{"pool": name, "stage": "done", "step": None, "error": None, "sqlstate": None, "cause": None, "elapsed_ms": 40}
+             for name in harness.ROLES]
+    pools[1] = {"pool": "control", "stage": "acquire", "step": "connect", "error": "Unavailable", "sqlstate": "28P01",
+                "cause": "db_error", "elapsed_ms": 12}
+    value = {"case": "readiness", "reason": "stage_failed", **pools[1], "pools": pools, "checks_passed": 0}
+    value.update(changes)
+    return value
+
+
+class RefusalTests(unittest.TestCase):
+    def test_the_harness_reads_the_entry_refusal_members(self):
+        block = ENTRY_SOURCE[ENTRY_SOURCE.index("const REFUSAL_KEYS:"):]
+        block = block[:block.index("];")]
+        self.assertEqual(set(re.findall(r'"(\w+)"', block)), harness.REFUSAL_KEYS)
+        for key in harness.POOL_KEYS:
+            self.assertIn('"%s":' % key, ENTRY_SOURCE[ENTRY_SOURCE.index("fn probe_value"):])
+
+    def test_a_closed_refusal_names_pool_stage_and_cause(self):
+        value = refusal()
+        self.assertTrue(harness.closed_refusal(value, [harness.HOST, "genui_", "password"]))
+        self.assertTrue(harness.refusal_names(value, case="readiness", pool="control", stage="acquire", step="connect",
+                                              error="Unavailable", sqlstate="28P01", cause="db_error"))
+        self.assertFalse(harness.refusal_names(None, case="readiness"))
+        panic = {key: None for key in harness.REFUSAL_KEYS}
+        panic.update(case="scoped_reads", reason="panic", checks_passed=1)
+        self.assertTrue(harness.closed_refusal(panic))
+
+    def test_free_text_extra_members_or_forbidden_text_are_refused(self):
+        for value in (refusal(cause="password authentication failed for user genui_control"),
+                      refusal(stage="acquire " + harness.HOST),
+                      refusal(sqlstate="28p01x"),
+                      refusal(elapsed_ms=1.5),
+                      refusal(elapsed_ms=True),
+                      refusal(detail="x"),
+                      {k: v for k, v in refusal().items() if k != "pools"},
+                      refusal(pools=[{"pool": "control"}]),
+                      "readiness"):
+            with self.subTest(value=value):
+                self.assertFalse(harness.closed_refusal(value))
+        self.assertFalse(harness.closed_refusal(refusal(cause="db_error"), ["db_error"]))
+
+
 class AllowlistTests(unittest.TestCase):
     def test_directory_reincludes_are_not_files(self):
         names = check_image.allowlist()

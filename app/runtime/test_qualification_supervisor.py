@@ -27,6 +27,11 @@ REGISTRY_VECTOR = (
     '"provider_tenant_id":"ten_00000000-0000-4000-8000-000000000002"}],'
     '"registry_version":"00000000-0000-4000-8000-000000000aaa","schema_version":1}')
 SECRET = "synthetic-secret-" + "f00d" * 4
+# APP-086: the entry's closed readiness refusal, as one pool reports it.
+REFUSAL = {"case": "readiness", "reason": "stage_failed", "pool": "control", "stage": "acquire", "step": "connect",
+           "error": "Unavailable", "sqlstate": "28P01", "cause": "db_error", "elapsed_ms": 12, "checks_passed": 0,
+           "pools": [{"pool": "control", "stage": "acquire", "step": "connect", "error": "Unavailable", "sqlstate": "28P01",
+                      "cause": "db_error", "elapsed_ms": 12}]}
 MOUNTINFO = textwrap.dedent("""\
     101 90 0:50 / / ro,relatime master:1 - overlay overlay ro
     102 101 0:53 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw
@@ -87,6 +92,8 @@ class Harness:
             "unpassed": "emit(%r)\nsys.exit(0)" % json.dumps({**result, "checks": result["checks"][:5] + [{"name": "x", "passed": False}]}),
             "none": "emit(%r)\nsys.exit(0)" % json.dumps({k: v for k, v in result.items() if k != "checks"}),
             "fail": "emit(%r)\nsys.exit(101)" % json.dumps({**result, "passed": False, "error": "case_refused", "checks": []}),
+            "refused": "emit(%r)\nsys.exit(101)" % json.dumps({**result, "passed": False, "error": "case_refused", "checks": [],
+                                                                "refusal": REFUSAL}),
             "missing": "sys.exit(101)",
             "double": "emit(%r)\nemit(%r)\nsys.exit(0)" % (json.dumps(result), json.dumps(result)),
             "slow": "time.sleep(1.2)\nemit(%r)\nsys.exit(0)" % json.dumps(result),
@@ -383,6 +390,17 @@ class SupervisorTests(unittest.TestCase):
                 self.assertFalse(harness.summary["passed"])
                 self.assertEqual(harness.run_files(), [])
         self.assertEqual(harness.summary["error"], "case_refused")
+
+    def test_a_case_refusal_diagnostic_is_retained_verbatim(self):
+        harness = Harness("refused")
+        self.addCleanup(harness.close)
+        self.assertEqual(harness.supervise(), 1)
+        self.assertFalse(harness.summary["passed"])
+        self.assertEqual(harness.summary["error"], "case_refused")
+        self.assertEqual(len(harness.results), 1)
+        result = json.loads(harness.results[0][len("APP008_MANAGED_RESULT "):])
+        self.assertEqual(result["refusal"], REFUSAL)
+        self.assertEqual(harness.run_files(), [])
 
     def test_a_pass_requires_six_passed_checks(self):
         for body in ("five", "unpassed", "none"):
