@@ -1,15 +1,16 @@
 # Six-phase delivery roadmap
 
-The workspace preparation is complete. Application implementation is organized into six phases, with 81 tickets and 12 sprints. **GenUI** owns the application; **FormaStack** owns the four upstream handoff items. No phase has started or passed its implementation gate yet.
+The workspace preparation is complete. Application implementation is organized into seven phases, with 88 tickets and 13 sprints ([ADR-010](../architecture/ADR-010-NOV-2-MVP-CUT.md) added PH07 and APP-082–088 for the November 2 MVP cut). **GenUI** owns the application; **FormaStack** owns the four upstream handoff items. No phase has started or passed its implementation gate yet.
 
 | Phase | Sprints | Tickets | What we will have at the end |
 |---|---|---|---|
 | [1 — Foundations and first saved workflow](../../Tickets/phases/PH01.md) | S01–S02 | APP-001–014, APP-073–078 (20) | One authorized query, receipt and durable decision that survives retry, conflict and reopen |
-| [2 — Working data and workspace](../../Tickets/phases/PH02.md) | S03–S05 | APP-015–031, APP-081 (18) | Real file imports, correct results, accessible canvas/forms and saved work |
+| [2 — Working data and workspace](../../Tickets/phases/PH02.md) | S03–S05 | APP-015–031, APP-081, APP-087–088 (20) | Real file imports, correct results, accessible canvas/forms and saved work |
 | [3 — App creation, governance and AI](../../Tickets/phases/PH03.md) | S06–S08 | APP-032–047 (16) | General app authoring, preview, governed publication, version changes and bounded AI |
 | [4 — Complete two-app demonstration](../../Tickets/phases/PH04.md) | S09–S10 | APP-048–057 (10) | Northstar and Spend Review work through the same build, with sharing, reuse and recovery proven |
 | [5 — Managed pilot controls](../../Tickets/phases/PH05.md) | S11 | APP-058–066, APP-080 (10) | Hosted deployment, service identity, audit, support and deletion controls |
 | [6 — Qualification and pilot learning](../../Tickets/phases/PH06.md) | S12 | APP-067–072, APP-079 (7) | Measured release readiness, a controlled real-data pilot, and observed customer reuse |
+| [7 — Post-MVP completion](../../Tickets/phases/PH07.md) | S13 | APP-082–086 (5) | Every acceptance sentence and review residual deferred by ADR-010 for the November 2 MVP is proven or dispositioned |
 
 The maintained [phase board](../../Tickets/PHASES.md) shows progress. Each phase page contains entry requirements, deliverables, checks and evidence gates, applicable FormaStack blockers and its ordered tickets. [Sprints](../../Tickets/SPRINTS.md) divide the phase into smaller batches; [categories](../../Tickets/CATEGORIES.md) group ownership. `Tickets/plan.json` owns phase definitions; ticket Markdown owns individual work status.
 
