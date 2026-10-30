@@ -5,7 +5,7 @@
 | Reviewed | merge `34a42eb` (from `1c581f2` code and `ffc56ee` evidence; first parent `495c555`) |
 | Reviewer | independent agent session, 2026-10-29 UTC; did not author APP-077 |
 | Scope | `app/operator/*`, the `OperatorTask` additions to `infra/src/stack.ts`, `infra/test/security.test.ts`, `evidence/APP-077/README.md` and its seven open questions |
-| Controlling text | `Tickets/0-backlog/APP-077.md` acceptance; `docs/planning/PHASE-1-EXECUTION-PLAN.md` Task B4 (and Task 9 on digests); ADR-007 D7.10, D7.19 and the 2026-10-29 creator-authority amendment; ADR-009 D9.3 (B1); ADR-004; `evidence/APP-008/managed-harness-preparation.md` slice 3 |
+| Controlling text | `Tickets/3-in-review/APP-077.md` acceptance; `docs/planning/PHASE-1-EXECUTION-PLAN.md` Task B4 (and Task 9 on digests); ADR-007 D7.10, D7.19 and the 2026-10-29 creator-authority amendment; ADR-009 D9.3 (B1); ADR-004; `evidence/APP-008/managed-harness-preparation.md` slice 3 |
 | AWS | none touched: no deploy, push, STS, S3, KMS, RDS or registry call. One AWS documentation page read (S3 HeadObject API reference). |
 | Local resources | one image `genui-app077-review:34a42eb` built and **removed**; `check_image.py` cleaned its own containers and network (`cleanup_complete: true`); no `app077` image, container or network remains. Scratch venv and synthesized templates live outside the repository. |
 

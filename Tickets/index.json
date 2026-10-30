@@ -230,7 +230,6 @@
   ],
   "ready_by_local_dependencies": [
     "APP-009",
-    "APP-077",
     "APP-084",
     "APP-087",
     "APP-088"
@@ -2492,11 +2491,11 @@
     {
       "id": "APP-077",
       "title": "Package the operator image and tools",
-      "path": "0-backlog/APP-077.md",
+      "path": "3-in-review/APP-077.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "Backlog",
+      "Status": "In review",
       "Priority": "P0",
       "Type": "Verification",
       "Sprint": "S02",
@@ -2508,8 +2507,8 @@
       "Requirements": "C01, C11, N7, SR1, SR3",
       "Depends on": "APP-008",
       "External dependencies": "None beyond listed local predecessors",
-      "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by subagents, independent review per slice)",
+      "Branch / PR": "phase-one-spikes (`34a42eb`, review fixes `01acdae`); landing PR pending",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
