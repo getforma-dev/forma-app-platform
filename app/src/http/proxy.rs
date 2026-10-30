@@ -113,15 +113,18 @@ pub fn client_address(
     }
     let forwarded: Vec<_> = headers.get_all("x-forwarded-for").iter().collect();
     match forwarded.last() {
-        Some(last) => last
-            .to_str()
-            .ok()?
-            .rsplit(',')
-            .next()?
-            .trim()
-            .parse()
-            .ok()
-            .map(canonical),
+        // Only the rightmost element is read, from bytes (APP-074 review m2):
+        // a client byte that is not visible ASCII earlier in the line cannot
+        // move the request into the shared `unknown` class.
+        Some(last) => {
+            let hop = last.as_bytes().rsplit(|b| *b == b',').next()?;
+            std::str::from_utf8(hop)
+                .ok()?
+                .trim()
+                .parse()
+                .ok()
+                .map(canonical)
+        }
         None => Some(peer),
     }
 }
@@ -198,6 +201,20 @@ mod tests {
             address_class(&none, Some("[2001:db8:9:8:7::1]:9".parse().unwrap()), &alb),
             "v6:2001:db8:9:8::/64"
         );
+        // Review m2: an obs-text byte earlier in the line, which the balancer
+        // forwards ahead of the address it appends, keeps the client's class.
+        let mut obs = HeaderMap::new();
+        obs.append(
+            "x-forwarded-for",
+            HeaderValue::from_bytes(b"\xff, 203.0.113.9").unwrap(),
+        );
+        assert_eq!(address_class(&obs, Some(balancer), &alb), "v4:203.0.113.9");
+        let mut obs_last = HeaderMap::new();
+        obs_last.append(
+            "x-forwarded-for",
+            HeaderValue::from_bytes(b"203.0.113.9, \xff").unwrap(),
+        );
+        assert_eq!(address_class(&obs_last, Some(balancer), &alb), "unknown");
     }
 
     #[test]

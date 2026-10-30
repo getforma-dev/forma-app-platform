@@ -14,6 +14,9 @@ spec = importlib.util.spec_from_file_location('preflight', PATH)
 preflight = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preflight)
 NOW = datetime(2026, 10, 28, 12, tzinfo=timezone.utc)
+# ADR-003 amendment 2026-10-30: the stack's provider capability secret (an output).
+CAPABILITY_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:ProviderCapabilities-AbCdEf'
+RETIRED = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
 
 
 def inputs(now=NOW):
@@ -37,7 +40,8 @@ class Preflight(unittest.TestCase):
         _, report = preflight.reserve(config, ledger, NOW)
         outputs = {'DeploymentExpiryScheduleArn': 'arn:aws:scheduler:us-east-1:877573132739:schedule/owned-group/expiry',
                    'DeploymentExpiryGroup': 'owned-group', 'DeploymentExpiryRoleArn': 'arn:aws:iam::877573132739:role/owned-expiry',
-                   'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:1'}
+                   'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:1',
+                   'ProviderCapabilitySecretArn': CAPABILITY_SECRET}
         cluster = 'arn:aws:ecs:us-east-1:877573132739:cluster/owned-cluster'
         service = 'arn:aws:ecs:us-east-1:877573132739:service/owned-cluster/owned-service'
         stack = {'StackStatus': 'CREATE_COMPLETE', 'Parameters': [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()],
@@ -49,7 +53,8 @@ class Preflight(unittest.TestCase):
                                'RetryPolicy': {'MaximumEventAgeInSeconds': 900, 'MaximumRetryAttempts': 3}}}
         current = {'serviceArn': service, 'clusterArn': cluster, 'taskDefinition': outputs['TaskDefinition'], 'status': 'ACTIVE', 'desiredCount': 0}
         definition = {'taskDefinitionArn': outputs['TaskDefinition'], 'runtimePlatform': {'cpuArchitecture': config['image_architecture']},
-                      'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest']}]}
+                      'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest'],
+                                                'secrets': [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': CAPABILITY_SECRET}]}]}
         calls = []
         def call(*args):
             calls.append(args)
@@ -71,46 +76,30 @@ class Preflight(unittest.TestCase):
         self.assertEqual([x[:2] for x in calls], [('sts', 'get-caller-identity'), ('cloudformation', 'describe-stacks'), ('scheduler', 'get-schedule'), ('ecs', 'describe-task-definition'), ('ecs', 'describe-services'), ('ecs', 'update-service'), ('ecs', 'describe-services')])
         self.assertEqual(calls[2], ('scheduler', 'get-schedule', '--group-name', 'owned-group', '--name', 'expiry'))
 
-    def test_optional_secret_preserves_disabled_window_and_binds_enabled_window(self):
+    def test_retired_qualification_secret_is_accepted_only_empty_and_keeps_disabled_bindings(self):
+        """APP-074 review m11: the stack no longer offers the qualification secret parameter."""
         config, ledger = inputs()
         existing, report = preflight.reserve(config, ledger, NOW)
-        self.assertEqual(report['cloudformation_parameters']['QualificationConfigSecretArn'], '')
+        self.assertNotIn('QualificationConfigSecretArn', report['cloudformation_parameters'])
         explicit_empty, same = preflight.reserve(dict(config, qualification_config_secret_arn=''), existing, NOW)
         self.assertEqual(explicit_empty, existing)
         self.assertEqual(same['input_sha256'], report['input_sha256'])
-        arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
-        enabled = dict(config, qualification_config_secret_arn=arn)
-        with self.assertRaisesRegex(ValueError, 'different deployment inputs'):
-            preflight.reserve(enabled, existing, NOW)
-        enabled_ledger, enabled_report = preflight.reserve(enabled, ledger, NOW)
-        self.assertEqual(enabled_report['cloudformation_parameters']['QualificationConfigSecretArn'], arn)
-        for changed in ('', arn.replace('fixture', 'another')):
-            with self.assertRaisesRegex(ValueError, 'different deployment inputs'):
-                preflight.reserve(dict(enabled, qualification_config_secret_arn=changed), enabled_ledger, NOW)
-
-    def test_secret_input_refuses_wrong_scope_selectors_raw_values_and_unknown_fields(self):
-        config, ledger = inputs()
-        arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
-        for bad in (None, False, 1, {}, 'synthetic-not-an-arn', arn + '\n', arn + ':key::', arn + '*',
-                    arn.replace('us-east-1', 'us-west-2'), arn.replace('877573132739', '111111111111'),
-                    arn.replace('genui-qualification-', 'unrelated-')):
-            with self.assertRaisesRegex(ValueError, 'exact approved secret ARN'):
+        for bad in (RETIRED, None, False, 1, {}, 'synthetic-not-an-arn', RETIRED + '\n'):
+            with self.assertRaisesRegex(ValueError, 'retired'):
                 preflight.reserve(dict(config, qualification_config_secret_arn=bad), ledger, NOW)
         with self.assertRaisesRegex(ValueError, 'closed contract'):
             preflight.reserve(dict(config, qualification_config_json='synthetic'), ledger, NOW)
 
-    def test_legacy_stack_without_optional_parameter_is_disabled_only(self):
-        config, report, stack, _, _, calls, call = self.activation_fixture()
-        stack['Parameters'] = [p for p in stack['Parameters'] if p['ParameterKey'] != 'QualificationConfigSecretArn']
-        self.assertEqual(preflight.activate(config, report, call, lambda: NOW)['desired_count'], 1)
-        self.assertTrue(any(c[:2] == ('ecs', 'describe-task-definition') for c in calls))
-
-    def test_live_secret_parameter_drift_refuses_before_update(self):
-        config, report, stack, _, _, calls, call = self.activation_fixture()
-        next(p for p in stack['Parameters'] if p['ParameterKey'] == 'QualificationConfigSecretArn')['ParameterValue'] = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-unexpected-Abc123'
-        with self.assertRaisesRegex(ValueError, 'qualification secret differs'):
-            preflight.activate(config, report, call, lambda: NOW)
-        self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls))
+    def test_an_older_stack_may_carry_the_retired_parameter_only_empty(self):
+        for value, accepted in (('', True), (RETIRED, False)):
+            config, report, stack, _, _, calls, call = self.activation_fixture()
+            stack['Parameters'].append({'ParameterKey': 'QualificationConfigSecretArn', 'ParameterValue': value})
+            if accepted:
+                self.assertEqual(preflight.activate(config, report, call, lambda: NOW)['desired_count'], 1)
+            else:
+                with self.assertRaisesRegex(ValueError, 'qualification secret parameter'):
+                    preflight.activate(config, report, call, lambda: NOW)
+                self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls))
 
     def test_live_task_image_architecture_and_secret_injection_must_match(self):
         for mutation in ('definition', 'image', 'architecture', 'extra_container', 'unexpected_secret'):
@@ -128,21 +117,19 @@ class Preflight(unittest.TestCase):
             with self.assertRaises(ValueError): preflight.activate(config, report, changed, lambda: NOW)
             self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), mutation)
 
-    def test_selected_secret_requires_exact_live_injection(self):
-        arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
-        for mutation in ('correct', 'missing', 'wrong_arn', 'wrong_name', 'extra'):
-            config, _, stack, _, _, calls, call = self.activation_fixture()
-            config['qualification_config_secret_arn'] = arn
-            _, report = preflight.reserve(config, inputs()[1], NOW)
-            stack['Parameters'] = [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()]
+    def test_the_capability_secret_is_the_one_exact_live_injection(self):
+        """ADR-003 amendment 2026-10-30: exactly the stack's capability secret, under runtime.py's name."""
+        for mutation in ('correct', 'missing', 'wrong_arn', 'wrong_name', 'extra', 'qualification'):
+            config, report, _, _, _, calls, call = self.activation_fixture()
             def changed(*args):
                 value = call(*args)
                 if args[:2] == ('ecs', 'describe-task-definition'):
-                    secrets = [{'name': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'valueFrom': arn}]
+                    secrets = [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': CAPABILITY_SECRET}]
                     if mutation == 'missing': secrets = []
-                    if mutation == 'wrong_arn': secrets[0]['valueFrom'] = arn.replace('fixture', 'another')
-                    if mutation == 'wrong_name': secrets[0]['name'] = 'GENUI_AUTH_QUALIFICATION_CONFIG_FILE'
+                    if mutation == 'wrong_arn': secrets[0]['valueFrom'] = CAPABILITY_SECRET.replace('AbCdEf', 'GhIjKl')
+                    if mutation == 'wrong_name': secrets[0]['name'] = 'GENUI_PROVIDER_CAPABILITY_DIR'
                     if mutation == 'extra': secrets.append({'name': 'PGPASSWORD', 'valueFrom': 'synthetic'})
+                    if mutation == 'qualification': secrets.append({'name': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'valueFrom': RETIRED})
                     value['taskDefinition']['containerDefinitions'][0]['secrets'] = secrets
                 return value
             if mutation == 'correct':
@@ -152,28 +139,24 @@ class Preflight(unittest.TestCase):
                     preflight.activate(config, report, changed, lambda: NOW)
                 self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), mutation)
 
-    def test_plain_environment_files_and_startup_cannot_bypass_secret_selection(self):
-        arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
-        for enabled in (False, True):
-            for mutation in ('raw_json', 'config_file', 'future_qualification_field', 'environment_file', 'entrypoint', 'command'):
-                config, _, stack, _, _, calls, call = self.activation_fixture()
-                config['qualification_config_secret_arn'] = arn if enabled else ''
-                _, report = preflight.reserve(config, inputs()[1], NOW)
-                stack['Parameters'] = [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()]
-                def changed(*args):
-                    value = call(*args)
-                    if args[:2] == ('ecs', 'describe-task-definition'):
-                        container = value['taskDefinition']['containerDefinitions'][0]
-                        if enabled: container['secrets'] = [{'name': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'valueFrom': arn}]
-                        names = {'raw_json': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'config_file': 'GENUI_AUTH_QUALIFICATION_CONFIG_FILE',
-                                 'future_qualification_field': 'GENUI_AUTH_QUALIFICATION_UNREVIEWED'}
-                        if mutation in names: container['environment'] = [{'name': names[mutation], 'value': 'synthetic'}]
-                        if mutation == 'environment_file': container['environmentFiles'] = [{'type': 's3', 'value': 'arn:aws:s3:::synthetic/config.env'}]
-                        if mutation == 'entrypoint': container['entryPoint'] = ['sh', '-c']
-                        if mutation == 'command': container['command'] = ['qualify']
-                    return value
-                with self.assertRaises(ValueError): preflight.activate(config, report, changed, lambda: NOW)
-                self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), (enabled, mutation))
+    def test_plain_environment_files_and_startup_cannot_bypass_the_secret_channel(self):
+        for mutation in ('raw_json', 'config_file', 'future_qualification_field', 'capabilities_json', 'capability_dir',
+                         'environment_file', 'entrypoint', 'command'):
+            config, report, _, _, _, calls, call = self.activation_fixture()
+            def changed(*args):
+                value = call(*args)
+                if args[:2] == ('ecs', 'describe-task-definition'):
+                    container = value['taskDefinition']['containerDefinitions'][0]
+                    names = {'raw_json': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'config_file': 'GENUI_AUTH_QUALIFICATION_CONFIG_FILE',
+                             'future_qualification_field': 'GENUI_AUTH_QUALIFICATION_UNREVIEWED',
+                             'capabilities_json': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'capability_dir': 'GENUI_PROVIDER_CAPABILITY_DIR'}
+                    if mutation in names: container['environment'] = [{'name': names[mutation], 'value': 'synthetic'}]
+                    if mutation == 'environment_file': container['environmentFiles'] = [{'type': 's3', 'value': 'arn:aws:s3:::synthetic/config.env'}]
+                    if mutation == 'entrypoint': container['entryPoint'] = ['sh', '-c']
+                    if mutation == 'command': container['command'] = ['qualify']
+                return value
+            with self.assertRaises(ValueError): preflight.activate(config, report, changed, lambda: NOW)
+            self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), mutation)
 
     def test_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry(self):
         for mutation in ('stack', 'disabled', 'schedule_arn', 'group', 'target', 'role', 'task', 'near_expiry'):

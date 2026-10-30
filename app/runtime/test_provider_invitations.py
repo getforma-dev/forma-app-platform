@@ -3,9 +3,11 @@
 SIMULATED TRANSPORT. Every provider here is fake_fauth.FakeFauth, a loopback
 stand-in built from the merged fAuth contract text and the public gatewasm
 source at 1bf5d3b; nothing calls the deployed fAuth, and nothing here is hosted
-identity evidence (APP-074/076). The database tests reuse test_admission_operator's
-disposable PostgreSQL 16.13 container with a throwaway TLS CA and drive the real
-command line as genui_migration over verify-full TLS.
+identity evidence (APP-074/076). The capability secret (ADR-003 amendment
+2026-10-30) is local_secrets.Stub, a loopback Secrets Manager stand-in spoken to
+by the real boto3 client; nothing calls AWS. The database tests reuse
+test_admission_operator's disposable PostgreSQL 16.13 container with a throwaway
+TLS CA and drive the real command line as genui_migration over verify-full TLS.
 """
 import contextlib
 import datetime
@@ -15,7 +17,6 @@ import os
 from pathlib import Path
 import shutil
 import socket
-import stat
 import tempfile
 import threading
 import time
@@ -25,18 +26,36 @@ import uuid
 
 import admission_operator as op
 import fake_fauth
+import local_secrets
 import provider_management as pm
+import runtime
 from test_admission_operator import ISSUER, ORG, TENANT, OperatorDatabase
 
 KEY = "mgmt_" + str(uuid.uuid4())
 EMAIL = "Invitee@Example.test"
+ARN = local_secrets.LOCAL_SECRET_ARN
 
 
-def private_directory(parent, name):
-    path = Path(parent, name)
-    path.mkdir(mode=0o700)
-    os.chmod(path, 0o700)
-    return path
+class SecretEntry:
+    """One capability id in the stand-in secret, read like the former capability file."""
+
+    def __init__(self, stub, key):
+        self.stub, self.key = stub, key
+
+    def entries(self):
+        return json.loads(self.stub.value())
+
+    def exists(self):
+        return self.key in self.entries()
+
+    def read_text(self):
+        return json.dumps(self.entries()[self.key])
+
+    def write_text(self, text):
+        """Fixture-only replacement of this entry (a new AWSCURRENT version)."""
+        entries = self.entries()
+        entries[self.key] = json.loads(text)
+        self.stub.set_value(json.dumps(entries))
 
 
 def private_file(path, text, mode=0o600):
@@ -50,27 +69,26 @@ def private_file(path, text, mode=0o600):
 class ConfigTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="genui-provider-config-")
-        self.capabilities = private_directory(self.tmp, "capabilities")
         self.key_file = private_file(Path(self.tmp, "key"), KEY + "\n")
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def env(self, **changes):
-        base = {pm.ENV_URL: "https://auth.example.test", pm.ENV_KEY_FILE: str(self.key_file), pm.ENV_CAPABILITY_DIR: str(self.capabilities)}
+        base = {pm.ENV_URL: "https://auth.example.test", pm.ENV_KEY_FILE: str(self.key_file), pm.ENV_CAPABILITY_SECRET: ARN}
         base.update(changes)
         return {k: v for k, v in base.items() if v is not None}
 
-    def refused(self, env, reason, required=True):
+    def refused(self, env, reason, required=True, secret_id=None):
         with self.assertRaises(pm.Refused) as refusal:
-            pm.load_config(env, required=required)
+            pm.load_config(env, required=required, secret_id=secret_id)
         self.assertEqual(str(refusal.exception), reason)
         self.assertNotIn(KEY, repr(refusal.exception))
 
     def test_complete_configuration_loads_without_echoing_the_key(self):
         config = pm.load_config(self.env(), required=True)
         self.assertEqual((config.scheme, config.host, config.port), ("https", "auth.example.test", 443))
-        self.assertEqual(config.capability_dir, self.capabilities)
+        self.assertEqual((config.capability_store.secret_id, config.capability_store.region), (ARN, "us-east-1"))
         self.assertNotIn(KEY, repr(config))
         self.assertNotIn(KEY, str(config))
         config = pm.load_config(self.env(**{pm.ENV_KEY_FILE: None, pm.ENV_KEY: KEY, pm.ENV_URL: "http://127.0.0.1:8123/"}), required=True)
@@ -80,7 +98,8 @@ class ConfigTests(unittest.TestCase):
         self.assertIsNone(pm.load_config({}, required=False))
         self.refused({}, "provider_configuration_missing")
         self.refused({pm.ENV_URL: "https://auth.example.test"}, "provider_configuration_incomplete", required=False)
-        self.refused(self.env(**{pm.ENV_CAPABILITY_DIR: None}), "provider_configuration_incomplete")
+        # ADR-003 amendment 2026-10-30: a provider configuration without the capability secret is incomplete.
+        self.refused(self.env(**{pm.ENV_CAPABILITY_SECRET: None}), "provider_configuration_incomplete")
 
     def test_url_refusals(self):
         for url in ("http://auth.example.test", "https://user:pw@auth.example.test", "https://auth.example.test/?x=1",
@@ -106,128 +125,166 @@ class ConfigTests(unittest.TestCase):
                 op.parser().parse_args(command)
             self.assertEqual(str(refusal.exception), "usage")
 
-    def test_capability_directory_must_be_private_to_the_operator(self):
-        open_dir = Path(self.tmp, "open")
-        open_dir.mkdir()
-        os.chmod(open_dir, 0o755)
-        link = Path(self.tmp, "dirlink")
-        link.symlink_to(self.capabilities, target_is_directory=True)
-        for path in (str(open_dir), str(link), "relative", str(Path(self.tmp, "absent")), str(self.key_file)):
-            with self.subTest(path=path):
-                self.refused(self.env(**{pm.ENV_CAPABILITY_DIR: path}), "provider_capability_directory_refused")
-
-    def test_capability_directory_refuses_sync_folders_and_reports_its_path_class(self):
-        """Review M2 (interim, ADR-003 decision pending): never inside a folder a sync client copies off the host."""
-        for parts in (("Library", "Mobile Documents", "com~apple~CloudDocs"), ("Library", "CloudStorage", "Dropbox"),
-                      ("Dropbox",), ("Dropbox (Example)",), ("Google Drive", "My Drive"), ("OneDrive",), ("OneDrive - Example",)):
-            path = Path(self.tmp, *parts, "capabilities")
-            path.mkdir(parents=True)
-            os.chmod(path, 0o700)
-            with self.subTest(parts=parts):
-                self.refused(self.env(**{pm.ENV_CAPABILITY_DIR: str(path)}), "provider_capability_directory_synced")
-        # A private-looking path whose parent is a link into a sync folder is refused by its real path.
-        alias = Path(self.tmp, "looks-private")
-        alias.symlink_to(Path(self.tmp, "Dropbox"), target_is_directory=True)
-        self.refused(self.env(**{pm.ENV_CAPABILITY_DIR: str(Path(alias, "capabilities"))}), "provider_capability_directory_synced")
-        self.assertEqual(pm.directory_class(str(self.capabilities)), "temporary")
-        self.assertEqual(pm.directory_class(str(Path.home() / "genui-capabilities")), "home")
-        self.assertEqual(pm.directory_class(str(Path.home() / "Library" / "Mobile Documents" / "x")), "sync:icloud_drive")
-        self.assertEqual(pm.directory_class("/srv/genui/capabilities"), "other")
+    def test_capability_secret_is_a_full_arn_and_the_host_directory_is_retired(self):
+        """ADR-003 amendment 2026-10-30 (APP-074 review M1): the secret replaces the operator-host directory."""
+        for bad in ("genui-provider-capabilities", "arn:aws:s3:::bucket", ARN + "\n", ARN.replace("us-east-1", "US-EAST-1"),
+                    "arn:aws:secretsmanager:us-east-1:12345:secret:x", ""):
+            with self.subTest(bad=bad):
+                self.refused(self.env(**{pm.ENV_CAPABILITY_SECRET: bad}), "capability_secret_refused")
+                with self.assertRaises(op.Refused) as refusal:
+                    op.validate(op.parser().parse_args(["reconcile", "--organization", ORG, "--capability-secret-id", bad]))
+                self.assertEqual(str(refusal.exception), "capability_secret_refused")
+        for env in (self.env(**{pm.ENV_RETIRED_CAPABILITY_DIR: self.tmp}), {pm.ENV_RETIRED_CAPABILITY_DIR: self.tmp}):
+            self.refused(env, "provider_capability_directory_retired", required=False)
+            with self.assertRaises(pm.Refused):
+                pm.load_store(env)
+        # The argument (an identifier, not a value) takes precedence over the environment.
+        other = ARN.replace("local-AbCdEf", "other-GhIjKl").replace("us-east-1", "eu-west-2")
+        config = pm.load_config(self.env(), required=True, secret_id=other)
+        self.assertEqual((config.capability_store.secret_id, config.capability_store.region), (other, "eu-west-2"))
+        self.assertIsNone(pm.load_store({}))
+        self.assertEqual(pm.load_store({pm.ENV_CAPABILITY_SECRET: ARN}).secret_id, ARN)
+        for command in ("issue", "revoke", "reconcile"):
+            self.assertIn("--capability-secret-id", op.parser()._subparsers._group_actions[0].choices[command].format_usage())
+        for command in ("list", "extend", "verify"):
+            self.assertNotIn("--capability-secret-id", op.parser()._subparsers._group_actions[0].choices[command].format_usage())
 
 
-class CapabilityTests(unittest.TestCase):
+class CapabilitySecretTests(unittest.TestCase):
+    """The environment's capability secret through the real boto3 client against the loopback stand-in."""
+
     def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="genui-provider-capability-")
-        self.directory = private_directory(self.tmp, "capabilities")
+        self.stub = local_secrets.Stub(ARN).start()
+        self.store = pm.CapabilitySecret(ARN, client=self.stub.client())
         self.org, self.invitation = str(uuid.uuid4()), str(uuid.uuid4())
+        self.token, self.remote = "tinv_" + str(uuid.uuid4()), "tinv_" + str(uuid.uuid4())
+        self.digest = "sha256:" + "ab" * 32
 
     def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
+        self.stub.stop()
 
-    def test_capability_file_is_private_exclusive_bounded_and_destroyable(self):
-        token, remote = "tinv_" + str(uuid.uuid4()), "tinv_" + str(uuid.uuid4())
-        path = pm.write_capability(self.directory, self.org, self.invitation, remote, token, "2026-11-01T00:00:00Z")
-        self.assertEqual(path.parent, self.directory)
-        self.assertEqual(path.name, "%s.%s.capability" % (self.org, self.invitation))
-        info = os.lstat(path)
-        self.assertTrue(stat.S_ISREG(info.st_mode))
-        self.assertEqual((stat.S_IMODE(info.st_mode), info.st_uid), (0o600, os.geteuid()))
-        stored = json.loads(path.read_text())
-        self.assertEqual(stored, {"format": "forma:fauth-invite-capability:v1", "organization_id": self.org,
-                                  "invitation_id": self.invitation, "remote_invitation_id": remote,
-                                  "provider_expires_at": "2026-11-01T00:00:00Z", "invite_token": token})
-        self.assertTrue(pm.capability_present(self.directory, self.org, self.invitation))
+    def add(self, invitation=None, **changes):
+        args = dict(organization=self.org, invitation_id=invitation or self.invitation, remote_id=self.remote, token=self.token,
+                    expires_at="2026-11-03T00:00:00Z", code_digest=self.digest)
+        args.update(changes)
+        return self.store.add(**args)
+
+    def test_a_capability_is_added_once_exactly_and_removed(self):
+        key = self.add()
+        self.assertEqual(key, "%s.%s" % (self.org, self.invitation))
+        stored = json.loads(self.stub.value())
+        self.assertEqual(stored, {key: {"format": "forma:fauth-invite-capability:v1", "organization_id": self.org,
+                                        "invitation_id": self.invitation, "remote_invitation_id": self.remote,
+                                        "provider_expires_at": "2026-11-03T00:00:00Z", "invite_token": self.token,
+                                        "code_digest": self.digest}})
+        snapshot = self.store.read()
+        self.assertTrue(pm.capability_present(snapshot, self.org, self.invitation))
+        self.assertEqual(pm.capability_record(snapshot, self.org, self.invitation)["remote_invitation_id"], self.remote)
+        self.assertEqual(pm.capability_invitations(snapshot, self.org), [self.invitation])
+        self.assertEqual(pm.capability_invitations(snapshot, str(uuid.uuid4())), [])
+        # An existing entry is never replaced: refused, nothing written.
+        puts = self.stub.count("PutSecretValue")
+        with self.assertRaises(pm.Refused) as refusal:
+            self.add(remote_id="tinv_" + str(uuid.uuid4()))
+        self.assertEqual((str(refusal.exception), self.stub.count("PutSecretValue")), ("capability_unwritable", puts))
+        self.assertEqual(self.store.remove([(self.org, self.invitation), (self.org, str(uuid.uuid4()))]), 1)
+        self.assertEqual(json.loads(self.stub.value()), {})
+        puts = self.stub.count("PutSecretValue")
+        self.assertEqual(self.store.remove([(self.org, self.invitation)]), 0)
+        self.assertEqual(self.stub.count("PutSecretValue"), puts, "nothing to remove writes nothing")
+
+    def test_only_well_formed_entries_are_written(self):
+        for changes, reason in (({"organization": "../x"}, "malformed_identifier"), ({"invitation": "x/y"}, "malformed_identifier"),
+                                ({"organization": self.org.upper()}, "malformed_identifier"), ({"token": "not-a-token"}, "provider_contract_mismatch"),
+                                ({"token": self.remote}, "provider_contract_mismatch"),
+                                ({"expires_at": "2026-11-03T00:00:00.5+00:00"}, "provider_contract_mismatch"),
+                                ({"code_digest": "ABCD"}, "malformed_identifier"), ({"code_digest": "sha256:" + "AB" * 32}, "malformed_identifier"),
+                                ({"code_digest": 7}, "malformed_identifier")):
+            with self.subTest(changes=sorted(changes)), self.assertRaises(pm.Refused) as refusal:
+                args = dict(changes)
+                organization = args.pop("organization", self.org)
+                self.store.add(organization, args.pop("invitation", self.invitation), args.pop("remote_id", self.remote),
+                               args.pop("token", self.token), args.pop("expires_at", "2026-11-03T00:00:00Z"), args.pop("code_digest", self.digest))
+            self.assertEqual(str(refusal.exception), reason)
+        self.assertEqual(self.stub.count("PutSecretValue"), 0)
+        # A record without the code digest is still a valid record (the service never hands it off).
+        self.add(code_digest=None)
+        self.assertNotIn("code_digest", json.loads(self.stub.value())["%s.%s" % (self.org, self.invitation)])
+
+    def test_the_whole_map_is_bounded_and_a_malformed_secret_refuses(self):
+        self.stub.set_value(json.dumps({"%s.%s" % (self.org, self.invitation): {"format": "other"}}))
+        with self.assertRaises(pm.Refused) as refusal:
+            self.store.read()
+        self.assertEqual(str(refusal.exception), "capability_secret_malformed")
         with self.assertRaises(pm.Refused):
-            pm.write_capability(self.directory, self.org, self.invitation, remote, token, "2026-11-01T00:00:00Z")
-        self.assertTrue(pm.destroy_capability(self.directory, self.org, self.invitation))
-        self.assertFalse(pm.capability_present(self.directory, self.org, self.invitation))
-        self.assertFalse(pm.destroy_capability(self.directory, self.org, self.invitation))
-        for bad in (("../x", self.invitation), (self.org, "x/y"), (self.org.upper(), self.invitation)):
-            with self.subTest(bad=bad), self.assertRaises(pm.Refused):
-                pm.write_capability(self.directory, bad[0], bad[1], remote, token, "2026-11-01T00:00:00Z")
-        with self.assertRaises(pm.Refused):
-            pm.write_capability(self.directory, self.org, self.invitation, remote, "not-a-token", "2026-11-01T00:00:00Z")
-        # APP-074: an optional code digest, digest-shaped only; still read by capability_record.
-        digest = "sha256:" + "ab" * 32
-        path = pm.write_capability(self.directory, self.org, self.invitation, remote, token, "2026-11-01T00:00:00Z", code_digest=digest)
-        self.assertEqual(json.loads(path.read_text())["code_digest"], digest)
-        self.assertEqual(pm.capability_record(self.directory, self.org, self.invitation)["remote_invitation_id"], remote)
+            self.add()
+        self.stub.set_value(json.dumps(dict(pm.capability_entry(self.org, str(uuid.uuid4()), self.remote, self.token, "2026-11-03T00:00:00Z")
+                                            for _ in range(pm.CAPABILITIES_MAX))))
+        with self.assertRaises(pm.Refused) as refusal:
+            self.add()
+        self.assertEqual(str(refusal.exception), "capability_secret_full")
+        self.assertEqual(self.stub.count("PutSecretValue"), 0)
+
+    def test_store_failures_answer_fixed_reasons_and_never_the_value(self):
+        self.stub.deny_puts = True
+        with self.assertRaises(pm.Refused) as refusal:
+            self.add()
+        self.assertEqual(str(refusal.exception), "capability_secret_unwritten")
+        self.assertIsNone(refusal.exception.__cause__)
+        self.assertNotIn(self.token, repr(refusal.exception) + str(refusal.exception.__context__))
+        self.assertEqual(json.loads(self.stub.value()), {})
+        self.stub.deny_puts = False
+        # An ambiguous 500 after the write: the SDK retries with the same token, which is idempotent.
+        self.stub.fail_after_put = 1
+        self.add()
+        self.assertEqual(self.stub.count("PutSecretValue"), 3)  # the denied one, the ambiguous one, its retry
+        self.assertEqual(len(self.stub.versions), 1)
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        import boto3
+        from botocore.config import Config
+        unreachable = boto3.session.Session(aws_access_key_id="x", aws_secret_access_key="y", region_name="us-east-1").client(
+            "secretsmanager", endpoint_url="http://127.0.0.1:%d" % port,
+            config=Config(retries={"total_max_attempts": 1}, connect_timeout=1, read_timeout=1))
+        with self.assertRaises(pm.Refused) as refusal:
+            pm.CapabilitySecret(ARN, client=unreachable).read()
+        self.assertEqual(str(refusal.exception), "capability_secret_unavailable")
+        # The identity policy: a caller without PutSecretValue cannot write it.
+        self.stub.grants = {local_secrets.LOCAL_ACCESS_KEY_ID: {"secretsmanager:GetSecretValue"}}
+        with self.assertRaises(pm.Refused) as refusal:
+            self.add(invitation=str(uuid.uuid4()))
+        self.assertEqual(str(refusal.exception), "capability_secret_unwritten")
+
+    def test_what_the_operator_writes_is_what_the_service_supervisor_materializes(self):
+        """The handoff in one process: operator add -> secret -> runtime.write_capabilities -> the service's file."""
+        self.add()
         other = str(uuid.uuid4())
-        for bad in ("ABCD", "sha256:" + "AB" * 32, "sha256:" + "ab" * 31, 7):
-            with self.subTest(digest=bad), self.assertRaises(pm.Refused):
-                pm.write_capability(self.directory, self.org, other, remote, token, "2026-11-01T00:00:00Z", code_digest=bad)
-        self.assertFalse(pm.capability_present(self.directory, self.org, other))
-
-    def test_a_capability_appears_complete_or_not_at_all(self):
-        """Review m6: the final name is linked to a fully written, fsynced file, so a sweep never reads a partial one."""
-        token, remote = "tinv_" + str(uuid.uuid4()), "tinv_" + str(uuid.uuid4())
-        final = pm.capability_path(self.directory, self.org, self.invitation)
-        real_write, seen = os.write, []
-
-        def write(fd, data):
-            seen.append(final.exists())
-            return real_write(fd, data)
-        with mock.patch.object(os, "write", side_effect=write):
-            pm.write_capability(self.directory, self.org, self.invitation, remote, token, "2026-11-01T00:00:00Z")
-        self.assertEqual(seen, [False])
-        self.assertEqual(os.listdir(self.directory), [final.name], "no partial file is left behind")
-        self.assertEqual(pm.capability_record(self.directory, self.org, self.invitation)["remote_invitation_id"], remote)
-        # An existing capability is never replaced, and the refused attempt leaves nothing behind.
-        with self.assertRaises(pm.Refused):
-            pm.write_capability(self.directory, self.org, self.invitation, "tinv_" + str(uuid.uuid4()), token, "2026-11-01T00:00:00Z")
-        self.assertEqual(os.listdir(self.directory), [final.name])
-        self.assertEqual(pm.capability_record(self.directory, self.org, self.invitation)["remote_invitation_id"], remote)
-
-    def test_only_stale_partial_writes_are_swept(self):
-        stale, fresh = (Path(self.directory, ".%s.%s.%s.partial" % (self.org, str(uuid.uuid4()), tag * 16)) for tag in ("a", "b"))
-        for path in (stale, fresh):
-            path.write_text("{")
-        old = time.time() - 3600
-        os.utime(stale, (old, old))
-        other = Path(self.directory, ".%s.%s.%s.partial" % (str(uuid.uuid4()), self.invitation, "c" * 16))
-        other.write_text("{")
-        os.utime(other, (old, old))
-        self.assertEqual(pm.remove_stale_partials(self.directory, self.org, 120), 1)
-        self.assertEqual((stale.exists(), fresh.exists(), other.exists()), (False, True, True))
-        self.assertEqual(pm.capability_invitations(self.directory, self.org), [])
+        self.add(invitation=other, token="tinv_" + str(uuid.uuid4()))
+        target = Path(tempfile.mkdtemp(prefix="genui-capability-handoff-"))
+        try:
+            target.chmod(0o700)
+            names = runtime.write_capabilities(str(target), self.stub.value())
+            self.assertEqual(sorted(names), sorted("%s.%s.capability" % (self.org, i) for i in (self.invitation, other)))
+            record = json.loads(Path(target, "%s.%s.capability" % (self.org, self.invitation)).read_text())
+            self.assertEqual(record, json.loads(self.stub.value())["%s.%s" % (self.org, self.invitation)])
+        finally:
+            shutil.rmtree(target, ignore_errors=True)
 
 
 class ClientTests(unittest.TestCase):
     """The management client against the loopback stand-in, in process."""
 
     def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="genui-provider-client-")
-        self.capabilities = private_directory(self.tmp, "capabilities")
         self.fake = fake_fauth.FakeFauth(TENANT, KEY)
         self.fake.start()
         self.client = pm.Client(self.config(self.fake.url))
 
     def tearDown(self):
         self.fake.stop()
-        shutil.rmtree(self.tmp, ignore_errors=True)
 
     def config(self, url, key=KEY):
-        return pm.load_config({pm.ENV_URL: url, pm.ENV_KEY: key, pm.ENV_CAPABILITY_DIR: str(self.capabilities)}, required=True)
+        return pm.load_config({pm.ENV_URL: url, pm.ENV_KEY: key, pm.ENV_CAPABILITY_SECRET: ARN}, required=True)
 
     def creates(self):
         return self.fake.count("POST", "/manage/invites")
@@ -372,19 +429,20 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.private = tempfile.mkdtemp(prefix="genui-provider-db-")
-        cls.capabilities = private_directory(cls.private, "capabilities")
         cls.key_file = private_file(Path(cls.private, "management-key"), KEY + "\n")
         cls.fake = fake_fauth.FakeFauth(TENANT, KEY)
         cls.fake.start()
+        cls.secret = local_secrets.Stub(ARN).start()
 
     @classmethod
     def tearDownClass(cls):
         cls.fake.stop()
+        cls.secret.stop()
         shutil.rmtree(cls.private, ignore_errors=True)
         super().tearDownClass()
 
     def provider_env(self, **changes):
-        env = {pm.ENV_URL: self.fake.url, pm.ENV_KEY_FILE: str(self.key_file), pm.ENV_CAPABILITY_DIR: str(self.capabilities)}
+        env = dict(local_secrets.environment(self.secret.endpoint), **{pm.ENV_URL: self.fake.url, pm.ENV_KEY_FILE: str(self.key_file)})
         env.update(changes)
         return {k: v for k, v in env.items() if v is not None}
 
@@ -395,7 +453,7 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         """The command line with its raw streams, for disclosure checks."""
         import subprocess
         import sys
-        full = {k: v for k, v in os.environ.items() if not k.startswith(("PG", "GENUI_PROVIDER_"))}
+        full = {k: v for k, v in os.environ.items() if not k.startswith(("PG", "GENUI_PROVIDER_", "AWS_"))}
         full.update(PGHOST="localhost", PGPORT=str(self.port), PGUSER="genui_migration", PGDATABASE="genui",
                     PGSSLROOTCERT=str(Path(self.directory, "ca.pem")), **(self.provider_env() if env is None else env))
         return subprocess.run([sys.executable, str(Path(op.__file__).with_name("admission_operator.py")), *args], capture_output=True,
@@ -437,7 +495,8 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         return self.run_cli("reconcile", "--organization", ORG, env=env)
 
     def capability(self, invitation_id):
-        return Path(self.capabilities, "%s.%s.capability" % (ORG, invitation_id))
+        """This invitation's entry in the environment's capability secret (the stand-in's AWSCURRENT)."""
+        return SecretEntry(self.secret, "%s.%s" % (ORG, invitation_id))
 
     def code_status(self, code_id):
         return self.query("SELECT status FROM genui.access_codes WHERE organization_id=%s AND code_id=%s", (ORG, code_id))[0][0]
@@ -461,9 +520,11 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(rows, [(invitation["invitation_id"], ISSUER, TENANT, invitation["remote_invitation_id"], op.email_digest(email),
                                  "user", "server_only", "create", "confirmed")])
         path = self.capability(invitation["invitation_id"])
-        info = os.lstat(path)
-        self.assertEqual((stat.S_IMODE(info.st_mode), info.st_uid), (0o600, os.geteuid()))
-        self.assertEqual(stat.S_IMODE(os.lstat(self.capabilities).st_mode), 0o700)
+        # ADR-003 amendment 2026-10-30: the token is in the environment's secret only; the
+        # operator host keeps no copy (the working directory holds nothing new).
+        self.assertTrue(path.exists())
+        self.assertEqual(sorted(os.listdir(self.private)), ["management-key"])
+        self.assertNotIn(KEY, self.secret.value())
         record = json.loads(path.read_text())
         token = record["invite_token"]
         self.assertRegex(token, pm.TOKEN)
@@ -489,18 +550,20 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
     def test_issue_refuses_before_any_write_without_a_verified_provider_tenant(self):
         self.ensure_backfill()
         before, creates = self.dump(), self.fake.count("POST", "/manage/invites")
-        wrong = private_file(Path(self.private, "wrong-key-" + uuid.uuid4().hex), "mgmt_" + str(uuid.uuid4()))
-        loose_dir = Path(self.private, "loose-" + uuid.uuid4().hex)
-        loose_dir.mkdir(mode=0o755)
-        os.chmod(loose_dir, 0o755)
+        wrong = tempfile.mkdtemp(prefix="genui-wrong-key-")
+        wrong = private_file(Path(wrong, "key"), "mgmt_" + str(uuid.uuid4()))
+        secret_before = self.secret.value()
         for env, reason in (({}, "provider_configuration_missing"),
                             (self.provider_env(**{pm.ENV_KEY_FILE: str(wrong)}), "provider_unauthorized"),
-                            (self.provider_env(**{pm.ENV_CAPABILITY_DIR: str(loose_dir)}), "provider_capability_directory_refused"),
+                            (self.provider_env(**{pm.ENV_CAPABILITY_SECRET: None}), "provider_configuration_incomplete"),
+                            (self.provider_env(**{pm.ENV_CAPABILITY_SECRET: "genui-capabilities"}), "capability_secret_refused"),
+                            (self.provider_env(**{pm.ENV_RETIRED_CAPABILITY_DIR: self.private}), "provider_capability_directory_retired"),
                             (self.provider_env(**{pm.ENV_URL: "http://auth.example.test"}), "provider_url_refused")):
             with self.subTest(reason=reason):
                 refused = self.invite(expect=1, env=env)
                 self.assertEqual(json.loads(refused.stderr), {"refused": reason})
-        self.assertEqual(self.dump(), before)
+        self.assertEqual((self.dump(), self.secret.value()), (before, secret_before))
+        shutil.rmtree(wrong.parent, ignore_errors=True)
         # The right key for the wrong binding: the provider's tenant must equal the code's bound tenant.
         with self.connect("postgres") as c:
             c.execute("INSERT INTO genui.provider_tenant_bindings VALUES (%s,%s,'ten_other_binding',true) ON CONFLICT DO NOTHING", (ORG, ISSUER))
@@ -665,6 +728,61 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertFalse(self.capability(created["invitation_id"]).exists())
         self.assertEqual(self.fake.status_of(created["remote_invitation_id"]), "revoked")
 
+    def test_revocation_with_the_secret_alone_ends_the_capability(self):
+        """ADR-003 amendment 2026-10-30: the managed operator task has the secret's id and no provider
+        settings; its revoke still removes the code's capability from the secret at once."""
+        out = self.invite("secretonly-%s@example.test" % uuid.uuid4().hex[:6])
+        created = out["provider_invitation"]
+        other = self.invite("bystander-%s@example.test" % uuid.uuid4().hex[:6])
+        env = {k: v for k, v in self.provider_env().items() if not k.startswith("GENUI_PROVIDER_") or k == pm.ENV_CAPABILITY_SECRET}
+        revoked = self.run_cli("revoke", "--organization", ORG, "--code-id", out["code_id"], env=env)
+        self.assertEqual((revoked["provider_phase"], revoked["capability_phase"], revoked["capabilities_destroyed"]),
+                         ("not_configured", "completed", 1))
+        self.assertFalse(self.capability(created["invitation_id"]).exists())
+        self.assertTrue(self.capability(other["provider_invitation"]["invitation_id"]).exists(), "another code's entry is untouched")
+        self.assertEqual(self.fake.status_of(created["remote_invitation_id"]), "pending")  # the remote revocation is reconcile's
+        # The same through the argument instead of the environment.
+        third = self.invite("argument-%s@example.test" % uuid.uuid4().hex[:6])
+        env = {k: v for k, v in env.items() if k != pm.ENV_CAPABILITY_SECRET}
+        revoked = self.run_cli("revoke", "--organization", ORG, "--code-id", third["code_id"], "--capability-secret-id", ARN, env=env)
+        self.assertEqual((revoked["capability_phase"], revoked["capabilities_destroyed"]), ("completed", 1))
+        self.assertFalse(self.capability(third["provider_invitation"]["invitation_id"]).exists())
+
+    def test_an_unwritable_secret_stores_nothing_and_revokes_the_invitation(self):
+        self.secret.deny_puts = True
+        try:
+            out = self.invite("unwritable-%s@example.test" % uuid.uuid4().hex[:6])
+        finally:
+            self.secret.deny_puts = False
+        invitation = out["provider_invitation"]
+        self.assertEqual((invitation["state"], invitation["capability_stored"], invitation["detail"]), ("confirmed", False, "capability_unwritable"))
+        self.assertEqual(invitation["revocation"]["state"], "confirmed")
+        self.assertFalse(self.capability(invitation["invitation_id"]).exists())
+        self.assertEqual(self.fake.status_of(invitation["remote_invitation_id"]), "revoked")
+        self.assertEqual([r[1:3] for r in self.rows(out["code_id"])], [("create", "confirmed"), ("revoke", "confirmed")])
+
+    def test_concurrent_operator_writes_never_lose_an_entry(self):
+        """Every change is a read and a whole-map write; the operator's advisory lock serializes them."""
+        self.ensure_backfill()
+        self.secret.get_delay = 0.4
+        boxes = [{} for _ in range(3)]
+        try:
+            runners = [threading.Thread(target=lambda box=box, i=i: box.update(p=self.raw_cli(
+                "issue", "--organization", ORG, "--issued-by", "unit-operator", "--grant", "source_read:" + self.source,
+                "--provider-email", "race-%d-%s@example.test" % (i, uuid.uuid4().hex[:6]), "--provider-role", "user",
+                "--provider-issuer", ISSUER, "--provider-tenant", TENANT))) for i, box in enumerate(boxes)]
+            for runner in runners:
+                runner.start()
+            for runner in runners:
+                runner.join()
+        finally:
+            self.secret.get_delay = 0
+        for box in boxes:
+            self.assertEqual(box["p"].returncode, 0, box["p"].stderr)
+            invitation = json.loads(box["p"].stdout)["provider_invitation"]
+            self.assertEqual((invitation["state"], invitation["capability_stored"]), ("confirmed", True))
+            self.assertTrue(self.capability(invitation["invitation_id"]).exists())
+
     def test_revocation_of_an_unknown_create_waits_for_its_reconciliation(self):
         email = "await-%s@example.test" % uuid.uuid4().hex[:6]
         self.fake.fault("create", "drop_after")
@@ -697,11 +815,10 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         path = self.capability(lapsed["provider_invitation"]["invitation_id"])
         stored = json.loads(path.read_text())
         stored["provider_expires_at"] = "2020-01-01T00:00:00Z"
-        os.chmod(path, 0o600)
         path.write_text(json.dumps(stored))
         events = len(self.operator_events())
         result = self.reconcile()
-        self.assertEqual(result["capability_directory_class"], "temporary")  # review M2: recorded for the evidence
+        self.assertEqual((result["capability_store"], result["capability_phase"]), ("secrets_manager", "completed"))
         self.assertGreaterEqual(result["revocations_recorded"], 2)
         for out in (expired, exhausted):
             self.assertEqual([r[1:3] for r in self.rows(out["code_id"])], [("create", "confirmed"), ("revoke", "confirmed")])

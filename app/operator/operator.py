@@ -91,7 +91,9 @@ PINNED_CA = "/etc/ssl/certs/rds-global-bundle.pem"
 MANAGED_TASK_VARIABLES = ("ECS_CONTAINER_METADATA_URI_V4", "ECS_CONTAINER_METADATA_URI")
 # admission subcommands never run in a managed task: `issue` prints the raw
 # code to standard output, which there is the awslogs group; `reconcile` (like
-# a provider invitation) needs the management key and a private directory;
+# a provider invitation) needs the management key, which the task never holds
+# (`revoke` there removes the code's capability from the secret the task
+# definition names, ADR-003 amendment 2026-10-30);
 # `register-source-revision` reads a local record file that a command-only
 # override cannot deliver (APP-012).
 MANAGED_REFUSED = ("issue", "reconcile", "register-source-revision")

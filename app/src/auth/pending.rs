@@ -10,7 +10,7 @@
 use super::{
     cookies, csrf,
     provider::Resend,
-    routes::{add_cookie, denied},
+    routes::{self, add_cookie, denied},
     vault::AccessFailure,
     Auth, PendingView, ResendResult,
 };
@@ -49,7 +49,9 @@ fn view(auth: &Auth, cookie: &str, pre: &PreAccess, result: Option<ResendResult>
     }
 }
 
-async fn live(auth: &Auth, cookie: &str) -> Option<PreAccess> {
+/// The live record a cookie names; `failed` learns of a lookup that found
+/// no record (APP-074 review M2 counts those per address class).
+async fn lookup(auth: &Auth, cookie: &str, failed: impl FnOnce()) -> Option<PreAccess> {
     let stores = auth.stores.as_ref()?;
     match stores.workspace.resolve_pre_access(cookie).await {
         Ok(Lookup::Live(pre)) => Some(pre),
@@ -57,15 +59,29 @@ async fn live(auth: &Auth, cookie: &str) -> Option<PreAccess> {
             auth.revoke(&ended).await;
             None
         }
-        Ok(Lookup::Absent) | Err(_) => None,
+        Ok(Lookup::Absent) => {
+            failed();
+            None
+        }
+        Err(_) => None,
     }
+}
+async fn live(auth: &Auth, cookie: &str) -> Option<PreAccess> {
+    lookup(auth, cookie, || {}).await
 }
 
 pub(crate) async fn page(State(auth): State<Arc<Auth>>, request: Request) -> Response {
-    let Some(cookie) = cookies::read(request.headers(), cookies::PRE_ACCESS) else {
+    let (parts, _) = request.into_parts();
+    let Some(cookie) = cookies::read(&parts.headers, cookies::PRE_ACCESS) else {
         return http::not_found();
     };
-    let Some(pre) = live(&auth, &cookie).await else {
+    // APP-074 review M2: the registry and the class's failed-lookup budget
+    // before any database work.
+    let class = auth.address_class(&parts);
+    if let Some(refused) = routes::before_lookup(&auth, &class, &cookie) {
+        return refused;
+    }
+    let Some(pre) = lookup(&auth, &cookie, || routes::lookup_failed(&auth, &class)).await else {
         return http::not_found();
     };
     if pre.email_verified() {

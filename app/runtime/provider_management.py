@@ -30,23 +30,33 @@ crates/server/src/handlers/management.rs blob bc12859a):
 
 The management key is read from the environment or a private file, never argv.
 Nothing here prints or logs the key, an `invite_token` or an address; callers
-receive fixed reason codes. A token is written only to a 0600 capability file in
-a 0700 directory owned by the operator (write_capability).
+receive fixed reason codes.
+
+Capability custody (ADR-003 amendment 2026-10-30, APP-074 review M1; it
+supersedes the operator-host 0600 directory): a token is written only into the
+environment's one AWS Secrets Manager secret (CapabilitySecret), a JSON map keyed
+by `{organization}.{invitation}` whose entries are exactly the records the
+service reads, with PutSecretValue under the operator's own AWS credentials. ECS
+injects that secret into the service task, whose runtime.py serve() writes each
+entry as a 0600 file for the service child alone. The operator host keeps no
+copy: nothing here writes a capability to disk. The secret's id comes from the
+environment (GENUI_PROVIDER_CAPABILITY_SECRET_ID) or the operator's
+`--capability-secret-id` (an ARN, not a secret); a value never travels in argv.
 """
 import datetime
 import http.client
 import json
 import os
-from pathlib import Path
 import re
-import secrets
 import socket
 import ssl
 import stat
-import tempfile
 import threading
 import time
+import uuid
 from urllib.parse import urlsplit
+
+import runtime
 
 # Bounds of the provider phase, recorded by `admission_operator.py defaults`.
 PROVIDER_DEFAULTS = {
@@ -64,16 +74,22 @@ PROVIDER_DEFAULTS = {
 ENV_URL = "GENUI_PROVIDER_URL"
 ENV_KEY = "GENUI_PROVIDER_MANAGEMENT_KEY"
 ENV_KEY_FILE = "GENUI_PROVIDER_MANAGEMENT_KEY_FILE"
-ENV_CAPABILITY_DIR = "GENUI_PROVIDER_CAPABILITY_DIR"
-ENV_NAMES = (ENV_URL, ENV_KEY, ENV_KEY_FILE, ENV_CAPABILITY_DIR)
+ENV_CAPABILITY_SECRET = "GENUI_PROVIDER_CAPABILITY_SECRET_ID"
+# The retired operator-host directory (ADR-003 amendment 2026-10-29); refused if still set,
+# so a stale setup never believes it keeps capabilities on the host.
+ENV_RETIRED_CAPABILITY_DIR = "GENUI_PROVIDER_CAPABILITY_DIR"
+ENV_NAMES = (ENV_URL, ENV_KEY, ENV_KEY_FILE)
+# The capability secret: a full Secrets Manager ARN (its region is the client's region).
+SECRET_ARN = re.compile(r"arn:aws:secretsmanager:([a-z]{2}(?:-[a-z]+)+-[0-9]):[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]{1,512}")
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 KEY = re.compile(r"mgmt_[A-Za-z0-9_-]{8,256}")
 REMOTE_ID = re.compile(r"tinv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 TOKEN = REMOTE_ID  # same shape as the id (management.rs:1718-1719); never interchangeable
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 ERROR_CODE = re.compile(r"[a-z][a-z0-9_]{0,63}")
-CAPABILITY_FORMAT = "forma:fauth-invite-capability:v1"
+CAPABILITY_FORMAT = runtime.CAPABILITY_FORMAT
 CODE_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+CAPABILITY_EXPIRY = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 TIMESTAMP = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})")
 
 
@@ -104,15 +120,15 @@ def normalize_email(email):
 class Config:
     """Validated provider configuration. The key never appears in repr or str."""
 
-    def __init__(self, scheme, host, port, key, capability_dir):
-        self.scheme, self.host, self.port, self.capability_dir = scheme, host, port, capability_dir
+    def __init__(self, scheme, host, port, key, capability_store):
+        self.scheme, self.host, self.port, self.capability_store = scheme, host, port, capability_store
         self._key = key
 
     def authorization(self):
         return "Bearer " + self._key
 
     def __repr__(self):
-        return "Config(%s://%s:%d, capability_dir=%s)" % (self.scheme, self.host, self.port, self.capability_dir)
+        return "Config(%s://%s:%d, capability_store=%r)" % (self.scheme, self.host, self.port, self.capability_store)
 
     __str__ = __repr__
 
@@ -133,74 +149,28 @@ def _private_file(path):
         os.close(fd)
 
 
-# Folders whose contents a sync client copies off the operator host (review M2, interim
-# until ADR-003 names the approved store). Matched on any path component, case-folded,
-# of both the configured path and its real path.
-def _sync_class(parts):
-    folded = [part.casefold() for part in parts]
-    for i, part in enumerate(folded):
-        parent = folded[i - 1] if i else ""
-        if parent == "library" and part == "mobile documents" or part == "icloud drive":
-            return "sync:icloud_drive"
-        if parent == "library" and part == "cloudstorage":
-            return "sync:cloud_storage"
-        if part == "dropbox" or part.startswith(("dropbox (", "dropbox-")):
-            return "sync:dropbox"
-        if part in ("google drive", "my drive") or part.startswith("googledrive"):
-            return "sync:google_drive"
-        if part == "onedrive" or part.startswith(("onedrive -", "onedrive-")):
-            return "sync:onedrive"
-    return None
+def load_store(environ, secret_id=None, required=False):
+    """The capability secret named by `--capability-secret-id` or GENUI_PROVIDER_CAPABILITY_SECRET_ID,
+    or None when neither is set and none is required. A full ARN only."""
+    require(ENV_RETIRED_CAPABILITY_DIR not in environ, "provider_capability_directory_retired")
+    value = secret_id if secret_id is not None else environ.get(ENV_CAPABILITY_SECRET)
+    if value is None:
+        require(not required, "provider_configuration_incomplete")
+        return None
+    require(isinstance(value, str) and SECRET_ARN.fullmatch(value) is not None, "capability_secret_refused")
+    return CapabilitySecret(value)
 
 
-def _under(path, root):
-    try:
-        Path(path).relative_to(root)
-        return True
-    except ValueError:
-        return False
-
-
-def directory_class(path):
-    """The capability directory's path class, recorded as evidence: `sync:<client>`
-    (refused), `temporary`, `home` or `other`. Never the path itself."""
-    real = os.path.realpath(path)
-    for candidate in (path, real):
-        found = _sync_class(Path(candidate).parts)
-        if found:
-            return found
-    temporary = {os.path.realpath(tempfile.gettempdir()), "/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp",
-                 "/var/folders", "/private/var/folders"}
-    if any(_under(real, root) or _under(path, root) for root in temporary):
-        return "temporary"
-    home = os.path.expanduser("~")
-    if home != "~" and (_under(real, os.path.realpath(home)) or _under(path, home)):
-        return "home"
-    return "other"
-
-
-def private_directory(path):
-    """An absolute directory, not a link, owned by this user, with no group or other access,
-    and not inside a folder that a sync client copies off the host."""
-    require(isinstance(path, str) and os.path.isabs(path), "provider_capability_directory_refused")
-    require(not directory_class(path).startswith("sync:"), "provider_capability_directory_synced")
-    try:
-        info = os.lstat(path)
-    except OSError:
-        raise Refused("provider_capability_directory_refused") from None
-    require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) & 0o077 == 0,
-            "provider_capability_directory_refused")
-    return Path(path)
-
-
-def load_config(environ, required):
-    """None when no provider variable is set and none is required; otherwise all of them, validated."""
+def load_config(environ, required, secret_id=None):
+    """None when no provider variable is set and none is required; otherwise all of them, validated,
+    with the capability secret (a provider configuration without one is incomplete)."""
+    require(ENV_RETIRED_CAPABILITY_DIR not in environ, "provider_capability_directory_retired")
     present = {name: environ.get(name) for name in ENV_NAMES if environ.get(name) is not None}
     if not present:
         require(not required, "provider_configuration_missing")
         return None
-    require(ENV_URL in present and ENV_CAPABILITY_DIR in present and (ENV_KEY in present or ENV_KEY_FILE in present),
-            "provider_configuration_incomplete")
+    require(ENV_URL in present and (ENV_KEY in present or ENV_KEY_FILE in present), "provider_configuration_incomplete")
+    store = load_store(environ, secret_id, required=True)
     try:
         url = urlsplit(present[ENV_URL])
         port = url.port
@@ -213,8 +183,7 @@ def load_config(environ, required):
     require(ENV_KEY not in present or ENV_KEY_FILE not in present, "provider_key_refused")
     key = _private_file(present[ENV_KEY_FILE]) if ENV_KEY_FILE in present else present[ENV_KEY]
     require(isinstance(key, str) and KEY.fullmatch(key) is not None, "provider_key_refused")
-    directory = private_directory(present[ENV_CAPABILITY_DIR])
-    return Config(scheme, host, port or (443 if scheme == "https" else 80), key, directory)
+    return Config(scheme, host, port or (443 if scheme == "https" else 80), key, store)
 
 
 # --- transport -------------------------------------------------------------------
@@ -424,143 +393,154 @@ class Client:
         raise Refused("provider_inspection_incomplete")
 
 
-# --- capability custody ------------------------------------------------------------
+# --- capability custody (ADR-003 amendment 2026-10-30; APP-074 review M1) -----------
+#
+# One Secrets Manager secret per environment holds every live capability as a JSON
+# map `{organization}.{invitation}` -> record, the record exactly what the service's
+# invitation entry reads (app/src/auth/invite.rs Record) and runtime.py validates.
+# Every change is one read and one PutSecretValue of the whole map; the operator
+# serializes them with a database advisory lock (admission_operator.capability_lock),
+# so two operator commands never lose each other's entry. Reads and writes answer
+# fixed reason codes only: no botocore error text (which can carry request data)
+# ever leaves this module.
 
-def capability_path(directory, organization, invitation_id):
+CAPABILITY_SECRET_BYTES_MAX = runtime.CAPABILITY_SECRET_BYTES_MAX
+CAPABILITIES_MAX = runtime.CAPABILITIES_MAX
+SECRET_CLIENT = {"connect_timeout": 5, "read_timeout": 10, "total_max_attempts": 3}
+
+
+def capability_id(organization, invitation_id):
     require(isinstance(organization, str) and UUID.fullmatch(organization) is not None
             and isinstance(invitation_id, str) and UUID.fullmatch(invitation_id) is not None, "malformed_identifier")
-    return Path(directory, "%s.%s.capability" % (organization, invitation_id))
+    return "%s.%s" % (organization, invitation_id)
 
 
-def _sync_directory(directory):
-    fd = os.open(directory, os.O_RDONLY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-
-
-def _partial_path(directory, organization, invitation_id):
-    """A hidden, unique name the sweep never reads as a capability (review m6)."""
-    capability_path(directory, organization, invitation_id)
-    return Path(directory, ".%s.%s.%s.partial" % (organization, invitation_id, secrets.token_hex(8)))
-
-
-def write_capability(directory, organization, invitation_id, remote_id, token, expires_at, code_digest=None):
-    """Write the 0600 capability under a private partial name, fsync it, then link it to its final
-    name, which never existed (link fails rather than overwrite). The final name therefore only
-    ever holds a complete record, so a concurrent sweep cannot read or delete a half-written one.
+def capability_entry(organization, invitation_id, remote_id, token, expires_at, code_digest=None):
+    """(id, record) of one capability, validated as the service's supervisor validates it.
 
     APP-074: `code_digest` (the code's stored `sha256:` digest, never the code) lets the service's
     invitation entry find the one capability of a validated code; the service never reads the
     operator's tables, and a record without it is never handed off."""
-    path = capability_path(directory, organization, invitation_id)
+    key = capability_id(organization, invitation_id)
     require(isinstance(token, str) and TOKEN.fullmatch(token) is not None and isinstance(remote_id, str)
-            and REMOTE_ID.fullmatch(remote_id) is not None, "provider_contract_mismatch")
+            and REMOTE_ID.fullmatch(remote_id) is not None and token != remote_id
+            and isinstance(expires_at, str) and CAPABILITY_EXPIRY.fullmatch(expires_at) is not None, "provider_contract_mismatch")
     require(code_digest is None or (isinstance(code_digest, str) and CODE_DIGEST.fullmatch(code_digest) is not None),
             "malformed_identifier")
-    private_directory(str(directory))
     record = {"format": CAPABILITY_FORMAT, "organization_id": organization, "invitation_id": invitation_id,
               "remote_invitation_id": remote_id, "provider_expires_at": expires_at, "invite_token": token}
     if code_digest is not None:
         record["code_digest"] = code_digest
-    partial = _partial_path(directory, organization, invitation_id)
     try:
-        fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), 0o600)
-    except OSError:
-        raise Refused("capability_unwritable") from None
+        runtime.check_capability(key, record)
+    except runtime.Refused:
+        raise Refused("provider_contract_mismatch") from None
+    return key, record
+
+
+def parse_capabilities(text):
+    """The secret's map, validated whole exactly as the service's supervisor will (runtime.capability_map)."""
     try:
+        return runtime.capability_map(text)
+    except (runtime.Refused, ValueError, TypeError):
+        raise Refused("capability_secret_malformed") from None
+
+
+def serialize_capabilities(capabilities):
+    """The map's one canonical text; never a value the service would refuse to start with."""
+    require(len(capabilities) <= CAPABILITIES_MAX, "capability_secret_full")
+    text = json.dumps(capabilities, sort_keys=True, separators=(",", ":"))
+    require(len(text.encode("utf-8")) <= CAPABILITY_SECRET_BYTES_MAX, "capability_secret_full")
+    parse_capabilities(text)
+    return text
+
+
+class CapabilitySecret:
+    """The environment's capability secret, read and written with the caller's own AWS credentials
+    (the operator's; the service only receives it through ECS injection)."""
+
+    def __init__(self, secret_id, client=None):
+        match = SECRET_ARN.fullmatch(secret_id) if isinstance(secret_id, str) else None
+        require(match is not None, "capability_secret_refused")
+        self.secret_id, self.region, self._client = secret_id, match.group(1), client
+
+    def __repr__(self):
+        return "CapabilitySecret(%s)" % self.secret_id
+
+    __str__ = __repr__
+
+    def client(self):
+        if self._client is None:
+            import boto3
+            from botocore.config import Config as SdkConfig
+            self._client = boto3.session.Session(region_name=self.region).client("secretsmanager", config=SdkConfig(
+                connect_timeout=SECRET_CLIENT["connect_timeout"], read_timeout=SECRET_CLIENT["read_timeout"],
+                retries={"total_max_attempts": SECRET_CLIENT["total_max_attempts"], "mode": "standard"}))
+        return self._client
+
+    def read(self):
+        """The current map (AWSCURRENT)."""
         try:
-            os.fchmod(fd, 0o600)
-            os.write(fd, json.dumps(record, sort_keys=True).encode("utf-8"))
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+            text = self.client().get_secret_value(SecretId=self.secret_id).get("SecretString")
+        except Exception:
+            raise Refused("capability_secret_unavailable") from None
+        return parse_capabilities(text)
+
+    def write(self, capabilities):
+        """Replace the map with one PutSecretValue. Its token is fixed for this call, so the SDK's
+        retries of an ambiguous answer are idempotent; a refusal leaves the outcome to the next read."""
+        text = serialize_capabilities(capabilities)
         try:
-            os.link(partial, path)
-        except OSError:
-            raise Refused("capability_unwritable") from None
-    finally:
-        try:
-            os.unlink(partial)
-        except FileNotFoundError:
-            pass
-    _sync_directory(directory)
-    return path
+            self.client().put_secret_value(SecretId=self.secret_id, SecretString=text, ClientRequestToken=str(uuid.uuid4()))
+        except Exception:
+            raise Refused("capability_secret_unwritten") from None
+
+    def add(self, organization, invitation_id, remote_id, token, expires_at, code_digest=None):
+        """Add one capability; an existing entry is never replaced (refused, nothing written)."""
+        key, record = capability_entry(organization, invitation_id, remote_id, token, expires_at, code_digest)
+        current = self.read()
+        require(key not in current, "capability_unwritable")
+        self.write(dict(current, **{key: record}))
+        return key
+
+    def remove(self, pairs):
+        """Remove these (organization, invitation) entries with at most one write; the number removed."""
+        keys = {capability_id(organization, invitation) for organization, invitation in pairs}
+        if not keys:
+            return 0
+        current = self.read()
+        gone = keys & set(current)
+        if gone:
+            self.write({key: record for key, record in current.items() if key not in gone})
+        return len(gone)
 
 
-def capability_present(directory, organization, invitation_id):
-    return os.path.lexists(capability_path(directory, organization, invitation_id))
+def capability_present(capabilities, organization, invitation_id):
+    return capability_id(organization, invitation_id) in capabilities
 
 
-def capability_record(directory, organization, invitation_id):
-    """The non-secret part of a well-formed capability (remote id and provider expiry), or None.
+def capability_record(capabilities, organization, invitation_id):
+    """The non-secret part of a capability in this map (remote id and provider expiry), or None.
 
     Its remote id came from a 201 that met the server-only contract, so reconcile takes it
     from here instead of inspecting the provider (review M1(d))."""
-    path = capability_path(directory, organization, invitation_id)
-    try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    except OSError:
+    record = capabilities.get(capability_id(organization, invitation_id))
+    if record is None:
         return None
     try:
-        record = json.loads(os.read(fd, 65536).decode("utf-8"))
-        remote = record["remote_invitation_id"]
-        if (record["format"] != CAPABILITY_FORMAT or record["organization_id"] != organization
-                or record["invitation_id"] != invitation_id or not isinstance(remote, str) or REMOTE_ID.fullmatch(remote) is None
-                or not isinstance(record["invite_token"], str) or TOKEN.fullmatch(record["invite_token"]) is None):
-            return None
-        return {"remote_invitation_id": remote, "provider_expires_at": parse_time(record["provider_expires_at"])}
-    except (ValueError, KeyError, TypeError, Refused):
+        return {"remote_invitation_id": record["remote_invitation_id"], "provider_expires_at": parse_time(record["provider_expires_at"])}
+    except Refused:
         return None
-    finally:
-        os.close(fd)
 
 
-def capability_expiry(directory, organization, invitation_id):
-    """The provider expiry recorded beside the token, or None when absent or unreadable."""
-    record = capability_record(directory, organization, invitation_id)
+def capability_expiry(capabilities, organization, invitation_id):
+    """The provider expiry recorded beside the token, or None when absent."""
+    record = capability_record(capabilities, organization, invitation_id)
     return record["provider_expires_at"] if record else None
 
 
-def remove_stale_partials(directory, organization, older_than_seconds):
-    """Unlink this organization's partial writes older than the bound: a writer that stopped between
-    its write and its link (crash). A younger one may still be linked, so it is left alone."""
-    prefix, removed, now = "." + organization + ".", 0, time.time()
-    for name in os.listdir(directory):
-        if not (name.startswith(prefix) and name.endswith(".partial")):
-            continue
-        path = Path(directory, name)
-        try:
-            info = os.lstat(path)
-            if now - info.st_mtime > older_than_seconds:
-                os.unlink(path)
-                removed += 1
-        except FileNotFoundError:
-            continue
-    if removed:
-        _sync_directory(directory)
-    return removed
-
-
-def destroy_capability(directory, organization, invitation_id):
-    """Unlink the capability; True when one existed. Its end of life is the file's removal."""
-    path = capability_path(directory, organization, invitation_id)
-    try:
-        os.unlink(path)
-    except FileNotFoundError:
-        return False
-    _sync_directory(directory)
-    return True
-
-
-def capability_invitations(directory, organization):
-    """Invitation ids of this organization's capability files (names only, nothing read)."""
+def capability_invitations(capabilities, organization):
+    """Invitation ids of this organization's entries (ids only, no token read out)."""
+    require(isinstance(organization, str) and UUID.fullmatch(organization) is not None, "malformed_identifier")
     prefix = organization + "."
-    found = []
-    for name in os.listdir(directory):
-        if name.startswith(prefix) and name.endswith(".capability"):
-            invitation = name[len(prefix):-len(".capability")]
-            if UUID.fullmatch(invitation):
-                found.append(invitation)
-    return sorted(found)
+    return sorted(key[len(prefix):] for key in capabilities if key.startswith(prefix))

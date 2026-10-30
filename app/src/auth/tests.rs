@@ -64,8 +64,10 @@ fn page(text: String) -> Response {
 impl Pages for TestPages {
     fn invite(&self, v: &InviteView) -> Response {
         page(format!(
-            "page=invite;failed={};limited={}",
-            v.failed, v.limited
+            "page=invite;failed={};limited={}{}",
+            v.failed,
+            v.limited.map_or("false", |w| w.as_str()),
+            if v.unavailable { ";unavailable" } else { "" }
         ))
     }
     fn signin(&self, v: &SigninView) -> Response {
@@ -999,7 +1001,7 @@ async fn campaign() {
     let hooks = settings.hooks.clone();
     let stores = Arc::new(Stores::new(settings).unwrap());
     let issuer = Issuer::start(tenants()).await;
-    let provider = FakeProvider::start_at(&fixture, NORTHSTAR_TENANT, "provider", None);
+    let provider = FakeProvider::start_at(&fixture, NORTHSTAR_TENANT, "provider", None, None);
     let auth = Arc::new(
         Auth::loopback(
             config(&issuer.origin),
