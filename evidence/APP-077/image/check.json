@@ -1,0 +1,1276 @@
+{
+  "cleanup": {
+    "genui-app077-check-53a6481ce1-db-admission-backfill-canary": true,
+    "genui-app077-check-53a6481ce1-db-admission-backfill-northstar": true,
+    "genui-app077-check-53a6481ce1-db-admission-list-northstar": true,
+    "genui-app077-check-53a6481ce1-db-admission-verify-northstar": true,
+    "genui-app077-check-53a6481ce1-db-default-command": true,
+    "genui-app077-check-53a6481ce1-db-migrate": true,
+    "genui-app077-check-53a6481ce1-db-migrate-repeat": true,
+    "genui-app077-check-53a6481ce1-db-seed": true,
+    "genui-app077-check-53a6481ce1-db-seed-repeat": true,
+    "genui-app077-check-53a6481ce1-db-verify-catalog": true,
+    "genui-app077-check-53a6481ce1-db-verify-catalog-before": true,
+    "genui-app077-check-53a6481ce1-net": true,
+    "genui-app077-check-53a6481ce1-overrides": true,
+    "genui-app077-check-53a6481ce1-postgres": true,
+    "genui-app077-check-53a6481ce1-probe": true,
+    "genui-app077-check-53a6481ce1-refuse-admission-unknown": true,
+    "genui-app077-check-53a6481ce1-refuse-application-identity": true,
+    "genui-app077-check-53a6481ce1-refuse-endpoint-override": true,
+    "genui-app077-check-53a6481ce1-refuse-generic-sql": true,
+    "genui-app077-check-53a6481ce1-refuse-no-arguments": true,
+    "genui-app077-check-53a6481ce1-refuse-service-mode": true,
+    "genui-app077-check-53a6481ce1-refuse-socket-host": true,
+    "genui-app077-check-53a6481ce1-upload": true
+  },
+  "cleanup_complete": true,
+  "database_sequence": [
+    {
+      "command": [
+        "verify-catalog"
+      ],
+      "exit_code": 1,
+      "output": null,
+      "seconds": 0.39,
+      "stderr": [
+        "{\"refused\": \"catalog_refused\"}"
+      ],
+      "step": "verify-catalog-before"
+    },
+    {
+      "command": [
+        "migrate"
+      ],
+      "exit_code": 0,
+      "output": {
+        "command": "migrate",
+        "database_version": 5,
+        "migrations": [
+          {
+            "sha256": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+            "version": 1
+          },
+          {
+            "sha256": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+            "version": 2
+          },
+          {
+            "sha256": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
+            "version": 3
+          },
+          {
+            "sha256": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
+            "version": 4
+          },
+          {
+            "sha256": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+            "version": 5
+          }
+        ]
+      },
+      "seconds": 0.55,
+      "stderr": [],
+      "step": "migrate"
+    },
+    {
+      "command": [
+        "migrate"
+      ],
+      "exit_code": 0,
+      "output": {
+        "command": "migrate",
+        "database_version": 5,
+        "migrations": [
+          {
+            "sha256": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+            "version": 1
+          },
+          {
+            "sha256": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+            "version": 2
+          },
+          {
+            "sha256": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
+            "version": 3
+          },
+          {
+            "sha256": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
+            "version": 4
+          },
+          {
+            "sha256": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+            "version": 5
+          }
+        ]
+      },
+      "seconds": 0.4,
+      "stderr": [],
+      "step": "migrate-repeat"
+    },
+    {
+      "command": [
+        "verify-catalog"
+      ],
+      "exit_code": 0,
+      "output": {
+        "catalog_version": 5,
+        "command": "verify-catalog",
+        "read_only": true
+      },
+      "seconds": 0.4,
+      "stderr": [],
+      "step": "verify-catalog"
+    },
+    {
+      "command": [
+        "seed"
+      ],
+      "exit_code": 0,
+      "output": {
+        "apps": [
+          [
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000065"
+          ],
+          [
+            "00000000-0000-4000-8000-000000000002",
+            "00000000-0000-4000-8000-000000000065"
+          ],
+          [
+            "00000000-0000-4000-8000-000000000002",
+            "00000000-0000-4000-8000-0000000000c9"
+          ]
+        ],
+        "bundles": 3,
+        "catalog_version": 5,
+        "command": "seed",
+        "organizations": [
+          "00000000-0000-4000-8000-000000000001",
+          "00000000-0000-4000-8000-000000000002"
+        ]
+      },
+      "seconds": 0.67,
+      "stderr": [],
+      "step": "seed"
+    },
+    {
+      "command": [
+        "seed"
+      ],
+      "exit_code": 0,
+      "output": {
+        "apps": [
+          [
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000065"
+          ],
+          [
+            "00000000-0000-4000-8000-000000000002",
+            "00000000-0000-4000-8000-000000000065"
+          ],
+          [
+            "00000000-0000-4000-8000-000000000002",
+            "00000000-0000-4000-8000-0000000000c9"
+          ]
+        ],
+        "bundles": 3,
+        "catalog_version": 5,
+        "command": "seed",
+        "organizations": [
+          "00000000-0000-4000-8000-000000000001",
+          "00000000-0000-4000-8000-000000000002"
+        ]
+      },
+      "seconds": 0.62,
+      "stderr": [],
+      "step": "seed-repeat"
+    },
+    {
+      "command": [
+        "admission",
+        "backfill",
+        "--organization",
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      "exit_code": 0,
+      "output": {
+        "created": [
+          "workspace",
+          "control",
+          "data",
+          "admission",
+          "operator"
+        ],
+        "deferred": [
+          "organization_sequences: not created; the relation arrives with migration 0007 (D7.7)"
+        ],
+        "existing": [],
+        "organization_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "seconds": 0.4,
+      "stderr": [],
+      "step": "admission-backfill-northstar"
+    },
+    {
+      "command": [
+        "admission",
+        "backfill",
+        "--organization",
+        "00000000-0000-4000-8000-000000000002"
+      ],
+      "exit_code": 0,
+      "output": {
+        "created": [
+          "workspace",
+          "control",
+          "data",
+          "admission",
+          "operator"
+        ],
+        "deferred": [
+          "organization_sequences: not created; the relation arrives with migration 0007 (D7.7)"
+        ],
+        "existing": [],
+        "organization_id": "00000000-0000-4000-8000-000000000002"
+      },
+      "seconds": 0.41,
+      "stderr": [],
+      "step": "admission-backfill-canary"
+    },
+    {
+      "command": [
+        "admission",
+        "verify",
+        "--organization",
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      "exit_code": 0,
+      "output": {
+        "chains": {
+          "admission": {
+            "events": 0,
+            "head_sequence": 1
+          },
+          "control": {
+            "events": 0,
+            "head_sequence": 1
+          },
+          "data": {
+            "events": 0,
+            "head_sequence": 1
+          },
+          "operator": {
+            "events": 0,
+            "head_sequence": 1
+          },
+          "workspace": {
+            "events": 0,
+            "head_sequence": 1
+          }
+        },
+        "organization_id": "00000000-0000-4000-8000-000000000001",
+        "verified": true
+      },
+      "seconds": 0.42,
+      "stderr": [],
+      "step": "admission-verify-northstar"
+    },
+    {
+      "command": [
+        "admission",
+        "list",
+        "--organization",
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      "exit_code": 0,
+      "output": {
+        "codes": [],
+        "organization_id": "00000000-0000-4000-8000-000000000001",
+        "truncated": false
+      },
+      "seconds": 0.42,
+      "stderr": [],
+      "step": "admission-list-northstar"
+    },
+    {
+      "command": [],
+      "exit_code": 0,
+      "output": {
+        "catalog_version": 5,
+        "command": "verify-catalog",
+        "read_only": true
+      },
+      "seconds": 0.41,
+      "stderr": [],
+      "step": "default-command"
+    }
+  ],
+  "database_server_version": "16.13 (Debian 16.13-1.pgdg13+1)",
+  "expectations": [
+    {
+      "detail": {
+        "extra": [],
+        "missing": []
+      },
+      "expectation": "operator context is exactly the explicit allowlist",
+      "met": true
+    },
+    {
+      "expectation": "operator context bytes equal the checkout",
+      "met": true
+    },
+    {
+      "expectation": "operator context carries every tracked parser/ file and no other parser file",
+      "met": true
+    },
+    {
+      "detail": [
+        "parser/",
+        "app/operator/requirements.lock",
+        "app/operator/operator.py",
+        "app/operator/overrides.json",
+        "app/operator/requirements.lock",
+        "app/runtime/runtime.py",
+        "app/runtime/tenant_seed.py",
+        "app/runtime/admission_operator.py",
+        "app/runtime/provider_management.py",
+        "app/migrations/",
+        "contracts/validate.py",
+        "contracts/schema.json",
+        "contracts/fixtures/impl-2026-10-28.1/northstar.json",
+        "contracts/fixtures/impl-2026-10-28.1/spend-review.json",
+        "fixtures/qualify.py",
+        "fixtures/verify.py",
+        "fixtures/phase-one/v1/manifest.json",
+        "fixtures/phase-one/v1/sources/northstar-events.csv",
+        "app/certs/rds-global-bundle.pem"
+      ],
+      "expectation": "every Dockerfile COPY source is inside the allowlist",
+      "met": true
+    },
+    {
+      "expectation": "operator context carries the reviewed RDS CA",
+      "met": true
+    },
+    {
+      "expectation": "operator context carries no test, stub or image-check file",
+      "met": true
+    },
+    {
+      "detail": {
+        "differing": []
+      },
+      "expectation": "service context bytes equal the base revision",
+      "met": true
+    },
+    {
+      "expectation": "service context has no operator inputs",
+      "met": true
+    },
+    {
+      "detail": {
+        "differing": []
+      },
+      "expectation": "qualification context bytes equal the base revision",
+      "met": true
+    },
+    {
+      "expectation": "qualification context has no operator inputs",
+      "met": true
+    },
+    {
+      "expectation": "image runs as UID 65532 with the documented entry point and default command",
+      "met": true
+    },
+    {
+      "expectation": "image exposes no port and declares only the private scratch volume",
+      "met": true
+    },
+    {
+      "expectation": "image environment carries no credential, endpoint, role or tenant value",
+      "met": true
+    },
+    {
+      "expectation": "probe ran as UID 65532",
+      "met": true
+    },
+    {
+      "detail": {
+        "differing": []
+      },
+      "expectation": "every packaged file equals its repository file",
+      "met": true
+    },
+    {
+      "detail": {
+        "extra": [],
+        "missing": []
+      },
+      "expectation": "the packaged files are exactly the allowlist's runtime files",
+      "met": true
+    },
+    {
+      "expectation": "build identity names every other packaged file with its digest",
+      "met": true
+    },
+    {
+      "detail": {},
+      "expectation": "packaged files are read-only: 0444, the two parser binaries and every directory 0555",
+      "met": true
+    },
+    {
+      "expectation": "no set-id file under /operator",
+      "met": true
+    },
+    {
+      "expectation": "private scratch /run/operator is 0700 owned by 65532",
+      "met": true
+    },
+    {
+      "expectation": "reviewed RDS CA is pinned at the fixed path, read-only",
+      "met": true
+    },
+    {
+      "expectation": "parser bytes equal the manifest the image build wrote",
+      "met": true
+    },
+    {
+      "expectation": "parser manifest's source digest equals a recomputation over this checkout's parser/",
+      "met": true
+    },
+    {
+      "detail": {
+        "installed": [
+          "attrs==26.1.0",
+          "boto3==1.43.121",
+          "botocore==1.43.121",
+          "duckdb==2.0.0",
+          "jmespath==1.1.0",
+          "jsonschema-specifications==2025.9.1",
+          "jsonschema==4.26.0",
+          "psycopg-binary==3.3.6",
+          "psycopg==3.3.6",
+          "python-dateutil==2.9.0.post0",
+          "referencing==0.37.0",
+          "rpds-py==2026.9.1",
+          "s3transfer==0.19.3",
+          "six==1.17.0",
+          "typing-extensions==4.16.0",
+          "urllib3==2.8.0"
+        ],
+        "locked": [
+          "attrs==26.1.0",
+          "boto3==1.43.121",
+          "botocore==1.43.121",
+          "duckdb==2.0.0",
+          "jmespath==1.1.0",
+          "jsonschema-specifications==2025.9.1",
+          "jsonschema==4.26.0",
+          "psycopg-binary==3.3.6",
+          "psycopg==3.3.6",
+          "python-dateutil==2.9.0.post0",
+          "referencing==0.37.0",
+          "rpds-py==2026.9.1",
+          "s3transfer==0.19.3",
+          "six==1.17.0",
+          "typing-extensions==4.16.0",
+          "urllib3==2.8.0"
+        ]
+      },
+      "expectation": "installed packages are exactly the hash-locked set",
+      "met": true
+    },
+    {
+      "detail": [],
+      "expectation": "operator.py reaches no runtime credential refresh, role assumption or service path",
+      "met": true
+    },
+    {
+      "detail": 206,
+      "expectation": "every documented override fits 8,192 bytes",
+      "met": true
+    },
+    {
+      "expectation": "every documented override names only the operator container and a command",
+      "met": true
+    },
+    {
+      "detail": "",
+      "expectation": "every documented override's command parses inside the image",
+      "met": true
+    },
+    {
+      "expectation": "refusal no-arguments exits 1 with usage and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal generic-sql exits 1 with usage and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal service-mode exits 1 with usage and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal admission-unknown exits 1 with usage and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal socket-host exits 1 with socket_host_refused and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal application-identity exits 1 with migration_identity_required and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "refusal endpoint-override exits 1 with aws_override_refused and prints nothing else",
+      "met": true
+    },
+    {
+      "expectation": "upload-sources in the image writes exactly the two ADR-009 B1 keys, original first",
+      "met": true
+    },
+    {
+      "expectation": "every PUT is conditional and carries SSE-KMS with the Northstar tenant key and a matching SHA-256 checksum, signed SigV4",
+      "met": true
+    },
+    {
+      "expectation": "a rerun's conditional PUTs store no second version",
+      "met": true
+    },
+    {
+      "expectation": "the receipt records the real content and normalized digests (not the seeded placeholders)",
+      "met": true
+    },
+    {
+      "expectation": "the image's adapter used its manifest-bound parser guest",
+      "met": true
+    },
+    {
+      "expectation": "a rerun leaves both objects unchanged",
+      "met": true
+    },
+    {
+      "expectation": "the normalized object holds the events_v1 columns, six rows, the 1,140,000-byte S02 window and ZSTD",
+      "met": true
+    },
+    {
+      "detail": "{\"refused\": \"catalog_refused\"}\n",
+      "expectation": "database step verify-catalog-before exits 1",
+      "met": true
+    },
+    {
+      "expectation": "database step verify-catalog-before never prints the synthetic password",
+      "met": true
+    },
+    {
+      "detail": "",
+      "expectation": "database step migrate exits 0",
+      "met": true
+    },
+    {
+      "expectation": "database step migrate never prints the synthetic password",
+      "met": true
+    },
+    {
+      "detail": "",
+      "expectation": "database step migrate-repeat exits 0",
+      "met": true
+    },
+    {
+      "expectation": "database step migrate-repeat never prints the synthetic password",
+      "met": true
+    },
+    {
+      "detail": "",
+      "expectation": "database step verify-catalog exits 0",
+      "met": true
+    },
+    {
+      "expectation": "database step verify-catalog never prints the synthetic password",
+      "met": true
+    },
+    {
+      "detail": "",
+      "expectation": "database step seed exits 0",
+      "met": true
+    },
+    {
+      "expectation": "database step seed never prints the synthetic password",
+      "met": true
+    },
+    {
+      "detail": "",
+      "expectation": "database step seed-repeat exits 0",
+      "met": true
+    },
+    {
+      "expectation": "database step seed-repeat never prints the synthetic password",
+      "met": true
+    },
+    {
+      "detail": "",
+      "expectation": "database step admission-backfill-northstar exits 0",
+      "met": true
+    },
+    {
+      "expectation": "database step admission-backfill-northstar never prints the synthetic password",
+      "met": true
+    },
+    {
+      "detail": "",
+      "expectation": "database step admission-backfill-canary exits 0",
+      "met": true
+    },
+    {
+      "expectation": "database step admission-backfill-canary never prints the synthetic password",
+      "met": true
+    },
+    {
+      "detail": "",
+      "expectation": "database step admission-verify-northstar exits 0",
+      "met": true
+    },
+    {
+      "expectation": "database step admission-verify-northstar never prints the synthetic password",
+      "met": true
+    },
+    {
+      "detail": "",
+      "expectation": "database step admission-list-northstar exits 0",
+      "met": true
+    },
+    {
+      "expectation": "database step admission-list-northstar never prints the synthetic password",
+      "met": true
+    },
+    {
+      "detail": "",
+      "expectation": "database step default-command exits 0",
+      "met": true
+    },
+    {
+      "expectation": "database step default-command never prints the synthetic password",
+      "met": true
+    },
+    {
+      "expectation": "migrate applied every landed migration and its repeat is identical",
+      "met": true
+    },
+    {
+      "expectation": "verify-catalog proves the latest catalog read-only",
+      "met": true
+    },
+    {
+      "expectation": "seed is exact-match idempotent for both organizations",
+      "met": true
+    },
+    {
+      "expectation": "admission passthrough backfills five genesis heads and verifies the chains",
+      "met": true
+    },
+    {
+      "expectation": "migration history equals the manifest",
+      "met": true
+    }
+  ],
+  "image": "genui-app077-operator:1c581f2",
+  "image_files": {
+    "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+    "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+    "app/migrations/0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
+    "app/migrations/0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
+    "app/migrations/0005_definition_work_grants.sql": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+    "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+    "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+    "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+    "app/migrations/catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
+    "app/migrations/catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
+    "app/migrations/catalog-v5.json": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+    "app/migrations/manifest.json": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
+    "app/operator/operator.py": "97de5f3be1654b9f91b48a2aebeab3dc3ffc19113aa503d39cd0c78fcffebc78",
+    "app/operator/overrides.json": "b71ccda7ea97fbc660f812169e593e74a20fcca8a03ea39e6ec2542454b2ac49",
+    "app/operator/requirements.lock": "72a22a15b6deaa312b2a6f4b98db686bae08731e01bc13fa32a0a0b7385c357a",
+    "app/runtime/admission_operator.py": "aa76c5de301bd6ce1a179c73008e54bcba91845601397b24d4d9a0c5e84bbaf8",
+    "app/runtime/provider_management.py": "7c06821a7723b0bd7ca71a1e883e1e7dac0aac689055e6b1c471efdd515c11c0",
+    "app/runtime/runtime.py": "689462bf2abc4b81d0603677ec0a1940f75e81be85a6bfa9bec3115020602e04",
+    "app/runtime/tenant_seed.py": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
+    "bin/parser-host": "44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934",
+    "bin/parser-manifest.json": "9cd03be78b42f7e1e99020f8765c973e8f5cf7f81a47ed52b8058fc68c4a8a13",
+    "bin/parser_guest.wasm": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
+    "build-identity.json": "0a8ef8dff380079297415302c317d85da185b77fcfbe5d05eb501a4b506e0f19",
+    "contracts/fixtures/impl-2026-10-28.1/northstar.json": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+    "contracts/fixtures/impl-2026-10-28.1/spend-review.json": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+    "contracts/schema.json": "93fac1752605c99e85dec50ed8317d8451553d2bf7a9f7ae2b718b6542852e58",
+    "contracts/validate.py": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
+    "fixtures/phase-one/v1/manifest.json": "995a097a5c2f9af7c893a37f49c1266f4b95b9f430b6ae876c79a0c588d2c34b",
+    "fixtures/phase-one/v1/sources/northstar-events.csv": "6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+    "fixtures/qualify.py": "698232124de1a9e2ba7f7bb2c2a52c8b3ba9cbcf665d6021ea0732fe7f2cc8fb",
+    "fixtures/verify.py": "28badd0d7c77ae0db3a33ec0ee0443989c8683f8f8cf921e33a454fabdc49ee2"
+  },
+  "image_identity": {
+    "architecture": "arm64",
+    "cmd": [
+      "verify-catalog"
+    ],
+    "entrypoint": [
+      "python3",
+      "-I",
+      "/operator/app/operator/operator.py"
+    ],
+    "env_names": [
+      "AWS_CONFIG_FILE",
+      "AWS_SHARED_CREDENTIALS_FILE",
+      "GPG_KEY",
+      "LANG",
+      "PATH",
+      "PYTHONDONTWRITEBYTECODE",
+      "PYTHONUNBUFFERED",
+      "PYTHON_SHA256",
+      "PYTHON_VERSION",
+      "TMPDIR"
+    ],
+    "exposed_ports": [],
+    "id": "sha256:a3b07f930744fdd470e2c2012fa6bee75c6f594038f7d01c59d175aa3990d41b",
+    "os": "linux",
+    "size": 438200398,
+    "user": "65532:65532",
+    "volumes": [
+      "/run/operator"
+    ]
+  },
+  "label": "genui-app077-check-53a6481ce1",
+  "operator_context": {
+    "count": 132,
+    "files": {
+      "app/certs/rds-global-bundle.pem": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+      "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+      "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+      "app/migrations/0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
+      "app/migrations/0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
+      "app/migrations/0005_definition_work_grants.sql": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+      "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+      "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+      "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+      "app/migrations/catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
+      "app/migrations/catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
+      "app/migrations/catalog-v5.json": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+      "app/migrations/manifest.json": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
+      "app/operator/Dockerfile": "e0dda83715a51edf335df7e6972901c7f0461864d855216b310bb12b4a32cbd2",
+      "app/operator/Dockerfile.dockerignore": "05cfbf14778553496bb246b7e223c09c5c35165acd663e536b257dda526ee945",
+      "app/operator/operator.py": "97de5f3be1654b9f91b48a2aebeab3dc3ffc19113aa503d39cd0c78fcffebc78",
+      "app/operator/overrides.json": "b71ccda7ea97fbc660f812169e593e74a20fcca8a03ea39e6ec2542454b2ac49",
+      "app/operator/requirements.lock": "72a22a15b6deaa312b2a6f4b98db686bae08731e01bc13fa32a0a0b7385c357a",
+      "app/runtime/admission_operator.py": "aa76c5de301bd6ce1a179c73008e54bcba91845601397b24d4d9a0c5e84bbaf8",
+      "app/runtime/provider_management.py": "7c06821a7723b0bd7ca71a1e883e1e7dac0aac689055e6b1c471efdd515c11c0",
+      "app/runtime/runtime.py": "689462bf2abc4b81d0603677ec0a1940f75e81be85a6bfa9bec3115020602e04",
+      "app/runtime/tenant_seed.py": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
+      "contracts/fixtures/impl-2026-10-28.1/northstar.json": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+      "contracts/fixtures/impl-2026-10-28.1/spend-review.json": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+      "contracts/schema.json": "93fac1752605c99e85dec50ed8317d8451553d2bf7a9f7ae2b718b6542852e58",
+      "contracts/validate.py": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
+      "fixtures/phase-one/v1/manifest.json": "995a097a5c2f9af7c893a37f49c1266f4b95b9f430b6ae876c79a0c588d2c34b",
+      "fixtures/phase-one/v1/sources/northstar-events.csv": "6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+      "fixtures/qualify.py": "698232124de1a9e2ba7f7bb2c2a52c8b3ba9cbcf665d6021ea0732fe7f2cc8fb",
+      "fixtures/verify.py": "28badd0d7c77ae0db3a33ec0ee0443989c8683f8f8cf921e33a454fabdc49ee2",
+      "parser/.cargo/config.toml": "52182ad656e05d285cd0e81bb70798b9beae6f0b73c9da75806e7d7d2f7ddbb4",
+      "parser/Cargo.lock": "d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+      "parser/Cargo.toml": "65d3ba090b7cef30188828978ac1cc751c59ede94db326765938ede23ee26c74",
+      "parser/fixtures/actual-coordinate.xlsx": "5dbf7a9c538346807ab195abd58192da9ca1414bbe336d5bc46dd17879a4c83d",
+      "parser/fixtures/actual-strings.xlsx": "10deb5a6c2d0917bfcf28c28c1292fa0aabc6639192d33a2e635b10506ee48af",
+      "parser/fixtures/bad-numeric.xlsx": "0711b034cc7636c8a2e12f333b63b54646602bbf1e44cd14650ec3ec88db0ba3",
+      "parser/fixtures/content-type-macro.xlsx": "14d1a507997737ef2e35a72e1cba08d7e0d6f7ec6fab3065b665e71b19ef3113",
+      "parser/fixtures/csv-config.json": "a100f51fb96129dab34355c954301e9692890074782601582f351ff392a6a2f7",
+      "parser/fixtures/declared-strings.xlsx": "dfe8d6f9da96bad0335fda3e86de6662b77ea31f19146845d1964f083474d403",
+      "parser/fixtures/deep.xml.xlsx": "2e3aae7c6f34956e7f53c6d9c0b5bc0806aebf17fd818c9462548a146bac9335",
+      "parser/fixtures/dimension.xlsx": "6d549b7cc519de5191d20c8403985992516a0e52681340f588425cceafca91b8",
+      "parser/fixtures/doctype.xlsx": "65950d2ee4e40df73950636f73f1753bff68de18381f374b08b7741bf75fc6e7",
+      "parser/fixtures/duplicate-cell.xlsx": "4207f5e5bcbeb8ad1a17487600702d61d4d6f5b4a737833e5d10a68e60fbd047",
+      "parser/fixtures/duplicate-values.xlsx": "a1d56ead7971ee4f62aef98c5cba669852db3f9ab377bfea18d52fb495a71d5b",
+      "parser/fixtures/external.xlsx": "d781bc449fa52f0eff47efd955a19842b2d759c1ad1a21d1d77e587636807cff",
+      "parser/fixtures/formula.xlsx": "7d3e6a82961a8c062a27f2aef7988b78c7ddb833a25e868be495a55f839a1d7a",
+      "parser/fixtures/literal.csv": "7a3c349a1a025e56f8eb61007319222a3853560f9a346260eb64f3ba587e88d0",
+      "parser/fixtures/macro.xlsx": "f8902ffb8124c8938857ba65ba7a57a2dc104e5df64eda1654b60403228e6239",
+      "parser/fixtures/unselected-formula.xlsx": "ecd72f3f3a78b270a4869e9589881a6ff4e8e530d6f77c0ea305460d96b020ab",
+      "parser/fixtures/valid.xlsx": "f345b3805cb38ca8cf9ec2617af71d4b7864479e7170be2fd0f9fcdc3227ad87",
+      "parser/fixtures/xlsx-config.json": "ddbc0581c731a55ab90d94b48a8371273383150cae475299c5439ccef03ca3c1",
+      "parser/fixtures/zero-exponents.xlsx": "7966e8e4946730ee22d1fa75d1e5986b671db5c011afe4f158c5ecca842d25cf",
+      "parser/guest/Cargo.toml": "7117c1d6c51cdb68c702336ae2bd7570d85df4de5d6a02633550aca87254a9aa",
+      "parser/guest/src/lib.rs": "a77cac6f685e64c73aee1f8b0e02f62568068dfaa2a356ff2648c384b29d80b3",
+      "parser/host/Cargo.toml": "b8805cc5698a91ddf669f408628750e99a3145f99ff7ec5072969948370caae7",
+      "parser/host/src/job.rs": "63fd913010b00b9b9ee23aa9b8be47f4e639f5beb80c13493be6732935e90914",
+      "parser/host/src/lib.rs": "15aeb204e3fe07cd3ba188e905ca4fe9bea59ebac2559e5695b105b3059c09c9",
+      "parser/host/src/main.rs": "e943030f76ceb69ff86cbea1708e8cdcebede5bad3fc17f8a98e098307bbf6a2",
+      "parser/host/tests/job.rs": "78a61f68a204a1a4b5b87e1676dc3120a5d25b8c91992f66989ce7fd14f55f74",
+      "parser/host/tests/qualification.rs": "6ea18170236c805d5215ca708dd90a6a4e9b3965663a8ea4e941bb2fc327fa01",
+      "parser/make_fixtures.py": "22fb7b4926503167481503c4e6d9ea298b1f8341eab21d65111172a97dec4036",
+      "parser/rust-toolchain.toml": "16d599dd673f1b247a0e5495d988f5ba9ba7552af318c23d0fb97ddc9c7d2843",
+      "parser/vendor/provenance.json": "5259d9a04cb06b892c19fa17a0c99b0951a40484ae1c25ea98332a12bcf20e1a",
+      "parser/vendor/zip-9.1.3-manifest.patch": "e47e10033e551589dad96bb4746640f69994f4b4fd1d00e50d0090c07e71b529",
+      "parser/vendor/zip-9.1.3/.cargo_vcs_info.json": "ae1462cca483ee32262e55aaba315c70173cdfd2aa86b7fa924b88ab9ae45646",
+      "parser/vendor/zip-9.1.3/.config/nextest.toml": "14e322c8cf375dcdb4a958aa31241919ce9d980d83f7037631b35758118c35a9",
+      "parser/vendor/zip-9.1.3/.devcontainer/Dockerfile": "da2c5f0c0d807645b643049a4274aeaab4285bf1ff098149202b7dabb6d1a065",
+      "parser/vendor/zip-9.1.3/.devcontainer/devcontainer.json": "0d2df6fce0a6b997a5af6ae2d003c614b957dae615cdca0b52563674f6929750",
+      "parser/vendor/zip-9.1.3/.gitattributes": "2de207c48edfd82a312d889c7706c149f1af74282c9afd604d8105137bacf411",
+      "parser/vendor/zip-9.1.3/.gitignore": "f8496809fc6aacd169f8a68e4bc9b4f4a3730bb9f7ec3bdfad16ba7080cae8c8",
+      "parser/vendor/zip-9.1.3/.pre-commit-config.yaml": "c798befbcb86b8e78e63bc99816e8c264a7005c7e7263317651162033eb58242",
+      "parser/vendor/zip-9.1.3/.whitesource": "e41e029d9f8a8bd0fa745a9ede64b2303860f6c9833b954fd992a99dae388b9f",
+      "parser/vendor/zip-9.1.3/CHANGELOG.md": "c3746a139a7f9d5b3bdd832d910c51b0b823ab8ea03b3682be1e26a615b50f6a",
+      "parser/vendor/zip-9.1.3/CODE_OF_CONDUCT.md": "77930b2129928632cae79e10d0863885b34729e4f144f3ae5443cff65997196a",
+      "parser/vendor/zip-9.1.3/CONTRIBUTING.md": "758a5eb9b17c36b581fc4bf3e4013174839f4f49d4b66ded111ad86fb90adc7f",
+      "parser/vendor/zip-9.1.3/Cargo.lock": "47c6c161a901b165b7ec00c83731ab4707b1c0e86aa664f656c6ace0bbfa4f59",
+      "parser/vendor/zip-9.1.3/Cargo.toml": "be97a6d400d799cf3569224496fb1afd706a7f95ed917caa5b771aef4298a0e5",
+      "parser/vendor/zip-9.1.3/Cargo.toml.orig": "2c76dd6a9215e547f59302476b95b45c21ea2e4a7d325a0b9a6bc3cf61f54f0f",
+      "parser/vendor/zip-9.1.3/LICENSE": "58545fed1565e42d687aecec6897d35c6d37ccb71479a137c0deb2203e125c79",
+      "parser/vendor/zip-9.1.3/README.md": "992542d62cee9ee833dbd2a82f37081110f76418fac0d25d1fb0132e54022ee7",
+      "parser/vendor/zip-9.1.3/SECURITY.md": "ac1630e1d2329e74e6d3e690bae60d05190febdd639c6b930091246c99849f40",
+      "parser/vendor/zip-9.1.3/cliff.toml": "e2bcd52127fe7f7ffd9a61c64641b3174a5d20bfac52bb1a021a2ebfed247cfd",
+      "parser/vendor/zip-9.1.3/release-plz.toml": "b8c373b742ee6b0fcf0c70264dab35b125c1e8b6df3360123aeeba4477a99222",
+      "parser/vendor/zip-9.1.3/src/aes.rs": "4f825360eec67d5e60de2f4ba2b351447b912a111251aa0f774d567833f6a556",
+      "parser/vendor/zip-9.1.3/src/aes_ctr.rs": "e9706368b1819d817884066b18ec730e5aa12161adca8096ccf4107c17b83542",
+      "parser/vendor/zip-9.1.3/src/compression.rs": "82f11c05dc482f71b17e2c2a3e1106d8c0c548c228c2c6ab68e68186c7d1ef4d",
+      "parser/vendor/zip-9.1.3/src/cp437.rs": "062b8ba1c10220c888b4ba9ac6970d3e298bbbeab4ca372f07bbdb956ba636be",
+      "parser/vendor/zip-9.1.3/src/crc32.rs": "581fe38c48d96d8441f487a58c95bda044945cd278e9a5cb07dd0a73deaf1e7e",
+      "parser/vendor/zip-9.1.3/src/datetime.rs": "af4477d267f52eb4d8f0c647ecf20732a6a3b2e8722deaf15c7f9b652ff943e0",
+      "parser/vendor/zip-9.1.3/src/extra_fields/aex_encryption.rs": "ca18ad2b4e09d9f8f59caa7cf91049897c9afc36282e2866c8193e31c8e64600",
+      "parser/vendor/zip-9.1.3/src/extra_fields/custom_extra_field.rs": "b4a5621b4487b999975bc6a209bc12d1f3a5b2b1cdeb7d669dcf291135673a8d",
+      "parser/vendor/zip-9.1.3/src/extra_fields/data_stream_alignment.rs": "c3e6968cfe4e1af15e02a1719844fb9fcc2b346c5422a094a8373ca7bf1d62c4",
+      "parser/vendor/zip-9.1.3/src/extra_fields/extended_timestamp.rs": "9d35b1f958e2473bd5fea4e317d8e9af72773a9af930995ea8baa618c0467490",
+      "parser/vendor/zip-9.1.3/src/extra_fields/extra_field.rs": "e70df79156b7ca2f09474b3f4c75aa48916bb84eb22a1c8eed39d00b87f4815d",
+      "parser/vendor/zip-9.1.3/src/extra_fields/mod.rs": "1d312fbbd25bffaa7cd83d8a46525d0d364603d1533d6f5d64bc4e8dd2b44819",
+      "parser/vendor/zip-9.1.3/src/extra_fields/ntfs.rs": "f5c8aa0b7e86df16a9a5d98948d0ea2aefad9a28d3416ef347e5ba30924800f2",
+      "parser/vendor/zip-9.1.3/src/extra_fields/zip64_extended_information.rs": "a2ec3a66b5597acba8d89ce59aeab723b396a82eecc94d12131199fbc24ff964",
+      "parser/vendor/zip-9.1.3/src/extra_fields/zipinfo_utf8.rs": "e3c04c7e1866be64318577960d6b1316e916e21dbb8201e943bd950c186b748d",
+      "parser/vendor/zip-9.1.3/src/format/aes.rs": "979a6b65b5eda88fc6d01483ec9c0c8173ad63caea621a54946d2c622bb0dfbe",
+      "parser/vendor/zip-9.1.3/src/format/blocks.rs": "8b1d0ba5516abd3733f69ac25f2df5355ddb58a903a4ef91e807fc350fc662e3",
+      "parser/vendor/zip-9.1.3/src/format/compression.rs": "069fd399550de59aeb2eae6e6956ad77c65e7dc1887600658086fa120d0c1c3d",
+      "parser/vendor/zip-9.1.3/src/format/data_descriptor.rs": "5ea3983be330d55b3a69883c0b9fc1292513dc5bbd0234d57cd83fd643227f56",
+      "parser/vendor/zip-9.1.3/src/format/extra_fields.rs": "7d53e1a36647e12ff4db5221c7b76c73f014b86f1664a555674ef0e8b4ec3f5a",
+      "parser/vendor/zip-9.1.3/src/format/find_central_directory.rs": "0063ed5c1837c4948c73ef597bdc52779ecb572a5bb5cee93cfad4273bc7f33c",
+      "parser/vendor/zip-9.1.3/src/format/flags.rs": "a8acb10e1376b3fec6bd3018758fc39ecedaa0b6112993008194ac8f62e945ae",
+      "parser/vendor/zip-9.1.3/src/format/functions.rs": "2935f16f08ec52bd8e7d34da9a09232d9f9308e3bccfb4fa67a889ae51e637da",
+      "parser/vendor/zip-9.1.3/src/format/magic.rs": "d86ca717d532796164e9fcbd12d844cfe831a9480ec26de95fcbf00a3615ecc3",
+      "parser/vendor/zip-9.1.3/src/format/mod.rs": "7932a6038240523df64119ebba4bdb0118b02633dd6a7e669a9f4c8010582e41",
+      "parser/vendor/zip-9.1.3/src/format/system.rs": "5fc53dce6c697d6a3d01bf15c33fcdd5f29d297d11a2c1d5356d2d5d8ea12b70",
+      "parser/vendor/zip-9.1.3/src/legacy/huffman.rs": "ad002f35e033592a68dceb43ca24c4fb79f82d14136bde26f1adec4946efb79a",
+      "parser/vendor/zip-9.1.3/src/legacy/implode.rs": "3001034b014aeb770cd815d66b269f517ea8ec22a36cd9a9f6f55931c40e0560",
+      "parser/vendor/zip-9.1.3/src/legacy/mod.rs": "fc792ab7f4a99471094011f4023ba68c7b93b2c85f6dc628a16c37452f65e000",
+      "parser/vendor/zip-9.1.3/src/legacy/reduce.rs": "60934251a2f7b870ad422a90ba5015137fbef50c1ce68413a59615fd09d75e34",
+      "parser/vendor/zip-9.1.3/src/legacy/shrink.rs": "4d9dad5ab3fc01ca10f7790fb3f9c4e1b9972616e5ca31c436558a2eb51081f3",
+      "parser/vendor/zip-9.1.3/src/lib.rs": "8f005fe6af7c8dc44531354618bcf9ec984dd8fe4ae288ea9d7b33136057f9b6",
+      "parser/vendor/zip-9.1.3/src/path.rs": "8b93c93937161ba308bff6061fe33818e7d2572b54895fd99ea7b7c4f4c6785e",
+      "parser/vendor/zip-9.1.3/src/read/config.rs": "2357aff84586da747f8228d3bf44a782ed89e4430d902afe0da144b187286ce1",
+      "parser/vendor/zip-9.1.3/src/read/extract.rs": "20fee5f5f84036af35fcc856a4e7d2af46ba73475c5b7bf2d1f626ddfa7c103d",
+      "parser/vendor/zip-9.1.3/src/read/magic_finder.rs": "0404ef29c6764deca88c882dd0389fd43d8adfa014f23f57fa7f21ccd5f44518",
+      "parser/vendor/zip-9.1.3/src/read/mod.rs": "3930a61000d6b6037ad0da382a1f61b28e9d04d1cc507e4a1fcc92c1ec082487",
+      "parser/vendor/zip-9.1.3/src/read/readers.rs": "7ec732949fd913b402355e1848a2fd2d4ca46e2a7493c7cee101013f8efc981f",
+      "parser/vendor/zip-9.1.3/src/read/stream.rs": "9a8f334d0647a5ceb1fd785dfc4046f0bfac8d5644964cfcd9db880b0d207667",
+      "parser/vendor/zip-9.1.3/src/read/zip_archive.rs": "8375fdc6e3cc36bda7f94470aee4565ecdfa066f23894aa908c9ffa7f0cec9be",
+      "parser/vendor/zip-9.1.3/src/read/zipfile.rs": "fc08a05f7fa61f75e2d647883b35b9234513c8392129433cf88c2618cf9531e1",
+      "parser/vendor/zip-9.1.3/src/result.rs": "7cb4d1314901d3d45531bc0c5d98416d3e9cb7d9c21c19cec9b0a8ce40a44bf6",
+      "parser/vendor/zip-9.1.3/src/types.rs": "fed64c3e3e79eed857885331d81e1c5dacf06d81b02edc891a9ee06e399f1029",
+      "parser/vendor/zip-9.1.3/src/unstable.rs": "a2fd3728a37f06e883cbf2d80258d7aa11603bf7b2e85c3e7f74491731cb1f2d",
+      "parser/vendor/zip-9.1.3/src/write.rs": "11d622d360708f807bc6c54cd9ec2ff46368ee2347120742e6e70055437bf12e",
+      "parser/vendor/zip-9.1.3/src/write/options.rs": "bb6b376d1dd687f072801b4dedae8b47e371f375292131fdc807cbea3938ba44",
+      "parser/vendor/zip-9.1.3/src/zipcrypto.rs": "3649aafff39fd7da0127e82fc42fd106518a5409ea3eaebe646162599b26ecb5",
+      "parser/verify_vendor.py": "dab4730cbc486e0cc54c7d877cad50b33845fee3b57eb8db33b796dbd45be842",
+      "parser/write_manifest.py": "c08f751712bd7fd669cb51e56a5995581eb799bf1dd6862884208648711a8244"
+    }
+  },
+  "override_bytes": {
+    "admission-backfill-canary": 135,
+    "admission-backfill-northstar": 135,
+    "admission-extend": 206,
+    "admission-list-northstar": 131,
+    "admission-revoke": 184,
+    "admission-verify-canary": 133,
+    "admission-verify-northstar": 133,
+    "migrate": 66,
+    "seed": 63,
+    "upload-sources": 73,
+    "upload-sources-plan": 82,
+    "verify-catalog": 73
+  },
+  "overrides_in_image": {
+    "admission_subcommands": [
+      "backfill",
+      "defaults",
+      "extend",
+      "issue",
+      "list",
+      "provision",
+      "reconcile",
+      "revoke",
+      "revoke-entitlement",
+      "revoke-membership",
+      "verify"
+    ],
+    "parsed": [
+      {
+        "command": "verify-catalog",
+        "name": "verify-catalog"
+      },
+      {
+        "command": "migrate",
+        "name": "migrate"
+      },
+      {
+        "command": "seed",
+        "name": "seed"
+      },
+      {
+        "command": "upload-sources",
+        "name": "upload-sources-plan"
+      },
+      {
+        "command": "upload-sources",
+        "name": "upload-sources"
+      },
+      {
+        "command": "admission",
+        "name": "admission-backfill-northstar"
+      },
+      {
+        "command": "admission",
+        "name": "admission-backfill-canary"
+      },
+      {
+        "command": "admission",
+        "name": "admission-verify-northstar"
+      },
+      {
+        "command": "admission",
+        "name": "admission-verify-canary"
+      },
+      {
+        "command": "admission",
+        "name": "admission-list-northstar"
+      },
+      {
+        "command": "admission",
+        "name": "admission-revoke"
+      },
+      {
+        "command": "admission",
+        "name": "admission-extend"
+      }
+    ]
+  },
+  "parser": {
+    "guest_sha256": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
+    "host_sha256": "44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934",
+    "rustc": {
+      "LLVM version": "21.1.8",
+      "commit-hash": "01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf",
+      "host": "aarch64-unknown-linux-gnu",
+      "release": "1.93.1"
+    },
+    "sources_sha256": "8971131071475adc792392c4813a869c2e7b141d34b8b50011da6301424bde61"
+  },
+  "passed": true,
+  "probe": {
+    "ca_mode": "0o444",
+    "ca_sha256": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+    "egid": 65532,
+    "euid": 65532,
+    "identity": {
+      "files": {
+        "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+        "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+        "app/migrations/0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
+        "app/migrations/0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
+        "app/migrations/0005_definition_work_grants.sql": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+        "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+        "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+        "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+        "app/migrations/catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
+        "app/migrations/catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
+        "app/migrations/catalog-v5.json": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+        "app/migrations/manifest.json": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
+        "app/operator/operator.py": "97de5f3be1654b9f91b48a2aebeab3dc3ffc19113aa503d39cd0c78fcffebc78",
+        "app/operator/overrides.json": "b71ccda7ea97fbc660f812169e593e74a20fcca8a03ea39e6ec2542454b2ac49",
+        "app/operator/requirements.lock": "72a22a15b6deaa312b2a6f4b98db686bae08731e01bc13fa32a0a0b7385c357a",
+        "app/runtime/admission_operator.py": "aa76c5de301bd6ce1a179c73008e54bcba91845601397b24d4d9a0c5e84bbaf8",
+        "app/runtime/provider_management.py": "7c06821a7723b0bd7ca71a1e883e1e7dac0aac689055e6b1c471efdd515c11c0",
+        "app/runtime/runtime.py": "689462bf2abc4b81d0603677ec0a1940f75e81be85a6bfa9bec3115020602e04",
+        "app/runtime/tenant_seed.py": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
+        "bin/parser-host": "44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934",
+        "bin/parser-manifest.json": "9cd03be78b42f7e1e99020f8765c973e8f5cf7f81a47ed52b8058fc68c4a8a13",
+        "bin/parser_guest.wasm": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
+        "contracts/fixtures/impl-2026-10-28.1/northstar.json": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+        "contracts/fixtures/impl-2026-10-28.1/spend-review.json": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+        "contracts/schema.json": "93fac1752605c99e85dec50ed8317d8451553d2bf7a9f7ae2b718b6542852e58",
+        "contracts/validate.py": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
+        "fixtures/phase-one/v1/manifest.json": "995a097a5c2f9af7c893a37f49c1266f4b95b9f430b6ae876c79a0c588d2c34b",
+        "fixtures/phase-one/v1/sources/northstar-events.csv": "6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+        "fixtures/qualify.py": "698232124de1a9e2ba7f7bb2c2a52c8b3ba9cbcf665d6021ea0732fe7f2cc8fb",
+        "fixtures/verify.py": "28badd0d7c77ae0db3a33ec0ee0443989c8683f8f8cf921e33a454fabdc49ee2"
+      },
+      "schema_version": 1
+    },
+    "packages": [
+      "attrs==26.1.0",
+      "boto3==1.43.121",
+      "botocore==1.43.121",
+      "duckdb==2.0.0",
+      "jmespath==1.1.0",
+      "jsonschema-specifications==2025.9.1",
+      "jsonschema==4.26.0",
+      "pip==24.0",
+      "psycopg-binary==3.3.6",
+      "psycopg==3.3.6",
+      "python-dateutil==2.9.0.post0",
+      "referencing==0.37.0",
+      "rpds-py==2026.9.1",
+      "s3transfer==0.19.3",
+      "setuptools==79.0.1",
+      "six==1.17.0",
+      "typing-extensions==4.16.0",
+      "urllib3==2.8.0",
+      "wheel==0.45.1"
+    ],
+    "parser_manifest": {
+      "guest": {
+        "bytes": 855790,
+        "path": "/operator/bin/parser_guest.wasm",
+        "sha256": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774"
+      },
+      "host": {
+        "bytes": 10795440,
+        "path": "/operator/bin/parser-host",
+        "sha256": "44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934"
+      },
+      "schema": "genui-parser-manifest/1",
+      "source": {
+        "cargo_lock_sha256": "d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+        "rust_toolchain": "1.93.1",
+        "rustc": {
+          "LLVM version": "21.1.8",
+          "commit-hash": "01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf",
+          "host": "aarch64-unknown-linux-gnu",
+          "release": "1.93.1"
+        },
+        "source_files": 102,
+        "sources_sha256": "8971131071475adc792392c4813a869c2e7b141d34b8b50011da6301424bde61",
+        "vendor_provenance_sha256": "5259d9a04cb06b892c19fa17a0c99b0951a40484ae1c25ea98332a12bcf20e1a"
+      }
+    },
+    "python": "3.11.14",
+    "run_directory": [
+      "0o700",
+      65532
+    ],
+    "setid_files": []
+  },
+  "qualification_context": {
+    "base_revision": "d6986c2",
+    "count": 50
+  },
+  "recorded_at": "2026-10-29T23:59:27.742536+00:00",
+  "refusals": [
+    {
+      "case": "no-arguments",
+      "exit_code": 1,
+      "refused": "usage"
+    },
+    {
+      "case": "generic-sql",
+      "exit_code": 1,
+      "refused": "usage"
+    },
+    {
+      "case": "service-mode",
+      "exit_code": 1,
+      "refused": "usage"
+    },
+    {
+      "case": "admission-unknown",
+      "exit_code": 1,
+      "refused": "usage"
+    },
+    {
+      "case": "socket-host",
+      "exit_code": 1,
+      "refused": "socket_host_refused"
+    },
+    {
+      "case": "application-identity",
+      "exit_code": 1,
+      "refused": "migration_identity_required"
+    },
+    {
+      "case": "endpoint-override",
+      "exit_code": 1,
+      "refused": "aws_override_refused"
+    }
+  ],
+  "scope": "APP-077 local confined operator-image checks; no AWS/RDS/registry",
+  "service_context": {
+    "base_revision": "d6986c2",
+    "count": 155
+  },
+  "timings_seconds": {
+    "contexts": 4.42,
+    "database": 7.4,
+    "upload": 2.14
+  },
+  "upload_in_image": {
+    "parquet": {
+      "columns": [
+        "time",
+        "destination",
+        "bytes"
+      ],
+      "compression": [
+        "ZSTD"
+      ],
+      "rows": 6,
+      "window_bytes": 1140000
+    },
+    "plan": [
+      {
+        "adapter": {
+          "duckdb_version": "2.0.0",
+          "fixture_manifest_sha256": "sha256:995a097a5c2f9af7c893a37f49c1266f4b95b9f430b6ae876c79a0c588d2c34b",
+          "parser_guest_sha256": "sha256:a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
+          "parser_host_sha256": "sha256:44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934",
+          "parser_manifest_sha256": "sha256:9cd03be78b42f7e1e99020f8765c973e8f5cf7f81a47ed52b8058fc68c4a8a13",
+          "path": "parser-host + WASM guest -> fixtures/qualify.py parser_rows -> asset selection -> DuckDB Parquet ZSTD"
+        },
+        "content_digest": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+        "contract_digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64",
+        "contract_id": "events_v1",
+        "input_id": "events",
+        "normalized_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+        "objects": [
+          {
+            "bytes": 397,
+            "content_type": "text/csv",
+            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/original",
+            "name": "original",
+            "sha256": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647"
+          },
+          {
+            "bytes": 642,
+            "content_type": "application/vnd.apache.parquet",
+            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/part.parquet",
+            "name": "part.parquet",
+            "sha256": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082"
+          }
+        ],
+        "organization_id": "00000000-0000-4000-8000-000000000001",
+        "parsed_rows": 6,
+        "revision_id": "00000000-0000-4000-8000-00000000006f",
+        "row_count": 6,
+        "seeded_placeholders": {
+          "content_digest": "sha256:f85bf298e932bbd0636a7f24b4c92a4cb1fa17e7402af5458b434e045fbe7371",
+          "normalized_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+          "row_count": 5
+        },
+        "selected_asset": "build-worker-17",
+        "source_id": "00000000-0000-4000-8000-00000000006e"
+      }
+    ],
+    "puts": [
+      {
+        "checksum_matches": true,
+        "conditional": true,
+        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/original",
+        "kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
+        "signed": true,
+        "sse": "aws:kms"
+      },
+      {
+        "checksum_matches": true,
+        "conditional": true,
+        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/part.parquet",
+        "kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
+        "signed": true,
+        "sse": "aws:kms"
+      }
+    ],
+    "receipts": [
+      {
+        "adapter": {
+          "duckdb_version": "2.0.0",
+          "fixture_manifest_sha256": "sha256:995a097a5c2f9af7c893a37f49c1266f4b95b9f430b6ae876c79a0c588d2c34b",
+          "parser_guest_sha256": "sha256:a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
+          "parser_host_sha256": "sha256:44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934",
+          "parser_manifest_sha256": "sha256:9cd03be78b42f7e1e99020f8765c973e8f5cf7f81a47ed52b8058fc68c4a8a13",
+          "path": "parser-host + WASM guest -> fixtures/qualify.py parser_rows -> asset selection -> DuckDB Parquet ZSTD"
+        },
+        "bucket": "genui-app077-local-stub",
+        "content_digest": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+        "contract_digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64",
+        "contract_id": "events_v1",
+        "input_id": "events",
+        "normalized_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+        "objects": [
+          {
+            "bytes": 397,
+            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/original",
+            "kms_key_arn": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
+            "name": "original",
+            "server_side_encryption": "aws:kms",
+            "sha256": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+            "state": "created",
+            "version_id": "a4814816e65749d59696c5fc3882eac3"
+          },
+          {
+            "bytes": 642,
+            "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/part.parquet",
+            "kms_key_arn": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
+            "name": "part.parquet",
+            "server_side_encryption": "aws:kms",
+            "sha256": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+            "state": "created",
+            "version_id": "4e091c1326dd490fb30d2add23f6757a"
+          }
+        ],
+        "organization_id": "00000000-0000-4000-8000-000000000001",
+        "parsed_rows": 6,
+        "revision_id": "00000000-0000-4000-8000-00000000006f",
+        "row_count": 6,
+        "seeded_placeholders": {
+          "content_digest": "sha256:f85bf298e932bbd0636a7f24b4c92a4cb1fa17e7402af5458b434e045fbe7371",
+          "normalized_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+          "row_count": 5
+        },
+        "selected_asset": "build-worker-17",
+        "source_id": "00000000-0000-4000-8000-00000000006e"
+      }
+    ],
+    "rerun_puts": [
+      {
+        "checksum_matches": true,
+        "conditional": true,
+        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/original",
+        "kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
+        "signed": true,
+        "sse": "aws:kms"
+      },
+      {
+        "checksum_matches": true,
+        "conditional": true,
+        "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/part.parquet",
+        "kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/00000000-0000-4000-8000-0000000000a1",
+        "signed": true,
+        "sse": "aws:kms"
+      }
+    ],
+    "rerun_states": [
+      "unchanged",
+      "unchanged"
+    ],
+    "stored_digests": [
+      "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+      "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082"
+    ],
+    "stored_versions": {
+      "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/original": 1,
+      "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/00000000-0000-4000-8000-00000000006f/part.parquet": 1
+    }
+  }
+}
