@@ -162,6 +162,7 @@ pub fn uniform(router: Router) -> Router {
 /// uniform 404 and no answer carries `Allow` (the `long` router answers the
 /// whole `long_path` as one service, so its method router's `Allow` is
 /// removed by the outer layer like the inner router's).
+#[cfg(test)]
 pub fn uniform_with(router: Router, long_path: &'static str, long: Router) -> Router {
     uniform_with_many(router, vec![(long_path, long)])
 }

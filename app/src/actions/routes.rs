@@ -248,9 +248,10 @@ pub(super) enum Body {
         utterance: String,
         receipt: Receipt,
     },
+    /// The work id is required and validated in the body but not kept:
+    /// resolution finds the record's work itself.
     Decide {
         app: String,
-        work: String,
         record: String,
         status: String,
         note: Option<String>,
@@ -324,9 +325,9 @@ pub(super) fn body(bytes: &[u8]) -> Option<Body> {
         }
         Some(_) => return None,
     };
+    id("work_id")?;
     Some(Body::Decide {
         app: id("app_id")?,
-        work: id("work_id")?,
         record: id("record_id")?,
         status: status.to_owned(),
         note,
@@ -505,20 +506,21 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
     }
     let today = today();
     let mut receipt_meta: Option<(&'static str, usize)> = None;
-    let (parse, utterance): (Parse, String) = match body {
-        Body::Utterance(utterance) if ledger::bare_command(&utterance, &catalog).is_some() => {
-            let parsed =
-                ledger::bare_command(&utterance, &catalog).unwrap_or_else(|| unreachable!());
-            (
-                Parse {
-                    parsed,
-                    rehearsed: false,
-                    duration_ms: 0,
-                },
-                utterance,
-            )
-        }
-        Body::Receipt { utterance, receipt } => {
+    // "/expense", "/ledger": no parse at all.
+    let bare = match &body {
+        Body::Utterance(utterance) => ledger::bare_command(utterance, &catalog),
+        _ => None,
+    };
+    let (parse, utterance): (Parse, String) = match (body, bare) {
+        (Body::Utterance(utterance), Some(parsed)) => (
+            Parse {
+                parsed,
+                rehearsed: false,
+                duration_ms: 0,
+            },
+            utterance,
+        ),
+        (Body::Receipt { utterance, receipt }, _) => {
             receipt_meta = Some((receipt.media_type, receipt.bytes.len()));
             if !state.parser.enabled() && !demo {
                 log_refused(&member, "composer_unavailable", started);
@@ -549,7 +551,7 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 }
             }
         }
-        Body::Utterance(utterance) | Body::Pinned { utterance, .. } => {
+        (Body::Utterance(utterance) | Body::Pinned { utterance, .. }, _) => {
             if !state.parser.enabled() && !demo {
                 log_refused(&member, "composer_unavailable", started);
                 return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
@@ -569,13 +571,15 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 }
             }
         }
-        Body::Decide {
-            app,
-            work,
-            record,
-            status,
-            note,
-        } => {
+        (
+            Body::Decide {
+                app,
+                record,
+                status,
+                note,
+            },
+            _,
+        ) => {
             // The structured decision: the hint is the record id itself, the
             // app the work's; resolution and the dry run judge the rest.
             let Some(catalog_app) = catalog.iter().find(|c| c.app == app) else {
@@ -594,7 +598,6 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 approver_name: None,
                 target_record_hint: Some(record),
             };
-            let _ = work;
             (
                 Parse {
                     parsed,

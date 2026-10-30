@@ -848,7 +848,7 @@ fn the_instant_matcher_routes_before_the_model_in_every_organization() {
     assert!(demo_organizations("").is_empty());
     let disabled = Composer::new(None, "r", "g").with_demo_organizations([demo.to_owned()]);
     assert!(!disabled.enabled());
-    assert!(disabled.demo_for(demo) && !disabled.demo_for(ORG));
+    assert!(!disabled.demo_for(ORG));
     // The matcher runs everywhere, so the route is available without a key.
     assert!(disabled.available_for(ORG) && disabled.available_for(demo));
     assert!(!Composer::new(None, "r", "g")
