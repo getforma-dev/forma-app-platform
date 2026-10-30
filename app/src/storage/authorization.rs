@@ -321,17 +321,49 @@ impl<'a> Transaction<'a> {
     pub async fn precheck(&self, action: Action, resource: Resource<'a>) -> Result<Precheck<'a>> {
         let request = self.member()?;
         require(self.lease.role() != Role::Worker)?;
+        self.current_member(request).await?;
+        self.entitlement(request).await?;
+        let precheck = Precheck { action, resource };
+        self.permissions(request, &precheck).await?;
+        Ok(precheck)
+    }
+    /// An active organization, an active membership at the request's epoch.
+    async fn current_member(&self, request: &TrustedRequest) -> Result<()> {
         let rows = self.query("SELECT o.status,m.status,m.membership_epoch FROM genui.organizations o JOIN genui.memberships m USING(organization_id) WHERE o.organization_id=$1::text::uuid AND m.principal_id=$2::text::uuid", &[&request.organization,&request.principal]).await?;
         let row = rows.first().ok_or(Error::Denied)?;
         require(
             text(row, 0)? == "active"
                 && text(row, 1)? == "active"
                 && integer(row, 2)? == request.epoch,
-        )?;
+        )
+    }
+    /// APP-076 G9 (the workspace listing): the member half of `precheck` and
+    /// `fence` with no resource permission of its own: current membership,
+    /// epoch and entitlement, the `lock_member_authority` fence, and the
+    /// entitlement again after it. The permit names the organization with
+    /// `Discover`, which `publication` and `record` refuse, so it authorizes
+    /// nothing by itself: the listing judges every item with `Permit::also`
+    /// (the same permission clauses the routes' own prechecks apply).
+    pub(super) async fn fence_member<'t>(&'t mut self) -> Result<Permit<'t, 'a>> {
+        let request = self.member()?;
+        require(self.lease.role() != Role::Worker)?;
+        self.current_member(request).await?;
         self.entitlement(request).await?;
-        let precheck = Precheck { action, resource };
-        self.permissions(request, &precheck).await?;
-        Ok(precheck)
+        self.lock_member(request).await?;
+        self.entitlement(request).await?;
+        Ok(Permit {
+            transaction: self,
+            request,
+            precheck: Precheck {
+                action: Action::Discover,
+                resource: Resource::Organization,
+            },
+        })
+    }
+    async fn lock_member(&self, request: &TrustedRequest) -> Result<()> {
+        let rows = self.query("SELECT organization_active,member_active,membership_epoch FROM genui_private.lock_member_authority($1::text::uuid,$2::text::uuid,$3)", &[&request.organization,&request.principal,&request.epoch]).await?;
+        let row = rows.first().ok_or(Error::Denied)?;
+        require(boolean(row, 0)? && boolean(row, 1)? && integer(row, 2)? == request.epoch)
     }
     /// APP-073 (ADR-003, ADR-004): every member action also needs a current
     /// trial entitlement, judged on the wall clock of this statement so that
@@ -371,9 +403,7 @@ impl<'a> Transaction<'a> {
     }
     pub async fn fence<'t>(&'t mut self, precheck: Precheck<'a>) -> Result<Permit<'t, 'a>> {
         let request = self.member()?;
-        let rows = self.query("SELECT organization_active,member_active,membership_epoch FROM genui_private.lock_member_authority($1::text::uuid,$2::text::uuid,$3)", &[&request.organization,&request.principal,&request.epoch]).await?;
-        let row = rows.first().ok_or(Error::Denied)?;
-        require(boolean(row, 0)? && boolean(row, 1)? && integer(row, 2)? == request.epoch)?;
+        self.lock_member(request).await?;
         // Entitlement revocation advances the epoch under the member lock
         // (operator channel), so this re-read after the fence also observes
         // expiry that happened since the precheck.

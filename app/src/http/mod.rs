@@ -11,10 +11,11 @@ pub mod proxy;
 
 use axum::{
     body::{to_bytes, Body},
-    extract::Request,
-    http::{header, HeaderMap, HeaderValue, StatusCode},
-    middleware::Next,
+    extract::{FromRequestParts, Path, Request},
+    http::{header, request::Parts, HeaderMap, HeaderValue, StatusCode},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
+    Router,
 };
 use std::time::Duration;
 
@@ -111,6 +112,51 @@ pub async fn fallback() -> Response {
     not_found()
 }
 
+/// The binary's composition of a product router (APP-076 G8): the uniform
+/// 404 for unknown paths and for a method the matched route does not serve,
+/// the D7.14 handler deadline, and no `Allow` header on any answer. axum's
+/// method router adds `Allow` to whatever its method-mismatch fallback
+/// returns, after every layer of the inner router, so a wrong method on an
+/// existing route would differ from an unknown path by that one header and
+/// disclose the route's shape; the outer router removes it, making the two
+/// byte-identical (ADR-006; ADR-007 D7.9). No route of this service answers
+/// `OPTIONS` or `405`, so no answer needs `Allow`.
+pub fn uniform(router: Router) -> Router {
+    let inner = router
+        .fallback(fallback)
+        .method_not_allowed_fallback(fallback)
+        .layer(middleware::from_fn(deadline));
+    Router::new()
+        .fallback_service(inner)
+        .layer(middleware::map_response(without_allow))
+}
+async fn without_allow(mut response: Response) -> Response {
+    response.headers_mut().remove(header::ALLOW);
+    response
+}
+
+/// A path extractor whose every rejection is the uniform 404 (APP-076 G7):
+/// a segment that does not percent-decode to UTF-8, or does not deserialize
+/// into `T`, names no resource, so a protected route answers it exactly as an
+/// unknown path, never with axum's `400 text/plain` (which carries none of
+/// the security headers). Every product route with path parameters extracts
+/// through this; `GET|POST /signin/{handle}` is anonymous and keeps its
+/// neutral sign-in page for an undecodable handle (APP-009 review m2).
+pub struct UniformPath<T>(pub T);
+impl<T, S> FromRequestParts<S> for UniformPath<T>
+where
+    T: serde::de::DeserializeOwned + Send,
+    S: Send + Sync,
+{
+    type Rejection = Response;
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Response> {
+        match Path::<T>::from_request_parts(parts, state).await {
+            Ok(Path(value)) => Ok(Self(value)),
+            Err(_) => Err(not_found()),
+        }
+    }
+}
+
 /// D7.14 handler deadline; a request that outlives it is unavailable.
 pub async fn deadline(request: Request, next: Next) -> Response {
     tokio::time::timeout(HANDLER_DEADLINE, next.run(request))
@@ -158,6 +204,56 @@ mod tests {
             );
         }
         assert_eq!(too_many_requests(7).headers()[header::RETRY_AFTER], "7");
+    }
+
+    /// APP-076 G7/G8: an undecodable segment, a wrong method on a mounted
+    /// route and an unknown path answer byte-identical uniform 404s, with no
+    /// `Allow` and the same header set.
+    #[tokio::test]
+    async fn method_mismatch_and_undecodable_paths_are_the_uniform_404() {
+        use axum::routing::{get, post};
+        use tower::ServiceExt as _;
+        async fn named(UniformPath((a, b)): UniformPath<(String, String)>) -> String {
+            format!("{a}/{b}")
+        }
+        let app = uniform(
+            Router::new()
+                .route("/x/{a}/{b}", post(named))
+                .route("/y", get(|| async { "y" })),
+        );
+        let send = |method: &str, uri: &str| {
+            let app = app.clone();
+            let request = Request::builder()
+                .method(method)
+                .uri(uri)
+                .body(Body::empty())
+                .unwrap();
+            async move {
+                let response = app.oneshot(request).await.unwrap();
+                let status = response.status();
+                let mut headers = response.headers().clone();
+                headers.remove(header::DATE);
+                let body = to_bytes(response.into_body(), 1024).await.unwrap();
+                (status, headers, body)
+            }
+        };
+        let unknown = send("GET", "/nothing-here").await;
+        assert_eq!(unknown.0, StatusCode::NOT_FOUND);
+        assert_eq!(unknown.2, &b"{\"code\":\"not_found\",\"status\":404}"[..]);
+        assert!(unknown.1.get(header::ALLOW).is_none());
+        for (method, uri) in [
+            ("GET", "/x/a/b"),
+            ("PUT", "/x/a/b"),
+            ("DELETE", "/y"),
+            ("POST", "/y"),
+            ("POST", "/x/%FF/b"),
+            ("POST", "/x/a/%C3%28"),
+        ] {
+            assert_eq!(send(method, uri).await, unknown, "{method} {uri}");
+        }
+        let served = send("POST", "/x/a%20b/c").await;
+        assert_eq!((served.0, &served.2[..]), (StatusCode::OK, &b"a b/c"[..]));
+        assert_eq!(send("GET", "/y").await.0, StatusCode::OK);
     }
 
     #[tokio::test]

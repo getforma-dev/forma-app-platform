@@ -17,7 +17,7 @@ use crate::{
     },
     storage::WorkView,
 };
-use axum::{body::Body, middleware};
+use axum::body::Body;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Mutex,
@@ -115,10 +115,7 @@ impl Pages for NoPages {
 /// The binary's composition: these routes, the uniform 404 fallback for
 /// unknown paths and methods, the 5 s handler deadline.
 pub(crate) fn compose(work: Arc<Work>) -> Router {
-    router(work)
-        .fallback(http::fallback)
-        .method_not_allowed_fallback(http::fallback)
-        .layer(middleware::from_fn(http::deadline))
+    http::uniform(router(work))
 }
 
 const APP: &str = "00000000-0000-4000-8000-000000000065";

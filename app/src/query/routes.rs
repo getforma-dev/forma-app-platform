@@ -71,12 +71,12 @@ use super::{
 use crate::{
     admission,
     auth::{cookies, csrf, Auth},
-    http,
+    http::{self, UniformPath},
     storage::{parse_parameters, Error, Lookup, QueryRun, TrustedRequest, WorkOutline, WorkView},
 };
 use axum::{
     body::to_bytes,
-    extract::{rejection::PathRejection, Path, Request, State},
+    extract::{Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -303,13 +303,10 @@ fn json_response(body: Vec<u8>) -> Response {
 /// `POST /v1/work/{app}/{work}/queries/{view}`.
 async fn query(
     State(work): State<Arc<Work>>,
-    path: Result<Path<(String, String, String)>, PathRejection>,
+    // An undecodable path segment is the uniform 404, not a 400 (G7).
+    UniformPath((app, saved, view)): UniformPath<(String, String, String)>,
     request: Request,
 ) -> Response {
-    // An undecodable path segment is the uniform 404, not a 400.
-    let Ok(Path((app, saved, view))) = path else {
-        return http::not_found();
-    };
     let (parts, body) = request.into_parts();
     if !csrf::same_origin(&parts.headers, work.auth.origin()) {
         return http::cross_site();
@@ -464,12 +461,9 @@ fn idle_views(outline: &WorkOutline) -> Vec<page::CardProps> {
 /// run cookie, the views run again with its parameters (reload restores).
 async fn work_page(
     State(work): State<Arc<Work>>,
-    path: Result<Path<(String, String)>, PathRejection>,
+    UniformPath((app, saved)): UniformPath<(String, String)>,
     request: Request,
 ) -> Response {
-    let Ok(Path((app, saved))) = path else {
-        return http::not_found();
-    };
     let (parts, _) = request.into_parts();
     let (cookie, member) = match member(&work.auth, &parts.headers).await {
         Ok(live) => live,
@@ -717,12 +711,9 @@ async fn run_views(
 /// run.
 async fn run_page(
     State(work): State<Arc<Work>>,
-    path: Result<Path<(String, String)>, PathRejection>,
+    UniformPath((app, saved)): UniformPath<(String, String)>,
     request: Request,
 ) -> Response {
-    let Ok(Path((app, saved))) = path else {
-        return http::not_found();
-    };
     let (parts, body) = request.into_parts();
     if !csrf::same_origin(&parts.headers, work.auth.origin()) {
         return http::cross_site();

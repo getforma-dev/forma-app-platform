@@ -378,24 +378,18 @@ class LocalBinaryTests(unittest.TestCase):
         if os.environ.get("GENUI_TRIAL_REPORT"):
             Path(os.environ["GENUI_TRIAL_REPORT"]).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         self.assertIsNotNone(report, done.stderr)
-        # Known finding (2026-10-30, recorded in RUNBOOK.md §Gaps G7 and G8): the
-        # command route and the record page extract `Path` without a
-        # rejection handler (app/src/commands/routes.rs submit, record_page),
-        # so an undecodable segment answers axum's 400 text/plain instead of
-        # the uniform 404. The query and auth routes map it to the 404. Every
-        # other row must pass; the not_found class may be non-uniform only
-        # because of these rows.
-        # Second known finding (G8): the method-mismatch fallback answers the
-        # uniform 404 but axum adds `Allow`, so a wrong method on an existing
-        # route differs from an unknown path by one header.
-        known = {f for f in report["failures"] if f.endswith((
-            ".command_undecodable_segment", ".record_page_undecodable_segment",
-            ".invite_validate_get", ".query_route_get", ".command_route_get", ".signout_all_get", ".workspace_post"))}
-        others = [r for r in report["rows"] if r["class"] == "not_found" and r["id"] not in known]
-        self.assertTrue(all(r["passed"] for r in others))
-        self.assertEqual(len({r["body_sha256"] for r in others}), 1)
-        self.assertEqual(len({r["header_fingerprint"] for r in others}), 1)
-        self.assertEqual(set(report["failures"]) - known - {"class:not_found"}, set(), report["failures"])
+        # G7 and G8 (RUNBOOK.md §Gaps) are fixed: an undecodable segment and a
+        # method mismatch on a mounted route answer the uniform 404 bytes with
+        # the same header set as an unknown path (`http::UniformPath`,
+        # `http::uniform`). Every row passes and every class is uniform.
+        self.assertEqual(report["failures"], [], report["failures"])
+        self.assertTrue(report["passed"])
+        not_found = [r for r in report["rows"] if r["class"] == "not_found"]
+        self.assertTrue(all(r["passed"] for r in not_found))
+        self.assertEqual(len({r["body_sha256"] for r in not_found}), 1)
+        self.assertEqual(len({r["header_fingerprint"] for r in not_found}), 1)
+        self.assertTrue(all("allow" not in r["header_names"] for r in report["rows"]))
+        self.assertTrue(all(c["uniform"] for c in report["classes"].values()), report["classes"])
 
 
 if __name__ == "__main__":

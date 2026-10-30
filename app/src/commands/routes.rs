@@ -6,14 +6,14 @@
 use super::{payload, Notice, RecordPage};
 use crate::{
     auth::{capability, cookies, csrf, Auth},
-    http,
+    http::{self, UniformPath},
     storage::{
         self, idempotency_key_shaped, CommandRequest, CommandResult, Lookup, TrustedRequest,
         COMMAND_HANDLER_DEADLINE,
     },
 };
 use axum::{
-    extract::{Path, Request, State},
+    extract::{Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -349,7 +349,7 @@ fn from_form(
 
 async fn submit(
     State(state): State<Arc<Commands>>,
-    Path((app, work, command)): Path<(String, String, String)>,
+    UniformPath((app, work, command)): UniformPath<(String, String, String)>,
     request: Request,
 ) -> Response {
     let auth = &state.auth;
@@ -443,7 +443,7 @@ async fn submit(
 /// under current authority; another principal's outcome is the uniform 404.
 async fn outcome(
     State(state): State<Arc<Commands>>,
-    Path((app, work, command, key)): Path<(String, String, String, String)>,
+    UniformPath((app, work, command, key)): UniformPath<(String, String, String, String)>,
     request: Request,
 ) -> Response {
     let auth = &state.auth;
@@ -493,7 +493,7 @@ fn fresh_key() -> Option<String> {
 
 async fn record_page(
     State(state): State<Arc<Commands>>,
-    Path((app, work, collection, record)): Path<(String, String, String, String)>,
+    UniformPath((app, work, collection, record)): UniformPath<(String, String, String, String)>,
     request: Request,
 ) -> Response {
     let auth = &state.auth;

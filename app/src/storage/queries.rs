@@ -667,6 +667,101 @@ impl Data {
     }
 }
 
+/// One saved work the member may open now (APP-076 G9, the workspace
+/// listing): its app and id, the pinned definition's title, and the record
+/// collections the record page serves, as `(collection_id, schema_id)`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OpenableWork {
+    pub app: String,
+    pub work: String,
+    pub title: String,
+    pub collections: Vec<(String, String)>,
+    /// Whether the member also holds `record_write` on the work now (the
+    /// record page then offers its command form).
+    pub can_write: bool,
+}
+/// At most this many of the organization's saved works are considered.
+const LISTING_CANDIDATES: i64 = 50;
+
+/// `Ok(false)` for a denial, so the listing omits the item; anything else
+/// (a store failure, which has aborted the transaction) ends the listing.
+fn granted(result: Result<()>) -> Result<bool> {
+    match result {
+        Ok(()) => Ok(true),
+        Err(Error::Denied) => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+impl Data {
+    /// APP-076 G9 (`GET /workspace`): the saved works the member may open
+    /// now, in one READ COMMITTED data-role transaction under the request's
+    /// scope (RLS) and the member fence (`fence_member`). A work is listed
+    /// only when, re-read after the fence, the member holds `discover` on its
+    /// app and `record_read` on the work: the clause the work page and the
+    /// record page apply, which includes `run` on the app, live `source_read`
+    /// on every dependency, and the unrevoked creator's authority (ADR-007
+    /// amendment 2026-10-29). Its pinned publication is read under
+    /// `lock_work_revision` and its stored definition re-admitted, exactly as
+    /// `work_outline` does, for the title. Nothing is written. A refused
+    /// member is `Denied`; the route shows that as an empty listing.
+    pub async fn openable_works(&self, request: &TrustedRequest) -> Result<Vec<OpenableWork>> {
+        let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
+        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
+        let result = async {
+            let permit = transaction.fence_member().await?;
+            let org = &request.organization;
+            let candidates = permit.transaction().query("SELECT app_id::text,work_id::text FROM genui.saved_work WHERE organization_id=$1::text::uuid ORDER BY app_id,work_id LIMIT $2", &[org,&LISTING_CANDIDATES]).await?;
+            let mut listed = Vec::new();
+            for row in &candidates {
+                let (app, work) = (text(row, 0)?, text(row, 1)?);
+                let (app, work) = (app.as_str(), work.as_str());
+                if !granted(permit.also(Action::Discover, Resource::App(app)).await)?
+                    || !granted(
+                        permit
+                            .also(Action::RecordRead, Resource::Work { app, work })
+                            .await,
+                    )?
+                {
+                    continue;
+                }
+                let can_write = granted(
+                    permit
+                        .also(Action::RecordWrite, Resource::Work { app, work })
+                        .await,
+                )?;
+                let transaction = permit.transaction();
+                let premise = match premise(transaction, org, app, work).await {
+                    Ok(premise) => premise,
+                    Err(Error::Denied) => continue,
+                    Err(error) => return Err(error),
+                };
+                let (admitted, content) =
+                    stored_content(transaction, org, app, &premise.definition_revision).await?;
+                if admitted != premise.definition_digest {
+                    return Err(Error::Unavailable);
+                }
+                let title = outline(&content)?.title;
+                let collections = transaction.query("SELECT collection_id::text,schema_id::text FROM genui.record_collections WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid ORDER BY collection_id", &[org,&app,&work]).await?
+                    .iter()
+                    .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
+                    .collect::<Result<Vec<_>>>()?;
+                listed.push(OpenableWork {
+                    app: app.to_owned(),
+                    work: work.to_owned(),
+                    title,
+                    collections,
+                    can_write,
+                });
+            }
+            Ok(listed)
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+}
+
 /// The receipt's stored-view and effective-query identities (`forma:query:v1`).
 pub fn query_digests(run: &QueryRun) -> Option<(String, String)> {
     let view = admission::encode(&run.view_query).ok()?;
