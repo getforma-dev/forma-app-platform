@@ -211,6 +211,12 @@ async fn name(
     let Some((_, member)) = crate::sharing::session(&auth, &parts.headers).await else {
         return http::not_found();
     };
+    if let Err(retry_after) = auth
+        .limits
+        .admit_member_write(member.organization(), member.principal())
+    {
+        return http::too_many_requests(retry_after);
+    }
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };

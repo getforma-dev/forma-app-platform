@@ -165,17 +165,28 @@ fn json_body(headers: &HeaderMap) -> bool {
         .and_then(|v| v.split(';').next())
         .is_some_and(|v| v.trim().eq_ignore_ascii_case("application/json"))
 }
-async fn json_of(body: axum::body::Body, headers: &HeaderMap) -> Result<Value, Response> {
+/// A JSON object body (`malformed_request` for anything else).
+async fn json_of(
+    body: axum::body::Body,
+    headers: &HeaderMap,
+) -> Result<serde_json::Map<String, Value>, Response> {
     let bytes = http::bounded(body, http::JSON_BODY_LIMIT)
         .await
         .ok_or_else(http::payload_too_large)?;
     if !json_body(headers) {
         return Err(http::problem(StatusCode::BAD_REQUEST, "malformed_request"));
     }
-    crate::admission::decode(&bytes)
-        .ok()
-        .filter(Value::is_object)
-        .ok_or_else(|| http::problem(StatusCode::BAD_REQUEST, "malformed_request"))
+    match crate::admission::decode(&bytes) {
+        Ok(Value::Object(object)) => Ok(object),
+        _ => Err(http::problem(StatusCode::BAD_REQUEST, "malformed_request")),
+    }
+}
+/// The member's `MEMBER_WRITES` window (folder create, uploads, rename, share).
+fn admit_write(state: &Boxes, member: &TrustedRequest) -> Result<(), u64> {
+    state
+        .auth
+        .limits
+        .admit_member_write(member.organization(), member.principal())
 }
 fn valid(id: &str) -> bool {
     storage::valid_identifier(id)
@@ -230,11 +241,13 @@ async fn create(State(state): State<Arc<Boxes>>, request: Request) -> Response {
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
-    let value = match json_of(body, &parts.headers).await {
-        Ok(value) => value,
+    if let Err(retry) = admit_write(&state, &member) {
+        return http::too_many_requests(retry);
+    }
+    let object = match json_of(body, &parts.headers).await {
+        Ok(object) => object,
         Err(response) => return response,
     };
-    let object = value.as_object().expect("an object");
     let name = object
         .get("name")
         .and_then(Value::as_str)
@@ -272,6 +285,9 @@ async fn uploads(State(state): State<Arc<Boxes>>, request: Request) -> Response 
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    if let Err(retry) = admit_write(&state, &member) {
+        return http::too_many_requests(retry);
+    }
     let Some(stores) = &state.auth.stores else {
         return http::not_found();
     };
@@ -898,11 +914,10 @@ async fn data(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
-    let value = match json_of(body, &parts.headers).await {
-        Ok(value) => value,
+    let object = match json_of(body, &parts.headers).await {
+        Ok(object) => object,
         Err(response) => return response,
     };
-    let object = value.as_object().expect("an object");
     let card = match object.get("card") {
         None => false,
         Some(Value::Bool(card)) => *card,
@@ -1387,9 +1402,7 @@ async fn apps(
     };
     let (Some(purpose), true) = (
         purpose,
-        value
-            .as_object()
-            .is_some_and(|o| o.keys().all(|k| k == "purpose" || k == "file_ids")),
+        value.keys().all(|k| k == "purpose" || k == "file_ids"),
     ) else {
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_intent");
     };
@@ -1414,6 +1427,9 @@ async fn rename(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    if let Err(retry) = admit_write(&state, &member) {
+        return http::too_many_requests(retry);
+    }
     let value = match json_of(body, &parts.headers).await {
         Ok(value) => value,
         Err(response) => return response,
@@ -1452,6 +1468,9 @@ async fn share(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    if let Err(retry) = admit_write(&state, &member) {
+        return http::too_many_requests(retry);
+    }
     let value = match json_of(body, &parts.headers).await {
         Ok(value) => value,
         Err(response) => return response,

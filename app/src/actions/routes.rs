@@ -120,6 +120,14 @@ async fn notes_work(State(auth): State<Arc<Auth>>, request: Request) -> Response
         Ok(member) => member,
         Err(refusal) => return refusal,
     };
+    if creating {
+        if let Err(retry_after) = auth
+            .limits
+            .admit_member_write(member.organization(), member.principal())
+        {
+            return http::too_many_requests(retry_after);
+        }
+    }
     let Some(stores) = auth.stores.as_ref() else {
         return http::not_found();
     };
