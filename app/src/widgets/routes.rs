@@ -33,7 +33,6 @@ use crate::{
     storage::{self, Lookup, TrustedRequest},
 };
 use axum::{
-    body::to_bytes,
     extract::{Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
@@ -198,12 +197,17 @@ async fn customize_route(State(state): State<Arc<Widgets>>, request: Request) ->
     if !csrf::same_origin(&parts.headers, state.auth.origin()) {
         return http::cross_site();
     }
-    let Ok(bytes) = to_bytes(body_stream, CUSTOMIZE_BODY_LIMIT).await else {
-        return http::payload_too_large();
-    };
+    // The session first: an anonymous caller spends nothing on the body.
     let member = match member(&state.auth, &parts.headers).await {
         Ok(member) => member,
         Err(refusal) => return refusal,
+    };
+    let bytes = match http::read_bounded(body_stream, CUSTOMIZE_BODY_LIMIT, http::HANDLER_DEADLINE)
+        .await
+    {
+        Ok(bytes) => bytes,
+        Err(http::BodyRefused::TooLarge) => return http::payload_too_large(),
+        Err(http::BodyRefused::Stalled) => return http::not_found(),
     };
     let started = Instant::now();
     let Some((widget, current, text)) =

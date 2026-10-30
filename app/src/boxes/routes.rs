@@ -1063,10 +1063,13 @@ pub enum BuildRefusal {
     /// No CSV/XLSX in the box could be used.
     NoData,
     CouldNotCompose(&'static str),
+    /// A per-member window is full (`Retry-After` seconds).
+    TooMany(u64),
 }
 impl BuildRefusal {
     pub fn response(&self) -> Response {
         match self {
+            Self::TooMany(retry_after) => http::too_many_requests(*retry_after),
             Self::NotFound => http::not_found(),
             Self::Unavailable => http::unavailable(),
             Self::ComposerUnavailable => {
@@ -1085,8 +1088,33 @@ impl BuildRefusal {
             Self::ComposerUnavailable => "composer_unavailable",
             Self::NoData => "no_data_files",
             Self::CouldNotCompose(code) => code,
+            Self::TooMany(_) => "too_many_requests",
         }
     }
+}
+
+/// The composer's per-member window (`COMPOSE_MEMBER`, shared with the
+/// canvas composer), on every surface that builds from a folder.
+pub fn admit_compose(state: &Boxes, member: &TrustedRequest) -> Result<(), BuildRefusal> {
+    let key = format!("compose:{}:{}", member.organization(), member.principal());
+    state
+        .auth
+        .limits
+        .admit(&[(&key, composer::routes::COMPOSE_MEMBER)])
+        .map_err(BuildRefusal::TooMany)
+}
+/// The explanation and brief window (`EXPLAIN_MEMBER`), on every surface.
+pub fn admit_explain(state: &Boxes, member: &TrustedRequest) -> Result<(), BuildRefusal> {
+    let key = format!(
+        "box-explain:{}:{}",
+        member.organization(),
+        member.principal()
+    );
+    state
+        .auth
+        .limits
+        .admit(&[(&key, EXPLAIN_MEMBER)])
+        .map_err(BuildRefusal::TooMany)
 }
 fn ms(since: Instant) -> u64 {
     since.elapsed().as_millis() as u64
@@ -1313,13 +1341,8 @@ async fn apps(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
-    let key = format!("compose:{}:{}", member.organization(), member.principal());
-    if let Err(retry) = state
-        .auth
-        .limits
-        .admit(&[(&key, composer::routes::COMPOSE_MEMBER)])
-    {
-        return http::too_many_requests(retry);
+    if let Err(refused) = admit_compose(&state, &member) {
+        return refused.response();
     }
     let value = match json_of(body, &parts.headers).await {
         Ok(value) => value,
@@ -1688,13 +1711,8 @@ async fn explain_post(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
-    let key = format!(
-        "box-explain:{}:{}",
-        member.organization(),
-        member.principal()
-    );
-    if let Err(retry) = state.auth.limits.admit(&[(&key, EXPLAIN_MEMBER)]) {
-        return http::too_many_requests(retry);
+    if let Err(refused) = admit_explain(&state, &member) {
+        return refused.response();
     }
     match explain_now(&state, &member, &app, &work).await {
         Ok(value) => document(StatusCode::OK, &value),

@@ -28,6 +28,31 @@ pub const COMMAND_BODY_LIMIT: usize = 256 * 1024;
 /// D7.14: every handler.
 pub const HANDLER_DEADLINE: Duration = Duration::from_secs(5);
 
+/// How a bounded body read ended short of bytes.
+#[derive(Debug, Eq, PartialEq)]
+pub enum BodyRefused {
+    /// More than the bound, or the stream failed.
+    TooLarge,
+    /// The bytes did not arrive within the deadline (composer review M1).
+    Stalled,
+}
+
+/// A request body of at most `limit` bytes arriving within `deadline`: a
+/// caller that trickles or stalls holds a route no longer than any other
+/// handler. Routes read it only after the session check, so an anonymous
+/// caller spends nothing.
+pub async fn read_bounded(
+    body: Body,
+    limit: usize,
+    deadline: Duration,
+) -> Result<axum::body::Bytes, BodyRefused> {
+    match tokio::time::timeout(deadline, to_bytes(body, limit)).await {
+        Ok(Ok(bytes)) => Ok(bytes),
+        Ok(Err(_)) => Err(BodyRefused::TooLarge),
+        Err(_) => Err(BodyRefused::Stalled),
+    }
+}
+
 /// `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and
 /// `Referrer-Policy: no-referrer` (a redirect may carry a front-channel
 /// capability such as fAuth's `request_uri`).

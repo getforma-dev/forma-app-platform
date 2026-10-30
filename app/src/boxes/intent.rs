@@ -399,6 +399,15 @@ pub async fn act(member: &TrustedRequest, utterance: &str, box_id: Option<&str>)
         }
         Resolved::None => return None,
     };
+    // The same per-member windows as the folder routes: admitted before any
+    // model call or write, on every surface (canvas, Slack, MCP).
+    let admitted = match wanted {
+        Ask::Build(_) => super::routes::admit_compose(&state, member),
+        Ask::Brief => super::routes::admit_explain(&state, member),
+    };
+    if let Err(refused) = admitted {
+        return Some(Answer::Refused(refused));
+    }
     Some(match wanted {
         Ask::Build(sentence) => {
             let purpose = purpose(&sentence);

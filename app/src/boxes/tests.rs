@@ -9,14 +9,14 @@ use tower::ServiceExt;
 
 const ID: &str = "00000000-0000-4000-8000-0000000000aa";
 
-fn app() -> axum::Router {
+fn state() -> Arc<Boxes> {
     let auth = Arc::new(Auth::new(None, None, Arc::new(crate::auth::tests::TestPages)).unwrap());
     let work = Arc::new(crate::query::Work::new(
         auth.clone(),
         None,
         Arc::new(crate::query::routes::tests::RecordingPages::default()),
     ));
-    let state = Arc::new(Boxes {
+    Arc::new(Boxes {
         auth,
         work,
         composer: crate::composer::Composer::new(None, "r", "g"),
@@ -25,8 +25,43 @@ fn app() -> axum::Router {
         },
         normalizer: super::register::Normalizer::image(),
         parser: None,
-    });
-    crate::http::uniform(router(state))
+    })
+}
+
+fn app() -> axum::Router {
+    crate::http::uniform(router(state()))
+}
+
+/// Review: every folder surface (the folder routes, `/v1/act`, Slack, MCP)
+/// spends the same per-member windows as the canvas composer and the brief
+/// route, so another surface cannot be used to go around them.
+#[test]
+fn folder_windows_are_the_composer_and_brief_windows() {
+    use super::routes::{admit_compose, admit_explain, BuildRefusal, EXPLAIN_MEMBER};
+    let state = state();
+    let member =
+        crate::storage::AgentCaller::for_tests(ID, "00000000-0000-4000-8000-0000000000bb", "t")
+            .request;
+    let compose = format!("compose:{ID}:{}", member.principal());
+    for _ in 0..crate::composer::routes::COMPOSE_MEMBER[0].limit {
+        assert!(admit_compose(&state, &member).is_ok());
+    }
+    assert!(state
+        .auth
+        .limits
+        .would_admit(&[(&compose, crate::composer::routes::COMPOSE_MEMBER)])
+        .is_err());
+    assert!(matches!(
+        admit_compose(&state, &member),
+        Err(BuildRefusal::TooMany(_))
+    ));
+    let explain = format!("box-explain:{ID}:{}", member.principal());
+    for _ in 0..EXPLAIN_MEMBER[0].limit {
+        state.auth.limits.admit(&[(&explain, EXPLAIN_MEMBER)]).unwrap();
+    }
+    let refused = admit_explain(&state, &member).unwrap_err();
+    assert_eq!(refused.code(), "too_many_requests");
+    assert_eq!(refused.response().status(), StatusCode::TOO_MANY_REQUESTS);
 }
 
 async fn send(method: &str, uri: &str, site: &str) -> (StatusCode, String) {

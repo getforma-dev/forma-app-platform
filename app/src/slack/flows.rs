@@ -1018,6 +1018,7 @@ fn folder_message(state: &Slack, answer: crate::boxes::intent::Answer) -> Value 
             let message = match refused {
                 crate::boxes::routes::BuildRefusal::NoData => format!("That {noun} has no CSV or XLSX data to build from yet."),
                 crate::boxes::routes::BuildRefusal::ComposerUnavailable => UNAVAILABLE.to_owned(),
+                crate::boxes::routes::BuildRefusal::TooMany(_) => "You're going fast. Try again in a few minutes.".to_owned(),
                 crate::boxes::routes::BuildRefusal::CouldNotCompose(_) => format!("Forma could not build an app from that {noun}. Try saying what it should show."),
                 _ => REFUSED.to_owned(),
             };

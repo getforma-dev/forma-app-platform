@@ -41,7 +41,6 @@ use crate::{
     },
 };
 use axum::{
-    body::to_bytes,
     extract::{Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
@@ -972,14 +971,7 @@ fn json_response(body: Vec<u8>) -> Response {
     response
 }
 
-/// How a bounded body read ended short of bytes.
-#[derive(Debug, Eq, PartialEq)]
-pub(super) enum BodyRefused {
-    /// More than the bound, or the stream failed.
-    TooLarge,
-    /// The bytes did not arrive within the handler deadline (review M1).
-    Stalled,
-}
+pub(super) use crate::http::BodyRefused;
 
 /// The intent body: at most `COMPOSE_BODY_LIMIT` bytes, arriving within
 /// `deadline`; a caller that trickles or stalls holds the route no longer
@@ -988,11 +980,7 @@ pub(super) async fn read_body(
     body: axum::body::Body,
     deadline: std::time::Duration,
 ) -> Result<axum::body::Bytes, BodyRefused> {
-    match tokio::time::timeout(deadline, to_bytes(body, COMPOSE_BODY_LIMIT)).await {
-        Ok(Ok(bytes)) => Ok(bytes),
-        Ok(Err(_)) => Err(BodyRefused::TooLarge),
-        Err(_) => Err(BodyRefused::Stalled),
-    }
+    http::read_bounded(body, COMPOSE_BODY_LIMIT, deadline).await
 }
 
 /// `POST /v1/compose` (order in the module notes).

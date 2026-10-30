@@ -429,3 +429,50 @@ fn the_notes_library_entry_creates_and_edits_plain_text_notes() {
         [("title", false), ("body", true)]
     );
 }
+
+/// A body whose bytes never arrive.
+pub(crate) struct Stalled;
+impl futures_core::Stream for Stalled {
+    type Item = Result<axum::body::Bytes, std::io::Error>;
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        std::task::Poll::Pending
+    }
+}
+
+/// An anonymous POST with a body that never arrives is answered at once:
+/// the session is checked before the body is read (review: the body used to
+/// be read first, with no time bound).
+pub(crate) async fn anonymous_stalled_post(app: axum::Router, path: &str) -> axum::http::StatusCode {
+    use tower::ServiceExt;
+    let request = axum::http::Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("sec-fetch-site", "same-origin")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from_stream(Stalled))
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(2), app.oneshot(request))
+        .await
+        .expect("answered without waiting on the body")
+        .unwrap()
+        .status()
+}
+
+#[tokio::test]
+async fn act_checks_the_session_before_reading_the_body() {
+    let auth = std::sync::Arc::new(
+        crate::auth::Auth::new(None, None, std::sync::Arc::new(crate::auth::tests::TestPages))
+            .unwrap(),
+    );
+    let app = super::routes::router(std::sync::Arc::new(super::routes::Act::new(
+        auth,
+        super::Parser::new(None, "test-model"),
+    )));
+    assert_eq!(
+        anonymous_stalled_post(app, super::PATH).await,
+        axum::http::StatusCode::NOT_FOUND
+    );
+}

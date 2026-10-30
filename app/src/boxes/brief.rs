@@ -570,13 +570,8 @@ pub async fn brief_post(
     let Some(member) = routes::session(&state, &parts.headers).await else {
         return http::not_found();
     };
-    let key = format!(
-        "box-explain:{}:{}",
-        member.organization(),
-        member.principal()
-    );
-    if let Err(retry) = state.auth.limits.admit(&[(&key, routes::EXPLAIN_MEMBER)]) {
-        return http::too_many_requests(retry);
+    if let Err(refused) = routes::admit_explain(&state, &member) {
+        return refused.response();
     }
     match generate(&state, &member, &box_id).await {
         Ok(value) => routes::document(StatusCode::OK, &value),

@@ -18,8 +18,10 @@
 //! nothing), 403 `cross_site`, 413, 422 `invalid_utterance`, 422
 //! `could_not_parse`, 422 `could_not_draft` (neutral), 429 with `Retry-After`
 //! (`ACT_MEMBER`), 503 `composer_unavailable` (no model key and nothing
-//! rehearsed applies), 503 `unavailable`. The route runs under `ACT_DEADLINE`
-//! (it waits on the model). The log carries identities, kinds, codes and
+//! rehearsed applies), 503 `unavailable`. The session is checked before the
+//! body is read (bounded in size and time) and the member's windows before
+//! anything acts, the folder path included. The route runs under
+//! `http::COMPOSE_DEADLINE` (it waits on the model). The log carries identities, kinds, codes and
 //! durations; never the utterance or a value.
 //!
 //! `GET /v1/work/{app}/{work}/records`: the work's current records (storage
@@ -54,7 +56,6 @@ use crate::{
     storage::{self, Lookup, RecordsListing, TrustedRequest},
 };
 use axum::{
-    body::to_bytes,
     extract::{Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
@@ -70,6 +71,10 @@ pub const ACT_MEMBER: &[limits::Window] = &[limits::per(60, 3600)];
 /// Per member, receipts (a vision call each): twenty an hour, inside
 /// `ACT_MEMBER` (APP-102).
 pub const RECEIPT_MEMBER: &[limits::Window] = &[limits::per(20, 3600)];
+/// A receipt photo (up to `RECEIPT_BODY_LIMIT`) may take longer to arrive
+/// than a JSON body (`http::HANDLER_DEADLINE`); still bounded, well inside
+/// the route's `COMPOSE_DEADLINE`.
+pub const RECEIPT_READ_DEADLINE: std::time::Duration = std::time::Duration::from_secs(20);
 
 pub struct Act {
     auth: Arc<Auth>,
@@ -395,26 +400,54 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
     } else {
         ACT_BODY_LIMIT
     };
-    let Ok(bytes) = to_bytes(body_stream, limit).await else {
-        return http::payload_too_large();
-    };
+    // Review: the session first (an anonymous caller spends nothing on the
+    // body), then the member's windows, then the body under a bounded read;
+    // nothing below (the folder path included) runs before admission.
     let member = match member(&state.auth, &parts.headers).await {
         Ok(member) => member,
         Err(refusal) => return refusal,
     };
     let started = Instant::now();
+    let key = format!("act:{}:{}", member.organization(), member.principal());
+    let receipt_key = format!(
+        "act-receipt:{}:{}",
+        member.organization(),
+        member.principal()
+    );
+    let admitted = if multipart.is_some() {
+        state
+            .auth
+            .limits
+            .admit(&[(&key, ACT_MEMBER), (&receipt_key, RECEIPT_MEMBER)])
+    } else {
+        state.auth.limits.admit(&[(&key, ACT_MEMBER)])
+    };
+    if let Err(retry_after) = admitted {
+        log_refused(&member, "too_many_requests", started);
+        return http::too_many_requests(retry_after);
+    }
+    let read_deadline = if multipart.is_some() {
+        RECEIPT_READ_DEADLINE
+    } else {
+        http::HANDLER_DEADLINE
+    };
+    let bytes = match http::read_bounded(body_stream, limit, read_deadline).await {
+        Ok(bytes) => bytes,
+        Err(http::BodyRefused::TooLarge) => return http::payload_too_large(),
+        Err(http::BodyRefused::Stalled) => {
+            log_refused(&member, "body_stalled", started);
+            return http::not_found();
+        }
+    };
     // APP-108: a folder request (the canvas's active folder chip or
     // @-mention as `box_id`, or a folder named in the words) is answered by
-    // the folder path; anything else continues below unchanged.
+    // the folder path (which applies the composer's or the brief's own
+    // window too); anything else continues below unchanged.
     if multipart.is_none() && parts.uri.query().is_none() {
         if let Some((utterance, box_id)) = folder_body(&bytes) {
-            let key = format!("act:{}:{}", member.organization(), member.principal());
             if let Some(answer) =
                 crate::boxes::intent::act(&member, &utterance, box_id.as_deref()).await
             {
-                if let Err(retry_after) = state.auth.limits.admit(&[(&key, ACT_MEMBER)]) {
-                    return http::too_many_requests(retry_after);
-                }
                 return match answer {
                     crate::boxes::intent::Answer::Done(value) => document(StatusCode::OK, &value),
                     crate::boxes::intent::Answer::NotAFolderRequest => {
@@ -449,24 +482,6 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_utterance");
     };
     let demo = demo::is_demo_org(member.organization());
-    let key = format!("act:{}:{}", member.organization(), member.principal());
-    let receipt_key = format!(
-        "act-receipt:{}:{}",
-        member.organization(),
-        member.principal()
-    );
-    let admitted = if matches!(body, Body::Receipt { .. }) {
-        state
-            .auth
-            .limits
-            .admit(&[(&key, ACT_MEMBER), (&receipt_key, RECEIPT_MEMBER)])
-    } else {
-        state.auth.limits.admit(&[(&key, ACT_MEMBER)])
-    };
-    if let Err(retry_after) = admitted {
-        log_refused(&member, "too_many_requests", started);
-        return http::too_many_requests(retry_after);
-    }
     let Some(stores) = state.auth.stores.as_ref() else {
         return http::not_found();
     };
