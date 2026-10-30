@@ -671,6 +671,9 @@ pub struct WorkView {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkOutline {
     pub title: String,
+    /// The definition's description (APP-101: an adapted definition's first
+    /// line carries the canvas chips, `composer::transform::chips_of`).
+    pub description: String,
     pub views: Vec<WorkView>,
 }
 
@@ -684,6 +687,11 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
             .ok_or(Error::Unavailable)
     };
     let title = label(content.get("title"))?;
+    let description = content
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
     let mut views = Vec::new();
     for view in content
         .get("views")
@@ -720,7 +728,11 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
             });
         }
     }
-    Ok(WorkOutline { title, views })
+    Ok(WorkOutline {
+        title,
+        description,
+        views,
+    })
 }
 
 impl Data {

@@ -1178,6 +1178,7 @@ mod tests {
         ];
         let outline = genui::storage::WorkOutline {
             title: "Northstar egress".into(),
+            description: String::new(),
             views: vec![],
         };
         let form = work::FormValues {

@@ -1,6 +1,7 @@
 import { h, mount, createShow, createList, createSignal, activateIslands } from '@getforma/core';
 import { submitUtterance } from './actions';
 import { startBoard } from './board';
+import { startSlash } from './slash';
 
 // ADR-011 pitch canvas (APP-092, APP-094): the signed-in workspace as one
 // canvas. Every group, card, value and receipt row below is resolved by the
@@ -550,7 +551,7 @@ function Canvas(props: CanvasProps) {
           <button type="button" data-tool="fit">Fit all</button>
           <button type="button" data-tool="reset-layout" title="View layout only: saved in this browser">Reset layout</button>
         </div>
-        <IntentBar placeholder="Describe the app you need" />
+        <IntentBar placeholder="Describe the app you need, or type / for your apps" />
         <p class="cv-layout-note">Layout saved in this browser</p>
       </footer>
     </div>
@@ -559,6 +560,7 @@ function Canvas(props: CanvasProps) {
 
 await activateIslands({ IntentBar });
 startBoard(document);
+startSlash(document);
 
 mount(
   () =>

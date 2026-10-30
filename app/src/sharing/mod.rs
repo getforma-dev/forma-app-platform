@@ -178,6 +178,41 @@ async fn share(
             if shared.changed() {
                 events::hub().app_shared(trusted.organization(), &app, &work);
             }
+            // APP-101: a composition's standard work shared by the member who
+            // composed it carries its live adaptation, through this same
+            // share path under the sharer's own authority
+            // (`composer::lineage`); the teammate's canvas reshapes.
+            if let Some((adapted_app, adapted_work)) = crate::composer::lineage::lineage().shared(
+                trusted.organization(),
+                trusted.principal(),
+                &work,
+                &shared.grantee,
+                record_write,
+            ) {
+                let adapted = stores
+                    .workspace
+                    .share_work(
+                        &trusted,
+                        &adapted_app,
+                        &adapted_work,
+                        &grantee,
+                        record_write,
+                    )
+                    .await;
+                tracing::info!(
+                    outcome = if adapted.is_ok() { "shared" } else { "refused" },
+                    "share.adapted"
+                );
+                if adapted.is_ok() {
+                    events::hub().app_adapted(
+                        trusted.organization(),
+                        &adapted_app,
+                        &adapted_work,
+                        &app,
+                        &work,
+                    );
+                }
+            }
             document(
                 StatusCode::OK,
                 &json!({

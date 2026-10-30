@@ -6,7 +6,8 @@
 // `GET /v1/canvas/works/{app}/{work}`, which re-authorizes, and runs its views
 // through the governed query route. Every refusal here is shown as neutral
 // copy; nothing of the response body is rendered besides the title.
-import { placeWork } from './board';
+import { markTailoring, noteKept, placeWork } from './board';
+import { showChooser } from './slash';
 import { isUuid } from './render';
 
 /** The composer route (`app/src/composer/routes.rs` PATH). */
@@ -16,7 +17,17 @@ export const COMPOSE_URL = '/v1/compose';
 export type ComposeOrigin = 'retrieved' | 'adapted' | 'generated';
 const ORIGINS: readonly ComposeOrigin[] = ['retrieved', 'adapted', 'generated'];
 
-export type ComposeResult = { app_id: string; work_id: string; origin: ComposeOrigin; title: string; labels: string[] };
+/** APP-101: how far the live transform got when the route answered. */
+export type Tailoring = 'none' | 'pending' | 'kept' | 'adapted';
+const TAILORINGS: readonly Tailoring[] = ['none', 'pending', 'kept', 'adapted'];
+export type ComposeResult = {
+  kind: 'placed'; app_id: string; work_id: string; origin: ComposeOrigin; title: string; labels: string[]; tailoring: Tailoring;
+};
+/** APP-101: a near tie; the member chooses (nothing was written). */
+export type Choice = { app_id: string; title: string; purpose: string };
+export type ComposeAnswer = ComposeResult | { kind: 'choose'; choices: Choice[] };
+/** APP-101: a slash command or chooser click pins the app; "Build something new" asks for generation. */
+export type Pin = { app_id: string } | { generate: true } | null;
 export type ComposeCode = 'not_connected' | 'unavailable' | 'refused' | 'invalid' | 'too_many' | 'failed';
 export class ComposeError extends Error {
   constructor(
@@ -45,7 +56,7 @@ async function refusalCode(response: Response): Promise<string | null> {
   return body && typeof body.code === 'string' && body.code.length <= 64 ? body.code : null;
 }
 
-export async function composeIntent(text: string): Promise<ComposeResult> {
+export async function composeIntent(text: string, pin: Pin = null): Promise<ComposeAnswer> {
   let response: Response;
   try {
     response = await fetch(COMPOSE_URL, {
@@ -53,7 +64,7 @@ export async function composeIntent(text: string): Promise<ComposeResult> {
       credentials: 'same-origin',
       cache: 'no-store',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ intent: text }),
+      body: JSON.stringify({ intent: text, ...(pin ?? {}) }),
     });
   } catch {
     throw new ComposeError('failed');
@@ -70,12 +81,20 @@ export async function composeIntent(text: string): Promise<ComposeResult> {
     throw new ComposeError(code === 'composer_unavailable' ? 'unavailable' : 'failed');
   }
   if (!response.ok) throw new ComposeError('failed');
-  const body = (await response.json().catch(() => null)) as Partial<Record<keyof ComposeResult, unknown>> | null;
+  const body = (await response.json().catch(() => null)) as (Partial<Record<keyof ComposeResult, unknown>> & { choices?: unknown }) | null;
+  if (body && Array.isArray(body.choices)) {
+    const choices = body.choices
+      .filter((c): c is Choice => typeof c === 'object' && c !== null && isUuid((c as Choice).app_id))
+      .slice(0, 3)
+      .map((c) => ({ app_id: c.app_id, title: String(c.title ?? '').slice(0, 120), purpose: String(c.purpose ?? '').slice(0, 200) }));
+    if (choices.length) return { kind: 'choose', choices };
+  }
   if (!body || !isUuid(body.app_id) || !isUuid(body.work_id)) throw new ComposeError('failed');
   if (!ORIGINS.includes(body.origin as ComposeOrigin)) throw new ComposeError('failed');
   const origin = body.origin as ComposeOrigin;
   const title = typeof body.title === 'string' ? body.title.slice(0, 120) : '';
-  return { app_id: body.app_id, work_id: body.work_id, origin, title, labels: labelsFor(origin) };
+  const tailoring = TAILORINGS.includes(body.tailoring as Tailoring) ? (body.tailoring as Tailoring) : 'none';
+  return { kind: 'placed', app_id: body.app_id, work_id: body.work_id, origin, title, labels: labelsFor(origin), tailoring };
 }
 
 const MESSAGES: Record<ComposeCode, string> = {
@@ -97,16 +116,37 @@ export function messageFor(error: unknown): string {
   return MESSAGES[error.code];
 }
 
-/** The intent bar's submit: compose, then place; `report` updates its status line. */
-export async function submitIntent(text: string, report: (message: string) => void): Promise<void> {
-  report('Composing your app…');
-  let result: ComposeResult;
+/**
+ * The intent bar's submit: compose, then place; `report` updates its status
+ * line. APP-101: the card lands at once with the app's defaults; when the
+ * request said more, a "tailoring" state follows until `app.adapted` (the
+ * card reshapes in place) or `app.kept` arrives on the live stream. A near
+ * tie shows the chooser instead of guessing.
+ */
+export async function submitIntent(text: string, report: (message: string) => void, pin: Pin = null): Promise<void> {
+  report(pin && 'app_id' in pin ? 'Opening it…' : 'Composing your app…');
+  const started = performance.now();
+  let answer: ComposeAnswer;
   try {
-    result = await composeIntent(text);
+    answer = await composeIntent(text, pin);
   } catch (error) {
     report(messageFor(error));
     return;
   }
+  if (answer.kind === 'choose') {
+    report('A few apps fit. Pick one, or build something new.');
+    showChooser(text, answer.choices, report);
+    return;
+  }
+  const result = answer;
+  document.getElementById('cv-canvas')?.setAttribute('data-last-compose-ms', String(Math.round(performance.now() - started)));
   report(result.title ? `Placing “${result.title}” on your canvas…` : 'Placing it on your canvas…');
-  report(await placeWork(result.app_id, result.work_id, result.labels));
+  const placed = await placeWork(result.app_id, result.work_id, result.labels);
+  if (result.tailoring === 'pending') {
+    markTailoring(result.work_id);
+    report(`${placed} Tailoring it to your request…`);
+    return;
+  }
+  if (result.tailoring === 'kept') noteKept(result.work_id);
+  report(placed);
 }

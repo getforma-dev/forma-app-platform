@@ -118,6 +118,24 @@ pub fn seeded_origins() -> Vec<OriginProps> {
     .collect()
 }
 
+/// APP-101: an adapted work's chips ("Adapted to your request", then each
+/// judged change, e.g. "Amount > $200"), read from the server-written first
+/// line of its admitted definition's description; `None` for any other work.
+pub fn adapted_origins(description: &str) -> Option<Vec<OriginProps>> {
+    let chips = crate::composer::transform::chips_of(description)?;
+    Some(
+        std::iter::once(("adapted", "Adapted to your request".to_owned()))
+            .chain(chips.into_iter().map(|chip| ("filter", chip)))
+            .enumerate()
+            .map(|(index, (kind, text))| OriginProps {
+                id: format!("o{index}"),
+                kind: kind.to_owned(),
+                text,
+            })
+            .collect(),
+    )
+}
+
 /// One saved work on the canvas.
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct GroupProps {
@@ -843,7 +861,7 @@ async fn group(
         app_card: format!("a-{work}"),
         title: outline.title,
         label: SEEDED_LABEL.to_owned(),
-        origins: seeded_origins(),
+        origins: adapted_origins(&outline.description).unwrap_or_else(seeded_origins),
         href: format!("/w/{app}/{work}"),
         csrf: auth.csrf.token(csrf::Form::Query, cookie),
         window_start: echo.window_start,

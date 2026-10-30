@@ -6,13 +6,17 @@
 // `GET /v1/canvas/works/{app}/{work}`, which re-authorizes).
 import { isUuid } from './render';
 
-export type LiveKind = 'record.committed' | 'app.shared' | 'app.placed' | 'stream.lagged';
+export type LiveKind = 'record.committed' | 'app.shared' | 'app.placed' | 'app.adapted' | 'app.kept' | 'stream.lagged';
 /** An announcement with ids, or the lag marker (`stream.lagged`, no ids): the
  * server dropped hints for this stream, so the board re-runs every card it shows. */
+// APP-101: `app.adapted` names the adapted work and the standard work it was
+// tailored from (`from_*`); `app.kept` names the standard work whose
+// transform kept the defaults.
 export type LiveEvent =
-  | { kind: 'record.committed' | 'app.shared' | 'app.placed'; app_id: string; work_id: string }
+  | { kind: 'record.committed' | 'app.shared' | 'app.placed' | 'app.kept'; app_id: string; work_id: string }
+  | { kind: 'app.adapted'; app_id: string; work_id: string; from_app_id: string; from_work_id: string }
   | { kind: 'stream.lagged' };
-const KINDS: readonly LiveKind[] = ['record.committed', 'app.shared', 'app.placed', 'stream.lagged'];
+const KINDS: readonly LiveKind[] = ['record.committed', 'app.shared', 'app.placed', 'app.adapted', 'app.kept', 'stream.lagged'];
 
 export function liveEvent(data: unknown): LiveEvent | null {
   if (typeof data !== 'string' || data.length > 4096) return null;
@@ -27,7 +31,11 @@ export function liveEvent(data: unknown): LiveEvent | null {
   if (!KINDS.includes(event.kind as LiveKind)) return null;
   if (event.kind === 'stream.lagged') return { kind: 'stream.lagged' };
   if (!isUuid(event.app_id) || !isUuid(event.work_id)) return null;
-  return { kind: event.kind as 'record.committed' | 'app.shared' | 'app.placed', app_id: event.app_id, work_id: event.work_id };
+  if (event.kind === 'app.adapted') {
+    if (!isUuid(event.from_app_id) || !isUuid(event.from_work_id)) return null;
+    return { kind: 'app.adapted', app_id: event.app_id, work_id: event.work_id, from_app_id: event.from_app_id, from_work_id: event.from_work_id };
+  }
+  return { kind: event.kind as 'record.committed' | 'app.shared' | 'app.placed' | 'app.kept', app_id: event.app_id, work_id: event.work_id };
 }
 
 /** Subscribes to `url` (same origin, `/v1/` only); returns the unsubscribe. */

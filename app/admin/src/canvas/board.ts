@@ -16,6 +16,7 @@ import { subscribeLive, type LiveEvent } from './live';
 import { parametersOf, runView } from './queries';
 import { buildForm, buildGroup, el, groupJson, isUuid, renderNoValue, type FormJson } from './render';
 import { recordsCardsOf, refreshRecords, wireRecordsCard } from './records';
+import { refreshCommands } from './slash';
 
 type Group = {
   app: string;
@@ -39,6 +40,17 @@ let saveTimer = 0;
 let reflowFrame = 0;
 let fitPending = false;
 const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => scheduleReflow());
+// APP-101: placements in flight (an `app.adapted` for a standard work still
+// being placed waits for it), works whose transform is pending, adapted ⇄
+// standard pairs ("back to standard"), and adaptations that arrived before
+// their standard work was placed here.
+const placing = new Map<string, Promise<string>>();
+const tailoring = new Map<string, number>();
+type Ref = { app: string; work: string };
+const pairs = new Map<string, { standard: Ref; adapted: Ref }>();
+const early = new Map<string, Ref>();
+/** How long the canvas waits for `app.adapted` / `app.kept` before keeping the defaults. */
+const TAILOR_WAIT_MS = 15000;
 
 /**
  * The default layout: one row per app, its cards left to right, each row
@@ -297,7 +309,15 @@ function flash(item: HTMLElement): void {
  * answers, in one frame; its time is kept on the canvas element
  * (`data-last-place-ms`) for the pitch's measurements.
  */
-export async function placeWork(app: string, work: string, labels: string[] = []): Promise<string> {
+export function placeWork(app: string, work: string, labels: string[] = []): Promise<string> {
+  const inFlight = placing.get(work);
+  if (inFlight) return inFlight;
+  const placed = placeWorkNow(app, work, labels).finally(() => placing.delete(work));
+  placing.set(work, placed);
+  return placed;
+}
+
+async function placeWorkNow(app: string, work: string, labels: string[]): Promise<string> {
   if (!canvas || !host || !isUuid(app) || !isUuid(work)) return 'Nothing was placed.';
   const existing = groups.get(work);
   if (existing) {
@@ -334,9 +354,11 @@ export async function placeWork(app: string, work: string, labels: string[] = []
   if (!group) return 'The app could not be opened. Nothing was placed.';
   const started = performance.now();
   const section = buildGroup(document_, group, labels);
+  if (nameable(labels, group.origins)) section.dataset.nameable = 'true';
   document_.getElementById('cv-board')?.append(section);
   const placed = adopt(section, y, true);
   if (!placed) return 'Nothing was placed.';
+  decorate(placed);
   scheduleReflow();
   host.classList.add('has-groups');
   document_.getElementById('cv-empty')?.setAttribute('hidden', '');
@@ -351,7 +373,240 @@ export async function placeWork(app: string, work: string, labels: string[] = []
   updateSummary();
   saveSoon();
   announce(`${group.title} placed on the canvas.`);
+  // An adaptation that arrived before this standard work was placed.
+  const pending = early.get(work);
+  if (pending) {
+    early.delete(work);
+    void reshape({ app, work }, pending);
+  }
   return `${group.title} is on your canvas.`;
+}
+
+// --- APP-101: live transform, back to standard, save as /name ---
+
+/** Generated and adapted apps can be saved as a slash command. */
+function nameable(labels: string[], origins: { kind: string; text: string }[] | undefined): boolean {
+  const words = [...labels, ...(origins ?? []).map((origin) => origin.kind)];
+  return words.some((word) => /generat|adapt/i.test(word));
+}
+
+function appCard(group: Group): HTMLElement | null {
+  for (const item of group.items) {
+    const card = item.querySelector<HTMLElement>('.cv-app');
+    if (card) return card;
+  }
+  return null;
+}
+
+/** The app card's APP-101 controls: back to standard / adapted view, and save as /name. */
+function decorate(group: Group): void {
+  const card = appCard(group);
+  if (!card) return;
+  const document_ = card.ownerDocument;
+  card.querySelector('.cv-tailor-controls')?.remove();
+  const controls = el(document_, 'div', { class: 'cv-tailor-controls' });
+  const pair = pairs.get(group.work);
+  if (pair) {
+    const showingAdapted = pair.adapted.work === group.work;
+    const toggle = el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-toggle-standard': '' },
+      showingAdapted ? 'Back to standard' : 'Show adapted view');
+    toggle.addEventListener('click', () => {
+      const target = showingAdapted ? pair.standard : pair.adapted;
+      void swapGroup(group.work, target.app, target.work, showingAdapted ? ['retrieved'] : []).then((swapped) => {
+        announce(swapped ? (showingAdapted ? 'Back to the standard view.' : 'Showing the adapted view.') : 'That view could not be opened.');
+      });
+    });
+    controls.append(toggle);
+  }
+  if (group.section.dataset.nameable === 'true') controls.append(nameForm(group));
+  if (controls.childElementCount) card.append(controls);
+}
+
+function nameForm(group: Group): HTMLElement {
+  const document_ = host?.ownerDocument ?? document;
+  const input = el(document_, 'input', {
+    type: 'text', name: 'slug', 'aria-label': 'Command name', placeholder: 'my-app', maxlength: '32',
+    pattern: '[a-z][a-z0-9-]{1,31}', autocomplete: 'off', spellcheck: 'false',
+  });
+  const status = el(document_, 'span', { class: 'cv-name-status', role: 'status' });
+  const form = el(document_, 'form', { class: 'cv-name', 'aria-label': 'Save as a slash command' },
+    el(document_, 'span', { class: 'cv-name-prefix', 'aria-hidden': 'true' }, 'Save as /'),
+    input,
+    el(document_, 'button', { type: 'submit', class: 'cv-secondary' }, 'Save'),
+    status);
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const slug = (input as HTMLInputElement).value.trim().replace(/^\//, '').toLowerCase();
+    if (!/^[a-z][a-z0-9-]{1,31}$/.test(slug) || slug.includes('--') || slug.endsWith('-')) {
+      status.textContent = 'Use 2 to 32 lowercase letters, digits or dashes.';
+      return;
+    }
+    status.textContent = 'Saving…';
+    void nameWork(group.app, group.work, slug).then(async (outcome) => {
+      if (typeof outcome === 'string') {
+        status.textContent = outcome;
+        return;
+      }
+      await swapGroup(group.work, outcome.app_id, outcome.work_id, [], false);
+      await refreshCommands();
+      announce(`Saved as /${outcome.slug}. Type /${outcome.slug} to open it.`);
+      const bar = host?.ownerDocument.getElementById('intent-status');
+      if (bar) bar.textContent = `Saved as /${outcome.slug}. Type /${outcome.slug} to open it any time.`;
+    });
+  });
+  return form;
+}
+
+async function nameWork(app: string, work: string, slug: string): Promise<{ app_id: string; work_id: string; slug: string } | string> {
+  try {
+    const response = await fetch(`/v1/work/${app}/${work}/name`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ slug }),
+    });
+    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (response.ok && body && isUuid(body.app_id) && isUuid(body.work_id) && typeof body.slug === 'string') {
+      return { app_id: body.app_id, work_id: body.work_id, slug: body.slug };
+    }
+    if (body?.code === 'name_taken') return 'That name is taken. Try another.';
+    if (body?.code === 'invalid_name') return 'Use 2 to 32 lowercase letters, digits or dashes.';
+    return 'It could not be saved right now.';
+  } catch {
+    return 'It could not be saved right now.';
+  }
+}
+
+/**
+ * Replaces the group of `fromWork` in place (same row) by the work
+ * `(toApp, toWork)`, fetched through the group route (which re-authorizes).
+ * The pair record follows the swap so the toggle keeps working.
+ */
+async function swapGroup(fromWork: string, toApp: string, toWork: string, labels: string[] = [], keepPair = true): Promise<boolean> {
+  const old = groups.get(fromWork);
+  if (!old || !canvas || !host || groups.has(toWork)) return false;
+  const json = await fetchGroup(toApp, toWork);
+  if (!json || !groups.has(fromWork)) return false;
+  const document_ = host.ownerDocument;
+  const y = Number(old.items[0]?.dataset.canvasY ?? nextRow());
+  const section = buildGroup(document_, json, labels);
+  if (nameable(labels, json.origins) || old.section.dataset.nameable === 'true') section.dataset.nameable = 'true';
+  document_.getElementById('cv-board')?.append(section);
+  for (const item of old.items) {
+    resized?.unobserve(item);
+    canvas.removeItem(item, { selectFallback: false });
+  }
+  old.section.remove();
+  const entries = Array.from(groups.entries());
+  groups.clear();
+  let fresh: Group | null = null;
+  for (const [key, group] of entries) {
+    if (key === fromWork) fresh = adopt(section, y, true);
+    else groups.set(key, group);
+  }
+  if (!fresh) return false;
+  const pair = pairs.get(fromWork);
+  if (pair && keepPair) pairs.set(toWork, pair);
+  if (!keepPair) pairs.delete(fromWork);
+  tailoring.delete(fromWork);
+  decorate(fresh);
+  scheduleReflow();
+  runGroup(toWork);
+  updateSummary();
+  const first = fresh.items[0];
+  if (first) {
+    canvas.centerItem(first);
+    flash(first);
+  }
+  return true;
+}
+
+/** The card reshapes in place: the standard work becomes the adapted one. */
+async function reshape(standard: Ref, adapted: Ref): Promise<void> {
+  pairs.set(standard.work, { standard, adapted });
+  pairs.set(adapted.work, { standard, adapted });
+  // The adapted work's own chips ("Adapted to your request", "Amount > $200")
+  // come from the group route (`query::canvas::adapted_origins`).
+  const swapped = await swapGroup(standard.work, adapted.app, adapted.work, []);
+  if (swapped) {
+    host?.setAttribute('data-last-reshape-at', String(Math.round(performance.now())));
+    announce('Adapted to your request.');
+    const bar = host?.ownerDocument.getElementById('intent-status');
+    if (bar && /Tailoring/.test(bar.textContent ?? '')) bar.textContent = 'Adapted to your request. “Back to standard” shows the defaults.';
+  }
+}
+
+/** The "tailoring to your request…" state on a just-placed card (APP-101). */
+export function markTailoring(work: string): void {
+  const group = groups.get(work);
+  const card = group && appCard(group);
+  if (!group || !card) return;
+  const document_ = card.ownerDocument;
+  card.querySelector('.cv-tailoring')?.remove();
+  card.append(el(document_, 'p', { class: 'cv-tailoring', role: 'status' },
+    el(document_, 'span', { class: 'cv-spinner', 'aria-hidden': 'true' }), 'Tailoring to your request…'));
+  group.items.forEach((item) => item.classList.add('is-tailoring'));
+  window.clearTimeout(tailoring.get(work));
+  tailoring.set(work, window.setTimeout(() => noteKept(work), TAILOR_WAIT_MS));
+}
+
+/** The transform kept the defaults: a neutral note, never an error. */
+export function noteKept(work: string): void {
+  window.clearTimeout(tailoring.get(work));
+  tailoring.delete(work);
+  const group = groups.get(work);
+  const card = group && appCard(group);
+  if (!group || !card) return;
+  group.items.forEach((item) => item.classList.remove('is-tailoring'));
+  card.querySelector('.cv-tailoring')?.remove();
+  card.querySelector('.cv-kept')?.remove();
+  card.append(el(card.ownerDocument, 'p', { class: 'cv-kept', role: 'status' }, 'Kept the standard view.'));
+  const bar = host?.ownerDocument.getElementById('intent-status');
+  if (bar && /Tailoring/.test(bar.textContent ?? '')) bar.textContent = 'Kept the standard view.';
+}
+
+async function onAdapted(event: { app_id: string; work_id: string; from_app_id: string; from_work_id: string }): Promise<void> {
+  if (groups.has(event.work_id)) return;
+  const standard = { app: event.from_app_id, work: event.from_work_id };
+  const adapted = { app: event.app_id, work: event.work_id };
+  await placing.get(standard.work)?.catch(() => undefined);
+  if (groups.has(standard.work)) {
+    await reshape(standard, adapted);
+    return;
+  }
+  // The standard work may still be on its way here (the compose answer or an
+  // `app.shared`): wait briefly, then place the adapted work on its own.
+  early.set(standard.work, adapted);
+  window.setTimeout(() => {
+    if (early.get(standard.work) === adapted) {
+      early.delete(standard.work);
+      if (!groups.has(adapted.work)) void placeWork(adapted.app, adapted.work, []).then(announce);
+    }
+  }, 3000);
+}
+
+/**
+ * APP-101 utility cards (the `/apps` list, and the widgets other branches
+ * register through `commands.ts`): mounted on the canvas at the next free
+ * row and brought into view; an existing card of the same id is replaced.
+ */
+export function placeUtilityCard(id: string, title: string, body: HTMLElement): void {
+  if (!canvas || !host) return;
+  const document_ = host.ownerDocument;
+  const instance = `utility-${id}`;
+  const existing = document_.querySelector<HTMLElement>(`[data-utility="${instance}"]`);
+  if (existing) canvas.removeItem(existing, { selectFallback: false });
+  const card = el(document_, 'article', { class: 'cv-card cv-utility', 'data-card': instance, 'aria-label': title },
+    el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, title)),
+    body);
+  const item = createCanvasItem({ instanceId: instance, displayName: title, preferredWidth: 520, minHeight: 200, content: card });
+  item.classList.add('cv-item', 'cv-item-utility', 'is-placing');
+  item.dataset.utility = instance;
+  canvas.mountItem(item, { x: ORIGIN, y: nextRow() }, { focus: false });
+  canvas.centerItem(item);
+  host.classList.add('has-groups');
+  document_.getElementById('cv-empty')?.setAttribute('hidden', '');
 }
 
 function onLive(event: LiveEvent): void {
@@ -362,6 +617,14 @@ function onLive(event: LiveEvent): void {
   }
   if (event.kind === 'record.committed') {
     if (groups.has(event.work_id)) runGroup(event.work_id, true);
+    return;
+  }
+  if (event.kind === 'app.adapted') {
+    void onAdapted(event);
+    return;
+  }
+  if (event.kind === 'app.kept') {
+    if (tailoring.has(event.work_id)) noteKept(event.work_id);
     return;
   }
   void placeWork(event.app_id, event.work_id).then(announce);

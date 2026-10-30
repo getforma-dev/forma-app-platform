@@ -13,6 +13,7 @@
 // server composed, never the model's text.
 import { placeWork, refreshGroupRecords } from './board';
 import { submitIntent } from './compose';
+import { runSlash } from './slash';
 import { label } from './display';
 import { el, isUuid } from './render';
 
@@ -96,9 +97,9 @@ async function post(body: Record<string, unknown>): Promise<ActAnswer> {
   return answer;
 }
 
-/** The utterance as an action (the server parses and drafts). */
-export function requestAction(utterance: string): Promise<ActAnswer> {
-  return post({ utterance });
+/** The utterance as an action (the server parses and drafts); APP-101: `app` pins a slash command's app. */
+export function requestAction(utterance: string, app: string | null = null): Promise<ActAnswer> {
+  return post(app ? { utterance, app_id: app } : { utterance });
 }
 
 /** A structured decision (no model): the server drafts the `decide` command. */
@@ -250,16 +251,22 @@ function confirmCard(document_: Document, draft: Draft, utterance: string): Prom
  * The intent bar's submit: the action path first, the composer when the
  * server says `place`; `report` updates the bar's status line.
  */
-export async function submitUtterance(text: string, report: (message: string) => void): Promise<void> {
+export async function submitUtterance(text: string, report: (message: string) => void, app: string | null = null): Promise<void> {
+  // APP-101: `/name rest` is the explicit lane (`slash.ts`): no guessing.
+  if (!app && text.startsWith('/')) {
+    await runSlash(text, report);
+    return;
+  }
+  const pin = app ? { app_id: app } : null;
   report('Understanding…');
   const started = performance.now();
   let answer: ActAnswer;
   try {
-    answer = await requestAction(text);
+    answer = await requestAction(text, app);
   } catch (error) {
     const message = error instanceof Error ? error.message : MESSAGES.failed;
     if (message === MESSAGES.not_connected) {
-      await submitIntent(text, report);
+      await submitIntent(text, report, pin);
       return;
     }
     report(message);
@@ -268,7 +275,7 @@ export async function submitUtterance(text: string, report: (message: string) =>
   const parse = Math.round(performance.now() - started);
   document.getElementById('cv-canvas')?.setAttribute('data-last-act-ms', String(parse));
   if (answer.action === 'place') {
-    await submitIntent(text, report);
+    await submitIntent(text, report, pin);
     return;
   }
   if (answer.action === 'open') {
