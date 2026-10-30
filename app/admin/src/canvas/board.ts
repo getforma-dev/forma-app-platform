@@ -26,7 +26,7 @@ type Group = {
 };
 
 const WIDTH: Record<string, number> = { app: 340, summary: 400, timeline: 620, form: 360 };
-const HEIGHT: Record<string, number> = { app: 300, summary: 300, timeline: 340, form: 320 };
+const HEIGHT: Record<string, number> = { app: 300, summary: 250, timeline: 340, form: 300 };
 const GAP = 28;
 const ROW_GAP = 72;
 const ORIGIN = 64;
@@ -68,6 +68,11 @@ function reflow(): void {
 }
 function scheduleReflow(): void {
   if (!reflowFrame) reflowFrame = requestAnimationFrame(reflow);
+}
+
+/** `GENUI_DEMO_MODE` is on for this page (`data-demo="on"`). */
+function demo(): boolean {
+  return host?.dataset.demo === 'on';
 }
 
 function announce(message: string): void {
@@ -119,8 +124,20 @@ function updateZoomLabel(): void {
   if (button && canvas) button.textContent = `${Math.round(canvas.getCamera().zoom * 100)}%`;
 }
 
-/** Runs every view card of a group with its window form's parameters. */
-export function runGroup(work: string): void {
+/** A short glow on a card a live event just updated (CSS honors reduced motion). */
+function pulse(card: HTMLElement): void {
+  const item = card.closest<HTMLElement>('.cv-item') ?? card;
+  item.classList.remove('is-live-updated');
+  void item.offsetWidth;
+  item.classList.add('is-live-updated');
+  window.setTimeout(() => item.classList.remove('is-live-updated'), 1600);
+}
+
+/**
+ * Runs every view card of a group with its window form's parameters;
+ * `live` marks a re-run a live event asked for (the cards pulse on arrival).
+ */
+export function runGroup(work: string, live = false): void {
   const group = groups.get(work);
   if (!group) return;
   const form = group.items
@@ -133,7 +150,9 @@ export function runGroup(work: string): void {
     if (parameters === null) {
       renderNoValue(card, 'failed', 'failed', 'The window was not accepted. Give a start before the end, as UTC date and time. Nothing ran.');
     } else {
-      void runView(card, parameters);
+      void runView(card, parameters).then(() => {
+        if (live) pulse(card);
+      });
     }
   }
 }
@@ -203,7 +222,9 @@ function adopt(section: HTMLElement, y: number, animate: boolean): Group | null 
   const app = section.dataset.app ?? '';
   const work = section.dataset.work ?? '';
   if (!isUuid(app) || !isUuid(work) || groups.has(work)) return null;
-  const saved = loadLayout(app, work);
+  // APP-098 demo shortcut (GENUI_DEMO_MODE): every load starts from the
+  // default arrangement, so two windows of the pitch show the same canvas.
+  const saved = demo() ? new Map<string, Partial<WidgetCanvasItemState>>() : loadLayout(app, work);
   const group: Group = { app, work, section, items: [], pinned: saved.size > 0 };
   groups.set(work, group);
   let x = ORIGIN;
@@ -278,15 +299,20 @@ export async function placeWork(app: string, work: string, labels: string[] = []
   }
   const document_ = host.ownerDocument;
   const y = nextRow();
+  const bar = (width: string) => el(document_, 'span', { class: 'cv-skeleton-bar', 'data-width': width });
   const ghost = createCanvasItem({
     instanceId: `placing-${work}`,
     displayName: 'Placing an app',
-    preferredWidth: 340,
-    minHeight: 220,
+    preferredWidth: 760,
+    minHeight: 260,
     content: el(document_, 'article', { class: 'cv-card cv-ghost', 'aria-busy': 'true' },
-      el(document_, 'p', { class: 'cv-eyebrow' }, 'Placing'),
-      el(document_, 'h2', {}, 'Placing your app…'),
-      el(document_, 'p', { class: 'cv-message' }, 'Its views appear here and run on your organization’s data. Nothing is shown until each result is released.')),
+      el(document_, 'p', { class: 'cv-ghost-status' }, el(document_, 'span', { class: 'cv-spinner', 'aria-hidden': 'true' }), 'Placing your app'),
+      el(document_, 'div', { class: 'cv-skeleton', 'aria-hidden': 'true' },
+        el(document_, 'div', { class: 'cv-skeleton-card' }, bar('60'), bar('40'), bar('90'), bar('90'), bar('50')),
+        el(document_, 'div', { class: 'cv-skeleton-card' }, bar('40'), el(document_, 'span', { class: 'cv-skeleton-block' }), bar('70')),
+        el(document_, 'div', { class: 'cv-skeleton-card' }, bar('50'), el(document_, 'span', { class: 'cv-skeleton-chart' },
+          ...['35', '60', '45', '80', '55', '95'].map((height) => el(document_, 'i', { 'data-height': height }))), bar('80'))),
+      el(document_, 'p', { class: 'cv-message' }, 'Its views run on your organization’s data. Nothing is shown until each result is released with its receipt.')),
     chrome: false,
   });
   ghost.classList.add('cv-item', 'cv-item-ghost');
@@ -319,7 +345,7 @@ export async function placeWork(app: string, work: string, labels: string[] = []
 
 function onLive(event: LiveEvent): void {
   if (event.kind === 'record.committed') {
-    if (groups.has(event.work_id)) runGroup(event.work_id);
+    if (groups.has(event.work_id)) runGroup(event.work_id, true);
     return;
   }
   void placeWork(event.app_id, event.work_id).then(announce);
@@ -394,7 +420,7 @@ export function startBoard(document_: Document): void {
     y = Math.max(y, ...group.items.map((item) => Number(item.dataset.canvasY ?? 0) + item.offsetHeight)) + ROW_GAP;
   }
   flush();
-  const camera = loadCamera();
+  const camera = demo() ? null : loadCamera();
   const target = location.hash.match(/^#g-([0-9a-f-]{36})$/)?.[1];
   if (target && groups.get(target)?.items[0]) {
     canvas.focusItem(groups.get(target)!.items[0]!);
@@ -420,11 +446,14 @@ export function startBoard(document_: Document): void {
   }
   const live = host.dataset.liveEvents ?? '';
   const chip = document_.getElementById('cv-live');
-  if (live) {
+  const chipText = chip?.querySelector<HTMLElement>('[data-live-text]');
+  if (live && chip) {
+    chip.hidden = false;
     subscribeLive(live, onLive, (state) => {
-      if (!chip) return;
       chip.dataset.state = state;
-      chip.textContent = state === 'live' ? 'Live' : state === 'reconnecting' ? 'Reconnecting…' : 'Live updates off';
+      const text = state === 'live' ? 'Live' : state === 'reconnecting' ? 'Reconnecting' : 'Offline';
+      if (chipText) chipText.textContent = text;
+      chip.title = state === 'live' ? 'Cards update as your team works' : text;
     });
   }
   announce(`${groups.size} ${groups.size === 1 ? 'app' : 'apps'} on the canvas.`);

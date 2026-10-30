@@ -6,41 +6,61 @@
 //! `CommandResult::Committed`), `app.shared` (the share route, after a share
 //! that wrote a grant) and `app.placed` (the composer's hook,
 //! [`Hub::app_placed`], when it places an app on the canvas). The hub never
-//! judges authority: `GET /v1/events` (`routes`) resolves the caller's
-//! workspace session, and the per-connection pump re-authorizes **every**
-//! event at delivery (`storage::Data::can_open`: `discover` on the app and
-//! `record_read` on the work, on current state, at the session's epoch) before
-//! an id reaches the wire. An event for a work the member cannot open is
-//! dropped silently; an event of another organization is dropped before any
-//! lookup; a member who is no longer current (sign-out or an operator
-//! revocation advanced the epoch, the entitlement lapsed) closes the stream
-//! (`storage::Data::member_current`, re-checked on every refusal and every
-//! `RECHECK` tick). Streams are one per session (a newer stream for the same
-//! session closes the earlier one), at most `MAX_STREAMS_PER_MEMBER` per
-//! member and `MAX_STREAMS` in the process (429 past them), heartbeat every
-//! `HEARTBEAT`, and end after `STREAM_LIFETIME` so the client re-resolves its
-//! session by reconnecting.
+//! judges authority. `GET /v1/events` (`routes`) resolves the caller's
+//! workspace session, and every event is judged **once per event for the
+//! whole organization** before an id reaches any wire (review M2): the first
+//! per-connection pump to reach an announcement runs one scoped, lock-free
+//! storage read (`storage::Data::openable_principals`) that names, among the
+//! organization's subscribed principals, who is current (active organization
+//! and membership at the subscriber's epoch, live entitlement) and who can
+//! open `(app, work)` now (`discover` on the app and `record_read` on the work,
+//! the workspace listing's clause); every other pump of that organization
+//! shares the judgment through a once-cell on the announcement and spends no
+//! storage transaction. A subscriber who cannot open the work gets nothing; a
+//! subscriber who is no longer current (sign-out or an operator revocation
+//! advanced the epoch, the entitlement lapsed) has its stream closed, as it
+//! does at the `RECHECK` tick (`storage::Data::member_current`, an unfenced
+//! read). An event of another organization is dropped before any lookup.
+//!
+//! Bounds (review M1): streams are one per session (a newer stream for the
+//! same session **replaces** the earlier one and takes over its slot, so a
+//! re-registration never adds a stream), at most `MAX_STREAMS_PER_MEMBER` per
+//! member and `MAX_STREAMS` in the process (429 past them). The pump never
+//! awaits the client: a delivery is `try_send` into the per-connection queue;
+//! when the queue is full (a client that stopped reading) the hint is dropped
+//! and the stream is marked lagged, and a `stream.lagged` frame follows as
+//! soon as the queue has room so the client re-reads what it shows. The
+//! lifetime, the replacement signal, the body's closure and the re-check are
+//! therefore always polled, and the registration is released on every exit.
+//! Heartbeat every `HEARTBEAT`; a stream ends after `STREAM_LIFETIME` so the
+//! client re-resolves its session by reconnecting.
 //!
 //! Wire shape, one SSE message per event:
 //! `event: <kind>` and `data: {"kind":"record.committed"|"app.shared"|
-//! "app.placed","app_id":"<uuid>","work_id":"<uuid>","at":"<whole-second UTC>"}`.
+//! "app.placed","app_id":"<uuid>","work_id":"<uuid>","at":"<whole-second UTC>"}`;
+//! the lag marker is `event: stream.lagged` and `data: {"kind":"stream.lagged",
+//! "at":"<whole-second UTC>"}` (no ids: the client refetches what it shows).
 //!
 //! Recorded limitation (ADR-011 debt, APP-095): the hub is in-process, which
 //! is exactly right for ADR-007 D7.18's single service task (stop-then-start);
 //! a multi-task deployment (APP-061) needs a shared channel or a database
-//! notification, or members connected to another task miss events.
+//! notification, or members connected to another task miss events. The
+//! residual amplification is one storage read per event per organization with
+//! a subscriber, plus one unfenced read per stream per `RECHECK` (ADR-011
+//! §Consequences, debt item 6).
 pub mod routes;
 #[cfg(test)]
 mod tests;
 
 use serde_json::{json, Value};
 use std::{
+    any::Any,
     collections::HashMap,
     future::Future,
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::sync::{broadcast, mpsc, Notify};
+use tokio::sync::{broadcast, mpsc, Notify, OnceCell};
 
 /// Open streams one member (organization, principal) may hold.
 pub const MAX_STREAMS_PER_MEMBER: usize = 4;
@@ -54,7 +74,7 @@ pub const RECHECK: Duration = Duration::from_secs(30);
 /// session, ADR-006 lifetimes), so a stream never outlives a session by more.
 pub const STREAM_LIFETIME: Duration = Duration::from_secs(3600);
 /// Broadcast capacity; a subscriber that lags past it skips the gap (an
-/// event is a hint to re-read, never the data itself).
+/// event is a hint to re-read, never the data itself) and is marked lagged.
 const CHANNEL_CAPACITY: usize = 256;
 /// Per-connection delivery queue toward the SSE body.
 const SINK_CAPACITY: usize = 32;
@@ -64,6 +84,9 @@ pub enum Kind {
     RecordCommitted,
     AppShared,
     AppPlaced,
+    /// The stream dropped at least one hint (the client was not reading, or
+    /// the subscriber lagged behind the hub); the client refetches.
+    StreamLagged,
 }
 impl Kind {
     pub fn name(self) -> &'static str {
@@ -71,6 +94,7 @@ impl Kind {
             Self::RecordCommitted => "record.committed",
             Self::AppShared => "app.shared",
             Self::AppPlaced => "app.placed",
+            Self::StreamLagged => "stream.lagged",
         }
     }
 }
@@ -95,9 +119,16 @@ impl Event {
             at: timestamp(unix_seconds()),
         }
     }
+    /// The lag marker for one stream: no ids.
+    fn lagged(organization: &str) -> Self {
+        Self::now(Kind::StreamLagged, organization, "", "")
+    }
     /// The wire document (the organization is the subscriber's own and is
-    /// not repeated).
+    /// not repeated; the lag marker carries no ids).
     pub fn document(&self) -> Value {
+        if self.kind == Kind::StreamLagged {
+            return json!({"kind": self.kind.name(), "at": self.at});
+        }
         json!({
             "kind": self.kind.name(),
             "app_id": self.app,
@@ -134,12 +165,41 @@ pub fn timestamp(seconds: u64) -> String {
     )
 }
 
+/// The organization-wide judgment of one announcement, type-erased so that
+/// the hub (which knows no gate) can carry it: `None` when the judging read
+/// failed (a store outage drops the hint for everyone and discloses nothing).
+type Judged = OnceCell<Option<Arc<dyn Any + Send + Sync>>>;
+
+/// What the hub broadcasts: the event and the once-per-event judgment cell
+/// every pump of the event's organization shares (review M2).
+#[derive(Clone)]
+pub struct Announcement {
+    pub event: Event,
+    judged: Arc<Judged>,
+}
+impl Announcement {
+    fn new(event: Event) -> Self {
+        Self {
+            event,
+            judged: Arc::new(OnceCell::new()),
+        }
+    }
+}
+
+/// One session's slot: the member it counts against and the signal that
+/// tells the stream holding it to close when a newer stream takes the slot.
+struct Slot {
+    member: (String, String),
+    closed: Arc<Notify>,
+}
+
 #[derive(Default)]
 struct Streams {
     total: usize,
     per_member: HashMap<(String, String), usize>,
-    /// One stream per session: the newer registration closes the earlier.
-    per_session: HashMap<String, Arc<Notify>>,
+    /// One slot per session: the newer registration takes the earlier one's
+    /// slot (and tells it to close) instead of adding a stream.
+    per_session: HashMap<String, Slot>,
 }
 
 /// Why a stream was not opened (429 with `Retry-After`).
@@ -150,7 +210,7 @@ pub enum Refused {
 }
 
 pub struct Hub {
-    sender: broadcast::Sender<Event>,
+    sender: broadcast::Sender<Announcement>,
     streams: Mutex<Streams>,
 }
 impl Default for Hub {
@@ -175,7 +235,7 @@ impl Hub {
     }
     pub fn publish(&self, event: Event) {
         // No subscriber is not an error: the announcement is best effort.
-        let _ = self.sender.send(event);
+        let _ = self.sender.send(Announcement::new(event));
     }
     /// The command route's hook after `CommandResult::Committed`.
     pub fn record_committed(&self, organization: &str, app: &str, work: &str) {
@@ -191,15 +251,36 @@ impl Hub {
     pub fn app_placed(&self, organization: &str, app: &str, work: &str) {
         self.publish(Event::now(Kind::AppPlaced, organization, app, work));
     }
-    pub fn subscribe(&self) -> broadcast::Receiver<Event> {
+    pub fn subscribe(&self) -> broadcast::Receiver<Announcement> {
         self.sender.subscribe()
     }
-    /// Open streams now (tests and the bounds).
+    /// Open streams now (tests and the bounds): one per session slot.
     pub fn open_streams(&self) -> usize {
         self.streams.lock().map(|s| s.total).unwrap_or(0)
     }
-    /// Counts a stream for `(organization, principal)` under `session`; a
-    /// stream already open for the same session is told to close.
+    /// The principals of `organization` holding a stream now, sorted and
+    /// distinct: the population one event's judgment is made for (at most
+    /// `MAX_STREAMS` by construction).
+    pub fn subscribed_principals(&self, organization: &str) -> Vec<String> {
+        let Ok(streams) = self.streams.lock() else {
+            return Vec::new();
+        };
+        let mut principals: Vec<String> = streams
+            .per_member
+            .keys()
+            .filter(|(org, _)| org == organization)
+            .map(|(_, principal)| principal.clone())
+            .collect();
+        principals.sort_unstable();
+        principals
+    }
+    /// Counts a stream for `(organization, principal)` under `session`. A
+    /// stream already open for the same session is told to close and its
+    /// slot passes to the new one: the member's and the process's counts do
+    /// not move (review M1: a re-registration replaces, never adds), and the
+    /// replaced registration's drop releases nothing. A new session of a
+    /// member at `MAX_STREAMS_PER_MEMBER` is refused even while an earlier
+    /// stream of that member is still winding down.
     pub fn register(
         &'static self,
         organization: &str,
@@ -208,58 +289,79 @@ impl Hub {
     ) -> Result<Registration, Refused> {
         let mut streams = self.streams.lock().map_err(|_| Refused::GlobalLimit)?;
         let member = (organization.to_owned(), principal.to_owned());
+        let closed = Arc::new(Notify::new());
+        if let Some(earlier) = streams.per_session.get_mut(session) {
+            if earlier.member == member {
+                // The slot changes hands; the counts are already right.
+                let replaced = std::mem::replace(&mut earlier.closed, closed.clone());
+                replaced.notify_one();
+                return Ok(Registration {
+                    hub: self,
+                    session: session.to_owned(),
+                    closed,
+                });
+            }
+        }
+        // A session key resolving to another member (it cannot: the key is a
+        // digest of the session cookie, which names one member) closes the
+        // earlier stream and releases its slot before a new one is judged.
+        if let Some(earlier) = streams.per_session.remove(session) {
+            Self::release(&mut streams, &earlier.member);
+            earlier.closed.notify_one();
+        }
         if streams.total >= MAX_STREAMS {
             return Err(Refused::GlobalLimit);
         }
         let held = streams.per_member.get(&member).copied().unwrap_or(0);
-        // Replacing the same session's stream does not raise the member's count.
-        let replacing = streams.per_session.contains_key(session);
-        if held >= MAX_STREAMS_PER_MEMBER && !replacing {
+        if held >= MAX_STREAMS_PER_MEMBER {
             return Err(Refused::MemberLimit);
-        }
-        let closed = Arc::new(Notify::new());
-        if let Some(earlier) = streams
-            .per_session
-            .insert(session.to_owned(), closed.clone())
-        {
-            earlier.notify_one();
         }
         streams.total += 1;
         *streams.per_member.entry(member.clone()).or_insert(0) += 1;
+        streams.per_session.insert(
+            session.to_owned(),
+            Slot {
+                member,
+                closed: closed.clone(),
+            },
+        );
         Ok(Registration {
             hub: self,
-            member,
             session: session.to_owned(),
             closed,
         })
+    }
+    fn release(streams: &mut Streams, member: &(String, String)) {
+        streams.total = streams.total.saturating_sub(1);
+        if let Some(count) = streams.per_member.get_mut(member) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                streams.per_member.remove(member);
+            }
+        }
     }
     fn unregister(&self, registration: &Registration) {
         let Ok(mut streams) = self.streams.lock() else {
             return;
         };
-        streams.total = streams.total.saturating_sub(1);
-        if let Some(count) = streams.per_member.get_mut(&registration.member) {
-            *count = count.saturating_sub(1);
-            if *count == 0 {
-                streams.per_member.remove(&registration.member);
-            }
-        }
-        // Only this registration's own entry; a newer stream of the same
-        // session keeps its place.
-        if streams
+        // Only the registration that holds the session's slot releases it; a
+        // replaced registration already handed its slot to the newer stream.
+        let holds = streams
             .per_session
             .get(&registration.session)
-            .is_some_and(|current| Arc::ptr_eq(current, &registration.closed))
-        {
-            streams.per_session.remove(&registration.session);
+            .is_some_and(|slot| Arc::ptr_eq(&slot.closed, &registration.closed));
+        if holds {
+            if let Some(slot) = streams.per_session.remove(&registration.session) {
+                Self::release(&mut streams, &slot.member);
+            }
         }
     }
 }
 
-/// A counted open stream; dropping it releases its slots.
+/// A counted open stream; dropping it releases its slot (unless a newer
+/// stream of the same session took the slot over).
 pub struct Registration {
     hub: &'static Hub,
-    member: (String, String),
     session: String,
     closed: Arc<Notify>,
 }
@@ -268,6 +370,10 @@ impl Registration {
     pub fn closed(&self) -> Arc<Notify> {
         self.closed.clone()
     }
+    /// The hub this registration counts on.
+    pub fn hub(&self) -> &'static Hub {
+        self.hub
+    }
 }
 impl Drop for Registration {
     fn drop(&mut self) {
@@ -275,7 +381,7 @@ impl Drop for Registration {
     }
 }
 
-/// The delivery decision for one event.
+/// The delivery decision for one event and one subscriber.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Verdict {
     Deliver,
@@ -284,33 +390,53 @@ pub enum Verdict {
     /// The member is no longer current; the stream ends.
     Close,
 }
-/// What the pump asks before every delivery and on every re-check tick. The
-/// production gate is `routes::StoreGate` (storage re-authorization); tests
-/// substitute a scripted one.
+/// What the pumps ask. `judge` runs **once per event** for the whole
+/// organization (whichever pump reaches the announcement first runs it; the
+/// others await the same cell) and names the population it was made for:
+/// `subscribers` are the organization's subscribed principals at that moment.
+/// `verdict` is this subscriber's reading of that judgment and performs no
+/// I/O. `current` is the idle re-check. The production gate is
+/// `routes::StoreGate` (storage); tests substitute scripted ones.
 pub trait Gate: Send + Sync + 'static {
-    fn judge(&self, app: &str, work: &str) -> impl Future<Output = Verdict> + Send;
+    /// The organization-wide judgment of `(app, work)` among `subscribers`.
+    type Judgment: Send + Sync + 'static;
+    /// `None` is a store outage: the hint is dropped for every subscriber.
+    fn judge(
+        &self,
+        app: &str,
+        work: &str,
+        subscribers: &[String],
+    ) -> impl Future<Output = Option<Self::Judgment>> + Send;
+    fn verdict(&self, judgment: &Self::Judgment) -> Verdict;
     fn current(&self) -> impl Future<Output = bool> + Send;
 }
 
-/// The per-connection pump: events of the subscriber's organization are
-/// judged by `gate` one by one and the delivered ones go to `sink` (the SSE
-/// body). Ends when the gate closes the stream, the member is no longer
-/// current at a re-check, a newer stream replaced this session's, the body
-/// was dropped (client gone), the lifetime passed or the hub closed.
+/// The per-connection pump: announcements of the subscriber's organization
+/// are judged (once per event, shared) and the delivered ones go to `sink`
+/// (the SSE body) without ever waiting on it. Ends when the judgment or a
+/// re-check finds the member no longer current, a newer stream replaced this
+/// session's, the body was dropped (client gone), the lifetime passed or the
+/// hub closed. The registration is released on every exit.
 pub async fn pump<G: Gate>(
     gate: G,
     organization: String,
-    mut receiver: broadcast::Receiver<Event>,
+    mut receiver: broadcast::Receiver<Announcement>,
     registration: Registration,
     sink: mpsc::Sender<Event>,
     recheck: Duration,
     lifetime: Duration,
 ) {
     let closed = registration.closed();
+    let hub = registration.hub();
     let start = tokio::time::Instant::now();
     let lifetime = tokio::time::sleep_until(start + lifetime);
     tokio::pin!(lifetime);
     let mut ticker = tokio::time::interval_at(start + recheck, recheck);
+    // A stall is not a burst: one re-check after a pause, then the cadence.
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // At least one hint was dropped since the client last had room: the next
+    // frame with room is the lag marker, so the client refetches.
+    let mut lagged = false;
     loop {
         tokio::select! {
             _ = &mut lifetime => break,
@@ -321,19 +447,39 @@ pub async fn pump<G: Gate>(
                     break;
                 }
             }
+            permit = sink.reserve(), if lagged => match permit {
+                Ok(permit) => {
+                    permit.send(Event::lagged(&organization));
+                    lagged = false;
+                }
+                Err(_) => break,
+            },
             received = receiver.recv() => match received {
                 Err(broadcast::error::RecvError::Closed) => break,
-                Err(broadcast::error::RecvError::Lagged(_)) => {}
-                Ok(event) => {
+                Err(broadcast::error::RecvError::Lagged(_)) => lagged = true,
+                Ok(announcement) => {
+                    let event = &announcement.event;
                     if event.organization != organization {
                         continue;
                     }
-                    match gate.judge(&event.app, &event.work).await {
-                        Verdict::Deliver => {
-                            if sink.send(event).await.is_err() {
-                                break;
-                            }
-                        }
+                    let judged = announcement.judged.get_or_init(|| async {
+                        let subscribers = hub.subscribed_principals(&organization);
+                        gate.judge(&event.app, &event.work, &subscribers)
+                            .await
+                            .map(|judgment| Arc::new(judgment) as Arc<dyn Any + Send + Sync>)
+                    }).await;
+                    // A failed judgment, or one made by a gate of another
+                    // type (tests only), delivers nothing and closes nothing.
+                    let verdict = judged
+                        .as_ref()
+                        .and_then(|judgment| judgment.downcast_ref::<G::Judgment>())
+                        .map_or(Verdict::Skip, |judgment| gate.verdict(judgment));
+                    match verdict {
+                        Verdict::Deliver => match sink.try_send(event.clone()) {
+                            Ok(()) => {}
+                            Err(mpsc::error::TrySendError::Full(_)) => lagged = true,
+                            Err(mpsc::error::TrySendError::Closed(_)) => break,
+                        },
                         Verdict::Skip => {}
                         Verdict::Close => break,
                     }

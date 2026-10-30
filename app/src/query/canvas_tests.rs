@@ -97,6 +97,7 @@ async fn anonymous_forged_and_pre_access_requests_get_the_uniform_404_and_run_no
         work,
         pages: pages.clone(),
         live_events: String::new(),
+        demo: false,
     })));
     let group = format!("/v1/canvas/works/{APP}/{WORK}");
     for headers in [
@@ -136,10 +137,10 @@ fn view(id: &str, kind: &str, integers: &[&str]) -> WorkView {
 }
 
 #[test]
-fn a_card_shows_a_number_only_with_its_receipt_and_key_identities() {
+fn a_card_shows_a_number_only_with_its_receipt_compact_and_complete() {
     let total = result(&["total_bytes"], vec![vec![json!("1140000")]]);
     let receipt = QueryReceipt {
-        digest: "sha256:receipt".into(),
+        digest: format!("sha256:{}", "ab12cd34".repeat(8)),
         document: json!({"digest": "sha256:receipt", "result_digest": total.result_digest,
             "mode": "published", "principal_id": "p", "membership_epoch": 3, "policy_epoch": 1,
             "source_revisions": [{"input_id": "events", "source_id": "s", "source_revision_id": "r", "source_digest": "sha256:s"}],
@@ -153,16 +154,26 @@ fn a_card_shows_a_number_only_with_its_receipt_and_key_identities() {
         card(&total_view, Outcome::Released(&total, &receipt)),
     );
     assert_eq!(ready.id, format!("c-{WORK}-total"));
+    assert_eq!(ready.title, "Total");
     assert_eq!(ready.query, format!("/v1/work/{APP}/{WORK}/queries/total"));
     assert_eq!(ready.integer_columns, "total_bytes");
-    assert!(ready.has_summary && ready.summary[0].value == "1,140,000");
-    assert!(ready.has_receipt && ready.receipt_digest == "sha256:receipt");
-    let key: Vec<&str> = ready
-        .receipt_key
-        .iter()
-        .map(|row| row.id.as_str())
-        .collect();
+    // One insight: compact with its unit, the exact value beside it.
+    assert!(ready.has_insight && !ready.has_stats);
+    assert_eq!(ready.insight_label, "Total bytes");
+    assert_eq!(ready.insight, "1.14 MB");
+    assert_eq!(ready.insight_exact, "1,140,000 bytes");
+    // The receipt: compact on the card, every row kept for the inspector.
+    assert!(ready.has_receipt && ready.receipt_digest == receipt.digest);
+    assert_eq!(ready.receipt_short, "ab12cd34");
+    assert_eq!(ready.receipt_sources, "1 source");
+    assert!(
+        ready.receipt_time.ends_with(" UTC"),
+        "{}",
+        ready.receipt_time
+    );
+    let ids: Vec<&str> = ready.receipt.iter().map(|row| row.id.as_str()).collect();
     for id in [
+        "digest",
         "result",
         "mode",
         "source-0",
@@ -170,10 +181,15 @@ fn a_card_shows_a_number_only_with_its_receipt_and_key_identities() {
         "principal",
         "membership",
         "policy",
+        "query",
+        "truncated",
     ] {
-        assert!(key.contains(&id), "{id} is always visible");
+        assert!(ids.contains(&id), "{id} is in the receipt");
     }
-    assert!(ready.receipt.len() > ready.receipt_key.len());
+    assert!(ready
+        .receipt
+        .iter()
+        .any(|row| row.value == total.result_digest));
     for outcome in [
         Outcome::Idle,
         Outcome::Loading,
@@ -182,14 +198,66 @@ fn a_card_shows_a_number_only_with_its_receipt_and_key_identities() {
         Outcome::Failed(Reason::Store),
     ] {
         let empty = canvas_card(APP, WORK, &total_view, card(&total_view, outcome));
-        assert!(!empty.has_summary && !empty.has_table && !empty.has_receipt);
-        assert!(empty.summary.is_empty() && empty.rows.is_empty() && empty.receipt_key.is_empty());
+        assert!(!empty.has_insight && !empty.has_chart && !empty.has_table && !empty.has_receipt);
+        assert!(empty.insight.is_empty() && empty.rows.is_empty() && empty.receipt.is_empty());
+        assert!(empty.receipt_time.is_empty());
         assert!(
             !empty.message.chars().any(|c| c.is_ascii_digit()),
             "{}",
             empty.message
         );
     }
+}
+
+#[test]
+fn a_timeline_card_is_a_chart_with_its_rows_folded_beneath() {
+    let rows = vec![
+        vec![
+            json!("2026-10-22T10:00:00Z"),
+            json!("203.0.113.10"),
+            json!("60000"),
+        ],
+        vec![
+            json!("2026-10-22T10:10:00Z"),
+            json!("198.51.100.99"),
+            json!("900000"),
+        ],
+    ];
+    let buckets = result(&["minute", "destination", "bytes"], rows);
+    let receipt = QueryReceipt {
+        digest: "sha256:timeline".into(),
+        document: json!({"digest": "sha256:timeline", "result_digest": buckets.result_digest,
+            "source_revisions": [{}, {}], "parameters": [], "provenance": {}}),
+    };
+    let timeline = view("timeline", "timeline", &["bytes"]);
+    let shown = canvas_card(
+        APP,
+        WORK,
+        &timeline,
+        card(&timeline, Outcome::Released(&buckets, &receipt)),
+    );
+    assert!(shown.has_chart && shown.chart.has_bars && shown.chart.bars.len() == 2);
+    assert!(shown.has_table && shown.has_folded_table && !shown.has_open_table);
+    assert_eq!(shown.rows_label, "2 rows");
+    assert_eq!(
+        shown
+            .columns
+            .iter()
+            .map(|c| c.text.as_str())
+            .collect::<Vec<_>>(),
+        ["Minute", "Destination", "Bytes"]
+    );
+    let first = &shown.rows[0].cells;
+    assert_eq!(
+        (first[0].text.as_str(), first[0].exact.as_str()),
+        ("Oct 22, 10:00", "2026-10-22T10:00:00Z")
+    );
+    assert_eq!(
+        (first[2].text.as_str(), first[2].exact.as_str()),
+        ("60 KB", "60,000 bytes")
+    );
+    assert_eq!(first[2].class, "value num");
+    assert_eq!(shown.receipt_sources, "2 sources");
 }
 
 #[test]
@@ -249,16 +317,26 @@ fn a_form_card_offers_the_writable_fields_and_enum_choices_only_to_a_writer() {
 }
 
 #[test]
-fn key_receipt_values_shorten_digests_and_ids_only() {
-    let digest = format!("sha256:{}", "0123456789abcdef".repeat(4));
-    let id = "00000000-0000-4000-8000-00000000006e";
+fn the_receipt_line_and_the_top_bar_identity() {
     assert_eq!(
-        abbreviate(&format!("source {id} revision {id} digest {digest}")),
-        "source 00000000…006e revision 00000000…006e digest sha256:0123456789ab…abcdef"
+        digest_prefix(&format!("sha256:{}", "0123456789abcdef".repeat(4))),
+        "01234567"
     );
-    assert_eq!(abbreviate("published"), "published");
-    assert_eq!(abbreviate("2026-10-22T10:00:00Z"), "2026-10-22T10:00:00Z");
-    assert_eq!(abbreviate("sha256:short"), "sha256:short");
+    assert_eq!(digest_prefix("sha256:ab"), "ab");
+    let rows = |n: usize| -> Vec<PairProps> {
+        (0..n)
+            .map(|i| PairProps {
+                id: format!("source-{i}"),
+                ..PairProps::default()
+            })
+            .collect()
+    };
+    assert_eq!(sources_label(&rows(1)), "1 source");
+    assert_eq!(sources_label(&rows(0)), "0 sources");
+    assert_eq!(sources_label(&rows(3)), "3 sources");
+    assert_eq!(initials("ba92f4c5-0000-4000-8000-00000000a119"), "BA");
+    assert_eq!(seeded_origins()[0].text, "Retrieved from library");
+    assert_eq!(seeded_origins()[1].kind, "seeded");
 }
 
 #[test]

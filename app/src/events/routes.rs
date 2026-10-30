@@ -2,7 +2,9 @@
 //! workspace session (else the uniform 404, like every protected route), the
 //! stream bounds (429 `too_many_requests` with `Retry-After`), then the
 //! stream. The response is `text/event-stream` with `no-store` and the
-//! security headers; a comment heartbeat every `HEARTBEAT`.
+//! security headers; a comment heartbeat every `HEARTBEAT`. The body never
+//! blocks the pump: frames the client has no room for are dropped and a
+//! `stream.lagged` frame follows (review M1).
 use super::{hub, pump, sink, Event, Gate, Refused, Verdict, HEARTBEAT, RECHECK, STREAM_LIFETIME};
 use crate::{
     auth::Auth,
@@ -50,24 +52,29 @@ fn session_key(cookie: &str) -> String {
         .collect()
 }
 
-/// The production gate: storage's re-authorization at delivery.
+/// The production gate: storage's re-authorization at delivery, once per
+/// event for the organization (`Data::openable_principals`, review M2) and
+/// read for this subscriber without I/O (`Openable::standing`).
 pub struct StoreGate {
     stores: Arc<Stores>,
     request: TrustedRequest,
 }
 impl Gate for StoreGate {
-    async fn judge(&self, app: &str, work: &str) -> Verdict {
-        match self.stores.data.can_open(&self.request, app, work).await {
-            Ok(()) => Verdict::Deliver,
-            Err(storage::Error::Denied) => {
-                if self.current().await {
-                    Verdict::Skip
-                } else {
-                    Verdict::Close
-                }
-            }
-            // A store outage discloses nothing: the hint is dropped.
-            Err(_) => Verdict::Skip,
+    type Judgment = storage::Openable;
+    async fn judge(&self, app: &str, work: &str, subscribers: &[String]) -> Option<Self::Judgment> {
+        // A store outage (or a refused read) discloses nothing: the hint is
+        // dropped for everyone and no stream is closed on it.
+        self.stores
+            .data
+            .openable_principals(&self.request, app, work, subscribers)
+            .await
+            .ok()
+    }
+    fn verdict(&self, judgment: &Self::Judgment) -> Verdict {
+        match judgment.standing(&self.request) {
+            storage::Standing::Open => Verdict::Deliver,
+            storage::Standing::Closed => Verdict::Skip,
+            storage::Standing::NotCurrent => Verdict::Close,
         }
     }
     async fn current(&self) -> bool {

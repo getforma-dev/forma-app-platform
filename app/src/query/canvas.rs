@@ -27,7 +27,8 @@
 //! through `POST /v1/work/{app}/{work}/commands/{command}` (idempotent,
 //! transactional, audited). This module adds no data path.
 use super::{
-    page::{self, CardProps, CellProps, FormValues, PairProps, RowProps},
+    canvas_display::{self as display, ChartProps},
+    page::{self, CardProps, CellProps, FormValues, PairProps},
     routes::{self, Restore, Work},
 };
 use crate::{
@@ -64,6 +65,58 @@ pub struct CanvasProps {
     /// The organization's server-sent events URL once the realtime route
     /// exists (`pivot/realtime`); empty: the island subscribes to nothing.
     pub live_events: String,
+    /// The live chip is offered (it shows once the island subscribes).
+    pub has_live: bool,
+    /// The member's organization (its display name), in the top bar; no
+    /// organization picker.
+    pub has_organization: bool,
+    pub organization: String,
+    /// The member's neutral label (`storage::sharing::member_label`: 0002
+    /// principals carry no display name) and its two-letter avatar.
+    pub member_label: String,
+    pub member_initials: String,
+    /// `GENUI_DEMO_MODE` (APP-098 demo shortcuts): the small-print
+    /// synthetic-data label, and `demo_mode` = "on" for the island's
+    /// demo-safe layout (each load starts from the default arrangement).
+    pub demo: bool,
+    pub demo_mode: String,
+}
+
+/// `GENUI_DEMO_MODE` is on (`1`, `true` or `on`); off by default.
+pub fn demo_mode() -> bool {
+    std::env::var("GENUI_DEMO_MODE")
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+/// An origin chip on an app card ("Retrieved from library", "Seeded
+/// definition", "Generated"): `kind` styles it.
+#[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct OriginProps {
+    pub id: String,
+    pub kind: String,
+    pub text: String,
+}
+
+/// The origin chips of a seeded Phase 1 work (`SEEDED_LABEL`, as chips).
+pub fn seeded_origins() -> Vec<OriginProps> {
+    [
+        ("library", "Retrieved from library"),
+        ("seeded", "Seeded definition"),
+    ]
+    .iter()
+    .enumerate()
+    .map(|(index, (kind, text))| OriginProps {
+        id: format!("o{index}"),
+        kind: (*kind).to_owned(),
+        text: (*text).to_owned(),
+    })
+    .collect()
 }
 
 /// One saved work on the canvas.
@@ -78,6 +131,7 @@ pub struct GroupProps {
     pub app_card: String,
     pub title: String,
     pub label: String,
+    pub origins: Vec<OriginProps>,
     /// `/w/{app}/{work}`: the work page and its run form (without JavaScript
     /// the group's run form posts there).
     pub href: String,
@@ -94,7 +148,9 @@ pub struct GroupProps {
 }
 
 /// One view card: the work page's card state model (`page::card`) plus the
-/// island's query route and the view's integer columns.
+/// island's query route and the view's integer columns, shown for reading
+/// (`canvas_display`): one insight number or a chart, the rows, and the
+/// receipt as a compact "Verified" line that expands inline to every field.
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct CanvasCardProps {
     /// `c-{work}-{view}`: a safe canvas item id.
@@ -104,23 +160,66 @@ pub struct CanvasCardProps {
     pub kind: String,
     pub state: String,
     pub badge: String,
+    pub has_message: bool,
     pub message: String,
     /// `POST` target of the island: the existing JSON query route.
     pub query: String,
     /// Comma-separated exact-integer columns (digit-grouped, nothing else).
     pub integer_columns: String,
-    pub has_summary: bool,
-    pub summary: Vec<PairProps>,
+    /// A one-row summary: its first value, compact with its unit, and the
+    /// exact value; the other values as small stats.
+    pub has_insight: bool,
+    pub insight_label: String,
+    pub insight: String,
+    pub insight_exact: String,
+    pub has_stats: bool,
+    pub stats: Vec<StatProps>,
+    /// A table result a chart reads honestly (`canvas_display::chart`).
+    pub has_chart: bool,
+    pub chart: ChartProps,
+    /// The rows, open when there is no chart, folded under it otherwise.
     pub has_table: bool,
+    pub has_open_table: bool,
+    pub has_folded_table: bool,
+    pub rows_label: String,
     pub columns: Vec<CellProps>,
-    pub rows: Vec<RowProps>,
+    pub rows: Vec<CanvasRowProps>,
     pub has_receipt: bool,
+    /// The receipt's full digest (the compact line's title and first row).
     pub receipt_digest: String,
-    /// The identities always visible on the card (never collapsed).
-    pub receipt_key: Vec<PairProps>,
-    /// Every receipt row (the inspector).
+    /// The digest's first eight hex digits, shown on the card.
+    pub receipt_short: String,
+    /// "2 sources".
+    pub receipt_sources: String,
+    /// When this page received the released result ("15:04 UTC"); not a
+    /// receipt field.
+    pub receipt_time: String,
+    /// Every receipt row, in full (the inline inspector).
     pub receipt: Vec<PairProps>,
     pub receipt_json: String,
+}
+
+/// A secondary summary value.
+#[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct StatProps {
+    pub id: String,
+    pub label: String,
+    pub value: String,
+    pub exact: String,
+}
+/// A table cell for reading (`text`) with its exact value (`exact`, the
+/// cell's title); `class` right-aligns numbers.
+#[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct CanvasCellProps {
+    pub id: String,
+    pub text: String,
+    pub exact: String,
+    pub class: String,
+}
+#[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct CanvasRowProps {
+    pub id: String,
+    pub cells: Vec<CanvasCellProps>,
 }
 
 /// One record form (APP-013, D7.16): a fresh record of a collection, the
@@ -142,6 +241,8 @@ pub struct FormCardProps {
     pub record_version: String,
     pub work_version: String,
     pub fields: Vec<FormFieldProps>,
+    /// The submit button: the command for reading ("Record decision").
+    pub submit: String,
 }
 
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
@@ -166,46 +267,28 @@ pub struct ChoiceProps {
     pub value: String,
 }
 
-/// The receipt identities a card always shows under its digest (design
-/// brief §2.7: the digest, in the card's receipt heading, and the key
-/// identities stay visible without expanding).
-fn key_row(id: &str) -> bool {
-    matches!(
-        id,
-        "result" | "mode" | "principal" | "membership" | "policy"
-    ) || id.starts_with("source-")
-        || id.starts_with("parameter-")
+/// The receipt digest's first eight hex digits.
+pub fn digest_prefix(digest: &str) -> String {
+    let hex = digest.strip_prefix("sha256:").unwrap_or(digest);
+    hex.chars().take(8).collect()
 }
 
-/// A key row's value as the card shows it: each `sha256:` digest and UUID
-/// shortened to its ends (the inspector keeps every full value; the
-/// receipt's own digest stays whole). Mirrors `render.ts` `abbreviate`.
-pub fn abbreviate(value: &str) -> String {
-    let hex = |text: &str| {
-        text.bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-    };
-    let uuid = |text: &str| {
-        text.len() == 36
-            && text.char_indices().all(|(index, c)| {
-                if matches!(index, 8 | 13 | 18 | 23) {
-                    c == '-'
-                } else {
-                    c.is_ascii_digit() || ('a'..='f').contains(&c)
-                }
-            })
-    };
-    value
-        .split(' ')
-        .map(|token| match token.strip_prefix("sha256:") {
-            Some(digest) if digest.len() == 64 && hex(digest) => {
-                format!("sha256:{}…{}", &digest[..12], &digest[58..])
-            }
-            _ if uuid(token) => format!("{}…{}", &token[..8], &token[32..]),
-            _ => token.to_owned(),
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+/// "1 source", "2 sources": the receipt's source revisions.
+pub fn sources_label(rows: &[PairProps]) -> String {
+    let count = rows
+        .iter()
+        .filter(|row| row.id.starts_with("source-"))
+        .count();
+    format!("{count} {}", if count == 1 { "source" } else { "sources" })
+}
+
+/// Now, as the compact receipt line shows it ("15:04 UTC").
+fn now_label() -> String {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or_default();
+    display::released_at(&crate::events::timestamp(seconds))
 }
 
 /// A canvas card from the work page's card for `view` of `work`.
@@ -215,35 +298,103 @@ pub fn canvas_card(
     view: &crate::storage::WorkView,
     card: CardProps,
 ) -> CanvasCardProps {
-    CanvasCardProps {
+    let integer = |column: &str| view.integer_columns.iter().any(|name| name == column);
+    let mut canvas = CanvasCardProps {
         id: format!("c-{work}-{}", view.id),
         view: view.id.clone(),
-        title: card.title,
+        title: display::label(&card.title),
         kind: card.kind,
         state: card.state,
         badge: card.badge,
+        has_message: !card.message.is_empty(),
         message: card.message,
         query: format!("/v1/work/{app}/{work}/queries/{}", view.id),
         integer_columns: view.integer_columns.join(","),
-        has_summary: card.has_summary,
-        summary: card.summary,
-        has_table: card.has_table,
-        columns: card.columns,
-        rows: card.rows,
         has_receipt: card.has_receipt,
+        receipt_short: digest_prefix(&card.receipt_digest),
         receipt_digest: card.receipt_digest,
-        receipt_key: card
-            .receipt
-            .iter()
-            .filter(|row| key_row(&row.id))
-            .map(|row| PairProps {
-                value: abbreviate(&row.value),
-                ..row.clone()
-            })
-            .collect(),
+        receipt_sources: sources_label(&card.receipt),
+        receipt_time: if card.has_receipt {
+            now_label()
+        } else {
+            String::new()
+        },
         receipt: card.receipt,
         receipt_json: card.receipt_json,
+        ..CanvasCardProps::default()
+    };
+    if card.has_summary {
+        let mut pairs = card.summary.iter().map(|pair| {
+            let (value, exact) = display::cell(&pair.label, integer(&pair.label), &pair.value);
+            (pair, value, exact)
+        });
+        if let Some((pair, value, exact)) = pairs.next() {
+            canvas.has_insight = true;
+            canvas.insight_label = display::label(&pair.label);
+            canvas.insight = value;
+            canvas.insight_exact = exact;
+        }
+        canvas.stats = pairs
+            .map(|(pair, value, exact)| StatProps {
+                id: pair.id.clone(),
+                label: display::label(&pair.label),
+                value,
+                exact,
+            })
+            .collect();
+        canvas.has_stats = !canvas.stats.is_empty();
     }
+    if card.has_table {
+        let names: Vec<String> = card.columns.iter().map(|c| c.text.clone()).collect();
+        let texts: Vec<Vec<String>> = card
+            .rows
+            .iter()
+            .map(|row| row.cells.iter().map(|c| c.text.clone()).collect())
+            .collect();
+        if let Some(chart) = display::chart(&names, &texts, &view.integer_columns) {
+            canvas.has_chart = true;
+            canvas.chart = chart;
+        }
+        canvas.has_table = true;
+        canvas.has_open_table = !canvas.has_chart;
+        canvas.has_folded_table = canvas.has_chart;
+        canvas.rows_label = format!(
+            "{} {}",
+            card.rows.len(),
+            if card.rows.len() == 1 { "row" } else { "rows" }
+        );
+        canvas.columns = card
+            .columns
+            .iter()
+            .map(|column| CellProps {
+                id: column.id.clone(),
+                text: display::label(&column.text),
+            })
+            .collect();
+        canvas.rows = card
+            .rows
+            .iter()
+            .map(|row| CanvasRowProps {
+                id: row.id.clone(),
+                cells: row
+                    .cells
+                    .iter()
+                    .zip(&names)
+                    .map(|(cell, name)| {
+                        let numeric = integer(name);
+                        let (text, exact) = display::cell(name, numeric, &cell.text);
+                        CanvasCellProps {
+                            id: cell.id.clone(),
+                            text,
+                            exact,
+                            class: if numeric { "value num" } else { "value" }.to_owned(),
+                        }
+                    })
+                    .collect(),
+            })
+            .collect();
+    }
+    canvas
 }
 
 /// A record form from the record page's model; `None` when the member may
@@ -299,6 +450,7 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
                 }
             })
             .collect(),
+        submit: display::label(&view.command),
     })
 }
 
@@ -351,6 +503,8 @@ pub struct Canvas {
     pub pages: Arc<dyn CanvasPages>,
     /// The realtime URL the page hands the island (empty: none yet).
     pub live_events: String,
+    /// `GENUI_DEMO_MODE` (APP-098): demo shortcuts on.
+    pub demo: bool,
 }
 
 pub fn router(canvas: Arc<Canvas>) -> Router {
@@ -449,6 +603,7 @@ async fn group(
         app_card: format!("a-{work}"),
         title: outline.title,
         label: SEEDED_LABEL.to_owned(),
+        origins: seeded_origins(),
         href: format!("/w/{app}/{work}"),
         csrf: auth.csrf.token(csrf::Form::Query, cookie),
         window_start: echo.window_start,
@@ -478,6 +633,31 @@ async fn listing(canvas: &Canvas, member: &TrustedRequest) -> Vec<OpenableWork> 
     }
 }
 
+/// The member's organization display name; empty when it cannot be read
+/// now (the top bar then shows the brand alone).
+async fn organization_name(canvas: &Canvas, member: &TrustedRequest) -> String {
+    let Some(stores) = &canvas.work.auth().stores else {
+        return String::new();
+    };
+    match stores.workspace.organization_name(member).await {
+        Ok(name) => name,
+        Err(error) => {
+            tracing::info!(code = %error, "canvas.organization_unavailable");
+            String::new()
+        }
+    }
+}
+
+/// The avatar's two letters: the member label's first two hex digits.
+pub fn initials(principal: &str) -> String {
+    principal
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .take(2)
+        .collect::<String>()
+        .to_ascii_uppercase()
+}
+
 /// `GET /canvas`.
 async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Response {
     let (parts, _) = request.into_parts();
@@ -498,12 +678,21 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
             Err(refusal) => return refusal,
         }
     }
+    let organization = organization_name(&canvas, &member).await;
+    let principal = member.principal();
     let props = CanvasProps {
         csrf_signout: auth.csrf.token(csrf::Form::SignOut, &cookie),
         has_groups: !groups.is_empty(),
         summary: summary(&groups),
         groups,
         live_events: canvas.live_events.clone(),
+        has_live: !canvas.live_events.is_empty(),
+        has_organization: !organization.is_empty(),
+        organization,
+        member_label: crate::storage::member_label(principal),
+        member_initials: initials(principal),
+        demo: canvas.demo,
+        demo_mode: if canvas.demo { "on" } else { "" }.to_owned(),
     };
     canvas.pages.canvas(&props)
 }
