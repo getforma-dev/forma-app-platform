@@ -971,8 +971,9 @@ async fn commit(
         }
         Err(_) => return Err(Output::unavailable()),
     };
-    let first = !held.spent;
-    state.drafts.spend(caller, id);
+    // The draft's first commit, decided atomically (a concurrent commit of
+    // the same draft replays the record and does not attribute or share).
+    let first = state.drafts.spend(caller, id);
     let mut shared_with = Value::Null;
     let mut share_note = String::new();
     if first {

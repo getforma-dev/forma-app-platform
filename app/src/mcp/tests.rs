@@ -372,12 +372,25 @@ fn drafts_are_the_callers_own_and_expire() {
     assert!(drafts.get_at(&caller(DIEGO, TOKEN_B), &id, now).is_none());
     assert!(drafts.get_at(&diego, &id.to_uppercase(), now).is_none());
     assert!(drafts.get_at(&diego, "00", now).is_none());
-    drafts.spend(&caller(SARAH, TOKEN_A), &id);
+    assert!(!drafts.spend(&caller(SARAH, TOKEN_A), &id));
     assert!(
         !drafts.get_at(&diego, &id, now).unwrap().spent,
         "only its owner spends it"
     );
-    drafts.spend(&diego, &id);
+    // Review: test-and-set. Exactly one commit is the first, even when
+    // several race (each used to read `spent` before any marked it).
+    let firsts = std::thread::scope(|scope| {
+        let spenders: Vec<_> = (0..8)
+            .map(|_| scope.spawn(|| drafts.spend(&diego, &id)))
+            .collect();
+        spenders
+            .into_iter()
+            .map(|spender| spender.join().unwrap())
+            .filter(|first| *first)
+            .count()
+    });
+    assert_eq!(firsts, 1);
+    assert!(!drafts.spend(&diego, &id), "a later commit replays");
     assert!(drafts.get_at(&diego, &id, now).unwrap().spent);
     // Expired after the TTL, and pruned.
     let later = now + DRAFT_TTL + Duration::from_secs(1);

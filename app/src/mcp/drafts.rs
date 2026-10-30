@@ -119,16 +119,23 @@ impl Drafts {
             .then(|| entry.held.clone())
     }
 
-    /// Marks the caller's draft `id` spent (its first commit happened).
-    pub fn spend(&self, caller: &AgentCaller, id: &str) {
-        if let Ok(mut entries) = self.entries.lock() {
-            if let Some(entry) = entries.get_mut(id) {
-                if entry.principal == caller.request.principal()
-                    && entry.token_id == caller.token_id
-                {
-                    entry.held.spent = true;
-                }
+    /// Marks the caller's draft `id` spent (a commit happened), atomically:
+    /// true for exactly one caller, the first; false for every later or
+    /// concurrent commit of the same draft (review: test-and-set, so two
+    /// concurrent commits cannot both attribute and share).
+    pub fn spend(&self, caller: &AgentCaller, id: &str) -> bool {
+        let Ok(mut entries) = self.entries.lock() else {
+            return false;
+        };
+        match entries.get_mut(id) {
+            Some(entry)
+                if entry.organization == caller.request.organization()
+                    && entry.principal == caller.request.principal()
+                    && entry.token_id == caller.token_id =>
+            {
+                !std::mem::replace(&mut entry.held.spent, true)
             }
+            _ => false,
         }
     }
 
