@@ -257,9 +257,11 @@
         "APP-104",
         "APP-105",
         "APP-106",
-        "APP-107"
+        "APP-107",
+        "APP-108",
+        "APP-109"
       ],
-      "ticket_count": 17,
+      "ticket_count": 19,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -3431,6 +3433,66 @@
         "APP-095",
         "APP-099",
         "APP-100"
+      ]
+    },
+    {
+      "id": "APP-108",
+      "title": "Boxes: file cards with a viewer, real CSV data, and apps built from a box that trace back to it",
+      "path": "0-backlog/APP-108.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "AI",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "108",
+      "Size": "L",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md): the November 2 emergency pivot. No dedicated phase existed, so the board's new phase PH08 / sprint S14 (order 8, no phase dependency; added to `plan.json`) holds the pitch tickets. Invariants of ADR-011 \u00a73 that bind this ticket: I3 receipts on every governed number; I4 transactional, idempotent, audited commands; I5 model output is data, never code, SQL, markup or grants (I1\u2013I6 number the six invariants in \u00a73 in order).",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-093, APP-095, APP-104, APP-106",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent on `pivot/focus-unite`)",
+      "Branch / PR": "Not started (`pivot/boxes`, from `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-093",
+        "APP-095",
+        "APP-104",
+        "APP-106"
+      ]
+    },
+    {
+      "id": "APP-109",
+      "title": "Quick notes: /note saves a note as a card",
+      "path": "0-backlog/APP-109.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P2",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "109",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md): the November 2 emergency pivot. No dedicated phase existed, so the board's new phase PH08 / sprint S14 (order 8, no phase dependency; added to `plan.json`) holds the pitch tickets. Invariants of ADR-011 \u00a73 that bind this ticket: I3 receipts on every governed number; I4 transactional, idempotent, audited commands; I5 model output is data, never code, SQL, markup or grants (I1\u2013I6 number the six invariants in \u00a73 in order).",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-103, APP-104",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent on `pivot/focus-unite`)",
+      "Branch / PR": "Not started (`pivot/notes`, from `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-103",
+        "APP-104"
       ]
     }
   ]
