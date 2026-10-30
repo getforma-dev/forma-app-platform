@@ -32,10 +32,17 @@ app/src/storage/**
 !app/src/storage/authorization.rs
 !app/src/storage/catalog.rs
 !app/src/storage/definitions.rs
+!app/src/storage/queries.rs
 !app/src/storage/definition_qualification.rs
 !app/src/storage/tests.rs
 !app/src/storage/qualification.rs
 !app/src/storage/qualification_cases.rs
+!app/src/query/
+app/src/query/**
+!app/src/query/mod.rs
+!app/src/query/receipt.rs
+!app/src/query/worker.rs
+# query/tests.rs and storage/query_qualification.rs are cfg(test) only.
 !app/src/admission/
 app/src/admission/**
 !app/src/admission/mod.rs
@@ -63,6 +70,7 @@ app/admin/src/styles/**
 !app/runtime/
 app/runtime/**
 !app/runtime/runtime.py
+!app/runtime/query_engine.py
 !app/runtime/requirements.lock
 !app/migrations/
 app/migrations/**

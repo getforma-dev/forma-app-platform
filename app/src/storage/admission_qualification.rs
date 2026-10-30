@@ -96,7 +96,7 @@ fn wait(child: Child, label: &str) -> Output {
     }
     child.wait_with_output().expect("operator command output")
 }
-fn operator_as(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> Output {
+pub(super) fn operator_as(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> Output {
     wait(
         cli_command(fixture, user, password, args)
             .spawn()
@@ -129,7 +129,7 @@ fn refused(output: &Output) {
     assert!(output.stdout.is_empty());
 }
 /// A refusal for the stated fixed reason code (never a value).
-fn refused_for(output: &Output, reason: &str) {
+pub(super) fn refused_for(output: &Output, reason: &str) {
     refused(output);
     assert_eq!(
         serde_json::from_slice::<Value>(&output.stderr).expect("refusal JSON"),

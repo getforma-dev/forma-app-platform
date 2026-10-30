@@ -8,6 +8,7 @@ mod authorization;
 mod catalog;
 mod definitions;
 mod pool;
+mod queries;
 mod registry;
 
 pub use admission::{
@@ -20,6 +21,9 @@ pub use definitions::{
     PublishResult, RecordSchema, SavedWork, SavedWorkDetail, WorkBinding, MAX_CANONICAL_BYTES,
 };
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
+pub use queries::{
+    parse_parameters, query_digests, Parameters, QueryRun, RunSource, QUERY_HANDLER_DEADLINE,
+};
 pub use registry::RegistryIdentity;
 
 use std::fmt;
@@ -81,5 +85,7 @@ mod managed_qualification;
 mod qualification;
 #[cfg(test)]
 mod qualification_cases;
+#[cfg(test)]
+mod query_qualification;
 #[cfg(test)]
 mod tests;

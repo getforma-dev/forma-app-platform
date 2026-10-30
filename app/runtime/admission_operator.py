@@ -17,6 +17,18 @@ the closed GRANTABLE set (a revocation advances the member's epoch);
 appends `permission.granted`, `permission.revoked` or
 `creator_authority.revoked` to the operator chain.
 
+Source revisions and their saved work (APP-012; ADR-007 D7.10, ADR-009 D9.3;
+APP-077 review M2): `register-source-revision --record` inserts one NEW
+`source_revisions` row from `upload-sources`' printed record, with the real
+digests of the objects already written at ADR-009 B1's keys; a revision is
+never rewritten (an identical record is `unchanged`, a differing one refused).
+`create-bound-work` writes a new saved work at version 1 that copies an
+existing work's publication, context and bindings and binds one source input
+to another live revision of the same source with the same contract; the old
+work and its records are untouched. Neither writes an audit event: D7.8's
+operator kinds name none (a kind is an ADR amendment), so, as with the seed,
+the retained JSON output is the record.
+
 A new access code's secret (32 CSPRNG bytes, base32) is printed exactly once,
 on standard output, after its transaction commits. It is never logged, stored
 or written anywhere else; only its domain-separated digest is stored. Listing
@@ -238,6 +250,12 @@ def parser():
     q = sub.add_parser("revoke-creator-authority")
     for arg in ("--organization", "--app", "--work"):
         q.add_argument(arg, required=True)
+    q = sub.add_parser("register-source-revision")
+    for arg in ("--organization", "--record"):
+        q.add_argument(arg, required=True)
+    q = sub.add_parser("create-bound-work")
+    for arg in ("--organization", "--app", "--from-work", "--work", "--creator", "--input", "--source", "--revision"):
+        q.add_argument(arg, required=True)
     return p
 
 
@@ -245,7 +263,7 @@ def validate(args):
     """Every argument is checked before any connection is opened."""
     if hasattr(args, "organization"):
         identifier(args.organization)
-    for name in ("code_id", "principal", "app", "work", "source", "space", "owner"):
+    for name in ("code_id", "principal", "app", "work", "source", "space", "owner", "from_work", "creator", "revision"):
         if getattr(args, name, None) is not None:
             identifier(getattr(args, name))
     if args.command in ("grant-permission", "revoke-permission"):
@@ -276,7 +294,53 @@ def validate(args):
             require(1 <= len(args.provider_issuer) <= 512 and 1 <= len(args.provider_tenant) <= 256, "malformed_provider_tenant")
     if args.command == "extend":
         require(1 <= args.expires_days <= DEFAULTS["code_expiry_days_max"], "expiry_out_of_range")
+    if args.command == "register-source-revision":
+        args.revision_record = source_record(args.record, args.organization)
+    if args.command == "create-bound-work":
+        require(LOCAL_ID.fullmatch(args.input) is not None, "malformed_input")
+        require(args.work != args.from_work, "work_exists")
     return args
+
+
+LOCAL_ID = re.compile(r"[a-z][a-z0-9_]{0,63}")
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+RECORD_KEYS = {"organization_id", "source_id", "revision_id", "content_digest", "normalized_digest", "object_digest",
+               "row_count", "contract_digest"}
+
+
+def revision_id(organization, content_digest):
+    """`upload-sources`' revision identity: uuid5(organization, content digest) re-stamped as version 4.
+
+    The contract and every validator accept only version 4 or 7 UUIDs.
+    """
+    return str(uuid.UUID(bytes=uuid.uuid5(uuid.UUID(organization), content_digest).bytes, version=4))
+
+
+def source_record(path, organization):
+    """`upload-sources`' one printed record, closed and checked before any connection.
+
+    `normalized_digest` is the SHA-256 of the uploaded `part.parquet` bytes
+    (ADR-009 D9.3 M6), which the query cache verifies (D7.10); the record's
+    `object_digest` names the same object and must agree, and `revision_id`
+    must be the content-derived identity (`revision_id`).
+    """
+    try:
+        with open(path, "rb") as stream:
+            raw = stream.read(4097)
+        require(len(raw) <= 4096, "record_refused")
+        record = json.loads(raw)
+    except (OSError, ValueError):
+        raise Refused("record_refused") from None
+    require(isinstance(record, dict) and set(record) == RECORD_KEYS, "record_refused")
+    for key in ("organization_id", "source_id", "revision_id"):
+        identifier(record[key])
+    for key in ("content_digest", "normalized_digest", "object_digest", "contract_digest"):
+        require(isinstance(record[key], str) and DIGEST.fullmatch(record[key]) is not None, "record_refused")
+    require(record["organization_id"] == organization, "record_organization_refused")
+    require(record["object_digest"] == record["normalized_digest"], "record_digest_refused")
+    require(record["revision_id"] == revision_id(organization, record["content_digest"]), "record_revision_refused")
+    require(type(record["row_count"]) is int and 0 <= record["row_count"] <= 9007199254740991, "record_refused")
+    return record
 
 
 # --- operator transaction -----------------------------------------------------
@@ -710,6 +774,130 @@ def revoke_creator_authority(c, args):
     append(c, org, "creator_authority.revoked", actor=creator, app=app, work=work)
     c.commit()
     return dict(result, changed=True, membership_epoch=epoch)
+
+
+def register_source_revision(c, args):
+    """One new immutable revision row with real digests; never a rewrite (ADR-009 D9.3).
+
+    The envelope is the source's existing revision envelope with the same
+    contract (its input contract, parser, mapping, format and time semantics),
+    carrying the new identity, digests, row count and creation time; it must
+    validate as a `source_revision` and reproduce the record's contract digest.
+    """
+    contracts = str(runtime.Path(runtime.__file__).resolve().parents[2] / "contracts")
+    if contracts not in sys.path:
+        sys.path.insert(0, contracts)
+    from validate import canonical as contract_canonical, digest as contract_digest, validate as contract_validate
+    record, org = args.revision_record, args.organization
+    begin(c, org)
+    lock_organization(c, org, active=True)
+    require(c.execute("SELECT 1 FROM genui.sources WHERE organization_id=%s AND source_id=%s",
+                      (org, record["source_id"])).fetchone() is not None, "source_unknown")
+    existing = c.execute("""SELECT content_digest::text,normalized_digest::text,contract_digest::text,deleted_at IS NULL
+          FROM genui.source_revisions WHERE organization_id=%s AND source_id=%s AND revision_id=%s""",
+                         (org, record["source_id"], record["revision_id"])).fetchone()
+    result = {"organization_id": org, "source_id": record["source_id"], "revision_id": record["revision_id"],
+              "normalized_digest": record["normalized_digest"], "contract_digest": record["contract_digest"]}
+    if existing is not None:
+        require(tuple(existing) == (record["content_digest"], record["normalized_digest"], record["contract_digest"], True),
+                "revision_exists_differs")
+        c.commit()
+        return dict(result, changed=False)
+    template = c.execute("""SELECT canonical_envelope FROM genui.source_revisions WHERE organization_id=%s AND source_id=%s
+          AND contract_digest=%s AND deleted_at IS NULL ORDER BY revision_id LIMIT 1""",
+                         (org, record["source_id"], record["contract_digest"])).fetchone()
+    require(template is not None, "contract_unknown")
+    envelope = json.loads(bytes(template[0]))
+    created = c.execute("SELECT now()").fetchone()[0]
+    envelope.update({"revision_id": record["revision_id"], "content_digest": record["content_digest"],
+                     "normalized_digest": record["normalized_digest"], "row_count": record["row_count"],
+                     "created_at": timestamp(created)})
+    try:
+        contract_validate(envelope)
+    except Exception:
+        raise Refused("envelope_refused") from None
+    require(envelope["organization_id"] == org and envelope["source_id"] == record["source_id"], "envelope_refused")
+    require(contract_digest("input-contract", envelope["input_contract"]) == record["contract_digest"], "contract_refused")
+    c.execute("""INSERT INTO genui.source_revisions(organization_id,source_id,revision_id,content_digest,normalized_digest,
+          contract_digest,deleted_at,canonical_envelope) VALUES (%s,%s,%s,%s,%s,%s,NULL,%s)""",
+              (org, record["source_id"], record["revision_id"], record["content_digest"], record["normalized_digest"],
+               record["contract_digest"], contract_canonical(envelope)))
+    c.commit()
+    return dict(result, changed=True, row_count=record["row_count"], created_at=envelope["created_at"])
+
+
+def create_bound_work(c, args):
+    """A new saved work (version 1) rebinding one source input; nothing is rewritten.
+
+    It copies `--from-work`'s publication, context and every binding, except
+    that `--input` binds `--revision` of the same source, which must be live
+    and carry the same contract digest. Each published record schema gets a
+    new, empty collection. The creator must be an active member holding `run`
+    on the app and `source_read` on every bound source, as the workspace's own
+    `create_work` requires; the work records them as its creator (ADR-007
+    amendment, review M2), so no work grant is written. A rerun with the same
+    bindings is `unchanged`; any other existing work id is refused.
+    """
+    org, app, work, origin, creator = args.organization, args.app, args.work, args.from_work, args.creator
+    begin(c, org)
+    lock_active_member(c, org, creator)
+    row = c.execute("SELECT publication_id::text,context FROM genui.saved_work WHERE organization_id=%s AND app_id=%s AND work_id=%s",
+                    (org, app, origin)).fetchone()
+    require(row is not None, "work_unknown")
+    publication, context = row
+    bindings = c.execute("""SELECT input_id::text,kind,contract_digest::text,source_id::text,source_revision_id::text,source_digest::text,
+          schema_id::text,schema_version FROM genui.work_bindings WHERE organization_id=%s AND app_id=%s AND work_id=%s ORDER BY input_id""",
+                         (org, app, origin)).fetchall()
+    target = [b for b in bindings if b[0] == args.input]
+    require(len(target) == 1 and target[0][1] == "source" and target[0][3] == args.source, "binding_refused")
+    revision = c.execute("""SELECT normalized_digest::text FROM genui.source_revisions WHERE organization_id=%s AND source_id=%s
+          AND revision_id=%s AND contract_digest=%s AND deleted_at IS NULL""", (org, args.source, args.revision, target[0][2])).fetchone()
+    require(revision is not None, "revision_refused")
+    planned = []
+    for input_id, kind, contract, source, source_revision, source_digest, schema, version in bindings:
+        if input_id == args.input:
+            source_revision, source_digest = args.revision, revision[0]
+        planned.append((input_id, kind, contract, source, source_revision, source_digest, schema, version))
+    sources = sorted({b[3] for b in planned if b[1] == "source"})
+    require(c.execute("SELECT 1 FROM genui.app_permissions WHERE organization_id=%s AND principal_id=%s AND app_id=%s AND permission='run'",
+                      (org, creator, app)).fetchone() is not None, "creator_lacks_authority")
+    for source in sources:
+        require(c.execute("""SELECT 1 FROM genui.source_permissions WHERE organization_id=%s AND principal_id=%s AND source_id=%s
+              AND permission='source_read'""", (org, creator, source)).fetchone() is not None, "creator_lacks_authority")
+    result = {"work_id": work, "publication_id": publication, "version": 1, "creator_principal_id": creator,
+              "bindings": [{"input_id": b[0], "kind": b[1], "source_id": b[3], "source_revision_id": b[4], "source_digest": b[5]}
+                           for b in planned]}
+    existing = c.execute("SELECT publication_id::text,created_by::text FROM genui.saved_work WHERE organization_id=%s AND app_id=%s AND work_id=%s",
+                         (org, app, work)).fetchone()
+    if existing is not None:
+        current = c.execute("""SELECT input_id::text,source_id::text,source_revision_id::text,source_digest::text FROM genui.work_bindings
+              WHERE organization_id=%s AND app_id=%s AND work_id=%s AND kind='source' ORDER BY input_id""", (org, app, work)).fetchall()
+        require(tuple(existing) == (publication, creator)
+                and [tuple(r) for r in current] == [(b[0], b[3], b[4], b[5]) for b in planned if b[1] == "source"], "work_exists")
+        c.commit()
+        return dict(result, changed=False)
+    c.execute("""INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by)
+          VALUES (%s,%s,%s,%s,1,%s,%s)""", (org, app, work, publication, context, creator))
+    collections = {}
+    for schema, version in c.execute("""SELECT schema_id::text,schema_version FROM genui.publication_record_schemas
+          WHERE organization_id=%s AND app_id=%s AND publication_id=%s ORDER BY schema_id,schema_version""", (org, app, publication)).fetchall():
+        collections[(schema, version)] = str(uuid.uuid4())
+        c.execute("""INSERT INTO genui.record_collections(organization_id,app_id,work_id,publication_id,collection_id,schema_id,schema_version)
+              VALUES (%s,%s,%s,%s,%s,%s,%s)""", (org, app, work, publication, collections[(schema, version)], schema, version))
+    for input_id, kind, contract, source, source_revision, source_digest, schema, version in planned:
+        if kind == "source":
+            c.execute("""INSERT INTO genui.work_bindings(organization_id,app_id,work_id,publication_id,input_id,kind,contract_digest,
+                  source_id,source_revision_id,source_digest) VALUES (%s,%s,%s,%s,%s,'source',%s,%s,%s,%s)""",
+                      (org, app, work, publication, input_id, contract, source, source_revision, source_digest))
+            c.execute("""INSERT INTO genui.work_source_dependencies(organization_id,app_id,work_id,input_id,source_id,source_revision_id,
+                  source_digest) VALUES (%s,%s,%s,%s,%s,%s,%s)""", (org, app, work, input_id, source, source_revision, source_digest))
+        else:
+            require((schema, version) in collections, "binding_refused")
+            c.execute("""INSERT INTO genui.work_bindings(organization_id,app_id,work_id,publication_id,input_id,kind,contract_digest,
+                  collection_id,schema_id,schema_version,revision_policy) VALUES (%s,%s,%s,%s,%s,'records',%s,%s,%s,%s,'committed_snapshot')""",
+                      (org, app, work, publication, input_id, contract, collections[(schema, version)], schema, version))
+    c.commit()
+    return dict(result, changed=True)
 
 
 def verify(c, args):
@@ -1234,7 +1422,8 @@ def _reconcile(c, org, config):
 COMMANDS = {"provision": provision, "backfill": backfill, "issue": issue, "list": list_codes, "revoke": revoke,
             "extend": extend, "revoke-entitlement": revoke_entitlement, "revoke-membership": revoke_membership, "verify": verify,
             "reconcile": reconcile, "grant-permission": grant_permission, "revoke-permission": revoke_permission,
-            "create-app": create_app, "revoke-creator-authority": revoke_creator_authority}
+            "create-app": create_app, "revoke-creator-authority": revoke_creator_authority,
+            "register-source-revision": register_source_revision, "create-bound-work": create_bound_work}
 
 
 def provider_configuration(args):

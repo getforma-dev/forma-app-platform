@@ -152,7 +152,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 42] = [
+const SOURCES: [(&str, &[u8]); 48] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -197,6 +197,19 @@ const SOURCES: [(&str, &[u8]); 42] = [
         include_bytes!("../imports/sandbox.rs"),
     ),
     ("app/src/lib.rs", include_bytes!("../lib.rs")),
+    ("app/src/query/mod.rs", include_bytes!("../query/mod.rs")),
+    (
+        "app/src/query/receipt.rs",
+        include_bytes!("../query/receipt.rs"),
+    ),
+    (
+        "app/src/query/tests.rs",
+        include_bytes!("../query/tests.rs"),
+    ),
+    (
+        "app/src/query/worker.rs",
+        include_bytes!("../query/worker.rs"),
+    ),
     ("app/src/readiness.rs", include_bytes!("../readiness.rs")),
     ("app/src/roles.rs", include_bytes!("../roles.rs")),
     (
@@ -237,6 +250,11 @@ const SOURCES: [(&str, &[u8]); 42] = [
     (
         "app/src/storage/qualification_cases.rs",
         include_bytes!("qualification_cases.rs"),
+    ),
+    ("app/src/storage/queries.rs", include_bytes!("queries.rs")),
+    (
+        "app/src/storage/query_qualification.rs",
+        include_bytes!("query_qualification.rs"),
     ),
     ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
