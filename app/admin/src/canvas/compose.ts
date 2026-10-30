@@ -6,7 +6,7 @@
 // `GET /v1/canvas/works/{app}/{work}`, which re-authorizes, and runs its views
 // through the governed query route. Every refusal here is shown as neutral
 // copy; nothing of the response body is rendered besides the title.
-import { markTailoring, noteKept, placeWork } from './board';
+import { markTailoring, noteKept, placeWork, setReporter } from './board';
 import { showChooser } from './slash';
 import { isUuid } from './render';
 
@@ -123,7 +123,8 @@ export function messageFor(error: unknown): string {
  * card reshapes in place) or `app.kept` arrives on the live stream. A near
  * tie shows the chooser instead of guessing.
  */
-export async function submitIntent(text: string, report: (message: string) => void, pin: Pin = null): Promise<void> {
+export async function submitIntent(text: string, bar: (message: string) => void, pin: Pin = null): Promise<void> {
+  const report = setReporter(bar);
   report(pin && 'app_id' in pin ? 'Opening it…' : 'Composing your app…');
   const started = performance.now();
   let answer: ComposeAnswer;
@@ -143,8 +144,10 @@ export async function submitIntent(text: string, report: (message: string) => vo
   report(result.title ? `Placing “${result.title}” on your canvas…` : 'Placing it on your canvas…');
   const placed = await placeWork(result.app_id, result.work_id, result.labels);
   if (result.tailoring === 'pending') {
-    markTailoring(result.work_id);
-    report(`${placed} Tailoring it to your request…`);
+    const state = markTailoring(result.work_id);
+    report(state === 'tailoring' ? `${placed} Tailoring it to your request…`
+      : state === 'adapted' ? 'Adapted to your request. “Back to standard” shows the defaults.'
+        : 'Kept the standard view.');
     return;
   }
   if (result.tailoring === 'kept') noteKept(result.work_id);

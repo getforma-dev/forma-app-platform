@@ -1349,6 +1349,8 @@ async fn campaign() {
             )
             .unwrap();
         }
+        // APP-101: the stand's transform answers (scratch screenshots only).
+        stub.script(vec![TRANSFORM_REPLY.into(); 16]);
         println!("PITCH_STAND {}", stand.origin);
         let deadline = Instant::now() + Duration::from_secs(seconds);
         let stopped = || !file.is_empty() && std::path::Path::new(&format!("{file}.stop")).exists();

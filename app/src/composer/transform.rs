@@ -275,7 +275,7 @@ Output exactly one JSON object and nothing else (no prose, no code fences), with
  \"group_by\": \"<field id>\", \"measure\": {\"op\": \"count|sum|min|max\", \"field\": \"<field id>\"},\n\
  \"columns\": [\"<field id>\"], \"sort\": {\"field\": \"<field id>\", \"direction\": \"asc|desc\"}, \"limit\": <1..500>,\n\
  \"presentation\": \"table|bar|line|number\", \"title\": \"<plain text, at most 80 characters>\"}\n\
-Rules: use only the field ids listed for the app; money values are dollars as a string (\"200\" or \"19.99\"); enum values must be one of the listed values; text values are plain words; lt/lte/gt/gte only on numbers, money, dates and timestamps. Include only what the intent asks for beyond the app as it is. If the intent asks for nothing more, output {}.\n\
+Rules: use only the field ids listed for the app; money values are dollars as a string (\"200\" or \"19.99\"); enum values must be one of the listed values; text values are plain words; lt/lte/gt/gte only on numbers, money, dates and timestamps. Include only what the intent explicitly asks for beyond the app as it is: no columns, sort, limit or presentation unless the intent names them. If the intent asks for nothing more, output {}.\n\
 FORBIDDEN: any other key; markup, script, SQL, URLs or file paths anywhere; anything about permissions, roles, owners, tenants, members, grants or access.";
 
 /// The transform model's user message: the intent as data and the app's
@@ -1354,5 +1354,115 @@ mod tests {
             !message.contains("decisions"),
             "records inputs are not offered"
         );
+    }
+}
+
+/// APP-101: the real fast model on the pitch sentences. Ignored: it runs
+/// only through `app/scripts/composer_smoke.sh transform`, which exports the
+/// key into this process from the gitignored `.env`; it prints the pick, the
+/// judged chips or the refusal code and the latency, never the key or a
+/// model text.
+#[cfg(test)]
+mod smoke {
+    use super::*;
+    use crate::composer::{matcher, Composer};
+
+    fn library(fixture: &str) -> LibraryApp {
+        let path = format!(
+            "{}/../contracts/fixtures/library/{fixture}",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let bundle: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let content = bundle["definition"]["content"].clone();
+        LibraryApp {
+            app: bundle["definition"]["app_id"].as_str().unwrap().into(),
+            publication: "00000000-0000-4000-8000-000000000068".into(),
+            definition_digest: bundle["definition"]["digest"].as_str().unwrap().into(),
+            title: content["title"].as_str().unwrap().into(),
+            description: content["description"].as_str().unwrap().into(),
+            inputs: content["inputs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|input| crate::storage::PublishedInput {
+                    id: input["id"].as_str().unwrap().into(),
+                    kind: input["kind"].as_str().unwrap().into(),
+                    contract_digest: "sha256:0".into(),
+                    fields: input["fields"].clone(),
+                })
+                .collect(),
+            record_schemas: Vec::new(),
+            views: content["views"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|view| crate::storage::LibraryView {
+                    id: view["id"].as_str().unwrap().into(),
+                    kind: view["kind"].as_str().unwrap().into(),
+                    title: view["title"].as_str().unwrap().into(),
+                })
+                .collect(),
+            content,
+        }
+    }
+
+    #[test]
+    #[ignore = "calls the real model; run through app/scripts/composer_smoke.sh transform"]
+    fn real_haiku_transform_smoke() {
+        let composer = Composer::from_env();
+        assert!(composer.enabled(), "no usable key in the environment");
+        let catalog: Vec<Value> = crate::storage::library_sidecar().unwrap();
+        let library: Vec<LibraryApp> = catalog
+            .iter()
+            .map(|entry| library(entry["fixture"].as_str().unwrap()))
+            .collect();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let sentences = [
+            "Review expenses over $200",
+            "Investigate outbound traffic from build-worker-17",
+            "expense claims in travel from the last 30 days",
+            "show rejected expense claims sorted by amount, top 10",
+            "vendor spend over $5,000 by category as a bar chart",
+            "outbound traffic over udp to each destination as a bar chart",
+            "support tickets per day as a line chart",
+        ];
+        eprintln!("smoke: transform model={}", composer.router_model());
+        for sentence in sentences {
+            let started = std::time::Instant::now();
+            let found = matcher::pick(sentence, &library, None);
+            let picked_us = started.elapsed().as_micros();
+            let Some(index) = found.pick else {
+                eprintln!(
+                    "smoke: {sentence:?} -> no confident pick ({})",
+                    found.reason
+                );
+                continue;
+            };
+            let app = &library[index];
+            let started = std::time::Instant::now();
+            let outcome = runtime.block_on(composer.transform(sentence, app, false));
+            let model_ms = started.elapsed().as_millis();
+            let decision = match outcome {
+                Ok((transform, _)) => match plan_transformed(
+                    app,
+                    &transform,
+                    "00000000-0000-4000-8000-000000000001",
+                    "00000000-0000-4000-8000-00000000e0a1",
+                    1_793_318_400,
+                ) {
+                    Ok(Some((_, chips))) => format!("adapted {chips:?}"),
+                    Ok(None) => "kept (nothing to change)".to_owned(),
+                    Err(refusal) => format!("kept (refused {})", refusal.code),
+                },
+                Err(failure) => format!("kept (model {failure:?})"),
+            };
+            eprintln!(
+                "smoke: {sentence:?} -> pick {:?} in {picked_us} us; transform {model_ms} ms: {decision}",
+                app.title
+            );
+        }
     }
 }

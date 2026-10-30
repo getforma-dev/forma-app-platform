@@ -3237,7 +3237,7 @@
       "Depends on": "APP-093, APP-094",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started (`pivot/transform`, from `pivot/pitch-mvp`)",
+      "Branch / PR": "`pivot/transform` (from `pivot/pitch-mvp`), not merged",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

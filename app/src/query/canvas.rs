@@ -854,14 +854,19 @@ async fn group(
             Err(error) => return Err(routes::storage_refusal(&error)),
         }
     };
+    let adapted = adapted_origins(&outline.description);
     Ok(Some(GroupProps {
         id: format!("g-{work}"),
         app: app.to_owned(),
         work: work.to_owned(),
         app_card: format!("a-{work}"),
         title: outline.title,
-        label: SEEDED_LABEL.to_owned(),
-        origins: adapted_origins(&outline.description).unwrap_or_else(seeded_origins),
+        label: if adapted.is_some() {
+            "Adapted to your request from a library app (typed transform, admitted).".to_owned()
+        } else {
+            SEEDED_LABEL.to_owned()
+        },
+        origins: adapted.unwrap_or_else(seeded_origins),
         href: format!("/w/{app}/{work}"),
         csrf: auth.csrf.token(csrf::Form::Query, cookie),
         window_start: echo.window_start,

@@ -26,4 +26,10 @@ unset key
 export GENUI_COMPOSER_ROUTER_MODEL=${GENUI_COMPOSER_ROUTER_MODEL:-claude-haiku-4-5-20251001}
 export GENUI_COMPOSER_GENERATION_MODEL=${GENUI_COMPOSER_GENERATION_MODEL:-claude-haiku-4-5-20251001}
 cd "$root/app"
-exec cargo +1.93.1 test --locked --lib composer::tests::real_model_smoke -- --ignored --exact --nocapture
+# APP-101: `composer_smoke.sh transform` runs the live-transform smoke
+# (the pitch sentences, decisions and latencies only) instead.
+case "${1:-composer}" in
+  transform) test=composer::transform::smoke::real_haiku_transform_smoke ;;
+  *) test=composer::tests::real_model_smoke ;;
+esac
+exec cargo +1.93.1 test --locked --lib "$test" -- --ignored --exact --nocapture

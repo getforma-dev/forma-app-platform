@@ -46,13 +46,115 @@ const EXAMPLE_WEIGHT: f64 = 0.65;
 /// Words that carry no routing signal (they are also what a transform reads,
 /// so they never pull an intent toward an app).
 const STOPWORDS: &[&str] = &[
-    "a", "about", "above", "all", "an", "and", "any", "app", "apps", "are", "as", "at", "be",
-    "below", "by", "can", "do", "does", "each", "every", "for", "from", "get", "give", "has",
-    "have", "how", "i", "in", "into", "is", "it", "its", "just", "last", "least", "less", "let",
-    "list", "many", "me", "more", "most", "much", "my", "need", "new", "of", "on", "only", "or",
-    "our", "over", "past", "per", "please", "see", "show", "some", "than", "that", "the", "their",
-    "there", "these", "this", "those", "to", "top", "under", "up", "us", "view", "vs", "want",
-    "was", "we", "what", "whats", "which", "who", "with", "you", "your",
+    "a",
+    "about",
+    "above",
+    "all",
+    "an",
+    "and",
+    "any",
+    "app",
+    "apps",
+    "are",
+    "as",
+    "at",
+    "be",
+    "below",
+    "by",
+    "can",
+    "do",
+    "does",
+    "each",
+    "every",
+    "for",
+    "from",
+    "get",
+    "give",
+    "has",
+    "have",
+    "how",
+    "i",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "just",
+    "last",
+    "least",
+    "less",
+    "let",
+    "list",
+    "many",
+    "me",
+    "more",
+    "most",
+    "much",
+    "my",
+    "need",
+    "new",
+    "of",
+    "on",
+    "only",
+    "or",
+    "our",
+    "over",
+    "past",
+    "per",
+    "please",
+    "see",
+    "show",
+    "some",
+    "than",
+    "that",
+    "the",
+    "their",
+    "there",
+    "these",
+    "this",
+    "those",
+    "to",
+    "top",
+    "under",
+    "up",
+    "us",
+    "view",
+    "vs",
+    "want",
+    "was",
+    "we",
+    "what",
+    "whats",
+    "which",
+    "who",
+    "with",
+    "you",
+    "your",
+    // The shape words a transform reads (APP-101): never routing signal.
+    "ascending",
+    "bar",
+    "between",
+    "chart",
+    "daily",
+    "day",
+    "days",
+    "descending",
+    "except",
+    "excluding",
+    "graph",
+    "line",
+    "only",
+    "since",
+    "sort",
+    "sorted",
+    "table",
+    "until",
+    "week",
+    "weekly",
+    "where",
+    "without",
+    "year",
+    "yesterday",
 ];
 
 /// Stem → canonical stem (applied after stemming, to both sides).
@@ -183,6 +285,15 @@ fn routing(app: &LibraryApp) -> Routing {
             if let Some(id) = field.get("id").and_then(Value::as_str) {
                 vocabulary.extend(tokens(id));
             }
+            // Enum values ("travel", "udp", "rejected") name this app's data.
+            for value in strings(
+                field
+                    .get("value_type")
+                    .and_then(|t| t.get("values"))
+                    .or_else(|| field.get("values")),
+            ) {
+                vocabulary.extend(tokens(value));
+            }
         }
     }
     for view in &app.views {
@@ -281,16 +392,38 @@ pub fn pick(intent: &str, library: &[LibraryApp], exclude: Option<&str>) -> Matc
             ranked: Vec::new(),
         };
     }
+    let candidates: Vec<(usize, Routing)> = library
+        .iter()
+        .enumerate()
+        .filter(|(_, app)| exclude != Some(app.app.as_str()))
+        .map(|(index, app)| (index, routing(app)))
+        .collect();
+    // Words no candidate knows ("PTO", a merchant, a host name) say nothing
+    // about which app; they are left to the transform (APP-101).
+    let known: BTreeSet<String> = words
+        .iter()
+        .filter(|word| candidates.iter().any(|(_, r)| r.vocabulary.contains(*word)))
+        .cloned()
+        .collect();
+    let unknown = words.len() - known.len();
+    let all_words = words;
+    let words = known;
+    if words.is_empty() {
+        return Match {
+            pick: None,
+            best: 0.0,
+            runner_up: 0.0,
+            reason: "no_hit",
+            ranked: Vec::new(),
+        };
+    }
     let mut scored: Vec<(usize, f64)> = Vec::new();
-    for (index, app) in library.iter().enumerate() {
-        if exclude == Some(app.app.as_str()) {
-            continue;
-        }
-        let routing = routing(app);
+    for (index, routing) in &candidates {
+        let index = *index;
         if routing
             .negatives
             .iter()
-            .any(|negative| negative.is_subset(&words))
+            .any(|negative| negative.is_subset(&all_words))
         {
             continue;
         }
@@ -299,7 +432,10 @@ pub fn pick(intent: &str, library: &[LibraryApp], exclude: Option<&str>) -> Matc
             .iter()
             .map(|example| dice(&words, example))
             .fold(0.0, f64::max);
-        let coverage = words.intersection(&routing.vocabulary).count() as f64 / words.len() as f64;
+        // Unknown words still dilute coverage a little, so a long request
+        // mostly about something else does not ride on one shared word.
+        let coverage = words.intersection(&routing.vocabulary).count() as f64
+            / (words.len() as f64 + unknown as f64 / 2.0);
         scored.push((
             index,
             EXAMPLE_WEIGHT * example + (1.0 - EXAMPLE_WEIGHT) * coverage,

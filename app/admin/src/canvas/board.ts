@@ -49,6 +49,8 @@ const tailoring = new Map<string, number>();
 type Ref = { app: string; work: string };
 const pairs = new Map<string, { standard: Ref; adapted: Ref }>();
 const early = new Map<string, Ref>();
+// `app.kept` that arrived before the card's tailoring state was shown.
+const keptEarly = new Set<string>();
 /** How long the canvas waits for `app.adapted` / `app.kept` before keeping the defaults. */
 const TAILOR_WAIT_MS = 15000;
 
@@ -384,6 +386,26 @@ async function placeWorkNow(app: string, work: string, labels: string[]): Promis
 
 // --- APP-101: live transform, back to standard, save as /name ---
 
+/**
+ * The intent bar's reporter (its island owns the status line; writing the
+ * DOM directly would detach its binding): the latest one a submit handed us.
+ */
+let reporter: ((message: string) => void) | null = null;
+let lastReport = '';
+export function setReporter(report: (message: string) => void): (message: string) => void {
+  reporter = report;
+  return (message: string) => {
+    lastReport = message;
+    report(message);
+  };
+}
+/** Reports on the intent bar; with `when`, only while its last message matches. */
+function reportStatus(message: string, when?: RegExp): void {
+  if (!reporter || (when && !when.test(lastReport))) return;
+  lastReport = message;
+  reporter(message);
+}
+
 /** Generated and adapted apps can be saved as a slash command. */
 function nameable(labels: string[], origins: { kind: string; text: string }[] | undefined): boolean {
   const words = [...labels, ...(origins ?? []).map((origin) => origin.kind)];
@@ -450,8 +472,8 @@ function nameForm(group: Group): HTMLElement {
       await swapGroup(group.work, outcome.app_id, outcome.work_id, [], false);
       await refreshCommands();
       announce(`Saved as /${outcome.slug}. Type /${outcome.slug} to open it.`);
-      const bar = host?.ownerDocument.getElementById('intent-status');
-      if (bar) bar.textContent = `Saved as /${outcome.slug}. Type /${outcome.slug} to open it any time.`;
+      status.textContent = `Saved as /${outcome.slug}.`;
+      reportStatus(`Saved as /${outcome.slug}. Type /${outcome.slug} to open it any time.`);
     });
   });
   return form;
@@ -509,6 +531,7 @@ async function swapGroup(fromWork: string, toApp: string, toWork: string, labels
   const pair = pairs.get(fromWork);
   if (pair && keepPair) pairs.set(toWork, pair);
   if (!keepPair) pairs.delete(fromWork);
+  window.clearTimeout(tailoring.get(fromWork));
   tailoring.delete(fromWork);
   decorate(fresh);
   scheduleReflow();
@@ -532,16 +555,23 @@ async function reshape(standard: Ref, adapted: Ref): Promise<void> {
   if (swapped) {
     host?.setAttribute('data-last-reshape-at', String(Math.round(performance.now())));
     announce('Adapted to your request.');
-    const bar = host?.ownerDocument.getElementById('intent-status');
-    if (bar && /Tailoring/.test(bar.textContent ?? '')) bar.textContent = 'Adapted to your request. “Back to standard” shows the defaults.';
+    reportStatus('Adapted to your request. “Back to standard” shows the defaults.', /Tailoring/);
   }
 }
 
-/** The "tailoring to your request…" state on a just-placed card (APP-101). */
-export function markTailoring(work: string): void {
+/**
+ * The "tailoring to your request…" state on a just-placed card (APP-101).
+ * Answers what the bar should say: the outcome may already have arrived
+ * (a fast transform reshapes or keeps before the placement finishes).
+ */
+export function markTailoring(work: string): 'tailoring' | 'adapted' | 'kept' {
+  if (keptEarly.delete(work)) {
+    noteKept(work);
+    return 'kept';
+  }
   const group = groups.get(work);
   const card = group && appCard(group);
-  if (!group || !card) return;
+  if (!group || !card) return pairs.has(work) || early.has(work) ? 'adapted' : 'kept';
   const document_ = card.ownerDocument;
   card.querySelector('.cv-tailoring')?.remove();
   card.append(el(document_, 'p', { class: 'cv-tailoring', role: 'status' },
@@ -549,6 +579,7 @@ export function markTailoring(work: string): void {
   group.items.forEach((item) => item.classList.add('is-tailoring'));
   window.clearTimeout(tailoring.get(work));
   tailoring.set(work, window.setTimeout(() => noteKept(work), TAILOR_WAIT_MS));
+  return 'tailoring';
 }
 
 /** The transform kept the defaults: a neutral note, never an error. */
@@ -562,8 +593,7 @@ export function noteKept(work: string): void {
   card.querySelector('.cv-tailoring')?.remove();
   card.querySelector('.cv-kept')?.remove();
   card.append(el(card.ownerDocument, 'p', { class: 'cv-kept', role: 'status' }, 'Kept the standard view.'));
-  const bar = host?.ownerDocument.getElementById('intent-status');
-  if (bar && /Tailoring/.test(bar.textContent ?? '')) bar.textContent = 'Kept the standard view.';
+  reportStatus('Kept the standard view.', /Tailoring/);
 }
 
 async function onAdapted(event: { app_id: string; work_id: string; from_app_id: string; from_work_id: string }): Promise<void> {
@@ -625,6 +655,10 @@ function onLive(event: LiveEvent): void {
   }
   if (event.kind === 'app.kept') {
     if (tailoring.has(event.work_id)) noteKept(event.work_id);
+    else {
+      keptEarly.add(event.work_id);
+      window.setTimeout(() => keptEarly.delete(event.work_id), 30000);
+    }
     return;
   }
   void placeWork(event.app_id, event.work_id).then(announce);
