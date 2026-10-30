@@ -1311,7 +1311,8 @@ async fn campaign() {
     assert!(hostile_draft["target"].is_null());
     assert_eq!(shown_of(&hostile_draft, "status"), "submitted");
     assert_eq!(footprint(&fixture).await, frozen);
-    // Refusals, in order: cross-site, size, session, then the bytes.
+    // Refusals, in order: cross-site, session (before the body is read,
+    // APP-113 server), size, then the bytes.
     let calls = stub.calls.load(Ordering::SeqCst);
     let cross = act_receipt(Some(&diego), None, &photo, "cross-site").await;
     assert_eq!(cross.status, StatusCode::FORBIDDEN);
@@ -1320,8 +1321,8 @@ async fn campaign() {
     let too_large = act_receipt(None, None, &huge, "same-origin").await;
     assert_eq!(
         too_large.status,
-        StatusCode::PAYLOAD_TOO_LARGE,
-        "size before the session"
+        StatusCode::NOT_FOUND,
+        "the session before the body: an anonymous oversized receipt is the uniform 404"
     );
     let anonymous = act_receipt(None, None, &photo, "same-origin").await;
     assert_eq!(anonymous.status, StatusCode::NOT_FOUND);

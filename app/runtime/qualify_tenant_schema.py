@@ -1793,6 +1793,16 @@ def qualify():
                     passed(name,sqlstate=e.sqlstate)
                 else: raise AssertionError('expected refusal: '+name)
 
+            # 0012 (APP-113 review): a member's slash-command name is unique, case-folded,
+            # whichever task names it (the route answers name_taken on the refusal).
+            named="INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES (%s,%s,%s,%s,1,%s,%s)"
+            with pg.connect() as c:
+                scope(c); c.execute('SET LOCAL ROLE genui_owner')
+                c.execute(named,(ORGANIZATIONS[0],APP,str(uuid.uuid4()),PUB,'forma-command:/qualify-name\nfirst',P))
+                c.execute(named,(ORGANIZATIONS[0],APP,str(uuid.uuid4()),PUB,'forma-command:/qualify-name-two\nfirst',P))
+            denied('a member cannot hold the same slash-command name twice','genui_migration',named,
+                   (ORGANIZATIONS[0],APP,str(uuid.uuid4()),PUB,'forma-command:/QUALIFY-name\nsecond',P),expected='23505')
+
             for role in ('genui_workspace','genui_control','genui_data','genui_worker'):
                 with pg.connect(role) as c:
                     assert c.execute('SELECT count(*) FROM genui.organizations').fetchone()==(0,)

@@ -1702,7 +1702,12 @@ pub async fn explain_now(
         .workspace
         .save_box_explanation(member, app, work, &template)
         .await
-        .map_err(|_| BuildRefusal::Unavailable)?;
+        // APP-113 (storage 8): saving a summary needs record_write; a reader
+        // without it is the uniform 404, never a 503.
+        .map_err(|error| match error {
+            Error::Denied => BuildRefusal::NotFound,
+            _ => BuildRefusal::Unavailable,
+        })?;
     let filled = explain::fill(&findings, &results).ok_or(BuildRefusal::Unavailable)?;
     Ok(
         json!({"state": "ready", "label": explain::LABEL, "generated_at": at, "findings": filled, "source": source, "timings": timings}),

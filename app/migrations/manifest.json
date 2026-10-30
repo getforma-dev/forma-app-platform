@@ -60,7 +60,7 @@
     {
       "version": 12,
       "file": "0012_review_fixes.sql",
-      "sha256": "8ba26b1cc140a7efb9a245a4e2858540072daca35fb09b0ca720f6c4b1c67c00"
+      "sha256": "1fcc8d42449ff8b51963e6a32171ff4b8dc2fffd472180e73135eb6672703779"
     }
   ],
   "catalog": [
@@ -114,7 +114,7 @@
     },
     {
       "file": "catalog-v12.json",
-      "sha256": "4727b8fd3673443247c1f9df88f4d94f81341c93204d9c7309beceed01279c27"
+      "sha256": "c74cce74cbbe87bf9f93a82cb34863dd1e50ca5b7f9e9446bcb210c125ffbdbd"
     }
   ]
 }

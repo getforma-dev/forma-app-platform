@@ -10,6 +10,12 @@
 --   EXECUTE grant), and genui_admit gains the column reads the lookup needs.
 --   Existing duplicates make the UNIQUE fail and the whole migration roll
 --   back: they are checked per organization before this runs (APP-113 Log).
+-- * saved_work: a member's slash-command names are unique in the database
+--   (a unique partial index on the creator and the context's marker line,
+--   `forma-command:/<slug>`, case-folded), so two concurrent "Save as /name"
+--   requests, in one task or several, cannot both create the name; the
+--   second insert is refused and the name route answers `name_taken`.
+--   Existing duplicates are checked before this runs, as above.
 -- * agent_tokens.expires_at: a token lives 30 days from minting (the mint
 --   writes it); a token minted before this migration expires 30 days after
 --   it. storage::sessions refuses an expired token like a revoked one.
@@ -36,6 +42,9 @@ ALTER TABLE genui_meta.schema_migrations DROP CONSTRAINT schema_migrations_versi
 
 ALTER TABLE genui.box_file_sources
  ADD CONSTRAINT box_file_sources_one_per_content UNIQUE (organization_id,box_id,file_id,normalized_digest);
+
+CREATE UNIQUE INDEX saved_work_one_command_name ON genui.saved_work
+ (organization_id,created_by,lower(split_part(context,E'\n',1))) WHERE context LIKE 'forma-command:/%';
 
 ALTER TABLE genui.agent_tokens ADD COLUMN expires_at timestamptz NOT NULL DEFAULT (now() + interval '30 days');
 ALTER TABLE genui.agent_tokens ALTER COLUMN expires_at DROP DEFAULT;

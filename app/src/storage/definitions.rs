@@ -35,7 +35,7 @@ use std::{
     time::Duration,
 };
 use tokio::time::Instant;
-use tokio_postgres::Row;
+use tokio_postgres::{error::SqlState, Row};
 
 /// Canonical bytes a reader returns and a column stores (0002 CHECKs).
 pub const MAX_CANONICAL_BYTES: usize = 262_144;
@@ -786,7 +786,13 @@ impl Workspace {
                 .zip(&ids[1..])
                 .map(|((schema, (version, _)), id)| (schema.as_str(), (id.as_str(), *version)))
                 .collect();
-            transaction.query("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,1,$5,$6::text::uuid)", &[org,&app,&work,&publication,&context,&request.principal]).await?;
+            // APP-113 (0012): a member's slash-command name is unique; a
+            // concurrent naming's committed row refuses this one (Denied).
+            match transaction.query_classified("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,1,$5,$6::text::uuid)", &[org,&app,&work,&publication,&context,&request.principal]).await? {
+                Ok(_) => {}
+                Err(state) if state == SqlState::UNIQUE_VIOLATION => return Err(Error::Denied),
+                Err(_) => return Err(Error::Unavailable),
+            }
             for (schema, (collection, version)) in &collections {
                 transaction.query("INSERT INTO genui.record_collections(organization_id,app_id,work_id,publication_id,collection_id,schema_id,schema_version) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text,$7)", &[org,&app,&work,&publication,collection,schema,version]).await?;
             }

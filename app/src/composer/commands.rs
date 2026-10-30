@@ -268,6 +268,10 @@ async fn name(
         .await
     {
         Ok(saved) => saved,
+        // APP-113 (0012): the member's names are unique in storage; the
+        // source work was just read under the member's authority, so a
+        // refused insert is the name another request took first.
+        Err(Error::Denied) => return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "name_taken"),
         Err(error) => return refusal(&error),
     };
     let title = stores
