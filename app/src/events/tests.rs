@@ -1,6 +1,8 @@
 //! Hub, bounds, delivery gate and route refusals without a database. The
 //! storage-backed gate (`StoreGate`) and the HTTP stream end to end are
 //! exercised by `storage::sharing_qualification::native_sharing_campaign`.
+//! The review's two probes (independent review of `b704274`, M1) are kept
+//! here as the tests that now pass the other way.
 use super::*;
 use crate::{auth::Auth, http};
 use axum::{
@@ -44,7 +46,16 @@ fn documents_carry_ids_and_kind_only() {
     );
     assert_eq!(Kind::AppShared.name(), "app.shared");
     assert_eq!(Kind::AppPlaced.name(), "app.placed");
+    assert_eq!(Kind::StreamLagged.name(), "stream.lagged");
     assert!(!event.document().to_string().contains(ORG));
+    // The lag marker names no app or work: the client refetches what it shows.
+    let lagged = Event::lagged(ORG);
+    let document = lagged.document();
+    assert_eq!(
+        document.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["at", "kind"]
+    );
+    assert_eq!(document["kind"], "stream.lagged");
 }
 
 #[test]
@@ -61,11 +72,16 @@ fn streams_are_bounded_per_member_and_one_per_session() {
     );
     // Another member is not affected by this member's bound.
     let other = hub.register(ORG, OTHER, "o1").unwrap();
-    // The same session again replaces its earlier stream (which is told to
-    // close) without raising the member's count.
+    assert_eq!(
+        hub.subscribed_principals(ORG),
+        vec![OTHER.to_owned(), PRINCIPAL.to_owned()]
+    );
+    assert!(hub.subscribed_principals(OTHER).is_empty());
+    // The same session again takes over its earlier stream's slot (which is
+    // told to close): neither the member's nor the process's count moves.
     let replaced = held.remove(0);
     let replacing = hub.register(ORG, PRINCIPAL, "s0").unwrap();
-    assert_eq!(hub.open_streams(), MAX_STREAMS_PER_MEMBER + 2);
+    assert_eq!(hub.open_streams(), MAX_STREAMS_PER_MEMBER + 1);
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -75,11 +91,13 @@ fn streams_are_bounded_per_member_and_one_per_session() {
             .await
             .expect("the earlier stream of the session is told to close");
     });
-    // Dropping the replaced registration keeps the newer one's session slot.
+    // Dropping the replaced registration releases nothing: the slot is the
+    // newer stream's now.
     drop(replaced);
     assert_eq!(hub.open_streams(), MAX_STREAMS_PER_MEMBER + 1);
     assert!(hub.streams.lock().unwrap().per_session.contains_key("s0"));
     drop(replacing);
+    assert_eq!(hub.open_streams(), MAX_STREAMS_PER_MEMBER);
     assert!(!hub.streams.lock().unwrap().per_session.contains_key("s0"));
     drop(held);
     drop(other);
@@ -103,15 +121,74 @@ fn the_global_bound_refuses_the_next_stream() {
     assert_eq!(hub.open_streams(), 0);
 }
 
+/// Review probe 2, inverted: the same session may re-register as often as it
+/// likes and never holds more than one stream, so one member cannot climb
+/// past its bound (let alone to `MAX_STREAMS`) by reconnecting on one cookie.
+#[test]
+fn re_registration_of_the_same_session_never_adds_a_stream() {
+    let hub = fresh_hub();
+    let mut held = Vec::new();
+    for _ in 0..MAX_STREAMS {
+        held.push(hub.register(ORG, PRINCIPAL, "same-session").unwrap());
+    }
+    assert_eq!(hub.open_streams(), 1);
+    assert_eq!(
+        hub.streams.lock().unwrap().per_member[&(ORG.to_owned(), PRINCIPAL.to_owned())],
+        1
+    );
+    // Everyone else still gets in; the member itself has three more sessions.
+    let someone = hub.register(ORG, OTHER, "other").unwrap();
+    let mut more = Vec::new();
+    for i in 1..MAX_STREAMS_PER_MEMBER {
+        more.push(
+            hub.register(ORG, PRINCIPAL, &format!("session-{i}"))
+                .unwrap(),
+        );
+    }
+    assert_eq!(
+        hub.register(ORG, PRINCIPAL, "one-too-many").err(),
+        Some(Refused::MemberLimit)
+    );
+    assert_eq!(hub.open_streams(), MAX_STREAMS_PER_MEMBER + 1);
+    // Only the last registration of the session holds the slot; dropping the
+    // replaced ones releases nothing, dropping the holder releases the slot.
+    let holder = held.pop().unwrap();
+    drop(held);
+    assert_eq!(hub.open_streams(), MAX_STREAMS_PER_MEMBER + 1);
+    drop(holder);
+    assert_eq!(hub.open_streams(), MAX_STREAMS_PER_MEMBER);
+    drop(more);
+    drop(someone);
+    assert_eq!(hub.open_streams(), 0);
+}
+
 /// A scripted gate: `OPEN` is openable, anything else is not; `current`
-/// flips to false to simulate a sign-out or revocation.
+/// flips to false to simulate a sign-out or revocation. Its judgment is the
+/// work judged; `judged` logs every organization-wide judgment (one per
+/// event, however many pumps share it) and `populations` the subscribed
+/// principals each judgment was made for.
 struct Scripted {
     current: Arc<AtomicBool>,
     judged: Arc<Mutex<Vec<String>>>,
+    populations: Arc<Mutex<Vec<Vec<String>>>>,
+}
+impl Scripted {
+    fn new(current: &Arc<AtomicBool>, judged: &Arc<Mutex<Vec<String>>>) -> Self {
+        Self {
+            current: current.clone(),
+            judged: judged.clone(),
+            populations: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
 }
 impl Gate for Scripted {
-    async fn judge(&self, _app: &str, work: &str) -> Verdict {
+    type Judgment = String;
+    async fn judge(&self, _app: &str, work: &str, subscribers: &[String]) -> Option<String> {
         self.judged.lock().unwrap().push(work.to_owned());
+        self.populations.lock().unwrap().push(subscribers.to_vec());
+        Some(work.to_owned())
+    }
+    fn verdict(&self, work: &String) -> Verdict {
         if !self.current.load(Ordering::SeqCst) {
             return Verdict::Close;
         }
@@ -136,10 +213,7 @@ async fn the_pump_delivers_only_openable_works_of_the_own_organization_and_close
     let (tx, mut rx) = sink();
     let receiver = hub.subscribe();
     let task = tokio::spawn(pump(
-        Scripted {
-            current: current.clone(),
-            judged: judged.clone(),
-        },
+        Scripted::new(&current, &judged),
         ORG.into(),
         receiver,
         registration,
@@ -180,6 +254,89 @@ async fn the_pump_delivers_only_openable_works_of_the_own_organization_and_close
     assert_eq!(hub.open_streams(), 0);
 }
 
+/// Review M2: one committed record with N subscribers of the organization
+/// costs one judgment (one storage read in production), made for exactly the
+/// subscribed principals; every subscriber reads its verdict from it.
+#[tokio::test]
+async fn one_event_with_n_subscribers_is_judged_once() {
+    const N: usize = 8;
+    let hub = fresh_hub();
+    let current = Arc::new(AtomicBool::new(true));
+    let judged = Arc::new(Mutex::new(Vec::new()));
+    let populations = Arc::new(Mutex::new(Vec::new()));
+    let mut bodies = Vec::new();
+    let mut tasks = Vec::new();
+    let mut principals: Vec<String> = (0..N).map(|i| format!("{i:0>36}")).collect();
+    for principal in &principals {
+        let registration = hub
+            .register(ORG, principal, &format!("s-{principal}"))
+            .unwrap();
+        let (tx, rx) = sink();
+        bodies.push(rx);
+        tasks.push(tokio::spawn(pump(
+            Scripted {
+                current: current.clone(),
+                judged: judged.clone(),
+                populations: populations.clone(),
+            },
+            ORG.into(),
+            hub.subscribe(),
+            registration,
+            tx,
+            Duration::from_secs(3600),
+            Duration::from_secs(3600),
+        )));
+    }
+    // One stream of another organization never judges this organization's event.
+    let foreign = hub.register(OTHER, PRINCIPAL, "foreign").unwrap();
+    let (tx, foreign_rx) = sink();
+    let foreign_judged = Arc::new(Mutex::new(Vec::new()));
+    tasks.push(tokio::spawn(pump(
+        Scripted::new(&current, &foreign_judged),
+        OTHER.into(),
+        hub.subscribe(),
+        foreign,
+        tx,
+        Duration::from_secs(3600),
+        Duration::from_secs(3600),
+    )));
+    hub.record_committed(ORG, APP, OPEN);
+    for rx in &mut bodies {
+        let delivered = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(delivered.work, OPEN);
+    }
+    assert_eq!(*judged.lock().unwrap(), vec![OPEN]);
+    principals.sort_unstable();
+    assert_eq!(*populations.lock().unwrap(), vec![principals]);
+    assert!(foreign_judged.lock().unwrap().is_empty());
+    // A second event is one more judgment, not N more.
+    hub.app_shared(ORG, APP, CLOSED_WORK);
+    hub.app_placed(ORG, APP, OPEN);
+    for rx in &mut bodies {
+        let delivered = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (delivered.kind, delivered.work.as_str()),
+            (Kind::AppPlaced, OPEN)
+        );
+    }
+    assert_eq!(*judged.lock().unwrap(), vec![OPEN, CLOSED_WORK, OPEN]);
+    drop(bodies);
+    drop(foreign_rx);
+    for task in tasks {
+        tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .expect("pumps end when their bodies are dropped")
+            .unwrap();
+    }
+    assert_eq!(hub.open_streams(), 0);
+}
+
 #[tokio::test]
 async fn the_pump_ends_on_the_recheck_when_the_member_is_not_current_and_when_replaced() {
     let hub = fresh_hub();
@@ -188,10 +345,7 @@ async fn the_pump_ends_on_the_recheck_when_the_member_is_not_current_and_when_re
     let registration = hub.register(ORG, PRINCIPAL, "r1").unwrap();
     let (tx, _rx) = sink();
     let task = tokio::spawn(pump(
-        Scripted {
-            current: current.clone(),
-            judged: judged.clone(),
-        },
+        Scripted::new(&current, &judged),
         ORG.into(),
         hub.subscribe(),
         registration,
@@ -209,10 +363,7 @@ async fn the_pump_ends_on_the_recheck_when_the_member_is_not_current_and_when_re
     let first = hub.register(ORG, PRINCIPAL, "same").unwrap();
     let (tx, _rx) = sink();
     let task = tokio::spawn(pump(
-        Scripted {
-            current: current.clone(),
-            judged: judged.clone(),
-        },
+        Scripted::new(&current, &judged),
         ORG.into(),
         hub.subscribe(),
         first,
@@ -232,7 +383,7 @@ async fn the_pump_ends_on_the_recheck_when_the_member_is_not_current_and_when_re
     let late = hub.register(ORG, PRINCIPAL, "late").unwrap();
     let (tx, _rx) = sink();
     let task = tokio::spawn(pump(
-        Scripted { current, judged },
+        Scripted::new(&current, &judged),
         ORG.into(),
         hub.subscribe(),
         late,
@@ -243,6 +394,99 @@ async fn the_pump_ends_on_the_recheck_when_the_member_is_not_current_and_when_re
     tokio::time::timeout(Duration::from_secs(2), task)
         .await
         .expect("lifetime ends the stream")
+        .unwrap();
+    assert_eq!(hub.open_streams(), 0);
+}
+
+/// Review probe 1, inverted: with the per-connection queue full (a client
+/// that stopped reading) the pump still polls its lifetime, its re-check and
+/// its replacement, so a stalled consumer pins nothing and the replaced
+/// registration releases its slot to the newer stream.
+#[tokio::test]
+async fn a_stalled_consumer_does_not_pin_the_pump() {
+    let hub = fresh_hub();
+    let current = Arc::new(AtomicBool::new(true));
+    let judged = Arc::new(Mutex::new(Vec::new()));
+    let registration = hub.register(ORG, PRINCIPAL, "stall").unwrap();
+    let (tx, rx) = sink(); // held but never read: a stalled client
+    let task = tokio::spawn(pump(
+        Scripted::new(&current, &judged),
+        ORG.into(),
+        hub.subscribe(),
+        registration,
+        tx,
+        Duration::from_millis(50),  // re-check
+        Duration::from_millis(300), // lifetime
+    ));
+    // More deliverable events than the queue holds (SINK_CAPACITY = 32).
+    for _ in 0..40 {
+        hub.record_committed(ORG, APP, OPEN);
+    }
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    // The member signs out: the re-check closes the stream...
+    current.store(false, Ordering::SeqCst);
+    // ...and a newer stream of the same session replaces this one anyway.
+    let replacement = hub.register(ORG, PRINCIPAL, "stall").unwrap();
+    tokio::time::timeout(Duration::from_secs(2), task)
+        .await
+        .expect("the pump ends although its client reads nothing")
+        .unwrap();
+    assert_eq!(hub.open_streams(), 1);
+    drop(replacement);
+    assert_eq!(hub.open_streams(), 0);
+    drop(rx);
+}
+
+/// A client that falls behind loses hints, never the stream: the queue's
+/// worth of events is delivered, then one `stream.lagged` marker as soon as
+/// there is room, and later events flow again.
+#[tokio::test]
+async fn a_full_queue_drops_hints_and_marks_the_stream_lagged() {
+    let hub = fresh_hub();
+    let current = Arc::new(AtomicBool::new(true));
+    let judged = Arc::new(Mutex::new(Vec::new()));
+    let registration = hub.register(ORG, PRINCIPAL, "slow").unwrap();
+    let (tx, mut rx) = sink();
+    let task = tokio::spawn(pump(
+        Scripted::new(&current, &judged),
+        ORG.into(),
+        hub.subscribe(),
+        registration,
+        tx,
+        Duration::from_secs(3600),
+        Duration::from_secs(3600),
+    ));
+    for _ in 0..(SINK_CAPACITY + 8) {
+        hub.record_committed(ORG, APP, OPEN);
+    }
+    // Every event was judged (the pump never parked); the queue holds its
+    // capacity's worth, the rest were dropped.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(judged.lock().unwrap().len(), SINK_CAPACITY + 8);
+    let mut kinds = Vec::new();
+    for _ in 0..(SINK_CAPACITY + 1) {
+        let frame = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        kinds.push(frame.kind);
+    }
+    assert!(kinds[..SINK_CAPACITY]
+        .iter()
+        .all(|kind| *kind == Kind::RecordCommitted));
+    assert_eq!(kinds[SINK_CAPACITY], Kind::StreamLagged);
+    // The stream is alive and delivers again.
+    hub.app_placed(ORG, APP, OPEN);
+    let next = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(next.kind, Kind::AppPlaced);
+    assert_eq!(hub.open_streams(), 1);
+    drop(rx);
+    tokio::time::timeout(Duration::from_secs(2), task)
+        .await
+        .expect("the pump ends when the body is dropped")
         .unwrap();
     assert_eq!(hub.open_streams(), 0);
 }

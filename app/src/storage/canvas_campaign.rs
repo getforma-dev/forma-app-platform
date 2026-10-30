@@ -14,8 +14,9 @@
 //!
 //! With `GENUI_CANVAS_STAND_SECONDS` the campaign also serves the composed
 //! routes (canvas page, assets, query, command and auth routes) on
-//! 127.0.0.1 for that long, writing the origin and Maya's synthetic session
-//! cookie to `GENUI_CANVAS_STAND_FILE` (scratch only, never evidence), so a
+//! 127.0.0.1 for that long (with the event stream), writing the origin and
+//! Maya's and the canary member's synthetic session cookies to
+//! `GENUI_CANVAS_STAND_FILE` (scratch only, never evidence), so a
 //! local browser can take the pitch screenshots against real results.
 use super::*;
 use crate::{
@@ -51,6 +52,13 @@ impl RecordPage for NoRecordPage {
 }
 
 const CANVAS_WORK: &str = "00000000-0000-4000-8000-0000000000f7";
+
+/// `GENUI_CANVAS_STAND_SECONDS`: serve the local pitch stand that long.
+fn stand_seconds() -> Option<u64> {
+    std::env::var("GENUI_CANVAS_STAND_SECONDS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+}
 
 #[test]
 #[ignore = "requires Docker and GENUI_NATIVE_FIXTURE_PYTHON (DuckDB 2.0.0)"]
@@ -181,10 +189,18 @@ async fn campaign() {
                 },
             )))
             .merge(crate::query::routes::router(work.clone()))
+            // The stand also serves the session-gated event stream, so the
+            // canvas shows its live state and re-runs on a committed record.
+            .merge(crate::events::routes::router(auth.clone()))
             .merge(canvas::router(Arc::new(canvas::Canvas {
                 work: work.clone(),
                 pages: canvas_pages,
-                live_events: String::new(),
+                live_events: if stand_seconds().is_some() {
+                    "/v1/events".to_owned()
+                } else {
+                    String::new()
+                },
+                demo: canvas::demo_mode(),
             }))),
     );
     let c = Campaign {
@@ -297,9 +313,7 @@ async fn campaign() {
             );
         }
     };
-    let stand = std::env::var("GENUI_CANVAS_STAND_SECONDS")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok());
+    let stand = stand_seconds();
     let mut shared = false;
     if let Some(seconds) = stand {
         // The local stand for the pitch screenshots: the composed routes on
@@ -315,12 +329,18 @@ async fn campaign() {
             .get(crate::auth::cookies::SESSION)
             .cloned()
             .expect("Maya's session");
+        let canary_session = canary
+            .jar
+            .get(crate::auth::cookies::SESSION)
+            .cloned()
+            .unwrap_or_default();
         if !file.is_empty() {
             std::fs::write(
                 &file,
                 serde_json::to_vec(&json!({
                     "origin": origin, "cookie": crate::auth::cookies::SESSION, "value": session,
                     "app": APP, "northstar": CANVAS_WORK, "spend_app": SPEND_APP, "spend": spend.work,
+                    "canary": canary_session,
                 }))
                 .unwrap(),
             )

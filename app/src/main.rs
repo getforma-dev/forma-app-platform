@@ -554,6 +554,7 @@ async fn main() {
             .ok()
             .filter(|url| url.starts_with("/v1/"))
             .unwrap_or_default(),
+        demo: genui::query::canvas::demo_mode(),
     }));
     let readiness = genui::readiness::Readiness::start(
         credential_path.into(),
@@ -1291,11 +1292,18 @@ mod tests {
         let total = result(&["total_bytes"], vec![vec![json!("1140000")]]);
         let buckets = result(
             &["minute", "destination", "bytes"],
-            vec![vec![
-                json!("2026-10-22T10:00:00Z"),
-                json!("203.0.113.9"),
-                json!("60000"),
-            ]],
+            vec![
+                vec![
+                    json!("2026-10-22T10:00:00Z"),
+                    json!("203.0.113.9"),
+                    json!("60000"),
+                ],
+                vec![
+                    json!("2026-10-22T10:10:00Z"),
+                    json!("198.51.100.99"),
+                    json!("900000"),
+                ],
+            ],
         );
         let (total_receipt, timeline_receipt) = (
             receipt(&total, "sha256:receipt-total"),
@@ -1350,6 +1358,7 @@ mod tests {
             app_card: format!("a-{work}"),
             title: title.into(),
             label: canvas::SEEDED_LABEL.into(),
+            origins: canvas::seeded_origins(),
             href: format!("/w/{app}/{work}"),
             csrf: "Q".repeat(43),
             ..canvas::GroupProps::default()
@@ -1376,7 +1385,14 @@ mod tests {
             has_groups: true,
             summary: canvas::summary(&groups),
             groups,
-            live_events: String::new(),
+            live_events: "/v1/events".into(),
+            has_live: true,
+            has_organization: true,
+            organization: "Northstar <Labs>".into(),
+            member_label: "Member ba92f4c5".into(),
+            member_initials: "BA".into(),
+            demo: true,
+            demo_mode: "on".into(),
         };
         let response = ssr.canvas(&props);
         let (status, headers, body) = html(response).await;
@@ -1394,10 +1410,34 @@ mod tests {
         let start = body.find("<body").unwrap();
         let end = body.find("<script type=\"module\"").unwrap();
         assert_eq!(body.matches("<script type=\"module\"").count(), 1);
-        let content = &body[start..end];
+        // Text read as a person sees it: the native renderer's hydration
+        // markers (`<!--f:…-->`) are removed.
+        let mut content = String::new();
+        let mut rest = &body[start..end];
+        while let Some(open) = rest.find("<!--") {
+            content.push_str(&rest[..open]);
+            rest = &rest[open..];
+            rest = &rest[rest.find("-->").map_or(rest.len(), |close| close + 3)..];
+        }
+        content.push_str(rest);
+        let content = content.as_str();
         assert!(content.contains("2 apps · 5 cards"));
         assert!(content.contains("Northstar &lt;egress&gt;") && !content.contains("<egress>"));
-        assert_eq!(content.matches(canvas::SEEDED_LABEL).count(), 2);
+        // The honest provenance: origin chips, the sentence as their title and
+        // for screen readers.
+        assert_eq!(content.matches(canvas::SEEDED_LABEL).count(), 4);
+        assert_eq!(content.matches(">Retrieved from library<").count(), 2);
+        // The top bar: the organization (escaped; no picker), the member's
+        // avatar, and the live chip the island reveals once subscribed.
+        assert!(content.contains(">Northstar &lt;Labs&gt;<") && !content.contains("<Labs>"));
+        assert!(content.contains(">BA<") && content.contains("aria-label=\"Member ba92f4c5\""));
+        assert!(
+            content.contains("id=\"cv-live\"")
+                && content.contains("data-live-events=\"/v1/events\"")
+        );
+        // GENUI_DEMO_MODE: the small-print synthetic-data label and the
+        // island's demo-safe layout flag.
+        assert!(content.contains("Synthetic data") && content.contains("data-demo=\"on\""));
         assert!(content.contains(&format!("id=\"g-{northstar}\"")));
         assert!(content.contains(&format!("action=\"/w/{app}/{northstar}\"")));
         assert!(content.contains("value=\"2026-10-22T10:00:00\""));
@@ -1409,34 +1449,57 @@ mod tests {
             rest[..rest.find("</article>").unwrap()].to_owned()
         };
         let ready = section("total");
-        assert!(ready.contains("data-state=\"ready\"") && ready.contains(">1,140,000<"));
+        // One insight, compact with its unit; the exact value beside it.
+        assert!(ready.contains("data-state=\"ready\"") && ready.contains(">1.14 MB<"));
+        assert!(ready.contains(">1,140,000 bytes<") && ready.contains("title=\"1,140,000 bytes\""));
         assert!(ready.contains(&format!(
             "data-query=\"/v1/work/{app}/{northstar}/queries/total\""
         )));
         assert!(ready.contains("data-integers=\"total_bytes\""));
-        // The receipt is visible, not collapsed: its digest and key identities
-        // sit outside the inspector's <details>.
-        let visible = &ready[..ready.find("<details").unwrap()];
+        // The receipt is always on the card: its compact line (seal, digest
+        // prefix, source count, time) is the <details> summary, visible
+        // closed; opening it shows every field in full, without JavaScript.
+        let receipt = &ready[ready.find("class=\"cv-receipt\"").expect("receipt")..];
+        let line = &receipt[..receipt.find("</summary>").unwrap()];
         assert!(
-            visible.contains("class=\"cv-receipt\"") && visible.contains("sha256:receipt-total")
+            line.contains(">Verified<")
+                && line.contains(">receipt-<")
+                && line.contains(">1 source<")
         );
-        // Key identities are shortened on the card; the inspector keeps them whole.
-        assert!(visible.contains(&canvas::abbreviate(&total.result_digest)));
-        assert!(visible.contains("Membership epoch") && ready.contains(&total.result_digest));
+        assert!(line.contains("title=\"sha256:receipt-total\"") && line.contains(" UTC<"));
+        assert!(receipt.contains("Membership epoch") && receipt.contains(&total.result_digest));
         assert!(
-            visible.contains("Source revision (events)") && visible.contains("Parameter window")
+            receipt.contains("Source revision (events)") && receipt.contains("Parameter window")
         );
+        assert!(receipt.contains("Receipt document (JSON)"));
+        // The timeline is a server-rendered SVG chart, its rows folded beneath.
         let timeline = section("timeline");
-        assert!(timeline.contains("<table") && timeline.contains(">60,000<"));
-        assert!(timeline.contains("sha256:receipt-timeline"));
+        assert!(
+            timeline.contains("<svg class=\"cv-chart-svg\"")
+                && timeline.contains("viewBox=\"0 0 560 188\"")
+        );
+        assert!(
+            timeline.contains("class=\"cv-bar is-peak\"")
+                && timeline
+                    .contains("<title>Oct 22, 10:10 · 198.51.100.99 · 900,000 bytes</title>")
+        );
+        assert!(timeline.contains("Oct 22, 10:00–10:10 UTC. Peak 900 KB at 10:10."));
+        assert!(timeline.contains("<details class=\"cv-rows\"") && timeline.contains("<table"));
+        assert!(timeline.contains(">60 KB<") && timeline.contains("title=\"60,000 bytes\""));
+        assert!(
+            timeline.contains(">Oct 22, 10:00<") && timeline.contains("sha256:receipt-timeline")
+        );
         for (id, state) in [("failed", "failed"), ("denied", "denied")] {
             let html = section(id);
             assert!(html.contains(&format!("data-state=\"{state}\"")), "{id}");
             assert!(
-                !html.contains("class=\"value\"") && !html.contains("cv-receipt"),
+                !html.contains("value\"") && !html.contains("cv-receipt") && !html.contains("<svg"),
                 "{id}"
             );
-            assert!(!html.contains("1,140,000") && !html.contains(">0<"), "{id}");
+            assert!(
+                !html.contains("1,140,000") && !html.contains("MB") && !html.contains(">0<"),
+                "{id}"
+            );
         }
         // The record form posts to the audited command route, keyed, without JS.
         assert!(content.contains(&format!(
@@ -1448,6 +1511,7 @@ mod tests {
         );
         assert!(content.contains("name=\"value.status\"") && content.contains(">reviewed<"));
         assert!(content.contains("name=\"spec.note\"") && content.contains("New decision record"));
+        assert!(content.contains(">Record decision</button>"));
         assert!(content.contains(&format!("value=\"{}\"", "C".repeat(43))));
         assert!(content.contains("action=\"/auth/signout\"") && content.contains(&"S".repeat(43)));
         // No organization picker; the intent bar posts nowhere but the page.
@@ -1461,5 +1525,8 @@ mod tests {
         };
         let (_, _, body) = html(ssr.canvas(&empty)).await;
         assert!(body.contains("Review expenses over $200") && !body.contains("class=\"cv-group\""));
+        // No stream configured: no live chip; no organization read: no name.
+        assert!(!body.contains("id=\"cv-live\"") && !body.contains("class=\"cv-org\""));
+        assert!(!body.contains("Synthetic data") && !body.contains("data-demo=\"on\""));
     }
 }

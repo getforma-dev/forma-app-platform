@@ -12,7 +12,24 @@ import { startBoard } from './board';
 // value, and `ready`/`empty` always carry their receipt.
 type Pair = { id: string; label: string; value: string };
 type Cell = { id: string; text: string };
-type Row = { id: string; cells: Cell[] };
+type Stat = { id: string; label: string; value: string; exact: string };
+type ShownCell = { id: string; text: string; exact: string; class: string };
+type Row = { id: string; cells: ShownCell[] };
+type Bar = { id: string; x: string; y: string; width: string; height: string; class: string; tip: string };
+type Grid = { id: string; y: string; labelY: string; text: string };
+type Tick = { id: string; x: string; anchor: string; text: string };
+type Chart = {
+  label: string;
+  caption: string;
+  viewBox: string;
+  hasBars: boolean;
+  bars: Bar[];
+  hasLine: boolean;
+  line: string;
+  area: string;
+  grid: Grid[];
+  ticks: Tick[];
+};
 type Card = {
   id: string;
   view: string;
@@ -20,17 +37,29 @@ type Card = {
   kind: string;
   state: string;
   badge: string;
+  hasMessage: boolean;
   message: string;
   query: string;
   integerColumns: string;
-  hasSummary: boolean;
-  summary: Pair[];
+  hasInsight: boolean;
+  insightLabel: string;
+  insight: string;
+  insightExact: string;
+  hasStats: boolean;
+  stats: Stat[];
+  hasChart: boolean;
+  chart: Chart;
   hasTable: boolean;
+  hasOpenTable: boolean;
+  hasFoldedTable: boolean;
+  rowsLabel: string;
   columns: Cell[];
   rows: Row[];
   hasReceipt: boolean;
   receiptDigest: string;
-  receiptKey: Pair[];
+  receiptShort: string;
+  receiptSources: string;
+  receiptTime: string;
   receipt: Pair[];
   receiptJson: string;
 };
@@ -64,7 +93,9 @@ type FormCard = {
   recordVersion: string;
   workVersion: string;
   fields: Field[];
+  submit: string;
 };
+type Origin = { id: string; kind: string; text: string };
 type Group = {
   id: string;
   app: string;
@@ -72,6 +103,7 @@ type Group = {
   appCard: string;
   title: string;
   label: string;
+  origins: Origin[];
   href: string;
   csrf: string;
   windowStart: string;
@@ -89,6 +121,13 @@ type CanvasProps = {
   groups: Group[];
   summary: string;
   liveEvents: string;
+  hasLive: boolean;
+  hasOrganization: boolean;
+  organization: string;
+  memberLabel: string;
+  memberInitials: string;
+  demo: boolean;
+  demoMode: string;
 };
 
 type IntentProps = { placeholder: string };
@@ -99,6 +138,11 @@ type IntentProps = { placeholder: string };
 function IntentBar(props: IntentProps) {
   const [status, setStatus] = createSignal('');
   const [busy, setBusy] = createSignal(false);
+  const [statusClass, setStatusClass] = createSignal('cv-intent-status');
+  const report = (message: string) => {
+    setStatus(message);
+    setStatusClass(message ? 'cv-intent-status is-shown' : 'cv-intent-status');
+  };
   return (
     <form
       id="intent-form"
@@ -114,11 +158,16 @@ function IntentBar(props: IntentProps) {
         const text = input ? input.value.trim() : '';
         if (!text || busy()) return;
         setBusy(true);
-        void submitIntent(text, (message: string) => setStatus(message)).finally(() => setBusy(false));
+        void submitIntent(text, report).finally(() => setBusy(false));
       }}
     >
       <label class="sr-only" for="intent-input">What do you need?</label>
-      <span class="cv-prompt" aria-hidden="true">›</span>
+      <span class="cv-prompt" aria-hidden="true">
+        <svg viewBox="0 0 20 20" width="18" height="18">
+          <path d="M10 2.5l1.6 4.3 4.4 1.6-4.4 1.6L10 14.3 8.4 10 4 8.4l4.4-1.6z" />
+          <path d="M15.5 13l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+        </svg>
+      </span>
       <input
         id="intent-input"
         name="intent"
@@ -128,9 +177,11 @@ function IntentBar(props: IntentProps) {
         aria-describedby="intent-status"
       />
       <button id="intent-submit" type="submit" disabled={() => busy()}>
-        {() => (busy() ? 'Placing…' : 'Compose')}
+        {() => (busy() ? 'Composing…' : 'Compose')}
       </button>
-      <p id="intent-status" class="cv-intent-status" role="status">{() => status()}</p>
+      <p id="intent-status" class={() => statusClass()} role="status">
+        {() => status()}
+      </p>
     </form>
   );
 }
@@ -139,28 +190,43 @@ function Canvas(props: CanvasProps) {
   return (
     <div id="cv-shell" class="cv-shell">
       <header class="cv-top">
-        <a class="cv-brand" href="/canvas" aria-label="Forma canvas">
-          <span class="cv-brand-mark" aria-hidden="true"></span>
-          <span>Forma</span>
-        </a>
+        <div class="cv-identity">
+          <a class="cv-brand" href="/canvas" aria-label="Forma canvas">
+            <span class="cv-brand-mark" aria-hidden="true"></span>
+            <span>Forma</span>
+          </a>
+          {createShow(() => props.hasOrganization, () => (
+            <span class="cv-org" title="Your organization">{props.organization}</span>
+          ))}
+          {createShow(() => props.demo, () => (
+            <span class="cv-demo-note" title="The organizations, people and records here are synthetic">Synthetic data</span>
+          ))}
+        </div>
         <div class="cv-top-status">
-          <span id="cv-summary" class="cv-chip">{props.summary}</span>
-          <span id="cv-live" class="cv-chip" data-state="off">Live updates off</span>
+          <span id="cv-summary" class="cv-count">{props.summary}</span>
+          {createShow(() => props.hasLive, () => (
+            <span id="cv-live" class="cv-live" data-state="connecting" role="status" hidden>
+              <span class="cv-live-dot" aria-hidden="true"></span>
+              <span data-live-text>Live</span>
+            </span>
+          ))}
           <a class="cv-link" href="/workspace">Workspace</a>
+          <span class="cv-avatar" title={props.memberLabel} aria-label={props.memberLabel} role="img">
+            {props.memberInitials}
+          </span>
           <form method="post" action="/auth/signout" class="cv-signout">
             <input type="hidden" name="csrf" value={props.csrfSignout} />
             <button type="submit">Sign out</button>
           </form>
         </div>
       </header>
-      <main id="cv-canvas" class="cv-canvas" aria-label="Canvas" data-live-events={props.liveEvents}>
+      <main id="cv-canvas" class="cv-canvas" aria-label="Canvas" data-live-events={props.liveEvents} data-demo={props.demoMode}>
         {props.hasGroups ? null : (
           <section id="cv-empty" class="cv-empty" aria-labelledby="cv-empty-title">
-            <p class="cv-eyebrow">Your workspace</p>
             <h1 id="cv-empty-title">What do you need?</h1>
             <p class="cv-empty-copy">
-              Describe the app you need. It is assembled from admitted components and runs on your
-              organization's data, with a receipt on every number.
+              Describe the app you need. Forma assembles it from admitted components, runs it on your
+              organization's data and puts a receipt on every number.
             </p>
             <div class="cv-suggestions" aria-label="Suggested intents">
               <button type="button" data-intent="Review expenses over $200">Review expenses over $200</button>
@@ -181,28 +247,32 @@ function Canvas(props: CanvasProps) {
               aria-label={group.title}
             >
               <article class="cv-card cv-app" data-card={group.appCard} data-kind="app" aria-label={group.title}>
-                <p class="cv-eyebrow">App</p>
                 <h2>{group.title}</h2>
-                <p class="cv-provenance">{group.label}</p>
+                <p class="cv-origins" aria-label="How this app was assembled" title={group.label}>
+                  {createList(() => group.origins, origin => origin.id, origin => (
+                    <span class="cv-origin" data-origin={origin.kind}>{origin.text}</span>
+                  ))}
+                </p>
+                <p class="sr-only">{group.label}</p>
                 <form method="post" action={group.href} class="cv-window" data-window>
                   <input type="hidden" name="csrf" value={group.csrf} />
                   <label>
-                    <span>Window start (UTC)</span>
+                    <span>From (UTC)</span>
                     <input name="window_start" type="datetime-local" step="1" value={group.windowStart} />
                   </label>
                   <label>
-                    <span>Window end (UTC, excluded)</span>
+                    <span>Until (UTC, excluded)</span>
                     <input name="window_end" type="datetime-local" step="1" value={group.windowEnd} />
                   </label>
                   <label>
                     <span>Destination (optional)</span>
                     <input name="destination" type="text" value={group.destination} />
                   </label>
-                  <button type="submit">Run views</button>
+                  <div class="cv-window-actions">
+                    <button type="submit">Run views</button>
+                    <a href={group.href}>Open work page</a>
+                  </div>
                 </form>
-                <p class="cv-app-links">
-                  <a href={group.href}>Open the work page</a>
-                </p>
               </article>
               {createList(() => group.cards, card => card.id, card => (
                 <article
@@ -221,18 +291,62 @@ function Canvas(props: CanvasProps) {
                     <span class="badge">{card.badge}</span>
                   </header>
                   <div class="cv-card-body" data-body>
-                    <p class="cv-message" role="status">{card.message}</p>
-                    {createShow(() => card.hasSummary, () => (
-                      <dl class="cv-summary">
-                        {createList(() => card.summary, item => item.id, item => (
-                          <div>
-                            <dt>{item.label}</dt>
-                            <dd class="value">{item.value}</dd>
-                          </div>
-                        ))}
-                      </dl>
+                    {createShow(() => card.hasMessage, () => (
+                      <p class="cv-message" role="status">{card.message}</p>
                     ))}
-                    {createShow(() => card.hasTable, () => (
+                    {createShow(() => card.hasInsight, () => (
+                      <div class="cv-insight">
+                        <p class="cv-insight-label">{card.insightLabel}</p>
+                        <p class="cv-insight-value value" title={card.insightExact}>{card.insight}</p>
+                        <p class="cv-insight-exact">{card.insightExact}</p>
+                        {createShow(() => card.hasStats, () => (
+                          <dl class="cv-stats">
+                            {createList(() => card.stats, stat => stat.id, stat => (
+                              <div>
+                                <dt>{stat.label}</dt>
+                                <dd class="value" title={stat.exact}>{stat.value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        ))}
+                      </div>
+                    ))}
+                    {createShow(() => card.hasChart, () => (
+                      <figure class="cv-chart">
+                        <svg class="cv-chart-svg" viewBox={card.chart.viewBox} role="img" aria-label={card.chart.label}>
+                          <g class="cv-grid" aria-hidden="true">
+                            {createList(() => card.chart.grid, line => line.id, line => (
+                              <line x1="52" x2="552" y1={line.y} y2={line.y} />
+                            ))}
+                          </g>
+                          <g class="cv-axis" aria-hidden="true">
+                            {createList(() => card.chart.grid, line => line.id, line => (
+                              <text x="44" y={line.labelY} text-anchor="end">{line.text}</text>
+                            ))}
+                            {createList(() => card.chart.ticks, tick => tick.id, tick => (
+                              <text x={tick.x} y="180" text-anchor={tick.anchor}>{tick.text}</text>
+                            ))}
+                          </g>
+                          {createShow(() => card.chart.hasBars, () => (
+                            <g class="cv-bars">
+                              {createList(() => card.chart.bars, bar => bar.id, bar => (
+                                <rect class={bar.class} x={bar.x} y={bar.y} width={bar.width} height={bar.height} rx="2">
+                                  <title>{bar.tip}</title>
+                                </rect>
+                              ))}
+                            </g>
+                          ))}
+                          {createShow(() => card.chart.hasLine, () => (
+                            <g class="cv-series">
+                              <path class="cv-area" d={card.chart.area} />
+                              <path class="cv-line" d={card.chart.line} pathLength={1} />
+                            </g>
+                          ))}
+                        </svg>
+                        <figcaption>{card.chart.caption}</figcaption>
+                      </figure>
+                    ))}
+                    {createShow(() => card.hasOpenTable, () => (
                       <div class="cv-table">
                         <table>
                           <thead>
@@ -240,29 +354,43 @@ function Canvas(props: CanvasProps) {
                           </thead>
                           <tbody>
                             {createList(() => card.rows, row => row.id, row => (
-                              <tr>{createList(() => row.cells, cell => cell.id, cell => <td class="value">{cell.text}</td>)}</tr>
+                              <tr>{createList(() => row.cells, cell => cell.id, cell => <td class={cell.class} title={cell.exact}>{cell.text}</td>)}</tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
                     ))}
+                    {createShow(() => card.hasFoldedTable, () => (
+                      <details class="cv-rows">
+                        <summary>{card.rowsLabel}</summary>
+                        <div class="cv-table">
+                          <table>
+                            <thead>
+                              <tr>{createList(() => card.columns, column => column.id, column => <th scope="col">{column.text}</th>)}</tr>
+                            </thead>
+                            <tbody>
+                              {createList(() => card.rows, row => row.id, row => (
+                                <tr>{createList(() => row.cells, cell => cell.id, cell => <td class={cell.class} title={cell.exact}>{cell.text}</td>)}</tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
+                    ))}
                     {createShow(() => card.hasReceipt, () => (
-                      <section class="cv-receipt" aria-label="Receipt">
-                        <p class="cv-receipt-head">
-                          <span>Receipt</span> <code>{card.receiptDigest}</code>
-                        </p>
-                        <dl class="cv-receipt-key">
-                          {createList(() => card.receiptKey, item => item.id, item => (
-                            <div>
-                              <dt>{item.label}</dt>
-                              <dd>
-                                <code>{item.value}</code>
-                              </dd>
-                            </div>
-                          ))}
-                        </dl>
-                        <details>
-                          <summary>All receipt fields</summary>
+                      <details class="cv-receipt" aria-label="Receipt">
+                        <summary title={card.receiptDigest}>
+                          <svg class="cv-seal" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                            <path d="M8 1.2l5.4 2v4.1c0 3.3-2.3 6.2-5.4 7.3C4.9 13.5 2.6 10.6 2.6 7.3V3.2z" />
+                            <path class="cv-seal-check" d="M5.4 8.1l1.8 1.8 3.5-3.6" />
+                          </svg>
+                          <span class="cv-verified">Verified</span>
+                          <code class="cv-receipt-id">{card.receiptShort}</code>
+                          <span class="cv-receipt-meta">{card.receiptSources}</span>
+                          <span class="cv-receipt-meta">{card.receiptTime}</span>
+                          <span class="cv-receipt-toggle" aria-hidden="true"></span>
+                        </summary>
+                        <div class="cv-receipt-body">
                           <dl>
                             {createList(() => card.receipt, item => item.id, item => (
                               <div>
@@ -273,9 +401,13 @@ function Canvas(props: CanvasProps) {
                               </div>
                             ))}
                           </dl>
-                          <pre>{card.receiptJson}</pre>
-                        </details>
-                      </section>
+                          <details class="cv-receipt-raw">
+                            <summary>Receipt document (JSON)</summary>
+                            <pre>{card.receiptJson}</pre>
+                          </details>
+                          <p class="cv-receipt-note">Received {card.receiptTime}, as this page saw it; the time is not part of the receipt.</p>
+                        </div>
+                      </details>
                     ))}
                   </div>
                 </article>
@@ -284,7 +416,7 @@ function Canvas(props: CanvasProps) {
                 <article class="cv-card cv-form" data-card={form.id} data-kind="form" aria-label={form.title}>
                   <header class="cv-card-head">
                     <h3>{form.title}</h3>
-                    <span class="badge">command</span>
+                    <span class="badge">record</span>
                   </header>
                   <form method="post" action={form.action} class="cv-command" data-command={form.command}>
                     <input type="hidden" name="csrf" value={form.csrf} />
@@ -317,7 +449,7 @@ function Canvas(props: CanvasProps) {
                         ))}
                       </div>
                     ))}
-                    <button type="submit">Submit {form.command}</button>
+                    <button type="submit">{form.submit}</button>
                   </form>
                   <p class="cv-outcome" role="status" data-outcome></p>
                 </article>
@@ -335,8 +467,8 @@ function Canvas(props: CanvasProps) {
           <button type="button" data-tool="fit">Fit all</button>
           <button type="button" data-tool="reset-layout" title="View layout only: saved in this browser">Reset layout</button>
         </div>
-        <IntentBar placeholder="What do you need? Describe an app…" />
-        <p class="cv-layout-note">View layout only · saved in this browser</p>
+        <IntentBar placeholder="Describe the app you need" />
+        <p class="cv-layout-note">Layout saved in this browser</p>
       </footer>
     </div>
   );
@@ -353,6 +485,13 @@ mount(
       groups: [],
       summary: '',
       liveEvents: '',
+      hasLive: false,
+      hasOrganization: false,
+      organization: '',
+      memberLabel: '',
+      memberInitials: '',
+      demo: false,
+      demoMode: '',
     }),
   '#app',
 );

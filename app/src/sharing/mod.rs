@@ -10,15 +10,22 @@
 //!   "<uuid>","record_write":false}` (`record_write` optional, default false;
 //!   no other member), `application/json`, at most `JSON_BODY_LIMIT`. 200
 //!   `{"app_id","work_id","grantee_principal_id","granted":[{"scope":"app"|
-//!   "work"|"source","resource_id":"<uuid>","permission":"<name>","inserted":
-//!   bool}, …]}`. Refusal order: fetch metadata (403 `cross_site`), the ids
-//!   (uniform 404), the session (uniform 404), the body (413, then 400
-//!   `malformed_share`), then storage: `Denied` is the uniform 404 (a work the
-//!   sharer cannot open, no authority to share, a `record_write` the sharer
-//!   does not hold, a grantee who is not an active member of the same
-//!   organization or is the sharer; identical for existing and nonexistent
-//!   works), 503 for a store outage. A share that wrote a grant announces
-//!   `app.shared` on the event hub (`events`).
+//!   "work"|"source","resource_id":"<uuid>","permission":"<name>"}, …]}`: the
+//!   sharer's subset now held by the teammate, the same shape whether this
+//!   call inserted rows or found them (review m1: the sharer learns nothing of
+//!   the teammate's prior holdings). Refusal order: fetch metadata (403
+//!   `cross_site`), the ids (uniform 404), the session (uniform 404), the body
+//!   (413, then 400 `malformed_share`), then storage: `Denied` is the uniform
+//!   404 (a work the sharer cannot open, no authority to share, a
+//!   `record_write` the sharer does not hold, a grantee who is not an active
+//!   member of the same organization or is the sharer; identical for existing
+//!   and nonexistent works), 503 for a store outage. A share that wrote a
+//!   grant announces `app.shared` on the event hub (`events`).
+//!
+//! Session resolution (`session`): an absent or ended session and a store
+//! error alike answer the uniform 404 (fail closed; review m2: the deliberate
+//! choice, so that a store hiccup never distinguishes an existing work from a
+//! nonexistent one on these routes); the store error is logged.
 use crate::{
     auth::{cookies, csrf, Auth},
     events,
@@ -54,7 +61,11 @@ pub(crate) async fn session(auth: &Auth, headers: &HeaderMap) -> Option<(String,
             auth.revoke(&ended).await;
             None
         }
-        Ok(Lookup::Absent) | Err(_) => None,
+        Ok(Lookup::Absent) => None,
+        Err(error) => {
+            tracing::warn!(outcome = "session_unavailable", error = %error, "session.resolve");
+            None
+        }
     }
 }
 
@@ -175,7 +186,7 @@ async fn share(
                     "grantee_principal_id": shared.grantee,
                     "granted": shared.granted.iter().map(|g| json!({
                         "scope": g.scope, "resource_id": g.resource,
-                        "permission": g.permission, "inserted": g.inserted,
+                        "permission": g.permission,
                     })).collect::<Vec<_>>(),
                 }),
             )

@@ -252,7 +252,7 @@
     {
       "name": "all real tenant relations have owner/FORCE-RLS/policies/tenant-leading indexes and FKs",
       "passed": true,
-      "table_count": 41
+      "table_count": 42
     },
     {
       "name": "lock definer is non-login non-inheriting minimal role with exact three UPDATE columns",
@@ -779,6 +779,13 @@
       "passed": true
     },
     {
+      "name": "0008 work_shares is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; only genui_admit holds a privilege on it (INSERT, nine columns), no application role any",
+      "passed": true,
+      "tables": [
+        "work_shares"
+      ]
+    },
+    {
       "name": "0003 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the two genui_private indexes carry no RLS",
       "passed": true,
       "tables": [
@@ -795,7 +802,7 @@
     {
       "name": "catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns plus 0006 session columns plus 0007 command columns (D7.3); EXECUTE on the six functions is genui_workspace only",
       "passed": true,
-      "admit_grant_count": 144,
+      "admit_grant_count": 153,
       "definition_work_grant_count": 126,
       "session_grant_count": 89,
       "command_grant_count": 97
@@ -1988,9 +1995,9 @@
   "fresh_container_removed": true,
   "source_sha256": {
     "app/runtime/runtime.py": "ee1600d202db4ee257440340bc37ae1a97269dbfc0fba3343cf3d987e57c29d2",
-    "app/runtime/qualify_tenant_schema.py": "db7f065bf7400c111b22b324af3aaf898d719491b22d524401082817d69ad0ea",
-    "app/runtime/tenant_seed.py": "d2f8a6ea0b94b0158ac31f18fb024db9a27afe2d3790dbdcd79e767b61ab8b0d",
-    "app/migrations/manifest.json": "8fd505eca8807a4e29d3c147e0cf7b1be49b2ad6010202f257403cd4c454948b",
+    "app/runtime/qualify_tenant_schema.py": "5f9cebdf7315bc4b0babe7792d3efadb63a5ce372b3bea4dd2b23c9e32fefd0d",
+    "app/runtime/tenant_seed.py": "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
+    "app/migrations/manifest.json": "31b63ca8305d581dafef5418118af268f14b99072ac5978566bd8afa9c2485ba",
     "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
     "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
     "app/migrations/0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
@@ -1998,7 +2005,7 @@
     "app/migrations/0005_definition_work_grants.sql": "78d837a2968a661253f5fa9ddaab1502fc17a4e84aac979d5acf6e6c969de06e",
     "app/migrations/0006_sessions.sql": "0372a295771eda11ee5f73472c991a4b1d6955db63d68519612fb6cfa30d07ed",
     "app/migrations/0007_command_outcomes.sql": "7a0007184cad993594749139d87d4ceec88ee262c0af078471fefdd842cc11e9",
-    "app/migrations/0008_sharing.sql": "c98ede67b43b95d32e976e687fddd3bc05330b6edf625dcfa0ac7ff64b52405b",
+    "app/migrations/0008_sharing.sql": "bc0a4dbaebc8a36e8bfe8b860b0824f0e308b09204f4089a8174449dded0b829",
     "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
     "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
     "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
@@ -2007,7 +2014,7 @@
     "app/migrations/catalog-v5.json": "66112bd02c1cf3e04753c8fe38d7baa261ecae91f35f5254d58c8d61d6987804",
     "app/migrations/catalog-v6.json": "2db0b8db417c4160fe41ea20bda7230772895fe2a088c3d4c38e3bcab65c27dc",
     "app/migrations/catalog-v7.json": "af4228aa9191125e691e93801c9a3221f31500ecef01964673a07c96fc66da97",
-    "app/migrations/catalog-v8.json": "8c97dc4e8cb8cd4848fb862c9f8b8a7d23bf859ee34c769e8b005057f13f62dd"
+    "app/migrations/catalog-v8.json": "03d2851b6cf55ff274ed60b7a3dcc6e4239fd9ac73e18e8430545731e5af55ed"
   },
   "container_removed": true
 }

@@ -4,7 +4,7 @@ Categories describe ownership; sprints describe execution order. A ticket lives 
 
 | Category | Responsibility | Tickets |
 |---|---|---|
-| [FND: Foundation](categories/FND.md) | Released framework qualification, typed contracts and reproducible application structure. | 7 |
+| [FND: Foundation](categories/FND.md) | Released framework qualification, typed contracts and reproducible application structure. | 8 |
 | [IAM: Identity and access](categories/IAM.md) | Authenticated principals, tenant boundaries and service authority. | 12 |
 | [ING: Evidence and imports](categories/ING.md) | Bounded CSV/XLSX ingestion, interpretation and immutable evidence. | 5 |
 | [QRY: Queries and provenance](categories/QRY.md) | Deterministic operations, exact semantics, receipts and resource bounds. | 9 |

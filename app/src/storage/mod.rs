@@ -50,7 +50,10 @@ pub use sessions::{
     PRE_ACCESS_ABSOLUTE_SECONDS, PRE_ACCESS_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS,
     SESSION_IDLE_SECONDS,
 };
-pub use sharing::{member_label, Granted, Member, Shared, SHARE_HANDLER_DEADLINE};
+pub use sharing::{
+    member_label, Granted, Member, Openable, Shared, Standing, JUDGMENT_LIMIT,
+    SHARE_HANDLER_DEADLINE,
+};
 
 use std::fmt;
 
