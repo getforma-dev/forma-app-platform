@@ -17,6 +17,8 @@ ADR-010 cut the November 2 MVP to Phase 1 live: invite, verified sign-in, govern
 5. **Planning is paused, not abandoned.** Every unfinished ADR-010 item is carried by a ticket in Backlog, with nothing deleted or rewritten: the APP-076 trial remainder (record reopen, canary replay, T5 revocation, T9 attachment clearing and FormaStack's key rotation, the laptop retry/conflict rows), the PH01 gate record, APP-078's qualification row (APP-086), APP-089 image hardening, APP-090 UI fixes and the designer handoff, the review residuals (APP-014, APP-084), and PH02–PH07 as planned. The ADR-010 §6 pick-up order remains the order.
 6. **Revisit on November 3** (ticket APP-097): decide what the pitch clone keeps and how it lands in the platform (ticket by ticket, through the normal review tiers), close the APP-076 remainder and the PH01 gate, and resume the ADR-010 §6 order with the pitch's lessons applied to PH02 Track C and PH03.
 
+**Amendment, 2026-10-30 (Victor, demo stance):** the pitch is a concept-car demonstration: inside the synthetic demo organization, rehearsed flows may answer instantly from canned, deterministic paths without labels, because the audience is shown a vision, not a release. Honesty obligations apply at release and customer onboarding: no demo shortcut applies outside the demo organization (`GENUI_DEMO_ORGANIZATIONS`), and every shortcut is listed in APP-098 for the revisit.
+
 ## Consequences
 
 - The live beta keeps running the Phase 1 build until the pitch build is deployed; the pitch deploys to the same environment only through a reviewed change set, and the Phase 1 rollback revision stays available.
