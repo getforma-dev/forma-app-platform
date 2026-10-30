@@ -733,7 +733,7 @@ async fn campaign() {
     let page = stand.get("/canvas", Some(&maya_cookie)).await;
     assert_eq!(page.status, StatusCode::OK);
     assert!(
-        page.text().contains(&format!("id=\"g-{work_id}\"")),
+        page.text().contains(&format!("id=\"lib-{work_id}\"")),
         "openable_works lists the composed work"
     );
     assert!(
@@ -1011,7 +1011,7 @@ async fn campaign() {
     assert_eq!(placed.status, StatusCode::OK, "{}", placed.text());
     assert_eq!(placed.json()["work"], work_id);
     let mate_page = stand.get("/canvas", Some(&mate_cookie)).await;
-    assert!(mate_page.text().contains(&format!("id=\"g-{work_id}\"")));
+    assert!(mate_page.text().contains(&format!("id=\"lib-{work_id}\"")));
     let mate_run = stand
         .post(
             &format!("/v1/work/{EXPENSE_APP}/{work_id}/queries/totals"),

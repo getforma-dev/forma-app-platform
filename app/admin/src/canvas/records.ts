@@ -36,7 +36,7 @@ export type RecordsJson = {
 /** The server's records card JSON (`GET /v1/canvas/works/{app}/{work}` → `records[]`). */
 export type RecordsCardJson = {
   id: string; title: string; summary: string; url: string; collection: string; schema: string; can_write: boolean;
-  decide: string; status_field: string; count: string; pending: string;
+  decide: string; status_field: string; count: string; pending: string; waiting?: string;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -64,7 +64,7 @@ export function buildRecordsCard(document_: Document, card: RecordsCardJson): HT
   const node = el(document_, 'article', {
     class: 'cv-card cv-records', 'data-card': card.id, 'data-kind': 'records', 'data-records': card.url,
     'data-collection': card.collection, 'data-schema': card.schema, 'data-decide': card.decide, 'data-status-field': card.status_field,
-    'data-can-write': card.can_write ? 'true' : 'false', 'aria-label': card.title,
+    'data-can-write': card.can_write ? 'true' : 'false', 'data-pending': card.pending, 'data-waiting': card.waiting ?? '0', 'aria-label': card.title,
   },
   el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, card.title), el(document_, 'span', { class: 'badge' }, 'records')),
   el(document_, 'p', { class: 'cv-records-summary', 'data-summary': '' }, card.summary),
@@ -95,6 +95,7 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
   const froms = new Set((decide?.transitions ?? []).map((t) => t.from));
   const records = listing.records.filter((r) => r.collection_id === collection.collection_id);
   const pending = records.filter((r) => listing.can_write && froms.has(statusOf(r, statusField)));
+  card.dataset.pendingNow = String(pending.length);
   card.dataset.decide = decide?.id ?? '';
   card.dataset.statusField = statusField;
   card.dataset.canWrite = listing.can_write ? 'true' : 'false';

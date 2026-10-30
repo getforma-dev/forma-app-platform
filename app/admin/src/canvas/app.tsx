@@ -2,6 +2,9 @@ import { h, mount, createShow, createList, createSignal, activateIslands } from 
 import { submitUtterance } from './actions';
 import { startAgents } from './agents';
 import { startBoard } from './board';
+import { startLibrary } from './library';
+import { startControls } from './controls';
+import { startStacks } from './stacks';
 import { registerCommands, startSlash } from './slash';
 // APP-103 utility widgets, registered as canvas slash commands (APP-101):
 // `/weather`, `/calculator`, `/clock` in the `/` list and `/apps`; a command
@@ -126,6 +129,7 @@ type RecordsCard = {
   statusField: string;
   count: string;
   pending: string;
+  waiting: string;
   hasRows: boolean;
   hasNoRows: boolean;
   columns: Cell[];
@@ -167,6 +171,7 @@ type Group = {
   windowEnd: string;
   destination: string;
   restored: boolean;
+  auto: string;
   hasCards: boolean;
   cards: Card[];
   hasForms: boolean;
@@ -176,6 +181,20 @@ type Group = {
   hasLedger: boolean;
   ledger: LedgerCard[];
 };
+// APP-104: the library pane, metadata only (`query::canvas::library`).
+type LibraryCard = { id: string; number: string; title: string; kind: string; search: string };
+type LibraryApp = {
+  id: string;
+  app: string;
+  work: string;
+  number: string;
+  title: string;
+  hasSlug: boolean;
+  slug: string;
+  search: string;
+  cards: LibraryCard[];
+};
+type LibraryCategory = { id: string; title: string; count: string; apps: LibraryApp[] };
 type CanvasProps = {
   csrfSignout: string;
   hasGroups: boolean;
@@ -189,6 +208,10 @@ type CanvasProps = {
   memberInitials: string;
   demo: boolean;
   demoMode: string;
+  hasLibrary: boolean;
+  library: LibraryCategory[];
+  librarySummary: string;
+  memberKey: string;
 };
 
 type IntentProps = { placeholder: string };
@@ -271,6 +294,23 @@ function Canvas(props: CanvasProps) {
               <span data-live-text>Live</span>
             </span>
           ))}
+          <button
+            type="button"
+            id="cv-library-toggle"
+            class="cv-lib-open"
+            aria-controls="cv-library"
+            aria-expanded="false"
+            title="Library: every card you can bring onto the canvas (L)"
+          >
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+              <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.4" />
+              <rect x="9" y="1.5" width="5.5" height="5.5" rx="1.4" />
+              <rect x="1.5" y="9" width="5.5" height="5.5" rx="1.4" />
+              <rect x="9" y="9" width="5.5" height="5.5" rx="1.4" />
+            </svg>
+            <span class="cv-lib-open-text">Library</span>
+            <span class="cv-kbd" aria-hidden="true">L</span>
+          </button>
           <a class="cv-link" href="/workspace">Workspace</a>
           <span class="cv-avatar" title={props.memberLabel} aria-label={props.memberLabel} role="img">
             {props.memberInitials}
@@ -281,23 +321,28 @@ function Canvas(props: CanvasProps) {
           </form>
         </div>
       </header>
-      <main id="cv-canvas" class="cv-canvas" aria-label="Canvas" data-live-events={props.liveEvents} data-demo={props.demoMode}>
-        {props.hasGroups ? null : (
-          <section id="cv-empty" class="cv-empty" aria-labelledby="cv-empty-title">
-            <h1 id="cv-empty-title">What do you need?</h1>
-            <p class="cv-empty-copy">
-              Describe the app you need. Forma assembles it from admitted components, runs it on your
-              organization's data and puts a receipt on every number.
-            </p>
-            <div class="cv-suggestions" aria-label="Suggested intents">
-              <button type="button" data-intent="Review expenses over $200">Review expenses over $200</button>
-              <button type="button" data-intent="Investigate outbound traffic from build-worker-17">
-                Investigate outbound traffic from build-worker-17
-              </button>
-              <button type="button" data-intent="Vendor spend this quarter">Vendor spend this quarter</button>
-            </div>
-          </section>
-        )}
+      <main
+        id="cv-canvas"
+        class="cv-canvas"
+        aria-label="Canvas"
+        data-live-events={props.liveEvents}
+        data-demo={props.demoMode}
+        data-member={props.memberKey}
+      >
+        <section id="cv-empty" class="cv-empty" aria-labelledby="cv-empty-title">
+          <h1 id="cv-empty-title">What do you need?</h1>
+          <p class="cv-empty-copy">Ask in your own words, type / for a command, or bring cards from your library.</p>
+          <div class="cv-suggestions" aria-label="Suggestions">
+            <button type="button" data-intent="/expense"><code>/expense</code></button>
+            <button type="button" data-intent="Review expenses over $200">Review expenses over $200</button>
+            <button type="button" data-intent="/weather"><code>/weather</code></button>
+          </div>
+          {createShow(() => props.hasLibrary, () => (
+            <button type="button" class="cv-empty-library" data-lib-open>
+              Browse your library <span class="cv-empty-library-count">{props.librarySummary}</span>
+            </button>
+          ))}
+        </section>
         <div id="cv-board" class="cv-board">
           {createList(() => props.groups, group => group.id, group => (
             <section
@@ -305,6 +350,7 @@ function Canvas(props: CanvasProps) {
               id={group.id}
               data-app={group.app}
               data-work={group.work}
+              data-auto={group.auto}
               aria-label={group.title}
             >
               <article class="cv-card cv-app" data-card={group.appCard} data-kind="app" aria-label={group.title}>
@@ -526,6 +572,8 @@ function Canvas(props: CanvasProps) {
                   data-decide={records.decide}
                   data-status-field={records.statusField}
                   data-can-write={records.canWriteText}
+                  data-pending={records.pending}
+                  data-waiting={records.waiting}
                   data-state="ready"
                   aria-label={records.title}
                 >
@@ -617,13 +665,93 @@ function Canvas(props: CanvasProps) {
         </div>
         <p id="cv-activity" class="sr-only" role="status" aria-live="polite"></p>
       </main>
+      <aside id="cv-library" class="cv-library" aria-labelledby="cv-lib-title" data-open="false">
+        <header class="cv-lib-head">
+          <div class="cv-lib-heading">
+            <h2 id="cv-lib-title">Library</h2>
+            <p class="cv-lib-summary">{props.librarySummary}</p>
+          </div>
+          <button type="button" class="cv-lib-close" data-lib-close aria-label="Close the library" title="Close (Esc)">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" />
+            </svg>
+          </button>
+        </header>
+        <div class="cv-lib-search">
+          <input id="cv-lib-search" type="search" placeholder="Search by name or number, e.g. 3.2" aria-label="Search the library" autocomplete="off" />
+        </div>
+        <p class="cv-lib-hint">Click a card to bring it onto the canvas, or type <code>/card 3.2</code> or <code>/app expense</code>.</p>
+        <div class="cv-lib-list" data-lib-list>
+          {createList(() => props.library, category => category.id, category => (
+            <section class="cv-lib-cat" data-category={category.id} aria-label={category.title}>
+              <h3 class="cv-lib-cat-title">
+                <span>{category.title}</span>
+                <span class="cv-lib-count">{category.count}</span>
+              </h3>
+              <ul class="cv-lib-apps">
+                {createList(() => category.apps, app => app.id, app => (
+                  <li class="cv-lib-app" id={app.id} data-app={app.app} data-work={app.work} data-number={app.number} data-search={app.search}>
+                    <div class="cv-lib-app-head">
+                      <button type="button" class="cv-lib-expand" aria-expanded="false" data-lib-expand>
+                        <span class="cv-lib-chevron" aria-hidden="true"></span>
+                        <span class="cv-lib-num">{app.number}</span>
+                        <span class="cv-lib-app-title">{app.title}</span>
+                        {createShow(() => app.hasSlug, () => (
+                          <code class="cv-lib-slug">{app.slug}</code>
+                        ))}
+                        <span class="cv-lib-on" data-lib-on></span>
+                      </button>
+                      <button type="button" class="cv-lib-stack" data-lib-stack title="Add the app as one stack">Stack</button>
+                      <button type="button" class="cv-lib-all" data-lib-all>Add all</button>
+                    </div>
+                    <ul class="cv-lib-cards">
+                      {createList(() => app.cards, card => card.id, card => (
+                        <li class="cv-lib-card" data-card={card.id} data-number={card.number} data-search={card.search}>
+                          <button type="button" class="cv-lib-toggle" aria-pressed="false" data-lib-toggle>
+                            <span class="cv-lib-num">{card.number}</span>
+                            <span class="cv-lib-card-title">{card.title}</span>
+                            <span class="cv-lib-kind" data-kind={card.kind}>{card.kind}</span>
+                            <span class="cv-lib-action" data-lib-action>Add</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </aside>
       <footer class="cv-dock">
-        <div class="cv-tools" role="toolbar" aria-label="Canvas view" data-tools hidden>
-          <button type="button" data-tool="zoom-out" aria-label="Zoom out">−</button>
-          <button type="button" data-tool="zoom-reset" aria-label="Reset zoom">100%</button>
-          <button type="button" data-tool="zoom-in" aria-label="Zoom in">+</button>
-          <button type="button" data-tool="fit">Fit all</button>
-          <button type="button" data-tool="reset-layout" title="View layout only: saved in this browser">Reset layout</button>
+        <div class="cv-tools" role="toolbar" aria-label="Canvas tools" data-tools hidden>
+          <button type="button" class="cv-tool" data-tool="move" aria-pressed="true" aria-label="Move" title="Move (V)">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path d="M3.5 2.2l9.2 5.2-4 1.1-1.9 3.9z" />
+            </svg>
+          </button>
+          <button type="button" class="cv-tool" data-tool="hand" aria-pressed="false" aria-label="Hand" title="Hand (H)">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path d="M5.2 8.4V3.6a1 1 0 012 0v3.6M7.2 7V2.8a1 1 0 012 0V7m0-3.2a1 1 0 012 0V7.6m0-2.4a1 1 0 012 0v4.2c0 2.6-1.8 4.6-4.4 4.6-1.6 0-2.6-.6-3.5-1.8L3 9.6a1 1 0 011.6-1.2l.6.8" />
+            </svg>
+          </button>
+          <span class="cv-tools-sep" aria-hidden="true"></span>
+          <div class="cv-zoom">
+            <button type="button" class="cv-zoom-button" data-tool="zoom-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="cv-zoom-menu" title="Zoom">
+              <span data-zoom-label>100%</span>
+              <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M2 3.8l3 3 3-3" /></svg>
+            </button>
+            <div id="cv-zoom-menu" class="cv-zoom-menu" role="menu" aria-label="Zoom" hidden>
+              <button type="button" role="menuitem" data-tool="zoom-in"><span>Zoom in</span><span class="cv-kbd-group">⌘ +</span></button>
+              <button type="button" role="menuitem" data-tool="zoom-out"><span>Zoom out</span><span class="cv-kbd-group">⌘ −</span></button>
+              <button type="button" role="menuitem" data-tool="zoom-reset"><span>Zoom to 100%</span><span class="cv-kbd-group">⇧ 0</span></button>
+              <button type="button" role="menuitem" data-tool="fit"><span>Zoom to fit</span><span class="cv-kbd-group">⇧ 1</span></button>
+              <button type="button" role="menuitem" data-tool="selection"><span>Zoom to selection</span><span class="cv-kbd-group">⇧ 2</span></button>
+              <span class="cv-zoom-sep" aria-hidden="true"></span>
+              <button type="button" role="menuitem" data-tool="reset-layout" title="View layout only: saved in this browser"><span>Reset layout</span></button>
+              <button type="button" role="menuitem" data-tool="help"><span>Keyboard shortcuts</span><span class="cv-kbd-group">?</span></button>
+            </div>
+          </div>
         </div>
         <IntentBar placeholder="Describe the app you need, or type / for your apps" />
         <p class="cv-layout-note">Layout saved in this browser</p>
@@ -642,6 +770,9 @@ registerCommands(WIDGET_COMMANDS.map((command) => ({
 })));
 startAgents(document);
 restoreWidgets();
+startLibrary(document);
+startControls(document);
+startStacks(document);
 
 mount(
   () =>
@@ -658,6 +789,10 @@ mount(
       memberInitials: '',
       demo: false,
       demoMode: '',
+      hasLibrary: false,
+      library: [],
+      librarySummary: '',
+      memberKey: '',
     }),
   '#app',
 );

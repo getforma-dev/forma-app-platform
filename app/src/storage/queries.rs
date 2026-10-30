@@ -675,6 +675,9 @@ pub struct WorkOutline {
     /// line carries the canvas chips, `composer::transform::chips_of`).
     pub description: String,
     pub views: Vec<WorkView>,
+    /// The pinned definition's admitted digest (APP-104: the canvas library
+    /// pane names a library app's category from the sidecar by it).
+    pub definition_digest: String,
 }
 
 /// The runnable views of re-admitted definition content.
@@ -732,6 +735,7 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
         title,
         description,
         views,
+        definition_digest: String::new(),
     })
 }
 
@@ -764,7 +768,9 @@ impl Data {
             if admitted != premise.definition_digest {
                 return Err(Error::Unavailable);
             }
-            outline(&content)
+            let mut outline = outline(&content)?;
+            outline.definition_digest = admitted;
+            Ok(outline)
         }
         .await;
         transaction.finish(result.is_ok()).await?;

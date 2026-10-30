@@ -47,6 +47,17 @@ export function registerCommands(commands: CanvasCommand[]): void {
   }
 }
 
+/**
+ * APP-104: an argument completion under the bar (`/card 3.2`, `/app expense`):
+ * a short badge (the number), a title, a detail line and the text it runs.
+ */
+export type Completion = { badge: string; title: string; detail: string; value: string };
+const completers = new Map<string, (rest: string) => Completion[]>();
+/** Offers completions for `/slug <rest>`. */
+export function registerCompleter(slug: string, complete: (rest: string) => Completion[]): void {
+  completers.set(slug, complete);
+}
+
 /** Every command: the built-in `/apps`, the registered ones, then the server's. */
 export function allCommands(): CanvasCommand[] {
   const seen = new Set<string>();
@@ -247,6 +258,7 @@ export function startSlash(document_: Document): void {
   input.setAttribute('aria-controls', 'cv-slash');
   input.setAttribute('aria-expanded', 'false');
   let shown: CanvasCommand[] = [];
+  let completions: Completion[] = [];
   let active = -1;
 
   const close = () => {
@@ -265,9 +277,40 @@ export function startSlash(document_: Document): void {
     input.value = `/${command.slug} `;
     close();
     input.focus();
+    if (completers.has(command.slug)) render();
+  };
+  const run = (value: string) => {
+    input.value = value;
+    close();
+    form.requestSubmit();
+  };
+  const renderCompletions = (list_: Completion[]) => {
+    completions = list_;
+    shown = [];
+    list.replaceChildren(...list_.map((completion, index) => {
+      const option = el(document_, 'li', { id: `cv-slash-${index}`, role: 'option', 'aria-selected': 'false', class: 'cv-slash-option cv-slash-completion' },
+        el(document_, 'span', { class: 'cv-slash-name cv-slash-badge' }, completion.badge),
+        el(document_, 'span', { class: 'cv-slash-title' }, completion.title),
+        el(document_, 'span', { class: 'cv-slash-purpose' }, completion.detail));
+      option.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        run(completion.value);
+      });
+      return option;
+    }));
+    list.hidden = list_.length === 0;
+    input.setAttribute('aria-expanded', list_.length ? 'true' : 'false');
+    highlight(list_.length ? 0 : -1);
   };
   const render = () => {
     const value = input.value;
+    const argument = value.match(/^\/([a-z0-9-]+)\s+([\s\S]*)$/i);
+    const completer = argument ? completers.get((argument[1] ?? '').toLowerCase()) : undefined;
+    if (argument && completer) {
+      renderCompletions(completer(argument[2] ?? ''));
+      return;
+    }
+    completions = [];
     const match = value.match(/^\/([a-z0-9-]*)$/i);
     if (!match) {
       close();
@@ -298,6 +341,27 @@ export function startSlash(document_: Document): void {
     else close();
   });
   input.addEventListener('keydown', (event) => {
+    if (!list.hidden && completions.length) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const step = event.key === 'ArrowDown' ? 1 : -1;
+        highlight((active + step + completions.length) % completions.length);
+      } else if (event.key === 'Tab' || event.key === 'Enter') {
+        const completion = completions[active];
+        if (!completion) return;
+        event.preventDefault();
+        if (event.key === 'Tab') {
+          input.value = `${completion.value}`;
+          render();
+        } else {
+          run(completion.value);
+        }
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        close();
+      }
+      return;
+    }
     if (list.hidden || !shown.length) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();

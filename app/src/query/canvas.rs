@@ -16,6 +16,14 @@
 //!   views run again under a fresh authorization and release, exactly as the
 //!   work page restores them, so a page without JavaScript still shows real
 //!   results with their receipts. Nothing else runs on a `GET`.
+//!   APP-104 (the library pane): the page renders every openable work as
+//!   metadata only (category → app → numbered cards, from each work's outline
+//!   and records listing; no view runs) and renders as groups only the works
+//!   the board must show without the member's choice: the run cookie's
+//!   restored work, and a work with a record waiting for the member's
+//!   decision (its records card). Every other card the member brought onto
+//!   the canvas (kept in this browser, DS-67) the island places through the
+//!   group route below.
 //! - `GET /v1/canvas/works/{app}/{work}`: one group as JSON, for the island
 //!   to place a work it did not render (the composer's newly published work,
 //!   a shared work, a live event). Only a work in the member's current
@@ -81,6 +89,203 @@ pub struct CanvasProps {
     /// demo-safe layout (each load starts from the default arrangement).
     pub demo: bool,
     pub demo_mode: String,
+    /// APP-104: the library pane (metadata only), "16 apps · 88 cards", and
+    /// the key the island keeps this member's placed cards under in this
+    /// browser (a digest of organization and principal, DS-67).
+    pub has_library: bool,
+    pub library: Vec<LibraryCategoryProps>,
+    pub library_summary: String,
+    pub member_key: String,
+}
+
+/// APP-104: one category of the library pane ("Finance", "My apps").
+#[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct LibraryCategoryProps {
+    pub id: String,
+    pub title: String,
+    /// "5 apps".
+    pub count: String,
+    pub apps: Vec<LibraryAppProps>,
+}
+
+/// One openable work in the library pane, numbered (`3`); its cards are
+/// `3.0` (the app card) and `3.1`, `3.2`, … in canvas order.
+#[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct LibraryAppProps {
+    /// `lib-{work}`.
+    pub id: String,
+    pub app: String,
+    pub work: String,
+    pub number: String,
+    pub title: String,
+    pub has_slug: bool,
+    /// "/expense" (the library command), or empty.
+    pub slug: String,
+    /// Lowercase words the pane's search matches.
+    pub search: String,
+    pub cards: Vec<LibraryCardProps>,
+}
+
+/// One card row: the canvas card id (`c-{work}-{view}`, `f-…`, `r-…`, `l-…`,
+/// `a-{work}`), its number, title and kind (number, chart, table, records,
+/// form, ledger, app).
+#[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct LibraryCardProps {
+    pub id: String,
+    pub number: String,
+    pub title: String,
+    pub kind: String,
+    pub search: String,
+}
+
+/// What the pane is built from for one work: its listing entry, the
+/// library sidecar's grouping when it is a library app
+/// (`composer::matcher::library_grouping`), and its card rows in canvas order
+/// as `(id, title, kind)`.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct LibrarySource {
+    pub app: String,
+    pub work: String,
+    pub title: String,
+    pub grouping: Option<(usize, String, String, String)>,
+    pub cards: Vec<(String, String, String)>,
+}
+
+/// The library categories in pane order: capability prefix → title.
+const CATEGORIES: &[(&str, &str)] = &[
+    ("finance", "Finance"),
+    ("security", "Security"),
+    ("ops", "Operations"),
+    ("operations", "Operations"),
+    ("sales", "Sales"),
+    ("support", "Support"),
+    ("people", "People"),
+];
+
+/// A view kind as the pane names it.
+pub fn card_kind(view_kind: &str) -> &'static str {
+    match view_kind {
+        "summary" | "status" => "number",
+        "timeline" | "chart" => "chart",
+        _ => "table",
+    }
+}
+
+/// The library pane (APP-104): library apps grouped by their first routing
+/// capability's prefix (in [`CATEGORIES`] order, then any other prefix),
+/// each in sidecar order; every other work under "My apps", by title. Apps
+/// are numbered 1.. in that order, so a library app keeps its number as
+/// compositions are added; cards are numbered `{app}.0` (the app card) and
+/// `{app}.1`… in canvas order.
+pub fn library(sources: Vec<LibrarySource>) -> Vec<LibraryCategoryProps> {
+    let category = |source: &LibrarySource| -> (usize, String, String) {
+        match &source.grouping {
+            Some((_, _, prefix, _)) => match CATEGORIES.iter().position(|(p, _)| p == prefix) {
+                Some(index) => {
+                    let title = CATEGORIES[index].1;
+                    let first = CATEGORIES
+                        .iter()
+                        .position(|(_, t)| *t == title)
+                        .unwrap_or(index);
+                    (first, title.to_lowercase(), title.to_owned())
+                }
+                None if !prefix.is_empty() => {
+                    (CATEGORIES.len(), prefix.clone(), display::label(prefix))
+                }
+                None => (CATEGORIES.len(), "library".into(), "Library".into()),
+            },
+            None => (CATEGORIES.len() + 1, "mine".into(), "My apps".into()),
+        }
+    };
+    let mut sorted: Vec<((usize, String, String), LibrarySource)> = sources
+        .into_iter()
+        .map(|source| (category(&source), source))
+        .collect();
+    sorted.sort_by(|(a, x), (b, y)| {
+        (a.0, &a.1)
+            .cmp(&(b.0, &b.1))
+            .then_with(|| {
+                let position = |s: &LibrarySource| s.grouping.as_ref().map(|g| g.0);
+                position(x).cmp(&position(y))
+            })
+            .then_with(|| x.title.cmp(&y.title))
+            .then_with(|| x.work.cmp(&y.work))
+    });
+    let mut categories: Vec<LibraryCategoryProps> = Vec::new();
+    for (number, ((_, id, title), source)) in sorted.into_iter().enumerate() {
+        let number = number + 1;
+        let slug = source
+            .grouping
+            .as_ref()
+            .map(|g| g.3.clone())
+            .filter(|slug| !slug.is_empty())
+            .map(|slug| format!("/{slug}"))
+            .unwrap_or_default();
+        let cards = source
+            .cards
+            .iter()
+            .enumerate()
+            .map(|(index, (card, title, kind))| {
+                let number = format!("{number}.{index}");
+                LibraryCardProps {
+                    id: card.clone(),
+                    search: format!("{number} {} {kind}", title.to_lowercase()),
+                    number,
+                    title: title.clone(),
+                    kind: kind.clone(),
+                }
+            })
+            .collect();
+        let app = LibraryAppProps {
+            id: format!("lib-{}", source.work),
+            search: format!("{number} {} {slug}", source.title.to_lowercase()),
+            app: source.app,
+            work: source.work,
+            number: number.to_string(),
+            title: source.title,
+            has_slug: !slug.is_empty(),
+            slug,
+            cards,
+        };
+        match categories.last_mut() {
+            Some(last) if last.id == id => last.apps.push(app),
+            _ => categories.push(LibraryCategoryProps {
+                id,
+                title,
+                count: String::new(),
+                apps: vec![app],
+            }),
+        }
+    }
+    for category in &mut categories {
+        let apps = category.apps.len();
+        category.count = format!("{apps} {}", plural(apps, "app"));
+    }
+    categories
+}
+
+/// "16 apps · 88 cards" over the pane.
+pub fn library_summary(categories: &[LibraryCategoryProps]) -> String {
+    let apps: usize = categories.iter().map(|c| c.apps.len()).sum();
+    let cards: usize = categories
+        .iter()
+        .flat_map(|c| &c.apps)
+        .map(|a| a.cards.len())
+        .sum();
+    format!(
+        "{apps} {} · {cards} {}",
+        plural(apps, "app"),
+        plural(cards, "card")
+    )
+}
+
+/// The browser key of this member's placed cards (DS-67): the first 16 hex
+/// digits of SHA-256 over organization and principal; not an identifier
+/// the server accepts anywhere.
+pub fn member_key(organization: &str, principal: &str) -> String {
+    use sha2::Digest as _;
+    let digest = sha2::Sha256::digest(format!("{organization}\n{principal}").as_bytes());
+    digest.iter().take(8).map(|b| format!("{b:02x}")).collect()
 }
 
 /// The demo organizations (APP-098): `GENUI_DEMO_ORGANIZATIONS`, the same
@@ -158,6 +363,10 @@ pub struct GroupProps {
     pub destination: String,
     /// The views ran on this request from the session's run cookie.
     pub restored: bool,
+    /// APP-104: why the page rendered this group without the member placing
+    /// it: "restored" (the run cookie's work) or "pending" (a record waits
+    /// for the member's decision); empty from the group route.
+    pub auto: String,
     pub has_cards: bool,
     pub cards: Vec<CanvasCardProps>,
     pub has_forms: bool,
@@ -196,6 +405,10 @@ pub struct RecordsCardProps {
     pub status_field: String,
     pub count: String,
     pub pending: String,
+    /// APP-104: the pending records filed by someone else, outside a library
+    /// app's seeded work: a request waiting for this member's decision (the
+    /// board shows this card even when the member did not place it).
+    pub waiting: String,
     pub has_rows: bool,
     pub has_no_rows: bool,
     pub columns: Vec<CellProps>,
@@ -532,8 +745,15 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
 }
 
 /// A records card from a listing (ADR-011 scenarios), one per collection;
-/// none for a work without collections.
-pub fn records_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<RecordsCardProps> {
+/// none for a work without collections. `principal` is the reader (APP-104:
+/// a pending record they filed themselves is not waiting for them).
+pub fn records_cards(
+    app: &str,
+    work: &str,
+    listing: &RecordsListing,
+    principal: &str,
+) -> Vec<RecordsCardProps> {
+    let seeded = crate::composer::matcher::seeded_work(work);
     listing
         .collections
         .iter()
@@ -580,6 +800,7 @@ pub fn records_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Rec
                 raw: String::new(),
             });
             let mut pending = 0usize;
+            let mut waiting = 0usize;
             let rows: Vec<RecordRowProps> = listing
                 .records
                 .iter()
@@ -603,6 +824,7 @@ pub fn records_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Rec
                         .to_owned();
                     let is_pending = listing.can_write && froms.contains(&status.as_str());
                     pending += usize::from(is_pending);
+                    waiting += usize::from(is_pending && !seeded && record.creator != principal);
                     let mut cells: Vec<CellProps> = shown
                         .iter()
                         .map(|f| CellProps {
@@ -664,6 +886,7 @@ pub fn records_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Rec
                 status_field,
                 count: count.to_string(),
                 pending: pending.to_string(),
+                waiting: waiting.to_string(),
                 has_rows: !rows.is_empty(),
                 has_no_rows: rows.is_empty(),
                 columns,
@@ -772,19 +995,23 @@ fn fresh_key() -> Option<String> {
     Some(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
-/// One group for `listed`, under the member's authority. `Ok(None)` when the
-/// work is no longer authorized (it left the listing between the two reads);
-/// `restore`, when given, is this request's run cookie verdict.
-async fn group(
+/// What one work reads before the page or the group route shapes it: the
+/// pinned definition's outline (`Data::work_outline`, the work page's own
+/// authorization) and, for a work with collections, its records listing
+/// (`Data::list_records`, the record page's). Neither runs a view.
+struct WorkRead {
+    outline: WorkOutline,
+    listing: Option<RecordsListing>,
+}
+
+/// `Ok(None)` when the work is no longer authorized (it left the listing
+/// between the two reads).
+async fn read_work(
     canvas: &Canvas,
-    cookie: &str,
     member: &Arc<TrustedRequest>,
     listed: &OpenableWork,
-    restore: bool,
-    headers: &axum::http::HeaderMap,
-) -> Result<Option<GroupProps>, Response> {
-    let auth = canvas.work.auth();
-    let Some(stores) = &auth.stores else {
+) -> Result<Option<WorkRead>, Response> {
+    let Some(stores) = &canvas.work.auth().stores else {
         return Err(http::not_found());
     };
     let (app, work) = (listed.app.as_str(), listed.work.as_str());
@@ -793,10 +1020,98 @@ async fn group(
         Err(Error::Denied) => return Ok(None),
         Err(error) => return Err(routes::storage_refusal(&error)),
     };
+    let listing = if listed.collections.is_empty() {
+        None
+    } else {
+        match stores.data.list_records(member, app, work).await {
+            Ok(listing) => Some(listing),
+            Err(Error::Denied) => None,
+            Err(error) => return Err(routes::storage_refusal(&error)),
+        }
+    };
+    Ok(Some(WorkRead { outline, listing }))
+}
+
+/// The pane's card rows of one work, in canvas order (APP-104), from the
+/// same reads the group is built from: the app card, the views, a record
+/// form per collection for a writer, the records cards and the ledger.
+fn library_source(listed: &OpenableWork, read: &WorkRead) -> LibrarySource {
+    let (app, work) = (listed.app.as_str(), listed.work.as_str());
+    let mut cards = vec![(format!("a-{work}"), "App card".to_owned(), "app".to_owned())];
+    for view in &read.outline.views {
+        cards.push((
+            format!("c-{work}-{}", view.id),
+            display::label(&view.title),
+            card_kind(&view.kind).to_owned(),
+        ));
+    }
+    if listed.can_write {
+        for (collection, schema) in &listed.collections {
+            cards.push((
+                format!("f-{work}-{collection}"),
+                format!("New {schema} record"),
+                "form".to_owned(),
+            ));
+        }
+    }
+    if let Some(listing) = &read.listing {
+        for card in records_cards(app, work, listing, "") {
+            cards.push((card.id, card.title, "records".to_owned()));
+        }
+        for card in super::canvas_ledger::ledger_cards(app, work, listing) {
+            cards.push((card.id, card.title, "ledger".to_owned()));
+        }
+    }
+    LibrarySource {
+        app: app.to_owned(),
+        work: work.to_owned(),
+        title: read.outline.title.clone(),
+        // The library's own seeded work stands for the library app; a work
+        // the member composed from it (retrieved, adapted) is theirs.
+        grouping: if crate::composer::matcher::seeded_work(work) {
+            crate::composer::matcher::library_grouping(&read.outline.definition_digest)
+        } else {
+            None
+        },
+        cards,
+    }
+}
+
+/// One group for `listed`, under the member's authority (the group route).
+async fn group(
+    canvas: &Canvas,
+    cookie: &str,
+    member: &Arc<TrustedRequest>,
+    listed: &OpenableWork,
+) -> Result<Option<GroupProps>, Response> {
+    let Some(read) = read_work(canvas, member, listed).await? else {
+        return Ok(None);
+    };
+    assemble(canvas, cookie, member, listed, read, Restore::Absent)
+        .await
+        .map(Some)
+}
+
+/// The group from its reads; `restore` is this request's run cookie
+/// verdict (its views run again only for `Restore::Parameters`).
+async fn assemble(
+    canvas: &Canvas,
+    cookie: &str,
+    member: &Arc<TrustedRequest>,
+    listed: &OpenableWork,
+    read: WorkRead,
+    restore: Restore,
+) -> Result<GroupProps, Response> {
+    let auth = canvas.work.auth();
+    let Some(stores) = &auth.stores else {
+        return Err(http::not_found());
+    };
+    let (app, work) = (listed.app.as_str(), listed.work.as_str());
+    let WorkRead { outline, listing } = read;
     let mut echo = FormValues::default();
     let mut restored = false;
-    let cards = match restore.then(|| routes::restore(auth, headers, app, work, cookie)) {
-        Some(Restore::Parameters(parameters)) => {
+    let cards = match restore {
+        Restore::Parameters(parameters) => {
             let views = routes::run_views(
                 &canvas.work,
                 member.clone(),
@@ -848,20 +1163,15 @@ async fn group(
             }
         }
     }
-    let (records, ledger) = if listed.collections.is_empty() {
-        (Vec::new(), Vec::new())
-    } else {
-        match stores.data.list_records(member, app, work).await {
-            Ok(listing) => (
-                records_cards(app, work, &listing),
-                super::canvas_ledger::ledger_cards(app, work, &listing),
-            ),
-            Err(Error::Denied) => (Vec::new(), Vec::new()),
-            Err(error) => return Err(routes::storage_refusal(&error)),
-        }
+    let (records, ledger) = match &listing {
+        Some(listing) => (
+            records_cards(app, work, listing, member.principal()),
+            super::canvas_ledger::ledger_cards(app, work, listing),
+        ),
+        None => (Vec::new(), Vec::new()),
     };
     let adapted = adapted_origins(&outline.description);
-    Ok(Some(GroupProps {
+    Ok(GroupProps {
         id: format!("g-{work}"),
         app: app.to_owned(),
         work: work.to_owned(),
@@ -879,6 +1189,7 @@ async fn group(
         window_end: echo.window_end,
         destination: echo.destination,
         restored,
+        auto: String::new(),
         has_cards: !cards.is_empty(),
         cards,
         has_forms: !forms.is_empty(),
@@ -887,7 +1198,7 @@ async fn group(
         records,
         has_ledger: !ledger.is_empty(),
         ledger,
-    }))
+    })
 }
 
 /// The member's openable works; a denial is the empty listing, as on
@@ -944,13 +1255,33 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
     }
     let member = Arc::new(member);
     let mut groups = Vec::new();
+    let mut sources = Vec::new();
     for listed in listing(&canvas, &member).await {
-        match group(&canvas, &cookie, &member, &listed, true, &parts.headers).await {
-            Ok(Some(group)) => groups.push(group),
-            Ok(None) => {}
+        let read = match read_work(&canvas, &member, &listed).await {
+            Ok(Some(read)) => read,
+            Ok(None) => continue,
+            Err(refusal) => return refusal,
+        };
+        sources.push(library_source(&listed, &read));
+        let verdict = routes::restore(auth, &parts.headers, &listed.app, &listed.work, &cookie);
+        let restored = matches!(verdict, Restore::Parameters(_));
+        let pending = read.listing.as_ref().is_some_and(|listing| {
+            records_cards(&listed.app, &listed.work, listing, member.principal())
+                .iter()
+                .any(|r| r.waiting != "0")
+        });
+        if !(restored || pending) {
+            continue;
+        }
+        match assemble(&canvas, &cookie, &member, &listed, read, verdict).await {
+            Ok(mut group) => {
+                group.auto = if restored { "restored" } else { "pending" }.to_owned();
+                groups.push(group);
+            }
             Err(refusal) => return refusal,
         }
     }
+    let library = library(sources);
     let organization = organization_name(&canvas, &member).await;
     let principal = member.principal();
     let demo = canvas.demo_organizations.contains(member.organization());
@@ -967,6 +1298,10 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         member_initials: initials(principal),
         demo,
         demo_mode: if demo { "on" } else { "" }.to_owned(),
+        has_library: !library.is_empty(),
+        library_summary: library_summary(&library),
+        library,
+        member_key: member_key(member.organization(), principal),
     };
     canvas.pages.canvas(&props)
 }
@@ -994,7 +1329,7 @@ async fn group_json(
     else {
         return http::not_found();
     };
-    let group = match group(&canvas, &cookie, &member, &listed, false, &parts.headers).await {
+    let group = match group(&canvas, &cookie, &member, &listed).await {
         Ok(Some(group)) => group,
         Ok(None) => return http::not_found(),
         Err(refusal) => return refusal,
