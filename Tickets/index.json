@@ -251,9 +251,10 @@
         "APP-098",
         "APP-099",
         "APP-100",
-        "APP-101"
+        "APP-101",
+        "APP-102"
       ],
-      "ticket_count": 11,
+      "ticket_count": 12,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -3244,6 +3245,35 @@
       "dependencies": [
         "APP-093",
         "APP-094"
+      ]
+    },
+    {
+      "id": "APP-102",
+      "title": "Receipt upload and the expense ledger: a photo becomes a reviewed row, every row adds up live",
+      "path": "0-backlog/APP-102.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "AI",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "102",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md): the November 2 emergency pivot. No dedicated phase existed, so the board's new phase PH08 / sprint S14 (order 8, no phase dependency; added to `plan.json`) holds the pitch tickets. Invariants of ADR-011 \u00a73 that bind this ticket: I1 verified identity; I2 tenant isolation (RLS, uniform 404); I3 receipts on every governed number; I4 transactional, idempotent, audited commands; I5 model output is data, never code, SQL, markup or grants (typed definitions through admission; every AI result labeled); I6 no credential, address or code in public evidence (I1\u2013I6 number the six invariants in \u00a73 in order).",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-093, APP-095",
+      "External dependencies": "None beyond listed local predecessors",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started (`pivot/receipts`, from `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-093",
+        "APP-095"
       ]
     }
   ]
