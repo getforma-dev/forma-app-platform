@@ -94,56 +94,69 @@ function committed(body: unknown): CommandOutcome | null {
 
 const sleep = (seconds: number) => new Promise((resolve) => setTimeout(resolve, seconds * 1000));
 
-/** Submits the form once (retrying `in_flight`/`busy` with the same key). */
-export async function submitCommand(form: HTMLFormElement, app: string, work: string): Promise<CommandOutcome> {
-  const request = commandRequest(form, app, work);
-  if (!request || !form.action) {
-    return { kind: 'refused', message: 'The command was refused: a value is not one this command accepts. Nothing was changed.' };
-  }
-  const key = String(request.idempotency_key);
-  const url = new URL(form.action, location.href);
-  if (url.origin !== location.origin || !url.pathname.startsWith('/v1/work/')) {
-    return { kind: 'failed', message: 'The command was not sent.' };
-  }
+/** The outcome copy a caller may tailor (the form, a confirmed draft, a note). */
+export type OutcomeCopy = Partial<Record<'conflict' | 'stale' | 'refused' | 'busy' | 'unconfirmed', string>>;
+const COPY: Required<OutcomeCopy> = {
+  conflict: 'The record changed before your command. Nothing was changed by this submission. Start a new record and submit again.',
+  stale: 'The saved work moved to a newer revision. Start a new record under it.',
+  refused: 'The command was refused: a value is not one this command accepts. Nothing was changed.',
+  busy: 'The record was busy. Submit again in a moment.',
+  unconfirmed: 'The result of your command could not be confirmed. Submitting again with the same form is safe: it can only return the stored outcome.',
+};
+
+/**
+ * One `command_request` through the audited route (`path`, same origin) with
+ * its idempotency key: `in_flight`/`busy` wait the server's `Retry-After`
+ * (1–10 s) and retry with the same key; a lost answer reads the stored
+ * outcome by key (ADR-002). The form, the confirmed draft and the notes all
+ * post through here.
+ */
+export async function postCommand(path: string, body: unknown, key: string, copy: OutcomeCopy = {}): Promise<CommandOutcome> {
+  const text = { ...COPY, ...copy };
   for (let attempt = 0; attempt < 4; attempt += 1) {
     let response: Response;
     try {
-      response = await fetch(url.pathname, {
+      response = await fetch(path, {
         method: 'POST',
         credentials: 'same-origin',
         cache: 'no-store',
         headers: { 'content-type': 'application/json', 'idempotency-key': key },
-        body: JSON.stringify(request),
+        body: JSON.stringify(body),
       });
     } catch {
-      return lookUp(url.pathname, key);
+      return lookUp(path, key, text.unconfirmed);
     }
-    const body: unknown = await response.json().catch(() => null);
-    const code = typeof body === 'object' && body !== null ? String((body as { code?: unknown }).code ?? '') : '';
-    if (response.ok) {
-      return committed(body) ?? { kind: 'unconfirmed', message: 'The result of the command could not be confirmed.' };
-    }
+    const json: unknown = await response.json().catch(() => null);
+    const code = typeof json === 'object' && json !== null ? String((json as { code?: unknown }).code ?? '') : '';
+    if (response.ok) return committed(json) ?? { kind: 'unconfirmed', message: 'The result of the command could not be confirmed.' };
     if (response.status === 409 && (code === 'in_flight' || code === 'busy')) {
       await sleep(Math.min(10, Math.max(1, Number(response.headers.get('retry-after')) || 2)));
       continue;
     }
-    if (response.status === 409) {
-      return { kind: 'conflict', message: 'The record changed before your command. Nothing was changed by this submission. Start a new record and submit again.' };
-    }
-    if (response.status === 412) {
-      return { kind: 'stale', message: 'The saved work moved to a newer revision. Start a new record under it.' };
-    }
-    if (response.status === 503 && code === 'unknown_outcome') return lookUp(url.pathname, key);
-    if (response.status === 400 || response.status === 404) {
-      return { kind: 'refused', message: 'The command was refused: a value is not one this command accepts. Nothing was changed.' };
-    }
+    if (response.status === 409) return { kind: 'conflict', message: text.conflict };
+    if (response.status === 412) return { kind: 'stale', message: text.stale };
+    if (response.status === 503 && code === 'unknown_outcome') return lookUp(path, key, text.unconfirmed);
+    if (response.status === 400 || response.status === 404) return { kind: 'refused', message: text.refused };
     return { kind: 'failed', message: 'The command could not be committed right now. Nothing was changed.' };
   }
-  return { kind: 'busy', message: 'The record was busy. Submit again in a moment.' };
+  return { kind: 'busy', message: text.busy };
+}
+
+/** Submits the form once (retrying `in_flight`/`busy` with the same key). */
+export async function submitCommand(form: HTMLFormElement, app: string, work: string): Promise<CommandOutcome> {
+  const request = commandRequest(form, app, work);
+  if (!request || !form.action) {
+    return { kind: 'refused', message: COPY.refused };
+  }
+  const url = new URL(form.action, location.href);
+  if (url.origin !== location.origin || !url.pathname.startsWith('/v1/work/')) {
+    return { kind: 'failed', message: 'The command was not sent.' };
+  }
+  return postCommand(url.pathname, request, String(request.idempotency_key));
 }
 
 /** ADR-002: after a lost answer, read the outcome by key under current authority. */
-async function lookUp(path: string, key: string): Promise<CommandOutcome> {
+async function lookUp(path: string, key: string, unconfirmed: string): Promise<CommandOutcome> {
   try {
     const response = await fetch(`${path}/outcomes/${key}`, { credentials: 'same-origin', cache: 'no-store' });
     if (response.ok) {
@@ -153,5 +166,5 @@ async function lookUp(path: string, key: string): Promise<CommandOutcome> {
   } catch {
     // fall through: unconfirmed
   }
-  return { kind: 'unconfirmed', message: 'The result of your command could not be confirmed. Submitting again with the same form is safe: it can only return the stored outcome.' };
+  return { kind: 'unconfirmed', message: unconfirmed };
 }

@@ -222,6 +222,8 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/records.ts
 !app/admin/src/canvas/slash.ts
 !app/admin/src/canvas/agents.ts
+# APP-113: the dock's one card host (confirmation and chooser).
+!app/admin/src/canvas/dock-card.ts
 # APP-104: the library pane and the Figma-style canvas controls.
 !app/admin/src/canvas/library.ts
 !app/admin/src/canvas/controls.ts

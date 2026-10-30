@@ -16,6 +16,7 @@
 import { submitAction } from './actions';
 import { placeUtilityCard, placeWork } from './board';
 import { submitIntent, type Choice } from './compose';
+import { isDismissKey, showDockCard } from './dock-card';
 import { el, isUuid } from './render';
 
 export const COMMANDS_URL = '/v1/commands';
@@ -192,20 +193,10 @@ const APPS: CanvasCommand = {
 
 // --- The near-tie chooser ---
 
-function dock(document_: Document): HTMLElement {
-  let node = document_.getElementById('cv-confirm');
-  if (!node) {
-    node = el(document_, 'div', { id: 'cv-confirm', class: 'cv-confirm-host' });
-    (document_.querySelector('.cv-dock') ?? document_.body).prepend(node);
-  }
-  return node;
-}
-
 /** Shows the top apps for a near tie plus "Build something new"; one click proceeds. */
 export function showChooser(text: string, choices: Choice[], report: Report): void {
   const document_ = document;
-  const host = dock(document_);
-  const close = () => host.replaceChildren();
+  let close = () => undefined as void;
   const options = el(document_, 'div', { class: 'cv-chooser-options' });
   const pick = (run: () => Promise<void>) => {
     close();
@@ -234,12 +225,14 @@ export function showChooser(text: string, choices: Choice[], report: Report): vo
     options,
     el(document_, 'div', { class: 'cv-confirm-actions' }, cancel));
   card.addEventListener('keydown', (event) => {
-    if ((event as KeyboardEvent).key === 'Escape') {
+    if (isDismissKey(event)) {
+      event.preventDefault();
       close();
       report('Nothing was placed.');
     }
   });
-  host.replaceChildren(card);
+  // A card that replaces this one reports for itself; nothing waits on the chooser.
+  close = showDockCard(document_, card, () => undefined);
   options.querySelector<HTMLButtonElement>('button')?.focus();
 }
 

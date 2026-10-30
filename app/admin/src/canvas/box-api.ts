@@ -4,6 +4,7 @@
 // JSON (or one multipart part for an upload); data never travels in a URL
 // beyond the ids. Refusals come back as the server's neutral code, shown
 // through `refusalText`.
+import { amount } from './display';
 import { isUuid } from './render';
 
 /**
@@ -308,17 +309,20 @@ export function lineage(appId: string, workId: string): Promise<Lineage | null> 
         }];
       }) : [];
       return { box_id: boxId, box_name: str(json.box_name) ? json.box_name.slice(0, 120) : 'Box', files };
-    }).catch(() => null);
+    }).catch(() => null).then((result) => {
+      // APP-113: only a found lineage is kept; a miss or a failure asks again next time.
+      if (!result) lineageCache.delete(key);
+      return result;
+    });
     lineageCache.set(key, found);
   }
   return found;
 }
 
-/** "12.4 KB". */
+/** "12.4 KB": the canvas's one byte format, steps of 1000 (`display.ts` `amount`, as the server's `canvas_display`). */
 export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (!Number.isFinite(bytes) || bytes < 0) return '';
+  return amount(true, false, BigInt(Math.floor(bytes)))[0];
 }
 
 /** Whether a local file is tabular data (by name; the server judges the bytes). */

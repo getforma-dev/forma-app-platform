@@ -5,7 +5,8 @@
     "build": "tsx build.ts --ssr --strict",
     "build:ssr": "tsx build.ts --ssr --strict",
     "dev": "tsx build.ts --ssr --watch --strict",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@getforma/core": "3.2.0"

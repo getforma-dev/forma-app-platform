@@ -16,14 +16,9 @@ import {
 } from './box-api';
 import { openModal, previewTable } from './box-viewer';
 import { boardWorks, placeWork } from './board';
-import { el } from './render';
+import { announce, el } from './render';
 
 export type SheetDone = { kind: 'card' | 'app' | 'attached' | 'data'; card: Card | null };
-
-function announce(message: string): void {
-  const status = document.getElementById('cv-activity');
-  if (status) status.textContent = message;
-}
 
 /** Opens the sheet for `file` (in box `boxId`) with its `preview`. */
 export function openDataSheet(boxId: string, file: BoxFile, preview: Preview, onDone?: (done: SheetDone) => void, adjust = false): void {

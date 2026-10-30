@@ -24,7 +24,7 @@
 //   this browser (DS-06/DS-67): the work, the frame's spot and each card's
 //   previous spot.
 import { createCanvasItem } from '../canvas-vendor/index';
-import { addCards, onLayoutSaved, setUniteHooks, stackBoard as board } from './board';
+import { addCards, GAP, onLayoutSaved, setUniteHooks, SLOT_WIDTH, stackBoard as board } from './board';
 import { loadUnited, saveUnited } from './layout';
 import { findApps } from './library';
 import { el, originKind } from './render';
@@ -52,7 +52,6 @@ let restored = false;
 const WIDE = 1240;
 const NARROW = 760;
 const PHONE = 400;
-const GAP = 28;
 const DURATION = 620;
 
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -85,10 +84,6 @@ export function frameCardsOf(id: string): string[] | null {
 /** The cards of a frame's canvas item. */
 export function frameCardsOfItem(item: HTMLElement): string[] {
   return [...(frames.get(item.dataset.unite ?? '')?.cards ?? [])];
-}
-
-export function isUnited(work: string): boolean {
-  return frames.has(work);
 }
 
 function save(): void {
@@ -330,7 +325,7 @@ export function breakApart(work: string): string {
   const items = new Map<HTMLElement, HTMLElement>();
   cards.forEach((card, index) => {
     const id = card.dataset.card ?? '';
-    const spot = frame.previous.get(id) ?? { x: frameState.x + index * (460 + GAP), y: frameState.y };
+    const spot = frame.previous.get(id) ?? { x: frameState.x + index * (SLOT_WIDTH + GAP), y: frameState.y };
     const restoreScroll = keepScroll(card);
     const item = board.drop(id, spot, false, true);
     restoreScroll();

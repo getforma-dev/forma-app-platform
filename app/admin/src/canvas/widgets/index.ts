@@ -14,6 +14,7 @@
 // Integration: `WIDGET_COMMANDS` is registered with the canvas's slash-command
 // registry (`slash.ts` `registerCommands`, from `app.tsx`), so the widgets show
 // in the `/` list and `/apps` and run through `runSlash`.
+import { announce } from '../render';
 import { activeCanvasItem, canvasHost, isDemoCanvas, mountWidget, onLayoutSaved, unmountWidget, widgetSpot } from '../board';
 import { mountCalculator, looksLikeExpression } from './calculator';
 import { buildCard, customize, widgetTitle, type WidgetCard } from './card';
@@ -75,11 +76,6 @@ function load(): Stored[] {
   } catch {
     return [];
   }
-}
-
-function announce(message: string): void {
-  const status = document.getElementById('cv-activity');
-  if (status) status.textContent = message;
 }
 
 /** Places a widget of `kind` with `state` and returns it (null before the canvas starts). */

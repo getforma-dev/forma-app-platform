@@ -16,6 +16,7 @@
 // - Esc, the close button or a click on the backdrop return the card to its
 //   spot and focus to the card. Focus is trapped in the modal (the rest of the
 //   page is inert), and arrow keys never fire while typing.
+import { eventOriginatesInTextEntry } from '../canvas-vendor/index';
 import { isOnBoard, onBoardSettled, paneKind, stackBoard as board } from './board';
 import { el } from './render';
 import { stackCardsOf } from './stacks';
@@ -87,8 +88,27 @@ function modalAbove(): boolean {
 }
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
 
-function editable(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]'));
+/**
+ * Tab and Shift+Tab wrap inside `root` (a modal's focus trap; focus mode and
+ * the shortcut sheet). Focus outside `root` comes back to its first control.
+ */
+export function trapTab(event: KeyboardEvent, root: HTMLElement): void {
+  if (event.key !== 'Tab') return;
+  const focusables = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((node) => node.getClientRects().length > 0);
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  const active = root.ownerDocument.activeElement;
+  if (!first || !last) return;
+  if (!root.contains(active)) {
+    event.preventDefault();
+    first.focus();
+  } else if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 export function isFocusOpen(): boolean {
@@ -371,30 +391,17 @@ export function focusFromItem(item: HTMLElement | null): boolean {
 function onKey(event: KeyboardEvent): void {
   if (!session || !dialog || event.isComposing || modalAbove()) return;
   if (event.key === 'Escape') {
+    if (event.defaultPrevented) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     closeFocus();
     return;
   }
   if (event.key === 'Tab') {
-    const focusables = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((node) => node.getClientRects().length > 0);
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    const active = documentRef?.activeElement ?? null;
-    if (!first || !last) return;
-    if (!dialog.contains(active)) {
-      event.preventDefault();
-      first.focus();
-    } else if (event.shiftKey && active === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && active === last) {
-      event.preventDefault();
-      first.focus();
-    }
+    trapTab(event, dialog);
     return;
   }
-  if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !editable(event.target) && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+  if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !eventOriginatesInTextEntry(event) && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
     event.preventDefault();
     event.stopImmediatePropagation();
     go(event.key === 'ArrowRight' ? 1 : -1);

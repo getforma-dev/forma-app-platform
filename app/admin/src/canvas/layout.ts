@@ -2,6 +2,8 @@
 // kept in this browser's localStorage per app/work. No data, receipt or
 // parameter is stored, and nothing here reaches the server. Storage that is
 // unavailable (private mode, blocked site data) just means the default layout.
+import { isUuid } from './render';
+
 export type ItemLayout = { x: number; y: number; width?: number; height?: number; z?: number; manualScale?: number };
 export type Camera = { panX: number; panY: number; zoom: number };
 
@@ -73,26 +75,32 @@ export function clearLayouts(): void {
 // receipt or parameter.
 export type PlacedWork = { app: string; cards: string[] };
 const placedKey = (member: string) => `forma.canvas.placed.v1:${member}`;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const CARD = /^[A-Za-z0-9_-]{1,96}$/;
+// What a browser keeps per member (APP-113: the most recent, capped on save).
+const MAX_WORKS = 64;
+const MAX_CARDS = 64;
+const MAX_FRAMES = 32;
 
 export function loadPlaced(member: string): Map<string, PlacedWork> {
   const placed = new Map<string, PlacedWork>();
   if (!/^[0-9a-f]{16}$/.test(member)) return placed;
   const stored = read(placedKey(member));
   if (typeof stored !== 'object' || stored === null) return placed;
-  for (const [work, value] of Object.entries(stored as Record<string, unknown>).slice(0, 64)) {
+  for (const [work, value] of Object.entries(stored as Record<string, unknown>).slice(-MAX_WORKS)) {
     const entry = value as Partial<PlacedWork> | null;
-    if (!UUID.test(work) || !entry || typeof entry.app !== 'string' || !UUID.test(entry.app) || !Array.isArray(entry.cards)) continue;
-    const cards = entry.cards.filter((id): id is string => typeof id === 'string' && CARD.test(id) && id.includes(work)).slice(0, 64);
+    if (!isUuid(work) || !entry || typeof entry.app !== 'string' || !isUuid(entry.app) || !Array.isArray(entry.cards)) continue;
+    const cards = entry.cards.filter((id): id is string => typeof id === 'string' && CARD.test(id) && id.includes(work)).slice(-MAX_CARDS);
     if (cards.length) placed.set(work, { app: entry.app, cards });
   }
   return placed;
 }
 export function savePlaced(member: string, placed: Map<string, PlacedWork>): void {
   if (!/^[0-9a-f]{16}$/.test(member)) return;
+  // Capped on save, keeping the most recent (a work placed again moves to the end).
   const out: Record<string, PlacedWork> = {};
-  for (const [work, entry] of placed) if (entry.cards.length) out[work] = entry;
+  for (const [work, entry] of [...placed].filter(([, entry]) => entry.cards.length).slice(-MAX_WORKS)) {
+    out[work] = { app: entry.app, cards: entry.cards.slice(-MAX_CARDS) };
+  }
   write(placedKey(member), out);
 }
 
@@ -104,11 +112,12 @@ export function loadStacks(member: string): StoredStack[] {
   if (!/^[0-9a-f]{16}$/.test(member)) return [];
   const stored = read(stacksKey(member));
   if (!Array.isArray(stored)) return [];
-  return stored.slice(0, 32).flatMap((value): StoredStack[] => {
+  return stored.slice(-MAX_FRAMES).flatMap((value): StoredStack[] => {
     const entry = value as Partial<StoredStack> | null;
     if (!entry || typeof entry.id !== 'string' || !/^[a-z0-9]{4,24}$/.test(entry.id) || !Array.isArray(entry.cards)) return [];
     if (!finite(entry.x) || !finite(entry.y)) return [];
-    const cards = entry.cards.filter((id): id is string => typeof id === 'string' && CARD.test(id)).slice(0, 64);
+    // A stack lists its cards top first (newest on top).
+    const cards = entry.cards.filter((id): id is string => typeof id === 'string' && CARD.test(id)).slice(0, MAX_CARDS);
     return [{
       id: entry.id, title: typeof entry.title === 'string' ? entry.title.slice(0, 80) : '', cards,
       top: finite(entry.top) ? Math.max(0, Math.floor(entry.top)) : 0, x: entry.x, y: entry.y,
@@ -116,7 +125,7 @@ export function loadStacks(member: string): StoredStack[] {
   });
 }
 export function saveStacks(member: string, stacks: StoredStack[]): void {
-  if (/^[0-9a-f]{16}$/.test(member)) write(stacksKey(member), stacks);
+  if (/^[0-9a-f]{16}$/.test(member)) write(stacksKey(member), stacks.slice(-MAX_FRAMES));
 }
 
 // APP-106 unite frames (DS-67): per member in this browser, the works shown
@@ -128,17 +137,17 @@ export function loadUnited(member: string): StoredUnite[] {
   if (!/^[0-9a-f]{16}$/.test(member)) return [];
   const stored = read(unitedKey(member));
   if (!Array.isArray(stored)) return [];
-  return stored.slice(0, 32).flatMap((value): StoredUnite[] => {
+  return stored.slice(-MAX_FRAMES).flatMap((value): StoredUnite[] => {
     const entry = value as Partial<StoredUnite> | null;
-    if (!entry || typeof entry.work !== 'string' || !UUID.test(entry.work) || typeof entry.app !== 'string' || !UUID.test(entry.app)) return [];
+    if (!entry || typeof entry.work !== 'string' || !isUuid(entry.work) || typeof entry.app !== 'string' || !isUuid(entry.app)) return [];
     if (!finite(entry.x) || !finite(entry.y) || typeof entry.previous !== 'object' || entry.previous === null) return [];
     const previous: Record<string, { x: number; y: number }> = {};
-    for (const [id, spot] of Object.entries(entry.previous).slice(0, 64)) {
+    for (const [id, spot] of Object.entries(entry.previous).slice(-MAX_CARDS)) {
       if (CARD.test(id) && spot && finite(spot.x) && finite(spot.y)) previous[id] = { x: spot.x, y: spot.y };
     }
     return [{ work: entry.work, app: entry.app, x: entry.x, y: entry.y, previous }];
   });
 }
 export function saveUnited(member: string, united: StoredUnite[]): void {
-  if (/^[0-9a-f]{16}$/.test(member)) write(unitedKey(member), united);
+  if (/^[0-9a-f]{16}$/.test(member)) write(unitedKey(member), united.slice(-MAX_FRAMES));
 }

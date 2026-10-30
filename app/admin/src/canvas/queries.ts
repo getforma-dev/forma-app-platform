@@ -80,20 +80,23 @@ export async function runView(card: HTMLElement, parameters: Parameters): Promis
   const current = () => card.dataset.epoch === epoch;
   renderNoValue(card, 'loading', 'running', 'Running on your organization’s data. Nothing is shown until the result is released.');
   for (let attempt = 0; ; attempt += 1) {
-    let response: Response;
+    let response: Response | null;
     try {
-      response = await slot(() => fetch(url, {
-        method: 'POST',
-        credentials: 'same-origin',
-        cache: 'no-store',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ parameters }),
-      }));
+      // APP-113: a run superseded while it waited for a slot never fetches.
+      response = await slot(() => (current()
+        ? fetch(url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ parameters }),
+        })
+        : Promise.resolve(null)));
     } catch {
       if (current()) renderNoValue(card, 'failed', 'failed', `This result could not be computed. ${NO_NUMBER}`);
       return;
     }
-    if (!current()) return;
+    if (!response || !current()) return;
     if (response.status === 429 && attempt < MAX_BUSY_RETRIES) {
       const wait = Math.min(10, Math.max(1, Number(response.headers.get('retry-after')) || 2));
       renderNoValue(card, 'loading', 'busy', 'Busy: the query engine has no room for this run yet. Retrying in a moment. Nothing is shown until the result is computed.');

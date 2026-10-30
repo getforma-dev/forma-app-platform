@@ -19,13 +19,15 @@
 // (DS-67); a browser that has not seen a note shows it. A note written in
 // another browser arrives live (`record.committed`).
 import { canvasHost, isDemoCanvas, mountWidget, onBoardSettled, onLayoutSaved, onLiveEvent, stackBoard, unmountWidget, widgetSpot } from './board';
+import { postCommand } from './commands';
 import { el, isUuid } from './render';
 import type { LiveEvent } from './live';
 
 type Report = (message: string) => void;
 type Spot = { x: number; y: number };
 type Note = { id: string; version: number; title: string; body: string; at: string };
-type Shown = { note: Note; item: HTMLElement; card: HTMLElement; saving: Promise<void> | null };
+/** `saving`: the tail of this card's save queue (one command at a time, each on the version the last one produced). */
+type Shown = { note: Note; item: HTMLElement; card: HTMLElement; saving: Promise<void> };
 type Listing = { publication: string; workVersion: number; schema: string; schemaVersion: number };
 
 export const NOTE_MAX = 2000;
@@ -41,7 +43,6 @@ const shown = new Map<string, Shown>();
 let hidden = new Set<string>();
 let spots = new Map<string, Spot>();
 const listeners: Array<() => void> = [];
-let loaded = false;
 
 // --- per-member view state in this browser (DS-67): ids and positions only ---
 
@@ -158,8 +159,12 @@ async function refresh(): Promise<boolean> {
     notes.set(note.id, note);
     const entry = shown.get(note.id);
     if (entry) {
+      // APP-113: text the member has not saved yet (being edited, waiting in
+      // the save queue, or refused) stays on the card; the next save writes it
+      // on this newer version.
+      const unsaved = edited(entry);
       entry.note = note;
-      paint(entry, false);
+      if (!unsaved) paint(entry, false);
     }
   }
   for (const id of [...notes.keys()]) if (!seen.has(id)) notes.delete(id);
@@ -168,7 +173,7 @@ async function refresh(): Promise<boolean> {
 
 type Outcome = { ok: true; version: number } | { ok: false; conflict: boolean; message: string };
 
-/** One command through the audited route (`/v1/work/{app}/{work}/commands/{command}`), retried with the same key while busy. */
+/** One command through the audited route (`commands.ts` `postCommand`: same key on retry, `Retry-After` honored). */
 async function command(id: 'add' | 'edit', record: string, version: number, title: string, body: string): Promise<Outcome> {
   if (!work || !listing) return { ok: false, conflict: false, message: 'Notes are not available right now.' };
   const key = freshHex(16);
@@ -182,43 +187,46 @@ async function command(id: 'add' | 'edit', record: string, version: number, titl
     ],
     idempotency_key: key,
   };
-  const path = `/v1/work/${work.app}/${work.work}/commands/${id}`;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    let response: Response;
-    try {
-      response = await fetch(path, {
-        method: 'POST', credentials: 'same-origin', cache: 'no-store',
-        headers: { 'content-type': 'application/json', 'idempotency-key': key },
-        body: JSON.stringify(request),
-      });
-    } catch {
-      return { ok: false, conflict: false, message: 'Not saved: the connection dropped. Edit again to retry.' };
-    }
-    const outcome = (await response.json().catch(() => null)) as { kind?: unknown; state?: unknown; record_version?: unknown; code?: unknown } | null;
-    if (response.ok && outcome?.kind === 'command_outcome' && outcome.state === 'committed') {
-      return { ok: true, version: Number(outcome.record_version) || version + 1 };
-    }
-    const code = String(outcome?.code ?? '');
-    if (response.status === 409 && (code === 'in_flight' || code === 'busy')) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      continue;
-    }
-    if (response.status === 409 || response.status === 412) return { ok: false, conflict: true, message: 'This note changed elsewhere.' };
-    return { ok: false, conflict: false, message: 'Not saved: the note was refused. Nothing was changed.' };
+  const outcome = await postCommand(`/v1/work/${work.app}/${work.work}/commands/${id}`, request, key);
+  switch (outcome.kind) {
+    case 'committed': return { ok: true, version: Number(outcome.recordVersion) || version + 1 };
+    case 'conflict':
+    case 'stale': return { ok: false, conflict: true, message: 'This note changed elsewhere.' };
+    case 'unconfirmed': return { ok: false, conflict: false, message: 'Not saved: the connection dropped. Edit again to retry.' };
+    case 'busy': return { ok: false, conflict: false, message: 'Not saved: the note was busy. Edit again to retry.' };
+    default: return { ok: false, conflict: false, message: 'Not saved: the note was refused. Nothing was changed.' };
   }
-  return { ok: false, conflict: false, message: 'Not saved: the note was busy. Edit again to retry.' };
 }
 
 // --- the card ---
 
+/** The card's text as a save would send it. */
+function cardText(entry: Shown): { title: string; body: string } {
+  const titleInput = entry.card.querySelector<HTMLInputElement>('[data-note-title]');
+  const bodyInput = entry.card.querySelector<HTMLTextAreaElement>('[data-note-body]');
+  return {
+    title: (titleInput?.value ?? '').trim().slice(0, TITLE_MAX) || 'Untitled note',
+    body: (bodyInput?.value ?? '').slice(0, NOTE_MAX),
+  };
+}
+
+/** Whether the card holds text not yet saved (focused, differing, or a save pending or refused). */
+function edited(entry: Shown): boolean {
+  if (entry.card.contains(entry.card.ownerDocument.activeElement)) return true;
+  if (entry.card.querySelector('[data-note-status].is-alert')) return true;
+  const { title, body } = cardText(entry);
+  return title !== entry.note.title || body !== entry.note.body;
+}
+
 function paint(entry: Shown, force: boolean): void {
   const title = entry.card.querySelector<HTMLInputElement>('[data-note-title]');
   const body = entry.card.querySelector<HTMLTextAreaElement>('[data-note-body]');
-  const editing = entry.card.contains(entry.card.ownerDocument.activeElement);
-  if (title && (force || !editing)) title.value = entry.note.title;
-  if (body && (force || !editing)) body.value = entry.note.body;
+  if (title) title.value = entry.note.title;
+  if (body) body.value = entry.note.body;
   entry.card.setAttribute('aria-label', `Note: ${entry.note.title || 'untitled'}`);
-  status(entry, entry.note.version ? `Saved · version ${entry.note.version}` : '');
+  if (force || !entry.card.querySelector('[data-note-status].is-alert')) {
+    status(entry, entry.note.version ? `Saved · version ${entry.note.version}` : '');
+  }
   sizeBody(entry);
 }
 
@@ -255,35 +263,33 @@ function buildCard(document_: Document, id: string): HTMLElement {
     el(document_, 'p', { class: 'cv-note-status', 'data-note-status': '', role: 'status' }));
 }
 
-/** Saves the card's text when it differs from the stored note (save on blur). */
-async function save(entry: Shown): Promise<void> {
-  if (entry.saving) await entry.saving;
-  const titleInput = entry.card.querySelector<HTMLInputElement>('[data-note-title]');
-  const bodyInput = entry.card.querySelector<HTMLTextAreaElement>('[data-note-body]');
-  const title = (titleInput?.value ?? '').trim().slice(0, TITLE_MAX) || 'Untitled note';
-  const body = (bodyInput?.value ?? '').slice(0, NOTE_MAX);
+/**
+ * Saves the card's text when it differs from the stored note (save on blur).
+ * APP-113: saves queue per card, so each one sends the version the previous
+ * one produced (two quick blurs no longer race on the same version).
+ */
+function save(entry: Shown): Promise<void> {
+  entry.saving = entry.saving.then(() => saveNow(entry)).catch(() => status(entry, 'Not saved. Edit again to retry.', true));
+  return entry.saving;
+}
+
+async function saveNow(entry: Shown): Promise<void> {
+  const { title, body } = cardText(entry);
   if (title === entry.note.title && body === entry.note.body) return;
   status(entry, 'Saving…');
-  entry.saving = (async () => {
-    let outcome = await command('edit', entry.note.id, entry.note.version, title, body);
-    if (!outcome.ok && outcome.conflict && (await refresh())) {
-      // Changed in another browser: the member's text wins, on the current version.
-      const current = notes.get(entry.note.id);
-      if (current) outcome = await command('edit', current.id, current.version, title, body);
-    }
-    if (outcome.ok) {
-      entry.note = { ...entry.note, title, body, version: outcome.version };
-      notes.set(entry.note.id, entry.note);
-      status(entry, `Saved · version ${outcome.version}`);
-      changed();
-    } else {
-      status(entry, outcome.message, true);
-    }
-  })();
-  try {
-    await entry.saving;
-  } finally {
-    entry.saving = null;
+  let outcome = await command('edit', entry.note.id, entry.note.version, title, body);
+  if (!outcome.ok && outcome.conflict && (await refresh())) {
+    // Changed in another browser: the member's text wins, on the current version.
+    const current = notes.get(entry.note.id);
+    if (current) outcome = await command('edit', current.id, current.version, title, body);
+  }
+  if (outcome.ok) {
+    entry.note = { ...entry.note, title, body, version: outcome.version };
+    notes.set(entry.note.id, entry.note);
+    status(entry, `Saved · version ${outcome.version}`);
+    changed();
+  } else {
+    status(entry, outcome.message, true);
   }
 }
 
@@ -296,7 +302,7 @@ function show(note: Note, focus = false): HTMLElement | null {
   if (!item) return null;
   item.classList.add('cv-item-note');
   item.dataset.note = note.id;
-  const entry: Shown = { note, item, card, saving: null };
+  const entry: Shown = { note, item, card, saving: Promise.resolve() };
   shown.set(note.id, entry);
   paint(entry, true);
   card.addEventListener('input', (event) => {
@@ -411,7 +417,9 @@ export const NOTE_COMMAND = {
 };
 
 function onLive(event: LiveEvent): void {
-  if (event.kind !== 'record.committed' || !work || event.work_id !== work.work) return;
+  if (!work) return;
+  // A reconnect (`stream.lagged`) may have missed a note's commit: read them again.
+  if (event.kind !== 'stream.lagged' && (event.kind !== 'record.committed' || event.work_id !== work.work)) return;
   void refresh().then((ok) => {
     if (!ok) return;
     // A note written in another browser arrives here too.
@@ -432,13 +440,7 @@ export function startNotes(document_: Document): void {
       if (found && (await refresh()) && !isDemoCanvas()) {
         for (const note of [...notes.values()].sort((a, b) => a.at.localeCompare(b.at))) if (!hidden.has(note.id)) show(note);
       }
-      loaded = true;
       changed();
     });
   });
-}
-
-/** Whether the member's notes have been read (the pane shows "Loading" before). */
-export function notesLoaded(): boolean {
-  return loaded;
 }
