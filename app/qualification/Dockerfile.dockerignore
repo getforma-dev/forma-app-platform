@@ -44,6 +44,7 @@
 !app/src/actions/receipt.rs
 !app/src/actions/receipt_tests.rs
 !app/src/actions/rehearsed.rs
+!app/src/actions/workflows.rs
 !app/src/actions/resolve.rs
 !app/src/actions/routes.rs
 !app/src/actions/tests.rs
@@ -121,6 +122,7 @@
 !app/src/storage/query_qualification.rs
 !app/src/storage/race_qualification.rs
 !app/src/storage/registry.rs
+!app/src/storage/rules.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
 !app/src/storage/sharing_qualification.rs

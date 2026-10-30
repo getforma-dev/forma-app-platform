@@ -723,6 +723,7 @@ fn the_record_page_offers_only_a_command_storage_would_admit_and_only_its_writab
         operation: "create".into(),
         writable_fields: vec!["status".into()],
         transitions: vec![("status".into(), "needs_context".into(), "reviewed".into())],
+        rules: Default::default(),
     };
     let detail = |version: i64, current: Option<&str>, commands: Vec<RecordCommand>| RecordDetail {
         record_id: "00000000-0000-4000-8000-0000000000f0".into(),
@@ -776,6 +777,7 @@ fn the_record_page_offers_only_a_command_storage_would_admit_and_only_its_writab
         operation: "update".into(),
         writable_fields: vec!["note".into()],
         transitions: Vec::new(),
+        rules: Default::default(),
     };
     assert_eq!(
         offered(&detail(2, Some("reviewed"), vec![plain.clone()])),

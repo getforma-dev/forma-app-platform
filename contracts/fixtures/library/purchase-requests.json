@@ -1,0 +1,884 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "principal_id": "00000000-0000-4000-8000-000000000066"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001781",
+    "revision_id": "00000000-0000-4000-8000-000000001782",
+    "content": {
+      "title": "Purchase requests",
+      "description": "Ask to buy something; your manager approves it, and anything over $5,000 also needs finance. Both steps are declared rules the server enforces. Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
+      "inputs": [
+        {
+          "id": "purchase_requests",
+          "contract_id": "purchase_requests_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "request_id",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            },
+            {
+              "id": "requester",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "item",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "vendor",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "cost_center",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "engineering",
+                  "sales",
+                  "marketing",
+                  "finance",
+                  "operations",
+                  "people",
+                  "design",
+                  "support",
+                  "other"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "manager_approved",
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "requests",
+          "contract_id": "purchase_request_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "item",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "vendor",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "cost_center",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "engineering",
+                  "sales",
+                  "marketing",
+                  "finance",
+                  "operations",
+                  "people",
+                  "design",
+                  "support",
+                  "other"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "justification",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "manager_approved",
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "totals",
+          "kind": "summary",
+          "renderer_version": 1,
+          "title": "Requests to date",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "purchase_requests"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [],
+                "measures": [
+                  {
+                    "id": "requests",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "purchase_requests",
+                      "field_id": "request_id"
+                    }
+                  },
+                  {
+                    "id": "total_amount",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "purchase_requests",
+                      "field_id": "amount"
+                    }
+                  },
+                  {
+                    "id": "largest_request",
+                    "operation": "max",
+                    "field": {
+                      "input_id": "purchase_requests",
+                      "field_id": "amount"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "awaiting_finance",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "Waiting for finance",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "purchase_requests"
+            ],
+            "operations": [
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "purchase_requests",
+                  "field_id": "status"
+                },
+                "comparison": "eq",
+                "value": {
+                  "type": "enum",
+                  "value": "manager_approved"
+                }
+              },
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "purchase_requests",
+                    "field_id": "request_id"
+                  },
+                  {
+                    "input_id": "purchase_requests",
+                    "field_id": "time"
+                  },
+                  {
+                    "input_id": "purchase_requests",
+                    "field_id": "requester"
+                  },
+                  {
+                    "input_id": "purchase_requests",
+                    "field_id": "item"
+                  },
+                  {
+                    "input_id": "purchase_requests",
+                    "field_id": "vendor"
+                  },
+                  {
+                    "input_id": "purchase_requests",
+                    "field_id": "amount"
+                  }
+                ]
+              },
+              {
+                "type": "sort",
+                "fields": [
+                  {
+                    "field": {
+                      "input_id": "purchase_requests",
+                      "field_id": "amount"
+                    },
+                    "direction": "desc"
+                  }
+                ],
+                "stable_tiebreak": {
+                  "input_id": "purchase_requests",
+                  "field_id": "request_id"
+                }
+              },
+              {
+                "type": "limit",
+                "rows": 50
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "by_cost_center",
+          "kind": "chart",
+          "renderer_version": 1,
+          "title": "Spend requested by cost center",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "purchase_requests"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "purchase_requests",
+                    "field_id": "cost_center"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "requests",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "purchase_requests",
+                      "field_id": "request_id"
+                    }
+                  },
+                  {
+                    "id": "amount",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "purchase_requests",
+                      "field_id": "amount"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "renderer_version": 1,
+          "title": "Requests by status",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "purchase_requests"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "purchase_requests",
+                    "field_id": "status"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "requests",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "purchase_requests",
+                      "field_id": "request_id"
+                    }
+                  },
+                  {
+                    "id": "amount",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "purchase_requests",
+                      "field_id": "amount"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "Request a purchase",
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "renderer_version": 1,
+          "title": "How approval works",
+          "text": "Up to $5,000 the manager's approval completes a request. Over $5,000 the manager approves first, then finance; finance cannot approve before the manager. History is labeled synthetic."
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "purchase_request",
+          "version": 1,
+          "fields": [
+            {
+              "id": "item",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "vendor",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "cost_center",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "engineering",
+                  "sales",
+                  "marketing",
+                  "finance",
+                  "operations",
+                  "people",
+                  "design",
+                  "support",
+                  "other"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "justification",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "manager_approved",
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "purchase_request",
+          "operation": "create",
+          "writable_fields": [
+            "item",
+            "vendor",
+            "amount",
+            "cost_center",
+            "justification",
+            "status"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "submitted"
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "purchase_request",
+          "operation": "create",
+          "writable_fields": [
+            "status"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "approved",
+              "when": {
+                "field_id": "amount",
+                "comparison": "lte",
+                "value": {
+                  "type": "money",
+                  "minor_units": "500000",
+                  "currency": "USD",
+                  "minor_unit_exponent": 2
+                }
+              }
+            },
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "manager_approved",
+              "when": {
+                "field_id": "amount",
+                "comparison": "gt",
+                "value": {
+                  "type": "money",
+                  "minor_units": "500000",
+                  "currency": "USD",
+                  "minor_unit_exponent": 2
+                }
+              }
+            },
+            {
+              "field_id": "status",
+              "from": "manager_approved",
+              "to": "approved"
+            },
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "rejected"
+            },
+            {
+              "field_id": "status",
+              "from": "manager_approved",
+              "to": "rejected"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "totals",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "awaiting_finance",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "by_cost_center",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "by_status",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "request",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        },
+        {
+          "view_id": "how",
+          "column": 0,
+          "row": 5,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:fef49bb7b9c9d291195a07389551158d59ae2252a9d8503e4af7cb948394b94e"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001781",
+    "publication_id": "00000000-0000-4000-8000-000000001783",
+    "definition_revision_id": "00000000-0000-4000-8000-000000001782",
+    "definition_digest": "sha256:fef49bb7b9c9d291195a07389551158d59ae2252a9d8503e4af7cb948394b94e",
+    "input_contract_digests": [
+      {
+        "input_id": "purchase_requests",
+        "digest": "sha256:d7010a02282c49ba72f4745574f4d0aaa1c232ad8d7de6bc4167365bfbb041eb"
+      },
+      {
+        "input_id": "requests",
+        "digest": "sha256:c3744f33578f29dca75dc283e65de881aaea4fe90ece7fc372c17494355084da"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "purchase_request",
+        "digest": "sha256:ccb2cf54c93530d9f867d8930bc25674c251903e684a2d1ef9fd701d8e575bb7"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "admission_digest": "sha256:0a14e60288beac1a79a954b4cff3f42aab3640b9473eaf251198218a2a6e2058",
+    "policy": {
+      "id": "00000000-0000-4000-8000-0000000000e0",
+      "version": 1,
+      "kind": "owner_publish"
+    },
+    "author_id": "00000000-0000-4000-8000-000000000066",
+    "approver_id": "00000000-0000-4000-8000-000000000066",
+    "approver_epoch": 1,
+    "published_at": "2026-10-30T09:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001781",
+    "work_id": "00000000-0000-4000-8000-000000001784",
+    "publication_id": "00000000-0000-4000-8000-000000001783",
+    "version": 1,
+    "context": "Prebuilt library: Purchase requests",
+    "bindings": [
+      {
+        "input_id": "purchase_requests",
+        "source_id": "00000000-0000-4000-8000-00000000301c",
+        "source_revision_id": "00000000-0000-4000-8000-00000000301d",
+        "source_digest": "sha256:9c5980496548390ac13165248702dd45d56c5311181871a30501fc7fe7a90e1d",
+        "kind": "source",
+        "contract_digest": "sha256:d7010a02282c49ba72f4745574f4d0aaa1c232ad8d7de6bc4167365bfbb041eb"
+      },
+      {
+        "input_id": "requests",
+        "kind": "records",
+        "contract_digest": "sha256:c3744f33578f29dca75dc283e65de881aaea4fe90ece7fc372c17494355084da",
+        "collection_id": "00000000-0000-4000-8000-000000001785",
+        "schema_id": "purchase_request",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-000000001785",
+        "schema_id": "purchase_request",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "purchase_requests",
+        "source_id": "00000000-0000-4000-8000-00000000301c",
+        "source_revision_id": "00000000-0000-4000-8000-00000000301d",
+        "source_digest": "sha256:9c5980496548390ac13165248702dd45d56c5311181871a30501fc7fe7a90e1d"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "source_id": "00000000-0000-4000-8000-00000000301c",
+      "revision_id": "00000000-0000-4000-8000-00000000301d",
+      "content_digest": "sha256:952d43fe9afc7fac079c4c590ae06a76cf4c2fa1dd4bc81246292de6fba37170",
+      "normalized_digest": "sha256:9c5980496548390ac13165248702dd45d56c5311181871a30501fc7fe7a90e1d",
+      "input_contract": {
+        "id": "purchase_requests",
+        "contract_id": "purchase_requests_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "request_id",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "time",
+            "value_type": {
+              "type": "timestamp"
+            },
+            "nullable": false
+          },
+          {
+            "id": "requester",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "item",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "vendor",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "amount",
+            "value_type": {
+              "type": "money",
+              "currency": "USD",
+              "minor_unit_exponent": 2
+            },
+            "nullable": false
+          },
+          {
+            "id": "cost_center",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "engineering",
+                "sales",
+                "marketing",
+                "finance",
+                "operations",
+                "people",
+                "design",
+                "support",
+                "other"
+              ]
+            },
+            "nullable": false
+          },
+          {
+            "id": "status",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "submitted",
+                "manager_approved",
+                "approved",
+                "rejected"
+              ]
+            },
+            "nullable": false
+          }
+        ]
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 160,
+      "timezone": "UTC",
+      "time_semantics": "event",
+      "units_confirmed": true,
+      "created_at": "2026-10-30T09:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001781",
+    "work_id": "00000000-0000-4000-8000-000000001784",
+    "mode": "published",
+    "definition_digest": "sha256:fef49bb7b9c9d291195a07389551158d59ae2252a9d8503e4af7cb948394b94e",
+    "publication_id": "00000000-0000-4000-8000-000000001783",
+    "view_id": "totals",
+    "operator_version": 1,
+    "source_revisions": [
+      {
+        "input_id": "purchase_requests",
+        "source_id": "00000000-0000-4000-8000-00000000301c",
+        "source_revision_id": "00000000-0000-4000-8000-00000000301d",
+        "source_digest": "sha256:9c5980496548390ac13165248702dd45d56c5311181871a30501fc7fe7a90e1d"
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:ba204e33c1fde1feb0d68e90464acdab2ab34430ebfb2c267f96af90d19d0888",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:a36e5629657ae1d7727c59088769693bb5e1a10ebc1afef61bd9a25b4df733ca",
+      "predicate_digest": "sha256:a36e5629657ae1d7727c59088769693bb5e1a10ebc1afef61bd9a25b4df733ca"
+    },
+    "digest": "sha256:b9d43a234dc41356cd06ab4457f8c90bad30aa94afd3522191927cd200e6245a"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-000000001781",
+    "work_id": "00000000-0000-4000-8000-000000001784",
+    "publication_id": "00000000-0000-4000-8000-000000001783",
+    "command_id": "submit",
+    "schema_id": "purchase_request",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-000000001786",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "item",
+        "value": {
+          "type": "text",
+          "value": "Monitor arms (6)"
+        }
+      },
+      {
+        "field_id": "vendor",
+        "value": {
+          "type": "text",
+          "value": "Atlas Office Supply"
+        }
+      },
+      {
+        "field_id": "amount",
+        "value": {
+          "type": "money",
+          "minor_units": "54000",
+          "currency": "USD",
+          "minor_unit_exponent": 2
+        }
+      },
+      {
+        "field_id": "cost_center",
+        "value": {
+          "type": "enum",
+          "value": "design"
+        }
+      },
+      {
+        "field_id": "justification",
+        "value": {
+          "type": "text",
+          "value": "Ergonomics; synthetic only"
+        }
+      },
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "submitted"
+        }
+      }
+    ],
+    "idempotency_key": "00000000000000000000000000001780"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001781",
+    "work_id": "00000000-0000-4000-8000-000000001784",
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "command_id": "submit",
+    "idempotency_key": "00000000000000000000000000001780",
+    "payload_digest": "sha256:e9b760655c506d70d8d1304b16a8455034a34d523bc82f37ef14f355aa180261",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-000000001786",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-000000001787",
+    "committed_at": "2026-10-30T09:05:00Z",
+    "retry_expires_at": "2026-10-31T09:05:00Z"
+  }
+}

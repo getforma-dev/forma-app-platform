@@ -56,10 +56,18 @@ pub struct Draft {
     /// The whole record after the command, as storage composed it.
     pub values: Vec<DraftValue>,
     pub approver: Option<Approver>,
+    /// APP-107: every approver named, in order (the first is `approver`);
+    /// a multi-level workflow names its second approver here.
+    pub approvers: Vec<Approver>,
     pub target: Option<Target>,
     /// A random correlation id the canvas echoes in its log line; it grants
     /// nothing (the command route re-judges the request on its own).
     pub confirm_token: String,
+    /// APP-107: the declared rule that chose the status, as people read it
+    /// ("Auto-approved by the app's rule: discount pct ≤ 10%"); display only.
+    pub rule: Option<String>,
+    /// APP-107: server-computed, display-only flags (the PO match).
+    pub flags: Vec<Value>,
 }
 
 /// What an action resolved to.
@@ -128,6 +136,9 @@ pub fn display(value: &Value) -> String {
                 if negative { "-" } else { "" },
                 crate::query::page::display(whole)
             )
+        }
+        "integer" if value.get("unit").and_then(Value::as_str) == Some("percent") => {
+            format!("{}%", text("value"))
         }
         "decimal" => text("coefficient"),
         "reference" => text("record_id"),
@@ -400,7 +411,7 @@ fn create_values(
     collection_schema: &str,
     parsed: &Parsed,
     today: &str,
-) -> Result<Value, Refusal> {
+) -> Result<(Value, Option<String>), Refusal> {
     let summary = listing
         .collections
         .iter()
@@ -432,7 +443,12 @@ fn create_values(
                     .filter_map(Value::as_str)
                     .collect();
                 // The status of a new record is the declared starting state
-                // (the `from` of the decide transitions), never the model's.
+                // (APP-107: the command's `initial` value, chosen below once
+                // every other value is typed; else the `from` of the decide
+                // transitions), never the model's.
+                if command.rules.initial_fields().contains(&field.id.as_str()) {
+                    continue;
+                }
                 let starting = app
                     .decide_command()
                     .and_then(|decide| decide.transitions.iter().find(|(f, _, _)| f == &field.id))
@@ -468,16 +484,71 @@ fn create_values(
                 }
                 raw.chars().take(200).collect()
             }
-            "integer" | "decimal" | "boolean" | "timestamp" => raw.to_owned(),
+            // APP-107: "12%", "3 days", "12.0" → the integer; anything else
+            // is absent (refused when the field is required).
+            "integer" => integer_text(raw).unwrap_or_default(),
+            "decimal" | "boolean" | "timestamp" => raw.to_owned(),
             _ => return Err(Refusal::CouldNotDraft("unsupported_field")),
         };
         if text.is_empty() && field.nullable {
             continue;
         }
+        if text.is_empty() && kind == "integer" {
+            return Err(Refusal::CouldNotDraft("missing_number"));
+        }
         let typed = typed_value(spec, &text).ok_or(Refusal::CouldNotDraft("untypable_value"))?;
         values.push(json!({"field_id": field.id, "value": typed}));
     }
-    Ok(Value::Array(values))
+    // APP-107: the declared initial values, from the typed record so far.
+    let state = crate::storage::rules::state_of(&Value::Array(values.clone()));
+    let mut rule = None;
+    for field in command.rules.initial_fields() {
+        let (value, guard) = command
+            .rules
+            .initial_value(field, &state)
+            .ok_or(Refusal::CouldNotDraft("no_initial_value"))?;
+        if let Some(guard) = guard {
+            rule = Some(format!(
+                "{} by the app's declared rule: {}",
+                capitalized(&value.replace('_', " ")),
+                guard.describe()
+            ));
+        }
+        values.push(json!({"field_id": field, "value": {"type": "enum", "value": value}}));
+    }
+    Ok((Value::Array(values), rule))
+}
+
+fn capitalized(word: &str) -> String {
+    let mut chars = word.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
+/// An integer as the member says it ("12", "12%", "3 days", "12.0", "1,200").
+fn integer_text(raw: &str) -> Option<String> {
+    let cleaned: String = raw.trim().chars().filter(|c| *c != ',').collect();
+    let digits: String = cleaned
+        .trim_start_matches('-')
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    let rest = &cleaned.trim_start_matches('-')[digits.len()..];
+    let fraction_zero = rest
+        .strip_prefix('.')
+        .map(|f| f.chars().take_while(char::is_ascii_digit).all(|c| c == '0'))
+        .unwrap_or(true);
+    if digits.is_empty() || digits.len() > 15 || !fraction_zero {
+        return None;
+    }
+    let number: i64 = digits.parse().ok()?;
+    Some(if cleaned.starts_with('-') {
+        format!("-{number}")
+    } else {
+        number.to_string()
+    })
 }
 
 /// Resolves `parsed` for `member` (module notes). `today` is the member's
@@ -493,6 +564,14 @@ pub async fn resolve(
 ) -> Result<Resolution, Refusal> {
     if parsed.kind == Kind::Place {
         return Ok(Resolution::Place);
+    }
+    // APP-107: a decision names a record, not an app: with several record
+    // apps the record is looked for across every decidable work the member
+    // may write (the hinted app first), never only in the first app.
+    if parsed.kind == Kind::Decide {
+        if let Some(found) = decision_across(stores, member, catalog, parsed).await? {
+            return decide_draft(stores, member, catalog, parsed, found).await;
+        }
     }
     let app = choose_app(catalog, parsed).ok_or(Refusal::CouldNotDraft("no_record_app"))?;
     let library_app = library
@@ -515,148 +594,89 @@ pub async fn resolve(
         .data
         .list_records(member, &work.app, &work.work)
         .await?;
+    if parsed.kind == Kind::Decide {
+        // Nothing pending anywhere else: the chosen app's own work decides.
+        return decide_draft(
+            stores,
+            member,
+            catalog,
+            parsed,
+            Found {
+                app: app.app.clone(),
+                title: work.title.clone(),
+                placed,
+                listing,
+                record: None,
+            },
+        )
+        .await;
+    }
     let summary = listing
         .collections
         .iter()
         .find(|c| c.schema == app.schema)
         .ok_or(Refusal::CouldNotDraft("no_collection"))?;
-    let key = fresh_key().ok_or(Refusal::StoreUnavailable)?;
-    let confirm_token = fresh_key().ok_or(Refusal::StoreUnavailable)?;
-    let (command, record, expected_version, values, target) = match parsed.kind {
-        Kind::Create => {
-            let command = app
-                .create_command()
-                .ok_or(Refusal::CouldNotDraft("no_create_command"))?;
-            let record = capability::random_uuid().ok_or(Refusal::StoreUnavailable)?;
-            let values = create_values(app, &listing, &app.schema, parsed, today)?;
-            (command.id.clone(), record, 0, values, None)
-        }
-        Kind::Decide => {
-            let command = app
-                .decide_command()
-                .ok_or(Refusal::CouldNotDraft("no_decide_command"))?;
-            let field = command
-                .transitions
-                .first()
-                .map(|(f, _, _)| f.clone())
-                .ok_or(Refusal::CouldNotDraft("no_transition"))?;
-            let froms: Vec<&str> = command
-                .transitions
-                .iter()
-                .filter(|(f, _, _)| *f == field)
-                .map(|(_, from, _)| from.as_str())
-                .collect();
-            let candidates: Vec<RecordRow> = listing
-                .records
-                .iter()
-                .filter(|r| r.schema == app.schema)
-                .cloned()
-                .collect();
-            let record = match_target(
-                parsed.target_record_hint.as_deref(),
-                &candidates,
-                &field,
-                &froms,
-            )
-            .ok_or(Refusal::CouldNotDraft("no_pending_record"))?;
-            let current = field_value(record, &field)
-                .and_then(|v| v.get("value"))
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            let wanted = parsed
-                .values
-                .get(&field)
-                .and_then(Value::as_str)
-                .map(|s| s.trim().to_lowercase());
-            let tos: Vec<&str> = command
-                .transitions
-                .iter()
-                .filter(|(f, from, _)| *f == field && from == current)
-                .map(|(_, _, to)| to.as_str())
-                .collect();
-            let to = match wanted.as_deref() {
-                Some(w) if tos.contains(&w) => w.to_owned(),
-                Some(w) if w.starts_with("approv") || w.starts_with("accept") => tos
-                    .iter()
-                    .find(|t| t.starts_with("approv") || t.starts_with("accept"))
-                    .map(|t| (*t).to_owned())
-                    .ok_or(Refusal::CouldNotDraft("no_transition"))?,
-                Some(w)
-                    if w.starts_with("reject")
-                        || w.starts_with("declin")
-                        || w.starts_with("den") =>
-                {
-                    tos.iter()
-                        .find(|t| {
-                            t.starts_with("reject")
-                                || t.starts_with("declin")
-                                || t.starts_with("den")
-                        })
-                        .map(|t| (*t).to_owned())
-                        .ok_or(Refusal::CouldNotDraft("no_transition"))?
-                }
-                _ => tos
-                    .first()
-                    .map(|t| (*t).to_owned())
-                    .ok_or(Refusal::CouldNotDraft("no_transition"))?,
-            };
-            let spec = summary
-                .fields
-                .iter()
-                .find(|f| f.id == field)
-                .map(|f| f.value_type.clone())
-                .ok_or(Refusal::CouldNotDraft("no_transition"))?;
-            let mut values = vec![
-                json!({"field_id": field, "value": typed_value(&spec, &to).ok_or(Refusal::CouldNotDraft("untypable_value"))?}),
-            ];
-            if let Some(note) = parsed.values.get("note").and_then(Value::as_str) {
-                if command.writable.iter().any(|w| w == "note") {
-                    if let Some(note_spec) = summary.fields.iter().find(|f| f.id == "note") {
-                        let text: String = note.trim().chars().take(200).collect();
-                        if !text.is_empty() {
-                            values.push(json!({"field_id": "note", "value": typed_value(&note_spec.value_type, &text).ok_or(Refusal::CouldNotDraft("untypable_value"))?}));
-                        }
-                    }
-                }
-            }
-            let target = Target {
-                record_id: record.record_id.clone(),
-                version: record.version,
-                summary: summarize(record),
-            };
-            (
-                command.id.clone(),
-                record.record_id.clone(),
-                record.version,
-                Value::Array(values),
-                Some(target),
-            )
-        }
-        Kind::Open | Kind::Place => unreachable!("handled above"),
-    };
+    let command = app
+        .create_command()
+        .ok_or(Refusal::CouldNotDraft("no_create_command"))?;
+    let record = capability::random_uuid().ok_or(Refusal::StoreUnavailable)?;
+    let (values, rule) = create_values(app, &listing, &app.schema, parsed, today)?;
     let request = CommandRequest {
         app: work.app.clone(),
         work: work.work.clone(),
         publication: listing.publication.clone(),
-        command,
+        command: command.id.clone(),
         schema: summary.schema.clone(),
         schema_version_expected: i64::from(summary.schema_version),
         record,
-        expected_record_version: expected_version,
+        expected_record_version: 0,
         expected_work_version: listing.work_version,
         values,
-        idempotency_key: key,
+        idempotency_key: fresh_key().ok_or(Refusal::StoreUnavailable)?,
     };
-    let state = match stores.data.dry_run_command(member, &request).await {
+    let values = dry_run(stores, member, &request).await?;
+    let approvers = match parsed.approver_name.as_deref() {
+        Some(names) => {
+            let members = stores.workspace.members(member).await?;
+            match_approvers(names, &members)
+        }
+        None => Vec::new(),
+    };
+    let flags = super::workflows::draft_flags(stores, member, &request.schema, &values).await;
+    Ok(Resolution::Draft(Box::new(Draft {
+        kind: Kind::Create,
+        app: work.app,
+        work: work.work,
+        title: work.title,
+        placed,
+        collection: summary.collection.clone(),
+        request,
+        values,
+        approver: approvers.first().cloned(),
+        approvers,
+        target: None,
+        confirm_token: fresh_key().ok_or(Refusal::StoreUnavailable)?,
+        rule,
+        flags,
+    })))
+}
+
+/// The storage dry run of `request`, as the card's typed values.
+async fn dry_run(
+    stores: &Stores,
+    member: &TrustedRequest,
+    request: &CommandRequest,
+) -> Result<Vec<DraftValue>, Refusal> {
+    let state = match stores.data.dry_run_command(member, request).await {
         Ok(DryRun::Valid { state, .. }) => state,
         Ok(DryRun::Stale) => return Err(Refusal::CouldNotDraft("stale")),
         Ok(DryRun::Conflict { .. }) => return Err(Refusal::CouldNotDraft("conflict")),
-        // A value storage refuses under the published schema is a neutral
-        // refusal (the member may write the work: judged above).
+        // A value storage refuses under the published schema (or a declared
+        // rule) is a neutral refusal (the member may write the work).
         Err(Error::Denied) => return Err(Refusal::CouldNotDraft("refused_by_schema")),
         Err(error) => return Err(error.into()),
     };
-    let values: Vec<DraftValue> = state
+    Ok(state
         .as_array()
         .into_iter()
         .flatten()
@@ -670,26 +690,328 @@ pub async fn resolve(
                 value,
             })
         })
-        .collect();
-    let approver = match (&parsed.kind, parsed.approver_name.as_deref()) {
-        (Kind::Create, Some(name)) => {
-            let members = stores.workspace.members(member).await?;
-            match_approver(name, &members)
+        .collect())
+}
+
+/// APP-107: every name in "Sarah", "Sarah and Priya", "Sarah, then Priya
+/// for finance" resolved to a distinct same-organization member, in order.
+pub fn match_approvers(names: &str, members: &[Member]) -> Vec<Approver> {
+    let mut found: Vec<Approver> = Vec::new();
+    let lowered = names
+        .replace(" then ", ",")
+        .replace(" and ", ",")
+        .replace('&', ",");
+    for name in lowered
+        .split([',', ';', '/'])
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+    {
+        if let Some(approver) = match_approver(name, members) {
+            if !found.iter().any(|a| a.principal == approver.principal) {
+                found.push(approver);
+            }
         }
-        _ => None,
+    }
+    if found.is_empty() {
+        found.extend(match_approver(names, members));
+    }
+    found.truncate(3);
+    found
+}
+
+/// A decision's record and the listing it was found in.
+struct Found {
+    app: String,
+    title: String,
+    placed: bool,
+    listing: RecordsListing,
+    /// The matched record id (`None`: match within `listing` later).
+    record: Option<String>,
+}
+
+/// APP-107: the best pending record for a decision across the member's
+/// writable works of decidable apps (the hinted app's works first; a record
+/// id hint names exactly one record). `None` when the member has no such
+/// work or nothing matches.
+async fn decision_across(
+    stores: &Stores,
+    member: &TrustedRequest,
+    catalog: &[CatalogApp],
+    parsed: &Parsed,
+) -> Result<Option<Found>, Refusal> {
+    let decidable: Vec<&CatalogApp> = catalog
+        .iter()
+        .filter(|app| app.decide_command().is_some())
+        .collect();
+    let mut works: Vec<OpenableWork> = stores
+        .data
+        .openable_works(member)
+        .await?
+        .into_iter()
+        .filter(|w| w.can_write && decidable.iter().any(|app| app.app == w.app))
+        .collect();
+    // The hinted app's works first (a stable sort keeps the listing order).
+    works.sort_by_key(|w| w.app != parsed.app_hint);
+    let hint = parsed.target_record_hint.as_deref();
+    let exact = hint.filter(|h| crate::storage::valid_identifier(h));
+    let mut best: Option<(usize, Found)> = None;
+    for work in works.into_iter().take(24) {
+        let listing = match stores
+            .data
+            .list_records(member, &work.app, &work.work)
+            .await
+        {
+            Ok(listing) => listing,
+            Err(Error::Denied) => continue,
+            Err(error) => return Err(error.into()),
+        };
+        let Some(app) = decidable.iter().find(|app| app.app == work.app) else {
+            continue;
+        };
+        let Some(decide) = app.decide_command() else {
+            continue;
+        };
+        let Some(field) = decide.transitions.first().map(|(f, _, _)| f.clone()) else {
+            continue;
+        };
+        let froms: Vec<&str> = decide
+            .transitions
+            .iter()
+            .filter(|(f, _, _)| *f == field)
+            .map(|(_, from, _)| from.as_str())
+            .collect();
+        let candidates: Vec<RecordRow> = listing
+            .records
+            .iter()
+            .filter(|r| r.schema == app.schema)
+            .cloned()
+            .collect();
+        let Some(record) = match_target(hint, &candidates, &field, &froms) else {
+            continue;
+        };
+        let score = if exact.is_some() {
+            usize::MAX
+        } else {
+            target_score(hint, record) + usize::from(work.app == parsed.app_hint)
+        };
+        if best.as_ref().is_none_or(|(s, _)| score > *s) {
+            let record = record.record_id.clone();
+            best = Some((
+                score,
+                Found {
+                    app: app.app.clone(),
+                    title: work.title.clone(),
+                    placed: false,
+                    listing,
+                    record: Some(record),
+                },
+            ));
+            if exact.is_some() {
+                break;
+            }
+        }
+    }
+    Ok(best.map(|(_, found)| found))
+}
+
+/// How many words of `hint` a record's values (and its filer's label) share.
+fn target_score(hint: Option<&str>, record: &RecordRow) -> usize {
+    let wanted = hint.map(tokens).unwrap_or_default();
+    let mut haystack = tokens(&summarize(record));
+    haystack.extend(tokens(&directory::label(&record.creator)));
+    wanted.iter().filter(|w| haystack.contains(w)).count()
+}
+
+/// Whether a declared target reads as a yes ("approved", "granted",
+/// "manager_approved", "paid") or a no ("rejected", "denied", "disputed").
+fn positive(to: &str) -> bool {
+    ["approv", "grant", "accept", "paid"]
+        .iter()
+        .any(|w| to.contains(w))
+}
+fn negative(to: &str) -> bool {
+    ["reject", "den", "declin", "disput"]
+        .iter()
+        .any(|w| to.contains(w))
+}
+
+/// APP-107: the declared target `wanted` names among `tos` (the transitions
+/// that may fire now): exact, else a yes or a no in declaration order.
+pub fn pick_transition<'a>(wanted: Option<&str>, tos: &[&'a str]) -> Option<&'a str> {
+    let wanted = wanted.map(|w| w.trim().to_lowercase());
+    match wanted.as_deref() {
+        Some(w) if tos.contains(&w) => tos.iter().find(|t| **t == w).copied(),
+        Some(w)
+            if [
+                "approv", "accept", "grant", "ok", "sign", "yes", "pay", "paid",
+            ]
+            .iter()
+            .any(|p| w.starts_with(p)) =>
+        {
+            tos.iter().find(|t| positive(t)).copied()
+        }
+        Some(w)
+            if ["reject", "declin", "den", "disput", "no"]
+                .iter()
+                .any(|p| w.starts_with(p)) =>
+        {
+            tos.iter().find(|t| negative(t)).copied()
+        }
+        _ => tos.first().copied(),
+    }
+}
+
+/// APP-107: the transitions of `command` that may fire on `record` now (from
+/// its current value, guards judged on its state), as `(field, to, guard)`.
+pub fn allowed_transitions<'a>(
+    transitions: &'a [(String, String, String)],
+    rules: &'a crate::storage::rules::Rules,
+    record: &RecordRow,
+) -> Vec<(&'a str, &'a str, Option<String>)> {
+    let state = crate::storage::rules::state_of(&record.values);
+    let Some(field) = transitions.first().map(|(f, _, _)| f.as_str()) else {
+        return Vec::new();
     };
+    let current = state
+        .get(field)
+        .and_then(|v| v.get("value"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    transitions
+        .iter()
+        .filter(|(f, from, _)| f == field && from == current)
+        .filter(|(f, from, to)| rules.allows(f, from, to, &state))
+        .map(|(f, from, to)| {
+            let guard = rules
+                .transitions
+                .iter()
+                .find(|(g, a, b, when)| g == f && a == from && b == to && when.is_some())
+                .and_then(|(_, _, _, when)| when.as_ref())
+                .map(crate::storage::rules::Guard::describe);
+            (f.as_str(), to.as_str(), guard)
+        })
+        .collect()
+}
+
+/// The decision draft for the record `found` names (or the best match in its
+/// listing): the guarded transition `parsed` asks for, dry-run by storage.
+async fn decide_draft(
+    stores: &Stores,
+    member: &TrustedRequest,
+    catalog: &[CatalogApp],
+    parsed: &Parsed,
+    found: Found,
+) -> Result<Resolution, Refusal> {
+    let app = catalog
+        .iter()
+        .find(|c| c.app == found.app)
+        .ok_or(Refusal::CouldNotDraft("no_record_app"))?;
+    let command = app
+        .decide_command()
+        .ok_or(Refusal::CouldNotDraft("no_decide_command"))?;
+    let listing = &found.listing;
+    if !listing.can_write {
+        return Err(Refusal::CouldNotDraft("no_record_write"));
+    }
+    let summary = listing
+        .collections
+        .iter()
+        .find(|c| c.schema == app.schema)
+        .ok_or(Refusal::CouldNotDraft("no_collection"))?;
+    let field = command
+        .transitions
+        .first()
+        .map(|(f, _, _)| f.clone())
+        .ok_or(Refusal::CouldNotDraft("no_transition"))?;
+    let froms: Vec<&str> = command
+        .transitions
+        .iter()
+        .filter(|(f, _, _)| *f == field)
+        .map(|(_, from, _)| from.as_str())
+        .collect();
+    let candidates: Vec<RecordRow> = listing
+        .records
+        .iter()
+        .filter(|r| r.schema == app.schema)
+        .cloned()
+        .collect();
+    let record = match &found.record {
+        Some(id) => candidates.iter().find(|r| &r.record_id == id),
+        None => match_target(
+            parsed.target_record_hint.as_deref(),
+            &candidates,
+            &field,
+            &froms,
+        ),
+    }
+    .ok_or(Refusal::CouldNotDraft("no_pending_record"))?;
+    let allowed = allowed_transitions(&command.transitions, &command.rules, record);
+    let tos: Vec<&str> = allowed.iter().map(|(_, to, _)| *to).collect();
+    let wanted = parsed.values.get(&field).and_then(Value::as_str);
+    let to = pick_transition(wanted, &tos).ok_or(Refusal::CouldNotDraft("no_transition"))?;
+    let rule = allowed
+        .iter()
+        .find(|(_, t, _)| *t == to)
+        .and_then(|(_, _, guard)| guard.clone())
+        .map(|guard| {
+            format!(
+                "{} by the app's declared rule: {guard}",
+                capitalized(&to.replace('_', " "))
+            )
+        });
+    let spec = summary
+        .fields
+        .iter()
+        .find(|f| f.id == field)
+        .map(|f| f.value_type.clone())
+        .ok_or(Refusal::CouldNotDraft("no_transition"))?;
+    let mut values = vec![
+        json!({"field_id": field, "value": typed_value(&spec, to).ok_or(Refusal::CouldNotDraft("untypable_value"))?}),
+    ];
+    if let Some(note) = parsed.values.get("note").and_then(Value::as_str) {
+        if command.writable.iter().any(|w| w == "note") {
+            if let Some(note_spec) = summary.fields.iter().find(|f| f.id == "note") {
+                let text: String = note.trim().chars().take(200).collect();
+                if !text.is_empty() {
+                    values.push(json!({"field_id": "note", "value": typed_value(&note_spec.value_type, &text).ok_or(Refusal::CouldNotDraft("untypable_value"))?}));
+                }
+            }
+        }
+    }
+    let target = Target {
+        record_id: record.record_id.clone(),
+        version: record.version,
+        summary: summarize(record),
+    };
+    let request = CommandRequest {
+        app: listing.app.clone(),
+        work: listing.work.clone(),
+        publication: listing.publication.clone(),
+        command: command.id.clone(),
+        schema: summary.schema.clone(),
+        schema_version_expected: i64::from(summary.schema_version),
+        record: record.record_id.clone(),
+        expected_record_version: record.version,
+        expected_work_version: listing.work_version,
+        values: Value::Array(values),
+        idempotency_key: fresh_key().ok_or(Refusal::StoreUnavailable)?,
+    };
+    let values = dry_run(stores, member, &request).await?;
     Ok(Resolution::Draft(Box::new(Draft {
-        kind: parsed.kind,
-        app: work.app,
-        work: work.work,
-        title: work.title,
-        placed,
+        kind: Kind::Decide,
+        app: listing.app.clone(),
+        work: listing.work.clone(),
+        title: found.title.clone(),
+        placed: found.placed,
         collection: summary.collection.clone(),
         request,
         values,
-        approver,
-        target,
-        confirm_token,
+        approver: None,
+        approvers: Vec::new(),
+        target: Some(target),
+        confirm_token: fresh_key().ok_or(Refusal::StoreUnavailable)?,
+        rule,
+        flags: Vec::new(),
     })))
 }
 
@@ -735,11 +1057,8 @@ pub fn pending<'a>(listing: &'a RecordsListing, me: &str) -> Vec<&'a RecordRow> 
         .iter()
         .filter(|record| record.creator != me)
         .filter(|record| {
-            decide_of(listing, record).is_some_and(|(_, command, field, current)| {
-                command
-                    .transitions
-                    .iter()
-                    .any(|(f, from, _)| *f == field && *from == current)
+            decide_of(listing, record).is_some_and(|(_, command, _, _)| {
+                !allowed_transitions(&command.transitions, &command.rules, record).is_empty()
             })
         })
         .collect()
@@ -764,23 +1083,17 @@ pub fn exact_decision<'a>(
     if !listing.can_write {
         return Err(Refusal::NotFound);
     }
-    let (summary, command, field, current) = decide_of(listing, record).ok_or(Refusal::NotFound)?;
-    let tos: Vec<&str> = command
-        .transitions
-        .iter()
-        .filter(|(f, from, _)| *f == field && *from == current)
-        .map(|(_, _, to)| to.as_str())
+    let (summary, command, field, _) = decide_of(listing, record).ok_or(Refusal::NotFound)?;
+    // APP-107: only the transitions whose guards hold now ("approved" on a
+    // $7,200 purchase at submitted is its manager step).
+    let tos: Vec<&str> = allowed_transitions(&command.transitions, &command.rules, record)
+        .into_iter()
+        .map(|(_, to, _)| to)
         .collect();
     if tos.is_empty() {
         return Err(Refusal::CouldNotDraft("already_decided"));
     }
-    let wanted = wanted.trim().to_lowercase();
-    let stem = wanted.get(..wanted.len().min(5)).unwrap_or("");
-    let to = tos
-        .iter()
-        .find(|t| **t == wanted)
-        .or_else(|| tos.iter().find(|t| !stem.is_empty() && t.starts_with(stem)))
-        .ok_or(Refusal::CouldNotDraft("no_transition"))?;
+    let to = pick_transition(Some(wanted), &tos).ok_or(Refusal::CouldNotDraft("no_transition"))?;
     let spec = summary
         .fields
         .iter()

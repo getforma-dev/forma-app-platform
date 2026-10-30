@@ -40,6 +40,12 @@ export type Draft = {
   parse_ms: number;
   /** APP-102: the draft was read from an attached receipt. */
   receipt?: boolean;
+  /** APP-107: every approver named (a two-level workflow names two); `approver` is the first. */
+  approvers?: { principal_id: string; label: string }[];
+  /** APP-107: the declared rule that chose the status, display only. */
+  rule?: string | null;
+  /** APP-107: server-computed display flags (the PO match). */
+  flags?: { kind: string; state: string; label: string }[];
 };
 export type LedgerRange = { from: string; to: string };
 export type ActAnswer =
@@ -191,20 +197,23 @@ async function lookUp(path: string, key: string): Promise<Posted> {
 
 /** The share step: the existing share route, record_write so the approver can decide. */
 async function shareWith(draft: Draft): Promise<string> {
-  if (!draft.approver) return '';
-  try {
-    const response = await fetch(`/v1/work/${draft.app_id}/${draft.work_id}/share`, {
-      method: 'POST',
-      credentials: 'same-origin',
-      cache: 'no-store',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ grantee_principal_id: draft.approver.principal_id, record_write: true }),
-    });
-    if (response.ok) return `Shared with ${draft.approver.label} for approval.`;
-    return `The share with ${draft.approver.label} was refused; the record is filed.`;
-  } catch {
-    return `The share with ${draft.approver.label} could not be sent; the record is filed.`;
+  const approvers = draft.approvers?.length ? draft.approvers : draft.approver ? [draft.approver] : [];
+  const notes: string[] = [];
+  for (const approver of approvers) {
+    try {
+      const response = await fetch(`/v1/work/${draft.app_id}/${draft.work_id}/share`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ grantee_principal_id: approver.principal_id, record_write: true }),
+      });
+      notes.push(response.ok ? `Shared with ${approver.label} for approval.` : `The share with ${approver.label} was refused; the record is filed.`);
+    } catch {
+      notes.push(`The share with ${approver.label} could not be sent; the record is filed.`);
+    }
   }
+  return notes.join(' ');
 }
 
 function host(document_: Document): HTMLElement {
@@ -229,9 +238,10 @@ function confirmCard(document_: Document, draft: Draft, utterance: string, recei
     chips.append(el(document_, 'span', { class: 'cv-origin', 'data-origin': 'library' }, draft.title));
     if (draft.placed) chips.append(el(document_, 'span', { class: 'cv-origin', 'data-origin': 'seeded' }, 'placed on your canvas'));
     if (draft.action === 'create') {
-      chips.append(draft.approver
-        ? el(document_, 'span', { class: 'cv-approver-chip', title: draft.approver.principal_id }, `Approver: ${draft.approver.label}`)
-        : el(document_, 'span', { class: 'cv-approver-chip is-none' }, 'No approver named'));
+      const approvers = draft.approvers?.length ? draft.approvers : draft.approver ? [draft.approver] : [];
+      if (!approvers.length) chips.append(el(document_, 'span', { class: 'cv-approver-chip is-none' }, 'No approver named'));
+      approvers.forEach((approver, index) => chips.append(el(document_, 'span', { class: 'cv-approver-chip', title: approver.principal_id },
+        `${approvers.length > 1 ? `Approver ${index + 1}` : 'Approver'}: ${approver.label}`)));
     } else if (draft.target) {
       chips.append(el(document_, 'span', { class: 'cv-approver-chip', title: draft.target.record_id }, `Record: ${draft.target.summary} (v${draft.target.version})`));
     }
@@ -251,6 +261,8 @@ function confirmCard(document_: Document, draft: Draft, utterance: string, recei
         : null,
       list,
       chips,
+      draft.rule ? el(document_, 'p', { class: 'cv-confirm-rule' }, draft.rule) : null,
+      ...(draft.flags ?? []).map((flag) => el(document_, 'p', { class: 'cv-flag', 'data-state': flag.state }, flag.label)),
       el(document_, 'p', { class: 'cv-confirm-note' }, 'Nothing is written until you confirm. The command is committed through the audited path with a server-minted key.'),
       el(document_, 'div', { class: 'cv-confirm-actions' }, confirm, edit, cancel));
     const done = (choice: 'confirm' | 'edit' | 'cancel') => {

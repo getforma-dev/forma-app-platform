@@ -209,6 +209,34 @@ def compatible(value, field):
     return all(value.get(k) == v for k, v in expected.items() if k != "type")
 
 
+GUARD_ORDERED = ("integer", "decimal", "money", "date", "timestamp")
+
+
+def _guard(guard, fields):
+    """APP-107: a declared guard compares one field of the same record schema with a typed, non-null literal."""
+    field = fields.get(guard["field_id"])
+    require(field is not None, "unknown guard field")
+    require(guard["value"]["type"] != "null" and compatible(guard["value"], field), "guard value type/unit mismatch")
+    require(guard["comparison"] in ("eq", "ne") or field["value_type"]["type"] in GUARD_ORDERED, "guard comparison requires an ordered field")
+
+
+def guard_holds(guard, state):
+    """APP-107: a guard over a record state ({field_id: value}); an absent or null value never satisfies it."""
+    value = state.get(guard["field_id"])
+    if value is None or value["type"] == "null":
+        return False
+    literal = guard["value"]
+    if value["type"] in ("money",):
+        a, b = int(value["minor_units"]), int(literal["minor_units"])
+    elif value["type"] == "decimal":
+        a, b = int(value["coefficient"]), int(literal["coefficient"])
+    elif value["type"] == "integer":
+        a, b = int(value["value"]), int(literal["value"])
+    else:
+        a, b = value.get("value"), literal.get("value")
+    return {"eq": a == b, "ne": a != b, "lt": a < b, "lte": a <= b, "gt": a > b, "gte": a >= b}[guard["comparison"]]
+
+
 def _definition(content):
     inputs = unique(content["inputs"], "id", "input id")
     for item in inputs.values():
@@ -232,6 +260,18 @@ def _definition(content):
             require(field is not None and field["value_type"]["type"] == "enum", "transition requires enum field")
             require(transition["field_id"] in command["writable_fields"], "transition field is not writable")
             require({transition["from"], transition["to"]} <= set(field["value_type"]["values"]), "unknown transition value")
+            if "when" in transition:
+                _guard(transition["when"], writable)
+        # APP-107 amendment: the starting value of an enum field on a create, chosen by declared guards.
+        if "initial" in command:
+            require(command["operation"] == "create" and not command["transitions"], "initial values belong to a filing create")
+            for rule in command["initial"]:
+                field = writable.get(rule["field_id"])
+                require(field is not None and field["value_type"]["type"] == "enum", "initial requires enum field")
+                require(rule["field_id"] in command["writable_fields"], "initial field is not writable")
+                require(rule["value"] in field["value_type"]["values"], "unknown initial value")
+                if "when" in rule:
+                    _guard(rule["when"], writable)
     for view in views.values():
         if view["kind"] == "form":
             require(view.get("command_id") in commands and "query" not in view, "form requires declared command without query")
@@ -456,6 +496,11 @@ def validate_bundle(bundle):
     for item in command["values"]:
         require(item["field_id"] in declaration["writable_fields"], "command field is not writable")
         require(compatible(item["value"], fields[item["field_id"]]), "command value type/unit mismatch")
+    if not existing and "initial" in declaration:
+        state = {item["field_id"]: item["value"] for item in command["values"]}
+        for field_id in dict.fromkeys(rule["field_id"] for rule in declaration["initial"]):
+            chosen = next((rule["value"] for rule in declaration["initial"] if rule["field_id"] == field_id and ("when" not in rule or guard_holds(rule["when"], state))), None)
+            require(chosen is not None and state.get(field_id) == {"type": "enum", "value": chosen}, "create must carry the declared initial value")
     require(command["expected_work_version"] == work["version"], "work version mismatch")
     require(outcome["payload_digest"] == payload_digest(command), "command payload mismatch")
     require(outcome["idempotency_key"] == command["idempotency_key"] and outcome["command_id"] == command["command_id"] and outcome["record_id"] == command["record_id"], "outcome command identity mismatch")

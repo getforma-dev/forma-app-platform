@@ -309,7 +309,86 @@ def generate_sources():
     sources["subscriptions"] = ({"id": "subscriptions", "contract_id": "subscriptions_v1", "contract_version": 1, "kind": "source", "fields": [
         field("subscription_id", "text"), field("customer", "text"), enum("plan", "starter", "growth", "enterprise"), money("mrr"), field("started", "date"),
         enum("status", "active", "churned", "trial")]}, rows, "none")
+    workflow_sources(sources)
     return sources
+
+
+# APP-107: the workflow library's history. A generator of its own, so every source above keeps its exact bytes.
+COST_CENTERS = ["engineering", "sales", "marketing", "finance", "operations", "people", "design", "support", "other"]
+PURCHASE_ITEMS = [("Laptop refresh (4 units)", "Atlas Office Supply", 280000, 960000), ("Figma seats", "Lumen Software", 90000, 860000),
+                  ("Conference booth", "Harbor Catering", 350000, 1800000), ("Security audit", "Beacon Legal LLP", 600000, 2400000),
+                  ("Standing desks", "Atlas Office Supply", 120000, 640000), ("Data warehouse credits", "Cloudline Hosting", 250000, 1500000),
+                  ("Recruiting retainer", "Vertex Recruiting", 400000, 1200000), ("Team offsite venue", "Granite Facilities", 180000, 900000),
+                  ("Monitor arms", "Atlas Office Supply", 20000, 90000), ("Analytics add-on", "Meridian Analytics", 60000, 420000)]
+GUARD_LIMIT_CENTS = 500000  # Purchase requests over $5,000 need the finance step (the declared guard below).
+DISCOUNT_AUTO_PCT = 10  # Deal desk: discounts at or under 10% approve on create (the declared initial rule below).
+
+
+def workflow_sources(sources):
+    rng = random.Random(20261107)
+    pick = rng.choice
+
+    def times(count, days=30):
+        return sorted(stamp(rng.randrange(days), rng.randrange(7, 20), rng.randrange(60), rng.randrange(60)) for _ in range(count))
+
+    rows = []
+    for n, t in enumerate(times(140), 1):
+        kind = rng.choices(["vacation", "sick", "personal"], [62, 24, 14])[0]
+        start = rng.randrange(-40, 80)
+        days = rng.randrange(1, 4) if kind != "vacation" else rng.randrange(2, 11)
+        status = "approved" if start < 0 else rng.choices(["approved", "submitted", "rejected"], [64, 28, 8])[0]
+        rows.append([f"PTO-{5100 + n}", t, pick(PEOPLE), kind, date(start), date(start + days - 1), str(days), status])
+    sources["leave_requests"] = ({"id": "leave_requests", "contract_id": "leave_requests_v1", "contract_version": 1, "kind": "source", "fields": [
+        field("request_id", "text"), field("time", "timestamp"), field("employee", "text"), enum("leave_type", "vacation", "sick", "personal"),
+        field("start", "date"), field("end", "date"), integer("days", "day"), enum("status", "submitted", "approved", "rejected")]}, rows, "event")
+
+    rows = []
+    for n, t in enumerate(times(160, 45), 1):
+        item, vendor, low, high = pick(PURCHASE_ITEMS)
+        cents = rng.randrange(low, high) // 100 * 100
+        status = rng.choices(["approved", "submitted", "manager_approved", "rejected"], [58, 18, 14, 10])[0]
+        if status == "manager_approved" and cents <= GUARD_LIMIT_CENTS:
+            status = "approved"
+        rows.append([f"PR-{6200 + n}", t, pick(PEOPLE), item, vendor, dollars(cents), pick(COST_CENTERS[:-1]), status])
+    sources["purchase_requests"] = ({"id": "purchase_requests", "contract_id": "purchase_requests_v1", "contract_version": 1, "kind": "source", "fields": [
+        field("request_id", "text"), field("time", "timestamp"), field("requester", "text"), field("item", "text"), field("vendor", "text"),
+        money("amount"), enum("cost_center", *COST_CENTERS), enum("status", "submitted", "manager_approved", "approved", "rejected")]}, rows, "event")
+
+    rows = []
+    for n, t in enumerate(times(150, 60), 1):
+        cents = rng.randrange(40000, 1400000)
+        issued = datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ")
+        due = (issued + datetime.timedelta(days=30)).strftime("%Y-%m-%d")
+        match = rng.choices(["match", "mismatch", "no_po"], [70, 9, 21])[0]
+        status = rng.choices(["paid", "approved", "received", "disputed"], [52, 22, 18, 8])[0]
+        if match == "mismatch" and status == "paid":
+            status = "disputed"
+        rows.append([f"AP-{7300 + n}", t, pick(VENDORS), f"{pick(['INV', 'BILL', 'N'])}-{rng.randrange(10000, 99999)}", dollars(cents),
+                     "" if match == "no_po" else f"PO-{rng.randrange(16 ** 7, 16 ** 8):08X}", due, status, match])
+    sources["ap_invoices"] = ({"id": "ap_invoices", "contract_id": "ap_invoices_v1", "contract_version": 1, "kind": "source", "fields": [
+        field("invoice_id", "text"), field("time", "timestamp"), field("vendor", "text"), field("invoice_number", "text"), money("amount"),
+        field("po_number", "text", nullable=True), field("due", "date"), enum("status", "received", "approved", "paid", "disputed"),
+        enum("po_match", "match", "mismatch", "no_po")]}, rows, "event")
+
+    rows = []
+    for n, t in enumerate(times(130, 45), 1):
+        status = rng.choices(["granted", "requested", "denied"], [66, 20, 14])[0]
+        rows.append([f"ACC-{8400 + n}", t, pick(PEOPLE), pick(SYSTEMS), rng.choices(["read", "write", "admin"], [52, 36, 12])[0], status,
+                     date(rng.randrange(15, 75))])
+    sources["access_grants"] = ({"id": "access_grants", "contract_id": "access_grants_v1", "contract_version": 1, "kind": "source", "fields": [
+        field("request_id", "text"), field("time", "timestamp"), field("requester", "text"), field("system", "text"),
+        enum("role", "read", "write", "admin"), enum("status", "requested", "granted", "denied"), field("expires_on", "date")]}, rows, "event")
+
+    rows = []
+    for n, t in enumerate(times(120, 60), 1):
+        pct = rng.choices([5, 8, 10, 12, 15, 20, 25, 30], [16, 14, 18, 14, 14, 12, 7, 5])[0]
+        auto = pct <= DISCOUNT_AUTO_PCT
+        status = "approved" if auto else rng.choices(["approved", "submitted", "rejected"], [55, 25, 20])[0]
+        rows.append([f"DD-{9500 + n}", t, pick(ACCOUNTS), pick(PEOPLE[:8]), dollars(rng.randrange(1200000, 36000000) // 10000 * 10000), str(pct), status,
+                     "true" if auto else "false"])
+    sources["discount_requests"] = ({"id": "discount_requests", "contract_id": "discount_requests_v1", "contract_version": 1, "kind": "source", "fields": [
+        field("request_id", "text"), field("time", "timestamp"), field("account", "text"), field("owner", "text"), money("deal_amount"),
+        integer("discount_pct", "percent"), enum("status", "submitted", "approved", "rejected"), field("auto_approved", "boolean")]}, rows, "event")
 
 
 # --- the apps ---------------------------------------------------------------------------------
@@ -349,6 +428,94 @@ EXPENSE_CLAIMS_RECORDS = {
 }
 
 
+
+# APP-107: the workflow library's record apps. Each files one typed request (`submit`, a create whose status is the declared
+# `initial` value, never the caller's) and decides it along declared transitions (`decide`); a transition or an initial
+# value may carry a declared guard (`when`) over a typed field of the same record, which storage judges on the record the
+# command composes (the dry run and the commit alike). Nothing about a status is ever chosen by a model.
+def lit_date(value):
+    return {"type": "date", "value": value}
+
+
+def guard(field_id, comparison, literal):
+    return {"field_id": field_id, "comparison": comparison, "value": literal}
+
+
+def t(source, target, when=None):
+    return {"field_id": "status", "from": source, "to": target, **({"when": when} if when else {})}
+
+
+def workflow(input_id, schema_id, fields, writable, initial, transitions, decide_writable, seed):
+    return {
+        "input_id": input_id, "contract_id": schema_id + "_v1", "schema_id": schema_id, "fields": fields,
+        "commands": [
+            {"id": "submit", "record_schema_id": schema_id, "operation": "create", "writable_fields": writable, "transitions": [], "initial": initial},
+            {"id": "decide", "record_schema_id": schema_id, "operation": "create", "writable_fields": decide_writable, "transitions": transitions},
+        ],
+        "seed": {"command_id": "submit", "values": seed},
+    }
+
+
+def v(field_id, value):
+    return {"field_id": field_id, "value": value}
+
+
+def text_value(value):
+    return {"type": "text", "value": value}
+
+
+TIME_OFF_RECORDS = workflow(
+    "requests", "leave_request",
+    [enum("leave_type", "vacation", "sick", "personal"), field("start", "date"), field("end", "date"), integer("days", "day", nullable=True),
+     field("note", "text", nullable=True), enum("status", "submitted", "approved", "rejected")],
+    ["leave_type", "start", "end", "days", "note", "status"],
+    [{"field_id": "status", "value": "submitted"}],
+    [t("submitted", "approved"), t("submitted", "rejected")], ["status", "note"],
+    [v("leave_type", lit_enum("vacation")), v("start", lit_date("2026-12-21")), v("end", lit_date("2026-12-23")), v("days", lit_int(3, "day")),
+     v("note", text_value("Holiday trip; synthetic only")), v("status", lit_enum("submitted"))])
+PURCHASE_RECORDS = workflow(
+    "requests", "purchase_request",
+    [field("item", "text"), field("vendor", "text"), money("amount"), enum("cost_center", *COST_CENTERS), field("justification", "text", nullable=True),
+     enum("status", "submitted", "manager_approved", "approved", "rejected")],
+    ["item", "vendor", "amount", "cost_center", "justification", "status"],
+    [{"field_id": "status", "value": "submitted"}],
+    [t("submitted", "approved", guard("amount", "lte", lit_money(GUARD_LIMIT_CENTS // 100))),
+     t("submitted", "manager_approved", guard("amount", "gt", lit_money(GUARD_LIMIT_CENTS // 100))),
+     t("manager_approved", "approved"), t("submitted", "rejected"), t("manager_approved", "rejected")],
+    ["status"],
+    [v("item", text_value("Monitor arms (6)")), v("vendor", text_value("Atlas Office Supply")), v("amount", lit_money(540)),
+     v("cost_center", lit_enum("design")), v("justification", text_value("Ergonomics; synthetic only")), v("status", lit_enum("submitted"))])
+INVOICE_RECORDS = workflow(
+    "invoices", "vendor_invoice",
+    [field("vendor", "text"), field("invoice_number", "text"), money("amount"), field("po_number", "text", nullable=True), field("due_date", "date"),
+     enum("status", "received", "approved", "paid", "disputed")],
+    ["vendor", "invoice_number", "amount", "po_number", "due_date", "status"],
+    [{"field_id": "status", "value": "received"}],
+    [t("received", "approved"), t("received", "disputed"), t("approved", "paid"), t("approved", "disputed"), t("disputed", "approved")],
+    ["status"],
+    [v("vendor", text_value("Orchard Print")), v("invoice_number", text_value("OP-2207")), v("amount", lit_money(318)),
+     v("due_date", lit_date("2026-11-20")), v("status", lit_enum("received"))])
+ACCESS_RECORDS = workflow(
+    "requests", "access_request",
+    [field("system", "text"), enum("role", "read", "write", "admin"), field("reason", "text"), field("expires_on", "date"),
+     enum("status", "requested", "granted", "denied")],
+    ["system", "role", "reason", "expires_on", "status"],
+    [{"field_id": "status", "value": "requested"}],
+    [t("requested", "granted"), t("requested", "denied")], ["status"],
+    [v("system", text_value("data-warehouse")), v("role", lit_enum("read")), v("reason", text_value("Quarterly reporting; synthetic only")),
+     v("expires_on", lit_date("2026-11-30")), v("status", lit_enum("requested"))])
+DEAL_DESK_RECORDS = workflow(
+    "requests", "discount_request",
+    [field("account", "text"), money("deal_amount"), integer("discount_pct", "percent"), field("reason", "text"),
+     enum("status", "submitted", "approved", "rejected")],
+    ["account", "deal_amount", "discount_pct", "reason", "status"],
+    [{"field_id": "status", "value": "approved", "when": guard("discount_pct", "lte", lit_int(DISCOUNT_AUTO_PCT, "percent"))},
+     {"field_id": "status", "value": "submitted"}],
+    [t("submitted", "approved"), t("submitted", "rejected")], ["status"],
+    [v("account", text_value("Quill Education")), v("deal_amount", lit_money(48000)), v("discount_pct", lit_int(8, "percent")),
+     v("reason", text_value("Multi-year renewal; synthetic only")), v("status", lit_enum("approved"))])
+
+
 # APP-101 slash commands: per library app its command slug and a short alias
 # list (`/slug rest-of-text` opens the app instantly in the canvas intent bar;
 # `apps` is reserved for the list). Lowercase, [a-z][a-z0-9-]{1,31}, unique
@@ -358,7 +525,7 @@ COMMANDS = {
     "vendor-spend": ("vendor-spend", ["spend", "vendors"]),
     "outbound-traffic": ("traffic", ["egress", "network"]),
     "incident-timeline": ("incidents", ["incident"]),
-    "access-review": ("access", ["access-review"]),
+    "access-review": ("access-review", ["access-audit"]),
     "sales-pipeline": ("pipeline", ["sales", "deals"]),
     "inventory-comparison": ("inventory", ["stock"]),
     "support-queue": ("support", ["tickets"]),
@@ -368,6 +535,11 @@ COMMANDS = {
     "hiring-funnel": ("hiring", ["candidates"]),
     "subscription-revenue": ("mrr", ["subscriptions", "revenue"]),
     "expense-claims": ("expense", ["expenses", "claim"]),
+    "time-off": ("pto", ["time-off", "leave", "vacation"]),
+    "purchase-requests": ("purchase", ["purchases", "po"]),
+    "vendor-invoices": ("invoice", ["invoices", "payables"]),
+    "access-requests": ("access", ["access-request"]),
+    "deal-desk": ("discount", ["deal-desk", "discounts"]),
 }
 
 
@@ -551,6 +723,74 @@ def apps():
                ["finance.expenses.claim", "finance.expenses.approve", "records.create", "records.transition"]),
            EXPENSE_CLAIMS_RECORDS)
 
+    # APP-107: the approval workflows real companies run in email, spreadsheets and ticket queues. Each is a typed request,
+    # a named approver, an audited decision; the data views give the history from a labeled synthetic source.
+    s = "leave_requests"
+    yield ("time-off", "Time off", "Request time off in your own words; your manager approves or rejects it, and the team sees who is out.", s, [
+        view("upcoming", "table", "Upcoming approved time off", query([s], [filt(s, "status", "eq", lit_enum("approved")), filt(s, "start", "gte", lit_date("2026-10-30")), {"type": "project", "fields": [f(s, "request_id"), f(s, "employee"), f(s, "leave_type"), f(s, "start"), f(s, "end"), f(s, "days")]}, sort(s, [("start", "asc")], "request_id"), limit(50)])),
+        view("days_by_person", "chart", "Days taken by person", query([s], [filt(s, "status", "eq", lit_enum("approved")), aggregate(s, ["employee"], [measure("days", "sum", s, "days"), measure("requests", "count", s, "request_id")])])),
+        view("by_type", "status", "Requests by type", query([s], [aggregate(s, ["leave_type"], [measure("requests", "count", s, "request_id"), measure("days", "sum", s, "days")])])),
+        view("request", "form", "Request time off", command_id="submit"),
+        view("how", "note", "How approval works", text="A request is filed as a typed record with status submitted; your manager approves or rejects it as an audited command. History is labeled synthetic."),
+    ], routing("Time off requests with manager approval: request vacation, sick or personal days (dates, days, note), the manager approves or rejects, and the team sees upcoming time off and days taken.",
+               ["book time off", "request vacation days", "I need a day off next Friday", "sick day request", "who is out of office next week", "Book me off Nov 24-26 for Thanksgiving"],
+               ["build an app", "expense claims", "payroll", "hiring funnel", "public holidays calendar"],
+               ["people.timeoff.request", "people.timeoff.approve", "records.create", "records.transition"]),
+           TIME_OFF_RECORDS)
+
+    s = "purchase_requests"
+    yield ("purchase-requests", "Purchase requests", "Ask to buy something; your manager approves it, and anything over $5,000 also needs finance. Both steps are declared rules the server enforces.", s, [
+        view("totals", "summary", "Requests to date", query([s], [aggregate(s, [], [measure("requests", "count", s, "request_id"), measure("total_amount", "sum", s, "amount"), measure("largest_request", "max", s, "amount")])])),
+        view("awaiting_finance", "table", "Waiting for finance", query([s], [filt(s, "status", "eq", lit_enum("manager_approved")), {"type": "project", "fields": [f(s, "request_id"), f(s, "time"), f(s, "requester"), f(s, "item"), f(s, "vendor"), f(s, "amount")]}, sort(s, [("amount", "desc")], "request_id"), limit(50)])),
+        view("by_cost_center", "chart", "Spend requested by cost center", query([s], [aggregate(s, ["cost_center"], [measure("requests", "count", s, "request_id"), measure("amount", "sum", s, "amount")])])),
+        view("by_status", "status", "Requests by status", query([s], [aggregate(s, ["status"], [measure("requests", "count", s, "request_id"), measure("amount", "sum", s, "amount")])])),
+        view("request", "form", "Request a purchase", command_id="submit"),
+        view("how", "note", "How approval works", text="Up to $5,000 the manager's approval completes a request. Over $5,000 the manager approves first, then finance; finance cannot approve before the manager. History is labeled synthetic."),
+    ], routing("Purchase requests with multi-level approval: request an item from a vendor with an amount and cost center; the manager approves, and requests over $5,000 also need finance.",
+               ["purchase request", "buy new laptops for the team", "I need to purchase software licenses", "request a purchase order", "approve the Figma seat purchase"],
+               ["build an app", "vendor invoices", "expense reimbursement", "inventory levels", "sales pipeline"],
+               ["finance.purchasing.request", "finance.purchasing.approve", "records.create", "records.transition"]),
+           PURCHASE_RECORDS)
+
+    s = "ap_invoices"
+    yield ("vendor-invoices", "Vendor invoices", "Log a supplier invoice, approve it for payment and mark it paid or disputed; the server checks the PO against your purchase requests.", s, [
+        view("by_status", "status", "Invoices by status", query([s], [aggregate(s, ["status"], [measure("invoices", "count", s, "invoice_id"), measure("amount", "sum", s, "amount")])])),
+        view("po_mismatches", "table", "Invoices that do not match their PO", query([s], [filt(s, "po_match", "eq", lit_enum("mismatch")), {"type": "project", "fields": [f(s, "invoice_id"), f(s, "vendor"), f(s, "invoice_number"), f(s, "po_number"), f(s, "amount"), f(s, "status")]}, sort(s, [("amount", "desc")], "invoice_id"), limit(50)])),
+        view("to_pay", "table", "Approved, not yet paid", query([s], [filt(s, "status", "eq", lit_enum("approved")), {"type": "project", "fields": [f(s, "invoice_id"), f(s, "vendor"), f(s, "amount"), f(s, "due")]}, sort(s, [("due", "asc")], "invoice_id"), limit(50)])),
+        view("log", "form", "Log a vendor invoice", command_id="submit"),
+        view("how", "note", "PO match", text="When an invoice names a PO, the server compares it with the purchase requests you can see and flags a mismatch; the flag is shown, it never blocks. History is labeled synthetic."),
+    ], routing("Vendor invoices (accounts payable approval): log a supplier invoice with its number, amount, PO and due date, approve it for payment, mark it paid or disputed; a PO match flag against purchase requests.",
+               ["vendor invoice", "log an invoice from a supplier", "invoice to approve for payment", "match an invoice to a purchase order", "mark the invoice paid"],
+               ["build an app", "unpaid invoices", "accounts payable by vendor", "employee expenses", "subscription revenue"],
+               ["finance.payables.invoice", "finance.payables.approve", "records.create", "records.transition"]),
+           INVOICE_RECORDS)
+
+    s = "access_grants"
+    yield ("access-requests", "Access requests", "Ask for access to a system with a role, a reason and an end date; the system owner grants or denies it, and grants expire.", s, [
+        view("expiring", "table", "Grants expiring in November", query([s], [filt(s, "status", "eq", lit_enum("granted")), filt(s, "expires_on", "gte", lit_date("2026-11-01")), filt(s, "expires_on", "lt", lit_date("2026-12-01")), {"type": "project", "fields": [f(s, "request_id"), f(s, "requester"), f(s, "system"), f(s, "role"), f(s, "expires_on")]}, sort(s, [("expires_on", "asc")], "request_id"), limit(50)])),
+        view("by_system", "chart", "Requests by system", query([s], [aggregate(s, ["system"], [measure("requests", "count", s, "request_id")])])),
+        view("by_status", "status", "Requests by status", query([s], [aggregate(s, ["status"], [measure("requests", "count", s, "request_id")])])),
+        view("request", "form", "Request access", command_id="submit"),
+        view("how", "note", "How approval works", text="A request is filed as requested; the system owner grants or denies it as an audited command. History is labeled synthetic."),
+    ], routing("Access requests: ask for access to a system with a role, reason and expiry date; the system owner grants or denies; grants expiring this month.",
+               ["request access to a system", "I need admin access to the production database", "give me write access to payroll until Friday", "access request for source control", "temporary access until the end of the month"],
+               ["build an app", "access review", "pending access requests", "who asked for admin access", "password reset"],
+               ["security.access.request", "security.access.grant", "records.create", "records.transition"]),
+           ACCESS_RECORDS)
+
+    s = "discount_requests"
+    yield ("deal-desk", "Deal desk", "Ask for a discount on a deal; up to 10% approves itself by a declared rule, deeper discounts go to the sales manager.", s, [
+        view("by_status", "status", "Discount requests by status", query([s], [aggregate(s, ["status"], [measure("requests", "count", s, "request_id"), measure("deal_amount", "sum", s, "deal_amount")])])),
+        view("deep_discounts", "table", "Discounts over 10%", query([s], [filt(s, "discount_pct", "gt", lit_int(DISCOUNT_AUTO_PCT, "percent")), {"type": "project", "fields": [f(s, "request_id"), f(s, "account"), f(s, "owner"), f(s, "deal_amount"), f(s, "discount_pct"), f(s, "status")]}, sort(s, [("discount_pct", "desc")], "request_id"), limit(50)])),
+        view("by_owner", "chart", "Requests by owner", query([s], [aggregate(s, ["owner"], [measure("requests", "count", s, "request_id"), measure("deepest_discount", "max", s, "discount_pct")])])),
+        view("request", "form", "Request a discount", command_id="submit"),
+        view("how", "note", "The rule", text="Discounts of 10% or less are approved on filing by the app's declared rule (an audited command like any decision); deeper ones wait for the sales manager. History is labeled synthetic."),
+    ], routing("Deal desk discount approvals: request a discount percent on a deal for an account with a reason; up to 10% approves automatically, deeper discounts go to the sales manager.",
+               ["deal desk", "request a 15% discount for Kestrel Logistics", "discount approval for a deal", "price exception request", "approve the discount on the Brightwater deal"],
+               ["build an app", "sales pipeline by stage", "coupon code", "stock price", "expense claims"],
+               ["sales.dealdesk.discount", "sales.dealdesk.approve", "records.create", "records.transition"]),
+           DEAL_DESK_RECORDS)
+
 
 def csv_bytes(contract, rows):
     import csv
@@ -662,7 +902,8 @@ def catalog_entry(library_id, title, purpose, route, b, csv_name):
             "inputs": [{"id": i["id"], "kind": i["kind"], "contract_id": i["contract_id"], "fields": [field_summary(fld) for fld in i["fields"]]} for i in content["inputs"]],
             "views": views,
             "commands": [{"id": c["id"], "record_schema_id": c["record_schema_id"], "operation": c["operation"], "writable_fields": c["writable_fields"],
-                          "transitions": copy.deepcopy(c["transitions"])} for c in content["commands"]],
+                          "transitions": copy.deepcopy(c["transitions"]), **({"initial": copy.deepcopy(c["initial"])} if "initial" in c else {})}
+                         for c in content["commands"]],
             "record_schemas": [{"id": r["id"], "version": r["version"], "fields": [field_summary(fld) for fld in r["fields"]]} for r in content["record_schemas"]],
             "sources": [{"input_id": source["id"], "source_id": revision["source_id"], "revision_id": revision["revision_id"], "csv": "data/" + csv_name,
                          "content_digest": revision["content_digest"], "normalized_digest": revision["normalized_digest"], "row_count": revision["row_count"],

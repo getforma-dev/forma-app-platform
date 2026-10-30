@@ -822,7 +822,18 @@ pub fn records_cards(
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or("")
                         .to_owned();
-                    let is_pending = listing.can_write && froms.contains(&status.as_str());
+                    // APP-107: pending when a declared transition may fire now
+                    // (its guard holding on the record).
+                    let is_pending = listing.can_write
+                        && froms.contains(&status.as_str())
+                        && decide.is_some_and(|c| {
+                            !crate::actions::resolve::allowed_transitions(
+                                &c.transitions,
+                                &c.rules,
+                                record,
+                            )
+                            .is_empty()
+                        });
                     pending += usize::from(is_pending);
                     waiting += usize::from(is_pending && !seeded && record.creator != principal);
                     let mut cells: Vec<CellProps> = shown

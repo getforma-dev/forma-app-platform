@@ -16,6 +16,7 @@ mod definitions;
 mod pool;
 mod queries;
 mod registry;
+pub mod rules;
 mod sessions;
 mod sharing;
 
