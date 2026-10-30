@@ -128,7 +128,7 @@ class LibraryFixtures(unittest.TestCase):
     def test_every_library_fixture_validates_under_the_contract_and_the_catalog_names_it(self):
         from validate import digest, validate_bundle
         names = sorted(p.name for p in LIBRARY.glob("*.json") if p.name != "catalog.json")
-        self.assertEqual(len(names), 14)
+        self.assertEqual(len(names), 15)
         self.assertEqual(names, sorted(a["fixture"] for a in CATALOG["apps"]))
         self.assertTrue(CATALOG["synthetic"])
         self.assertEqual((CATALOG["window_field"], CATALOG["destination_field"]), ("time", "destination"))
@@ -228,7 +228,7 @@ class LibraryEngine(unittest.TestCase):
         return json.loads(lines[0])
 
     def test_normalized_revisions_match_the_catalog_pins_and_are_private(self):
-        self.assertEqual(len(self.records), 13)
+        self.assertEqual(len(self.records), 14)
         for record in self.records:
             path = Path(record["path"])
             self.assertEqual(path.stat().st_mode & 0o777, 0o400)
@@ -434,7 +434,7 @@ class LibraryEngine(unittest.TestCase):
                                    env={k: v for k, v in os.environ.items() if not k.startswith("AWS")})
         self.assertEqual(completed.returncode, 0, completed.stderr)
         plan = json.loads(completed.stdout)
-        self.assertEqual(len(plan["sources"]), 13)
+        self.assertEqual(len(plan["sources"]), 14)
         for source in plan["sources"]:
             prefix = f"o/{ORG}/s/{source['source_id']}/r/{source['revision_id']}/"
             self.assertEqual(source["objects"], {"original": prefix + "original", "part.parquet": prefix + "part.parquet"})

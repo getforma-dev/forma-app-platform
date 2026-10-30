@@ -28,6 +28,7 @@ import { registerCommands } from './slash';
 import { removeWidgets } from './widgets/index';
 import { collapseAll, dissolve, expand, isStackItem, shuffle, stackOfItem, stackSelection } from './stacks';
 import { focusFromItem, isFocusOpen } from './focus';
+import { isNoteItem, removeNoteItem } from './notes';
 import { frameCardsOfItem, isUniteItem, splitFromItem, uniteFromItem } from './unite';
 
 const selection = new Set<HTMLElement>();
@@ -96,7 +97,8 @@ function removeSelected(): void {
   const cards: string[] = [];
   for (const item of items) {
     const kind = itemKind(item);
-    if (kind === 'widget') removeWidgets(item);
+    if (isNoteItem(item)) removeNoteItem(item);
+    else if (kind === 'widget') removeWidgets(item);
     else if (kind === 'utility') removeUtilityItem(item);
     else if (kind === 'card' && item.dataset.instanceId) cards.push(item.dataset.instanceId);
     else if (isStackItem(item)) cards.push(...(stackOfItem(item)?.cards ?? []));

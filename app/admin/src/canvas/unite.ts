@@ -205,8 +205,25 @@ function fly(cards: HTMLElement[], before: Map<HTMLElement, { x: number; y: numb
       ];
     card.classList.add('is-flying');
     const motion = card.animate(keyframes, { duration: DURATION, delay: index * step, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' });
-    void motion.finished.catch(() => undefined).finally(() => card.classList.remove('is-flying'));
+    void motion.finished.catch(() => undefined).finally(() => {
+      card.classList.remove('is-flying');
+      repaintCharts(card);
+    });
   });
+}
+
+/**
+ * APP-109 fix: a chart whose result landed while its card was flying (a
+ * unite right after placement) could keep its axis labels rasterized at the
+ * flight's scale, drawn oversized. Once the card has settled, each chart is
+ * swapped for an identical copy (same nodes, no listeners on them), so it is
+ * painted afresh at its real size; a chart that renders later is new anyway.
+ */
+function repaintCharts(card: HTMLElement): void {
+  if (!card.isConnected) return;
+  for (const chart of card.querySelectorAll<SVGSVGElement>('svg.cv-chart-svg')) {
+    chart.replaceWith(chart.cloneNode(true));
+  }
 }
 
 function syncAppButton(cards: HTMLElement[], united: boolean): void {

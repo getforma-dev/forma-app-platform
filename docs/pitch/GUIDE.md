@@ -39,6 +39,7 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 | `/app <name>` | Brings all of an app's cards. |
 | `/arrange` | Lays the board out by app. |
 | `/unite <app>`, `/split <app>` | Assembles an app's cards into one frame; breaks it apart again. |
+| `/note <text>` | Keeps a quick note as a card (your own record; edit in place, saved when you leave it). |
 | `/weather <place>`, `/calculator`, `/clock <zone>` | Utility widgets; restyle them in words. |
 | Any other sentence | The instant pick and live reshape; a short chooser when two apps fit equally; "Build something new" generates one. |
 

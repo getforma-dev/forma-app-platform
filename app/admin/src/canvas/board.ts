@@ -1222,7 +1222,14 @@ export function removeUtilityItem(item: HTMLElement): boolean {
   return true;
 }
 
+const liveListeners: Array<(event: LiveEvent) => void> = [];
+/** APP-109: calls `listener` with every live event this page receives (the notes module's refresh). */
+export function onLiveEvent(listener: (event: LiveEvent) => void): void {
+  liveListeners.push(listener);
+}
+
 function onLive(event: LiveEvent): void {
+  for (const listener of liveListeners) listener(event);
   if (event.kind === 'stream.lagged') {
     // Hints were dropped for this stream: re-run what is shown (APP-095 review).
     for (const work of groups.keys()) runGroup(work, true);
