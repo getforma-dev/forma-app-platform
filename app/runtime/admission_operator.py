@@ -17,9 +17,26 @@ the closed GRANTABLE set (a revocation advances the member's epoch);
 appends `permission.granted`, `permission.revoked` or
 `creator_authority.revoked` to the operator chain.
 
+Source revisions and their saved work (APP-012; ADR-007 D7.10, ADR-009 D9.3;
+APP-077 review M2): `register-source-revision --record` inserts one NEW
+`source_revisions` row from `upload-sources`' printed record, with the real
+digests of the objects already written at ADR-009 B1's keys; a revision is
+never rewritten (an identical record is `unchanged`, a differing one refused).
+`create-bound-work` writes a new saved work at version 1 that copies an
+existing work's publication, context and bindings and binds one source input
+to another live revision of the same source with the same contract; the old
+work and its records are untouched. Neither writes an audit event: D7.8's
+operator kinds name none (a kind is an ADR amendment), so, as with the seed,
+the retained JSON output is the record.
+
 A new access code's secret (32 CSPRNG bytes, base32) is printed exactly once,
 on standard output, after its transaction commits. It is never logged, stored
-or written anywhere else; only its domain-separated digest is stored. Listing
+or written anywhere else; only its domain-separated digest is stored. In a
+managed (ECS) task, whose standard output is CloudWatch Logs, the operator
+instead mints the code on its own machine (infra/scripts/window_requests.py
+mint-code) and passes `issue --code-digest` only: the task never sees the
+secret and prints only the digest; a reused digest refuses (code_index primary
+key), and a pre-minted code never carries a provider invitation. Listing
 and audit show identifiers, status and counts only. Refusals print a fixed
 reason code on standard error and never echo an argument value.
 
@@ -28,14 +45,72 @@ intended email and the explicit least-privilege role records a `pending` create
 in the code's transaction, then, after COMMIT, sends exactly one server-only
 create to fAuth's management API (provider_management.py) and records
 `confirmed` with the remote invitation id, `failed`, or `unknown`; a create is
-never repeated. The returned `invite_token` goes only to a 0600 capability file
-in the operator's private directory, named by the invitation row. `revoke`
-commits the local revocation first, destroys the code's capability and then
-revokes remotely; `reconcile` settles pending/unknown operations by inspecting
-the provider, one run per organization at a time, attributing each remote
-invitation to at most one create (see judge_creates). Provider settings come only
-from the environment (GENUI_PROVIDER_*; the management key from a 0600 file or the
-environment, never argv).
+never repeated. The returned `invite_token` goes only into the environment's
+provider capability secret in AWS Secrets Manager (ADR-003 amendment
+2026-10-30), keyed by the invitation row; the operator host keeps no copy, and
+the service receives it at its next task start. `revoke` commits the local
+revocation first, removes the code's capability from the secret (with the
+secret alone configured, as in the managed operator task) and then revokes
+remotely; `reconcile` removes every capability that can no longer be handed off
+and settles pending/unknown operations by inspecting the provider, one run per
+organization at a time, attributing each remote invitation to at most one
+create (see judge_creates). Provider settings come only from the environment
+(GENUI_PROVIDER_*; the management key from a 0600 file or the environment,
+never argv); the secret's ARN from GENUI_PROVIDER_CAPABILITY_SECRET_ID or
+`--capability-secret-id`.
+
+Managed invitations (ADR-003 amendment 2026-10-30, "managed invitations"; APP-076
+gap G2): on RDS, reachable only from tasks, a redeemable code is issued by
+`issue --code-digest <d> --provider-input-from-secret` in the managed operator
+task. The task receives FormaStack's existing tenant-scoped management secret,
+attached by ARN under approval A12 and never copied (its `management_key` and
+`tenant_id` JSON keys, injected by ECS, beside the stack's non-secret
+management URL; provider_management.management_configuration; the injected
+tenant must equal the code's bound tenant before any provider call), and the
+injected GENUI_OPERATOR_INVITATION_INPUT_JSON (a small document the operator
+host writes immediately before the task and empties right after:
+`{"format": ..., "invitations": [{organization_id, code_digest, email, role,
+issuer, tenant}]}`, composed by infra/scripts/window_requests.py
+invitation-input). The command takes the one entry whose organization and code
+digest equal its arguments (refusing a missing or ambiguous entry before any
+connection) and then runs exactly the invitation path above: `pending` in the
+code's transaction, one server-only create after COMMIT, confirmed/failed/
+unknown, the invite_token only into the capability secret. The intended address
+lives only in the input secret and at the provider: never in an override,
+argv, CloudTrail, the log or this command's output, which prints identifiers,
+states and the digest only. `issue --provider-email` (the address in argv) stays
+refused in a managed task; `reconcile` and `revoke` run there with the same
+attached management secret.
+
+Spend Review in Northstar (APP-076 gap G3, ADR-010 act 6): `seed-spend-review`
+seeds the Spend Review fixture bundle (contracts/fixtures/impl-2026-10-28.1/
+spend-review.json, the exact bytes and digests the operator seed places in the
+second fixture organization) into the named fixture organization through
+tenant_seed.seed itself, under organization scope and the organization FOR
+SHARE, in one transaction: the app shell, the seeded definition revision with its
+inputs and record schemas, the publication, the saved work, its collection and
+bindings, the expenses source revision and the seeded EXP-002 outcome, labeled
+"seeded definition" as the seed labels every fixture definition (ADR-010 §1,
+demo R3). Exact-match idempotent (`changed: false` on a repeat; any differing
+row refuses whole). No audit event: D7.8's operator kinds name none (APP-084
+item 6), as for `create-bound-work`; the retained output is the record. The
+definition is not re-admitted through the service's whole-output admission
+path (APP-010, Rust): that path is not reproducible from Python byte for byte,
+so the seeded rows are used, exactly as the seed itself placed them.
+
+Provider tenant bindings (APP-078 B1): `bind-provider-tenant` binds an existing
+organization (the two seeded ones) to its real provider tenant for an issuer, the
+row the callback's registry/database agreement needs (ADR-006; the seed binds only
+the fixture issuer). Identifiers only, so it runs in the managed operator task;
+it writes no audit event because ADR-007 D7.8's operator kinds are closed and
+name none (the seed's bindings have none either; a `provider_tenant.bound` kind
+would be an ADR-007 amendment).
+
+Sign-in handles (APP-009, ADR-006 §handle): `issue-handle` gives an organization
+without one its first live handle (fresh, or an exact already-issued `--handle`
+so one routing value serves every environment); `rotate-handle` adds a second
+live handle; `retire-handle` stops the old one after FormaStack re-registers the
+client's return_entry_url. Handles are non-secret routing and are printed.
 """
 import argparse
 import base64
@@ -92,6 +167,17 @@ LABEL = re.compile(r"[a-z0-9][a-z0-9._@-]{0,63}")
 PROVIDER_ROLES = ("user",)
 APP_PERMISSIONS = ("discover", "run", "edit_definition")
 WORK_PERMISSIONS = ("record_read", "record_write", "share_work", "export")
+# ADR-003 amendment 2026-10-30 (managed invitations): the OperatorInvitationInput secret, injected
+# whole into the managed operator task only. `{}` is the empty document the operator host writes
+# back right after the task; otherwise exactly this shape, every entry closed.
+INVITATION_INPUT_ENV = "GENUI_OPERATOR_INVITATION_INPUT_JSON"
+INVITATION_INPUT_FORMAT = "forma:operator-invitation-input:v1"
+INVITATION_INPUT_BYTES_MAX = 65536
+INVITATION_INPUT_ENTRIES_MAX = 64
+INVITATION_KEYS = frozenset({"organization_id", "code_digest", "email", "role", "issuer", "tenant"})
+# The fixture organization the Spend Review seed may target (tenant_seed.ORGANIZATIONS) and the
+# retained fixture edition the seed reads (ADR-009 D9.3; tenant_seed.make_bundles).
+SEED_EDITION = "impl-2026-10-28.1"
 
 
 # A refusal whose message is a fixed reason code, never a value (shared with provider_management).
@@ -201,10 +287,22 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("defaults")
     for name in ("backfill", "list", "verify", "reconcile"):
-        sub.add_parser(name).add_argument("--organization", required=True)
+        q = sub.add_parser(name)
+        q.add_argument("--organization", required=True)
+        if name == "reconcile":
+            q.add_argument("--capability-secret-id")
     q = sub.add_parser("provision")
     for arg in ("--organization", "--display-name", "--issuer", "--provider-tenant"):
         q.add_argument(arg, required=True)
+    # APP-078 B1: an existing organization's binding to its real provider tenant. B1 review m5: in the
+    # managed task the pair comes from the injected AuthConfiguration secret (`--from-auth-configuration`,
+    # the secret's ARN from GENUI_AUTH_CONFIGURATION_SECRET_ID or `--auth-configuration-secret-id`), so no
+    # identifier is on argv and the registry and the database agree by construction.
+    q = sub.add_parser("bind-provider-tenant")
+    q.add_argument("--organization", required=True)
+    for arg in ("--issuer", "--provider-tenant", "--auth-configuration-secret-id"):
+        q.add_argument(arg)
+    q.add_argument("--from-auth-configuration", action="store_true")
     q = sub.add_parser("issue")
     q.add_argument("--organization", required=True)
     q.add_argument("--issued-by", required=True)
@@ -212,14 +310,26 @@ def parser():
     q.add_argument("--max-redemptions", type=int, default=DEFAULTS["max_redemptions_default"])
     q.add_argument("--expires-days", type=int, default=DEFAULTS["code_expiry_days_default"])
     q.add_argument("--grant", action="append", default=[])
-    for arg in ("--provider-email", "--provider-role", "--provider-issuer", "--provider-tenant"):
+    # APP-078 managed channel: the operator mints the code on its own machine
+    # (mint_access_code) and the task receives only its digest, so no secret
+    # reaches a task override, CloudTrail or the awslogs group.
+    q.add_argument("--code-digest")
+    # ADR-003 amendment 2026-10-30: the capability secret's ARN (an identifier, never a value);
+    # default GENUI_PROVIDER_CAPABILITY_SECRET_ID.
+    for arg in ("--provider-email", "--provider-role", "--provider-issuer", "--provider-tenant", "--capability-secret-id"):
         q.add_argument(arg)
+    # ADR-003 amendment 2026-10-30 (managed invitations): the invitation's address, role,
+    # issuer and tenant come from the injected input secret's entry for this digest, so none
+    # of them appears in argv, the override, CloudTrail or the log.
+    q.add_argument("--provider-input-from-secret", action="store_true")
     for name in ("revoke", "extend"):
         q = sub.add_parser(name)
         q.add_argument("--organization", required=True)
         q.add_argument("--code-id", required=True)
         if name == "extend":
             q.add_argument("--expires-days", type=int, required=True)
+        else:
+            q.add_argument("--capability-secret-id")
     for name in ("revoke-entitlement", "revoke-membership"):
         q = sub.add_parser(name)
         q.add_argument("--organization", required=True)
@@ -238,6 +348,22 @@ def parser():
     q = sub.add_parser("revoke-creator-authority")
     for arg in ("--organization", "--app", "--work"):
         q.add_argument(arg, required=True)
+    # ADR-006 sign-in handles (D7.19 operator channel; APP-009).
+    for name in ("issue-handle", "rotate-handle", "retire-handle"):
+        q = sub.add_parser(name)
+        q.add_argument("--organization", required=True)
+        q.add_argument("--handle", required=(name == "retire-handle"))
+    q = sub.add_parser("register-source-revision")
+    q.add_argument("--organization", required=True)
+    # Exactly one: a local record file, or (the APP-078 managed channel, where
+    # an override carries only the command) the same non-secret record inline.
+    q.add_argument("--record")
+    q.add_argument("--record-json")
+    q = sub.add_parser("create-bound-work")
+    for arg in ("--organization", "--app", "--from-work", "--work", "--creator", "--input", "--source", "--revision"):
+        q.add_argument(arg, required=True)
+    # APP-076 G3: the Spend Review fixture bundle seeded into a fixture organization (Northstar).
+    sub.add_parser("seed-spend-review").add_argument("--organization", required=True)
     return p
 
 
@@ -245,9 +371,11 @@ def validate(args):
     """Every argument is checked before any connection is opened."""
     if hasattr(args, "organization"):
         identifier(args.organization)
-    for name in ("code_id", "principal", "app", "work", "source", "space", "owner"):
+    for name in ("code_id", "principal", "app", "work", "source", "space", "owner", "from_work", "creator", "revision"):
         if getattr(args, name, None) is not None:
             identifier(getattr(args, name))
+    if getattr(args, "capability_secret_id", None) is not None:
+        require(provider.SECRET_ARN.fullmatch(args.capability_secret_id) is not None, "capability_secret_refused")
     if args.command in ("grant-permission", "revoke-permission"):
         resource = GRANTABLE.get(args.permission)
         require(resource is not None, "permission_refused")
@@ -257,6 +385,15 @@ def validate(args):
         require(1 <= len(args.display_name) <= 200 and args.display_name.isprintable(), "malformed_display_name")
         require(1 <= len(args.issuer) <= 512 and args.issuer.isascii() and args.issuer.isprintable(), "malformed_issuer")
         require(1 <= len(args.provider_tenant) <= 256 and args.provider_tenant.isascii() and args.provider_tenant.isprintable(), "malformed_provider_tenant")
+    if args.command == "bind-provider-tenant":
+        given = (args.issuer is not None, args.provider_tenant is not None)
+        if args.from_auth_configuration:
+            require(given == (False, False), "binding_source_refused")
+            if args.auth_configuration_secret_id is not None:
+                require(provider.SECRET_ARN.fullmatch(args.auth_configuration_secret_id) is not None, "auth_configuration_secret_refused")
+        else:
+            require(given == (True, True) and args.auth_configuration_secret_id is None, "binding_source_refused")
+            check_binding(args)
     if args.command == "issue":
         require(LABEL.fullmatch(args.issued_by) is not None, "malformed_issued_by")
         require(args.kind in ("trial", "member_invite"), "kind_refused")
@@ -265,18 +402,189 @@ def validate(args):
         require(args.grant, "grant_required")
         args.templates = sorted({parse_grant(g) for g in args.grant}, key=str)
         invitation = (args.provider_email, args.provider_role, args.provider_issuer, args.provider_tenant)
+        if args.provider_input_from_secret:
+            # The managed form: the digest names the entry; every invitation field comes from it.
+            require(args.code_digest is not None, "invitation_input_requires_code_digest")
+            require(all(v is None for v in invitation), "invitation_input_with_flags_refused")
         # ADR-003/APP-073: an invitation needs the intended email, an explicit
         # least-privilege provider role and the exact provider tenant; an
         # omitted role is refused, never defaulted.
         require(all(v is None for v in invitation) or all(v is not None for v in invitation), "invitation_incomplete")
+        if args.code_digest is not None:
+            require(DIGEST.fullmatch(args.code_digest) is not None, "malformed_code_digest")
+            # A pre-minted code takes its provider invitation only from the injected input
+            # secret (managed invitations): the address never travels in argv beside the digest.
+            require(args.provider_email is None, "code_digest_with_invitation_refused")
         if args.provider_email is not None:
-            email = args.provider_email.strip()
-            require(3 <= len(email) <= 320 and email.count("@") == 1 and email.isascii() and email.isprintable(), "malformed_email")
-            require(args.provider_role in PROVIDER_ROLES, "provider_role_refused")
-            require(1 <= len(args.provider_issuer) <= 512 and 1 <= len(args.provider_tenant) <= 256, "malformed_provider_tenant")
+            check_invitation(args)
     if args.command == "extend":
         require(1 <= args.expires_days <= DEFAULTS["code_expiry_days_max"], "expiry_out_of_range")
+    if args.command in ("issue-handle", "rotate-handle", "retire-handle"):
+        args.raw_handle = None
+        if args.handle is not None:
+            args.raw_handle = normalize_handle(args.handle)
+            require(args.raw_handle is not None, "malformed_handle")
+    if args.command == "register-source-revision":
+        require((args.record is None) != (args.record_json is None), "record_refused")
+        if args.record is not None:
+            args.revision_record = source_record(args.record, args.organization)
+        else:
+            raw = args.record_json.encode("utf-8", errors="strict") if args.record_json.isascii() else b""
+            args.revision_record = source_record_bytes(raw, args.organization)
+    if args.command == "create-bound-work":
+        require(LOCAL_ID.fullmatch(args.input) is not None, "malformed_input")
+        require(args.work != args.from_work, "work_exists")
     return args
+
+
+def check_binding(args):
+    """The registry's own bounds (storage/registry.rs `label`): a binding the closed registry could not
+    name is useless. The issuer is the token's `iss` claim, the value the service compares (not
+    necessarily the provider's origin URL)."""
+    require(_graphic(args.issuer, 256), "malformed_issuer")
+    require(_graphic(args.provider_tenant, 128), "malformed_provider_tenant")
+
+
+def bind_from_auth_configuration(args, environ):
+    """B1 review m5: take this organization's one (issuer, provider tenant) pair from the environment's
+    AuthConfiguration secret, validated whole with the supervisor's reader (which, since review m2,
+    admits exactly one binding per routed organization), before any database connection."""
+    secret_id = args.auth_configuration_secret_id if args.auth_configuration_secret_id is not None else environ.get(provider.ENV_AUTH_CONFIGURATION_SECRET)
+    require(secret_id is not None, "auth_configuration_secret_missing")
+    try:
+        text = provider.ManagedSecret(secret_id).read_text()
+    except provider.Refused as refusal:
+        raise Refused("auth_configuration_secret_refused" if str(refusal) == "secret_id_refused" else "auth_configuration_unavailable") from None
+    try:
+        files = runtime.auth_configuration(text)
+    except (runtime.Refused, ValueError, TypeError):
+        raise Refused("auth_configuration_malformed") from None
+    require(files is not None, "auth_configuration_unconfigured")
+    bindings = [b for b in json.loads(files[runtime.IDENTITY_REGISTRY_FILE_NAME])["bindings"] if b["organization_id"] == args.organization]
+    require(len(bindings) == 1, "organization_not_routed")
+    args.issuer, args.provider_tenant = bindings[0]["issuer"], bindings[0]["provider_tenant_id"]
+    check_binding(args)
+    return args
+
+
+def check_invitation(args):
+    """The invitation fields of `issue`, whatever channel delivered them (argv or the input secret)."""
+    email = args.provider_email.strip() if isinstance(args.provider_email, str) else ""
+    require(3 <= len(email) <= 320 and email.count("@") == 1 and email.isascii() and email.isprintable(), "malformed_email")
+    require(args.provider_role in PROVIDER_ROLES, "provider_role_refused")
+    require(isinstance(args.provider_issuer, str) and isinstance(args.provider_tenant, str)
+            and 1 <= len(args.provider_issuer) <= 512 and 1 <= len(args.provider_tenant) <= 256, "malformed_provider_tenant")
+
+
+def _unique_object(pairs):
+    keys = [key for key, _ in pairs]
+    require(len(keys) == len(set(keys)), "invitation_input_malformed")
+    return dict(pairs)
+
+
+def invitation_input(text):
+    """The injected OperatorInvitationInput secret, validated whole before any connection: `{}` gives
+    [] (nothing to issue); otherwise the closed entries, each organization and digest named once.
+    A refusal names a fixed reason and never a value (the address is in the value)."""
+    require(isinstance(text, str) and len(text.encode("utf-8")) <= INVITATION_INPUT_BYTES_MAX, "invitation_input_malformed")
+    try:
+        value = json.loads(text, object_pairs_hook=_unique_object)
+    except ValueError:
+        raise Refused("invitation_input_malformed") from None
+    require(isinstance(value, dict), "invitation_input_malformed")
+    if not value:
+        return []
+    require(set(value) == {"format", "invitations"} and value["format"] == INVITATION_INPUT_FORMAT
+            and isinstance(value["invitations"], list) and len(value["invitations"]) <= INVITATION_INPUT_ENTRIES_MAX,
+            "invitation_input_malformed")
+    entries, seen = [], set()
+    for item in value["invitations"]:
+        require(isinstance(item, dict) and set(item) == INVITATION_KEYS, "invitation_input_malformed")
+        require(all(isinstance(item[key], str) for key in INVITATION_KEYS), "invitation_input_malformed")
+        identifier(item["organization_id"])
+        require(DIGEST.fullmatch(item["code_digest"]) is not None, "malformed_code_digest")
+        probe = argparse.Namespace(provider_email=item["email"], provider_role=item["role"], provider_issuer=item["issuer"],
+                                   provider_tenant=item["tenant"])
+        check_invitation(probe)
+        key = (item["organization_id"], item["code_digest"])
+        require(key not in seen, "invitation_input_malformed")
+        seen.add(key)
+        entries.append(dict(item))
+    return entries
+
+
+def bind_invitation_input(args, environ):
+    """`issue --provider-input-from-secret`: take this digest's one entry from the injected secret and
+    bind its fields as if given, so `issue` runs its existing invitation path unchanged."""
+    text = environ.get(INVITATION_INPUT_ENV)
+    require(text is not None, "invitation_input_missing")
+    matches = [e for e in invitation_input(text) if e["organization_id"] == args.organization and e["code_digest"] == args.code_digest]
+    require(len(matches) == 1, "invitation_input_missing")
+    entry = matches[0]
+    args.provider_email, args.provider_role = entry["email"], entry["role"]
+    args.provider_issuer, args.provider_tenant = entry["issuer"], entry["tenant"]
+    check_invitation(args)
+    return args
+
+
+def _graphic(value, bound):
+    """1..bound printable ASCII bytes with no space (the service's `label`/`bounded`)."""
+    return isinstance(value, str) and 1 <= len(value) <= bound and all(0x21 <= ord(ch) <= 0x7E for ch in value)
+
+
+LOCAL_ID = re.compile(r"[a-z][a-z0-9_]{0,63}")
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+RECORD_KEYS = {"organization_id", "source_id", "revision_id", "content_digest", "normalized_digest", "object_digest",
+               "row_count", "contract_digest"}
+
+
+def revision_id(organization, content_digest):
+    """`upload-sources`' revision identity: uuid5(organization, content digest) re-stamped as version 4.
+
+    The contract and every validator accept only version 4 or 7 UUIDs.
+    """
+    return str(uuid.UUID(bytes=uuid.uuid5(uuid.UUID(organization), content_digest).bytes, version=4))
+
+
+def source_record(path, organization):
+    """`upload-sources`' one printed record, closed and checked before any connection.
+
+    `normalized_digest` is the SHA-256 of the uploaded `part.parquet` bytes
+    (ADR-009 D9.3 M6), which the query cache verifies (D7.10); the record's
+    `object_digest` names the same object and must agree, and `revision_id`
+    must be the content-derived identity (`revision_id`).
+    """
+    try:
+        with open(path, "rb") as stream:
+            raw = stream.read(4097)
+    except OSError:
+        raise Refused("record_refused") from None
+    return source_record_bytes(raw, organization)
+
+
+def _closed_pairs(pairs):
+    keys = [key for key, _ in pairs]
+    require(len(keys) == len(set(keys)), "record_refused")
+    return dict(pairs)
+
+
+def source_record_bytes(raw, organization):
+    """The same closed checks for a record given inline (``--record-json``)."""
+    try:
+        require(0 < len(raw) <= 4096, "record_refused")
+        record = json.loads(raw, object_pairs_hook=_closed_pairs)
+    except ValueError:
+        raise Refused("record_refused") from None
+    require(isinstance(record, dict) and set(record) == RECORD_KEYS, "record_refused")
+    for key in ("organization_id", "source_id", "revision_id"):
+        identifier(record[key])
+    for key in ("content_digest", "normalized_digest", "object_digest", "contract_digest"):
+        require(isinstance(record[key], str) and DIGEST.fullmatch(record[key]) is not None, "record_refused")
+    require(record["organization_id"] == organization, "record_organization_refused")
+    require(record["object_digest"] == record["normalized_digest"], "record_digest_refused")
+    require(record["revision_id"] == revision_id(organization, record["content_digest"]), "record_revision_refused")
+    require(type(record["row_count"]) is int and 0 <= record["row_count"] <= 9007199254740991, "record_refused")
+    return record
 
 
 # --- operator transaction -----------------------------------------------------
@@ -334,17 +642,22 @@ def append(c, organization, kind, code_id=None, actor=None, app=None, work=None)
               (sequence, digest, organization))
 
 
-def organization_sequence_hook(c, organization):
-    """D7.7 TODO(APP-013, migration 0007): organization_sequences arrives with 0007.
+def organization_sequence_row(c, organization):
+    """D7.7 (migration 0007, APP-013): the organization's one commit-sequence row.
 
-    Until then there is nothing to create. When the relation exists this hook
-    refuses, so provisioning and backfill cannot silently skip the row; 0007's
-    slice must replace it with the D7.7 insert (next_commit_sequence = 1, or
-    1 + max(internal_record_revisions.commit_sequence) for a backfill).
+    Provisioning creates it at 1 in the organization's own transaction; the
+    backfill for an existing organization inserts it under scope at
+    1 + max(internal_record_revisions.commit_sequence) (1 when there is none)
+    and reports an existing row unchanged. The row is written by this channel
+    only (D7.19); a command that finds none writes nothing (Error::Configuration).
     """
-    require(c.execute("SELECT to_regclass('genui.organization_sequences') IS NULL").fetchone() == (True,),
-            "organization_sequences_hook_not_implemented")
-    return "organization_sequences: not created; the relation arrives with migration 0007 (D7.7)"
+    found = c.execute("SELECT next_commit_sequence FROM genui.organization_sequences WHERE organization_id=%s", (organization,)).fetchone()
+    if found is not None:
+        return {"organization_sequences": "existing", "next_commit_sequence": found[0]}
+    following = c.execute("SELECT coalesce(max(commit_sequence),0)+1 FROM genui.internal_record_revisions WHERE organization_id=%s",
+                          (organization,)).fetchone()[0]
+    c.execute("INSERT INTO genui.organization_sequences(organization_id,next_commit_sequence) VALUES (%s,%s)", (organization, following))
+    return {"organization_sequences": "created", "next_commit_sequence": following}
 
 
 # --- commands -----------------------------------------------------------------
@@ -359,14 +672,59 @@ def provision(c, args):
     for chain in CHAINS:
         c.execute("INSERT INTO genui.audit_heads(organization_id,writer_role,chain_sequence,head_hash) VALUES (%s,%s,1,%s)",
                   (org, chain, genesis(org, chain)))
-    deferred = organization_sequence_hook(c, org)
+    sequence = organization_sequence_row(c, org)
     raw = secrets.token_bytes(DEFAULTS["handle_bytes"])
     c.execute("INSERT INTO genui_private.handle_index(handle_digest,organization_id,retired_at) VALUES (%s,%s,NULL)", (handle_digest(raw), org))
     lock_organization(c, org, active=True)
     append(c, org, "organization.provisioned")
     c.commit()
     # The handle is non-secret routing (ADR-006); it is still shown only here.
-    return {"organization_id": org, "handle": encode_handle(raw), "audit_heads": list(CHAINS), "deferred": [deferred]}
+    return {"organization_id": org, "handle": encode_handle(raw), "audit_heads": list(CHAINS), "sequence": sequence}
+
+
+def bind_provider_tenant(c, args):
+    """APP-078 B1: bind an existing organization to its real provider tenant for `issuer`, so the
+    callback's registry/database agreement (ADR-006) can hold for the hosted sign-in. Idempotent:
+    an identical active row is reported `existing`; an inactive one refuses (reactivation is a
+    separate decision). No audit event: D7.8's closed operator kinds name none (the row is the
+    record, as for the seed's fixture bindings)."""
+    org = args.organization
+    begin(c, org)
+    lock_organization(c, org, active=True)
+    row = lock_binding(c, org, args.issuer, args.provider_tenant)
+    if row is None:
+        require(not bound_elsewhere(c, org, args.issuer, args.provider_tenant), "provider_tenant_bound_elsewhere")
+        c.execute("INSERT INTO genui.provider_tenant_bindings(organization_id,issuer,provider_tenant_id,active) VALUES (%s,%s,%s,true)",
+                  (org, args.issuer, args.provider_tenant))
+        state = "created"
+    else:
+        require(row == (True,), "provider_binding_inactive")
+        state = "existing"
+    active = c.execute("SELECT count(*) FROM genui.provider_tenant_bindings WHERE organization_id=%s AND active", (org,)).fetchone()[0]
+    c.commit()
+    return {"organization_id": org, "binding": state, "active_bindings": active, "audit_event": None,
+            "source": "auth_configuration" if args.from_auth_configuration else "arguments"}
+
+
+def bound_elsewhere(c, org, issuer, tenant):
+    """B1 review m6: is this (issuer, tenant) already active for another organization?
+
+    FORCE RLS scopes every `genui` read to one organization, so the other organizations are visited
+    under their own scope in turn; the candidates are the organizations that can route a sign-in
+    (genui_private.handle_index, which has no RLS and is readable by the owner) plus every
+    organization with a code. A binding elsewhere is only ever useful to an organization that can
+    sign in, so this is the set the check must cover; the scope is restored afterwards."""
+    others = {r[0] for r in c.execute("""SELECT organization_id::text FROM genui_private.handle_index
+          UNION SELECT organization_id::text FROM genui_private.code_index""").fetchall()} - {org}
+    found = False
+    for other in sorted(others):
+        c.execute("SELECT set_config('genui.organization_id',%s,true)", (other,))
+        if c.execute("""SELECT 1 FROM genui.provider_tenant_bindings WHERE organization_id=%s AND issuer=%s AND provider_tenant_id=%s AND active""",
+                     (other, issuer, tenant)).fetchone() is not None:
+            found = True
+            break
+    c.execute("SELECT set_config('genui.organization_id',%s,true)", (org,))
+    return found
 
 
 def backfill(c, args):
@@ -381,11 +739,12 @@ def backfill(c, args):
             c.execute("INSERT INTO genui.audit_heads(organization_id,writer_role,chain_sequence,head_hash) VALUES (%s,%s,1,%s)",
                       (org, chain, genesis(org, chain)))
             created.append(chain)
-    deferred = organization_sequence_hook(c, org)
+    sequence = organization_sequence_row(c, org)
     # D7.8's operator kinds are closed and name no backfill event; the genesis
-    # heads themselves are the record (verify recomputes them).
+    # heads themselves are the record (verify recomputes them), and so is the
+    # sequence row (D7.7).
     c.commit()
-    return {"organization_id": org, "created": created, "existing": existing, "deferred": [deferred]}
+    return {"organization_id": org, "created": created, "existing": existing, "sequence": sequence}
 
 
 def issue(c, args):
@@ -416,13 +775,16 @@ def issue(c, args):
                               AND r.code_id=p.code_id AND r.operation='revoke')""",
                           (org, args.provider_issuer, args.provider_tenant, email_digest(args.provider_email))).fetchone() == (0,),
                 "provider_invitation_exists")
-    raw = secrets.token_bytes(DEFAULTS["code_secret_bytes"])
+    # Pre-minted (APP-078 managed channel): only the digest is known here and
+    # the secret is never printed; otherwise draw it now and print it once.
+    raw = None if args.code_digest is not None else secrets.token_bytes(DEFAULTS["code_secret_bytes"])
+    digest = args.code_digest if raw is None else code_digest(raw)
     code_id = str(uuid.uuid4())
-    c.execute("INSERT INTO genui_private.code_index(code_digest,organization_id) VALUES (%s,%s)", (code_digest(raw), org))
+    c.execute("INSERT INTO genui_private.code_index(code_digest,organization_id) VALUES (%s,%s)", (digest, org))
     c.execute("""INSERT INTO genui.access_codes(organization_id,code_id,code_digest,kind,status,destination_organization_id,max_redemptions,
                  redeemed_count,issued_at,expires_at,trial_days,issued_by,revoked_at)
                  VALUES (%s,%s,%s,%s,'active',%s,%s,0,now(),now()+make_interval(days=>%s),%s,%s,NULL)""",
-              (org, code_id, code_digest(raw), args.kind, org, args.max_redemptions, args.expires_days,
+              (org, code_id, digest, args.kind, org, args.max_redemptions, args.expires_days,
                DEFAULTS["trial_entitlement_days"], "genui_migration:" + args.issued_by))
     for permission, app, work, source in args.templates:
         c.execute("""INSERT INTO genui.code_grant_templates(organization_id,code_id,permission,app_id,work_id,source_id)
@@ -440,8 +802,11 @@ def issue(c, args):
     c.commit()
     # Only after the commit succeeded: the one and only appearance of the secret
     # (printed by main once the provider phase below has finished).
-    result = {"code_id": code_id, "code": encode_code(raw), "kind": args.kind, "max_redemptions": args.max_redemptions,
-              "expires_at": timestamp(expires)}
+    result = {"code_id": code_id, "kind": args.kind, "max_redemptions": args.max_redemptions, "expires_at": timestamp(expires)}
+    if raw is None:
+        result["code_digest"] = digest
+    else:
+        result["code"] = encode_code(raw)
     if invited:
         # Review m5: the code committed above is printed whatever happens in the provider phase,
         # including an interrupt; an unrecorded outcome is left to reconcile.
@@ -487,12 +852,26 @@ def list_codes(c, args):
           FROM genui.provider_invitations WHERE organization_id=%s ORDER BY created_at,operation,invitation_id""", (org,)).fetchall():
         invitations.setdefault(code, []).append({"invitation_id": invitation, "operation": operation, "state": state,
                                                  "remote_invitation_id": remote})
+    # APP-076 G5: who redeemed each code, by identifier, so `revoke-entitlement` and
+    # `revoke-membership` can name the redeemer; with the member's and entitlement's
+    # current status (never a provider subject, address or token). APP-078 review M5: LEFT
+    # JOINs, so a redemption is never hidden; an absent row shows as a null status.
+    redemptions = {}
+    for code, redemption, principal, entitlement, committed, member_status, entitlement_status in c.execute("""SELECT d.code_id::text,
+          d.redemption_id::text,d.principal_id::text,d.entitlement_id::text,d.committed_at,m.status,e.status
+          FROM genui.code_redemptions d LEFT JOIN genui.memberships m ON m.organization_id=d.organization_id AND m.principal_id=d.principal_id
+          LEFT JOIN genui.entitlements e ON e.organization_id=d.organization_id AND e.principal_id=d.principal_id AND e.entitlement_id=d.entitlement_id
+          WHERE d.organization_id=%s ORDER BY d.committed_at,d.redemption_id""", (org,)).fetchall():
+        redemptions.setdefault(code, []).append({"redemption_id": redemption, "principal_id": principal, "entitlement_id": entitlement,
+                                                 "redeemed_at": timestamp(committed), "membership_status": member_status,
+                                                 "entitlement_status": entitlement_status})
     c.commit()
     codes = [{"code_id": r[0], "kind": r[1], "status": r[2], "max_redemptions": r[3], "redeemed_count": r[4],
               "live_pending_admissions": r[5], "lapsed_pending_admissions": r[10], "denied_for_reconciliation": r[11],
               "live_reservations": r[6], "issued_at": timestamp(r[7]),
               "expires_at": timestamp(r[8]), "revoked_at": timestamp(r[9]) if r[9] else None,
-              "provider_invitations": invitations.get(r[0], [])} for r in rows[:DEFAULTS["list_rows_max"]]]
+              "provider_invitations": invitations.get(r[0], []), "redemptions": redemptions.get(r[0], [])}
+             for r in rows[:DEFAULTS["list_rows_max"]]]
     return {"organization_id": org, "codes": codes, "truncated": len(rows) > DEFAULTS["list_rows_max"]}
 
 
@@ -520,12 +899,24 @@ def revoke(c, args):
     result = {"code_id": code_id, "status": "revoked", "changed": True, "provider_revocations_pending": len(revocations)}
     # The local revocation above is final whatever happens remotely; a failed or
     # unknown remote revocation never restores it.
-    config = args.provider_config
-    result.update(provider_phase="not_configured", capabilities_destroyed=None, provider_revocations=[])
+    config, store = args.provider_config, getattr(args, "capability_store", None)
+    result.update(provider_phase="not_configured", capability_phase="not_configured", capabilities_destroyed=None,
+                  provider_revocations=[])
+    # ADR-003 amendment 2026-10-30: the capability leaves the environment's secret first
+    # (the service drops it at its next task start; the code already refuses).
+    if store is not None:
+        try:
+            result["capabilities_destroyed"] = destroy_code_capabilities(c, org, code_id, store)
+            result["capability_phase"] = "completed"
+        except Refused as refusal:
+            _rollback(c)
+            result["capability_phase"] = str(refusal)  # reconcile's sweep removes it later
+        except Exception:
+            _rollback(c)
+            result["capability_phase"] = "incomplete"
     if config is None:
         return result
     try:
-        result["capabilities_destroyed"] = destroy_code_capabilities(c, org, code_id, config.capability_dir)
         result["provider_revocations"], result["provider_phase"] = [], "completed"
         if revocations:
             client = provider.Client(config)
@@ -712,6 +1103,174 @@ def revoke_creator_authority(c, args):
     return dict(result, changed=True, membership_epoch=epoch)
 
 
+def register_source_revision(c, args):
+    """One new immutable revision row with real digests; never a rewrite (ADR-009 D9.3).
+
+    The envelope is the source's existing revision envelope with the same
+    contract (its input contract, parser, mapping, format and time semantics),
+    carrying the new identity, digests, row count and creation time; it must
+    validate as a `source_revision` and reproduce the record's contract digest.
+    """
+    contracts = str(runtime.Path(runtime.__file__).resolve().parents[2] / "contracts")
+    if contracts not in sys.path:
+        sys.path.insert(0, contracts)
+    from validate import canonical as contract_canonical, digest as contract_digest, validate as contract_validate
+    record, org = args.revision_record, args.organization
+    begin(c, org)
+    lock_organization(c, org, active=True)
+    require(c.execute("SELECT 1 FROM genui.sources WHERE organization_id=%s AND source_id=%s",
+                      (org, record["source_id"])).fetchone() is not None, "source_unknown")
+    existing = c.execute("""SELECT content_digest::text,normalized_digest::text,contract_digest::text,deleted_at IS NULL
+          FROM genui.source_revisions WHERE organization_id=%s AND source_id=%s AND revision_id=%s""",
+                         (org, record["source_id"], record["revision_id"])).fetchone()
+    result = {"organization_id": org, "source_id": record["source_id"], "revision_id": record["revision_id"],
+              "normalized_digest": record["normalized_digest"], "contract_digest": record["contract_digest"]}
+    if existing is not None:
+        require(tuple(existing) == (record["content_digest"], record["normalized_digest"], record["contract_digest"], True),
+                "revision_exists_differs")
+        c.commit()
+        return dict(result, changed=False)
+    template = c.execute("""SELECT canonical_envelope FROM genui.source_revisions WHERE organization_id=%s AND source_id=%s
+          AND contract_digest=%s AND deleted_at IS NULL ORDER BY revision_id LIMIT 1""",
+                         (org, record["source_id"], record["contract_digest"])).fetchone()
+    require(template is not None, "contract_unknown")
+    envelope = json.loads(bytes(template[0]))
+    created = c.execute("SELECT now()").fetchone()[0]
+    envelope.update({"revision_id": record["revision_id"], "content_digest": record["content_digest"],
+                     "normalized_digest": record["normalized_digest"], "row_count": record["row_count"],
+                     "created_at": timestamp(created)})
+    try:
+        contract_validate(envelope)
+    except Exception:
+        raise Refused("envelope_refused") from None
+    require(envelope["organization_id"] == org and envelope["source_id"] == record["source_id"], "envelope_refused")
+    require(contract_digest("input-contract", envelope["input_contract"]) == record["contract_digest"], "contract_refused")
+    c.execute("""INSERT INTO genui.source_revisions(organization_id,source_id,revision_id,content_digest,normalized_digest,
+          contract_digest,deleted_at,canonical_envelope) VALUES (%s,%s,%s,%s,%s,%s,NULL,%s)""",
+              (org, record["source_id"], record["revision_id"], record["content_digest"], record["normalized_digest"],
+               record["contract_digest"], contract_canonical(envelope)))
+    c.commit()
+    return dict(result, changed=True, row_count=record["row_count"], created_at=envelope["created_at"])
+
+
+def create_bound_work(c, args):
+    """A new saved work (version 1) rebinding one source input; nothing is rewritten.
+
+    It copies `--from-work`'s publication, context and every binding, except
+    that `--input` binds `--revision` of the same source, which must be live
+    and carry the same contract digest. Each published record schema gets a
+    new, empty collection. The creator must be an active member holding `run`
+    on the app and `source_read` on every bound source, as the workspace's own
+    `create_work` requires; the work records them as its creator (ADR-007
+    amendment, review M2), so no work grant is written. A rerun with the same
+    bindings is `unchanged`; any other existing work id is refused.
+    """
+    org, app, work, origin, creator = args.organization, args.app, args.work, args.from_work, args.creator
+    begin(c, org)
+    lock_active_member(c, org, creator)
+    row = c.execute("SELECT publication_id::text,context FROM genui.saved_work WHERE organization_id=%s AND app_id=%s AND work_id=%s",
+                    (org, app, origin)).fetchone()
+    require(row is not None, "work_unknown")
+    publication, context = row
+    bindings = c.execute("""SELECT input_id::text,kind,contract_digest::text,source_id::text,source_revision_id::text,source_digest::text,
+          schema_id::text,schema_version FROM genui.work_bindings WHERE organization_id=%s AND app_id=%s AND work_id=%s ORDER BY input_id""",
+                         (org, app, origin)).fetchall()
+    target = [b for b in bindings if b[0] == args.input]
+    require(len(target) == 1 and target[0][1] == "source" and target[0][3] == args.source, "binding_refused")
+    revision = c.execute("""SELECT normalized_digest::text FROM genui.source_revisions WHERE organization_id=%s AND source_id=%s
+          AND revision_id=%s AND contract_digest=%s AND deleted_at IS NULL""", (org, args.source, args.revision, target[0][2])).fetchone()
+    require(revision is not None, "revision_refused")
+    planned = []
+    for input_id, kind, contract, source, source_revision, source_digest, schema, version in bindings:
+        if input_id == args.input:
+            source_revision, source_digest = args.revision, revision[0]
+        planned.append((input_id, kind, contract, source, source_revision, source_digest, schema, version))
+    sources = sorted({b[3] for b in planned if b[1] == "source"})
+    require(c.execute("SELECT 1 FROM genui.app_permissions WHERE organization_id=%s AND principal_id=%s AND app_id=%s AND permission='run'",
+                      (org, creator, app)).fetchone() is not None, "creator_lacks_authority")
+    for source in sources:
+        require(c.execute("""SELECT 1 FROM genui.source_permissions WHERE organization_id=%s AND principal_id=%s AND source_id=%s
+              AND permission='source_read'""", (org, creator, source)).fetchone() is not None, "creator_lacks_authority")
+    result = {"work_id": work, "publication_id": publication, "version": 1, "creator_principal_id": creator,
+              "bindings": [{"input_id": b[0], "kind": b[1], "source_id": b[3], "source_revision_id": b[4], "source_digest": b[5]}
+                           for b in planned]}
+    existing = c.execute("SELECT publication_id::text,created_by::text FROM genui.saved_work WHERE organization_id=%s AND app_id=%s AND work_id=%s",
+                         (org, app, work)).fetchone()
+    if existing is not None:
+        current = c.execute("""SELECT input_id::text,source_id::text,source_revision_id::text,source_digest::text FROM genui.work_bindings
+              WHERE organization_id=%s AND app_id=%s AND work_id=%s AND kind='source' ORDER BY input_id""", (org, app, work)).fetchall()
+        require(tuple(existing) == (publication, creator)
+                and [tuple(r) for r in current] == [(b[0], b[3], b[4], b[5]) for b in planned if b[1] == "source"], "work_exists")
+        c.commit()
+        return dict(result, changed=False)
+    c.execute("""INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by)
+          VALUES (%s,%s,%s,%s,1,%s,%s)""", (org, app, work, publication, context, creator))
+    collections = {}
+    for schema, version in c.execute("""SELECT schema_id::text,schema_version FROM genui.publication_record_schemas
+          WHERE organization_id=%s AND app_id=%s AND publication_id=%s ORDER BY schema_id,schema_version""", (org, app, publication)).fetchall():
+        collections[(schema, version)] = str(uuid.uuid4())
+        c.execute("""INSERT INTO genui.record_collections(organization_id,app_id,work_id,publication_id,collection_id,schema_id,schema_version)
+              VALUES (%s,%s,%s,%s,%s,%s,%s)""", (org, app, work, publication, collections[(schema, version)], schema, version))
+    for input_id, kind, contract, source, source_revision, source_digest, schema, version in planned:
+        if kind == "source":
+            c.execute("""INSERT INTO genui.work_bindings(organization_id,app_id,work_id,publication_id,input_id,kind,contract_digest,
+                  source_id,source_revision_id,source_digest) VALUES (%s,%s,%s,%s,%s,'source',%s,%s,%s,%s)""",
+                      (org, app, work, publication, input_id, contract, source, source_revision, source_digest))
+            c.execute("""INSERT INTO genui.work_source_dependencies(organization_id,app_id,work_id,input_id,source_id,source_revision_id,
+                  source_digest) VALUES (%s,%s,%s,%s,%s,%s,%s)""", (org, app, work, input_id, source, source_revision, source_digest))
+        else:
+            require((schema, version) in collections, "binding_refused")
+            c.execute("""INSERT INTO genui.work_bindings(organization_id,app_id,work_id,publication_id,input_id,kind,contract_digest,
+                  collection_id,schema_id,schema_version,revision_policy) VALUES (%s,%s,%s,%s,%s,'records',%s,%s,%s,%s,'committed_snapshot')""",
+                      (org, app, work, publication, input_id, contract, collections[(schema, version)], schema, version))
+    c.commit()
+    return dict(result, changed=True)
+
+
+def seed_spend_review(c, args):
+    """APP-076 G3: the Spend Review fixture bundle in a fixture organization (Northstar), through the
+    operator seed itself.
+
+    tenant_seed.make_bundle rewrites the retained edition's bundle onto the organization exactly
+    as the seed does for the second fixture organization, and tenant_seed.seed writes the same rows
+    with the same `ON CONFLICT DO NOTHING` then equality check, so a repeat is `changed: false` and a
+    differing row refuses whole. Lock order: the organization FOR SHARE first (D7.1), then the
+    seed's own writes under scope. D7.7: the organization's commit sequence (if backfilled) must
+    stay ahead of every seeded record revision, else nothing is kept. No audit event (D7.8 names
+    no kind; APP-084 item 6): this JSON output is the record.
+    """
+    import tenant_seed
+    org = args.organization
+    require(org in tenant_seed.ORGANIZATIONS, "organization_refused")
+    try:
+        bundle = tenant_seed.make_bundle("spend-review", org)
+    except Exception:
+        raise Refused("seed_bundle_refused") from None
+    begin(c, org)
+    lock_organization(c, org, active=True)
+    # tenant_seed.seed proves the migration identity itself and takes the owner role for its writes.
+    c.execute("RESET ROLE")
+    changes = []
+    try:
+        tenant_seed.seed(c, [bundle], changes)
+    except ValueError:
+        raise Refused("seed_refused") from None
+    c.execute("SET LOCAL ROLE genui_owner")
+    c.execute("SELECT set_config('genui.organization_id',%s,true)", (org,))
+    sequence = c.execute("SELECT next_commit_sequence FROM genui.organization_sequences WHERE organization_id=%s", (org,)).fetchone()
+    highest = c.execute("SELECT coalesce(max(commit_sequence),0) FROM genui.internal_record_revisions WHERE organization_id=%s", (org,)).fetchone()[0]
+    require(sequence is None or sequence[0] > highest, "commit_sequence_mismatch")
+    d, pub, w, outcome = bundle["definition"], bundle["publication"], bundle["work"], bundle["outcome"]
+    c.commit()
+    return {"organization_id": org, "label": "seeded definition", "edition": SEED_EDITION, "app_id": d["app_id"],
+            "definition_revision_id": d["revision_id"], "definition_digest": d["digest"], "publication_id": pub["publication_id"],
+            "work_id": w["work_id"], "collection_ids": [item["id"] for item in w["record_collections"]],
+            "sources": [{"source_id": s["source_id"], "revision_id": s["revision_id"]} for s in bundle["sources"]],
+            "seeded_record": {"record_id": outcome["record_id"], "version": outcome["record_version"]},
+            "author_principal_id": bundle["context"]["principal_id"], "approver_principal_id": pub["approver_id"],
+            "changed": bool(changes), "rows_inserted": len(changes), "audit_event": None}
+
+
 def verify(c, args):
     """SR10: recompute every chain of the organization in chain_sequence order; the tail equals the head."""
     import psycopg
@@ -749,8 +1308,22 @@ def verify(c, args):
           AND e.writer_role='admission' AND e.kind='admission.redeemed' AND e.code_id=d.code_id
           AND e.actor_principal_id=d.principal_id AND e.outcome_digest=d.payload_digest)""", (org,)).fetchone()[0]
     require(orphans == 0, "redemption_audit_mismatch")
+    # APP-013 (0007): command_outcomes.audit_event_id carries no foreign key
+    # (D7.8); every outcome names its own command.committed event with the
+    # record and the payload digest, and the organization's sequence row is
+    # ahead of every committed revision (D7.7).
+    outcomes = c.execute("""SELECT count(*), count(*) FILTER (WHERE NOT EXISTS (
+          SELECT 1 FROM genui.audit_events e WHERE e.organization_id=o.organization_id AND e.event_id=o.audit_event_id
+          AND e.writer_role='data' AND e.kind='command.committed' AND e.record_id=o.record_id AND e.work_id=o.work_id
+          AND e.actor_principal_id=o.principal_id AND e.outcome_digest=o.payload_digest))
+          FROM genui.command_outcomes o WHERE o.organization_id=%s""", (org,)).fetchone()
+    require(outcomes[1] == 0, "command_audit_mismatch")
+    sequence = c.execute("SELECT next_commit_sequence FROM genui.organization_sequences WHERE organization_id=%s", (org,)).fetchone()
+    highest = c.execute("SELECT coalesce(max(commit_sequence),0) FROM genui.internal_record_revisions WHERE organization_id=%s", (org,)).fetchone()[0]
+    require(sequence is None or sequence[0] > highest, "commit_sequence_mismatch")
     c.commit()
-    return {"organization_id": org, "verified": True, "chains": chains}
+    return {"organization_id": org, "verified": True, "chains": chains, "command_outcomes": outcomes[0],
+            "next_commit_sequence": None if sequence is None else sequence[0]}
 
 
 # --- provider invitation operations (APP-073 acceptance 6 and 7) -------------------
@@ -807,13 +1380,35 @@ def record_revocations(c, org, code_id, lock=True):
           RETURNING invitation_id::text,provider_tenant_id""", (org, code_id)).fetchall()]
 
 
-def destroy_code_capabilities(c, org, code_id, directory):
-    """Revocation ends the private capability locally first, whatever the provider answers."""
+# ADR-003 amendment 2026-10-30: every change to the environment's capability secret is a
+# read and a whole-map PutSecretValue, so operator commands that change it take this
+# transaction-scoped advisory lock first (one per database, so one per environment). Only
+# create_remote takes it while holding rows, and no holder of this lock waits for a row
+# lock, so it adds no wait cycle to D7.1's order. The pair keeps runtime.py's lock class.
+CAPABILITY_LOCK = (1819409017, 74)
+
+
+def capability_lock(c):
+    c.execute("SELECT pg_catalog.pg_advisory_xact_lock(%s, %s)", CAPABILITY_LOCK)
+
+
+def destroy_code_capabilities(c, org, code_id, store):
+    """Revocation ends the code's capabilities in the secret first, whatever the provider answers."""
     begin(c, org)
     invitations = [r[0] for r in c.execute("""SELECT invitation_id::text FROM genui.provider_invitations
           WHERE organization_id=%s AND code_id=%s AND operation='create'""", (org, code_id)).fetchall()]
+    capability_lock(c)
+    removed = store.remove([(org, invitation) for invitation in invitations])
     c.commit()
-    return sum(1 for invitation in invitations if provider.destroy_capability(directory, org, invitation))
+    return removed
+
+
+def stored_capabilities(store):
+    """A snapshot of the secret's map, or None when it cannot be read (fixed reasons only)."""
+    try:
+        return store.read()
+    except Refused:
+        return None
 
 
 def operation_result(invitation_id, operation, state, remote, detail, **extra):
@@ -842,7 +1437,7 @@ def create_remote(c, org, invitation_id, code_id, email, role, client):
     row and then waits on a create row, so there is no wait cycle (review n7). Review m5:
     nothing after the outcome's COMMIT can stop the committed code from being printed."""
     limits = provider.PROVIDER_DEFAULTS
-    directory = client.config.capability_dir
+    store = client.config.capability_store
     margin = limits["create_send_margin_seconds"]
     try:
         begin(c, org)
@@ -876,10 +1471,17 @@ def create_remote(c, org, invitation_id, code_id, email, role, client):
         if outcome.usable and not (status == "active" and live and revoking == 0):
             detail = "code_no_longer_usable"  # revoked, expired or exhausted while the create was in flight
         elif outcome.usable:
-            # The file precedes the database update: a crash in between leaves a
-            # pending row that reconcile confirms from the file.
+            # The secret's entry precedes the database update: a crash in between
+            # leaves a pending row that reconcile confirms from the entry. It records
+            # the code's stored digest so the service's invitation entry (APP-074)
+            # can find this capability for a validated code. A refused or ambiguous
+            # write is not stored: the invitation is revoked below, and reconcile's
+            # sweep removes an entry that the ambiguous write did make.
+            digest = c.execute("SELECT code_digest FROM genui.access_codes WHERE organization_id=%s AND code_id=%s",
+                               (org, code_id)).fetchone()[0]
+            capability_lock(c)
             try:
-                provider.write_capability(directory, org, invitation_id, outcome.remote_id, outcome.token, timestamp(outcome.expires_at))
+                store.add(org, invitation_id, outcome.remote_id, outcome.token, timestamp(outcome.expires_at), code_digest=digest)
                 stored = True
             except Refused:
                 detail = "capability_unwritable"
@@ -892,8 +1494,9 @@ def create_remote(c, org, invitation_id, code_id, email, role, client):
         c.commit()
     except Exception:
         _rollback(c)
+        snapshot = stored_capabilities(store)
         return operation_result(invitation_id, "create", "pending", None, "outcome_unrecorded",
-                                capability_stored=provider.capability_present(directory, org, invitation_id))
+                                capability_stored=None if snapshot is None else provider.capability_present(snapshot, org, invitation_id))
     result = operation_result(invitation_id, "create", outcome.state, outcome.remote_id, detail, capability_stored=stored)
     if outcome.provider_error:
         result["provider_error"] = outcome.provider_error
@@ -983,7 +1586,7 @@ def judge_creates(c, org, client, tenant, scan):
     limits = provider.PROVIDER_DEFAULTS
     skew = datetime.timedelta(seconds=limits["reconcile_clock_skew_seconds"])
     lifetime = limits["provider_invitation_hours_default"] * 3600 + limits["reconcile_clock_skew_seconds"]
-    directory = client.config.capability_dir
+    store = client.config.capability_store
     begin(c, org)
     held = c.execute("""SELECT invitation_id::text,state,intended_email_digest,provider_role,created_at,updated_at,code_id::text,
           updated_at<=now()-make_interval(secs=>%s) FROM genui.provider_invitations
@@ -996,8 +1599,15 @@ def judge_creates(c, org, client, tenant, scan):
     known = {r[0] for r in c.execute("""SELECT remote_invitation_id FROM genui.provider_invitations
           WHERE organization_id=%s AND remote_invitation_id IS NOT NULL""", (org,)).fetchall()}
     decided, waiting = {}, {}
+    # One read of the secret serves the whole judgment; unreadable, nothing is judged from it
+    # and the rows wait for the next run.
+    snapshot = stored_capabilities(store)
+    if snapshot is None:
+        _rollback(c)
+        return [operation_result(r[0], "create", r[1], None, "capability_secret_unavailable", state_before=r[1], capability_stored=None)
+                for r in held]
     for invitation, _, _, _, _, _, _, lapsed in held:
-        record = provider.capability_record(directory, org, invitation)
+        record = provider.capability_record(snapshot, org, invitation)
         if record is not None:
             decided[invitation] = ("confirmed", record["remote_invitation_id"], "capability_record")
             known.add(record["remote_invitation_id"])
@@ -1038,7 +1648,7 @@ def judge_creates(c, org, client, tenant, scan):
                                             capability_stored=False))
             continue
         state, remote, detail = decided[invitation]
-        stored = state == "confirmed" and provider.capability_present(directory, org, invitation)
+        stored = state == "confirmed" and provider.capability_present(snapshot, org, invitation)
         if state == "confirmed" and not stored:
             unusable.append(code_id)
         entries.append(operation_result(invitation, "create", state, remote, detail, state_before=state_before, capability_stored=stored))
@@ -1060,7 +1670,7 @@ def ended_remotely(c, org, client, tenant, scan):
     limits = provider.PROVIDER_DEFAULTS
     skew = datetime.timedelta(seconds=limits["reconcile_clock_skew_seconds"])
     lifetime = limits["provider_invitation_hours_default"] * 3600 + limits["reconcile_clock_skew_seconds"]
-    directory = client.config.capability_dir
+    store = client.config.capability_store
     begin(c, org)
     rows = c.execute("""SELECT p.invitation_id::text,p.code_id::text,p.remote_invitation_id,p.created_at,
           p.updated_at<=now()-make_interval(secs=>%s) FROM genui.provider_invitations p JOIN genui.access_codes a
@@ -1082,7 +1692,7 @@ def ended_remotely(c, org, client, tenant, scan):
             ended[invitation] = (code_id, remote, "remote_" + statuses[remote])
         elif statuses.get(remote) == "accepted":
             spent.append((invitation, remote))
-    entries, destroyed = [], 0
+    entries = []
     for invitation, (code_id, remote, detail) in ended.items():
         begin(c, org)
         recorded = record_revocations(c, org, code_id)
@@ -1090,33 +1700,46 @@ def ended_remotely(c, org, client, tenant, scan):
             c.execute("""UPDATE genui.provider_invitations SET state='confirmed',updated_at=now() WHERE organization_id=%s AND invitation_id=%s""",
                       (org, revocation))
         c.commit()
-        destroyed += provider.destroy_capability(directory, org, invitation)
         entries += [operation_result(revocation, "revoke", "confirmed", remote, detail, state_before=None) for revocation, _ in recorded]
+    # Every ended or spent capability leaves the secret in one write.
+    removing = [invitation for invitation in ended] + [invitation for invitation, _ in spent]
+    destroyed, gone = 0, set()
+    if removing:
+        begin(c, org)
+        capability_lock(c)
+        try:
+            current = store.read()
+            gone = {invitation for invitation in removing if provider.capability_present(current, org, invitation)}
+            destroyed = store.remove([(org, invitation) for invitation in gone])
+        except Refused:
+            gone = set()  # the next reconcile's sweep removes them; the code side already refuses
+        c.commit()
     for invitation, remote in spent:
-        if provider.destroy_capability(directory, org, invitation):
-            destroyed += 1
+        if invitation in gone:
             entries.append(operation_result(invitation, "create", "confirmed", remote, "remote_accepted", state_before="confirmed",
                                             capability_stored=False))
     return entries, destroyed
 
 
-def sweep_capabilities(c, org, directory):
-    """End every capability that can no longer be handed off: its code is revoked, expired or
-    exhausted, a revocation is recorded, its create failed or is unknown to the ledger, or the
-    provider's own invitation expiry has passed. A partial write older than the grace is a
-    writer that stopped before linking it (review m6); younger ones are left to their writer."""
+def sweep_capabilities(c, org, store):
+    """End every capability of this organization in the secret that can no longer be handed off:
+    its code is revoked, expired or exhausted, a revocation is recorded, its create failed or is
+    unknown to the ledger, or the provider's own invitation expiry has passed. One write at most,
+    under the capability lock."""
     begin(c, org)
-    now, destroyed = datetime.datetime.now(datetime.timezone.utc), 0
-    destroyed += provider.remove_stale_partials(directory, org, provider.PROVIDER_DEFAULTS["reconcile_grace_seconds"])
-    for invitation in provider.capability_invitations(directory, org):
+    capability_lock(c)
+    now, ending = datetime.datetime.now(datetime.timezone.utc), []
+    current = store.read()
+    for invitation in provider.capability_invitations(current, org):
         row = c.execute("""SELECT p.state<>'failed' AND a.status='active' AND a.expires_at>now() AND NOT EXISTS (
               SELECT 1 FROM genui.provider_invitations r WHERE r.organization_id=p.organization_id AND r.code_id=p.code_id
               AND r.operation='revoke') FROM genui.provider_invitations p JOIN genui.access_codes a
               ON a.organization_id=p.organization_id AND a.code_id=p.code_id
               WHERE p.organization_id=%s AND p.invitation_id=%s AND p.operation='create'""", (org, invitation)).fetchone()
-        expiry = provider.capability_expiry(directory, org, invitation)
-        if not (row == (True,) and expiry is not None and expiry > now) and provider.destroy_capability(directory, org, invitation):
-            destroyed += 1
+        expiry = provider.capability_expiry(current, org, invitation)
+        if not (row == (True,) and expiry is not None and expiry > now):
+            ending.append((org, invitation))
+    destroyed = store.remove(ending)
     c.commit()
     return destroyed
 
@@ -1168,8 +1791,12 @@ def _reconcile(c, org, config):
           ORDER BY a.code_id LIMIT %s FOR UPDATE OF a""", (org, limits["reconcile_operations_max"])).fetchall()
     recorded = sum(len(record_revocations(c, org, code, lock=False)) for (code,) in codes)
     c.commit()
-    # 2. End capabilities locally before any provider call.
-    destroyed = sweep_capabilities(c, org, config.capability_dir)
+    # 2. End capabilities in the secret before any provider call (ADR-003 amendment 2026-10-30).
+    try:
+        destroyed, capability_phase = sweep_capabilities(c, org, config.capability_store), "completed"
+    except Refused as refusal:
+        _rollback(c)
+        destroyed, capability_phase = 0, str(refusal)
     # 3. Inventory: what needs the provider.
     begin(c, org)
     # Operations past the provider lifetime are settled without inspection, so they never widen the scan.
@@ -1190,7 +1817,7 @@ def _reconcile(c, org, config):
     creates = creates[:limits["reconcile_operations_max"]]
     result = {"organization_id": org, "revocations_recorded": recorded, "capabilities_destroyed": destroyed, "operations": [],
               "deferred": sum(1 for r in creates if not r[1]), "truncated": truncated, "provider_phase": "completed",
-              "capability_directory_class": provider.directory_class(str(config.capability_dir))}
+              "capability_store": "secrets_manager", "capability_phase": capability_phase}
     ready = [r for r in creates if r[1]]
     if not ready and not revokes and not live:
         return result
@@ -1231,25 +1858,122 @@ def _reconcile(c, org, config):
     return result
 
 
-COMMANDS = {"provision": provision, "backfill": backfill, "issue": issue, "list": list_codes, "revoke": revoke,
+# --- sign-in handles (ADR-006 §handle; D7.2, D7.19; APP-009) ----------------------
+#
+# A handle is 16 CSPRNG bytes shown as 26 lowercase base32 characters; only its
+# domain-separated digest is stored, in genui_private.handle_index. It is
+# non-secret routing (it appears in https://beta.getforma.dev/signin/{handle}
+# and in fAuth's client return_entry_url) and grants nothing. Every handle
+# operation locks the organization FOR SHARE and then the organization's
+# operator audit head FOR UPDATE, which serializes handle changes per
+# organization, and appends one `handle.rotated` event (D7.8's only handle kind).
+
+def live_handles(c, org):
+    return c.execute("""SELECT count(*) FROM genui_private.handle_index WHERE organization_id=%s
+          AND (retired_at IS NULL OR retired_at>now())""", (org,)).fetchone()[0]
+
+
+def lock_handles(c, org):
+    lock_organization(c, org, active=True)
+    require(c.execute("SELECT 1 FROM genui.audit_heads WHERE organization_id=%s AND writer_role='operator' FOR UPDATE",
+                      (org,)).fetchone() is not None, "audit_chain_not_provisioned")
+
+
+def add_handle(c, org, raw):
+    raw = raw if raw is not None else secrets.token_bytes(DEFAULTS["handle_bytes"])
+    require(c.execute("SELECT count(*) FROM genui_private.handle_index WHERE handle_digest=%s",
+                      (handle_digest(raw),)).fetchone() == (0,), "handle_taken")
+    c.execute("INSERT INTO genui_private.handle_index(handle_digest,organization_id,retired_at) VALUES (%s,%s,NULL)",
+              (handle_digest(raw), org))
+    append(c, org, "handle.rotated")
+    return raw
+
+
+def issue_handle(c, args):
+    """The first live handle of an organization that has none (one created before
+    handles existed, such as the two fixture organizations). `--handle` installs an
+    exact, already-issued handle, so one routing value can be registered with fAuth
+    once and installed in each environment; otherwise a fresh handle is drawn."""
+    org = args.organization
+    begin(c, org)
+    lock_handles(c, org)
+    require(live_handles(c, org) == 0, "handle_exists")
+    raw = add_handle(c, org, args.raw_handle)
+    c.commit()
+    return {"organization_id": org, "handle": encode_handle(raw), "live_handles": 1}
+
+
+def rotate_handle(c, args):
+    """Rotation step 1: a new live handle beside the current one; both route
+    until FormaStack re-registers return_entry_url and `retire-handle` runs."""
+    org = args.organization
+    begin(c, org)
+    lock_handles(c, org)
+    live = live_handles(c, org)
+    require(live == 1, "handle_missing" if live == 0 else "rotation_in_progress")
+    raw = add_handle(c, org, args.raw_handle)
+    c.commit()
+    return {"organization_id": org, "handle": encode_handle(raw), "live_handles": 2}
+
+
+def retire_handle(c, args):
+    """Rotation step 2: the named handle stops routing; never the last live one."""
+    org = args.organization
+    begin(c, org)
+    lock_handles(c, org)
+    row = c.execute("""SELECT organization_id::text,retired_at IS NULL OR retired_at>now() FROM genui_private.handle_index
+          WHERE handle_digest=%s FOR UPDATE""", (handle_digest(args.raw_handle),)).fetchone()
+    require(row is not None and row[0] == org, "handle_unknown")
+    require(row[1], "handle_retired")
+    live = live_handles(c, org)
+    require(live >= 2, "last_live_handle")
+    c.execute("UPDATE genui_private.handle_index SET retired_at=now() WHERE handle_digest=%s", (handle_digest(args.raw_handle),))
+    append(c, org, "handle.rotated")
+    c.commit()
+    return {"organization_id": org, "retired": True, "live_handles": live - 1}
+
+
+COMMANDS = {"provision": provision, "bind-provider-tenant": bind_provider_tenant, "backfill": backfill, "issue": issue, "list": list_codes, "revoke": revoke,
             "extend": extend, "revoke-entitlement": revoke_entitlement, "revoke-membership": revoke_membership, "verify": verify,
             "reconcile": reconcile, "grant-permission": grant_permission, "revoke-permission": revoke_permission,
-            "create-app": create_app, "revoke-creator-authority": revoke_creator_authority}
+            "create-app": create_app, "revoke-creator-authority": revoke_creator_authority,
+            "issue-handle": issue_handle, "rotate-handle": rotate_handle, "retire-handle": retire_handle,
+            "register-source-revision": register_source_revision, "create-bound-work": create_bound_work,
+            "seed-spend-review": seed_spend_review}
 
 
 def provider_configuration(args):
-    """Validated before any connection: required to create or reconcile, optional to revoke."""
+    """Validated before any connection: required (with the capability secret) to create or
+    reconcile, optional to revoke."""
+    secret_id = getattr(args, "capability_secret_id", None)
     if args.command == "issue" and args.provider_email is not None or args.command == "reconcile":
-        return provider.load_config(os.environ, required=True)
+        return provider.load_config(os.environ, required=True, secret_id=secret_id)
     if args.command == "revoke":
-        return provider.load_config(os.environ, required=False)
+        return provider.load_config(os.environ, required=False, secret_id=secret_id)
+    return None
+
+
+def capability_store(args):
+    """The capability secret: the provider configuration's, or for `revoke` the secret alone, so a
+    revocation with no provider settings (the managed OperatorTask) still ends the code's capability."""
+    if args.provider_config is not None:
+        return args.provider_config.capability_store
+    if args.command == "revoke":
+        return provider.load_store(os.environ, getattr(args, "capability_secret_id", None))
     return None
 
 
 def main(argv=None):
     try:
         args = validate(parser().parse_args(argv))
+        if getattr(args, "provider_input_from_secret", False):
+            # Managed invitations: the entry is bound before the provider configuration is
+            # loaded, so a missing or mismatched entry refuses before any connection or call.
+            bind_invitation_input(args, os.environ)
+        if getattr(args, "from_auth_configuration", False):
+            bind_from_auth_configuration(args, os.environ)
         args.provider_config = provider_configuration(args)
+        args.capability_store = capability_store(args)
         if args.command == "defaults":
             result = dict(DEFAULTS, provider=dict(provider.PROVIDER_DEFAULTS))
         else:

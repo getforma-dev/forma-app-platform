@@ -11,6 +11,14 @@ from validate import (ContractError, SCHEMA, canonical, digest, domain_name, exa
 
 ROOT = Path(__file__).resolve().parent
 RETAINED = ROOT / "fixtures" / "impl-2026-10-28.1"
+RETAINED_TWO = ROOT / "fixtures" / "impl-2026-10-29.2"
+# The fixture identities edition impl-2026-10-29.2 locked; its copies are retained byte-identically.
+EDITION_TWO_FIXTURES = {
+    "canonical-vectors": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
+    "negative-vectors": "315a9d32e91dbeaf21c0ad3ec6f8e882315e46ef23b7db4c3c47f4b161ae1cbc",
+    "northstar": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
+    "spend-review": "186162da87532f368ed3c74faafc46c04780cc7331c095dc92f729bead0f0851"
+}
 # The fixture identities edition impl-2026-10-28.1 locked; its copies are retained byte-identically.
 EDITION_ONE_FIXTURES = {
     "canonical-vectors": "33b46ff5970bdcd5259f23bdb5e9a7fcda4c5eeffebe93e0fedfebf5f661203d",
@@ -343,3 +351,101 @@ class CanonicalTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class EditionThreeTests(unittest.TestCase):
+    """Edition impl-2026-10-29.3 (ADR-007 D7.15, APP-013): the recovery view, the claim and the command problem codes."""
+
+    def test_edition_three_retains_edition_two_byte_identically(self):
+        for name, identity in EDITION_TWO_FIXTURES.items():
+            with self.subTest(fixture=name):
+                self.assertEqual(hashlib.sha256((RETAINED_TWO / (name + ".json")).read_bytes()).hexdigest(), identity)
+                # The current edition's bundles and vectors are edition two's, unchanged.
+                self.assertEqual((RETAINED_TWO / (name + ".json")).read_bytes(), (ROOT / "fixtures" / (name + ".json")).read_bytes())
+        for name in ("northstar", "spend-review"):
+            validate_bundle(loads((RETAINED_TWO / (name + ".json")).read_bytes()))
+
+    def test_recovery_views_claim_and_problem_bodies_validate(self):
+        specimen = fixture("command-recovery")
+        self.assertEqual(specimen, make_fixtures.command_recovery())
+        for view in specimen["recovery_views"]:
+            validate(view)
+            self.assertEqual(canonical(view), canonical(loads(canonical(view))))
+        validate(specimen["claim"])
+        self.assertEqual(specimen["claim"]["payload_digest"], payload_digest(fixture("spend-review")["command"]))
+        for body in specimen["problems"]:
+            with self.subTest(code=body["code"]):
+                validate_problem(body)
+        # Edition-two problem bodies are unchanged.
+        validate_problem({"status": 429, "code": "limit_exceeded", "limit": "task_queue", "retry_after_seconds": 7})
+        validate_problem({"status": 413, "code": "payload_too_large"})
+
+    def test_recovery_view_and_problem_refusals(self):
+        specimen = fixture("command-recovery")
+        stale_edit, reused_key, absent = specimen["recovery_views"]
+        cases = [
+            ("a key conflict names the stored outcome", dict(stale_edit, reason="payload_mismatch"), "stored outcome"),
+            ("a version conflict names none", dict(reused_key, reason="expected_version"), "stored outcome"),
+            ("values iff the record exists", dict(absent, current_values=[]), "current values iff"),
+            ("values iff the record exists (absent values on a live record)", dict(stale_edit, current_values=None), "current values iff"),
+            ("stored outcome under another key", dict(reused_key, idempotency_key="00000000000000000000000000000001"), "scope mismatch"),
+            ("duplicate recovery value", dict(stale_edit, current_values=[stale_edit["current_values"][0]] * 2), "duplicate recovery value"),
+        ]
+        for label, view, expected in cases:
+            with self.subTest(case=label), self.assertRaisesRegex(ContractError, expected):
+                validate(view)
+        with self.assertRaisesRegex(ContractError, "schema"):
+            validate(dict(stale_edit, reason="overwritten"))
+        with self.assertRaisesRegex(ContractError, "schema"):
+            validate(dict(specimen["claim"], idempotency_key="short"))
+        problems = [
+            ("conflict without its view", {"status": 409, "code": "conflict"}, "conflict is 409 with the recovery view"),
+            ("conflict at 412", {"status": 412, "code": "conflict", "recovery_view": stale_edit}, "conflict is 409"),
+            ("a view on another code", {"status": 400, "code": "malformed_command", "recovery_view": stale_edit}, "only a conflict carries one"),
+            ("stale without the revision", {"status": 412, "code": "stale"}, "stale is 412 with the current revision"),
+            ("stale at 409", {"status": 409, "code": "stale", "current_revision": specimen["problems"][2]["current_revision"]}, "stale is 412"),
+            ("in_flight without Retry-After", {"status": 409, "code": "in_flight"}, "in_flight and busy are 409 with Retry-After"),
+            ("busy at 503", {"status": 503, "code": "busy", "retry_after_seconds": 2}, "in_flight and busy are 409"),
+            ("Retry-After on a 400", {"status": 400, "code": "malformed_command", "retry_after_seconds": 2}, "only a 429, in_flight or busy does"),
+            ("a limit on in_flight", {"status": 409, "code": "in_flight", "retry_after_seconds": 2, "limit": "task_queue"}, "in_flight and busy are 409 with Retry-After seconds"),
+            ("an unregistered code", {"status": 409, "code": "overwritten"}, "schema"),
+        ]
+        for label, body, expected in problems:
+            with self.subTest(case=label), self.assertRaisesRegex(ContractError, expected):
+                validate_problem(body)
+
+    def test_create_on_an_existing_record_must_name_a_declared_transition(self):
+        """Edition impl-2026-10-29.3 amendment (APP-013 review M1): a create command expects the absent record
+        (version 0), or an existing version only when its declaration has transitions and the command carries a
+        declared transition's target value; an update command expects an existing version."""
+        def moved(bundle, status, version):
+            bundle["command"]["expected_record_version"] = version
+            bundle["command"]["values"][0]["value"]["value"] = status
+            bundle["outcome"]["record_version"] = version + 1
+            bundle["outcome"]["payload_digest"] = payload_digest(bundle["command"])
+            return bundle
+        # S05 ik-2: reviewed under a new key at version 1 is the declared needs_context -> reviewed transition.
+        validate_bundle(moved(fixture("spend-review"), "reviewed", 1))
+        validate_bundle(moved(fixture("northstar"), "reviewed", 3))
+        # At version 1 without a transition target (a note-only or identical resubmission) it is refused.
+        with self.assertRaisesRegex(ContractError, "create expects absent record"):
+            validate_bundle(moved(fixture("spend-review"), "needs_context", 1))
+        # A create whose declaration has no transitions still expects the absent record.
+        bundle = moved(fixture("spend-review"), "reviewed", 1)
+        bundle["definition"]["content"]["commands"][0]["transitions"] = []
+        with self.assertRaisesRegex(ContractError, "create expects absent record"):
+            check_command(bundle)
+        # An update expects an existing version.
+        bundle = fixture("spend-review")
+        bundle["definition"]["content"]["commands"][0]["operation"] = "update"
+        with self.assertRaisesRegex(ContractError, "update expects an existing version"):
+            check_command(bundle)
+
+
+def check_command(bundle):
+    """validate_bundle after a definition edit: re-identify the definition and its pins."""
+    definition = bundle["definition"]
+    definition["digest"] = digest("app-definition", definition["content"])
+    bundle["publication"]["definition_digest"] = bundle["receipt"]["definition_digest"] = definition["digest"]
+    rehash_receipt(bundle["receipt"])
+    validate_bundle(bundle)

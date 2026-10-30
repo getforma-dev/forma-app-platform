@@ -19,6 +19,8 @@ COPY app/src ./src
 COPY app/migrations ./migrations
 COPY app/certs/rds-global-bundle.pem ./certs/rds-global-bundle.pem
 COPY contracts/implementation-lock.json /source/contracts/implementation-lock.json
+# contracts/schema.json is embedded by commands/tests.rs and managed_qualification.rs (APP-013).
+COPY contracts/schema.json /source/contracts/schema.json
 COPY contracts/fixtures /source/contracts/fixtures
 COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml
 COPY spikes/APP-006/src /source/spikes/APP-006/src

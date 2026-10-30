@@ -1,0 +1,81 @@
+{
+  "binary": "app/target/debug/forma-app-platform built at the worktree tip (f442c1a plus this pass), cargo +1.93.1, debug profile",
+  "deny_all_environment": [
+    "FORMA_BIND_ADDRESS",
+    "FORMA_PORT",
+    "GENUI_RDS_CA_FILE",
+    "GENUI_RUNTIME_CONFIG_FILE"
+  ],
+  "health_live": 200,
+  "invite_validate_post": {
+    "location": null,
+    "set_cookie": false,
+    "status": 400
+  },
+  "limitation": "runtime.py serve() would also hand the child the private empty identity registry; a registry-bearing start needs the image-only /run/genui cache and scratch directories (query::EngineSettings::image), which do not exist on this host, so the local run starts the inert shell (no registry) whose refusals precede any registry or database read. The empty-registry path is covered by test_runtime.py (EmptyIdentityRegistryFile), the APP-074 invite campaign check 9 and the preflight/CDK assertions.",
+  "matrix": {
+    "any_2xx_or_3xx": false,
+    "any_set_cookie": false,
+    "classes": {
+      "callback": {
+        "distinct_bodies": 1,
+        "distinct_header_sets": 1,
+        "rows": 5,
+        "statuses": [
+          400
+        ],
+        "uniform": true
+      },
+      "cross_site": {
+        "distinct_bodies": 1,
+        "distinct_header_sets": 1,
+        "rows": 71,
+        "statuses": [
+          403
+        ],
+        "uniform": true
+      },
+      "not_found": {
+        "distinct_bodies": 1,
+        "distinct_header_sets": 1,
+        "rows": 211,
+        "statuses": [
+          404
+        ],
+        "uniform": true
+      }
+    },
+    "failures": [],
+    "rows": 287,
+    "statuses_seen": [
+      400,
+      403,
+      404
+    ]
+  },
+  "matrix_exit": 0,
+  "protected_get": {
+    "/w/00000000-0000-4000-8000-000000000065/00000000-0000-4000-8000-0000000000f2": {
+      "body": "{\"code\":\"not_found\",\"status\":404}",
+      "set_cookie": false,
+      "status": 404
+    },
+    "/work/00000000-0000-4000-8000-0000000000c9/00000000-0000-4000-8000-0000000000cd/records/00000000-0000-4000-8000-0000000000ce/00000000-0000-4000-8000-0000000013b1": {
+      "body": "{\"code\":\"not_found\",\"status\":404}",
+      "set_cookie": false,
+      "status": 404
+    },
+    "/workspace": {
+      "body": "{\"code\":\"not_found\",\"status\":404}",
+      "set_cookie": false,
+      "status": 404
+    }
+  },
+  "scope": "APP-076 G11 / item 8 local verification, 2026-10-30: the service binary started as the deny-all rollback revision starts it (no GENUI_AUTH_CONFIGURATION_JSON, no GENUI_PROVIDER_CAPABILITIES_JSON, so no GENUI_AUTH_CONFIG_FILE and no GENUI_PROVIDER_CAPABILITY_DIR), then evidence/APP-076/prep/trial_checks.py matrix --check matrix against it. Not hosted evidence; the live rollback is APP-076 runbook section 8.",
+  "signin_post": {
+    "location": null,
+    "set_cookie": false,
+    "status": 400
+  },
+  "started": true
+}

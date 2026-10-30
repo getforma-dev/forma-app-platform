@@ -1,0 +1,129 @@
+{
+  "checks": [
+    {
+      "name": "operator backfill creates each organization's organization_sequences row at 1 + max(internal_record_revisions.commit_sequence) once, and reports it existing afterwards (D7.7, D7.19)",
+      "passed": true
+    },
+    {
+      "name": "S05 Spend Review in Northstar through the admitted path over the three seeded placeholder records; no claim, outcome or data-chain event exists before the first command",
+      "passed": true
+    },
+    {
+      "name": "ik-1 at expected version 0 commits record version 1: one revision (commit_sequence 2, creator and updater the author), one current pointer, the record's source dependencies, one scoped outcome and exactly one command.committed event naming the record, in one transaction; the sequence advances to 3",
+      "passed": true
+    },
+    {
+      "name": "ik-1 retried with its now-stale expected version 0 returns the stored outcome unchanged, with no second revision, outcome or audit event; the outcome lookup by key returns the same",
+      "passed": true
+    },
+    {
+      "name": "the same key with a changed canonical payload conflicts with the authorized recovery view naming the stored outcome and the current record; nothing is written",
+      "passed": true
+    },
+    {
+      "name": "a new key expecting version 0 against version 1 conflicts (409 recovery view: expected 0, current 1 with the current values) without partially writing a record, claim or outcome",
+      "passed": true
+    },
+    {
+      "name": "a work version or publication premise that is not the saved work's is Stale (412) naming the current publication, revision, digest and work version; nothing is written",
+      "passed": true
+    },
+    {
+      "name": "ik-2 (reviewed, the declared needs_context → reviewed transition) commits version 2 at commit_sequence 3: one more revision, outcome and audit event; the current pointer is 2",
+      "passed": true
+    },
+    {
+      "name": "an undeclared transition (reviewed → needs_context on a create command), a note-only edit and a resubmission of the current values through the create command (no declared transition fires; edition impl-2026-10-29.3 amendment), an undeclared command, another schema version, a mistyped or unknown field, a malformed key, a member without record_write and the canary organization are refused with nothing written",
+      "passed": true
+    },
+    {
+      "name": "the idempotency scope includes the principal: a reviewer with record_write reads no outcome under the author's key and gets its own conflict on replaying it; a member without authority is denied; the author reads its outcome",
+      "passed": true
+    },
+    {
+      "name": "while a command holds its claim, sequence and record locks, the same key waits on the claim and a different key on the sequence row, each observed in pg_stat_activity and answered in_flight after lock_timeout (never 503) with nothing written; the released command commits its record's version 1 (commit_sequence 4), the same key then replays and the different key conflicts on the moved version",
+      "passed": true
+    },
+    {
+      "name": "a member row being updated by an operator transaction makes the authorization fence wait past lock_timeout: the command answers busy (409); a member row held FOR UPDATE blocks the claim's reference and answers in_flight (409); neither is a 503, nothing is written, and the command commits once the operator releases",
+      "passed": true
+    },
+    {
+      "name": "a backend ended before COMMIT answers is UnknownOutcome (503 unknown_outcome), never a claimed success: the outcome lookup by key finds nothing, the same key resubmitted commits once, and the lookup then finds it",
+      "passed": true
+    },
+    {
+      "name": "claims, outcomes, revisions and audit events are insert-only for the data role; it cannot write a sequence row, another chain or another principal's claim; workspace, control and worker cannot read the command relations; another principal's outcomes are row-invisible",
+      "passed": true
+    },
+    {
+      "name": "the record page renders the current record (version 1, needs_context) with a fresh 32-hex key per render and the session-bound token; no session or a member without record_read is the uniform 404",
+      "passed": true
+    },
+    {
+      "name": "the record page's form commits through the route (303 to the page with notice=committed, the record's version 2), resubmits as replayed and conflicts when edited under the same key; a value storage refuses (a status outside the enum, an unwritable field) returns 303 to the page with notice=refused; a cross-site post, a wrong token, a missing key and no session are refused before any write",
+      "passed": true
+    },
+    {
+      "name": "the JSON route answers 200 with the outcome document, 200 again on the identical retry, 409 conflict with the recovery view on a stale version or a changed payload, 412 stale on a moved work premise, 409 in_flight with Retry-After: 2 for the same key while its first command holds the claim, 200 on the outcome lookup by key (404 for another key or another principal), 400 for a missing, short, padded or repeated key and for a malformed, duplicate-member or non-JSON body, 413 over 256 KiB, 403 cross-site and 404 for a foreign path; eight commits in all",
+      "passed": true
+    },
+    {
+      "name": "every problem body the route answered (conflict, stale, in_flight, the three 400 codes, payload_too_large, cross_site, not_found) validates under contracts/validate.py validate_problem for edition impl-2026-10-29.3 (the HTTP layer's not_found and cross_site carry exactly status and code), with Retry-After equal to retry_after_seconds",
+      "passed": true
+    },
+    {
+      "name": "after every pool and store is replaced (and the old session ended with its vault), the EXP-002 decision record reads back at version 2 (reviewed) with its values, ik-1's outcome is unchanged and replays, and a fresh session reopens the page",
+      "passed": true
+    },
+    {
+      "name": "the operator recomputes the data chain (eight command.committed events) to its head and every outcome names its own event with the record and payload digest; the canary's data chain is empty; the sequence is 10 after eight commits",
+      "passed": true
+    },
+    {
+      "name": "local database and private fixture files removed",
+      "passed": true
+    }
+  ],
+  "first_outcome": {
+    "app_id": "00000000-0000-4000-8000-0000000000c9",
+    "audit_event_id": "c2fa9088-9e25-4ce4-8e94-655b982ef5c8",
+    "command_id": "record_decision",
+    "commit_sequence": 2,
+    "committed_at": "2026-10-30T03:38:26Z",
+    "idempotency_key": "00000000000000000000000000000001",
+    "kind": "command_outcome",
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "payload_digest": "sha256:42c98b5c01449b85d816562549afe9741d21bfe5b289c5beee9c8e58ff09f858",
+    "principal_id": "00000000-0000-4000-8000-0000000000ca",
+    "record_id": "00000000-0000-4000-8000-0000000000f0",
+    "record_version": 1,
+    "retry_expires_at": "2026-10-31T03:38:26Z",
+    "schema_version": 1,
+    "state": "committed",
+    "work_id": "5a5a63d8-b48b-47ea-b518-aa4022b118fe",
+    "work_version": 1
+  },
+  "limits": [
+    "Synthetic local password authentication is not RDS IAM.",
+    "Identities are synthetic registry-bound fixtures; the HTTP session is minted by a test-only constructor after the seeded membership, not by the fAuth exchange (the session campaign owns that path).",
+    "The database itself is not restarted (tmpfs fixture); the restart is of every application pool and store.",
+    "Lock waits are provoked by the pool's test-only checkpoints and a superuser transaction; APP-014 owns the revocation and adoption races in both orders.",
+    "The record page is rendered by a test page renderer; the SSR page is covered by the binary test and the HTTP smoke.",
+    "The ambiguous commit is provoked by pg_terminate_backend at a test-only checkpoint before COMMIT."
+  ],
+  "managed_acceptance": false,
+  "passed": true,
+  "s05": {
+    "app_id": "00000000-0000-4000-8000-0000000000c9",
+    "collection_id": "d5edb530-d6e6-4a19-abc5-cfac565608f4",
+    "definition_digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9",
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "publication_id": "e54dd15e-64ee-475c-bed7-44a6b00ead22",
+    "record_id": "00000000-0000-4000-8000-0000000000f0",
+    "work_id": "5a5a63d8-b48b-47ea-b518-aa4022b118fe"
+  },
+  "schema_version": 1,
+  "scope": "APP-013 isolated native PostgreSQL TLS record command, outcome and audit qualification",
+  "server_version": "16.13 (Debian 16.13-1.pgdg13+1)"
+}

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "scope": "ADR-006 organization sign-in handles issued by APP-009 for the two fixture organizations. Non-secret routing: each appears in the sign-in URL and in the fAuth client's return_entry_url; it grants nothing. Only its forma:signin-handle:v1 digest is stored, in genui_private.handle_index.",
+  "generated": "2026-10-29, 16 bytes each from the operating system CSPRNG (Python secrets), canonical lowercase RFC 4648 base32 without padding",
+  "install": "app/runtime/admission_operator.py issue-handle --organization <organization> --handle <handle> (operator channel, D7.19); the local session campaign installs exactly these values",
+  "handles": [
+    {
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "organization": "Northstar (fixture)",
+      "handle": "se45m37vabqrfvbh3gbwn22qkm",
+      "signin_url": "https://beta.getforma.dev/signin/se45m37vabqrfvbh3gbwn22qkm"
+    },
+    {
+      "organization_id": "00000000-0000-4000-8000-000000000002",
+      "organization": "Canary (fixture)",
+      "handle": "z33gibxjspwxcnopbsdxqtijey",
+      "signin_url": "https://beta.getforma.dev/signin/z33gibxjspwxcnopbsdxqtijey"
+    }
+  ],
+  "not_done_here": "No managed (RDS) database has these handles; APP-077/078 install them there with the same command, and FormaStack registers each return_entry_url. Rotation: rotate-handle, re-register, then retire-handle."
+}

@@ -7,7 +7,7 @@ permissions:
 jobs:
   tenant-foundation:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: '2'
     steps:
@@ -56,6 +56,27 @@ jobs:
       - name: Qualify managed-entry cleanup on real TLS transports (APP-075)
         working-directory: app
         run: cargo +1.93.1 test --locked --lib storage::managed_qualification::tests::managed_cleanup_with_real_transports -- --ignored --exact --nocapture
+      - name: Qualify typed definition admission and re-admission (APP-010)
+        working-directory: app
+        run: GENUI_DEFINITION_REPORT="$RUNNER_TEMP/tenant-foundation/definition.json" cargo +1.93.1 test --locked --lib storage::definition_qualification::native_definition_campaign -- --ignored --exact --nocapture
+      - name: Qualify verified sign-in sessions, epochs and sign-out (APP-009)
+        working-directory: app
+        run: GENUI_SESSION_REPORT="$RUNNER_TEMP/tenant-foundation/session.json" cargo +1.93.1 test --locked --lib auth::tests::native_session_campaign -- --ignored --exact --nocapture
+      - name: Qualify invite redemption and entitlement (APP-074)
+        working-directory: app
+        run: GENUI_INVITE_REPORT="$RUNNER_TEMP/tenant-foundation/invite.json" cargo +1.93.1 test --locked --lib auth::invite_tests::native_invite_campaign -- --ignored --exact --nocapture
+      - name: Qualify explicit record commands, outcomes and audit (APP-013)
+        working-directory: app
+        run: GENUI_COMMAND_REPORT="$RUNNER_TEMP/tenant-foundation/command.json" cargo +1.93.1 test --locked --lib storage::command_qualification::native_command_campaign -- --ignored --exact --nocapture
+      - name: Qualify command races, revocation and restart (APP-014)
+        working-directory: app
+        run: GENUI_RACE_REPORT="$RUNNER_TEMP/tenant-foundation/race.json" cargo +1.93.1 test --locked --lib storage::race_qualification::native_race_campaign -- --ignored --exact --nocapture
+      - name: Qualify the confined query child (APP-012)
+        working-directory: app
+        run: GENUI_QUERY_PYTHON="$GITHUB_WORKSPACE/app/runtime/.venv/bin/python" cargo +1.93.1 test --locked --lib query::tests::engine_child_campaign -- --ignored --exact --nocapture
+      - name: Qualify authorized queries, receipts and release (APP-012)
+        working-directory: app
+        run: GENUI_QUERY_PYTHON="$GITHUB_WORKSPACE/app/runtime/.venv/bin/python" GENUI_QUERY_REPORT="$RUNNER_TEMP/tenant-foundation/query.json" cargo +1.93.1 test --locked --lib storage::query_qualification::native_query_campaign -- --ignored --exact --nocapture
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

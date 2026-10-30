@@ -209,3 +209,86 @@ Choices the coordinator may want to revisit:
 - An operator `source_read` grant event cannot name its source, because D7.8 has no source column.
 - Revocations (`revoke-permission`, `revoke-creator-authority`) advance the member's epoch, following D7.1's revocation order; grants do not.
 - 0003's operator kind list is widened by `ALTER POLICY` in 0005, not by editing 0003, so 0003 and catalogs v1–v4 stay byte-identical.
+
+## Re-check (2026-10-29)
+
+**Verdict: no blocking findings.** M1 and M2 are fixed as the ADR-007 amendment "creator authority on saved work and publication order" decides, and every minor's disposition holds. Two new minors remain (r1, r2). Neither blocks moving APP-010 to In review.
+
+Revision: `phase-one-spikes` at `fced61e`. The fixes are `4bae2c0` and `b69e548`, merged in `f35704d`; nothing under `app/`, `fixtures/` or `scripts/` changed between `f35704d` and `fced61e`. Reviewer: the independent reviewer (Claude), read-only apart from this section; nothing committed. Hashes match the README: 0005 `78d837a2…69de06e`, `catalog-v5.json` `66112bd0…6987804`, `tenant_seed.py` `73bd6b2d…65fc2e`.
+
+### What I ran
+
+| Command | Result |
+| --- | --- |
+| in `app/`: `CARGO_BUILD_JOBS=2 cargo +1.93.1 test --locked --lib` | exit 0, 75 passed, 7 ignored (includes `a_publication_retry_starts_only_within_the_handler_deadline`) |
+| `PYC -m unittest discover app/runtime` | 119 tests OK (107 at `4bae2c0`; later APP-073 commits add tests) |
+| `python3 scripts/check-schema-pins.py` | exit 0, `agree: true`, all pins 5 |
+| `PYC app/runtime/qualify_tenant_schema.py --output <scratch>` | `passed: true`, **322 checks**, every container removed. `0005 workspace cannot save work for another creator`, `… without a creator`, `… revoke creator authority`, `… create an app shell`, `control cannot write publication policies` and `control cannot rewrite a publication sequence` are all 42501. |
+| in `app/`: `GENUI_NATIVE_FIXTURE_PYTHON=PYC GENUI_DEFINITION_REPORT=<scratch> cargo +1.93.1 test --locked --lib storage::definition_qualification::native_definition_campaign -- --ignored --exact --nocapture` | 1 passed, `passed: true`, **18 checks**, container removed |
+| **Break-the-creator probe** (scratch copy only, not in the repository): the same campaign with a block inserted just before check 14's `check(..)`; separate target dir, since removed | every probe refused as listed below. The campaign then panicked at the check 17 event count (workspace 10 ≠ 7) because the probe adds a work. That is expected, and `verify` returned `verified: true` before the count. The container was removed on drop. |
+
+Docker before and after: only `gatewasm-db-test-1`, plus `genui-native-…` and `genui-app073-operator-…` containers that a parallel session started and removed. This re-check did not touch them.
+
+### Attempts to break creator authority
+
+| Probe | Result |
+| --- | --- |
+| P1. The same principal id (a member of both organizations) reads Northstar's creator work under the other organization's scope | `Err(Denied)`. The work query is organization-scoped (`authorization.rs:340`), and the composite FK `(organization_id, created_by)` (0005:33) ties a creator to its own organization. |
+| P2. As `genui_workspace` scoped to principal `…066`, INSERT a `saved_work` row with `created_by` = another active member (`…0ca`) | refused: `new row violates row-level security policy "saved_work_creator"`. P2b, the same INSERT with `created_by` = the scoped principal, succeeds (rolled back), so the refusal comes from the RESTRICTIVE check and not from the FK or a missing grant. |
+| P2c. The same INSERT for Northstar's organization under the other organization's scope | refused by `tenant_scope` |
+| P3. A member saves work and reads it as its creator, then `revoke-membership` runs | the read before revocation succeeds; after it, reads at the old epoch 1 and the new epoch 2 are both `Err(Denied)` (precheck status and epoch, `authorization.rs:298-303`; fence re-check `:348-355`). `genui_admit` has no UPDATE on `memberships.status`, so a revoked creator cannot be reactivated by admission. |
+| P4. A creator whose `creator_revoked_at` is set and who holds only an operator `record_read` grant asks for `record_write` | `Err(Denied)`. Check 14 already covers the revoked creator's read and its restoration by grant. |
+| P5. A second `revoke-creator-authority` on the same work | `changed: false`; epoch unchanged at 4; no second event |
+
+Code review agrees with the probes:
+
+- `permissions` (`authorization.rs:340`) replaces only the `work_permissions` EXISTS with `(grant OR ($5 IN ('record_read','record_write') AND created_by = principal AND creator_revoked_at IS NULL))`. The app `run` EXISTS and the dependency `source_read` NOT EXISTS are unchanged and keyed on the request principal.
+- `share_work`/`export` never follow from creator authority.
+- No role holds UPDATE on `saved_work.created_by` or `creator_revoked_at` (0005:46 grants INSERT on `created_by` only).
+
+### M1 and M2
+
+- **M1 holds.**
+  - The `UNIQUE (organization_id, app_id, publication_sequence)` constraint is at 0005:35-36.
+  - `publish_once` locks the control head `FOR UPDATE` and only then reads `max + 1` (`definitions.rs:1002-1014`). A publisher whose SERIALIZABLE snapshot predates a committed publication therefore gets 40001 on the lock and cannot reuse a sequence, and the unique key is the backstop.
+  - `current_revision` orders by `publication_sequence DESC` (`definitions.rs:1107`).
+  - The 1.1 s sleep is gone. The only remaining waits are the 20 ms poll at `definition_qualification.rs:348` and check 12's deadline `sleep_until` at `:1078`.
+  - Checks 10 and 11 assert the highest sequence.
+- **M2 holds.** The schema campaign asserts the columns, the composite FK and the exact RESTRICTIVE policy text. Creator authority is as described above.
+  - The operator commands are `grant-permission`, `revoke-permission`, `create-app` and `revoke-creator-authority` (`admission_operator.py:634-705`). Each takes organization `FOR SHARE`, then member `FOR UPDATE`, then the row, then the operator head.
+  - Revocations advance `membership_epoch`, which D7.1 orders for every authority reduction. Grants do not.
+  - The 0005 `ALTER POLICY operator_chain` (0005:97-100) adds the three kinds, and the qualifier's `CHAIN_KINDS` matches.
+  - The S05 builder uses `create-app` and `grant-permission` for `discover`, `run` and `source_read` only (`definition_qualification.rs:215-233`). It grants no `share_work` and writes no work grant.
+
+### Minors and the implementer's choices
+
+| Item | Re-check |
+| --- | --- |
+| m1 COMMIT path | Holds: the `commit` checkpoint is at `pool.rs:443-446`, and check 11 passes. |
+| m2 unused grants | Holds: no INSERT on `apps` or `publication_policies`, and both 42501 probes pass. |
+| m3 policy choice | Accepted as a recorded Phase 1 limit (README, `publish` doc comment). |
+| m4 `independent_review` | Holds: check 13 passes. |
+| m5 handler deadline | Holds. Both attempts are capped at the deadline less 1 s, the retry gate needs 2 s, the `Stale` read is capped, and lease acquisition is bounded (`authorization.rs:211-231`). |
+| m6 event identity | Accepted. The event id equals the publication id. The PK `(organization_id, event_id)` cannot collide, because a rolled-back attempt leaves no event and every attempt takes fresh ids. Check 15 passes. |
+| m7 fixture deviation | Accepted. Only the expenses source revision and the `independent_review` policy row remain fixture SQL; the ticket log must name them. |
+| m8 stale text | Holds. |
+| `ALTER POLICY` in 0005 rather than editing 0003 | Accepted. 0003 and catalogs v1–v4 stay byte-identical, and catalog-v5 captures the widened check. |
+| `discover` grantable | Accepted. It is a read-only app permission that `read_publication_detail` needs, and it sits outside the excluded set (`admin_policy`, `share_work`, `export`). |
+| `share_work` no longer granted by S05 | Accepted and verified. |
+| `create-app`'s `permission.granted` as the creation record | Accepted, with r1. |
+
+### Remaining findings
+
+**r1 (minor). Operator permission events do not say which permission changed.**
+
+- **Where:** `admission_operator.py:324-332`. `append` writes `outcome_digest` NULL, so `grant_permission` (`:634`), `revoke_permission` (`:651`) and `create_app` (`:667`) emit `permission.granted`/`permission.revoked` events that carry only actor, app and work.
+- **Effect:** the operator chain cannot tell a `run` grant from an `edit_definition` or `review_publish` grant on the same app. It also cannot tell `create-app` from a later `edit_definition` grant. This is the same class of gap as review m6, and the README already records the narrower case of the missing source id.
+- **Fix:** bind the permission and resource into `outcome_digest`, for example a `forma:operator-permission:v1` digest over `{permission, resource kind, app, work, source}`. That needs no D7.8 column change, but it is a new digest domain, so under ADR-002 it goes with the next contract edition. Until then, widen the README limit to "permission events do not name the permission or the source".
+
+**r2 (minor, documentation). D7.8's closed operator kind list was not amended in place.**
+
+- **Where:** ADR-007 `docs/architecture/ADR-007-PHASE-1-WRITE-AUTHORITY.md:66` still lists seven operator kinds.
+- **Gap:** the amendment (`:46`) names `creator_authority.revoked` ("added to D7.8's kinds") and `permission.granted`, but never `permission.revoked`. Migration 0005:97-100 and `OPERATOR_KINDS` (`admission_operator.py:72-74`) add all three, and D7.8 says that "a new kind is an amendment of this ADR".
+- **Fix (coordinator, `docs/`):** name `permission.revoked` in the amendment and add all three kinds to D7.8's operator list. In the same edit, record m2's move in D7.3: INSERT on `apps` and `publication_policies` are operator writes in Phase 1.
+
+The probe's scratch copy and log are at `…/scratchpad/app010-recheck/` (`repo/`, `probe.rs`, `probe.log`, `schema.json`, `definition.json`). Its separate build directory under `app/target` was deleted. The working tree is unchanged apart from this section.

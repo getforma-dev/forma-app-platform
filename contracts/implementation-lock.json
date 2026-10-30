@@ -1,5 +1,5 @@
 {
-  "edition": "impl-2026-10-29.2",
+  "edition": "impl-2026-10-29.3",
   "source_edition": "prep-2026-10-22.1",
   "status": "synthetic contract qualification; not runtime authorization or persistence",
   "canonical_encoding": "forma-json-v1",
@@ -8,6 +8,15 @@
     "design/forma-northstar-demo/platform-contract-lock.json": "d267c1495bdf200434d621738868a9f5af78320cc750a79d0a4d6a5732f74953"
   },
   "retained_editions": {
+    "impl-2026-10-29.2": {
+      "lock_sha256": "c1c1c80d7e327c53e2558da37befb97c9dbf6900bed56225e17518f79d952923",
+      "artifacts": {
+        "contracts/fixtures/impl-2026-10-29.2/canonical-vectors.json": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
+        "contracts/fixtures/impl-2026-10-29.2/negative-vectors.json": "315a9d32e91dbeaf21c0ad3ec6f8e882315e46ef23b7db4c3c47f4b161ae1cbc",
+        "contracts/fixtures/impl-2026-10-29.2/northstar.json": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
+        "contracts/fixtures/impl-2026-10-29.2/spend-review.json": "186162da87532f368ed3c74faafc46c04780cc7331c095dc92f729bead0f0851"
+      }
+    },
     "impl-2026-10-28.1": {
       "lock_sha256": "9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45",
       "artifacts": {
@@ -21,22 +30,27 @@
   "artifacts": {
     ".github/workflows/contracts.yml": "e9a068f471f856a3d5d531ab99ee8e88943f05f96f30156e73f590717990f539",
     "contracts/.gitignore": "57a8ad0e62346f7b0f2e261d59a7b90f1310043424bcb9d229208f183f1940d9",
-    "contracts/README.md": "62e8ef4cca883e1011630a06370b033c2e56ca9ce3c56140b759ca44c42f8070",
+    "contracts/README.md": "1521f3f7408047c0870a830010ed58d62e7ec9a74459d3c0182a1e63b03e9747",
     "contracts/fixtures/canonical-vectors.json": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
+    "contracts/fixtures/command-recovery.json": "b2539b15b32c7086576bd42aed824d823e5fa4c8ed2f40ed57637cdf79d14ecf",
     "contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json": "33b46ff5970bdcd5259f23bdb5e9a7fcda4c5eeffebe93e0fedfebf5f661203d",
     "contracts/fixtures/impl-2026-10-28.1/negative-vectors.json": "089e9a3017adda324a2a150fb68d5aa497889cd104d2f7096b9128d520764e75",
     "contracts/fixtures/impl-2026-10-28.1/northstar.json": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
     "contracts/fixtures/impl-2026-10-28.1/spend-review.json": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+    "contracts/fixtures/impl-2026-10-29.2/canonical-vectors.json": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
+    "contracts/fixtures/impl-2026-10-29.2/negative-vectors.json": "315a9d32e91dbeaf21c0ad3ec6f8e882315e46ef23b7db4c3c47f4b161ae1cbc",
+    "contracts/fixtures/impl-2026-10-29.2/northstar.json": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
+    "contracts/fixtures/impl-2026-10-29.2/spend-review.json": "186162da87532f368ed3c74faafc46c04780cc7331c095dc92f729bead0f0851",
     "contracts/fixtures/negative-vectors.json": "315a9d32e91dbeaf21c0ad3ec6f8e882315e46ef23b7db4c3c47f4b161ae1cbc",
     "contracts/fixtures/northstar.json": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
     "contracts/fixtures/spend-review.json": "186162da87532f368ed3c74faafc46c04780cc7331c095dc92f729bead0f0851",
-    "contracts/lock.py": "772d6f762ca9bd6feef8da6e41c59b013f2bf92c3d33e7c374f171e8be5ff722",
-    "contracts/make_fixtures.py": "1012797e57499f785fabbabfd7a55b4cad25fa88246241f7eacd2faa8fc4c10a",
+    "contracts/lock.py": "666b1b01e68d6cc403a8c697df3f5d898e0f5509a460a447d3a3fa39a7cd358e",
+    "contracts/make_fixtures.py": "dcac7082e2ed531cc028e6475dd6f0e3374badb7c54401c7e7f04e8c3e4d805c",
     "contracts/requirements.lock": "8254cb9a13753eafff6514939b2f687b33fc40c1a9ea5e329219f3265ae5ed12",
-    "contracts/schema.json": "93fac1752605c99e85dec50ed8317d8451553d2bf7a9f7ae2b718b6542852e58",
-    "contracts/schema.py": "cb44e5c25ff7ecadaf0f2a023bee137cee5fea6b0c1c94965f10458e6e7df930",
-    "contracts/test_contracts.py": "0c14955f26b87f71112c178825819d504785d716baf7d750b13b368d43646b31",
-    "contracts/validate.py": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
+    "contracts/schema.json": "80d773f7f87d71203560e023311adea1b14aaa08bc8127507b9db886ffa6c535",
+    "contracts/schema.py": "d3edae3ea98414d7f8ac95e9da6ae0381283e07d4bef23b216f52ede7f2b56fe",
+    "contracts/test_contracts.py": "85ee62c10fa29e5ef8a018289d06b43ebb833603c4603cddcedd9f47fe25f76f",
+    "contracts/validate.py": "7c9492bc55d12c818f984f7889ab5e95024699cfda11222ebafc84d982e973d5",
     "contracts/verify_vectors.mjs": "b81b9bdeb4e57037a66bca328c5e519ea7613101eec1c3d8486598aa28b31674",
     "docs/architecture/ADR-002-CONTRACT-EDITION.md": "5bba501cbd3e9b603439e790acc3fea9c8c3e78bc2cb8ba57a94ed2f6b25a79a",
     "docs/architecture/ADR-009-PHASE-2-DATA-PLANE.md": "8a52d3cb7efa6e8451633de44634c3f3fcd3107044be4c6c94b8cf85c765172f",

@@ -1,0 +1,23 @@
+{
+  "service_missing_sources": [
+    "app/src/admission/tests.rs",
+    "app/src/storage/admission_qualification.rs",
+    "app/src/storage/managed_qualification.rs",
+    "app/src/storage/managed_qualification/tests.rs"
+  ],
+  "service_missing_pages": [],
+  "service_missing_migrations": [],
+  "service_new_files": [
+    "app/admin/src/invite/app.tsx",
+    "app/src/auth/invite.rs",
+    "app/src/auth/invite_tests.rs"
+  ],
+  "qualification_missing_sources": [
+    "app/src/main.rs"
+  ],
+  "qualification_catalogs": [
+    "app/migrations/catalog-query.json",
+    "app/migrations/catalog-v6.json",
+    "app/migrations/manifest.json"
+  ]
+}

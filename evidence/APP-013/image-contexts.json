@@ -1,0 +1,32 @@
+{
+  "qualification": {
+    "sources": 68,
+    "missing": [],
+    "leaks": []
+  },
+  "service": {
+    "needed": 189,
+    "new_present": {
+      "app/src/commands/mod.rs": true,
+      "app/src/commands/payload.rs": true,
+      "app/src/commands/routes.rs": true,
+      "app/src/storage/commands.rs": true,
+      "app/admin/src/record/app.tsx": true,
+      "app/migrations/0007_command_outcomes.sql": true,
+      "app/migrations/catalog-v7.json": true
+    },
+    "cfg_test_modules_included_as_in_0005_and_0006_contexts": [
+      "app/src/storage/command_qualification.rs",
+      "app/src/commands/tests.rs"
+    ],
+    "not_in_context_pre_existing": [
+      "spikes/APP-006/src/tests.rs"
+    ],
+    "note": "spikes/APP-006/src/tests.rs is cfg(test)-only and was never in the service context; the cfg(test) storage/command test modules are listed as definition_qualification.rs and auth/tests.rs already are"
+  },
+  "operator": {
+    "missing": [],
+    "leaks": []
+  },
+  "scope": "image context exports (--output type=local) compared with the sources; no image built"
+}

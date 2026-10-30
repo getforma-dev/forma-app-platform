@@ -1,0 +1,75 @@
+{
+  "checks": [
+    {
+      "name": "item 1: GET /invite renders the entry; POST /invite/validate validates the code by digest (normalized input) and, without consuming a redemption slot (redeemed_count 0, no pending admission), creates the 10-minute single-use signup handoff (flow kind signup bound to a presignup reservation and the provider invitation id) and performs the backend PAR with the capability's invite_token; the browser receives only a 303 to /t/{slug}/auth/authorize with client_id and request_uri and the __Host- pre-login cookie",
+      "passed": true
+    },
+    {
+      "name": "item 2: the hosted registration consumes the bound invitation and the callback lands on /auth/pending with a 24-hour pending admission; the registered account and its pre-access session mint no principal, redemption or workspace session (uniform 404); only the later verified sign-in redeems (code exhausted at 1 of 1)",
+      "passed": true
+    },
+    {
+      "name": "item 1 (honest states): unknown, malformed, expired, revoked, exhausted codes and a code without a provider invitation receive the same neutral 400 page, headers and body included (\"could not be used\"), consume nothing and make no provider call; the code is never shown back",
+      "passed": true
+    },
+    {
+      "name": "item 4/5: invitation floods hit 5/minute per address class with the honest limited page (429, Retry-After) before any code is judged, valid codes included; rotating forged X-Forwarded-For from an untrusted peer never evades the peer's budget; behind the trusted load balancer the rightmost hop is the client; one code holds at most 10 live presignup reservations (the eleventh is neutral with no PAR) and none consumes a redemption slot; dispatch counters show no provider call for any denied request",
+      "passed": true
+    },
+    {
+      "name": "item 4 (redemption, review M2): GET /auth/callback is limited per address class (15/minute, 80/hour) and across the service (800/hour), sized at the sum of the sign-in and invitation starts, before the query, the cookie or any database work (the 16th forged callback from one class is 429 with Retry-After and the neutral page); with the database paused, forged pre-login, session and pre-access cookies of an organization the closed registry does not bind answer at once (neutral page, uniform 404) because nothing reaches the store; no flood consumed a slot, created a record or reached the token endpoint",
+      "passed": true
+    },
+    {
+      "name": "item 2: missing, wrong-email and other-tenant provider invitations cannot create an account through the hosted registration (refused, invitation untouched), an existing account for the invited email is refused (fAuth's 409) and an existing identity's sign-in on another email's invited request is refused, both with the invitation still pending (review m1), a sign-in request offers no generic signup, and a provider-revoked or already-consumed invitation is refused at the backend PAR (neutral page, flow discarded); a leaked or replayed used code obtains nothing",
+      "passed": true
+    },
+    {
+      "name": "item 3: a wrong state consumes the signup flow and a replay of the right one then finds nothing (no token request); a Canary code and state injected into a Northstar flow's browser are refused (no pre-access); a signup handoff past its 10 minutes admits nothing",
+      "passed": true
+    },
+    {
+      "name": "item 3: client-provided organization, tenant, role(s), redirect, destination and invite_token fields refuse with the neutral page; cross-site, foreign-Origin and metadata-less posts are 403 cross_site; none reserves, starts a flow or calls the provider; under Northstar's scope a Canary code reserves nothing and its capability is not found",
+      "passed": true
+    },
+    {
+      "name": "item 2/3: an operator-preprovisioned Canary code hands off to the Canary tenant only and its member joins only Canary; the Northstar member only Northstar; each workspace opens for its own member; a Canary identity at Northstar's sign-in is denied with nothing minted",
+      "passed": true
+    },
+    {
+      "name": "item 2/5: mounted protected routes at this tip: [\"/workspace\"]; the [\"export\", \"generation\", \"import\", \"query\", \"record\"] paths are not mounted and answer the router's uniform fallback 404 to every principal, admitted members included, so none is counted as implemented. 70 probes by anonymous, malformed, pre-access (also presented as a session), expired, entitlement-revoked and foreign-scoped principals all answer the byte-identical uniform 404 (problem+json, no-store, nosniff, no Set-Cookie); 20 member probes over all 10 paths: the mounted route reaches its handler and every unmounted path is byte-identical to the fallback; no PAR, exchange or registration was dispatched, and the expired and entitlement-revoked sessions' destruction revoked each refresh token once (ADR-006); a registered pre-access identity holds no principal. APP-012/APP-013 re-run this check with their routes marked mounted before item 2 is claimed for the query or record family",
+      "passed": true
+    },
+    {
+      "name": "provider faults at the backend PAR (503, and an answer past the 3-second client deadline) give the neutral page inside the 5-second handler deadline, discard the flow and consume no slot; the presignup reservation simply lapses in 10 minutes (the create/revoke timeout and reconciliation exercise is APP-082's)",
+      "passed": true
+    },
+    {
+      "name": "item 1: the observer detects a deliberately planted raw code, invite_token and issued code (negative control); 194 responses carry no raw code, invite_token, issued code, token or request_uri outside the authorize redirect; the database (135820 bytes dumped) holds no raw code or invitation token; 65 captured log lines carry none of them and no cookie value, while recording invite.validate outcomes",
+      "passed": true
+    }
+  ],
+  "dispatch": {
+    "exchange": 12,
+    "par": 32,
+    "par_invited": 22,
+    "par_refused": 1,
+    "register": 9,
+    "register_refused": 4
+  },
+  "hosted_acceptance": false,
+  "limits": [
+    "The provider is the cfg(test) synthetic loopback issuer (PAR, hosted registration, token) plus the loopback management stand-in app/runtime/fake_fauth.py; the operator writes each capability into the environment's secret (app/runtime/local_secrets.py, a loopback Secrets Manager stand-in reached through the real boto3 client; ADR-003 amendment 2026-10-30), the supervisor's own writer (runtime.write_capabilities) materializes it as the service's 0600 files after each operator command, and the test copies each invitation token from the service's file into the issuer (one simulated provider). Never the deployed fAuth; hosted PAR, real mail and browsers are APP-076/079.",
+    "Synthetic local password authentication over TLS, not RDS IAM; synthetic identifiers.",
+    "Rate-limit windows are in-process (D7.5, D7.18).",
+    "The route-level admission race repeat and the provider create/revoke fault exercise are APP-082's (ADR-010).",
+    "Raw codes and invitation tokens are never written to this report."
+  ],
+  "log_lines_scanned": 65,
+  "managed_acceptance": false,
+  "passed": true,
+  "responses_scanned": 194,
+  "schema_version": 1,
+  "scope": "APP-074 local public invitation entry on the native PostgreSQL TLS fixture with the cfg(test) synthetic loopback issuer and the loopback fAuth management stand-in",
+  "server_version": "16.13 (Debian 16.13-1.pgdg13+1)"
+}

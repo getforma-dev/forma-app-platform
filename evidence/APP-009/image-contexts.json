@@ -1,0 +1,32 @@
+{
+  "service_missing_sources": [],
+  "service_missing_pages": [],
+  "service_missing_migrations": [],
+  "service_new_files": [
+    "app/admin/src/denied/app.tsx",
+    "app/admin/src/pending/app.tsx",
+    "app/admin/src/signin/app.tsx",
+    "app/admin/src/workspace/app.tsx",
+    "app/migrations/0006_sessions.sql",
+    "app/migrations/catalog-v6.json",
+    "app/src/auth/capability.rs",
+    "app/src/auth/cookies.rs",
+    "app/src/auth/csrf.rs",
+    "app/src/auth/mod.rs",
+    "app/src/auth/pending.rs",
+    "app/src/auth/pkce.rs",
+    "app/src/auth/provider.rs",
+    "app/src/auth/routes.rs",
+    "app/src/auth/synthetic_issuer.rs",
+    "app/src/auth/tests.rs",
+    "app/src/auth/vault.rs",
+    "app/src/http/limits.rs",
+    "app/src/http/mod.rs",
+    "app/src/http/proxy.rs",
+    "app/src/storage/sessions.rs"
+  ],
+  "qualification_missing_sources": [],
+  "qualification_catalogs": [
+    "app/migrations/catalog-v6.json"
+  ]
+}

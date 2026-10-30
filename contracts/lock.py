@@ -9,10 +9,19 @@ LOCK = ROOT / "contracts/implementation-lock.json"
 SOURCE = "design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md"
 DEMO_LOCK = "design/forma-northstar-demo/platform-contract-lock.json"
 SOURCE_SHA = "f209ccb05aa895080c6fd424fe979d65f276959536ee7d57b371428e1d049fd5"
-EDITION = "impl-2026-10-29.2"
-# Edition impl-2026-10-28.1's lock file and the fixture identities it locked. Its fixtures are retained
-# byte-identically under contracts/fixtures/impl-2026-10-28.1/ and must keep these identities (ADR-002).
+EDITION = "impl-2026-10-29.3"
+# Each prior edition's lock file and the fixture identities it locked. Its fixtures are retained
+# byte-identically under contracts/fixtures/<edition>/ and must keep these identities (ADR-002).
 RETAINED = {
+    "impl-2026-10-29.2": {
+        "lock_sha256": "c1c1c80d7e327c53e2558da37befb97c9dbf6900bed56225e17518f79d952923",
+        "artifacts": {
+            "contracts/fixtures/impl-2026-10-29.2/canonical-vectors.json": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
+            "contracts/fixtures/impl-2026-10-29.2/negative-vectors.json": "315a9d32e91dbeaf21c0ad3ec6f8e882315e46ef23b7db4c3c47f4b161ae1cbc",
+            "contracts/fixtures/impl-2026-10-29.2/northstar.json": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
+            "contracts/fixtures/impl-2026-10-29.2/spend-review.json": "186162da87532f368ed3c74faafc46c04780cc7331c095dc92f729bead0f0851"
+        },
+    },
     "impl-2026-10-28.1": {
         "lock_sha256": "9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45",
         "artifacts": {

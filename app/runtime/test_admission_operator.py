@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -104,6 +105,64 @@ class PureTests(unittest.TestCase):
             with self.subTest(bad=bad[0]), self.assertRaises(op.Refused):
                 op.validate(parser.parse_args(bad))
 
+    def test_source_revision_record_is_closed_and_content_derived(self):
+        # APP-012: upload-sources' record; the Northstar identity APP-077 prints.
+        northstar = "00000000-0000-4000-8000-000000000001"
+        content = "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647"
+        self.assertEqual(op.revision_id(northstar, content), "9161c1e4-27c0-4cbb-addf-eb7ce504bf45")
+        normalized = "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082"
+        good = {"organization_id": northstar, "source_id": "00000000-0000-4000-8000-00000000006e",
+                "revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45", "content_digest": content,
+                "normalized_digest": normalized, "object_digest": normalized, "row_count": 6,
+                "contract_digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64"}
+        with tempfile.TemporaryDirectory() as directory:
+            def parse(value, organization=northstar):
+                path = Path(directory) / "record.json"
+                path.write_text(json.dumps(value))
+                return op.validate(op.parser().parse_args(["register-source-revision", "--organization", organization, "--record", str(path)]))
+            self.assertEqual(parse(good).revision_record, good)
+            for change, reason in ((dict(good, extra=1), "record_refused"), (dict(good, row_count="6"), "record_refused"),
+                                   (dict(good, object_digest=content), "record_digest_refused"),
+                                   (dict(good, revision_id="00000000-0000-4000-8000-0000000000f1"), "record_revision_refused"),
+                                   (dict(good, content_digest="sha256:" + "0" * 64), "record_revision_refused"),
+                                   (dict(good, normalized_digest="sha256:XYZ"), "record_refused")):
+                with self.assertRaises(op.Refused) as refusal:
+                    parse(change)
+                self.assertEqual(str(refusal.exception), reason)
+            with self.assertRaises(op.Refused) as refusal:
+                parse(good, organization="00000000-0000-4000-8000-000000000002")
+            self.assertEqual(str(refusal.exception), "record_organization_refused")
+            # APP-078: the same record inline is checked identically; exactly one form.
+            def inline(value, organization=northstar):
+                return op.validate(op.parser().parse_args(["register-source-revision", "--organization", organization, "--record-json", value]))
+            self.assertEqual(inline(json.dumps(good)).revision_record, good)
+            for change in (dict(good, extra=1), dict(good, object_digest=content), dict(good, row_count="6")):
+                with self.assertRaises(op.Refused):
+                    inline(json.dumps(change))
+            duplicate = json.dumps(good)[:-1] + ',"row_count":7}'
+            for bad in (duplicate, "", "[]", "x" * 4097, json.dumps(good).replace("6e0f", "ée0f")):
+                with self.assertRaises(op.Refused) as refusal:
+                    inline(bad)
+                self.assertTrue(str(refusal.exception).startswith("record_"), bad[:20])
+            with self.assertRaises(op.Refused):
+                inline(json.dumps(good), organization="00000000-0000-4000-8000-000000000002")
+            path = Path(directory) / "record.json"
+            for argv in (["register-source-revision", "--organization", northstar],
+                         ["register-source-revision", "--organization", northstar, "--record", str(path), "--record-json", json.dumps(good)]):
+                with self.assertRaises(op.Refused) as refusal:
+                    op.validate(op.parser().parse_args(argv))
+                self.assertEqual(str(refusal.exception), "record_refused")
+        parser = op.parser()
+        base = ["create-bound-work", "--organization", northstar, "--app", ORG, "--from-work", ORG, "--work", ORG,
+                "--creator", ORG, "--input", "events", "--source", ORG, "--revision", ORG]
+        with self.assertRaises(op.Refused):
+            op.validate(parser.parse_args(base))  # the new work must differ from its origin
+        base[8] = "00000000-0000-4000-8000-0000000000a2"
+        op.validate(parser.parse_args(base))
+        base[12] = "Events"
+        with self.assertRaises(op.Refused):
+            op.validate(parser.parse_args(base))
+
     def test_issue_argument_bounds(self):
         parser = op.parser()
         base = ["issue", "--organization", ORG, "--issued-by", "unit", "--grant", "source_read:" + str(uuid.uuid4())]
@@ -127,6 +186,65 @@ class PureTests(unittest.TestCase):
             op.validate(parser.parse_args(["issue", "--organization", ORG, "--issued-by", "unit"]))
         with self.assertRaises(op.Refused):
             op.validate(parser.parse_args(["issue", "--organization", ORG.upper(), "--issued-by", "unit", "--grant", "source_read:" + str(uuid.uuid4())]))
+        # APP-078 managed channel: a pre-minted digest of the exact stored shape, never with an invitation.
+        digest = op.code_digest(bytes(32))
+        self.assertEqual(op.validate(parser.parse_args(base + ["--code-digest", digest])).code_digest, digest)
+        for bad in ("sha256:" + "A" * 64, "sha256:" + "0" * 63, digest + "\n", "0" * 64, op.encode_code(bytes(32))):
+            with self.subTest(digest=bad[:12]), self.assertRaises(op.Refused) as refused:
+                op.validate(parser.parse_args(base + ["--code-digest", bad]))
+            self.assertEqual(str(refused.exception), "malformed_code_digest")
+        with self.assertRaises(op.Refused) as refused:
+            op.validate(parser.parse_args(base + ["--code-digest", digest] + invitation + ["user"]))
+        self.assertEqual(str(refused.exception), "code_digest_with_invitation_refused")
+
+    def test_invitation_input_is_closed_and_bound_by_digest(self):
+        """ADR-003 amendment 2026-10-30 (managed invitations): the injected input document and the managed form."""
+        digest, other = op.code_digest(bytes(32)), op.code_digest(bytes([1] * 32))
+        entry = {"organization_id": ORG, "code_digest": digest, "email": "Invitee@Example.test", "role": "user", "issuer": ISSUER, "tenant": TENANT}
+        good = json.dumps({"format": op.INVITATION_INPUT_FORMAT, "invitations": [entry]})
+        self.assertEqual(op.invitation_input(good), [entry])
+        self.assertEqual(op.invitation_input("{}"), [])
+        for bad, reason in (("[]", "invitation_input_malformed"), ("{", "invitation_input_malformed"), ("x" * 70000, "invitation_input_malformed"),
+                            (json.dumps({"format": "other", "invitations": [entry]}), "invitation_input_malformed"),
+                            (json.dumps({"format": op.INVITATION_INPUT_FORMAT}), "invitation_input_malformed"),
+                            (json.dumps({"format": op.INVITATION_INPUT_FORMAT, "invitations": [entry], "extra": 1}), "invitation_input_malformed"),
+                            (json.dumps({"format": op.INVITATION_INPUT_FORMAT, "invitations": [dict(entry, label="ns")]}), "invitation_input_malformed"),
+                            (json.dumps({"format": op.INVITATION_INPUT_FORMAT, "invitations": [dict(entry, code_digest="sha256:" + "A" * 64)]}), "malformed_code_digest"),
+                            (json.dumps({"format": op.INVITATION_INPUT_FORMAT, "invitations": [dict(entry, role="admin")]}), "provider_role_refused"),
+                            (json.dumps({"format": op.INVITATION_INPUT_FORMAT, "invitations": [dict(entry, email="not-an-address")]}), "malformed_email"),
+                            (json.dumps({"format": op.INVITATION_INPUT_FORMAT, "invitations": [dict(entry, organization_id="x")]}), "malformed_identifier"),
+                            (json.dumps({"format": op.INVITATION_INPUT_FORMAT, "invitations": [entry, dict(entry, email="b@example.test")]}), "invitation_input_malformed"),
+                            ('{"format":"%s","format":"%s","invitations":[]}' % (op.INVITATION_INPUT_FORMAT, op.INVITATION_INPUT_FORMAT), "invitation_input_malformed"),
+                            (json.dumps({"format": op.INVITATION_INPUT_FORMAT, "invitations": [dict(entry, code_digest=op.code_digest(bytes([i] * 32)))
+                                                                                                for i in range(65)]}), "invitation_input_malformed")):
+            with self.subTest(bad=bad[:40]), self.assertRaises(op.Refused) as refused:
+                op.invitation_input(bad)
+            self.assertEqual(str(refused.exception), reason)
+            self.assertNotIn("Invitee", str(refused.exception))
+        parser = op.parser()
+        base = ["issue", "--organization", ORG, "--issued-by", "unit", "--grant", "source_read:" + str(uuid.uuid4())]
+        managed = op.validate(parser.parse_args(base + ["--code-digest", digest, "--provider-input-from-secret"]))
+        self.assertTrue(managed.provider_input_from_secret)
+        for extra, reason in ((["--provider-input-from-secret"], "invitation_input_requires_code_digest"),
+                              (["--code-digest", digest, "--provider-input-from-secret", "--provider-email", "a@example.test"], "invitation_input_with_flags_refused"),
+                              (["--code-digest", digest, "--provider-input-from-secret", "--provider-tenant", TENANT], "invitation_input_with_flags_refused"),
+                              (["--code-digest", digest, "--provider-email", "a@example.test", "--provider-role", "user", "--provider-issuer", ISSUER,
+                                "--provider-tenant", TENANT], "code_digest_with_invitation_refused")):
+            with self.subTest(extra=extra[:3]), self.assertRaises(op.Refused) as refused:
+                op.validate(parser.parse_args(base + extra))
+            self.assertEqual(str(refused.exception), reason)
+        # Binding takes exactly this organization's entry for this digest, or refuses before any connection.
+        bound = op.bind_invitation_input(op.validate(parser.parse_args(base + ["--code-digest", digest, "--provider-input-from-secret"])),
+                                         {op.INVITATION_INPUT_ENV: good})
+        self.assertEqual((bound.provider_email, bound.provider_role, bound.provider_issuer, bound.provider_tenant),
+                         ("Invitee@Example.test", "user", ISSUER, TENANT))
+        for environ in ({}, {op.INVITATION_INPUT_ENV: "{}"},
+                        {op.INVITATION_INPUT_ENV: json.dumps({"format": op.INVITATION_INPUT_FORMAT, "invitations": [dict(entry, code_digest=other)]})},
+                        {op.INVITATION_INPUT_ENV: json.dumps({"format": op.INVITATION_INPUT_FORMAT,
+                                                              "invitations": [dict(entry, organization_id="00000000-0000-4000-8000-0000000000a2")]})}):
+            with self.subTest(environ=sorted(environ)), self.assertRaises(op.Refused) as refused:
+                op.bind_invitation_input(op.validate(parser.parse_args(base + ["--code-digest", digest, "--provider-input-from-secret"])), environ)
+            self.assertEqual(str(refused.exception), "invitation_input_missing")
 
     def test_canonical_event_bytes_match_the_contract_encoder(self):
         body = {"b": None, "a": "x", "chain_sequence": 2, "kind": "code.issued"}
@@ -289,17 +407,26 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         for role, sequence, head in heads:
             if role in first["created"]:
                 self.assertEqual((sequence, head), (1, op.genesis(ORG, role)))
+        # D7.7 (0007): the backfilled row starts at 1 + the highest committed
+        # revision sequence (1 when this fixture has none); a second backfill
+        # leaves it unchanged.
+        following = self.query("SELECT coalesce(max(commit_sequence),0)+1 FROM genui.internal_record_revisions WHERE organization_id=%s", (ORG,))[0][0]
+        self.assertEqual(first["sequence"], {"organization_sequences": "created", "next_commit_sequence": following})
+        self.assertEqual(self.query("SELECT next_commit_sequence FROM genui.organization_sequences WHERE organization_id=%s", (ORG,)), [(following,)])
         again = self.cli("backfill", "--organization", ORG)
         self.assertEqual(again["created"], [])
         self.assertEqual(sorted(again["existing"]), sorted(op.CHAINS))
-        self.assertIn("organization_sequences", again["deferred"][0])
+        self.assertEqual(again["sequence"], {"organization_sequences": "existing", "next_commit_sequence": following})
+        verified = self.cli("verify", "--organization", ORG)
+        self.assertEqual((verified["command_outcomes"], verified["next_commit_sequence"]), (0, following))
         self.cli("backfill", "--organization", str(uuid.uuid4()), expect=1)
 
     def test_provision_creates_organization_binding_heads_handle_and_event_once(self):
         org = str(uuid.uuid4())
         out = self.cli("provision", "--organization", org, "--display-name", "Operator test trial",
                        "--issuer", ISSUER, "--provider-tenant", "ten_" + org[-12:])
-        self.assertEqual(set(out), {"organization_id", "handle", "audit_heads", "deferred"})
+        self.assertEqual(set(out), {"organization_id", "handle", "audit_heads", "sequence"})
+        self.assertEqual(out["sequence"], {"organization_sequences": "created", "next_commit_sequence": 1})
         raw = op.normalize_handle(out["handle"])
         self.assertIsNotNone(raw)
         self.assertEqual(self.query("SELECT status FROM genui.organizations WHERE organization_id=%s", (org,)), [("active",)])
@@ -312,6 +439,96 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         before = self.dump()
         self.cli("provision", "--organization", org, "--display-name", "again", "--issuer", ISSUER, "--provider-tenant", "ten_x", expect=1)
         self.assertEqual(self.dump(), before)
+
+    def test_bind_provider_tenant_adds_the_real_binding_once_without_an_audit_event(self):
+        """APP-078 B1: an existing (seeded) organization gains its real provider tenant binding beside
+        the fixture one; identifiers only, idempotent, no audit event (D7.8's kinds name none)."""
+        self.ensure_backfill()
+        before = self.operator_events()
+        rows = lambda: self.query("SELECT issuer,provider_tenant_id,active FROM genui.provider_tenant_bindings WHERE organization_id=%s ORDER BY issuer", (ORG,))
+        self.assertEqual(rows(), [(ISSUER, TENANT, True)], "the fixture's existing binding, like the seed's `app008-fixture-only` on RDS")
+        args = ("bind-provider-tenant", "--organization", ORG, "--issuer", "synthetic-iss", "--provider-tenant", "ten_00000000-0000-4000-8000-00000000a001")
+        created = self.cli(*args)
+        self.assertEqual(created, {"organization_id": ORG, "binding": "created", "active_bindings": 2, "audit_event": None, "source": "arguments"})
+        self.assertEqual(rows(), [(ISSUER, TENANT, True), ("synthetic-iss", "ten_00000000-0000-4000-8000-00000000a001", True)])
+        self.assertEqual(self.cli(*args), {"organization_id": ORG, "binding": "existing", "active_bindings": 2, "audit_event": None, "source": "arguments"})
+        # B1 review m6: a pair already active for another organization that can sign in is refused.
+        other = "00000000-0000-4000-8000-0000000000a2"
+        with self.connect("postgres", autocommit=True) as c:
+            c.execute("INSERT INTO genui.organizations VALUES (%s,'Operator test other','active') ON CONFLICT DO NOTHING", (other,))
+            c.execute("INSERT INTO genui_private.handle_index VALUES (%s,%s,NULL) ON CONFLICT DO NOTHING", (op.handle_digest(os.urandom(16)), other))
+            c.execute("INSERT INTO genui.provider_tenant_bindings VALUES (%s,'elsewhere-iss','ten_elsewhere',true) ON CONFLICT DO NOTHING", (other,))
+        before_rows = self.dump()
+        elsewhere = self.cli("bind-provider-tenant", "--organization", ORG, "--issuer", "elsewhere-iss", "--provider-tenant", "ten_elsewhere", expect=1)
+        self.assertEqual(json.loads(elsewhere.stderr), {"refused": "provider_tenant_bound_elsewhere"})
+        self.assertEqual(self.dump(), before_rows)
+        # Both halves of the pair must match: the same tenant under another issuer is a different pair.
+        self.cli("bind-provider-tenant", "--organization", ORG, "--issuer", "other-iss", "--provider-tenant", "ten_elsewhere")
+        with self.connect("postgres", autocommit=True) as c:
+            c.execute("DELETE FROM genui.provider_tenant_bindings WHERE organization_id=%s AND issuer='other-iss'", (ORG,))
+        # The source form: either both identifiers or the auth configuration flag, never a mixture.
+        for bad in (("--issuer", "x"), ("--provider-tenant", "t"), ("--issuer", "x", "--provider-tenant", "t", "--from-auth-configuration"),
+                    ("--from-auth-configuration", "--issuer", "x"), ("--issuer", "x", "--provider-tenant", "t", "--auth-configuration-secret-id", "arn:aws:secretsmanager:us-east-1:000000000000:secret:x")):
+            with self.subTest(bad=bad), self.assertRaises(op.Refused) as refused:
+                op.validate(op.parser().parse_args(["bind-provider-tenant", "--organization", ORG, *bad]))
+            self.assertEqual(str(refused.exception), "binding_source_refused")
+        self.assertEqual(rows()[1:], [("synthetic-iss", "ten_00000000-0000-4000-8000-00000000a001", True)])
+        self.assertEqual(self.operator_events(), before, "D7.8's closed operator kinds name no binding event")
+        # The registry's own bounds, checked before any connection; an unknown organization refuses after it.
+        for bad in (("--issuer", "with space"), ("--issuer", "x" * 257), ("--provider-tenant", ""), ("--provider-tenant", "t" * 129)):
+            with self.subTest(bad=bad):
+                self.cli("bind-provider-tenant", "--organization", ORG, "--issuer", "ok-iss", "--provider-tenant", "ten_ok", *bad, expect=1)
+        unknown = self.cli("bind-provider-tenant", "--organization", "00000000-0000-4000-8000-0000000000ff", "--issuer", "ok-iss", "--provider-tenant", "ten_ok", expect=1)
+        self.assertEqual(json.loads(unknown.stderr), {"refused": "organization_unknown"})
+        # An inactive binding is not silently reactivated.
+        with self.connect("postgres", autocommit=True) as c:
+            c.execute("UPDATE genui.provider_tenant_bindings SET active=false WHERE organization_id=%s AND issuer='synthetic-iss'", (ORG,))
+        inactive = self.cli(*args, expect=1)
+        self.assertEqual(json.loads(inactive.stderr), {"refused": "provider_binding_inactive"})
+        with self.connect("postgres", autocommit=True) as c:
+            c.execute("DELETE FROM genui.provider_tenant_bindings WHERE organization_id=%s AND issuer='synthetic-iss'", (ORG,))
+
+    def test_handles_issue_rotate_and_retire_route_through_resolve_handle(self):
+        """APP-009 (ADR-006 §handle): only digests are stored; both handles route
+        during a rotation; the last live handle never retires; one handle.rotated
+        event per change; refusals echo no value and write nothing."""
+        org = str(uuid.uuid4())
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui.organizations VALUES (%s,'Handle test','active')", (org,))
+        self.cli("backfill", "--organization", org)
+
+        def routes(handle):
+            raw = op.normalize_handle(handle)
+            with self.connect("genui_workspace") as c:
+                found = c.execute("SELECT genui_private.resolve_handle(%s)::text", (op.handle_digest(raw),)).fetchone()[0]
+            return found
+        fixed = op.encode_handle(bytes(range(1, 17)))
+        first = self.cli("issue-handle", "--organization", org, "--handle", fixed)
+        self.assertEqual(first, {"organization_id": org, "handle": fixed, "live_handles": 1})
+        self.assertEqual(routes(fixed), org)
+        self.assertNotIn(fixed, self.dump())
+        before = self.dump()
+        p = self.cli("issue-handle", "--organization", org, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "handle_exists"})
+        p = self.cli("issue-handle", "--organization", str(uuid.uuid4()), "--handle", "NOT-A-HANDLE", expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "malformed_handle"})
+        self.assertNotIn("NOT-A-HANDLE", p.stderr)
+        self.cli("retire-handle", "--organization", org, "--handle", fixed, expect=1)
+        self.assertEqual(self.dump(), before)
+        second = self.cli("rotate-handle", "--organization", org)
+        self.assertEqual(second["live_handles"], 2)
+        self.assertEqual((routes(fixed), routes(second["handle"])), (org, org))
+        p = self.cli("rotate-handle", "--organization", org, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "rotation_in_progress"})
+        self.assertEqual(self.cli("retire-handle", "--organization", org, "--handle", fixed),
+                         {"organization_id": org, "retired": True, "live_handles": 1})
+        self.assertIsNone(routes(fixed))
+        self.assertEqual(routes(second["handle"]), org)
+        p = self.cli("retire-handle", "--organization", org, "--handle", fixed, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "handle_retired"})
+        p = self.cli("issue-handle", "--organization", str(uuid.uuid4()), "--handle", fixed, expect=1)
+        self.assertEqual(self.operator_events(org), [("handle.rotated",)] * 3)
+        self.assertEqual(self.cli("verify", "--organization", org)["verified"], True)
 
     def test_issue_prints_the_secret_once_and_stores_only_its_digest(self):
         out = self.issue("--max-redemptions", "2", "--expires-days", "7")
@@ -338,9 +555,30 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         entry = next(item for item in listed["codes"] if item["code_id"] == out["code_id"])
         self.assertEqual(set(entry), {"code_id", "kind", "status", "max_redemptions", "redeemed_count", "live_pending_admissions",
                                       "lapsed_pending_admissions", "denied_for_reconciliation", "live_reservations", "issued_at",
-                                      "expires_at", "revoked_at", "provider_invitations"})
+                                      "expires_at", "revoked_at", "provider_invitations", "redemptions"})
         self.assertEqual((entry["status"], entry["redeemed_count"], entry["live_pending_admissions"], entry["lapsed_pending_admissions"],
                           entry["denied_for_reconciliation"]), ("active", 0, 0, 0, 0))
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+
+    def test_preminted_issue_stores_the_given_digest_and_prints_no_secret(self):
+        # APP-078 managed channel: the operator minted the code; the command sees only its digest.
+        raw = os.urandom(32)
+        code, digest = op.encode_code(raw), op.code_digest(raw)
+        out = self.issue("--code-digest", digest)
+        self.assertEqual(set(out), {"code_id", "code_digest", "kind", "max_redemptions", "expires_at"})
+        self.assertEqual(out["code_digest"], digest)
+        self.assertEqual(self.query("SELECT organization_id::text FROM genui_private.code_index WHERE code_digest=%s", (digest,)), [(ORG,)])
+        self.assertEqual(self.query("SELECT code_digest::text,status FROM genui.access_codes WHERE organization_id=%s AND code_id=%s",
+                                    (ORG, out["code_id"])), [(digest, "active")])
+        self.assertNotIn(code, self.dump())
+        self.assertEqual(self.operator_events()[-1], ("code.issued",))
+        # The code the operator holds is the one the stored digest admits.
+        self.assertEqual(op.code_digest(op.normalize_code(code)), digest)
+        # A reused digest refuses whole (code_index primary key) and writes nothing.
+        before = self.dump()
+        self.cli("issue", "--organization", ORG, "--issued-by", "unit-operator", "--grant", "source_read:" + self.source,
+                 "--code-digest", digest, expect=1)
+        self.assertEqual(self.dump(), before)
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
 
     def test_issue_refusals_write_nothing(self):
@@ -625,6 +863,125 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         entry = next(i for i in self.cli("list", "--organization", ORG)["codes"] if i["code_id"] == out["code_id"])
         self.assertEqual((entry["live_pending_admissions"], entry["lapsed_pending_admissions"], entry["denied_for_reconciliation"]),
                          (1, 1, 1))
+
+    def test_list_names_the_principal_of_a_redeemed_code(self):
+        """APP-076 G5: `list` shows each redemption's principal and entitlement ids so revocation can target the redeemer."""
+        out = self.issue("--max-redemptions", "1")
+        digest = op.code_digest(op.normalize_code(out["code"]))
+        subject = "usr_" + uuid.uuid4().hex
+        before = next(i for i in self.cli("list", "--organization", ORG)["codes"] if i["code_id"] == out["code_id"])
+        self.assertEqual(before["redemptions"], [])
+        with self.workspace() as c:
+            reservation, _, _ = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)", (ORG, digest, "sha256:" + "a" * 64)).fetchone()
+            pending, _, outcome = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)",
+                                            (ORG, reservation, ISSUER, TENANT, subject)).fetchone()
+            self.assertEqual(outcome, "pending")
+            principal, _, entitlement, redemption, outcome = c.execute("SELECT * FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)",
+                                                                       (ORG, pending, ISSUER, TENANT, subject, "sha256:" + "3" * 64)).fetchone()
+            self.assertEqual(outcome, "admitted")
+        listed = self.cli("list", "--organization", ORG)
+        entry = next(i for i in listed["codes"] if i["code_id"] == out["code_id"])
+        self.assertEqual((entry["status"], entry["redeemed_count"]), ("exhausted", 1))
+        self.assertEqual(len(entry["redemptions"]), 1)
+        shown = entry["redemptions"][0]
+        self.assertEqual(set(shown), {"redemption_id", "principal_id", "entitlement_id", "redeemed_at", "membership_status", "entitlement_status"})
+        self.assertEqual((shown["redemption_id"], shown["principal_id"], shown["entitlement_id"], shown["membership_status"], shown["entitlement_status"]),
+                         (str(redemption), str(principal), str(entitlement), "active", "active"))
+        # Identifiers only: no provider subject, address or secret in the listing.
+        self.assertNotIn(subject, json.dumps(listed))
+        self.assertNotIn(out["code"], json.dumps(listed))
+        # The shown principal is what revoke-entitlement targets (runbook 6.3/6.4).
+        revoked = self.cli("revoke-entitlement", "--organization", ORG, "--principal", shown["principal_id"])
+        self.assertEqual((revoked["changed"], revoked["entitlements_revoked"]), (True, 1))
+        entry = next(i for i in self.cli("list", "--organization", ORG)["codes"] if i["code_id"] == out["code_id"])
+        self.assertEqual((entry["redemptions"][0]["membership_status"], entry["redemptions"][0]["entitlement_status"]), ("active", "revoked"))
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+
+    def test_list_never_hides_a_redemption_whose_rows_are_absent(self):
+        """APP-078 review M5: `list` LEFT JOINs memberships and entitlements, so a redemption shows with null statuses."""
+        out = self.issue("--max-redemptions", "1")
+        digest = op.code_digest(op.normalize_code(out["code"]))
+        subject = "usr_" + uuid.uuid4().hex
+        with self.workspace() as c:
+            reservation, _, _ = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)", (ORG, digest, "sha256:" + "b" * 64)).fetchone()
+            pending, _, _ = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)",
+                                      (ORG, reservation, ISSUER, TENANT, subject)).fetchone()
+            principal, _, entitlement, redemption, outcome = c.execute("SELECT * FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)",
+                                                                       (ORG, pending, ISSUER, TENANT, subject, "sha256:" + "4" * 64)).fetchone()
+            self.assertEqual(outcome, "admitted")
+        # The foreign keys make this unreachable through any role; the fixture superuser removes the
+        # rows with referential triggers off (replica) and puts them back byte-for-byte afterwards.
+        key = (ORG, principal)
+        with self.connect("postgres") as c:
+            c.execute("SET LOCAL session_replication_role = replica")
+            entitlements = c.execute("DELETE FROM genui.entitlements WHERE organization_id=%s AND principal_id=%s RETURNING *", key).fetchall()
+            memberships = c.execute("DELETE FROM genui.memberships WHERE organization_id=%s AND principal_id=%s RETURNING *", key).fetchall()
+        self.assertEqual((len(entitlements), len(memberships)), (1, 1))
+        try:
+            entry = next(i for i in self.cli("list", "--organization", ORG)["codes"] if i["code_id"] == out["code_id"])
+            self.assertEqual([(r["redemption_id"], r["principal_id"], r["entitlement_id"], r["membership_status"], r["entitlement_status"])
+                              for r in entry["redemptions"]],
+                             [(str(redemption), str(principal), str(entitlement), None, None)])
+        finally:
+            with self.connect("postgres") as c:
+                c.execute("SET LOCAL session_replication_role = replica")
+                for row in memberships:
+                    c.execute("INSERT INTO genui.memberships VALUES (%s)" % ",".join(["%s"] * len(row)), row)
+                for row in entitlements:
+                    c.execute("INSERT INTO genui.entitlements VALUES (%s)" % ",".join(["%s"] * len(row)), row)
+        entry = next(i for i in self.cli("list", "--organization", ORG)["codes"] if i["code_id"] == out["code_id"])
+        self.assertEqual((entry["redemptions"][0]["membership_status"], entry["redemptions"][0]["entitlement_status"]), ("active", "active"))
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+
+    @unittest.skipUnless(importlib.util.find_spec("jsonschema") is not None,
+                         "seed-spend-review validates the bundle with contracts/validate.py; jsonschema is in the operator image's "
+                         "lock (app/operator/requirements.lock) and in tenant-foundation CI, not in the runtime-only lock")
+    def test_seed_spend_review_places_the_fixture_bundle_in_northstar_once(self):
+        """APP-076 G3: the Spend Review bundle in the first fixture organization through the operator seed, idempotent."""
+        import tenant_seed
+        northstar, canary = tenant_seed.ORGANIZATIONS
+        with self.connect() as c:
+            tenant_seed.seed(c, tenant_seed.make_bundles())
+        bundle = tenant_seed.make_bundle("spend-review", northstar)
+        app, work = bundle["definition"]["app_id"], bundle["work"]["work_id"]
+        rows = lambda org: self.query("""SELECT (SELECT count(*) FROM genui.apps WHERE organization_id=%s AND app_id=%s),
+              (SELECT count(*) FROM genui.saved_work WHERE organization_id=%s AND app_id=%s),
+              (SELECT count(*) FROM genui.publications WHERE organization_id=%s AND app_id=%s),
+              (SELECT count(*) FROM genui.internal_records WHERE organization_id=%s AND app_id=%s)""", (org, app) * 4)[0]
+        self.assertEqual((rows(northstar), rows(canary)), ((0, 0, 0, 0), (1, 1, 1, 1)))
+        # Not a fixture organization: refused before any write.
+        self.assertIn("organization_refused", self.cli("seed-spend-review", "--organization", ORG, expect=1).stderr)
+        first = self.cli("seed-spend-review", "--organization", northstar)
+        self.assertEqual((first["changed"], first["label"], first["edition"], first["audit_event"]), (True, "seeded definition", "impl-2026-10-28.1", None))
+        self.assertGreater(first["rows_inserted"], 0)
+        self.assertEqual((first["app_id"], first["work_id"], first["publication_id"], first["definition_revision_id"], first["definition_digest"]),
+                         (app, work, bundle["publication"]["publication_id"], bundle["definition"]["revision_id"], bundle["definition"]["digest"]))
+        self.assertEqual(first["collection_ids"], [bundle["work"]["record_collections"][0]["id"]])
+        self.assertEqual((rows(northstar), rows(canary)), ((1, 1, 1, 1), (1, 1, 1, 1)))
+        # The same bytes and digests as the seed's: the definition row is canonical(content) under the fixture digest.
+        stored = self.query("SELECT digest::text,canonical_content FROM genui.definition_revisions WHERE organization_id=%s AND app_id=%s", (northstar, app))
+        self.assertEqual(stored, [(bundle["definition"]["digest"], tenant_seed.canonical(bundle["definition"]["content"]))])
+        self.assertEqual(self.query("SELECT space_id::text,owner_principal_id::text FROM genui.apps WHERE organization_id=%s AND app_id=%s", (northstar, app)),
+                         [(tenant_seed.SPACE, bundle["context"]["principal_id"])])
+        # The Northstar seed rows the bundle shares (organization, space, policy, shared actors) are untouched.
+        self.assertEqual(self.query("SELECT count(*) FROM genui.apps WHERE organization_id=%s", (northstar,)), [(2,)])
+        snapshot = self.dump()
+        again = self.cli("seed-spend-review", "--organization", northstar)
+        self.assertEqual((again["changed"], again["rows_inserted"]), (False, 0))
+        self.assertEqual(self.dump(), snapshot)
+        # A differing existing row refuses whole and writes nothing (the seed's exact-match rule).
+        with self.connect("postgres") as c:
+            c.execute("UPDATE genui.saved_work SET version=2 WHERE organization_id=%s AND app_id=%s AND work_id=%s", (northstar, app, work))
+        tampered = self.dump()
+        self.assertIn("seed_refused", self.cli("seed-spend-review", "--organization", northstar, expect=1).stderr)
+        self.assertEqual(self.dump(), tampered)
+        with self.connect("postgres") as c:
+            c.execute("UPDATE genui.saved_work SET version=1 WHERE organization_id=%s AND app_id=%s AND work_id=%s", (northstar, app, work))
+        # D7.7 and SR10 hold afterwards: the backfilled sequence row is ahead of the seeded revision and the chains verify.
+        self.cli("backfill", "--organization", northstar)
+        verified = self.cli("verify", "--organization", northstar)
+        self.assertEqual((verified["verified"], verified["next_commit_sequence"]), (True, 2))
+        self.assertEqual(self.cli("seed-spend-review", "--organization", northstar)["changed"], False)
 
     def test_verify_recomputes_sql_written_admission_chain_and_detects_tamper(self):
         out = self.issue("--max-redemptions", "1")

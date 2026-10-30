@@ -148,15 +148,28 @@ def validate_exact_rational(value):
 def validate_problem(body):
     """application/problem+json bodies for the codes this edition registers."""
     canonical(body)
-    require(all(type(v) is int for v in body.values() if not isinstance(v, str)), "problem members are text or integers")
+    require(all(type(v) is int for k, v in body.items() if not isinstance(v, str) and k not in ("recovery_view", "current_revision")),
+            "problem members are text or integers, or the registered recovery view and current revision objects")
     errors = sorted(PROBLEM_VALIDATOR.iter_errors(body), key=lambda e: str(list(e.path)))
     if errors:
         raise ContractError("schema: " + errors[0].message)
-    require(body["code"] != "payload_too_large" or body["status"] == 413, "payload_too_large is 413")
-    require(body["code"] != "limit_exceeded" or body["status"] == 429, "limit_exceeded is 429")
-    names = body["code"] == "limit_exceeded" and "limit" in body and "retry_after_seconds" in body
-    require((body["status"] == 429) == names and ("limit" in body or "retry_after_seconds" in body) == names,
-            "a 429 names its limit and Retry-After seconds, and only a 429 does")
+    code = body["code"]
+    require(code != "payload_too_large" or body["status"] == 413, "payload_too_large is 413")
+    require(code != "limit_exceeded" or body["status"] == 429, "limit_exceeded is 429")
+    names = code == "limit_exceeded" and "limit" in body and "retry_after_seconds" in body
+    # Edition impl-2026-10-29.3 (ADR-007 D7.9): in_flight and busy are 409 with Retry-After and no limit.
+    waiting = code in ("in_flight", "busy")
+    require(not waiting or (body["status"] == 409 and "retry_after_seconds" in body and "limit" not in body),
+            "in_flight and busy are 409 with Retry-After seconds")
+    require((body["status"] == 429) == names and ("limit" in body) == names and ("retry_after_seconds" in body) == (names or waiting),
+            "a 429 names its limit and Retry-After seconds, and only a 429, in_flight or busy does")
+    # D7.15: the recovery view travels only on a 409 conflict, the current revision only on a 412 stale.
+    require((code == "conflict") == ("recovery_view" in body) and (code != "conflict" or body["status"] == 409),
+            "a conflict is 409 with the recovery view, and only a conflict carries one")
+    require((code == "stale") == ("current_revision" in body) and (code != "stale" or body["status"] == 412),
+            "stale is 412 with the current revision, and only stale carries one")
+    if "recovery_view" in body:
+        validate(body["recovery_view"])
     return body
 
 
@@ -335,6 +348,18 @@ def validate(entity):
         start = datetime.fromisoformat(entity["committed_at"].replace("Z", "+00:00"))
         end = datetime.fromisoformat(entity["retry_expires_at"].replace("Z", "+00:00"))
         require(end - start == timedelta(hours=24), "retry horizon must be 24 hours")
+    elif kind == "recovery_view":
+        # Edition impl-2026-10-29.3: an absent record has version 0 and no values; a key conflict names the
+        # stored outcome under the same scope and key, a version conflict names none.
+        require((entity["current_record_version"] == 0) == (entity["current_values"] is None), "current values iff the record exists")
+        if entity["current_values"] is not None:
+            unique(entity["current_values"], "field_id", "recovery value")
+        stored = entity["stored_outcome"]
+        require((entity["reason"] == "expected_version") == (stored is None), "a key conflict names the stored outcome; a version conflict names none")
+        if stored is not None:
+            validate(stored)
+            require(all(stored[k] == entity[k] for k in ("organization_id", "app_id", "work_id", "command_id", "idempotency_key", "record_id")),
+                    "stored outcome scope mismatch")
     elif kind == "job_state":
         require((entity["state"] == "done") == ("result_digest" in entity), "done iff committed result reference exists")
         require((entity["state"] == "failed") == ("failure_code" in entity), "failed iff failure code exists")
@@ -418,7 +443,15 @@ def validate_bundle(bundle):
         require(receipt["partial"] == partial, "receipt partial must equal the partial coverage of the inputs it reads")
     declaration = next((x for x in content["commands"] if x["id"] == command["command_id"]), None)
     require(declaration is not None and declaration["record_schema_id"] == command["schema_id"], "command is undeclared")
-    require((declaration["operation"] == "create") == (command["expected_record_version"] == 0), "create expects absent record; update expects an existing version")
+    # Edition impl-2026-10-29.3 amendment (APP-013 review M1): a create command expects the absent record, or an
+    # existing version only when its declaration has transitions and the command carries a declared transition's
+    # target (storage requires that transition to fire from the current value; no command writes a no-op revision).
+    targets = {(t["field_id"], t["to"]) for t in declaration.get("transitions", [])}
+    fires = any((item["field_id"], item["value"].get("value")) in targets for item in command["values"])
+    existing = command["expected_record_version"] >= 1
+    require(declaration["operation"] != "create" or not existing or fires,
+            "create expects absent record, or an existing version along a declared transition")
+    require(declaration["operation"] != "update" or existing, "update expects an existing version")
     fields = {x["id"]: x for x in schemas[command["schema_id"]]["fields"]}
     for item in command["values"]:
         require(item["field_id"] in declaration["writable_fields"], "command field is not writable")

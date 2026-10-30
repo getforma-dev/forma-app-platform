@@ -17,7 +17,10 @@ pub mod validate;
 
 pub use canonical::{decode, encode};
 pub use digest::digest;
-pub use validate::{admit_definition, check_exact_rational, exact_rational, AdmittedDefinition};
+pub use validate::{
+    admit_definition, admit_receipt, check_exact_rational, contract_timestamp, exact_rational,
+    AdmittedDefinition,
+};
 
 /// Why a document was refused. Each variant has a stable [`code`](Self::code).
 /// Text payloads name a location such as `$.content.views[0].kind`, plus a

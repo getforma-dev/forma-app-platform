@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Real native HTTP route/disabled-default/privacy check; no provider requests."""
+"""Real native HTTP route/harness-retirement/privacy check; no provider requests.
+
+APP-009 (ADR-006 §retirement, ADR-007 D7.13): the release binary owns
+/auth/callback through the product `auth` module and refuses the operator
+qualification configuration at startup; the harness routes are absent. With no
+provider configuration a callback is the uniform neutral sign-in failure (400)
+and protected routes are the uniform 404 problem. The APP-006 harness itself
+now compiles only with the `qualification-harness` feature.
+"""
 import argparse
 import base64
 import json
@@ -23,6 +31,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def capability():
     return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
+
+
+UNIFORM_404 = b'{"code":"not_found"}'
 
 
 def run(binary, directory=None):
@@ -64,11 +75,20 @@ def run(binary, directory=None):
                             'AWS_EC2_METADATA_DISABLED': 'true', 'FORMA_PORT': '0',
                             'FORMA_BIND_ADDRESS': '127.0.0.1'})
         opener = urllib.request.build_opener(NoRedirect(), urllib.request.ProxyHandler({}))
-        for enabled in (False, True, True):
-            env = dict(environment)
-            if enabled:
-                env['GENUI_AUTH_QUALIFICATION_CONFIG_FILE'] = str(path / 'qualification.json')
-            process = subprocess.Popen([binary], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        secrets_in_play = (qualification['operator_token'], qualification['invite_token'])
+
+        # D7.13: the release binary refuses the harness configuration outright.
+        env = dict(environment, GENUI_AUTH_QUALIFICATION_CONFIG_FILE=str(path / 'qualification.json'))
+        refused = subprocess.run([binary], env=env, capture_output=True, text=True, timeout=15)
+        assert refused.returncode != 0 and 'FORMA_LISTENING' not in refused.stdout
+        assert 'not part of this binary' in refused.stderr
+        for value in secrets_in_play:
+            assert value not in refused.stdout + refused.stderr
+        reports.append({'harness_configuration': 'refused at startup', 'exit_code': refused.returncode,
+                        'listener_bound': False})
+
+        for restart in (1, 2):
+            process = subprocess.Popen([binary], env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             output, messages = [], queue.Queue()
 
             def collect():
@@ -99,34 +119,31 @@ def run(binary, directory=None):
                     with response:
                         return response.code, response.headers, response.read()
 
-                status, headers, body = request('/auth/callback?code=' + supplied_code + '&state=' + supplied_state)
-                assert status == (303 if enabled else 404)
-                if enabled:
-                    assert headers['Location'] == '/auth/qualification/result'
-                    assert headers['Referrer-Policy'] == 'no-referrer'
-                    assert headers['Cache-Control'] == 'no-store'
-                    assert 'Max-Age=0' in headers['Set-Cookie']
-                    assert request('/auth/qualification/start', 'POST', b'')[0] == 403
-                    operator = {'Authorization': 'Bearer ' + qualification['operator_token']}
-                    # Rejected before PAR: no real or simulated provider request.
-                    assert request('/auth/qualification/start', 'POST', b'{"tenant":"foreign"}', operator)[0] == 403
-                    receipt_status, _, receipt_body = request('/auth/qualification/status', headers=operator)
-                    assert receipt_status == 200
-                    receipt = json.loads(receipt_body)
-                    assert receipt['counts']['starts'] == receipt['counts']['callback_exchanges'] == 0
-                    assert receipt['counts']['identity_checked'] == receipt['pending_flows'] == 0
-                    assert receipt['workspace_access_granted'] is False
-                    assert receipt['provider_revocation_proved'] is False
-                    assert request('/auth/qualification/status')[0] == 403
-                    assert b'No application access was granted' in request('/auth/qualification/result')[2]
-                for route in ('/workspace', '/api/query', '/api/import', '/api/generate', '/api/export'):
-                    assert request(route)[0] == 404
+                cookie = {'Cookie': '__Host-genui_prelogin=' + capability() + capability()[:21]}
+                status, headers, body = request('/auth/callback?code=' + supplied_code + '&state=' + supplied_state, headers=cookie)
+                # The product callback: uniform neutral failure, no session, no provider call.
+                assert status == 400 and headers.get('Location') is None
+                assert headers['Cache-Control'] == 'no-store' or 'no-store' in headers['Cache-Control']
+                assert '__Host-genui_prelogin=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0' in headers.get_all('Set-Cookie')
+                assert b'Sign-in could not continue' in body
+                for route, method in (('/auth/qualification/start', 'POST'), ('/auth/qualification/status', 'GET'),
+                                      ('/auth/qualification/result', 'GET')):
+                    code, hdrs, payload = request(route, method, b'' if method == 'POST' else None,
+                                                  {'Sec-Fetch-Site': 'same-origin'})
+                    assert (code, payload) == (404, UNIFORM_404) and hdrs['Content-Type'] == 'application/problem+json'
+                for route in ('/workspace', '/auth/pending', '/api/query', '/api/import', '/api/generate', '/api/export', '/v1/anything'):
+                    code, hdrs, payload = request(route)
+                    assert (code, payload) == (404, UNIFORM_404), route
+                    assert hdrs['Cache-Control'] == 'no-store' and hdrs['X-Content-Type-Options'] == 'nosniff'
+                assert request('/auth/signout', 'POST', b'', {'Sec-Fetch-Site': 'cross-site'})[0] == 403
+                signin_status, _, signin_body = request('/signin')
+                assert signin_status == 200 and b'Sign in' in signin_body and b'<script src' not in signin_body
                 assert request('/health/live')[0] == 200
                 assert request('/health/ready')[0] == 503
-                for value in (supplied_code, supplied_state, qualification['operator_token'], qualification['invite_token']):
+                for value in (supplied_code, supplied_state) + secrets_in_play:
                     assert value.encode() not in body
                     assert value not in str(headers)
-                reports.append({'enabled': enabled, 'callback_status': status,
+                reports.append({'run': restart, 'harness_routes': 404, 'callback_status': status,
                                 'protected_routes': 404, 'provider_requests': 0,
                                 'managed_readiness_without_probe': 503})
             finally:
@@ -137,10 +154,10 @@ def run(binary, directory=None):
                     process.kill()
                     process.wait(timeout=5)
                 thread.join(timeout=2)
-            for value in (supplied_code, supplied_state, qualification['operator_token'], qualification['invite_token']):
+            for value in (supplied_code, supplied_state) + secrets_in_play:
                 assert value not in ''.join(output), 'native output disclosed synthetic capability'
-    return {'scope': 'local native HTTP routing, default-off and privacy; no hosted identity or mailbox evidence',
-            'runs': reports, 'enabled_process_restarted': True, 'private_files_removed': True,
+    return {'scope': 'local native HTTP routing, harness retirement and privacy; no hosted identity or mailbox evidence',
+            'runs': reports, 'process_restarted': True, 'private_files_removed': True,
             'synthetic_capabilities_in_native_output': False, 'passed': True}
 
 

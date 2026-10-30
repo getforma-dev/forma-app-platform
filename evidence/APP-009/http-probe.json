@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "private_files_removed": true,
+  "process_restarted": true,
+  "runs": [
+    {
+      "exit_code": 1,
+      "harness_configuration": "refused at startup",
+      "listener_bound": false
+    },
+    {
+      "callback_status": 400,
+      "harness_routes": 404,
+      "managed_readiness_without_probe": 503,
+      "protected_routes": 404,
+      "provider_requests": 0,
+      "run": 1
+    },
+    {
+      "callback_status": 400,
+      "harness_routes": 404,
+      "managed_readiness_without_probe": 503,
+      "protected_routes": 404,
+      "provider_requests": 0,
+      "run": 2
+    }
+  ],
+  "scope": "local native HTTP routing, harness retirement and privacy; no hosted identity or mailbox evidence",
+  "synthetic_capabilities_in_native_output": false
+}

@@ -1,0 +1,659 @@
+{
+  "schema_version": 1,
+  "scope": "APP-078 preparation: read-only observation (describe/get/list only; no mutation)",
+  "observed_at_utc": "2026-10-30T02:24:33Z",
+  "caller_account": "877573132739",
+  "stack": {
+    "name": "GenuiSyntheticFoundation",
+    "id": "arn:aws:cloudformation:us-east-1:877573132739:stack/GenuiSyntheticFoundation/9158dbd0-d320-11f1-a006-0affc4587aaf",
+    "status": "UPDATE_COMPLETE",
+    "last_updated": "2026-10-29T00:43:53Z",
+    "termination_protection": false,
+    "parameters": {
+      "Operator": "Victor / GenUI qualification operator",
+      "TlsCertificateArn": "arn:aws:acm:us-east-1:877573132739:certificate/832cd214-1039-4d8d-abdd-1ae614caf9ed",
+      "BootstrapVersion": "/cdk-bootstrap/hnb659fds/version",
+      "MonthlyBudgetUsd": "100",
+      "ImageDigest": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+      "IngressMode": "public",
+      "OperatorIpv4Cidr": "<private: see .cache/operations/beta>",
+      "DeploymentExpiresAtUtc": "2026-10-29T04:39:50Z",
+      "ServiceDesiredCount": "0",
+      "ImageArchitecture": "ARM64"
+    },
+    "outputs": {
+      "MigrationTaskDefinition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationMigrationTask99B85AB9:2",
+      "TaskSecurityGroup": "sg-00b28ce2a112f530b",
+      "DeploymentExpiryScheduleArn": "arn:aws:scheduler:us-east-1:877573132739:schedule/GenuiSyntheticFoundation-ExpiryScheduleGroup-1GXBT2YNEMFEK/GenuiSyntheticFoundation-DeploymentExpiry-P2FWIBRKKAC1",
+      "EvidenceBucket": "genuisyntheticfoundation-evidence4cc26d68-p1jacwjbl56s",
+      "MigrationExecutionRoleArn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-MigrationExecutionRoleB6B1-xXWQpb0qWjxV",
+      "SelectedIngressMode": "public",
+      "MigrationTaskRoleArn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-MigrationRole55C404E5-DeJi45LfX4HM",
+      "DatabaseRoleConfiguration": "{\"workspace\":\"arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccessworkspace80F-iHrQLtdolyJd\",\"control\":\"arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccesscontrolEF42B-7x18OI7FGonb\",\"data\":\"arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccessdata36378A0D-JiXYtZmk7cKD\",\"worker\":\"arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-DatabaseAccessworker767404-wzze9whxTsKh\"}",
+      "ScheduledExpiryUtc": "2026-10-29T04:39:50Z",
+      "TaskDefinition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationTaskE2459512:2",
+      "ServiceName": "GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF",
+      "PublicTaskSubnets": "subnet-06ef6d4f9a7db394e,subnet-0e259603502741ffe",
+      "ClusterName": "GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN",
+      "DeploymentExpiryGroup": "GenuiSyntheticFoundation-ExpiryScheduleGroup-1GXBT2YNEMFEK",
+      "DeploymentExpiryRoleArn": "arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-ExpiryRole0EF470AE-IxWa18xd7HiP",
+      "LoadBalancerDnsName": "GenuiS-LoadB-DaSWApcUZWXa-161166425.us-east-1.elb.amazonaws.com",
+      "TenantConfiguration": "[{\"organization_id\":\"00000000-0000-4000-8000-000000000001\",\"role_arn\":\"arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-TenantAccess09CBCD5F8-10VyuoA9ZJ0Z\",\"kms_key_arn\":\"arn:aws:kms:us-east-1:877573132739:key/2d4528db-ca4b-4ee3-9565-169c4a75b1c7\",\"prefix\":\"o/00000000-0000-4000-8000-000000000001/\"},{\"organization_id\":\"00000000-0000-4000-8000-000000000002\",\"role_arn\":\"arn:aws:iam::877573132739:role/GenuiSyntheticFoundation-TenantAccess1B93A8085-UXRCAMtDQ6bU\",\"kms_key_arn\":\"arn:aws:kms:us-east-1:877573132739:key/676056e3-dc52-4244-865d-8d55eea15af5\",\"prefix\":\"o/00000000-0000-4000-8000-000000000002/\"}]",
+      "DatabaseEndpoint": "<private: see .cache/operations/beta>"
+    },
+    "stack_policy": {
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": "*",
+          "Action": "Update:*",
+          "Resource": "*"
+        },
+        {
+          "Effect": "Deny",
+          "Principal": "*",
+          "Action": [
+            "Update:Replace",
+            "Update:Delete"
+          ],
+          "Resource": "*",
+          "Condition": {
+            "StringEquals": {
+              "ResourceType": [
+                "AWS::RDS::DBInstance"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "change_sets": [],
+    "resource_count": 65
+  },
+  "services": [
+    {
+      "serviceName": "GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF",
+      "serviceArn": "arn:aws:ecs:us-east-1:877573132739:service/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF",
+      "status": "ACTIVE",
+      "desiredCount": 0,
+      "runningCount": 0,
+      "pendingCount": 0,
+      "taskDefinition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationTaskE2459512:2",
+      "launchType": "FARGATE",
+      "platformVersion": "1.4.0",
+      "deployment_configuration": {
+        "deploymentCircuitBreaker": {
+          "enable": true,
+          "rollback": true,
+          "resetOnHealthyTask": true,
+          "thresholdConfiguration": {
+            "type": "BOUNDED_PERCENT",
+            "value": 50
+          }
+        },
+        "maximumPercent": 200,
+        "minimumHealthyPercent": 100,
+        "alarms": {
+          "alarmNames": [],
+          "rollback": false,
+          "enable": false
+        },
+        "strategy": "ROLLING",
+        "bakeTimeInMinutes": 0
+      },
+      "deployments": [
+        {
+          "status": "PRIMARY",
+          "taskDefinition": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationTaskE2459512:2",
+          "desiredCount": 0,
+          "runningCount": 0,
+          "rolloutState": "COMPLETED",
+          "createdAt": "2026-10-28T23:03:32Z"
+        }
+      ]
+    }
+  ],
+  "task_definitions": {
+    "TaskDefinition": {
+      "arn": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationTaskE2459512:2",
+      "revision": 2,
+      "status": "ACTIVE",
+      "cpu": "2048",
+      "memory": "8192",
+      "runtime_platform": {
+        "cpuArchitecture": "ARM64",
+        "operatingSystemFamily": "LINUX"
+      },
+      "containers": [
+        {
+          "name": "workspace",
+          "image": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+          "user": "65532:65532",
+          "readonly_root": true,
+          "entry_point": [],
+          "command": [],
+          "environment_names": [
+            "AWS_REGION",
+            "FORMA_BIND_ADDRESS",
+            "FORMA_PORT",
+            "GENUI_DATABASE_HOST",
+            "GENUI_DATABASE_NAME",
+            "GENUI_DATABASE_PORT",
+            "GENUI_DATABASE_ROLES_JSON",
+            "GENUI_EVIDENCE_BUCKET",
+            "GENUI_RDS_CA_FILE",
+            "GENUI_RUNTIME_CONFIG_FILE",
+            "GENUI_TENANTS_JSON",
+            "PYTHONDONTWRITEBYTECODE"
+          ],
+          "secret_names": []
+        }
+      ]
+    },
+    "MigrationTaskDefinition": {
+      "arn": "arn:aws:ecs:us-east-1:877573132739:task-definition/GenuiSyntheticFoundationMigrationTask99B85AB9:2",
+      "revision": 2,
+      "status": "ACTIVE",
+      "cpu": "2048",
+      "memory": "8192",
+      "runtime_platform": {
+        "cpuArchitecture": "ARM64",
+        "operatingSystemFamily": "LINUX"
+      },
+      "containers": [
+        {
+          "name": "migration",
+          "image": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic@sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+          "user": "65532:65532",
+          "readonly_root": true,
+          "entry_point": [
+            "python3",
+            "/app/runtime.py"
+          ],
+          "command": [
+            "migrate"
+          ],
+          "environment_names": [
+            "PGDATABASE",
+            "PGHOST",
+            "PGPORT",
+            "PGSSLMODE",
+            "PGSSLROOTCERT",
+            "PGUSER",
+            "PYTHONDONTWRITEBYTECODE"
+          ],
+          "secret_names": [
+            "PGPASSWORD"
+          ]
+        }
+      ]
+    }
+  },
+  "tasks": {
+    "RUNNING": [],
+    "STOPPED": []
+  },
+  "databases": [
+    {
+      "identifier": "genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg",
+      "resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+      "arn": "arn:aws:rds:us-east-1:877573132739:db:genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg",
+      "status": "available",
+      "engine": "postgres",
+      "engine_version": "16.13",
+      "class": "db.t4g.small",
+      "storage_gib": 20,
+      "storage_type": "gp3",
+      "storage_encrypted": true,
+      "publicly_accessible": false,
+      "multi_az": false,
+      "iam_auth": true,
+      "deletion_protection": true,
+      "auto_minor_version_upgrade": false,
+      "backup_retention_days": 7,
+      "latest_restorable_time": "2026-10-30T02:18:38Z",
+      "endpoint": "<private: see .cache/operations/beta>",
+      "snapshots": [
+        {
+          "id": "rds:genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg-2026-10-28-23-00",
+          "type": "automated",
+          "status": "available",
+          "created": "2026-10-28T23:00:36Z",
+          "encrypted": true,
+          "engine_version": "16.13"
+        },
+        {
+          "id": "rds:genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg-2026-10-29-05-21",
+          "type": "automated",
+          "status": "available",
+          "created": "2026-10-29T05:21:08Z",
+          "encrypted": true,
+          "engine_version": "16.13"
+        }
+      ]
+    }
+  ],
+  "ecr": {
+    "genui-synthetic": {
+      "uri": "877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-synthetic",
+      "tag_mutability": "IMMUTABLE",
+      "scan_on_push": true,
+      "images": [
+        {
+          "digest": "sha256:86fd8b52c37715bb736ed5a2e67e0e9bc4bc41dd709717c5c52ce4f5a61e2c59",
+          "tags": [],
+          "pushed_at": "2026-10-28T22:01:24Z",
+          "size_bytes": 2121,
+          "media_type": "application/vnd.oci.image.manifest.v1+json"
+        },
+        {
+          "digest": "sha256:88d8833f6ad7556f241f62fdabde155ba0e6c640d2b2e2f5fdd40fc81331b23a",
+          "tags": [],
+          "pushed_at": "2026-10-28T22:01:24Z",
+          "size_bytes": 78501857,
+          "media_type": "application/vnd.oci.image.manifest.v1+json"
+        },
+        {
+          "digest": "sha256:8d8e2f3905ec1764e14d4207915439022be6edff0791e743b502716c929f2afb",
+          "tags": [
+            "app007-8139067-arm64"
+          ],
+          "pushed_at": "2026-10-28T22:01:24Z",
+          "size_bytes": 78501857,
+          "media_type": "application/vnd.oci.image.index.v1+json"
+        },
+        {
+          "digest": "sha256:b3cbc338bf20d5dec21fb370fc94f387ea2ac3d9a4f2bf460526a1c64cfb7625",
+          "tags": [],
+          "pushed_at": "2026-10-28T22:27:50Z",
+          "size_bytes": 78502267,
+          "media_type": "application/vnd.oci.image.manifest.v1+json"
+        },
+        {
+          "digest": "sha256:03259c81caf8122ac1cec436e23d9c923784a541a6f721c96e067d4f8ed34617",
+          "tags": [],
+          "pushed_at": "2026-10-28T22:27:50Z",
+          "size_bytes": 2128,
+          "media_type": "application/vnd.oci.image.manifest.v1+json"
+        },
+        {
+          "digest": "sha256:770bcb00395b135325ebb0955edc87a84c3c86b7ec05d0711af9a7765f03eb22",
+          "tags": [
+            "app007-8f8c34b-arm64"
+          ],
+          "pushed_at": "2026-10-28T22:27:50Z",
+          "size_bytes": 78502267,
+          "media_type": "application/vnd.oci.image.index.v1+json"
+        },
+        {
+          "digest": "sha256:08d350fd186f72886823c9b33be21b1df1a70d4f96b1a35e63d639fb7c775ac9",
+          "tags": [],
+          "pushed_at": "2026-10-29T01:06:07Z",
+          "size_bytes": 80198681,
+          "media_type": "application/vnd.oci.image.manifest.v1+json"
+        },
+        {
+          "digest": "sha256:e66bf7ca6165e8415c45cb5ed5d56d32af8ee1fea6a81bc614f0ace3c29e05e6",
+          "tags": [],
+          "pushed_at": "2026-10-29T01:06:07Z",
+          "size_bytes": 2118,
+          "media_type": "application/vnd.oci.image.manifest.v1+json"
+        },
+        {
+          "digest": "sha256:a4a47707e1e4028221cba7f5f0dfdf03ef663c6f46d0686a27632c4fd5fc5d08",
+          "tags": [
+            "app006-18c33f5-arm64"
+          ],
+          "pushed_at": "2026-10-29T01:06:07Z",
+          "size_bytes": 80198681,
+          "media_type": "application/vnd.oci.image.index.v1+json"
+        },
+        {
+          "digest": "sha256:e8566e68b2ce1ee7221eae6a5da105157d31a13af80028f2952abe2e09b0d744",
+          "tags": [],
+          "pushed_at": "2026-10-29T02:33:05Z",
+          "size_bytes": 1934,
+          "media_type": "application/vnd.oci.image.manifest.v1+json"
+        },
+        {
+          "digest": "sha256:e72c13558e7e08a172012d0534f6dbbb1a5f1584d2faf7248b81f1f9f91a81fa",
+          "tags": [],
+          "pushed_at": "2026-10-29T02:33:05Z",
+          "size_bytes": 49441675,
+          "media_type": "application/vnd.oci.image.manifest.v1+json"
+        },
+        {
+          "digest": "sha256:5ee5ad165bca1e37bc2efe13f2fb727912c008cbe721b18f452a98482404cedc",
+          "tags": [
+            "app006-key-8fca35c-arm64"
+          ],
+          "pushed_at": "2026-10-29T02:33:05Z",
+          "size_bytes": 49441675,
+          "media_type": "application/vnd.oci.image.index.v1+json"
+        }
+      ]
+    },
+    "fauth-beta": {
+      "uri": "877573132739.dkr.ecr.us-east-1.amazonaws.com/fauth-beta",
+      "tag_mutability": "IMMUTABLE",
+      "scan_on_push": true,
+      "images": [
+        {
+          "digest": "sha256:d1365238ef1db7fb7afa759f3201c7550106d2ca79a0ebb239a06814970229a3",
+          "tags": [
+            "source-1bf5d3b2fb515c8ed82b0c5a044f7846915e28d0"
+          ],
+          "pushed_at": "2026-10-29T19:30:18Z",
+          "size_bytes": 40814839,
+          "media_type": "application/vnd.oci.image.manifest.v1+json"
+        }
+      ]
+    },
+    "cdk-hnb659fds-container-assets-877573132739-us-east-1": {
+      "uri": "877573132739.dkr.ecr.us-east-1.amazonaws.com/cdk-hnb659fds-container-assets-877573132739-us-east-1",
+      "tag_mutability": "IMMUTABLE",
+      "scan_on_push": false,
+      "images": []
+    }
+  },
+  "stop_schedule": {
+    "arn": "arn:aws:scheduler:us-east-1:877573132739:schedule/GenuiSyntheticFoundation-ExpiryScheduleGroup-1GXBT2YNEMFEK/GenuiSyntheticFoundation-DeploymentExpiry-P2FWIBRKKAC1",
+    "state": "ENABLED",
+    "expression": "at(2026-10-29T04:39:50)",
+    "timezone": "UTC",
+    "flexible_window": {
+      "Mode": "OFF"
+    },
+    "target_arn": "arn:aws:scheduler:::aws-sdk:ecs:updateService",
+    "target_input": {
+      "Cluster": "arn:aws:ecs:us-east-1:877573132739:cluster/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN",
+      "Service": "arn:aws:ecs:us-east-1:877573132739:service/GenuiSyntheticFoundation-ClusterEB0386A7-HMlpmHwGMVSN/GenuiSyntheticFoundation-ServiceD69D759B-pNHHjoez1RWF",
+      "DesiredCount": 0
+    },
+    "retry_policy": {
+      "MaximumEventAgeInSeconds": 900,
+      "MaximumRetryAttempts": 3
+    }
+  },
+  "load_balancers": [
+    {
+      "name": "GenuiS-LoadB-DaSWApcUZWXa",
+      "dns_name": "GenuiS-LoadB-DaSWApcUZWXa-161166425.us-east-1.elb.amazonaws.com",
+      "state": "active",
+      "scheme": "internet-facing"
+    }
+  ],
+  "listeners": [
+    {
+      "port": 443,
+      "protocol": "HTTPS",
+      "ssl_policy": "ELBSecurityPolicy-TLS13-1-2-2021-06",
+      "certificates": [
+        "arn:aws:acm:us-east-1:877573132739:certificate/832cd214-1039-4d8d-abdd-1ae614caf9ed"
+      ]
+    }
+  ],
+  "target_health": {
+    "arn:aws:elasticloadbalancing:us-east-1:877573132739:targetgroup/GenuiS-LoadB-XBVMORRQU7PM/7642bca65e43d34b": []
+  },
+  "certificate": {
+    "arn": "arn:aws:acm:us-east-1:877573132739:certificate/832cd214-1039-4d8d-abdd-1ae614caf9ed",
+    "domain": "beta.getforma.dev",
+    "status": "ISSUED",
+    "not_after": "2027-05-13T23:59:59Z",
+    "in_use_by": [
+      "arn:aws:elasticloadbalancing:us-east-1:877573132739:loadbalancer/app/GenuiS-LoadB-DaSWApcUZWXa/d00306dee9a36b99"
+    ],
+    "renewal_eligibility": "ELIGIBLE"
+  },
+  "budgets": [],
+  "cost_month_to_date": {
+    "start": "2026-10-01",
+    "end_exclusive": "2026-10-30",
+    "estimated": true,
+    "by_service": [
+      {
+        "service": "Amazon Relational Database Service",
+        "usd": "14.0933053476"
+      },
+      {
+        "service": "Amazon Virtual Private Cloud",
+        "usd": "3.43432085"
+      },
+      {
+        "service": "AWS Secrets Manager",
+        "usd": "2.880070918"
+      },
+      {
+        "service": "Amazon Elastic Compute Cloud - Compute",
+        "usd": "2.8033074972"
+      },
+      {
+        "service": "AWS App Runner",
+        "usd": "2.3434334448"
+      },
+      {
+        "service": "Amazon Elastic Load Balancing",
+        "usd": "0.4050437281"
+      },
+      {
+        "service": "EC2 - Other",
+        "usd": "0.2868301288"
+      },
+      {
+        "service": "Amazon Elastic Container Service",
+        "usd": "0.0731933996"
+      },
+      {
+        "service": "AWS Key Management Service",
+        "usd": "0.03763438"
+      },
+      {
+        "service": "Amazon EC2 Container Registry (ECR)",
+        "usd": "0.006946473"
+      },
+      {
+        "service": "Amazon Simple Storage Service",
+        "usd": "0.0024756517"
+      },
+      {
+        "service": "AmazonCloudWatch",
+        "usd": "0.00004"
+      },
+      {
+        "service": "AWS CloudShell",
+        "usd": "0.0000000347"
+      },
+      {
+        "service": "AWS Certificate Manager",
+        "usd": "0"
+      },
+      {
+        "service": "AWS CloudFormation",
+        "usd": "0"
+      },
+      {
+        "service": "AWS Glue",
+        "usd": "0"
+      },
+      {
+        "service": "AWS Lambda",
+        "usd": "0"
+      },
+      {
+        "service": "Amazon CloudFront",
+        "usd": "0"
+      },
+      {
+        "service": "Amazon Simple Notification Service",
+        "usd": "0"
+      },
+      {
+        "service": "CloudWatch Events",
+        "usd": "0"
+      },
+      {
+        "service": "Tax",
+        "usd": "0"
+      }
+    ],
+    "total_usd": "26.37"
+  },
+  "qualification_secrets": [],
+  "requests": [
+    {
+      "service": "sts",
+      "operation": "get_caller_identity",
+      "request_id": "89c8a1a0-0f89-4b46-b1a4-e890705e58be",
+      "http_status": 200
+    },
+    {
+      "service": "cloudformation",
+      "operation": "describe_stacks",
+      "request_id": "1cb94259-f411-4004-8987-ee5976e79241",
+      "http_status": 200
+    },
+    {
+      "service": "cloudformation",
+      "operation": "get_stack_policy",
+      "request_id": "c57eba28-9d97-4cda-96ad-30bb4216de0b",
+      "http_status": 200
+    },
+    {
+      "service": "cloudformation",
+      "operation": "list_change_sets",
+      "request_id": "0c908fd4-4034-490a-89f2-25d6e7472041",
+      "http_status": 200
+    },
+    {
+      "service": "cloudformation",
+      "operation": "list_stack_resources",
+      "request_id": "947fd379-d4b4-4f12-ae86-63fa3295ea67",
+      "http_status": 200
+    },
+    {
+      "service": "ecs",
+      "operation": "describe_clusters",
+      "request_id": "fa07ba0f-fbad-4687-91ef-f91a916ef0d2",
+      "http_status": 200
+    },
+    {
+      "service": "ecs",
+      "operation": "describe_services",
+      "request_id": "29794bf4-0ab1-418d-a9d9-2ff7246a1a6e",
+      "http_status": 200
+    },
+    {
+      "service": "ecs",
+      "operation": "list_tasks",
+      "request_id": "bee891bf-fd47-4cc9-b1d4-3d6d5abdc2ab",
+      "http_status": 200
+    },
+    {
+      "service": "ecs",
+      "operation": "list_tasks",
+      "request_id": "12c8de1c-b4f2-417a-8f9a-f92c1627ee18",
+      "http_status": 200
+    },
+    {
+      "service": "ecs",
+      "operation": "describe_task_definition",
+      "request_id": "301562b0-b1ad-4e9d-bf4c-f4c3526e6dcd",
+      "http_status": 200
+    },
+    {
+      "service": "ecs",
+      "operation": "describe_task_definition",
+      "request_id": "c77c5359-b6ba-4c8e-af2f-3d37c453208a",
+      "http_status": 200
+    },
+    {
+      "service": "rds",
+      "operation": "describe_db_instances",
+      "request_id": "64909753-fcb6-4fbb-8bc0-096466ad0abf",
+      "http_status": 200
+    },
+    {
+      "service": "rds",
+      "operation": "describe_db_snapshots",
+      "request_id": "f078c63e-7eca-48ac-96a2-bf1f49100b60",
+      "http_status": 200
+    },
+    {
+      "service": "ecr",
+      "operation": "describe_repositories",
+      "request_id": "fec86ab9-1038-4271-b64c-50be2d16165d",
+      "http_status": 200
+    },
+    {
+      "service": "ecr",
+      "operation": "describe_images",
+      "request_id": "31277b6c-5f1f-4a95-bdd6-b3a1707c2ba6",
+      "http_status": 200
+    },
+    {
+      "service": "ecr",
+      "operation": "describe_images",
+      "request_id": "d92caa6a-0946-4fbe-a517-850e21e77c5f",
+      "http_status": 200
+    },
+    {
+      "service": "ecr",
+      "operation": "describe_images",
+      "request_id": "a2eddce8-6623-4289-8947-e7c538160e7f",
+      "http_status": 200
+    },
+    {
+      "service": "scheduler",
+      "operation": "get_schedule",
+      "request_id": "f35324dd-59e1-4e4c-9b26-7cb2f53345a1",
+      "http_status": 200
+    },
+    {
+      "service": "elbv2",
+      "operation": "describe_load_balancers",
+      "request_id": "1f762c67-8cf5-4c9d-bbe9-0e870698e722",
+      "http_status": 200
+    },
+    {
+      "service": "elbv2",
+      "operation": "describe_listeners",
+      "request_id": "5db11ef9-3858-4461-851e-4e532d9c204f",
+      "http_status": 200
+    },
+    {
+      "service": "elbv2",
+      "operation": "describe_target_health",
+      "request_id": "0d74af15-2bcd-4527-9331-c36a39262f7a",
+      "http_status": 200
+    },
+    {
+      "service": "acm",
+      "operation": "describe_certificate",
+      "request_id": "badd9f93-858f-4eb6-ac12-fc3fe5ef3ba9",
+      "http_status": 200
+    },
+    {
+      "service": "budgets",
+      "operation": "describe_budgets",
+      "request_id": "69ea0d75-8a18-47b6-a4ef-b446f34d3075",
+      "http_status": 200
+    },
+    {
+      "service": "ce",
+      "operation": "get_cost_and_usage",
+      "request_id": "5671d7c3-88fd-4396-bae4-6f3f0a89732c",
+      "http_status": 200
+    },
+    {
+      "service": "secretsmanager",
+      "operation": "list_secrets",
+      "request_id": "345145c1-b86c-4277-8d36-6451c9a167f4",
+      "http_status": 200
+    }
+  ],
+  "limits": [
+    "Read-only snapshot at one instant; not a billing statement (Cost Explorer amounts are estimates and lag).",
+    "The database endpoint and operator address are kept only in the private raw file."
+  ]
+}

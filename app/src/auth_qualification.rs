@@ -2,6 +2,11 @@
 //!
 //! No public registration, app principal, membership or workspace session is
 //! created here. No request/response payload, query, Location or secret is logged.
+//!
+//! ADR-007 D7.13 (APP-009): compiled only with the `qualification-harness`
+//! feature, which release builds never enable; the product `auth` module owns
+//! `/auth/callback` and the service binary refuses the harness configuration.
+#![cfg(feature = "qualification-harness")]
 use axum::{
     body::to_bytes,
     extract::{Request, State},

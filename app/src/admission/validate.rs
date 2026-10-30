@@ -164,6 +164,33 @@ pub fn admit_definition(bytes: &[u8]) -> Result<AdmittedDefinition, AdmissionErr
     })
 }
 
+/// The contract `TIMESTAMP` rule (`contracts/validate.py` `valid_timestamp`
+/// over the schema pattern): a whole-second UTC instant `YYYY-MM-DDTHH:MM:SSZ`
+/// naming a real day in years 1 to 9999. APP-012 review M2: run parameters
+/// are judged by this rule, so an impossible date never reaches an engine.
+pub fn contract_timestamp(text: &str) -> bool {
+    Grammar::Time.admits(text)
+}
+
+/// APP-012 review M2: the Rust equivalent of `contracts/validate.py`
+/// `validate` for an edition-1 `query_receipt` (`$defs.query_receipt`): a
+/// forma-json-v1 document of at most 1 MiB, the closed member set with every
+/// required member, each value in its grammar (UUIDs, digests, identifiers,
+/// typed literals, integer ranges), `publication_id` exactly when the mode is
+/// `published`, unique `source_revisions` inputs and unique `parameters`
+/// fields. The receipt's own `digest` member is compared by its builder
+/// (`query::receipt`), which owns the identity. A receipt this refuses is
+/// never delivered.
+pub fn admit_receipt(document: &Value) -> Result<(), AdmissionError> {
+    canonical::encode(document)?;
+    let mut walk = Walk::default();
+    walk.receipt(document);
+    match walk.worst {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
 /// The parts of a well-formed definition its reference rules read.
 struct Definition {
     content: Content,
@@ -1241,6 +1268,141 @@ impl Walk {
 }
 
 type Fields<'a> = BTreeMap<&'a str, BTreeMap<&'a str, &'a Field>>;
+
+impl Walk {
+    /// `$defs.query_receipt` (schema version 1) as `validate.py` checks it.
+    fn receipt(&mut self, value: &Value) {
+        #[rustfmt::skip]
+        const REQUIRED: [&str; 21] = [
+            "kind", "schema_version", "organization_id", "app_id", "work_id", "mode",
+            "definition_digest", "view_id", "operator_version", "source_revisions",
+            "record_snapshot_sequence", "parameters", "principal_id", "membership_epoch",
+            "policy_epoch", "filter_epoch", "result_digest", "partial", "truncated_page",
+            "total_scope", "provenance",
+        ];
+        const SAFE: u64 = canonical::MAX_SAFE_INTEGER;
+        let Some(map) = self.object("$", value, &REQUIRED, &["publication_id", "digest"]) else {
+            return;
+        };
+        let at = |key: &str| member("$", key);
+        self.choice(&at("kind"), map.get("kind"), &["query_receipt"], None);
+        self.exactly(&at("schema_version"), map.get("schema_version"), 1);
+        for key in ["organization_id", "app_id", "work_id", "principal_id"] {
+            self.string(&at(key), map.get(key), Grammar::Uuid);
+        }
+        let mode = self.choice(
+            &at("mode"),
+            map.get("mode"),
+            &["published", "synthetic_preview", "authorized_read_preview"],
+            None,
+        );
+        if let Some(mode) = mode {
+            if (mode == "published") != map.contains_key("publication_id") {
+                self.fail(refused(
+                    &at("publication_id"),
+                    "only published receipt names publication",
+                ));
+            }
+        }
+        for key in ["definition_digest", "result_digest", "digest"] {
+            self.string(&at(key), map.get(key), Grammar::Digest);
+        }
+        self.string(
+            &at("publication_id"),
+            map.get("publication_id"),
+            Grammar::Uuid,
+        );
+        self.id(&at("view_id"), map.get("view_id"));
+        self.exactly(&at("operator_version"), map.get("operator_version"), 1);
+        let sources = at("source_revisions");
+        if let Some(items) = self.array(&sources, map.get("source_revisions"), 0, 8) {
+            let mut inputs = BTreeSet::new();
+            for (index, item) in items.iter().enumerate() {
+                let path = element(&sources, index);
+                let required = [
+                    "input_id",
+                    "source_id",
+                    "source_revision_id",
+                    "source_digest",
+                ];
+                let Some(dependency) = self.object(&path, item, &required, &[]) else {
+                    continue;
+                };
+                if let Some(input) = self.id(&member(&path, "input_id"), dependency.get("input_id"))
+                {
+                    if !inputs.insert(input) {
+                        self.fail(refused(&path, "duplicate receipt source"));
+                    }
+                }
+                for key in ["source_id", "source_revision_id"] {
+                    self.string(&member(&path, key), dependency.get(key), Grammar::Uuid);
+                }
+                self.string(
+                    &member(&path, "source_digest"),
+                    dependency.get("source_digest"),
+                    Grammar::Digest,
+                );
+            }
+        }
+        self.integer(
+            &at("record_snapshot_sequence"),
+            map.get("record_snapshot_sequence"),
+            0..=SAFE,
+        );
+        let parameters = at("parameters");
+        if let Some(items) = self.array(&parameters, map.get("parameters"), 0, 32) {
+            let mut fields = BTreeSet::new();
+            for (index, item) in items.iter().enumerate() {
+                let path = element(&parameters, index);
+                let Some(named) = self.object(&path, item, &["field_id", "value"], &[]) else {
+                    continue;
+                };
+                if let Some(field) = self.id(&member(&path, "field_id"), named.get("field_id")) {
+                    if !fields.insert(field) {
+                        self.fail(refused(&path, "duplicate receipt parameter"));
+                    }
+                }
+                if let Some(literal) = named.get("value") {
+                    self.literal(&member(&path, "value"), literal);
+                }
+            }
+        }
+        self.integer(
+            &at("membership_epoch"),
+            map.get("membership_epoch"),
+            1..=SAFE,
+        );
+        self.integer(&at("policy_epoch"), map.get("policy_epoch"), 1..=SAFE);
+        self.integer(&at("filter_epoch"), map.get("filter_epoch"), 0..=SAFE);
+        if let Some(partial) = map.get("partial").filter(|p| p.as_bool() != Some(false)) {
+            self.mistyped(
+                &at("partial"),
+                partial,
+                refused(&at("partial"), "expected false"),
+            );
+        }
+        self.boolean(&at("truncated_page"), map.get("truncated_page"));
+        self.choice(
+            &at("total_scope"),
+            map.get("total_scope"),
+            &["full_authorized_filtered_input"],
+            None,
+        );
+        if let Some(provenance) = map.get("provenance") {
+            let path = at("provenance");
+            if let Some(provenance) = self.object(
+                &path,
+                provenance,
+                &["query_digest", "predicate_digest"],
+                &[],
+            ) {
+                for key in ["query_digest", "predicate_digest"] {
+                    self.string(&member(&path, key), provenance.get(key), Grammar::Digest);
+                }
+            }
+        }
+    }
+}
 
 impl Content {
     /// validate.py `_definition`: identifiers, references, declared commands,

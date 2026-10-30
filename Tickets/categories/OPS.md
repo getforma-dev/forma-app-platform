@@ -18,3 +18,4 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 71 | [APP-068: Exercise restore and failure drills](../0-backlog/APP-068.md) | [PH06](../phases/PH06.md) | S12 | OPS | P0 | L | Backlog | APP-061, APP-064, APP-065, APP-067 |
 | 74 | [APP-071: Publish operator/run/release/rollback and incident runbooks](../0-backlog/APP-071.md) | [PH06](../phases/PH06.md) | S12 | OPS | P0 | M | Backlog | APP-066, APP-067, APP-068, APP-070 |
 | 81 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](../0-backlog/APP-080.md) | [PH05](../phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-077, APP-078 |
+| 86 | [APP-086: Close the managed qualification and native campaign residuals (APP-075 and APP-008 reviews)](../0-backlog/APP-086.md) | [PH07](../phases/PH07.md) | S13 | OPS | P2 | M | Backlog | APP-075, APP-078 |

@@ -6,6 +6,13 @@ AWS spending cap. Reservations survive failed/lost deployments and are never
 released automatically. Keep this file outside Git with the deployment inputs.
 Default mode calls no AWS API. Explicit --activate verifies the live stack and
 future stop schedule, then requests ECS desiredCount one. It never provisions.
+
+Two operating plans exist. `bounded-window` (the default; ledger schema 1) is
+ADR-003's $100/month 48-hour qualification window. `always-on-beta` (ledger
+schema 2) is Victor's approval of 2026-10-29 recorded in ADR-008: GenUI's
+always-on synthetic beta at about $150-170/month, with FormaStack's lean fAuth
+(about $33, up to $38) reserved separately. The always-on stop schedule is a
+backstop at most 32 days away, renewed with a fresh reconciled reservation.
 """
 import argparse
 import calendar
@@ -28,6 +35,35 @@ UTC = timezone.utc
 CAP = 10000
 GENUI_CAP = 7000
 MIN_VARIABLE_RESERVE = 1000
+BOUNDED, ALWAYS_ON = 'bounded-window', 'always-on-beta'
+# Closed operating plans. Caps are code, never ledger input: a ledger names its
+# plan and the plan's figures come only from the decision they cite.
+PLANS = {
+    BOUNDED: {'ledger_schema': 1, 'monthly_budget_usd': '100', 'genui_cap_cents': GENUI_CAP, 'project_cap_cents': CAP,
+              'max_expiry': timedelta(hours=48), 'decision': 'ADR-003 $100/month bounded 48-hour window'},
+    # ADR-008, "Victor's decisions of 2026-10-29 (evening)": about $150-170/month
+    # for GenUI (x86-priced) on top of FormaStack's lean fAuth (about $33, up to
+    # $38). The project cap is exactly those two approved upper figures.
+    ALWAYS_ON: {'ledger_schema': 2, 'monthly_budget_usd': '170', 'genui_cap_cents': 17000, 'project_cap_cents': 17000 + 3800,
+                'max_expiry': timedelta(days=32), 'auth_min_cents': 3300, 'auth_max_cents': 3800,
+                'decision': 'ADR-008 always-on beta: GenUI about $150-170/month plus FormaStack lean fAuth about $33 (up to $38)'},
+}
+DIGEST_RE = r'877573132739\.dkr\.ecr\.us-east-1\.amazonaws\.com/[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}'
+# Optional inputs: missing and explicitly empty (or the default plan) mean
+# disabled and are left out of the window binding, so earlier windows keep
+# their hashes.
+OPTIONAL_INPUTS = ('qualification_config_secret_arn', 'qualification_image_digest', 'operator_image_digest', 'operating_plan',
+                   'provider_management_secret_arn', 'provider_management_url')
+# Stack parameters an older deployed template may lack; absent means disabled.
+OPTIONAL_PARAMETERS = ('QualificationImageDigest', 'OperatorImageDigest', 'ProviderManagementSecretArn', 'ProviderManagementUrl')
+# ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's answers; approval A12):
+# FormaStack's existing management secret, attached by ARN to the operator task for the window and
+# the trial and cleared afterwards. Attaching and clearing cost nothing and change no compute, so,
+# like the ingress mode and the desired count, they may change within one reserved window and are
+# not part of its binding. Both or neither; this account and region only.
+MANAGEMENT_SECRET_RE = r'arn:aws:secretsmanager:us-east-1:877573132739:secret:[A-Za-z0-9/_+=.@-]{1,512}-[A-Za-z0-9]{6}'
+MANAGEMENT_URL_RE = r'https://[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::[0-9]{1,5})?'
+WITHIN_WINDOW = ('ingress_mode', 'service_desired_count', 'provider_management_secret_arn', 'provider_management_url')
 # Conservative Linux x86 price even when deploying an ARM64 image.
 TASK_HOURLY = Decimal('0.1215248')  # 2 CPU + 8 GiB + task IPv4
 FIXED_HOURLY = Decimal('0.0645')   # RDS + ALB + two ALB IPv4
@@ -66,11 +102,42 @@ def months_between(start, end):
     return result
 
 
+def plan_of(config):
+    plan = config.get('operating_plan', BOUNDED) if isinstance(config, dict) else BOUNDED
+    require(isinstance(plan, str) and plan in PLANS, 'unknown operating plan')
+    return plan
+
+
 def reserve(config, ledger, now):
-    optional = ['qualification_config_secret_arn'] if isinstance(config, dict) and 'qualification_config_secret_arn' in config else []
+    optional = [k for k in OPTIONAL_INPUTS if isinstance(config, dict) and k in config]
     exact_keys(config, ['window_id', 'account', 'region', 'hostname', 'operator', 'ingress_mode', 'operator_ipv4_cidr', 'deployment_expires_at_utc', 'tls_certificate_arn', 'image_digest', 'image_architecture', 'service_desired_count', 'extra_task_hours'] + optional, 'deployment')
-    qualification_arn = config.get('qualification_config_secret_arn', '')
-    require(isinstance(qualification_arn, str) and re.fullmatch(r'(?:|arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-[a-z0-9][a-z0-9-]{0,79}-[A-Za-z0-9]{6})', qualification_arn), 'qualification configuration must be empty or an exact approved secret ARN')
+    plan = plan_of(config)
+    rules = PLANS[plan]
+    # APP-074 review m11: the qualification secret injection is retired (the
+    # runtime refuses it in every mode). The key is accepted only empty, so
+    # earlier disabled windows keep their exact binding.
+    require(config.get('qualification_config_secret_arn', '') == '', 'qualification configuration secret is retired; leave it empty')
+    require(isinstance(config['image_digest'], str) and re.fullmatch(DIGEST_RE, config['image_digest']), 'reviewed same-account/region ECR digest required')
+    # APP-075/APP-077 standalone task images: empty (no task definition) or a
+    # reviewed same-account digest that is never the service image.
+    task_images = {}
+    for key in ('qualification_image_digest', 'operator_image_digest'):
+        value = config.get(key, '')
+        require(isinstance(value, str) and re.fullmatch('(?:' + DIGEST_RE + ')?', value) is not None, key + ' must be empty or a reviewed same-account/region ECR digest')
+        require(value != config['image_digest'], key + ' must never be the service image')
+        task_images[key] = value
+    require(not task_images['qualification_image_digest'] or task_images['qualification_image_digest'] != task_images['operator_image_digest'], 'qualification and operator images must be distinct artifacts')
+    management = {key: config.get(key, '') for key in ('provider_management_secret_arn', 'provider_management_url')}
+    require(isinstance(management['provider_management_secret_arn'], str)
+            and re.fullmatch('(?:' + MANAGEMENT_SECRET_RE + ')?', management['provider_management_secret_arn']) is not None,
+            'provider_management_secret_arn must be empty or a complete same-account/region Secrets Manager ARN')
+    require(isinstance(management['provider_management_url'], str)
+            and re.fullmatch('(?:' + MANAGEMENT_URL_RE + ')?', management['provider_management_url']) is not None,
+            'provider_management_url must be empty or an https origin')
+    require((management['provider_management_secret_arn'] == '') == (management['provider_management_url'] == ''),
+            'provider_management_secret_arn and provider_management_url are set together or left empty together')
+    require(not management['provider_management_secret_arn'] or task_images['operator_image_digest'],
+            'an attached management secret needs the operator task (operator_image_digest)')
     require(str(uuid.UUID(config['window_id'])) == config['window_id'], 'window_id must be a canonical UUID retained across retry')
     require(config['account'] == '877573132739' and config['region'] == 'us-east-1', 'unexpected account or region')
     require(config['hostname'] == 'beta.getforma.dev', 'unexpected beta hostname')
@@ -79,22 +146,25 @@ def reserve(config, ledger, now):
     address = ipaddress.ip_network(config['operator_ipv4_cidr'], strict=True)
     require(address.version == 4 and address.prefixlen == 32 and address.network_address.is_global, 'operator address must be a real public IPv4 /32')
     expires = timestamp(config['deployment_expires_at_utc'])
-    require(now + timedelta(minutes=10) <= expires <= now + timedelta(hours=48), 'expiry must be 10 minutes to 48 hours in the future')
+    require(now + timedelta(minutes=10) <= expires <= now + rules['max_expiry'], 'expiry must be 10 minutes to %s in the future' % ('48 hours' if plan == BOUNDED else '32 days'))
     require(re.fullmatch(r'arn:aws:acm:us-east-1:877573132739:certificate/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', config['tls_certificate_arn']), 'certificate must belong to the selected account/region')
-    require(re.fullmatch(r'877573132739\.dkr\.ecr\.us-east-1\.amazonaws\.com/[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}', config['image_digest']), 'reviewed same-account/region ECR digest required')
     require(config['image_architecture'] in ('ARM64', 'X86_64'), 'invalid image architecture')
     require(type(config['service_desired_count']) is int and config['service_desired_count'] in (0, 1), 'desired count must be zero or one')
     require(integer(config['extra_task_hours'], 2), 'reserve at least two additional task-hours for migration, qualification and deployment overlap')
-    exact_keys(ledger, ['schema_version', 'scope', 'months', 'windows'], 'ledger')
-    require(ledger['schema_version'] == 1 and ledger['scope'] == 'genui-beta-incremental', 'unexpected ledger scope/version')
+    if plan == BOUNDED:
+        exact_keys(ledger, ['schema_version', 'scope', 'months', 'windows'], 'ledger')
+    else:
+        exact_keys(ledger, ['schema_version', 'scope', 'operating_plan', 'months', 'windows'], 'ledger')
+        require(ledger['operating_plan'] == plan, 'ledger operating plan differs from the deployment input')
+    require(ledger['schema_version'] == rules['ledger_schema'] and ledger['scope'] == 'genui-beta-incremental', 'unexpected ledger scope/version for the operating plan')
     require(isinstance(ledger['months'], dict) and isinstance(ledger['windows'], dict), 'invalid ledger collections')
     # The same prepaid window covers migration at count zero, its /32 trial,
     # and public/count-one operation. Neither transition extends its deadline.
     # Missing and explicitly empty both mean disabled. Preserve the exact
     # binding of earlier disabled windows; enabling/changing a secret is a new
     # immutable input and cannot repurpose an already reserved window.
-    immutable = {k: v for k, v in config.items() if k not in ('ingress_mode', 'service_desired_count')
-                 and not (k == 'qualification_config_secret_arn' and v == '')}
+    immutable = {k: v for k, v in config.items() if k not in WITHIN_WINDOW
+                 and not (k in OPTIONAL_INPUTS and v in ('', BOUNDED))}
     encoded = json.dumps(immutable, sort_keys=True, separators=(',', ':')).encode()
     binding = hashlib.sha256(encoded).hexdigest()
     for key, old in ledger['windows'].items():
@@ -127,28 +197,38 @@ def reserve(config, ledger, now):
         require(isinstance(entry['basis'], str) and 0 < len(entry['basis'].strip()) <= 1000, 'ledger reconciliation basis required')
         require(all(integer(entry[k]) for k in ['prior_extra_spend_cents', 'variable_reserve_cents', 'auth_spent_or_reserved_cents', 'unallocated_cents']), 'ledger cents must be nonnegative integers')
         require(entry['variable_reserve_cents'] >= MIN_VARIABLE_RESERVE, 'retain at least $10 for probes, secrets, storage, logs and requests')
-        require(entry['auth_spent_or_reserved_cents'] >= 500 and entry['unallocated_cents'] == 2500, 'retain the separate $5 auth allowance and $25 unallocated')
+        if plan == BOUNDED:
+            require(entry['auth_spent_or_reserved_cents'] >= 500 and entry['unallocated_cents'] == 2500, 'retain the separate $5 auth allowance and $25 unallocated')
+        else:
+            # FormaStack's approved lean fAuth is reserved at its quoted figure,
+            # never below "about $33" and never above its quoted $38.
+            require(rules['auth_min_cents'] <= entry['auth_spent_or_reserved_cents'] <= rules['auth_max_cents'], 'reserve FormaStack lean fAuth at its approved $33-38 figure')
         year, number = (int(x) for x in month.split('-'))
         retained = cents(FIXED_HOURLY * calendar.monthrange(year, number)[1] * 24 + FIXED_STORAGE_KEYS)
         windows = sum(w['reserved_compute_cents_by_month'].get(month, 0) for w in updated['windows'].values())
         genui = retained + windows + entry['prior_extra_spend_cents'] + entry['variable_reserve_cents']
         total = genui + entry['auth_spent_or_reserved_cents'] + entry['unallocated_cents']
-        require(genui <= GENUI_CAP and total <= CAP, 'budget exceeded for ' + month + '; reconcile prior reservations or change the reviewed operating plan')
+        require(genui <= rules['genui_cap_cents'] and total <= rules['project_cap_cents'], 'budget exceeded for ' + month + '; reconcile prior reservations or change the reviewed operating plan')
         reports[month] = {'retained_core_full_month_cents': retained, 'all_window_compute_reservations_cents': windows,
                           'prior_extra_spend_cents': entry['prior_extra_spend_cents'], 'variable_reserve_cents': entry['variable_reserve_cents'],
                           'genui_total_cents': genui, 'auth_spent_or_reserved_cents': entry['auth_spent_or_reserved_cents'],
                           'unallocated_cents': entry['unallocated_cents'], 'project_total_cents': total}
-    parameters = {'Operator': config['operator'], 'MonthlyBudgetUsd': '100', 'IngressMode': config['ingress_mode'],
+    parameters = {'Operator': config['operator'], 'MonthlyBudgetUsd': rules['monthly_budget_usd'], 'IngressMode': config['ingress_mode'],
                   'OperatorIpv4Cidr': config['operator_ipv4_cidr'], 'DeploymentExpiresAtUtc': config['deployment_expires_at_utc'],
                   'TlsCertificateArn': config['tls_certificate_arn'], 'ImageDigest': config['image_digest'],
                   'ImageArchitecture': config['image_architecture'], 'ServiceDesiredCount': '0',
-                  'QualificationConfigSecretArn': qualification_arn}
+                  'QualificationImageDigest': task_images['qualification_image_digest'],
+                  'OperatorImageDigest': task_images['operator_image_digest'],
+                  'ProviderManagementSecretArn': management['provider_management_secret_arn'],
+                  'ProviderManagementUrl': management['provider_management_url']}
     return updated, {'status': 'reserved_local_plan_only', 'window_id': config['window_id'], 'input_sha256': binding,
                      'observed_at_utc': now.strftime('%Y-%m-%dT%H:%M:%SZ'), 'reused_reservation': existing is not None,
-                     'monthly_budget_cents': CAP, 'genui_allocation_cents': GENUI_CAP, 'cost_by_month': reports,
+                     'operating_plan': plan, 'decision': rules['decision'],
+                     'monthly_budget_cents': rules['project_cap_cents'], 'genui_allocation_cents': rules['genui_cap_cents'], 'cost_by_month': reports,
                      'cloudformation_parameters': parameters,
                      'limits': ['No AWS resource, certificate, image, account state or billing feed was queried.',
-                                'Scheduler requests ECS desiredCount zero; it is not a billing cap, teardown or a guarantee of timely delivery.',
+                                'Scheduler requests ECS desiredCount zero; it is not a billing cap, teardown or a guarantee of timely delivery.'
+                                + (' For the always-on beta it is a backstop that must be renewed, with a new reconciled reservation, before it fires.' if plan == ALWAYS_ON else ''),
                                 'RDS, ALB, two ALB IPv4 addresses, storage and keys remain charged after ECS stops.',
                                 'Retain this ledger across failed deployments, retries and renewed windows; never reset known spending to zero.',
                                 'Renewals, standalone tasks, actual charges above reserves and every later month need reconciliation; model spending remains zero.']}
@@ -162,8 +242,9 @@ def activate(config, report, call, clock):
     require(stack['StackStatus'] in ('CREATE_COMPLETE', 'UPDATE_COMPLETE'), 'stack must be complete before activation')
     parameters = {v['ParameterKey']: v['ParameterValue'] for v in stack['Parameters']}
     expected = report['cloudformation_parameters']
-    require(parameters.get('QualificationConfigSecretArn', '') == config.get('qualification_config_secret_arn', ''), 'deployed qualification secret differs from the reserved plan')
-    require(all(parameters.get(k, '' if k == 'QualificationConfigSecretArn' else None) == str(v) for k, v in expected.items()), 'deployed parameters differ from the reserved plan')
+    # An older deployed template may still carry the retired parameter: only empty.
+    require(parameters.get('QualificationConfigSecretArn', '') == '', 'deployed qualification secret parameter must be empty or absent')
+    require(all(parameters.get(k, '' if k in OPTIONAL_PARAMETERS else None) == str(v) for k, v in expected.items()), 'deployed parameters differ from the reserved plan')
     outputs = {v['OutputKey']: v['OutputValue'] for v in stack['Outputs']}
     arn = outputs['DeploymentExpiryScheduleArn']
     prefix = 'arn:aws:scheduler:us-east-1:877573132739:schedule/'
@@ -190,11 +271,42 @@ def activate(config, report, call, clock):
     require(containers[0]['image'] == config['image_digest'] and definition['runtimePlatform']['cpuArchitecture'] == config['image_architecture'], 'live image or architecture differs from the reserved plan')
     require(containers[0].get('entryPoint', []) == [] and containers[0].get('command', []) == [], 'live service must use the reviewed image startup')
     require(containers[0].get('environmentFiles', []) == [] and
-            not any(item['name'].startswith('GENUI_AUTH_QUALIFICATION_') for item in containers[0].get('environment', [])),
-            'live qualification configuration cannot bypass the reviewed secret channel')
-    qualification_arn = config.get('qualification_config_secret_arn', '')
-    expected_secrets = [{'name': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'valueFrom': qualification_arn}] if qualification_arn else []
-    require(containers[0].get('secrets', []) == expected_secrets, 'live qualification secret injection differs from the reserved plan')
+            not any(item['name'].startswith(('GENUI_AUTH_QUALIFICATION_', 'GENUI_PROVIDER_CAPABILIT', 'GENUI_AUTH_CONFIG', 'GENUI_IDENTITY_REGISTRY'))
+                    for item in containers[0].get('environment', [])),
+            'live qualification, capability or sign-in configuration cannot bypass the reviewed secret channel')
+    # ADR-003 amendment 2026-10-30 and APP-078 B1: exactly two injected secrets, the
+    # stack's provider capability secret and its hosted sign-in configuration, under
+    # the names runtime.py serve() consumes.
+    expected_secrets = [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': outputs['ProviderCapabilitySecretArn']},
+                        {'name': 'GENUI_AUTH_CONFIGURATION_JSON', 'valueFrom': outputs['AuthConfigurationSecretArn']}]
+    by_name = lambda entries: sorted(entries, key=lambda entry: entry['name'])
+    require(by_name(containers[0].get('secrets', [])) == by_name(expected_secrets), 'live secret injection differs from the reviewed stack')
+    # APP-076 item 8 / gap G11: the deny-all rollback revision (`PREVIOUS_TD`) exists on the same
+    # image with no secret injected and no sign-in configuration in its environment, so a rollback
+    # redeploy answers the uniform 404 on every protected route while the schema stays migrated.
+    require('RollbackTaskDefinition' in outputs, 'the stack has no deny-all rollback task definition (APP-076 G11)')
+    rollback = call('ecs', 'describe-task-definition', '--task-definition', outputs['RollbackTaskDefinition'])['taskDefinition']
+    require(rollback['taskDefinitionArn'] == outputs['RollbackTaskDefinition'] and rollback['taskDefinitionArn'] != outputs['TaskDefinition'],
+            'unexpected rollback task definition')
+    fallback = rollback['containerDefinitions']
+    require(len(fallback) == 1 and fallback[0]['name'] == 'workspace' and fallback[0]['image'] == config['image_digest']
+            and rollback['runtimePlatform']['cpuArchitecture'] == config['image_architecture'],
+            'rollback task definition must run the reserved image on one workspace container')
+    require(fallback[0].get('secrets', []) == [] and fallback[0].get('environmentFiles', []) == []
+            and fallback[0].get('entryPoint', []) == [] and fallback[0].get('command', []) == []
+            and not any(item['name'].startswith(('GENUI_AUTH_QUALIFICATION_', 'GENUI_PROVIDER_CAPABILIT', 'GENUI_AUTH_CONFIG', 'GENUI_IDENTITY_REGISTRY'))
+                        for item in fallback[0].get('environment', [])),
+            'rollback task definition must inject no secret and name no sign-in configuration: it starts deny-all')
+    # A12: an attached management secret must be the named one, live, and under the AWS-managed
+    # `aws/secretsmanager` key: the stack grants the operator task's execution role GetSecretValue
+    # only, so a customer-managed key would fail the task start (it would need a key-policy grant).
+    attached = parameters.get('ProviderManagementSecretArn', '')
+    if attached:
+        described = call('secretsmanager', 'describe-secret', '--secret-id', attached)
+        require(described.get('ARN') == attached and 'DeletedDate' not in described,
+                'the attached management secret is not the named live secret')
+        require(described.get('KmsKeyId') in (None, 'alias/aws/secretsmanager'),
+                'the attached management secret uses a customer-managed key; the operator task cannot decrypt it without a key-policy grant')
     def current_service():
         result = call('ecs', 'describe-services', '--cluster', cluster_arn, '--services', service_arn)
         require(not result.get('failures') and len(result['services']) == 1, 'intended service is unavailable')
@@ -205,7 +317,7 @@ def activate(config, report, call, clock):
         return service
     current_service()
     observed = clock()
-    require(observed + timedelta(minutes=10) <= timestamp(config['deployment_expires_at_utc']) <= observed + timedelta(hours=48), 'live expiry is too close, past or beyond the bounded window')
+    require(observed + timedelta(minutes=10) <= timestamp(config['deployment_expires_at_utc']) <= observed + PLANS[plan_of(config)]['max_expiry'], 'live expiry is too close, past or beyond the bounded window')
     # UpdateService is an immediate control-plane call after the live check,
     # never a count-one request hidden behind a slow CloudFormation deployment.
     result = call('ecs', 'update-service', '--cluster', cluster_arn, '--service', service_arn, '--desired-count', '1')
@@ -220,6 +332,7 @@ def activate(config, report, call, clock):
         raise ValueError('expiry elapsed during activation; stop requested and outcome must be reconciled')
     return {'status': 'activation_requested_not_healthy', 'observed_at_utc': observed.strftime('%Y-%m-%dT%H:%M:%SZ'),
             'cluster_arn': cluster_arn, 'service_arn': service_arn, 'schedule_arn': arn,
+            'task_definition': outputs['TaskDefinition'], 'rollback_task_definition': outputs['RollbackTaskDefinition'],
             'expires_at_utc': config['deployment_expires_at_utc'], 'desired_count': 1,
             'limit': 'Retain the reservation on failure/unknown outcome. Verify desiredCount zero and stopped tasks at expiry; this API response is not readiness or a billing cutoff.'}
 

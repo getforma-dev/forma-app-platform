@@ -1,0 +1,61 @@
+{
+  "command": "upload-sources",
+  "plan": true,
+  "registration": [
+    {
+      "content_digest": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+      "contract_digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64",
+      "normalized_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+      "object_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45",
+      "row_count": 6,
+      "source_id": "00000000-0000-4000-8000-00000000006e"
+    }
+  ],
+  "sources": [
+    {
+      "adapter": {
+        "duckdb_version": "2.0.0",
+        "fixture_manifest_sha256": "sha256:995a097a5c2f9af7c893a37f49c1266f4b95b9f430b6ae876c79a0c588d2c34b",
+        "parser_guest_sha256": "sha256:a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
+        "parser_host_sha256": "sha256:44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934",
+        "parser_manifest_sha256": "sha256:9cd03be78b42f7e1e99020f8765c973e8f5cf7f81a47ed52b8058fc68c4a8a13",
+        "path": "parser-host + WASM guest -> fixtures/qualify.py parser_rows -> asset selection -> DuckDB Parquet ZSTD"
+      },
+      "content_digest": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+      "contract_digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64",
+      "contract_id": "events_v1",
+      "input_id": "events",
+      "normalized_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+      "objects": [
+        {
+          "bytes": 397,
+          "content_type": "text/csv",
+          "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/original",
+          "name": "original",
+          "sha256": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647"
+        },
+        {
+          "bytes": 642,
+          "content_type": "application/vnd.apache.parquet",
+          "key": "o/00000000-0000-4000-8000-000000000001/s/00000000-0000-4000-8000-00000000006e/r/9161c1e4-27c0-4cbb-addf-eb7ce504bf45/part.parquet",
+          "name": "part.parquet",
+          "sha256": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082"
+        }
+      ],
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "parsed_rows": 6,
+      "revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45",
+      "row_count": 6,
+      "seeded_placeholder_not_written": {
+        "content_digest": "sha256:f85bf298e932bbd0636a7f24b4c92a4cb1fa17e7402af5458b434e045fbe7371",
+        "normalized_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+        "revision_id": "00000000-0000-4000-8000-00000000006f",
+        "row_count": 5
+      },
+      "selected_asset": "build-worker-17",
+      "source_id": "00000000-0000-4000-8000-00000000006e"
+    }
+  ]
+}

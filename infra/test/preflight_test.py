@@ -14,6 +14,20 @@ spec = importlib.util.spec_from_file_location('preflight', PATH)
 preflight = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preflight)
 NOW = datetime(2026, 10, 28, 12, tzinfo=timezone.utc)
+# ADR-003 amendment 2026-10-30: the stack's provider capability secret (an output).
+CAPABILITY_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:ProviderCapabilities-AbCdEf'
+# APP-078 B1: the stack's hosted sign-in configuration secret (an output).
+AUTH_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:AuthConfiguration-GhIjKl'
+INJECTED = [{'name': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'valueFrom': CAPABILITY_SECRET},
+            {'name': 'GENUI_AUTH_CONFIGURATION_JSON', 'valueFrom': AUTH_SECRET}]
+RETIRED = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
+
+
+def rollback_definition(outputs, config):
+    """APP-076 G11: the deny-all revision, the live container without its secrets."""
+    return {'taskDefinitionArn': outputs['RollbackTaskDefinition'], 'runtimePlatform': {'cpuArchitecture': config['image_architecture']},
+            'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest'], 'secrets': [],
+                                      'environment': [{'name': 'GENUI_RUNTIME_CONFIG_FILE', 'value': '/run/genui/credentials.json'}]}]}
 
 
 def inputs(now=NOW):
@@ -37,7 +51,9 @@ class Preflight(unittest.TestCase):
         _, report = preflight.reserve(config, ledger, NOW)
         outputs = {'DeploymentExpiryScheduleArn': 'arn:aws:scheduler:us-east-1:877573132739:schedule/owned-group/expiry',
                    'DeploymentExpiryGroup': 'owned-group', 'DeploymentExpiryRoleArn': 'arn:aws:iam::877573132739:role/owned-expiry',
-                   'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:1'}
+                   'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:1',
+                   'RollbackTaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-rollback:1',
+                   'ProviderCapabilitySecretArn': CAPABILITY_SECRET, 'AuthConfigurationSecretArn': AUTH_SECRET}
         cluster = 'arn:aws:ecs:us-east-1:877573132739:cluster/owned-cluster'
         service = 'arn:aws:ecs:us-east-1:877573132739:service/owned-cluster/owned-service'
         stack = {'StackStatus': 'CREATE_COMPLETE', 'Parameters': [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()],
@@ -49,14 +65,17 @@ class Preflight(unittest.TestCase):
                                'RetryPolicy': {'MaximumEventAgeInSeconds': 900, 'MaximumRetryAttempts': 3}}}
         current = {'serviceArn': service, 'clusterArn': cluster, 'taskDefinition': outputs['TaskDefinition'], 'status': 'ACTIVE', 'desiredCount': 0}
         definition = {'taskDefinitionArn': outputs['TaskDefinition'], 'runtimePlatform': {'cpuArchitecture': config['image_architecture']},
-                      'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest']}]}
+                      'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest'],
+                                                'secrets': list(INJECTED)}]}
+        rollback = rollback_definition(outputs, config)
         calls = []
         def call(*args):
             calls.append(args)
             if args[:2] == ('sts', 'get-caller-identity'): return {'Account': '877573132739'}
             if args[:2] == ('cloudformation', 'describe-stacks'): return {'Stacks': [stack]}
             if args[:2] == ('scheduler', 'get-schedule'): return schedule
-            if args[:2] == ('ecs', 'describe-task-definition'): return {'taskDefinition': copy.deepcopy(definition)}
+            if args[:2] == ('ecs', 'describe-task-definition'):
+                return {'taskDefinition': copy.deepcopy(rollback if args[-1] == outputs['RollbackTaskDefinition'] else definition)}
             if args[:2] == ('ecs', 'describe-services'): return {'services': [dict(current)], 'failures': []}
             if args[:2] == ('ecs', 'update-service'):
                 current['desiredCount'] = int(args[-1]); return {'service': dict(current)}
@@ -68,56 +87,41 @@ class Preflight(unittest.TestCase):
         self.assertEqual(report['cloudformation_parameters']['ServiceDesiredCount'], '0')
         outcome = preflight.activate(config, report, call, lambda: NOW)
         self.assertEqual(outcome['status'], 'activation_requested_not_healthy')
-        self.assertEqual([x[:2] for x in calls], [('sts', 'get-caller-identity'), ('cloudformation', 'describe-stacks'), ('scheduler', 'get-schedule'), ('ecs', 'describe-task-definition'), ('ecs', 'describe-services'), ('ecs', 'update-service'), ('ecs', 'describe-services')])
+        self.assertEqual([x[:2] for x in calls], [('sts', 'get-caller-identity'), ('cloudformation', 'describe-stacks'), ('scheduler', 'get-schedule'), ('ecs', 'describe-task-definition'), ('ecs', 'describe-task-definition'), ('ecs', 'describe-services'), ('ecs', 'update-service'), ('ecs', 'describe-services')])
+        self.assertEqual(outcome['rollback_task_definition'], 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-rollback:1')
         self.assertEqual(calls[2], ('scheduler', 'get-schedule', '--group-name', 'owned-group', '--name', 'expiry'))
 
-    def test_optional_secret_preserves_disabled_window_and_binds_enabled_window(self):
+    def test_retired_qualification_secret_is_accepted_only_empty_and_keeps_disabled_bindings(self):
+        """APP-074 review m11: the stack no longer offers the qualification secret parameter."""
         config, ledger = inputs()
         existing, report = preflight.reserve(config, ledger, NOW)
-        self.assertEqual(report['cloudformation_parameters']['QualificationConfigSecretArn'], '')
+        self.assertNotIn('QualificationConfigSecretArn', report['cloudformation_parameters'])
         explicit_empty, same = preflight.reserve(dict(config, qualification_config_secret_arn=''), existing, NOW)
         self.assertEqual(explicit_empty, existing)
         self.assertEqual(same['input_sha256'], report['input_sha256'])
-        arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
-        enabled = dict(config, qualification_config_secret_arn=arn)
-        with self.assertRaisesRegex(ValueError, 'different deployment inputs'):
-            preflight.reserve(enabled, existing, NOW)
-        enabled_ledger, enabled_report = preflight.reserve(enabled, ledger, NOW)
-        self.assertEqual(enabled_report['cloudformation_parameters']['QualificationConfigSecretArn'], arn)
-        for changed in ('', arn.replace('fixture', 'another')):
-            with self.assertRaisesRegex(ValueError, 'different deployment inputs'):
-                preflight.reserve(dict(enabled, qualification_config_secret_arn=changed), enabled_ledger, NOW)
-
-    def test_secret_input_refuses_wrong_scope_selectors_raw_values_and_unknown_fields(self):
-        config, ledger = inputs()
-        arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
-        for bad in (None, False, 1, {}, 'synthetic-not-an-arn', arn + '\n', arn + ':key::', arn + '*',
-                    arn.replace('us-east-1', 'us-west-2'), arn.replace('877573132739', '111111111111'),
-                    arn.replace('genui-qualification-', 'unrelated-')):
-            with self.assertRaisesRegex(ValueError, 'exact approved secret ARN'):
+        for bad in (RETIRED, None, False, 1, {}, 'synthetic-not-an-arn', RETIRED + '\n'):
+            with self.assertRaisesRegex(ValueError, 'retired'):
                 preflight.reserve(dict(config, qualification_config_secret_arn=bad), ledger, NOW)
         with self.assertRaisesRegex(ValueError, 'closed contract'):
             preflight.reserve(dict(config, qualification_config_json='synthetic'), ledger, NOW)
 
-    def test_legacy_stack_without_optional_parameter_is_disabled_only(self):
-        config, report, stack, _, _, calls, call = self.activation_fixture()
-        stack['Parameters'] = [p for p in stack['Parameters'] if p['ParameterKey'] != 'QualificationConfigSecretArn']
-        self.assertEqual(preflight.activate(config, report, call, lambda: NOW)['desired_count'], 1)
-        self.assertTrue(any(c[:2] == ('ecs', 'describe-task-definition') for c in calls))
-
-    def test_live_secret_parameter_drift_refuses_before_update(self):
-        config, report, stack, _, _, calls, call = self.activation_fixture()
-        next(p for p in stack['Parameters'] if p['ParameterKey'] == 'QualificationConfigSecretArn')['ParameterValue'] = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-unexpected-Abc123'
-        with self.assertRaisesRegex(ValueError, 'qualification secret differs'):
-            preflight.activate(config, report, call, lambda: NOW)
-        self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls))
+    def test_an_older_stack_may_carry_the_retired_parameter_only_empty(self):
+        for value, accepted in (('', True), (RETIRED, False)):
+            config, report, stack, _, _, calls, call = self.activation_fixture()
+            stack['Parameters'].append({'ParameterKey': 'QualificationConfigSecretArn', 'ParameterValue': value})
+            if accepted:
+                self.assertEqual(preflight.activate(config, report, call, lambda: NOW)['desired_count'], 1)
+            else:
+                with self.assertRaisesRegex(ValueError, 'qualification secret parameter'):
+                    preflight.activate(config, report, call, lambda: NOW)
+                self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls))
 
     def test_live_task_image_architecture_and_secret_injection_must_match(self):
         for mutation in ('definition', 'image', 'architecture', 'extra_container', 'unexpected_secret'):
             config, report, _, _, _, calls, call = self.activation_fixture()
             def changed(*args):
                 value = call(*args)
-                if args[:2] == ('ecs', 'describe-task-definition'):
+                if args[:2] == ('ecs', 'describe-task-definition') and 'owned-rollback' not in args[-1]:
                     definition = value['taskDefinition']; container = definition['containerDefinitions'][0]
                     if mutation == 'definition': definition['taskDefinitionArn'] += '9'
                     if mutation == 'image': container['image'] = config['image_digest'][:-1] + 'b'
@@ -128,52 +132,87 @@ class Preflight(unittest.TestCase):
             with self.assertRaises(ValueError): preflight.activate(config, report, changed, lambda: NOW)
             self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), mutation)
 
-    def test_selected_secret_requires_exact_live_injection(self):
-        arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
-        for mutation in ('correct', 'missing', 'wrong_arn', 'wrong_name', 'extra'):
-            config, _, stack, _, _, calls, call = self.activation_fixture()
-            config['qualification_config_secret_arn'] = arn
-            _, report = preflight.reserve(config, inputs()[1], NOW)
-            stack['Parameters'] = [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()]
+    def test_the_capability_secret_is_the_one_exact_live_injection(self):
+        """ADR-003 amendment 2026-10-30 and APP-078 B1: exactly the stack's capability secret and its auth
+        configuration secret, under runtime.py's names, in either order."""
+        for mutation in ('correct', 'reordered', 'missing', 'missing_auth', 'missing_capabilities', 'wrong_arn', 'wrong_auth_arn',
+                         'swapped', 'wrong_name', 'extra', 'qualification'):
+            config, report, _, _, _, calls, call = self.activation_fixture()
             def changed(*args):
                 value = call(*args)
-                if args[:2] == ('ecs', 'describe-task-definition'):
-                    secrets = [{'name': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'valueFrom': arn}]
+                if args[:2] == ('ecs', 'describe-task-definition') and 'owned-rollback' not in args[-1]:
+                    secrets = copy.deepcopy(INJECTED)
+                    if mutation == 'reordered': secrets.reverse()
                     if mutation == 'missing': secrets = []
-                    if mutation == 'wrong_arn': secrets[0]['valueFrom'] = arn.replace('fixture', 'another')
-                    if mutation == 'wrong_name': secrets[0]['name'] = 'GENUI_AUTH_QUALIFICATION_CONFIG_FILE'
+                    if mutation == 'missing_auth': secrets = secrets[:1]
+                    if mutation == 'missing_capabilities': secrets = secrets[1:]
+                    if mutation == 'wrong_arn': secrets[0]['valueFrom'] = CAPABILITY_SECRET.replace('AbCdEf', 'GhIjKl')
+                    if mutation == 'wrong_auth_arn': secrets[1]['valueFrom'] = AUTH_SECRET.replace('GhIjKl', 'MnOpQr')
+                    if mutation == 'swapped': secrets[0]['valueFrom'], secrets[1]['valueFrom'] = secrets[1]['valueFrom'], secrets[0]['valueFrom']
+                    if mutation == 'wrong_name': secrets[0]['name'] = 'GENUI_PROVIDER_CAPABILITY_DIR'
                     if mutation == 'extra': secrets.append({'name': 'PGPASSWORD', 'valueFrom': 'synthetic'})
+                    if mutation == 'qualification': secrets.append({'name': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'valueFrom': RETIRED})
                     value['taskDefinition']['containerDefinitions'][0]['secrets'] = secrets
                 return value
-            if mutation == 'correct':
+            if mutation in ('correct', 'reordered'):
                 self.assertEqual(preflight.activate(config, report, changed, lambda: NOW)['desired_count'], 1)
             else:
                 with self.assertRaisesRegex(ValueError, 'secret injection differs'):
                     preflight.activate(config, report, changed, lambda: NOW)
                 self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), mutation)
 
-    def test_plain_environment_files_and_startup_cannot_bypass_secret_selection(self):
-        arn = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-fixture-Abc123'
-        for enabled in (False, True):
-            for mutation in ('raw_json', 'config_file', 'future_qualification_field', 'environment_file', 'entrypoint', 'command'):
-                config, _, stack, _, _, calls, call = self.activation_fixture()
-                config['qualification_config_secret_arn'] = arn if enabled else ''
-                _, report = preflight.reserve(config, inputs()[1], NOW)
-                stack['Parameters'] = [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()]
-                def changed(*args):
-                    value = call(*args)
-                    if args[:2] == ('ecs', 'describe-task-definition'):
-                        container = value['taskDefinition']['containerDefinitions'][0]
-                        if enabled: container['secrets'] = [{'name': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'valueFrom': arn}]
-                        names = {'raw_json': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'config_file': 'GENUI_AUTH_QUALIFICATION_CONFIG_FILE',
-                                 'future_qualification_field': 'GENUI_AUTH_QUALIFICATION_UNREVIEWED'}
-                        if mutation in names: container['environment'] = [{'name': names[mutation], 'value': 'synthetic'}]
-                        if mutation == 'environment_file': container['environmentFiles'] = [{'type': 's3', 'value': 'arn:aws:s3:::synthetic/config.env'}]
-                        if mutation == 'entrypoint': container['entryPoint'] = ['sh', '-c']
-                        if mutation == 'command': container['command'] = ['qualify']
-                    return value
+    def test_plain_environment_files_and_startup_cannot_bypass_the_secret_channel(self):
+        for mutation in ('raw_json', 'config_file', 'future_qualification_field', 'capabilities_json', 'capability_dir',
+                         'auth_configuration_json', 'auth_config_file', 'identity_registry_file', 'environment_file', 'entrypoint', 'command'):
+            config, report, _, _, _, calls, call = self.activation_fixture()
+            def changed(*args):
+                value = call(*args)
+                if args[:2] == ('ecs', 'describe-task-definition') and 'owned-rollback' not in args[-1]:
+                    container = value['taskDefinition']['containerDefinitions'][0]
+                    names = {'raw_json': 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', 'config_file': 'GENUI_AUTH_QUALIFICATION_CONFIG_FILE',
+                             'future_qualification_field': 'GENUI_AUTH_QUALIFICATION_UNREVIEWED',
+                             'capabilities_json': 'GENUI_PROVIDER_CAPABILITIES_JSON', 'capability_dir': 'GENUI_PROVIDER_CAPABILITY_DIR',
+                             'auth_configuration_json': 'GENUI_AUTH_CONFIGURATION_JSON', 'auth_config_file': 'GENUI_AUTH_CONFIG_FILE',
+                             'identity_registry_file': 'GENUI_IDENTITY_REGISTRY_FILE'}
+                    if mutation in names: container['environment'] = [{'name': names[mutation], 'value': 'synthetic'}]
+                    if mutation == 'environment_file': container['environmentFiles'] = [{'type': 's3', 'value': 'arn:aws:s3:::synthetic/config.env'}]
+                    if mutation == 'entrypoint': container['entryPoint'] = ['sh', '-c']
+                    if mutation == 'command': container['command'] = ['qualify']
+                return value
+            with self.assertRaises(ValueError): preflight.activate(config, report, changed, lambda: NOW)
+            self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), mutation)
+
+    def test_the_rollback_revision_must_exist_on_the_same_image_with_no_secret(self):
+        """APP-076 item 8 / G11: activation requires the deny-all rollback task definition (PREVIOUS_TD)."""
+        for mutation in ('correct', 'absent_output', 'same_as_live', 'image', 'architecture', 'secret', 'auth_env', 'registry_env',
+                         'capability_env', 'environment_file', 'entrypoint', 'two_containers', 'wrong_name'):
+            config, report, stack, _, _, calls, call = self.activation_fixture()
+            if mutation == 'absent_output':
+                stack['Outputs'] = [o for o in stack['Outputs'] if o['OutputKey'] != 'RollbackTaskDefinition']
+            if mutation == 'same_as_live':
+                for output in stack['Outputs']:
+                    if output['OutputKey'] == 'RollbackTaskDefinition': output['OutputValue'] = 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:1'
+            def changed(*args):
+                value = call(*args)
+                if args[:2] == ('ecs', 'describe-task-definition') and 'owned-rollback' in args[-1]:
+                    definition = value['taskDefinition']; container = definition['containerDefinitions'][0]
+                    if mutation == 'image': container['image'] = config['image_digest'][:-1] + 'b'
+                    if mutation == 'architecture': definition['runtimePlatform']['cpuArchitecture'] = 'X86_64'
+                    if mutation == 'secret': container['secrets'] = [INJECTED[1]]
+                    if mutation == 'auth_env': container['environment'].append({'name': 'GENUI_AUTH_CONFIG_FILE', 'value': '/run/genui/auth.json'})
+                    if mutation == 'registry_env': container['environment'].append({'name': 'GENUI_IDENTITY_REGISTRY_FILE', 'value': '/run/genui/registry.json'})
+                    if mutation == 'capability_env': container['environment'].append({'name': 'GENUI_PROVIDER_CAPABILITY_DIR', 'value': '/run/genui/caps'})
+                    if mutation == 'environment_file': container['environmentFiles'] = [{'type': 's3', 'value': 'arn:aws:s3:::synthetic/config.env'}]
+                    if mutation == 'entrypoint': container['entryPoint'] = ['sh', '-c']
+                    if mutation == 'two_containers': definition['containerDefinitions'].append(dict(container))
+                    if mutation == 'wrong_name': container['name'] = 'rollback'
+                return value
+            if mutation == 'correct':
+                outcome = preflight.activate(config, report, changed, lambda: NOW)
+                self.assertEqual((outcome['desired_count'], outcome['rollback_task_definition']), (1, 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-rollback:1'))
+            else:
                 with self.assertRaises(ValueError): preflight.activate(config, report, changed, lambda: NOW)
-                self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), (enabled, mutation))
+                self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), mutation)
 
     def test_activation_refuses_stale_stack_schedule_wrong_service_and_near_expiry(self):
         for mutation in ('stack', 'disabled', 'schedule_arn', 'group', 'target', 'role', 'task', 'near_expiry'):
@@ -328,6 +367,234 @@ class Preflight(unittest.TestCase):
             results = [process.communicate() for process in running]
             self.assertEqual(sorted(p.returncode for p in running), [0, 1], results)
             self.assertEqual(len(json.loads(book.read_text())['windows']), 1)
+
+
+WINDOW = datetime(2026, 11, 1, 17, tzinfo=timezone.utc)
+QUALIFICATION = '877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-qualification@sha256:' + 'b' * 64
+OPERATOR = '877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-operator@sha256:' + 'c' * 64
+
+
+def always_on(now=WINDOW):
+    """The APP-078 shape: always-on plan, backstop at the end of November."""
+    config, _ = inputs(now)
+    config.update(operating_plan='always-on-beta', ingress_mode='public', deployment_expires_at_utc='2026-11-30T23:00:00Z',
+                  extra_task_hours=3, qualification_image_digest=QUALIFICATION, operator_image_digest=OPERATOR)
+    ledger = {'schema_version': 2, 'scope': 'genui-beta-incremental', 'operating_plan': 'always-on-beta', 'windows': {},
+              'months': {'2026-11': {'reconciled_at_utc': now.strftime('%Y-%m-%dT%H:%M:%SZ'), 'basis': 'Synthetic fixture, not AWS billing evidence',
+                                     'prior_extra_spend_cents': 0, 'variable_reserve_cents': 1500,
+                                     'auth_spent_or_reserved_cents': 3800, 'unallocated_cents': 0}}}
+    return config, ledger
+
+
+class AlwaysOnPlan(unittest.TestCase):
+    def test_always_on_reserves_the_whole_month_within_the_approved_figure(self):
+        config, ledger = always_on()
+        updated, report = preflight.reserve(config, ledger, WINDOW)
+        month = report['cost_by_month']['2026-11']
+        self.assertEqual(set(report['cost_by_month']), {'2026-11'})
+        self.assertEqual(month['retained_core_full_month_cents'], 5074)
+        # 17:00 Nov 1 to 23:00 Nov 30 plus the one-hour margin is 703 hours, plus three extra task-hours.
+        self.assertEqual(month['all_window_compute_reservations_cents'], 8580)
+        self.assertEqual(month['genui_total_cents'], 15154)
+        self.assertEqual(month['project_total_cents'], 18954)
+        self.assertEqual((report['operating_plan'], report['genui_allocation_cents'], report['monthly_budget_cents']), ('always-on-beta', 17000, 20800))
+        parameters = report['cloudformation_parameters']
+        self.assertEqual(parameters['MonthlyBudgetUsd'], '170')
+        self.assertEqual((parameters['QualificationImageDigest'], parameters['OperatorImageDigest']), (QUALIFICATION, OPERATOR))
+        self.assertEqual(parameters['ServiceDesiredCount'], '0')
+        self.assertIn('backstop', report['limits'][1])
+        self.assertEqual(updated['operating_plan'], 'always-on-beta')
+
+    def test_plan_and_ledger_schema_must_agree(self):
+        config, ledger = always_on()
+        legacy = dict(ledger, schema_version=1); del legacy['operating_plan']
+        with self.assertRaises(ValueError): preflight.reserve(config, legacy, WINDOW)
+        with self.assertRaisesRegex(ValueError, 'operating plan differs'):
+            preflight.reserve(config, dict(ledger, operating_plan='bounded-window'), WINDOW)
+        bounded, _ = inputs(WINDOW)
+        with self.assertRaises(ValueError): preflight.reserve(bounded, ledger, WINDOW)
+        for plan in ['always-on', 'ALWAYS-ON-BETA', '', None, 1]:
+            with self.assertRaisesRegex(ValueError, 'unknown operating plan'):
+                preflight.reserve(dict(config, operating_plan=plan), ledger, WINDOW)
+
+    def test_always_on_expiry_is_a_bounded_backstop(self):
+        config, ledger = always_on()
+        preflight.reserve(dict(config, deployment_expires_at_utc='2026-12-03T16:59:59Z'), copy.deepcopy(ledger) | {'months': ledger['months'] | {'2026-12': ledger['months']['2026-11']}}, WINDOW)
+        for expiry in ['2026-12-03T17:00:01Z', '2026-11-01T17:09:59Z']:
+            with self.assertRaisesRegex(ValueError, '32 days'):
+                preflight.reserve(dict(config, deployment_expires_at_utc=expiry), ledger, WINDOW)
+        bounded, book = inputs(WINDOW)
+        with self.assertRaisesRegex(ValueError, '48 hours'):
+            preflight.reserve(dict(bounded, deployment_expires_at_utc='2026-11-03T17:00:01Z'), book, WINDOW)
+
+    def test_always_on_auth_reservation_and_genui_cap(self):
+        for auth in [3299, 3801]:
+            config, ledger = always_on(); ledger['months']['2026-11']['auth_spent_or_reserved_cents'] = auth
+            with self.assertRaisesRegex(ValueError, 'fAuth'): preflight.reserve(config, ledger, WINDOW)
+        config, ledger = always_on(); ledger['months']['2026-11']['prior_extra_spend_cents'] = 17000 - 15154
+        preflight.reserve(config, ledger, WINDOW)
+        ledger['months']['2026-11']['prior_extra_spend_cents'] += 1
+        with self.assertRaisesRegex(ValueError, 'budget exceeded for 2026-11'): preflight.reserve(config, ledger, WINDOW)
+        config, ledger = always_on(); ledger['months']['2026-11']['unallocated_cents'] = 20800 - 18954 + 1
+        with self.assertRaisesRegex(ValueError, 'budget exceeded'): preflight.reserve(config, ledger, WINDOW)
+        config, ledger = always_on(); ledger['months']['2026-11']['variable_reserve_cents'] = 999
+        with self.assertRaises(ValueError): preflight.reserve(config, ledger, WINDOW)
+
+    def test_task_image_digests_are_validated_and_bound(self):
+        config, ledger = always_on()
+        for key in ['qualification_image_digest', 'operator_image_digest']:
+            for value in ['123456789012.dkr.ecr.us-east-1.amazonaws.com/genui-operator@sha256:' + 'c' * 64,
+                          '877573132739.dkr.ecr.us-east-1.amazonaws.com/genui-operator:latest', config['image_digest'], OPERATOR + '\n', None]:
+                with self.assertRaises(ValueError, msg=(key, value)): preflight.reserve(dict(config, **{key: value}), ledger, WINDOW)
+        with self.assertRaisesRegex(ValueError, 'distinct'):
+            preflight.reserve(dict(config, qualification_image_digest=OPERATOR), ledger, WINDOW)
+        updated, report = preflight.reserve(config, ledger, WINDOW)
+        with self.assertRaisesRegex(ValueError, 'already has different'):
+            preflight.reserve(dict(config, operator_image_digest=OPERATOR[:-1] + 'd'), updated, WINDOW)
+        # Ingress mode and desired count may change within the reserved window.
+        again, same = preflight.reserve(dict(config, service_desired_count=1), updated, WINDOW + timedelta(hours=2))
+        self.assertEqual((again, same['input_sha256']), (updated, report['input_sha256']))
+
+    def test_empty_task_images_and_default_plan_keep_earlier_bindings(self):
+        config, ledger = inputs()
+        _, report = preflight.reserve(config, ledger, NOW)
+        explicit = dict(config, qualification_image_digest='', operator_image_digest='', operating_plan='bounded-window')
+        _, same = preflight.reserve(explicit, ledger, NOW)
+        self.assertEqual(same['input_sha256'], report['input_sha256'])
+        self.assertEqual((same['cloudformation_parameters']['QualificationImageDigest'], same['cloudformation_parameters']['OperatorImageDigest']), ('', ''))
+        self.assertEqual(same['cloudformation_parameters']['MonthlyBudgetUsd'], '100')
+
+    def activation(self):
+        config, ledger = always_on(); config['service_desired_count'] = 1
+        _, report = preflight.reserve(config, ledger, WINDOW)
+        outputs = {'DeploymentExpiryScheduleArn': 'arn:aws:scheduler:us-east-1:877573132739:schedule/owned-group/expiry',
+                   'DeploymentExpiryGroup': 'owned-group', 'DeploymentExpiryRoleArn': 'arn:aws:iam::877573132739:role/owned-expiry',
+                   'ClusterName': 'owned-cluster', 'ServiceName': 'owned-service', 'TaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-task:3',
+                   'RollbackTaskDefinition': 'arn:aws:ecs:us-east-1:877573132739:task-definition/owned-rollback:3',
+                   'ProviderCapabilitySecretArn': CAPABILITY_SECRET, 'AuthConfigurationSecretArn': AUTH_SECRET}
+        cluster = 'arn:aws:ecs:us-east-1:877573132739:cluster/owned-cluster'
+        service = 'arn:aws:ecs:us-east-1:877573132739:service/owned-cluster/owned-service'
+        stack = {'StackStatus': 'UPDATE_COMPLETE', 'Parameters': [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()],
+                 'Outputs': [{'OutputKey': k, 'OutputValue': v} for k, v in outputs.items()]}
+        schedule = {'Arn': outputs['DeploymentExpiryScheduleArn'], 'State': 'ENABLED', 'ScheduleExpressionTimezone': 'UTC',
+                    'ScheduleExpression': 'at(2026-11-30T23:00:00)', 'FlexibleTimeWindow': {'Mode': 'OFF'},
+                    'Target': {'Arn': 'arn:aws:scheduler:::aws-sdk:ecs:updateService', 'RoleArn': outputs['DeploymentExpiryRoleArn'],
+                               'Input': json.dumps({'Cluster': cluster, 'Service': service, 'DesiredCount': 0}),
+                               'RetryPolicy': {'MaximumEventAgeInSeconds': 900, 'MaximumRetryAttempts': 3}}}
+        current = {'serviceArn': service, 'clusterArn': cluster, 'taskDefinition': outputs['TaskDefinition'], 'status': 'ACTIVE', 'desiredCount': 0}
+        definition = {'taskDefinitionArn': outputs['TaskDefinition'], 'runtimePlatform': {'cpuArchitecture': 'ARM64'},
+                      'containerDefinitions': [{'name': 'workspace', 'image': config['image_digest'],
+                                                'secrets': list(INJECTED)}]}
+        rollback = rollback_definition(outputs, config)
+        calls = []
+        def call(*args):
+            calls.append(args)
+            if args[:2] == ('sts', 'get-caller-identity'): return {'Account': '877573132739'}
+            if args[:2] == ('cloudformation', 'describe-stacks'): return {'Stacks': [stack]}
+            if args[:2] == ('scheduler', 'get-schedule'): return schedule
+            if args[:2] == ('ecs', 'describe-task-definition'):
+                return {'taskDefinition': copy.deepcopy(rollback if args[-1] == outputs['RollbackTaskDefinition'] else definition)}
+            if args[:2] == ('ecs', 'describe-services'): return {'services': [dict(current)], 'failures': []}
+            if args[:2] == ('ecs', 'update-service'):
+                current['desiredCount'] = int(args[-1]); return {'service': dict(current)}
+            raise AssertionError(args)
+        return config, report, stack, calls, call
+
+    def test_always_on_activation_accepts_the_month_backstop_and_checks_task_images(self):
+        config, report, _, calls, call = self.activation()
+        self.assertEqual(preflight.activate(config, report, call, lambda: WINDOW + timedelta(hours=1))['desired_count'], 1)
+        for key in ['QualificationImageDigest', 'OperatorImageDigest', 'MonthlyBudgetUsd']:
+            config, report, stack, calls, call = self.activation()
+            parameter = next(p for p in stack['Parameters'] if p['ParameterKey'] == key)
+            parameter['ParameterValue'] = '100' if key == 'MonthlyBudgetUsd' else ''
+            with self.assertRaisesRegex(ValueError, 'deployed parameters differ'):
+                preflight.activate(config, report, call, lambda: WINDOW + timedelta(hours=1))
+            self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls), key)
+        # Too close to the backstop: never start compute that would stop within ten minutes.
+        config, report, _, calls, call = self.activation()
+        with self.assertRaises(ValueError):
+            preflight.activate(config, report, call, lambda: datetime(2026, 11, 30, 22, 51, tzinfo=timezone.utc))
+        self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls))
+
+    def test_legacy_stack_without_task_image_parameters_is_disabled_only(self):
+        config, ledger = inputs(); config['service_desired_count'] = 1
+        _, report = preflight.reserve(config, ledger, NOW)
+        fixture = Preflight('test_activation_checks_live_stop_and_service_before_count_one').activation_fixture()
+        _, _, stack, _, _, _, call = fixture
+        stack['Parameters'] = [p for p in stack['Parameters'] if p['ParameterKey'] not in ('QualificationImageDigest', 'OperatorImageDigest')]
+        self.assertEqual(preflight.activate(fixture[0], fixture[1], call, lambda: NOW)['desired_count'], 1)
+
+
+MANAGEMENT_SECRET = 'arn:aws:secretsmanager:us-east-1:877573132739:secret:fauth-beta/management/northstar-jAkFuz'
+MANAGEMENT_URL = 'https://auth-staging.getforma.dev'
+
+
+class AttachedManagementSecret(unittest.TestCase):
+    """ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's answers; A12)."""
+
+    def attached(self):
+        config, ledger = always_on()
+        return dict(config, provider_management_secret_arn=MANAGEMENT_SECRET, provider_management_url=MANAGEMENT_URL), ledger
+
+    def test_the_parameters_are_empty_by_default_and_passed_through_when_attached(self):
+        config, ledger = always_on()
+        _, report = preflight.reserve(config, ledger, WINDOW)
+        self.assertEqual((report['cloudformation_parameters']['ProviderManagementSecretArn'], report['cloudformation_parameters']['ProviderManagementUrl']), ('', ''))
+        config, ledger = self.attached()
+        _, report = preflight.reserve(config, ledger, WINDOW)
+        self.assertEqual((report['cloudformation_parameters']['ProviderManagementSecretArn'], report['cloudformation_parameters']['ProviderManagementUrl']),
+                         (MANAGEMENT_SECRET, MANAGEMENT_URL))
+
+    def test_shape_account_region_and_both_or_neither(self):
+        config, ledger = self.attached()
+        for changes in ({'provider_management_url': ''}, {'provider_management_secret_arn': ''},
+                        {'provider_management_secret_arn': MANAGEMENT_SECRET.replace('877573132739', '123456789012')},
+                        {'provider_management_secret_arn': MANAGEMENT_SECRET.replace('us-east-1', 'eu-west-2')},
+                        {'provider_management_secret_arn': MANAGEMENT_SECRET[:-7]}, {'provider_management_secret_arn': 'fauth-beta/management/northstar'},
+                        {'provider_management_secret_arn': MANAGEMENT_SECRET + ':management_key::'}, {'provider_management_secret_arn': None},
+                        {'provider_management_url': 'http://auth-staging.getforma.dev'}, {'provider_management_url': MANAGEMENT_URL + '/manage'},
+                        {'provider_management_url': MANAGEMENT_URL + '\n'}, {'operator_image_digest': ''}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                preflight.reserve(dict(config, **changes), ledger, WINDOW)
+
+    def test_attaching_and_clearing_stay_within_the_reserved_window(self):
+        config, ledger = always_on()
+        updated, report = preflight.reserve(config, ledger, WINDOW)
+        attached, _ = self.attached()
+        again, same = preflight.reserve(attached, updated, WINDOW + timedelta(hours=1))
+        self.assertEqual((again, same['input_sha256'], same['reused_reservation']), (updated, report['input_sha256'], True))
+        cleared, cleared_report = preflight.reserve(dict(attached, provider_management_secret_arn='', provider_management_url=''), again, WINDOW + timedelta(hours=2))
+        self.assertEqual((cleared, cleared_report['input_sha256']), (updated, report['input_sha256']))
+        self.assertEqual(cleared_report['cloudformation_parameters']['ProviderManagementSecretArn'], '')
+
+    def activation(self, described):
+        config, ledger = self.attached(); config['service_desired_count'] = 1
+        _, report = preflight.reserve(config, ledger, WINDOW)
+        _, _, stack, calls, call = AlwaysOnPlan('test_legacy_stack_without_task_image_parameters_is_disabled_only').activation()
+        stack['Parameters'] = [{'ParameterKey': k, 'ParameterValue': str(v)} for k, v in report['cloudformation_parameters'].items()]
+
+        def live(*args):
+            if args[:2] == ('secretsmanager', 'describe-secret'):
+                calls.append(args)
+                return dict(described)
+            return call(*args)
+        return config, report, calls, live
+
+    def test_activation_requires_the_named_live_secret_under_the_aws_managed_key(self):
+        config, report, calls, live = self.activation({'ARN': MANAGEMENT_SECRET, 'Name': 'fauth-beta/management/northstar'})
+        self.assertEqual(preflight.activate(config, report, live, lambda: WINDOW + timedelta(hours=1))['desired_count'], 1)
+        self.assertIn(('secretsmanager', 'describe-secret', '--secret-id', MANAGEMENT_SECRET), calls)
+        for described in ({'ARN': MANAGEMENT_SECRET, 'KmsKeyId': 'arn:aws:kms:us-east-1:877573132739:key/00000000-0000-4000-8000-0000000000aa'},
+                          {'ARN': MANAGEMENT_SECRET, 'DeletedDate': '2026-11-01T00:00:00Z'},
+                          {'ARN': MANAGEMENT_SECRET.replace('jAkFuz', 'zzzzzz')}):
+            config, report, calls, live = self.activation(described)
+            with self.subTest(described=sorted(described)), self.assertRaises(ValueError):
+                preflight.activate(config, report, live, lambda: WINDOW + timedelta(hours=1))
+            self.assertFalse(any(c[:2] == ('ecs', 'update-service') for c in calls))
+        # Not attached: no Secrets Manager call at all.
+        config, report, _, calls, call = AlwaysOnPlan('test_legacy_stack_without_task_image_parameters_is_disabled_only').activation()
+        self.assertEqual(preflight.activate(config, report, call, lambda: WINDOW + timedelta(hours=1))['desired_count'], 1)
+        self.assertFalse(any(c[0] == 'secretsmanager' for c in calls))
 
 
 if __name__ == '__main__':

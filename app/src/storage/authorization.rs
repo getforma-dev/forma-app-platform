@@ -9,8 +9,9 @@ use std::sync::{
 use tokio::time::{timeout_at, Instant};
 use tokio_postgres::{error::SqlState, types::ToSql, Row};
 
-/// No public constructor, deserializer or clone. APP-009 must supply the
-/// reviewed session adapter before ordinary production access.
+/// No public constructor, deserializer or clone. In production only
+/// `storage::sessions::resolve_session` (APP-009) constructs one, from a live
+/// workspace session row, the member's current epoch and the registry.
 ///
 /// ```compile_fail
 /// use genui::storage::TrustedRequest;
@@ -28,6 +29,14 @@ pub struct TrustedRequest {
     pub(super) provider_tenant: String,
     pub(super) provider_subject: String,
     pub(super) registry_sha256: String,
+}
+impl TrustedRequest {
+    /// The organization the session resolved to (read-only; for the
+    /// structured query log, APP-076 G6). Authority still comes only from the
+    /// storage operations that take the whole request.
+    pub fn organization(&self) -> &str {
+        &self.organization
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -107,6 +116,10 @@ pub(super) struct Transaction<'a> {
     /// Set when any statement of this transaction failed with SQLSTATE 40001
     /// (ADR-007 D7.6): PostgreSQL has then aborted the whole transaction.
     serialization: AtomicBool,
+    /// Set when any statement failed with SQLSTATE 55P03 (a lock wait past
+    /// `lock_timeout`) or 40P01 (a deadlock PostgreSQL resolved against this
+    /// transaction): D7.9 answers these as 409 `busy`/`in_flight`, never 503.
+    lock_wait: AtomicBool,
 }
 impl<'a> Transaction<'a> {
     pub async fn begin(pool: &Arc<RolePool>, request: &'a TrustedRequest) -> Result<Self> {
@@ -234,6 +247,7 @@ impl<'a> Transaction<'a> {
             deadline,
             request,
             serialization: AtomicBool::new(false),
+            lock_wait: AtomicBool::new(false),
         };
         transaction.batch(isolation).await?;
         #[cfg(test)]
@@ -245,16 +259,28 @@ impl<'a> Transaction<'a> {
     fn member(&self) -> Result<&'a TrustedRequest> {
         self.request.ok_or(Error::Denied)
     }
-    /// Records a 40001 refusal; it never leaves storage (D7.9).
+    /// Records a 40001, 55P03 or 40P01 refusal; none leaves storage (D7.9).
     fn note(&self, error: &tokio_postgres::Error) {
-        if error.code() == Some(&SqlState::T_R_SERIALIZATION_FAILURE) {
-            self.serialization.store(true, Ordering::Relaxed);
+        match error.code() {
+            Some(&SqlState::T_R_SERIALIZATION_FAILURE) => {
+                self.serialization.store(true, Ordering::Relaxed);
+            }
+            Some(&SqlState::LOCK_NOT_AVAILABLE) | Some(&SqlState::T_R_DEADLOCK_DETECTED) => {
+                self.lock_wait.store(true, Ordering::Relaxed);
+            }
+            _ => {}
         }
     }
     /// Whether a statement of this transaction failed with SQLSTATE 40001, so
     /// PostgreSQL has rolled the whole transaction back (D7.6).
     pub fn serialization_failed(&self) -> bool {
         self.serialization.load(Ordering::Relaxed)
+    }
+    /// Whether a statement of this transaction waited past `lock_timeout`
+    /// (55P03) or lost a deadlock (40P01); the transaction is aborted either
+    /// way and the caller answers 409 `busy` or `in_flight` (D7.9).
+    pub fn lock_timed_out(&self) -> bool {
+        self.lock_wait.load(Ordering::Relaxed)
     }
     pub async fn batch(&self, sql: &str) -> Result<()> {
         timeout_at(self.deadline, self.lease.client().batch_execute(sql))
@@ -295,17 +321,49 @@ impl<'a> Transaction<'a> {
     pub async fn precheck(&self, action: Action, resource: Resource<'a>) -> Result<Precheck<'a>> {
         let request = self.member()?;
         require(self.lease.role() != Role::Worker)?;
+        self.current_member(request).await?;
+        self.entitlement(request).await?;
+        let precheck = Precheck { action, resource };
+        self.permissions(request, &precheck).await?;
+        Ok(precheck)
+    }
+    /// An active organization, an active membership at the request's epoch.
+    async fn current_member(&self, request: &TrustedRequest) -> Result<()> {
         let rows = self.query("SELECT o.status,m.status,m.membership_epoch FROM genui.organizations o JOIN genui.memberships m USING(organization_id) WHERE o.organization_id=$1::text::uuid AND m.principal_id=$2::text::uuid", &[&request.organization,&request.principal]).await?;
         let row = rows.first().ok_or(Error::Denied)?;
         require(
             text(row, 0)? == "active"
                 && text(row, 1)? == "active"
                 && integer(row, 2)? == request.epoch,
-        )?;
+        )
+    }
+    /// APP-076 G9 (the workspace listing): the member half of `precheck` and
+    /// `fence` with no resource permission of its own: current membership,
+    /// epoch and entitlement, the `lock_member_authority` fence, and the
+    /// entitlement again after it. The permit names the organization with
+    /// `Discover`, which `publication` and `record` refuse, so it authorizes
+    /// nothing by itself: the listing judges every item with `Permit::also`
+    /// (the same permission clauses the routes' own prechecks apply).
+    pub(super) async fn fence_member<'t>(&'t mut self) -> Result<Permit<'t, 'a>> {
+        let request = self.member()?;
+        require(self.lease.role() != Role::Worker)?;
+        self.current_member(request).await?;
         self.entitlement(request).await?;
-        let precheck = Precheck { action, resource };
-        self.permissions(request, &precheck).await?;
-        Ok(precheck)
+        self.lock_member(request).await?;
+        self.entitlement(request).await?;
+        Ok(Permit {
+            transaction: self,
+            request,
+            precheck: Precheck {
+                action: Action::Discover,
+                resource: Resource::Organization,
+            },
+        })
+    }
+    async fn lock_member(&self, request: &TrustedRequest) -> Result<()> {
+        let rows = self.query("SELECT organization_active,member_active,membership_epoch FROM genui_private.lock_member_authority($1::text::uuid,$2::text::uuid,$3)", &[&request.organization,&request.principal,&request.epoch]).await?;
+        let row = rows.first().ok_or(Error::Denied)?;
+        require(boolean(row, 0)? && boolean(row, 1)? && integer(row, 2)? == request.epoch)
     }
     /// APP-073 (ADR-003, ADR-004): every member action also needs a current
     /// trial entitlement, judged on the wall clock of this statement so that
@@ -345,9 +403,7 @@ impl<'a> Transaction<'a> {
     }
     pub async fn fence<'t>(&'t mut self, precheck: Precheck<'a>) -> Result<Permit<'t, 'a>> {
         let request = self.member()?;
-        let rows = self.query("SELECT organization_active,member_active,membership_epoch FROM genui_private.lock_member_authority($1::text::uuid,$2::text::uuid,$3)", &[&request.organization,&request.principal,&request.epoch]).await?;
-        let row = rows.first().ok_or(Error::Denied)?;
-        require(boolean(row, 0)? && boolean(row, 1)? && integer(row, 2)? == request.epoch)?;
+        self.lock_member(request).await?;
         // Entitlement revocation advances the epoch under the member lock
         // (operator channel), so this re-read after the fence also observes
         // expiry that happened since the precheck.

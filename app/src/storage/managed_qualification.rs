@@ -113,12 +113,12 @@ const SEED_INPUTS: [(&str, &str, &str); 5] = [
     (
         "seed_program_sha256",
         "app/runtime/tenant_seed.py",
-        "73bd6b2d16c636fc3e2a8f91b71507d42aa737823084c7f6a2fe3570ee65fc2e",
+        "d2f8a6ea0b94b0158ac31f18fb024db9a27afe2d3790dbdcd79e767b61ab8b0d",
     ),
     (
         "seed_validator_sha256",
         "contracts/validate.py",
-        "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
+        "7c9492bc55d12c818f984f7889ab5e95024699cfda11222ebafc84d982e973d5",
     ),
 ];
 /// The shared cases' checks a pass requires, in order (`qualification_cases`).
@@ -131,7 +131,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v5.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v7.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -152,7 +152,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 42] = [
+const SOURCES: [(&str, &[u8]); 81] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -180,6 +180,43 @@ const SOURCES: [(&str, &[u8]); 42] = [
         include_bytes!("../admission/validate.rs"),
     ),
     (
+        "app/src/auth/capability.rs",
+        include_bytes!("../auth/capability.rs"),
+    ),
+    (
+        "app/src/auth/cookies.rs",
+        include_bytes!("../auth/cookies.rs"),
+    ),
+    ("app/src/auth/csrf.rs", include_bytes!("../auth/csrf.rs")),
+    (
+        "app/src/auth/invite.rs",
+        include_bytes!("../auth/invite.rs"),
+    ),
+    (
+        "app/src/auth/invite_tests.rs",
+        include_bytes!("../auth/invite_tests.rs"),
+    ),
+    ("app/src/auth/mod.rs", include_bytes!("../auth/mod.rs")),
+    (
+        "app/src/auth/pending.rs",
+        include_bytes!("../auth/pending.rs"),
+    ),
+    ("app/src/auth/pkce.rs", include_bytes!("../auth/pkce.rs")),
+    (
+        "app/src/auth/provider.rs",
+        include_bytes!("../auth/provider.rs"),
+    ),
+    (
+        "app/src/auth/routes.rs",
+        include_bytes!("../auth/routes.rs"),
+    ),
+    (
+        "app/src/auth/synthetic_issuer.rs",
+        include_bytes!("../auth/synthetic_issuer.rs"),
+    ),
+    ("app/src/auth/tests.rs", include_bytes!("../auth/tests.rs")),
+    ("app/src/auth/vault.rs", include_bytes!("../auth/vault.rs")),
+    (
         "app/src/auth_qualification.rs",
         include_bytes!("../auth_qualification.rs"),
     ),
@@ -187,7 +224,29 @@ const SOURCES: [(&str, &[u8]); 42] = [
         "app/src/auth_qualification/tests.rs",
         include_bytes!("../auth_qualification/tests.rs"),
     ),
+    (
+        "app/src/commands/mod.rs",
+        include_bytes!("../commands/mod.rs"),
+    ),
+    (
+        "app/src/commands/payload.rs",
+        include_bytes!("../commands/payload.rs"),
+    ),
+    (
+        "app/src/commands/routes.rs",
+        include_bytes!("../commands/routes.rs"),
+    ),
+    (
+        "app/src/commands/tests.rs",
+        include_bytes!("../commands/tests.rs"),
+    ),
     ("app/src/config.rs", include_bytes!("../config.rs")),
+    (
+        "app/src/http/limits.rs",
+        include_bytes!("../http/limits.rs"),
+    ),
+    ("app/src/http/mod.rs", include_bytes!("../http/mod.rs")),
+    ("app/src/http/proxy.rs", include_bytes!("../http/proxy.rs")),
     (
         "app/src/imports/mod.rs",
         include_bytes!("../imports/mod.rs"),
@@ -197,6 +256,28 @@ const SOURCES: [(&str, &[u8]); 42] = [
         include_bytes!("../imports/sandbox.rs"),
     ),
     ("app/src/lib.rs", include_bytes!("../lib.rs")),
+    ("app/src/query/mod.rs", include_bytes!("../query/mod.rs")),
+    ("app/src/query/page.rs", include_bytes!("../query/page.rs")),
+    (
+        "app/src/query/receipt.rs",
+        include_bytes!("../query/receipt.rs"),
+    ),
+    (
+        "app/src/query/route_tests.rs",
+        include_bytes!("../query/route_tests.rs"),
+    ),
+    (
+        "app/src/query/routes.rs",
+        include_bytes!("../query/routes.rs"),
+    ),
+    (
+        "app/src/query/tests.rs",
+        include_bytes!("../query/tests.rs"),
+    ),
+    (
+        "app/src/query/worker.rs",
+        include_bytes!("../query/worker.rs"),
+    ),
     ("app/src/readiness.rs", include_bytes!("../readiness.rs")),
     ("app/src/roles.rs", include_bytes!("../roles.rs")),
     (
@@ -212,6 +293,11 @@ const SOURCES: [(&str, &[u8]); 42] = [
         include_bytes!("authorization.rs"),
     ),
     ("app/src/storage/catalog.rs", include_bytes!("catalog.rs")),
+    (
+        "app/src/storage/command_qualification.rs",
+        include_bytes!("command_qualification.rs"),
+    ),
+    ("app/src/storage/commands.rs", include_bytes!("commands.rs")),
     (
         "app/src/storage/definition_qualification.rs",
         include_bytes!("definition_qualification.rs"),
@@ -238,12 +324,26 @@ const SOURCES: [(&str, &[u8]); 42] = [
         "app/src/storage/qualification_cases.rs",
         include_bytes!("qualification_cases.rs"),
     ),
+    ("app/src/storage/queries.rs", include_bytes!("queries.rs")),
+    (
+        "app/src/storage/query_qualification.rs",
+        include_bytes!("query_qualification.rs"),
+    ),
+    (
+        "app/src/storage/race_qualification.rs",
+        include_bytes!("race_qualification.rs"),
+    ),
     ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
+    ("app/src/storage/sessions.rs", include_bytes!("sessions.rs")),
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
     ("app/src/supervise.rs", include_bytes!("../supervise.rs")),
     (
         "contracts/fixtures/canonical-vectors.json",
         include_bytes!("../../../contracts/fixtures/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/command-recovery.json",
+        include_bytes!("../../../contracts/fixtures/command-recovery.json"),
     ),
     (
         "contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json",
@@ -262,6 +362,22 @@ const SOURCES: [(&str, &[u8]); 42] = [
         include_bytes!("../../../contracts/fixtures/impl-2026-10-28.1/spend-review.json"),
     ),
     (
+        "contracts/fixtures/impl-2026-10-29.2/canonical-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.2/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.2/negative-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.2/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.2/northstar.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.2/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.2/spend-review.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.2/spend-review.json"),
+    ),
+    (
         "contracts/fixtures/negative-vectors.json",
         include_bytes!("../../../contracts/fixtures/negative-vectors.json"),
     ),
@@ -276,6 +392,10 @@ const SOURCES: [(&str, &[u8]); 42] = [
     (
         "contracts/implementation-lock.json",
         include_bytes!("../../../contracts/implementation-lock.json"),
+    ),
+    (
+        "contracts/schema.json",
+        include_bytes!("../../../contracts/schema.json"),
     ),
     (
         "spikes/APP-006/Cargo.toml",

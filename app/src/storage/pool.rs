@@ -61,7 +61,7 @@ pub struct Settings {
     host: String,
     port: u16,
     #[cfg(test)]
-    pub(super) hooks: Arc<TestHooks>,
+    pub(crate) hooks: Arc<TestHooks>,
 }
 impl Settings {
     pub fn new(
@@ -111,7 +111,7 @@ impl Settings {
 // production constructor can select these lifecycle barriers.
 #[cfg(test)]
 #[derive(Default)]
-pub(super) struct TestHooks {
+pub(crate) struct TestHooks {
     phase: std::sync::Mutex<Option<&'static str>>,
     pub reached: Notify,
     pub release: Notify,
@@ -428,6 +428,12 @@ impl Lease {
     }
     pub async fn finish(self, commit: bool, transaction_deadline: Instant) -> Result<()> {
         let command = if commit { "COMMIT" } else { "ROLLBACK" };
+        // APP-013: the command campaign pauses here to end the backend before
+        // COMMIT, so the answer is lost and the outcome unknown (D7.9).
+        #[cfg(test)]
+        if commit {
+            self.checkpoint("commit").await;
+        }
         match timeout_at(transaction_deadline, self.client().batch_execute(command)).await {
             Ok(Ok(())) => (),
             _ if commit => return Err(Error::UnknownOutcome),
@@ -520,7 +526,7 @@ async fn verify_schema_version(client: &Client) -> Result<()> {
         )
         .await
         .map_err(|_| Error::Unavailable)?;
-    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 5 {
+    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 7 {
         return Err(Error::Unavailable);
     }
     Ok(())

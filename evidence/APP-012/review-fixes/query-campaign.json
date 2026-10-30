@@ -1,0 +1,654 @@
+{
+  "admission": {
+    "launched": 134,
+    "peak_organization_running": 2,
+    "peak_task_running": 2,
+    "rejected": 0
+  },
+  "bound_work": "00000000-0000-4000-8000-0000000000f2",
+  "checks": [
+    {
+      "name": "register-source-revision writes one new source revision with the uploaded objects' real digests; a rerun is unchanged; a differing record, a revision id not derived from the content digest, a disagreeing object digest and another organization are refused; the seeded placeholder revision is untouched",
+      "passed": true
+    },
+    {
+      "name": "create-bound-work writes a new saved work at version 1 on the same publication whose events input binds the new revision; the seeded work, its binding and its record are unchanged; a creator without run and source_read is refused",
+      "passed": true
+    },
+    {
+      "name": "authorized_member_gets_exact_result_and_receipt_digest: total 1,140,000, destination 198.51.100.7 900,000 and the five timeline buckets of the APP-011 oracle, each released after re-authorization with a contract-valid published receipt pinning the new revision's real digest; the receipt lists every source dependency of the work (events and inventory) and passes contracts/validate.py validate_bundle against the work, while a receipt cut to the read input alone is refused (source evidence dependency mismatch)",
+      "passed": true
+    },
+    {
+      "name": "the seeded work still binds the placeholder digest; with no object of that digest in the cache it is unavailable and no number is produced",
+      "passed": true
+    },
+    {
+      "name": "unknown and query-less views, the lookup view, unclosed or money parameters, another organization's scope, a member without run or work access and a stale epoch are denied before any engine runs; a run is never released to another principal or organization",
+      "passed": true
+    },
+    {
+      "name": "foreign_or_revoked_scope_denied_before_release_including_change_between_execution_and_delivery: a computed result is not released after source_read revocation, creator-authority revocation or membership revocation between execution and delivery, and the new epoch can neither claim it nor start a run until authority is current again",
+      "passed": true
+    },
+    {
+      "name": "per-request latency measured: run_query + engine child + release_result + receipt, and the child alone sequentially and in waves of two",
+      "passed": true
+    },
+    {
+      "name": "route_authorized_member_gets_exact_result_and_receipt_digest: a member signed in through the APP-009 routes gets total 1,140,000 for [10:00, 10:10), 900,000 for destination 198.51.100.7 at filter epoch 1 and the five timeline buckets from POST /v1/work/{app}/{work}/queries/{view} (application/json, no-store); each receipt is contract-valid (contracts/validate.py validate), its digest and result digest recompute, it pins her principal, the new work, every source dependency of the work and the uploaded revision's real digest, and the total receipt passes validate_bundle against its work; without the window the same view is 2,040,000 with a receipt that records no window",
+      "passed": true
+    },
+    {
+      "name": "impossible window bounds (2026-02-31, 2026-04-31, year 0000) are 422 invalid_parameters on the JSON route before authorization or any engine (review M2, probe P6)",
+      "passed": true
+    },
+    {
+      "name": "work page: GET /w/{app}/{work} shows the definition's two runnable views idle and runs nothing; the run form (window required, destination optional, synchronizer token) answers 303 to the page with the run cookie and the page then shows total 1,140,000 and the five timeline buckets with contract-valid receipts listing every source dependency, 900,000 for the destination, and empty (never zero) for a destination with no event; a missing window and an impossible day (2026-02-31, year 0000) are 422 with every view idle and the run cookie untouched, a forged token 403, none reaching the engine",
+      "passed": true
+    },
+    {
+      "name": "reload restores (ADR-010 act 4): after the run form's 303, GET /w/{app}/{work} twice shows the same 1,140,000 and five buckets with a fresh run and release each time (dispatch +2 per reload, identical receipt identity for the same pinned state and parameters) and refreshes the Strict run cookie; a source_read revocation between execution and release of a restored run renders both views denied, a revocation before the reload makes the page the uniform 404; the cookie presented on another work of hers and a tampered cookie are ignored and cleared with every view idle and no dispatch; a query string stays the uniform 404",
+      "passed": true
+    },
+    {
+      "name": "D7.9 lock wait during session resolution (review M4, probe P14): while an operator transaction holds the member's row FOR UPDATE, her live cookie on GET /workspace, the JSON route, the page and the run form answers the uniform 404 after lock_timeout (never 503), with no Set-Cookie and no dispatch; once released the same cookie is live again (200) and the run form shows 1,140,000",
+      "passed": true
+    },
+    {
+      "name": "filters travel in bodies only: a query string on the JSON route is 422 invalid_parameters and on the page the uniform 404; unclosed, foreign-scoped or malformed bodies are 422 and a body over 64 KiB is 413; none reaches the engine",
+      "passed": true
+    },
+    {
+      "name": "foreign, revoked, pre-access and anonymous requests get the uniform 404 and invoke no engine: 32 requests (anonymous, a pre-access session, a pre-access cookie presented as a session, a canary member replaying the Northstar ids, a member without work or source access, a revoked membership, and the member after her own source_read revocation) on the JSON route, the page and the run form; the dispatch counter did not move and the service log gained no query.dispatch line",
+      "passed": true
+    },
+    {
+      "name": "revocation between execution and delivery denies release: with the engine paused after computing 1,140,000, a source_read revocation turns the JSON response into the uniform 404 with no number; on the page a membership revocation in the same gap (the run form's 303, then the restored GET) renders both views denied with no value or receipt, and the next request finds no session",
+      "passed": true
+    },
+    {
+      "name": "every receipt the work page delivered (6 receipts over the first run, the destination, the empty views and the reloads) validates under contracts/validate.py validate",
+      "passed": true
+    },
+    {
+      "name": "429 under load: with the organization's engine admission full (2 running, 20 waiting), an authorized POST /v1/work/{app}/{work}/queries/{view} is 429 too_many_requests with Retry-After: 2 and no-store, and the work page (the form's 303, then the restored GET) renders both views loading, labelled busy, with no value or receipt; the engine rejected exactly those 3 and never ran more than 2 at once; the fillers finished (2 completed, 20 expired in the queue); once drained the same request is 200",
+      "passed": true
+    },
+    {
+      "name": "store outage maps alike on GET /workspace and the APP-012 routes: with the workspace store unreachable, the member's live cookie and a forged cookie both get 503 unavailable (no-store) on GET /workspace, the JSON route, the page and its run form (8 requests in 1 ms, inside the 5 s handler deadline, so the answer is the storage mapping), without a cookie the uniform 404; the engine is never reached",
+      "passed": true
+    },
+    {
+      "name": "structured query log (APP-076 G6): 139 query.dispatch lines, one per engine child launched across both engines; 25 query.released and 5 query.release_denied lines carrying receipt and result identities; 2 query.failed_after_dispatch lines, and no more terminal lines than dispatches; 38 query.refused_before_dispatch lines with their codes (busy, denied, invalid_parameters among them); no window bound, destination or cookie value appears in the log",
+      "passed": true
+    },
+    {
+      "name": "local database and private fixture files removed",
+      "passed": true
+    }
+  ],
+  "latency": {
+    "authorized_path_wall_ms": {
+      "max": 267.3,
+      "p50": 246.0,
+      "p95": 263.2,
+      "samples": 20
+    },
+    "child": {
+      "engine_reported_ms": {
+        "max": 75,
+        "p50": 69
+      },
+      "peak_rss_bytes": 54050816,
+      "samples": 40,
+      "sequential_wall_ms": {
+        "max": 141.1,
+        "p50": 132.0,
+        "p95": 138.4,
+        "p99": 141.1
+      },
+      "wave_of_two_wall_ms": {
+        "max": 148.9,
+        "p50": 142.3,
+        "p99": 148.9
+      }
+    }
+  },
+  "limits": [
+    "Synthetic local password authentication is not RDS IAM. The storage checks use synthetic registry-bound requests; the route and page checks use real APP-009 sessions minted through the product routes against the cfg(test) synthetic loopback issuer (SIMULATED provider), rendered by a recording page renderer (the SSR page is the binary's test).",
+    "The revision cache is seeded locally with the bytes APP-077 uploads (same SHA-256); the credentialed S3 fetch is unit-tested against botocore's Stubber, not S3.",
+    "The engine child runs on macOS arm64 with the locked venv, not in the linux image under Fargate; its latency is re-measured in APP-078's window.",
+    "The registered record is written by the test with the APP-077 digests and the content-derived revision id; upload-sources itself (merged separately) is not run here."
+  ],
+  "managed_acceptance": false,
+  "passed": true,
+  "receipts": {
+    "destination": {
+      "app_id": "00000000-0000-4000-8000-000000000065",
+      "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
+      "digest": "sha256:ba28077fac92d2bd2514c16df4b002e14f132cd044b7a02d9a700209f8d000f5",
+      "filter_epoch": 1,
+      "kind": "query_receipt",
+      "membership_epoch": 1,
+      "mode": "published",
+      "operator_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "parameters": [
+        {
+          "field_id": "destination",
+          "value": {
+            "type": "text",
+            "value": "198.51.100.7"
+          }
+        },
+        {
+          "field_id": "window_end",
+          "value": {
+            "type": "timestamp",
+            "value": "2026-10-22T10:10:00Z"
+          }
+        },
+        {
+          "field_id": "window_start",
+          "value": {
+            "type": "timestamp",
+            "value": "2026-10-22T10:00:00Z"
+          }
+        }
+      ],
+      "partial": false,
+      "policy_epoch": 1,
+      "principal_id": "00000000-0000-4000-8000-000000000066",
+      "provenance": {
+        "predicate_digest": "sha256:4ff14af639531c302342be991cc5127338ab7edc0e67b484481347ea62d8bb47",
+        "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
+      },
+      "publication_id": "00000000-0000-4000-8000-000000000068",
+      "record_snapshot_sequence": 0,
+      "result_digest": "sha256:3ae98befe7487a6998a491b19a17eb0b609da387673806b4f53b467aacc7d40c",
+      "schema_version": 1,
+      "source_revisions": [
+        {
+          "input_id": "events",
+          "source_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+          "source_id": "00000000-0000-4000-8000-00000000006e",
+          "source_revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45"
+        },
+        {
+          "input_id": "inventory",
+          "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+          "source_id": "00000000-0000-4000-8000-000000000070",
+          "source_revision_id": "00000000-0000-4000-8000-000000000071"
+        }
+      ],
+      "total_scope": "full_authorized_filtered_input",
+      "truncated_page": false,
+      "view_id": "total",
+      "work_id": "00000000-0000-4000-8000-0000000000f2"
+    },
+    "timeline": {
+      "app_id": "00000000-0000-4000-8000-000000000065",
+      "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
+      "digest": "sha256:aef1b7b1e815acbb6b341832cd3a07203754a50f67ca700a1ec6c23586db4b47",
+      "filter_epoch": 0,
+      "kind": "query_receipt",
+      "membership_epoch": 1,
+      "mode": "published",
+      "operator_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "parameters": [
+        {
+          "field_id": "window_end",
+          "value": {
+            "type": "timestamp",
+            "value": "2026-10-22T10:10:00Z"
+          }
+        },
+        {
+          "field_id": "window_start",
+          "value": {
+            "type": "timestamp",
+            "value": "2026-10-22T10:00:00Z"
+          }
+        }
+      ],
+      "partial": false,
+      "policy_epoch": 1,
+      "principal_id": "00000000-0000-4000-8000-000000000066",
+      "provenance": {
+        "predicate_digest": "sha256:93e239a0bf50df6c543799243ff7e426250893e01914f7f330ef0d5c08adfe9a",
+        "query_digest": "sha256:b3d11fb7d535628a5eaf5b2bf2e3c5d6e34e285d53bc964be349837381e942e7"
+      },
+      "publication_id": "00000000-0000-4000-8000-000000000068",
+      "record_snapshot_sequence": 0,
+      "result_digest": "sha256:5c70c49ab819e1bf840116f30fd132f4df800b78ea812ed1d281014e86c4119a",
+      "schema_version": 1,
+      "source_revisions": [
+        {
+          "input_id": "events",
+          "source_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+          "source_id": "00000000-0000-4000-8000-00000000006e",
+          "source_revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45"
+        },
+        {
+          "input_id": "inventory",
+          "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+          "source_id": "00000000-0000-4000-8000-000000000070",
+          "source_revision_id": "00000000-0000-4000-8000-000000000071"
+        }
+      ],
+      "total_scope": "full_authorized_filtered_input",
+      "truncated_page": false,
+      "view_id": "timeline",
+      "work_id": "00000000-0000-4000-8000-0000000000f2"
+    },
+    "total": {
+      "app_id": "00000000-0000-4000-8000-000000000065",
+      "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
+      "digest": "sha256:fe8d98766a6b309b7d2df997ce304c405e14bbbf37b584c50fe2dd97cae13815",
+      "filter_epoch": 0,
+      "kind": "query_receipt",
+      "membership_epoch": 1,
+      "mode": "published",
+      "operator_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "parameters": [
+        {
+          "field_id": "window_end",
+          "value": {
+            "type": "timestamp",
+            "value": "2026-10-22T10:10:00Z"
+          }
+        },
+        {
+          "field_id": "window_start",
+          "value": {
+            "type": "timestamp",
+            "value": "2026-10-22T10:00:00Z"
+          }
+        }
+      ],
+      "partial": false,
+      "policy_epoch": 1,
+      "principal_id": "00000000-0000-4000-8000-000000000066",
+      "provenance": {
+        "predicate_digest": "sha256:cb3af210e42e9eef5c055488404710cb6d1a3bc3fdb33f240a67399c49b07e9d",
+        "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
+      },
+      "publication_id": "00000000-0000-4000-8000-000000000068",
+      "record_snapshot_sequence": 0,
+      "result_digest": "sha256:6f3f0b37b87e02e4d26855cb808c36e5b4cfba05a70d8ed21a7a524c09d44410",
+      "schema_version": 1,
+      "source_revisions": [
+        {
+          "input_id": "events",
+          "source_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+          "source_id": "00000000-0000-4000-8000-00000000006e",
+          "source_revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45"
+        },
+        {
+          "input_id": "inventory",
+          "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+          "source_id": "00000000-0000-4000-8000-000000000070",
+          "source_revision_id": "00000000-0000-4000-8000-000000000071"
+        }
+      ],
+      "total_scope": "full_authorized_filtered_input",
+      "truncated_page": false,
+      "view_id": "total",
+      "work_id": "00000000-0000-4000-8000-0000000000f2"
+    }
+  },
+  "revision": {
+    "content_digest": "sha256:6e0f0ed7f182509d7cbadb70405c21d2e25f24e89d80c2137297e411fc034647",
+    "contract_digest": "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546b1f59f2f9178f64",
+    "normalized_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45",
+    "source_id": "00000000-0000-4000-8000-00000000006e"
+  },
+  "routes": {
+    "delivered_page_receipts": 6,
+    "denied_requests_without_dispatch": 32,
+    "dispatch_calls": 29,
+    "load": {
+      "filler_child_ms": 1500,
+      "fillers": 22,
+      "fillers_completed": 2,
+      "fillers_expired": 20,
+      "page_views_loading": 2,
+      "peak_organization_running": 2,
+      "rejected": 3,
+      "route_too_many_requests": 1
+    },
+    "lock_wait": {
+      "lock_timeout_ms": 1000,
+      "requests": [
+        {
+          "elapsed_ms": 1059,
+          "method": "GET",
+          "route": "/workspace",
+          "status": 404
+        },
+        {
+          "elapsed_ms": 1080,
+          "method": "POST",
+          "route": "/v1/work/{app}/{work}/queries/total",
+          "status": 404
+        },
+        {
+          "elapsed_ms": 1078,
+          "method": "GET",
+          "route": "/w/{app}/{work}",
+          "status": 404
+        },
+        {
+          "elapsed_ms": 1093,
+          "method": "POST",
+          "route": "/w/{app}/{work}",
+          "status": 404
+        }
+      ]
+    },
+    "query_log": {
+      "dispatch": 139,
+      "failed_after_dispatch": 2,
+      "refused_before_dispatch": 38,
+      "release_denied": 5,
+      "released": 25
+    },
+    "receipts": {
+      "destination": {
+        "app_id": "00000000-0000-4000-8000-000000000065",
+        "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
+        "digest": "sha256:872e122aaec5cd3c998f2ecf2b24a2d18c352b4905bcbceaf8d2647eb6859ee1",
+        "filter_epoch": 1,
+        "kind": "query_receipt",
+        "membership_epoch": 1,
+        "mode": "published",
+        "operator_version": 1,
+        "organization_id": "00000000-0000-4000-8000-000000000001",
+        "parameters": [
+          {
+            "field_id": "destination",
+            "value": {
+              "type": "text",
+              "value": "198.51.100.7"
+            }
+          },
+          {
+            "field_id": "window_end",
+            "value": {
+              "type": "timestamp",
+              "value": "2026-10-22T10:10:00Z"
+            }
+          },
+          {
+            "field_id": "window_start",
+            "value": {
+              "type": "timestamp",
+              "value": "2026-10-22T10:00:00Z"
+            }
+          }
+        ],
+        "partial": false,
+        "policy_epoch": 1,
+        "principal_id": "a2d1c807-1d75-4f4e-9d7d-6eeae70c1ee0",
+        "provenance": {
+          "predicate_digest": "sha256:4ff14af639531c302342be991cc5127338ab7edc0e67b484481347ea62d8bb47",
+          "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
+        },
+        "publication_id": "00000000-0000-4000-8000-000000000068",
+        "record_snapshot_sequence": 0,
+        "result_digest": "sha256:3ae98befe7487a6998a491b19a17eb0b609da387673806b4f53b467aacc7d40c",
+        "schema_version": 1,
+        "source_revisions": [
+          {
+            "input_id": "events",
+            "source_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+            "source_id": "00000000-0000-4000-8000-00000000006e",
+            "source_revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45"
+          },
+          {
+            "input_id": "inventory",
+            "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+            "source_id": "00000000-0000-4000-8000-000000000070",
+            "source_revision_id": "00000000-0000-4000-8000-000000000071"
+          }
+        ],
+        "total_scope": "full_authorized_filtered_input",
+        "truncated_page": false,
+        "view_id": "total",
+        "work_id": "00000000-0000-4000-8000-0000000000f6"
+      },
+      "timeline": {
+        "app_id": "00000000-0000-4000-8000-000000000065",
+        "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
+        "digest": "sha256:519976d56f2d78b66e540ad482fe182ad5eb56755ec80437a68f5637e56e48f4",
+        "filter_epoch": 0,
+        "kind": "query_receipt",
+        "membership_epoch": 1,
+        "mode": "published",
+        "operator_version": 1,
+        "organization_id": "00000000-0000-4000-8000-000000000001",
+        "parameters": [
+          {
+            "field_id": "window_end",
+            "value": {
+              "type": "timestamp",
+              "value": "2026-10-22T10:10:00Z"
+            }
+          },
+          {
+            "field_id": "window_start",
+            "value": {
+              "type": "timestamp",
+              "value": "2026-10-22T10:00:00Z"
+            }
+          }
+        ],
+        "partial": false,
+        "policy_epoch": 1,
+        "principal_id": "a2d1c807-1d75-4f4e-9d7d-6eeae70c1ee0",
+        "provenance": {
+          "predicate_digest": "sha256:93e239a0bf50df6c543799243ff7e426250893e01914f7f330ef0d5c08adfe9a",
+          "query_digest": "sha256:b3d11fb7d535628a5eaf5b2bf2e3c5d6e34e285d53bc964be349837381e942e7"
+        },
+        "publication_id": "00000000-0000-4000-8000-000000000068",
+        "record_snapshot_sequence": 0,
+        "result_digest": "sha256:5c70c49ab819e1bf840116f30fd132f4df800b78ea812ed1d281014e86c4119a",
+        "schema_version": 1,
+        "source_revisions": [
+          {
+            "input_id": "events",
+            "source_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+            "source_id": "00000000-0000-4000-8000-00000000006e",
+            "source_revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45"
+          },
+          {
+            "input_id": "inventory",
+            "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+            "source_id": "00000000-0000-4000-8000-000000000070",
+            "source_revision_id": "00000000-0000-4000-8000-000000000071"
+          }
+        ],
+        "total_scope": "full_authorized_filtered_input",
+        "truncated_page": false,
+        "view_id": "timeline",
+        "work_id": "00000000-0000-4000-8000-0000000000f6"
+      },
+      "total": {
+        "app_id": "00000000-0000-4000-8000-000000000065",
+        "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
+        "digest": "sha256:e5224c2f4a52f1a92095baa91a55c3693ec26e33b209c5825e862393867cdade",
+        "filter_epoch": 0,
+        "kind": "query_receipt",
+        "membership_epoch": 1,
+        "mode": "published",
+        "operator_version": 1,
+        "organization_id": "00000000-0000-4000-8000-000000000001",
+        "parameters": [
+          {
+            "field_id": "window_end",
+            "value": {
+              "type": "timestamp",
+              "value": "2026-10-22T10:10:00Z"
+            }
+          },
+          {
+            "field_id": "window_start",
+            "value": {
+              "type": "timestamp",
+              "value": "2026-10-22T10:00:00Z"
+            }
+          }
+        ],
+        "partial": false,
+        "policy_epoch": 1,
+        "principal_id": "a2d1c807-1d75-4f4e-9d7d-6eeae70c1ee0",
+        "provenance": {
+          "predicate_digest": "sha256:cb3af210e42e9eef5c055488404710cb6d1a3bc3fdb33f240a67399c49b07e9d",
+          "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
+        },
+        "publication_id": "00000000-0000-4000-8000-000000000068",
+        "record_snapshot_sequence": 0,
+        "result_digest": "sha256:6f3f0b37b87e02e4d26855cb808c36e5b4cfba05a70d8ed21a7a524c09d44410",
+        "schema_version": 1,
+        "source_revisions": [
+          {
+            "input_id": "events",
+            "source_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+            "source_id": "00000000-0000-4000-8000-00000000006e",
+            "source_revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45"
+          },
+          {
+            "input_id": "inventory",
+            "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+            "source_id": "00000000-0000-4000-8000-000000000070",
+            "source_revision_id": "00000000-0000-4000-8000-000000000071"
+          }
+        ],
+        "total_scope": "full_authorized_filtered_input",
+        "truncated_page": false,
+        "view_id": "total",
+        "work_id": "00000000-0000-4000-8000-0000000000f6"
+      },
+      "whole_revision": {
+        "app_id": "00000000-0000-4000-8000-000000000065",
+        "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
+        "digest": "sha256:87d8cb0b14538bf5c0d13fe39532cab8434254a5e581ee0113f0e4e29de634be",
+        "filter_epoch": 0,
+        "kind": "query_receipt",
+        "membership_epoch": 1,
+        "mode": "published",
+        "operator_version": 1,
+        "organization_id": "00000000-0000-4000-8000-000000000001",
+        "parameters": [],
+        "partial": false,
+        "policy_epoch": 1,
+        "principal_id": "a2d1c807-1d75-4f4e-9d7d-6eeae70c1ee0",
+        "provenance": {
+          "predicate_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66",
+          "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
+        },
+        "publication_id": "00000000-0000-4000-8000-000000000068",
+        "record_snapshot_sequence": 0,
+        "result_digest": "sha256:b4e1cbca5dc7e08f9171c6086e9697ae6ba99d431f43df5a6acf978cb87dade5",
+        "schema_version": 1,
+        "source_revisions": [
+          {
+            "input_id": "events",
+            "source_digest": "sha256:0c2582d801005bd49ed4173b86bf8d03b9e681cbcfcca8a8387b5eb32237a082",
+            "source_id": "00000000-0000-4000-8000-00000000006e",
+            "source_revision_id": "9161c1e4-27c0-4cbb-addf-eb7ce504bf45"
+          },
+          {
+            "input_id": "inventory",
+            "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+            "source_id": "00000000-0000-4000-8000-000000000070",
+            "source_revision_id": "00000000-0000-4000-8000-000000000071"
+          }
+        ],
+        "total_scope": "full_authorized_filtered_input",
+        "truncated_page": false,
+        "view_id": "total",
+        "work_id": "00000000-0000-4000-8000-0000000000f6"
+      }
+    },
+    "reload_restores": {
+      "mechanism": "POST 303 + __Host-genui_run (SameSite=Strict, HttpOnly, Secure, Max-Age 600, tag over work path, session cookie and canonical parameters) + GET",
+      "reloads": [
+        {
+          "receipt_digest": "sha256:e5224c2f4a52f1a92095baa91a55c3693ec26e33b209c5825e862393867cdade",
+          "reload": 1,
+          "timeline_rows": 5,
+          "total": "1,140,000"
+        },
+        {
+          "receipt_digest": "sha256:e5224c2f4a52f1a92095baa91a55c3693ec26e33b209c5825e862393867cdade",
+          "reload": 2,
+          "timeline_rows": 5,
+          "total": "1,140,000"
+        }
+      ]
+    },
+    "store_outage": {
+      "dispatch_calls": 0,
+      "elapsed_ms": 1,
+      "requests": [
+        {
+          "cookie": "member",
+          "method": "GET",
+          "route": "/workspace",
+          "status": 503
+        },
+        {
+          "cookie": "member",
+          "method": "POST",
+          "route": "/v1/work/{app}/{work}/queries/total",
+          "status": 503
+        },
+        {
+          "cookie": "member",
+          "method": "GET",
+          "route": "/w/{app}/{work}",
+          "status": 503
+        },
+        {
+          "cookie": "member",
+          "method": "POST",
+          "route": "/w/{app}/{work}",
+          "status": 503
+        },
+        {
+          "cookie": "forged",
+          "method": "GET",
+          "route": "/workspace",
+          "status": 503
+        },
+        {
+          "cookie": "forged",
+          "method": "POST",
+          "route": "/v1/work/{app}/{work}/queries/total",
+          "status": 503
+        },
+        {
+          "cookie": "forged",
+          "method": "GET",
+          "route": "/w/{app}/{work}",
+          "status": 503
+        },
+        {
+          "cookie": "forged",
+          "method": "POST",
+          "route": "/w/{app}/{work}",
+          "status": 503
+        }
+      ]
+    }
+  },
+  "schema_version": 1,
+  "scope": "APP-012 isolated native PostgreSQL TLS query authorization, confined DuckDB child and receipt qualification",
+  "server_version": "16.13 (Debian 16.13-1.pgdg13+1)"
+}

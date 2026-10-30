@@ -58,6 +58,13 @@ def synthetic_versions(target, latest):
     return target
 
 
+# APP-078 review M1: each is serialized differently by WHATWG (`0x7f.1`, `127.1`, `2130706433` -> `127.0.0.1`;
+# `1.2.3` -> `1.2.0.3`; `012.0.0.1` -> `10.0.0.1`; `1.2.3.4.` -> `1.2.3.4`) or refused outright.
+WHATWG_NUMERIC_HOST_PROBES = ('https://0x7f.1', 'https://127.1', 'https://2130706433', 'https://1.2.3',
+                              'https://012.0.0.1', 'https://example.0', 'https://1.2.3.4.5', 'https://09.1.1.1',
+                              'https://1.2.3.4.', 'https://example.0x')
+
+
 class MigrationRecorder:
     """Unit-only stand-in for one migration transaction; never a database.
 
@@ -646,22 +653,19 @@ class QualificationSecretTests(unittest.TestCase):
     def auth_files(self):
         return list(self.directory.glob('.auth-qualification-*'))
 
-    def test_transport_consumption_byte_limit_and_no_duplicate_auth_policy(self):
-        for raw in (self.PAYLOAD, '\u00e9' * 4096, '{invalid-json-for-rust-to-refuse'):
-            with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: raw}, clear=True):
-                self.assertEqual(runtime.take_qualification_json('serve'), raw.encode('utf-8'))
-                self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
-        for raw in ('', ' \n ', 'x' * 8193, '\u00e9' * 4097, '\udcff'):
-            with self.subTest(kind=len(raw)), patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: raw}, clear=True):
+    def test_injection_is_removed_and_refused_in_every_mode(self):
+        """APP-009 review m6 (ADR-007 D7.13): the harness configuration is
+        refused, never written to a file; the raw value leaves the environment."""
+        for env in ({runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, {runtime.QUALIFICATION_JSON_ENV: ''},
+                    {runtime.QUALIFICATION_FILE_ENV: '/run/genui/x'},
+                    {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD, runtime.QUALIFICATION_FILE_ENV: ''}):
+            with self.subTest(env=sorted(env)), patch.dict(os.environ, env, clear=True):
                 with self.assertRaises(runtime.Refused) as error:
-                    runtime.take_qualification_json('serve')
+                    runtime.refuse_qualification_injection()
                 self.assertEqual(str(error.exception), 'runtime configuration refused')
                 self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
         with patch.dict(os.environ, {}, clear=True):
-            self.assertIsNone(runtime.take_qualification_json('serve'))
-        with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD, runtime.QUALIFICATION_FILE_ENV: ''}, clear=True):
-            with self.assertRaises(runtime.Refused): runtime.take_qualification_json('serve')
-            self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
+            self.assertIsNone(runtime.refuse_qualification_injection())
 
     def test_new_real_private_file_is_exact_and_cleanup_preserves_other_files(self):
         self.path.write_text('unrelated-existing-credential-file')
@@ -743,32 +747,28 @@ class QualificationSecretTests(unittest.TestCase):
         self.assertEqual(self.auth_files(), [])
         self.assertEqual(self.path.read_text(), 'existing-preserve')
 
-    def test_failed_preparation_does_not_refresh_launch_or_delete_existing_credentials(self):
+    def test_serve_refuses_injection_before_refresh_launch_or_any_file(self):
         self.path.write_text('existing-preserve')
-        self.directory.chmod(0o755)
-        with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, clear=True), \
-             patch.object(runtime.signal, 'signal'), patch.object(runtime, 'refresh') as refresh, patch.object(runtime.subprocess, 'Popen') as child:
-            with self.assertRaises(runtime.Refused): runtime.serve(self.path)
-            refresh.assert_not_called(); child.assert_not_called()
-            self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
-        self.directory.chmod(0o700)
+        for env in ({runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, {runtime.QUALIFICATION_FILE_ENV: str(self.directory / 'x.json')}):
+            with self.subTest(env=sorted(env)), patch.dict(os.environ, env, clear=True), \
+                 patch.object(runtime.signal, 'signal'), patch.object(runtime, 'refresh') as refresh, \
+                 patch.object(runtime.subprocess, 'Popen') as child:
+                with self.assertRaises(runtime.Refused): runtime.serve(self.path)
+                refresh.assert_not_called(); child.assert_not_called()
+                self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
         self.assertEqual(self.path.read_text(), 'existing-preserve')
         self.assertEqual(self.auth_files(), [])
+        self.assertEqual(sorted(p.name for p in self.directory.iterdir()), ['credentials.json'])
 
     def child_script(self, exit_code=0, wait_for_termination=False):
         script = self.directory / 'child.py'
         report = self.directory / 'child-report.json'
         source = f'''#!{sys.executable}
-import json, os, signal, stat, time
+import json, os, signal, time
 from pathlib import Path
 if {wait_for_termination!r}: signal.signal(signal.SIGTERM, signal.SIG_IGN)
-path = os.environ.get({runtime.QUALIFICATION_FILE_ENV!r})
-info = None if path is None else Path(path).stat()
-content_ok = path is None or Path(path).read_text() == {self.PAYLOAD!r}
 result = {{'raw_env_absent': {runtime.QUALIFICATION_JSON_ENV!r} not in os.environ,
-           'path_present': path is not None, 'content_ok': content_ok,
-           'mode': None if info is None else stat.S_IMODE(info.st_mode),
-           'owned': info is None or info.st_uid == os.geteuid()}}
+           'path_present': {runtime.QUALIFICATION_FILE_ENV!r} in os.environ}}
 Path({str(report)!r}).write_text(json.dumps(result))
 if {wait_for_termination!r}:
     while True: time.sleep(0.05)
@@ -777,54 +777,33 @@ raise SystemExit({exit_code})
         script.write_text(source); script.chmod(0o700)
         return script, report
 
-    def test_real_successful_and_failed_children_receive_only_private_path(self):
+    def test_real_children_receive_no_qualification_handoff(self):
         for exit_code in (0, 7):
             with self.subTest(exit_code=exit_code):
                 script, report = self.child_script(exit_code)
-                env = {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD, 'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
+                env = {'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
                 with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
                      patch.object(runtime, 'refresh', side_effect=lambda path: runtime.atomic_write(path, self.value)) as refresh:
                     self.assertEqual(runtime.serve(self.path), exit_code)
-                    self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
-                    self.assertNotIn(runtime.QUALIFICATION_FILE_ENV, os.environ)
                     refresh.assert_called_once()
-                self.assertEqual(json.loads(report.read_text()), {'raw_env_absent': True, 'path_present': True, 'content_ok': True, 'mode': 0o600, 'owned': True})
+                self.assertEqual(json.loads(report.read_text()), {'raw_env_absent': True, 'path_present': False})
                 self.assertEqual(self.auth_files(), [])
                 self.assertFalse(self.path.exists())
 
-    def test_absent_json_preserves_default_and_explicit_path_is_never_owned(self):
-        for explicit in (False, True):
-            with self.subTest(explicit=explicit):
-                script, report = self.child_script()
-                existing = self.directory / 'explicit.json'
-                existing.write_text(self.PAYLOAD); existing.chmod(0o600)
-                env = {'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
-                if explicit: env[runtime.QUALIFICATION_FILE_ENV] = str(existing)
-                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
-                     patch.object(runtime, 'refresh', side_effect=lambda path: runtime.atomic_write(path, self.value)):
-                    self.assertEqual(runtime.serve(self.path), 0)
-                value = json.loads(report.read_text())
-                self.assertTrue(value['raw_env_absent'])
-                self.assertEqual(value['path_present'], explicit)
-                self.assertEqual(existing.read_text(), self.PAYLOAD)
-                self.assertEqual(self.auth_files(), [])
-
-    def test_startup_failure_and_cancel_after_write_clean_file_without_secret_output(self):
+    def test_startup_failure_and_cancel_leave_no_files_or_secret_output(self):
         for failure in ('refresh', 'launch', 'interrupt'):
             with self.subTest(failure=failure):
                 stop = threading.Event()
                 output = io.StringIO()
                 def refresh(path):
-                    self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, os.environ)
-                    self.assertEqual(len(self.auth_files()), 1)
                     if failure == 'refresh':
                         stop.set(); raise OSError(self.PAYLOAD)
                     if failure == 'interrupt': raise KeyboardInterrupt()
                     runtime.atomic_write(path, self.value)
                 def launch(*args, **kwargs):
-                    self.assertNotIn(runtime.QUALIFICATION_JSON_ENV, kwargs['env'])
+                    self.assertNotIn(runtime.QUALIFICATION_FILE_ENV, kwargs['env'])
                     stop.set(); raise OSError(self.PAYLOAD)
-                with patch.dict(os.environ, {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, clear=True), \
+                with patch.dict(os.environ, {}, clear=True), \
                      patch.object(runtime.signal, 'signal'), patch.object(runtime.threading, 'Event', return_value=stop), \
                      patch.object(runtime, 'refresh', side_effect=refresh), patch.object(runtime.subprocess, 'Popen', side_effect=launch), \
                      contextlib.redirect_stderr(output):
@@ -833,6 +812,7 @@ raise SystemExit({exit_code})
                     else: self.assertEqual(runtime.serve(self.path), 0)
                 self.assertNotIn(self.PAYLOAD, output.getvalue())
                 self.assertEqual(self.auth_files(), [])
+                self.assertEqual(list(self.directory.glob('.identity-registry-*')), [])
 
     def test_real_cancelled_child_ignoring_term_is_killed_and_cleanup_is_bounded(self):
         script, report = self.child_script(wait_for_termination=True)
@@ -842,7 +822,7 @@ raise SystemExit({exit_code})
             while not report.exists() and time.monotonic() < deadline: time.sleep(0.01)
             stop.set()
         watcher = threading.Thread(target=cancel_when_started, daemon=True)
-        env = {runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD, 'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
+        env = {'GENUI_BINARY': str(script), 'GENUI_RUNTIME_CONFIG_FILE': str(self.path)}
         started = time.monotonic()
         watcher.start()
         with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
@@ -856,16 +836,370 @@ raise SystemExit({exit_code})
         self.assertEqual(self.auth_files(), [])
         self.assertFalse(self.path.exists())
 
-    def test_actual_nonserve_commands_refuse_injection_before_managed_operations(self):
-        for mode in ('refresh', 'probe', 'migrate', 'qualify', 'cleanup'):
-            with self.subTest(mode=mode):
-                process = subprocess.run([sys.executable, str(Path(runtime.__file__).resolve()), mode],
-                                         env={runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD},
-                                         capture_output=True, text=True, timeout=3)
-                self.assertEqual(process.returncode, 1)
-                self.assertEqual(process.stdout, '')
-                self.assertEqual(process.stderr, 'managed_dependency_operation_refused\n')
-                self.assertNotIn(self.PAYLOAD, process.stdout + process.stderr)
+    def test_actual_commands_refuse_injection_before_managed_operations(self):
+        for mode in ('refresh', 'probe', 'migrate', 'qualify', 'cleanup', 'serve'):
+            for env in ({runtime.QUALIFICATION_JSON_ENV: self.PAYLOAD}, {runtime.QUALIFICATION_FILE_ENV: '/run/genui/x'}):
+                with self.subTest(mode=mode, env=sorted(env)):
+                    process = subprocess.run([sys.executable, str(Path(runtime.__file__).resolve()), mode],
+                                             env=dict(env, GENUI_RUNTIME_CONFIG_FILE=str(self.path), GENUI_BINARY='/nonexistent'),
+                                             capture_output=True, text=True, timeout=5)
+                    self.assertEqual(process.returncode, 1)
+                    self.assertEqual(process.stdout, '')
+                    self.assertEqual(process.stderr, 'managed_dependency_operation_refused\n')
+                    self.assertNotIn(self.PAYLOAD, process.stdout + process.stderr)
+        self.assertEqual(sorted(self.directory.iterdir()), [])
+
+
+def capability(org=None, invitation=None, **changes):
+    """One synthetic capability entry: (id, record)."""
+    org, invitation = org or str(uuid.uuid4()), invitation or str(uuid.uuid4())
+    record = {'format': runtime.CAPABILITY_FORMAT, 'organization_id': org, 'invitation_id': invitation,
+              'remote_invitation_id': 'tinv_' + str(uuid.uuid4()), 'provider_expires_at': '2026-11-03T00:00:00Z',
+              'invite_token': 'tinv_' + str(uuid.uuid4()), 'code_digest': 'sha256:' + 'ab' * 32}
+    record.update(changes)
+    return '%s.%s' % (org, invitation), {k: v for k, v in record.items() if v is not None}
+
+
+class CapabilityInjectionTests(unittest.TestCase):
+    """ADR-003 amendment 2026-10-30 (APP-074 review M1): the injected secret becomes 0600 files in a
+    fresh 0700 directory under the runtime volume that only the service child is told about."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='genui-capabilities-unit-')
+        self.directory = Path(self.tmp.name); self.directory.chmod(0o700)
+        self.path = self.directory / 'credentials.json'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def secret(self, *entries):
+        return json.dumps(dict(entries))
+
+    def test_the_map_is_validated_whole(self):
+        good = capability()
+        self.assertEqual(runtime.capability_map(self.secret(good)), dict([good]))
+        self.assertEqual(runtime.capability_map('{}'), {})
+        self.assertEqual(runtime.capability_map(self.secret(capability(code_digest=None))).popitem()[1].get('code_digest'), None)
+        key, record = capability()
+        other_org = capability()[1]['organization_id']
+        bad = [
+            'not json', '[]', '{"a": 1}',
+            json.dumps({key.upper(): record}),
+            json.dumps({'%s.%s' % (other_org, record['invitation_id']): record}),
+            self.secret(capability(extra='x')), self.secret(capability(format='other')),
+            self.secret(capability(invite_token='short')), self.secret(capability(remote_invitation_id=None)),
+            self.secret(capability(provider_expires_at='2026-11-03T00:00:00.000Z')),
+            self.secret(capability(code_digest='sha256:AB')),
+            '{"%s": %s, "%s": %s}' % (key, json.dumps(record), key, json.dumps(record)),  # a duplicated id
+            self.secret(*(capability() for _ in range(runtime.CAPABILITIES_MAX + 1))),
+            json.dumps({key: dict(record, invite_token=record['remote_invitation_id'])}),
+            'x' * (runtime.CAPABILITY_SECRET_BYTES_MAX + 1),
+        ]
+        for text in bad:
+            with self.subTest(text=text[:60]), self.assertRaises((runtime.Refused, ValueError)):
+                runtime.capability_map(text)
+
+    def test_files_are_private_exact_and_never_replace_a_name(self):
+        entries = [capability(), capability()]
+        target = self.directory / 'capabilities'; target.mkdir(mode=0o700); target.chmod(0o700)
+        written = runtime.write_capabilities(str(target), self.secret(*entries))
+        self.assertEqual(sorted(written), sorted(key + '.capability' for key, _ in entries))
+        for key, record in entries:
+            path = target / (key + '.capability')
+            info = path.lstat()
+            self.assertEqual((stat.S_IMODE(info.st_mode), info.st_uid, info.st_nlink), (0o600, os.geteuid(), 1))
+            self.assertEqual(json.loads(path.read_bytes()), record)
+        with self.assertRaises(FileExistsError):
+            runtime.write_capabilities(str(target), self.secret(entries[0]))
+        loose = self.directory / 'loose'; loose.mkdir(); loose.chmod(0o755)
+        with self.assertRaises(runtime.Refused):
+            runtime.write_capabilities(str(loose), self.secret(capability()))
+        link = self.directory / 'link'; link.symlink_to(target, target_is_directory=True)
+        with self.assertRaises(OSError):
+            runtime.write_capabilities(str(link), self.secret(capability()))
+        self.assertEqual(list(loose.iterdir()), [])
+
+    def child(self):
+        report = self.directory / 'report.json'; script = self.directory / 'child.py'
+        script.write_text(f'''#!{sys.executable}
+import json,os,stat
+from pathlib import Path
+d=os.environ.get({runtime.CAPABILITY_DIR_ENV!r})
+out={{'dir':d,'raw_absent':{runtime.CAPABILITIES_JSON_ENV!r} not in os.environ}}
+if d:
+    p=Path(d)
+    out.update(mode=stat.S_IMODE(p.lstat().st_mode),parent=str(p.parent),files={{n:[stat.S_IMODE((p/n).lstat().st_mode),json.loads((p/n).read_text())] for n in os.listdir(p)}})
+Path({str(report)!r}).write_text(json.dumps(out))
+'''); script.chmod(0o700)
+        return script, report
+
+    def test_serve_materializes_the_injected_secret_for_its_child_only(self):
+        script, report = self.child()
+        entries = [capability(), capability()]
+        text = self.secret(*entries)
+        for injected in (text, '{}', None):
+            with self.subTest(injected=injected and injected[:20]):
+                env = {'GENUI_BINARY': str(script)}
+                if injected is not None:
+                    env[runtime.CAPABILITIES_JSON_ENV] = injected
+                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
+                     patch.object(runtime, 'refresh', side_effect=lambda p: runtime.atomic_write(p, fixture())):
+                    self.assertEqual(runtime.serve(self.path), 0)
+                    self.assertNotIn(runtime.CAPABILITIES_JSON_ENV, os.environ, 'removed from the supervisor itself')
+                    self.assertNotIn(runtime.CAPABILITY_DIR_ENV, os.environ)
+                value = json.loads(report.read_text())
+                self.assertTrue(value['raw_absent'], 'the child never inherits the secret value')
+                if injected is None:
+                    self.assertIsNone(value['dir'])
+                else:
+                    self.assertEqual((value['mode'], value['parent']), (0o700, str(self.directory)))
+                    self.assertTrue(Path(value['dir']).name.startswith(runtime.CapabilityDirectory.PREFIX))
+                    expected = dict(entries) if injected == text else {}
+                    self.assertEqual(value['files'], {key + '.capability': [0o600, record] for key, record in expected.items()})
+                    self.assertFalse(Path(value['dir']).exists(), 'removed when serve ends')
+                self.assertEqual(sorted(p.name for p in self.directory.iterdir()), ['child.py', 'report.json'])
+
+    def test_a_malformed_secret_or_an_inherited_directory_refuses_before_launch(self):
+        for env in ({runtime.CAPABILITIES_JSON_ENV: self.secret(capability(extra='x'))},
+                    {runtime.CAPABILITIES_JSON_ENV: 'not json'},
+                    {runtime.CAPABILITY_DIR_ENV: str(self.directory)}):
+            with self.subTest(env=sorted(env)):
+                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
+                     patch.object(runtime, 'refresh') as refresh, patch.object(runtime.subprocess, 'Popen') as launch:
+                    with self.assertRaises((runtime.Refused, ValueError)): runtime.serve(self.path)
+                    launch.assert_not_called(); refresh.assert_not_called()
+                    self.assertNotIn(runtime.CAPABILITIES_JSON_ENV, os.environ)
+                self.assertEqual(list(self.directory.iterdir()), [])
+
+    def test_every_mode_removes_the_injection(self):
+        with patch.dict(os.environ, {runtime.CAPABILITIES_JSON_ENV: '{}'}, clear=True):
+            self.assertEqual(runtime.take_capability_injection(), '{}')
+            self.assertNotIn(runtime.CAPABILITIES_JSON_ENV, os.environ)
+            self.assertIsNone(runtime.take_capability_injection())
+        process = subprocess.run([sys.executable, str(Path(runtime.__file__).resolve()), 'refresh'],
+                                 env={runtime.CAPABILITIES_JSON_ENV: self.secret(capability()),
+                                      'GENUI_RUNTIME_CONFIG_FILE': str(self.path)},
+                                 capture_output=True, text=True, timeout=10)
+        self.assertEqual((process.returncode, process.stdout), (1, ''))
+        self.assertEqual(process.stderr, 'managed_dependency_operation_refused\n')
+
+ORG_A = '00000000-0000-4000-8000-000000000001'
+ORG_B = '00000000-0000-4000-8000-000000000002'
+
+
+def auth_document(**changes):
+    """A synthetic, complete AuthConfiguration secret value (every identifier is a fixture value)."""
+    config = {'schema_version': 1, 'auth_origin': 'https://auth-synthetic.invalid', 'app_origin': 'https://beta.getforma.dev',
+              'issuer': 'synthetic-iss', 'audience': 'synthetic-aud', 'max_access_lifetime_seconds': 900,
+              'organizations': [{'organization_id': ORG_A, 'tenant_slug': 'northstar', 'client_id': 'northstar-platform'},
+                                {'organization_id': ORG_B, 'tenant_slug': 'canary', 'client_id': 'canary-platform'}]}
+    registry = {'schema_version': 1, 'registry_version': '00000000-0000-4000-8000-0000000000b1',
+                'bindings': [{'issuer': 'synthetic-iss', 'provider_tenant_id': 'ten_00000000-0000-4000-8000-00000000a001', 'organization_id': ORG_A},
+                             {'issuer': 'synthetic-iss', 'provider_tenant_id': 'ten_00000000-0000-4000-8000-00000000a002', 'organization_id': ORG_B}]}
+    document = {'format': runtime.AUTH_CONFIGURATION_FORMAT, 'auth_config': config, 'identity_registry': registry}
+    for key, value in changes.items():
+        head, _, tail = key.partition('__')
+        if tail:
+            document[head][tail] = value
+        else:
+            document[head] = value
+    return document
+
+
+class AuthConfigurationInjectionTests(unittest.TestCase):
+    """APP-078 B1: the injected AuthConfiguration secret becomes the two private files the service
+    reads, in a fresh 0700 directory under the runtime volume that only the service child is told about."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='genui-auth-configuration-unit-')
+        self.directory = Path(self.tmp.name); self.directory.chmod(0o700)
+        self.path = self.directory / 'credentials.json'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_document_is_validated_whole_with_the_services_bounds(self):
+        good = auth_document()
+        files = runtime.auth_configuration(json.dumps(good))
+        self.assertEqual(sorted(files), ['auth-config.json', 'identity-registry.json'])
+        self.assertEqual(json.loads(files['auth-config.json']), good['auth_config'])
+        self.assertEqual(json.loads(files['identity-registry.json']), good['identity_registry'])
+        self.assertIsNone(runtime.auth_configuration('{}'), 'the initial secret value means not configured')
+        self.assertIsNone(runtime.auth_configuration(' {} \n'))
+        # A non-default port and an uppercase client id are within the service's rules.
+        self.assertIsNotNone(runtime.auth_configuration(json.dumps(auth_document(auth_config__auth_origin='https://auth.example.test:8443'))))
+        bad = [
+            'not json', '[]', 'null', '{"a": 1}',
+            json.dumps(dict(good, format='other')),
+            json.dumps({k: v for k, v in good.items() if k != 'identity_registry'}),
+            json.dumps(dict(good, extra=1)),
+            json.dumps(auth_document(auth_config__schema_version=2)),
+            json.dumps(auth_document(auth_config__auth_origin='http://auth-synthetic.invalid')),
+            json.dumps(auth_document(auth_config__auth_origin='https://auth-synthetic.invalid/')),
+            json.dumps(auth_document(auth_config__auth_origin='https://Auth-Synthetic.invalid')),
+            json.dumps(auth_document(auth_config__auth_origin='https://user@auth-synthetic.invalid')),
+            # B1 review m1: hosts the service's url crate refuses (a space, percent-encoding), and ids outside
+            # storage::valid_id (version nibble 1, variant nibble c), must refuse here too.
+            json.dumps(auth_document(auth_config__auth_origin='https://exa mple.com')),
+            json.dumps(auth_document(auth_config__auth_origin='https://ex%41mple.com')),
+            json.dumps(auth_document(auth_config__auth_origin='https://ex{ample.com')),
+            json.dumps(auth_document(auth_config__auth_origin='https://-example.com')),
+            json.dumps(auth_document(auth_config__auth_origin='https://auth-synthetic.invalid:99999')),
+            # APP-078 review M1: WHATWG "ends in a number" hosts the url crate normalizes or refuses.
+            *[json.dumps(auth_document(auth_config__auth_origin=origin)) for origin in WHATWG_NUMERIC_HOST_PROBES],
+            json.dumps(auth_document(identity_registry__registry_version='00000000-0000-1000-8000-0000000000b1')),
+            json.dumps(auth_document(identity_registry__registry_version='00000000-0000-4000-c000-0000000000b1')),
+            json.dumps(auth_document(auth_config__organizations=[dict(good['auth_config']['organizations'][0], organization_id='00000000-0000-1000-8000-000000000001'), good['auth_config']['organizations'][1]],
+                                     identity_registry__bindings=[dict(good['identity_registry']['bindings'][0], organization_id='00000000-0000-1000-8000-000000000001'), good['identity_registry']['bindings'][1]])),
+            # B1 review m2: two bindings for one routed organization (Registry::tenant_for would be ambiguous).
+            json.dumps(auth_document(identity_registry__bindings=good['identity_registry']['bindings'] + [dict(good['identity_registry']['bindings'][0], provider_tenant_id='ten_00000000-0000-4000-8000-00000000a003')])),
+            json.dumps(auth_document(auth_config__app_origin='https://beta.getforma.dev/auth')),
+            json.dumps(auth_document(auth_config__issuer='')),
+            json.dumps(auth_document(auth_config__issuer='with space')),
+            json.dumps(auth_document(auth_config__audience='x' * 513)),
+            json.dumps(auth_document(auth_config__max_access_lifetime_seconds=0)),
+            json.dumps(auth_document(auth_config__max_access_lifetime_seconds=86401)),
+            json.dumps(auth_document(auth_config__max_access_lifetime_seconds='900')),
+            json.dumps(auth_document(auth_config__max_access_lifetime_seconds=True)),
+            json.dumps(auth_document(auth_config__organizations=[])),
+            json.dumps(auth_document(auth_config__organizations=good['auth_config']['organizations'] * 17, identity_registry__bindings=good['identity_registry']['bindings'] * 17)),
+            json.dumps(auth_document(auth_config__organizations=[dict(good['auth_config']['organizations'][0], tenant_slug='Northstar'), good['auth_config']['organizations'][1]])),
+            json.dumps(auth_document(auth_config__organizations=[dict(good['auth_config']['organizations'][0], client_id='northstar-hosted'), good['auth_config']['organizations'][1]])),
+            json.dumps(auth_document(auth_config__organizations=[dict(good['auth_config']['organizations'][0], client_id='a b'), good['auth_config']['organizations'][1]])),
+            json.dumps(auth_document(auth_config__organizations=[good['auth_config']['organizations'][0]] * 2)),
+            json.dumps(auth_document(auth_config__organizations=[dict(good['auth_config']['organizations'][0], extra=1), good['auth_config']['organizations'][1]])),
+            json.dumps(auth_document(identity_registry__schema_version=2)),
+            json.dumps(auth_document(identity_registry__registry_version='v1')),
+            json.dumps(auth_document(identity_registry__bindings=good['identity_registry']['bindings'][:1])),  # fewer bindings than routes
+            json.dumps(auth_document(identity_registry__bindings=good['identity_registry']['bindings'] + [{'issuer': 'synthetic-iss', 'provider_tenant_id': 'ten_x', 'organization_id': '00000000-0000-4000-8000-0000000000ff'}])),
+            json.dumps(auth_document(identity_registry__bindings=[dict(good['identity_registry']['bindings'][0], issuer='https://auth-synthetic.invalid'), good['identity_registry']['bindings'][1]])),  # the origin is not the token issuer
+            json.dumps(auth_document(identity_registry__bindings=[good['identity_registry']['bindings'][0], dict(good['identity_registry']['bindings'][1], provider_tenant_id=good['identity_registry']['bindings'][0]['provider_tenant_id'])])),  # a duplicated (issuer, tenant)
+            json.dumps(auth_document(identity_registry__bindings=[dict(good['identity_registry']['bindings'][0], provider_tenant_id='x' * 129), good['identity_registry']['bindings'][1]])),
+            json.dumps(auth_document(identity_registry__bindings=[dict(good['identity_registry']['bindings'][0], extra=1), good['identity_registry']['bindings'][1]])),
+            '{"format": "%s", "format": "%s", "auth_config": {}, "identity_registry": {}}' % (runtime.AUTH_CONFIGURATION_FORMAT, runtime.AUTH_CONFIGURATION_FORMAT),
+            json.dumps(auth_document(auth_config__audience='y' * 512, auth_config__issuer='z' * 512,
+                                     auth_config__organizations=[{'organization_id': '00000000-0000-4000-8000-%012x' % i, 'tenant_slug': 'slug-%02d-' % i + 'a' * 58, 'client_id': 'c' * 128} for i in range(32)],
+                                     identity_registry__bindings=[{'issuer': 'z' * 512, 'provider_tenant_id': 't' * 128, 'organization_id': '00000000-0000-4000-8000-%012x' % i} for i in range(32)])),  # over the 16 KiB file bound (and the 256-byte registry issuer)
+            'x' * (runtime.AUTH_CONFIGURATION_BYTES_MAX + 1),
+        ]
+        for text in bad:
+            with self.subTest(text=text[:80]), self.assertRaises((runtime.Refused, ValueError)):
+                runtime.auth_configuration(text)
+
+    def test_exact_origin_agrees_with_the_whatwg_serialization(self):
+        """APP-078 review M1: `_exact_origin` accepts a value only when a WHATWG parser (the service's `url`
+        crate; cross-checked with Node 22 `new URL(v).origin`) serializes it to itself."""
+        for origin in WHATWG_NUMERIC_HOST_PROBES + ('https://exa mple.com', 'https://ex%41mple.com',
+                                                   'https://EXAMPLE.com', 'https://a_b.com', 'https://[::1]'):
+            with self.subTest(origin=origin):
+                self.assertFalse(runtime._exact_origin(origin))
+        for origin in ('https://auth-synthetic.invalid', 'https://auth.example.test:8443', 'https://127.0.0.1',
+                       'https://192.168.0.1:8443', 'https://a1.example', 'https://example.1a', 'https://example.0x1g',
+                       'https://example.com.', 'https://1e5'):
+            with self.subTest(origin=origin):
+                self.assertTrue(runtime._exact_origin(origin))
+
+    def test_files_are_private_exact_and_never_replace_a_name(self):
+        good = auth_document()
+        target = self.directory / 'configuration'; target.mkdir(mode=0o700); target.chmod(0o700)
+        written = runtime.write_auth_configuration(str(target), json.dumps(good))
+        self.assertEqual(written, ['auth-config.json', 'identity-registry.json'])
+        for name, document in (('auth-config.json', good['auth_config']), ('identity-registry.json', good['identity_registry'])):
+            info = (target / name).lstat()
+            self.assertEqual((stat.S_IMODE(info.st_mode), info.st_uid, info.st_nlink), (0o600, os.geteuid(), 1))
+            self.assertEqual(json.loads((target / name).read_bytes()), document)
+        with self.assertRaises(FileExistsError):
+            runtime.write_auth_configuration(str(target), json.dumps(good))
+        empty = self.directory / 'empty'; empty.mkdir(mode=0o700); empty.chmod(0o700)
+        self.assertEqual(runtime.write_auth_configuration(str(empty), '{}'), [])
+        self.assertEqual(list(empty.iterdir()), [])
+        loose = self.directory / 'loose'; loose.mkdir(); loose.chmod(0o755)
+        with self.assertRaises(runtime.Refused):
+            runtime.write_auth_configuration(str(loose), json.dumps(good))
+        link = self.directory / 'link'; link.symlink_to(target, target_is_directory=True)
+        with self.assertRaises(OSError):
+            runtime.write_auth_configuration(str(link), json.dumps(good))
+        self.assertEqual(list(loose.iterdir()), [])
+
+    def child(self):
+        report = self.directory / 'report.json'; script = self.directory / 'child.py'
+        script.write_text(f'''#!{sys.executable}
+import json,os,stat
+from pathlib import Path
+out={{'raw_absent':{runtime.AUTH_CONFIGURATION_JSON_ENV!r} not in os.environ}}
+for key in ({runtime.AUTH_CONFIG_FILE_ENV!r},{runtime.IDENTITY_REGISTRY_FILE_ENV!r}):
+    p=os.environ.get(key)
+    out[key]=None if p is None else {{'path':p,'mode':stat.S_IMODE(Path(p).lstat().st_mode),'dir_mode':stat.S_IMODE(Path(p).parent.lstat().st_mode),'value':json.loads(Path(p).read_text())}}
+Path({str(report)!r}).write_text(json.dumps(out))
+'''); script.chmod(0o700)
+        return script, report
+
+    def test_serve_materializes_the_injected_configuration_for_its_child_only(self):
+        script, report = self.child()
+        good = auth_document(); text = json.dumps(good)
+        for injected in (text, '{}', None):
+            with self.subTest(injected=injected and injected[:20]):
+                env = {'GENUI_BINARY': str(script)}
+                if injected is not None:
+                    env[runtime.AUTH_CONFIGURATION_JSON_ENV] = injected
+                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
+                     patch.object(runtime, 'refresh', side_effect=lambda p: runtime.atomic_write(p, fixture())):
+                    self.assertEqual(runtime.serve(self.path), 0)
+                    self.assertNotIn(runtime.AUTH_CONFIGURATION_JSON_ENV, os.environ, 'removed from the supervisor itself')
+                    self.assertNotIn(runtime.AUTH_CONFIG_FILE_ENV, os.environ)
+                    self.assertNotIn(runtime.IDENTITY_REGISTRY_FILE_ENV, os.environ)
+                value = json.loads(report.read_text())
+                self.assertTrue(value['raw_absent'], 'the child never inherits the secret value')
+                config, registry = value[runtime.AUTH_CONFIG_FILE_ENV], value[runtime.IDENTITY_REGISTRY_FILE_ENV]
+                if injected == text:
+                    self.assertEqual((config['mode'], config['dir_mode'], config['value']), (0o600, 0o700, good['auth_config']))
+                    self.assertEqual((registry['mode'], registry['dir_mode'], registry['value']), (0o600, 0o700, good['identity_registry']))
+                    self.assertEqual(Path(config['path']).parent, Path(registry['path']).parent)
+                    self.assertTrue(Path(config['path']).parent.name.startswith(runtime.AuthConfigurationDirectory.PREFIX))
+                    self.assertEqual(Path(config['path']).parent.parent, self.directory)
+                    self.assertFalse(Path(config['path']).parent.exists(), 'removed when serve ends')
+                else:
+                    # Not configured (or absent): no routing file, the private deny-all registry as before.
+                    self.assertIsNone(config)
+                    self.assertEqual(registry['value']['bindings'], [])
+                    self.assertTrue(Path(registry['path']).name.startswith('.identity-registry-'))
+                self.assertEqual(sorted(p.name for p in self.directory.iterdir()), ['child.py', 'report.json'])
+
+    def test_a_malformed_secret_or_a_plain_file_variable_beside_it_refuses_before_launch(self):
+        text = json.dumps(auth_document())
+        explicit = self.directory / 'operator-registry.json'; explicit.write_text('{}'); explicit.chmod(0o600)
+        for env in ({runtime.AUTH_CONFIGURATION_JSON_ENV: json.dumps(auth_document(format='other'))},
+                    {runtime.AUTH_CONFIGURATION_JSON_ENV: 'not json'},
+                    {runtime.AUTH_CONFIGURATION_JSON_ENV: '[]'},
+                    {runtime.AUTH_CONFIGURATION_JSON_ENV: text, runtime.IDENTITY_REGISTRY_FILE_ENV: str(explicit)},
+                    {runtime.AUTH_CONFIGURATION_JSON_ENV: text, runtime.AUTH_CONFIG_FILE_ENV: str(explicit)}):
+            with self.subTest(env=sorted(env)):
+                with patch.dict(os.environ, env, clear=True), patch.object(runtime.signal, 'signal'), \
+                     patch.object(runtime, 'refresh') as refresh, patch.object(runtime.subprocess, 'Popen') as launch:
+                    with self.assertRaises((runtime.Refused, ValueError)): runtime.serve(self.path)
+                    launch.assert_not_called(); refresh.assert_not_called()
+                    self.assertNotIn(runtime.AUTH_CONFIGURATION_JSON_ENV, os.environ)
+                self.assertEqual([p.name for p in self.directory.iterdir()], ['operator-registry.json'])
+        # The unconfigured secret beside an explicit registry keeps the explicit file (local use), as before.
+        with patch.dict(os.environ, {runtime.AUTH_CONFIGURATION_JSON_ENV: '{}', runtime.IDENTITY_REGISTRY_FILE_ENV: str(explicit)}, clear=True), \
+             patch.object(runtime.signal, 'signal'), patch.object(runtime, 'refresh'), patch.object(runtime.subprocess, 'Popen') as launch:
+            launch.return_value.poll.return_value = 0; launch.return_value.returncode = 0
+            self.assertEqual(runtime.serve(self.path), 0)
+            self.assertEqual(launch.call_args.kwargs['env'][runtime.IDENTITY_REGISTRY_FILE_ENV], str(explicit))
+            self.assertNotIn(runtime.AUTH_CONFIG_FILE_ENV, launch.call_args.kwargs['env'])
+
+    def test_every_mode_removes_the_injection(self):
+        with patch.dict(os.environ, {runtime.AUTH_CONFIGURATION_JSON_ENV: '{}'}, clear=True):
+            self.assertEqual(runtime.take_auth_configuration_injection(), '{}')
+            self.assertNotIn(runtime.AUTH_CONFIGURATION_JSON_ENV, os.environ)
+            self.assertIsNone(runtime.take_auth_configuration_injection())
+        process = subprocess.run([sys.executable, str(Path(runtime.__file__).resolve()), 'refresh'],
+                                 env={runtime.AUTH_CONFIGURATION_JSON_ENV: json.dumps(auth_document()),
+                                      'GENUI_RUNTIME_CONFIG_FILE': str(self.path)},
+                                 capture_output=True, text=True, timeout=10)
+        self.assertEqual((process.returncode, process.stdout), (1, ''))
+        self.assertEqual(process.stderr, 'managed_dependency_operation_refused\n')
+        self.assertNotIn('synthetic', process.stderr)
 
 
 if __name__ == '__main__': unittest.main()

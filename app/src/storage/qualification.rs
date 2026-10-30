@@ -50,7 +50,7 @@ fn command(mut command: Command, input: &[u8], label: &str) -> String {
     assert!(output.status.success(), "fixture command refused: {label}");
     String::from_utf8(output.stdout).expect("fixture UTF-8 output")
 }
-pub(super) fn docker(args: &[&str], input: &[u8], label: &str) -> String {
+pub(crate) fn docker(args: &[&str], input: &[u8], label: &str) -> String {
     let mut cmd = Command::new("docker");
     cmd.args(args);
     command(cmd, input, label)
@@ -72,7 +72,7 @@ fn private_write(path: &Path, bytes: &[u8]) {
 
 /// The locked Python environment used for migrations, seed and the operator
 /// command; overridable for a checkout whose venv lives elsewhere.
-pub(super) fn fixture_python() -> PathBuf {
+pub(crate) fn fixture_python() -> PathBuf {
     std::env::var_os("GENUI_NATIVE_FIXTURE_PYTHON")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
@@ -80,7 +80,7 @@ pub(super) fn fixture_python() -> PathBuf {
         })
 }
 
-pub(super) struct PrivateDirectory(pub PathBuf);
+pub(crate) struct PrivateDirectory(pub PathBuf);
 impl PrivateDirectory {
     pub fn new() -> Self {
         let nonce = ring::rand::SystemRandom::new();
@@ -100,7 +100,7 @@ impl Drop for PrivateDirectory {
     }
 }
 
-pub(super) struct Fixture {
+pub(crate) struct Fixture {
     pub directory: PrivateDirectory,
     pub name: String,
     pub port: u16,
@@ -110,7 +110,7 @@ pub(super) struct Fixture {
     pub removed: bool,
     pub server_version: String,
 }
-pub(super) struct Operator {
+pub(crate) struct Operator {
     pub client: tokio_postgres::Client,
     driver: tokio::task::JoinHandle<()>,
 }
@@ -382,13 +382,40 @@ impl Fixture {
         }
         private_write(&self.credentials,&serde_json::to_vec(&json!({"schema_version":1,"generation":format!("00000000-0000-4000-8000-{generation:012x}"),"issued_at":now,"expires_at":now+lifetime,"database":{"host":host,"name":"genui","port":5432,"roles":roles},"storage":{}})).unwrap());
     }
+    /// APP-009 session campaign: replaces the fixture's private registry
+    /// (synthetic `gatewasm` bindings); new `Stores` read it.
+    pub fn write_registry(&self, document: &Value) {
+        let _ = fs::remove_file(&self.registry);
+        private_write(&self.registry, &serde_json::to_vec(document).unwrap());
+    }
     pub fn settings(&self) -> Settings {
+        self.settings_with_registry(self.registry.clone())
+    }
+    /// APP-078 B1: the same settings reading the identity registry the
+    /// supervisor materialized from the auth configuration secret.
+    pub fn settings_with_registry(&self, registry: PathBuf) -> Settings {
+        Settings::fixture(
+            self.credentials.clone(),
+            registry,
+            self.ca.clone(),
+            "localhost",
+            self.port,
+        )
+    }
+    /// APP-012: the same settings against a closed loopback port, so every
+    /// acquisition fails at connect: a store outage that depends on no
+    /// identity.
+    pub fn unreachable_settings(&self) -> Settings {
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .unwrap()
+            .port();
         Settings::fixture(
             self.credentials.clone(),
             self.registry.clone(),
             self.ca.clone(),
-            "localhost",
-            self.port,
+            "127.0.0.1",
+            port,
         )
     }
     fn request(
@@ -857,9 +884,12 @@ async fn campaign() {
             "ALTER TABLE genui.internal_records DISABLE ROW LEVEL SECURITY",
             "ALTER TABLE genui.internal_records ENABLE ROW LEVEL SECURITY",
         ),
+        // APP-013 (0007) grants genui_data UPDATE(current_version) on
+        // internal_records, so the extra table-level UPDATE probe moves to a
+        // relation the data role never writes.
         (
-            "GRANT UPDATE ON genui.internal_records TO genui_data",
-            "REVOKE UPDATE ON genui.internal_records FROM genui_data",
+            "GRANT UPDATE ON genui.publications TO genui_data",
+            "REVOKE UPDATE ON genui.publications FROM genui_data",
         ),
         (
             "ALTER TABLE genui.definition_inputs RENAME TO fixture_hidden_inputs",
@@ -886,9 +916,9 @@ async fn campaign() {
     fixture.sql("GRANT genui_owner TO genui_worker", "genui");
     assert!(Lease::acquire(&identity.worker.inner).await.is_err());
     fixture.sql("REVOKE genui_owner FROM genui_worker", "genui");
-    fixture.sql("ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check; UPDATE genui_meta.schema_version SET version=6;","genui");
+    fixture.sql("ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_check; UPDATE genui_meta.schema_version SET version=8;","genui");
     assert!(Lease::acquire(&identity.worker.inner).await.is_err());
-    fixture.sql("UPDATE genui_meta.schema_version SET version=5; ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK(version BETWEEN 1 AND 5);","genui");
+    fixture.sql("UPDATE genui_meta.schema_version SET version=7; ALTER TABLE genui_meta.schema_version ADD CONSTRAINT schema_version_version_check CHECK(version BETWEEN 1 AND 7);","genui");
     let lease = Lease::acquire(&identity.worker.inner).await.unwrap();
     drop(lease);
     identity.close().await.unwrap();
@@ -995,7 +1025,7 @@ async fn campaign() {
     version.close().await.unwrap();
     let version_fresh = Stores::new(fixture.settings()).unwrap();
     refuse_all_roles(&version_fresh).await;
-    fixture.sql("UPDATE genui_meta.schema_version SET version=5", "genui");
+    fixture.sql("UPDATE genui_meta.schema_version SET version=7", "genui");
     version_fresh.readiness().await.unwrap();
     version_fresh.close().await.unwrap();
     drop(operator);

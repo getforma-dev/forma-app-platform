@@ -1,5 +1,28 @@
 # GenUI handoff to Claude
 
+## 2026-10-29 (evening) — the November 2 MVP plan (read this first)
+
+Victor set a hard MVP deadline of **2026-11-02**. [ADR-010](docs/architecture/ADR-010-NOV-2-MVP-CUT.md) records the cut; [MVP-NOV-2-PLAN](docs/planning/MVP-NOV-2-PLAN.md) is the day-by-day order for the orchestrator. In one paragraph: the MVP is Phase 1 on the live beta (ADR-008) — invite → verified sign-in → entitlement → authorized query with receipt → explicit command → atomic outcome/audit → restart/reopen at `beta.getforma.dev`, the canary denied, the service left running — which is the demo's acts 1, 4 (run) and 6 (record) in reduced form on operator-seeded sources and seeded typed definitions labeled as such; acts 2, 3 and 5 are not shown and not simulated; nothing in identity, isolation, receipts, transactional commands or idempotency is cut.
+
+State after `0f9025d`: PH01 Done = APP-001–008, 011, 073, 075 (PR 2 landed on `main` at `699b8a9` from `b066247`, eleven workflows green). APP-010 In review (re-check clean, lands in PR 3). APP-009 in implementation (worktree `agent-a4241d58b67f65c4e`), APP-077 implemented and merged on the branch at `34a42eb`, Tier B review pending (ticket still Backlog). Backlog: APP-074 (trimmed: items 4 and 7 are APP-082's), 012, 013, 014, 078, 076 (trimmed: item 7 is APP-083's). The board has 88 tickets, 7 phases (PH07 "Post-MVP completion", sprint S13) and 13 sprints; `board.py check` is OK.
+
+Ordered next tasks (MVP plan task numbers):
+
+1. Tier B review of APP-077 at `34a42eb` (already merged on the branch); apply fixes; move APP-077 to In review (tasks 2, 6).
+2. Finish APP-009 (plan Task 7); Tier A review → fix → re-check; merge (tasks 3, 7).
+3. Start APP-012's storage/worker half now; its route/page after APP-009 merges; Tier A for the worker confinement and delivery authorization (tasks 4, 9, 12).
+4. APP-074 local, items 1, 2, 3, 5, 6 only, after APP-009 builds; Tier A (tasks 8, 14).
+5. **Landing PR 3** (APP-010, APP-009, APP-077, the ADR-010 board and docs) on Oct 30; Done at merge (task 11).
+6. APP-078 preparation without AWS mutation: ledger basis, window input, preflight learns the two image-digest parameters, TemplateURL and change-set files, window checklist (task 10). Ask Victor for the Nov 1 slot (task 5).
+7. APP-013 (Tier A) then APP-014 (Tier B) on Oct 31–Nov 1 (tasks 13, 17); **Landing PR 4** (APP-074, 012, 013, 014) Nov 1 (task 18).
+8. **RDS window Nov 1 ~17:00–20:00 UTC** (APP-078 rows, then service to count 1, DNS, invite codes; task 20); Tier A review of the receipts (task 21).
+9. **Go-live trial Nov 2** (APP-076 items 1–6, 8–11) with Victor as the SES-verified viewer from a second network (task 22); Tier A review; checklist `evidence/phases/PH01/GATE.md` naming APP-079/080/082/083 as limitations; **Landing PR 5**; PH01 gate passed (tasks 23–25).
+10. Nov 3 onward: the ADR-010 §6 pick-up order — APP-088, APP-087 (PH02 preparation), APP-083, APP-082, APP-084 (Victor's custody decision), APP-085, then PH02 Tracks A/B/C, APP-086 and APP-080 in the first PH02 RDS window, PH03, PH04, APP-079 when FORMA-365 delivers.
+
+Victor's decisions outstanding: the ADR-010 §8 judgment calls (two trims, deferred provider-audit amendment, custody default, review tiers, batched PRs, PH07/PH02 placement, pick-up order, the Nov 1 window and Nov 2 trial); the Nov 1 slot; merge words on PRs 3–5; being the viewer on Nov 2. Review residuals and declined items from every review so far are in APP-084–088 (ADR-010 §5); nothing is lost.
+
+Process until the PH01 gate (ADR-010 §4, mirrored in [QUALITY-GATES](docs/planning/QUALITY-GATES.md)): Tier A (auth/RLS/definer/sandbox/money) full review → fix → re-check; Tier B single review with reviewer-applied small fixes; evidence identities re-recorded only at the RDS window and the trial; batched landing PRs; checklist gate record.
+
 ## 2026-10-29 Claude takeover status (read this before the Codex text below)
 
 Claude took over the GenUI lane on 2026-10-29 and is the single GenUI operator. The FormaStack/fAuth lane is the Claude session titled "FormaStack/fAuth prerequisites for GenUI" (`local_4691ee0e-47d3-478e-964c-a24bf5ce30a1`); coordination so far is recorded in [CROSS-TEAM-HANDOFF](docs/planning/CROSS-TEAM-HANDOFF.md). Victor will switch this session's model after planning; the session remains the owner.

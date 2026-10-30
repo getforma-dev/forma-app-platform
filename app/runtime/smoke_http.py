@@ -59,7 +59,22 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
                 assert b'Foundation workspace' in body and re.search(rb'>\s*7\s*<',body)
                 nonce=re.search(r"nonce-([^' ]+)",csp).group(1);assert nonce.encode() in body;pages.append(nonce)
         assert pages[0]!=pages[1]
-        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_html_count':7,'fresh_csp_nonces':True,'no_store':True}))
+        # APP-009 (ADR-006): the native sign-in page, and the uniform 404
+        # problem for protected and unknown paths alike.
+        with urllib.request.urlopen(origin+'/signin',timeout=3) as response:
+            assert response.status==200 and 'no-store' in response.headers['Cache-Control'] and b'Sign in' in response.read()
+        # APP-074: the native invitation entry (no script) and the landing links to it.
+        with urllib.request.urlopen(origin+'/invite',timeout=3) as response:
+            body=response.read()
+            assert response.status==200 and 'no-store' in response.headers['Cache-Control']
+            assert b'action="/invite/validate"' in body and b'name="code"' in body and b'<script src' not in body
+        with urllib.request.urlopen(origin,timeout=3) as response: assert b'href="/invite"' in response.read()
+        for route in ('/workspace','/auth/pending','/v1/unknown','/invite/validate'):
+            try: urllib.request.urlopen(origin+route,timeout=3)
+            except urllib.error.HTTPError as error:
+                assert error.code==404 and error.read()==b'{"code":"not_found","status":404}' and error.headers['Content-Type']=='application/problem+json'
+            else: raise AssertionError('protected route answered without a session')
+        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_html_count':7,'fresh_csp_nonces':True,'no_store':True,'signin_page':200,'invite_page':200,'protected_uniform_404':True}))
     finally:
         process.terminate()
         try: process.communicate(timeout=5)

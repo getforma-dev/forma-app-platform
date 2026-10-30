@@ -16,3 +16,9 @@ reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-
 
 [dev-dependencies]
 tokio = { version = "=1.53.3", features = ["sync", "time", "rt-multi-thread", "macros", "net", "io-util", "test-util"] }
+
+[features]
+# Test-only: `Verifier::new_loopback_for_tests` (plain HTTP on a loopback
+# address). Consumers enable it as a dev-dependency feature only, so a release
+# build never contains it.
+loopback-http = []

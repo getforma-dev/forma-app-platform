@@ -1,4 +1,4 @@
-import { CfnCondition, CfnOutput, CfnParameter, Duration, Fn, RemovalPolicy, Stack, StackProps, Tags } from 'aws-cdk-lib';
+import { Aws, CfnCondition, CfnOutput, CfnParameter, CfnRule, Duration, Fn, RemovalPolicy, SecretValue, Stack, StackProps, Tags, Validations } from 'aws-cdk-lib';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
@@ -9,6 +9,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as scheduler from 'aws-cdk-lib/aws-scheduler';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
 
 // The temporary ingress trial is one real operator address; public mode uses /0.
@@ -20,7 +21,43 @@ const IMAGE_DIGEST_BODY = '[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/
 export const IMAGE_DIGEST_PATTERN = `^${IMAGE_DIGEST_BODY}(?![\\s\\S])`;
 // Empty, or a reviewed digest of the separate APP-075 qualification image.
 export const QUALIFICATION_IMAGE_PATTERN = `^(?:|${IMAGE_DIGEST_BODY})(?![\\s\\S])`;
-export const QUALIFICATION_SECRET_ARN_PATTERN = '^(?:|arn:aws:secretsmanager:us-east-1:877573132739:secret:genui-qualification-[a-z0-9][a-z0-9-]{0,79}-[A-Za-z0-9]{6})(?![\\s\\S])';
+// Empty, or a reviewed digest of the separate APP-077 operator image.
+export const OPERATOR_IMAGE_PATTERN = `^(?:|${IMAGE_DIGEST_BODY})(?![\\s\\S])`;
+// APP-074 review m11: the GENUI_AUTH_QUALIFICATION_CONFIG_JSON injection (its
+// parameter, conditional read policy and secret entry) is retired: runtime.py
+// refuses it in every mode, so offering it could only crash-loop the service.
+// ADR-003 amendment 2026-10-30 (review M1): the one injected secret is the
+// environment's provider capability map, read by runtime.py serve().
+export const CAPABILITY_SECRET_ENV = 'GENUI_PROVIDER_CAPABILITIES_JSON';
+export const CAPABILITY_SECRET_ID_ENV = 'GENUI_PROVIDER_CAPABILITY_SECRET_ID';
+// APP-078 B1: the hosted sign-in configuration (ADR-006 provider routing and the
+// closed identity registry) is one more secret injected into the service
+// container only; runtime.py serve() writes it as the two private files the
+// service reads (GENUI_AUTH_CONFIG_FILE, GENUI_IDENTITY_REGISTRY_FILE).
+export const AUTH_CONFIGURATION_ENV = 'GENUI_AUTH_CONFIGURATION_JSON';
+export const AUTH_CONFIGURATION_SECRET_ID_ENV = 'GENUI_AUTH_CONFIGURATION_SECRET_ID';
+// ADR-003 amendment 2026-10-30 (managed invitations; APP-076 G2), as revised the same
+// day after FormaStack's answers: two inputs reach the managed operator task only.
+// FormaStack's existing tenant-scoped fAuth management secret (for Northstar
+// `fauth-beta/management/northstar`, JSON `{tenant_id, management_key}`) is attached
+// by ARN (parameter ProviderManagementSecretArn, approval A12), never copied: ECS
+// injects its two JSON keys, beside the non-secret management URL (parameter
+// ProviderManagementUrl), into the operator container alone
+// (provider_management.management_configuration). The operator's invitation input
+// (the invitees' addresses bound to minted code digests, written by the operator host
+// immediately before an issue task and emptied right after;
+// admission_operator.invitation_input) is GenUI's own short-lived secret. Neither
+// value ever enters an override, argv, CloudTrail or a log; the service task reads
+// neither.
+export const PROVIDER_MANAGEMENT_URL_ENV = 'GENUI_PROVIDER_MANAGEMENT_URL';
+export const PROVIDER_MANAGEMENT_KEY_ENV = 'GENUI_PROVIDER_MANAGEMENT_SECRET_KEY';
+export const PROVIDER_MANAGEMENT_TENANT_ENV = 'GENUI_PROVIDER_MANAGEMENT_SECRET_TENANT_ID';
+export const INVITATION_INPUT_ENV = 'GENUI_OPERATOR_INVITATION_INPUT_JSON';
+// Empty (not attached), or one complete Secrets Manager secret ARN (with its six-character
+// suffix, as the ECS JSON-key form requires); preflight also requires this account and region.
+export const PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN = '^(?:|arn:aws:secretsmanager:[a-z]{2}(?:-[a-z]+)+-[0-9]:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]{1,512}-[A-Za-z0-9]{6})(?![\\s\\S])';
+// Empty, or an https origin with no path, query, credentials or fragment.
+export const PROVIDER_MANAGEMENT_URL_PATTERN = '^(?:|https://[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::[0-9]{1,5})?)(?![\\s\\S])';
 
 /** Reviewable deployment model. Synth/tests never create cloud resources. */
 export class GenuiFoundation extends Stack {
@@ -29,7 +66,10 @@ export class GenuiFoundation extends Stack {
     Tags.of(this).add('Application', 'forma-app-platform');
     Tags.of(this).add('Environment', 'synthetic');
     const operator = new CfnParameter(this, 'Operator', { type: 'String', minLength: 1, description: 'Named operator before provisioning' });
-    const budget = new CfnParameter(this, 'MonthlyBudgetUsd', { type: 'Number', default: 100, allowedValues: ['100'], description: 'Approved $100 monthly operating limit; preflight accounts for retained resources and other spending. This is not an AWS billing hard-stop.' });
+    // '100' is ADR-003's bounded 48-hour window; '170' is the always-on beta
+    // figure Victor approved on 2026-10-29 (ADR-008). preflight.py selects it
+    // from the reserved operating plan; neither is an AWS billing hard-stop.
+    const budget = new CfnParameter(this, 'MonthlyBudgetUsd', { type: 'Number', default: 100, allowedValues: ['100', '170'], description: 'Approved monthly GenUI operating figure: 100 for the bounded qualification window, 170 for the approved always-on beta. Preflight accounts for retained resources and other spending. This is not an AWS billing hard-stop.' });
     const ingressMode = new CfnParameter(this, 'IngressMode', { type: 'String', default: 'public', allowedValues: ['operator', 'public'], description: 'operator only for the temporary /32 ingress trial; public HTTPS is the selected beta mode. Application access requires its separately tested signup/invite gate.' });
     const publicIngress = new CfnCondition(this, 'PublicIngress', { expression: Fn.conditionEquals(ingressMode.valueAsString, 'public') });
     const operatorCidr = new CfnParameter(this, 'OperatorIpv4Cidr', {
@@ -45,13 +85,6 @@ export class GenuiFoundation extends Stack {
     const desiredCount = new CfnParameter(this, 'ServiceDesiredCount', {
       type: 'Number', default: 0, allowedValues: ['0'],
       description: 'Template creates service at zero; later unrelated updates may preserve actual count drift. Observe service/tasks stopped before replacing image/window/schedule. Activate only through the live-checked preflight path.',
-    });
-    const qualificationSecretArn = new CfnParameter(this, 'QualificationConfigSecretArn', {
-      type: 'String', default: '', allowedPattern: QUALIFICATION_SECRET_ARN_PATTERN,
-      description: 'Optional full ARN of an existing genui-qualification- secret in the approved account/region. Empty disables injection and its read policy. The secret contains the complete operator-only rehearsal JSON; never place its value in parameters.',
-    });
-    const qualificationConfigured = new CfnCondition(this, 'QualificationConfigured', {
-      expression: Fn.conditionNot(Fn.conditionEquals(qualificationSecretArn.valueAsString, '')),
     });
     Tags.of(this).add('Operator', operator.valueAsString, { excludeResourceTypes: ['aws:cdk:stack'] });
     Tags.of(this).add('ApprovedMonthlyBudgetUsd', budget.valueAsString, { excludeResourceTypes: ['aws:cdk:stack'] });
@@ -131,11 +164,41 @@ export class GenuiFoundation extends Stack {
       return role;
     };
     const executionRole = makeExecutionRole('ExecutionRole');
-    const qualificationSecretRead = new iam.CfnPolicy(this, 'QualificationConfigRead', {
-      policyName: 'genui-qualification-config-read', roles: [executionRole.roleName],
-      policyDocument: { Version: '2012-10-17', Statement: [{ Effect: 'Allow', Action: 'secretsmanager:GetSecretValue', Resource: qualificationSecretArn.valueAsString }] },
+    // ADR-003 amendment 2026-10-30 (APP-074 review M1): the environment's provider
+    // invitation capabilities, one secret holding a JSON map keyed by
+    // `{organization}.{invitation}`, encrypted under its own retained KMS key. The
+    // operator writes it with PutSecretValue (its own credentials; in the managed
+    // operator task, OperatorRole below); ECS injects it into the service container
+    // only, through the service's execution role, and runtime.py serve() writes the
+    // entries as 0600 files for the service child. The initial value is the empty
+    // map (not secret); CloudFormation never rewrites it while this resource's
+    // properties are unchanged, so never edit them while capabilities are live.
+    const capabilityKey = new kms.Key(this, 'ProviderCapabilityKey', {
+      description: 'GenUI provider invitation capabilities (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
     });
-    qualificationSecretRead.cfnOptions.condition = qualificationConfigured;
+    const capabilitySecret = new secretsmanager.Secret(this, 'ProviderCapabilities', {
+      description: 'GenUI provider invitation capabilities: written by the operator, injected into the service task only (ADR-003 amendment 2026-10-30)',
+      encryptionKey: capabilityKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
+    });
+    // APP-078 B1: the hosted sign-in configuration. One secret per environment
+    // holding the auth configuration (auth origin, token issuer and audience, each
+    // organization's fAuth tenant slug and public client id) and the closed identity
+    // registry (`ten_` tenant -> organization bindings): nothing secret beyond what
+    // ADR-006 allows in a client configuration, but private routing all the same.
+    // The operator composes it locally (infra/scripts/window_requests.py
+    // auth-configuration) and writes it with PutSecretValue; ECS injects it into the
+    // service container only; runtime.py serve() validates it whole and writes the
+    // two 0600 files for the service child. The initial `{}` means not configured
+    // (deny-all sign-in, as before); a new value reaches the service at its next
+    // task start. CloudFormation never rewrites it while this resource's
+    // properties are unchanged, so never edit them while the beta is live.
+    const authConfigurationKey = new kms.Key(this, 'AuthConfigurationKey', {
+      description: 'GenUI hosted sign-in configuration (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const authConfiguration = new secretsmanager.Secret(this, 'AuthConfiguration', {
+      description: 'GenUI hosted sign-in configuration and identity registry: written by the operator, injected into the service task only (APP-078 B1)',
+      encryptionKey: authConfigurationKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
+    });
     const task = new ecs.FargateTaskDefinition(this, 'Task', { cpu: 2048, memoryLimitMiB: 8192, taskRole, executionRole, runtimePlatform });
     task.addVolume({ name: 'runtime-config' });
     const log = new logs.LogGroup(this, 'Logs', { retention: logs.RetentionDays.ONE_MONTH, removalPolicy: RemovalPolicy.RETAIN });
@@ -144,35 +207,67 @@ export class GenuiFoundation extends Stack {
       GENUI_EVIDENCE_BUCKET: bucket.bucketName, GENUI_DATABASE_ROLES_JSON: this.toJsonString(databaseRoles), GENUI_TENANTS_JSON: this.toJsonString(tenants),
       GENUI_RUNTIME_CONFIG_FILE: '/run/genui/credentials.json', GENUI_RDS_CA_FILE: '/etc/ssl/certs/rds-global-bundle.pem',
       FORMA_BIND_ADDRESS: '0.0.0.0', FORMA_PORT: '3000', AWS_REGION: this.region, PYTHONDONTWRITEBYTECODE: '1',
+      // ADR-007 D7.14 (APP-074): only the ALB's subnets are trusted proxies, so the
+      // rightmost X-Forwarded-For hop is believed from them alone.
+      GENUI_TRUSTED_PROXY_CIDRS: vpc.publicSubnets.map(subnet => subnet.ipv4CidrBlock).join(','),
     };
     const container = task.addContainer('workspace', {
       image: ecs.ContainerImage.fromRegistry(image.valueAsString), readonlyRootFilesystem: true,
       user: '65532:65532',
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'genui', logGroup: log }),
       environment: runtimeEnvironment,
+      // The whole map and the whole configuration, resolved by ECS at task start: a
+      // new or removed capability, or a new configuration, reaches the service at its
+      // next task start (APP-076's runbook; force a new deployment after a write).
+      secrets: {
+        [CAPABILITY_SECRET_ENV]: ecs.Secret.fromSecretsManager(capabilitySecret),
+        [AUTH_CONFIGURATION_ENV]: ecs.Secret.fromSecretsManager(authConfiguration),
+      },
       healthCheck: { command: ['CMD', 'python3', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health/live', timeout=2).read()"], interval: Duration.seconds(30), timeout: Duration.seconds(5), retries: 3, startPeriod: Duration.seconds(60) },
     });
     container.addMountPoints({ sourceVolume: 'runtime-config', containerPath: '/run/genui', readOnly: false });
     container.addPortMappings({ containerPort: 3000 });
-    // Keep both optional capabilities absent when disabled. Tasks must remain
-    // stopped until the stack update (including the conditional policy) finishes.
-    // An unconditional dependency on that policy would also suppress disabled resources.
-    (task.node.defaultChild as ecs.CfnTaskDefinition).addPropertyOverride('ContainerDefinitions.0.Secrets',
-      Fn.conditionIf(qualificationConfigured.logicalId,
-        [{ Name: 'GENUI_AUTH_QUALIFICATION_CONFIG_JSON', ValueFrom: qualificationSecretArn.valueAsString }],
-        { Ref: 'AWS::NoValue' }));
+    // APP-076 item 8 / gap G11: the deny-all rollback revision. The same image digest,
+    // roles, environment, volume, port and health check as the service's task
+    // definition, with no secret injected: runtime.py serve() then starts the child
+    // with the private empty identity registry, no provider routing and no
+    // invitation capability, so every sign-in fails neutrally, no code obtains a
+    // handoff and every protected route answers the uniform 404 (no dispatch, no
+    // admission) while the schema stays migrated. `aws ecs update-service
+    // --task-definition <RollbackTaskDefinition>` is the rollback; the candidate
+    // revision is the restore (APP-076 runbook §8). It is never the service's
+    // configured task definition, so a stack update never deploys it by itself.
+    const rollback = new ecs.FargateTaskDefinition(this, 'RollbackTask', { cpu: 2048, memoryLimitMiB: 8192, taskRole, executionRole, runtimePlatform });
+    rollback.addVolume({ name: 'runtime-config' });
+    const rollbackContainer = rollback.addContainer('workspace', {
+      image: ecs.ContainerImage.fromRegistry(image.valueAsString), readonlyRootFilesystem: true,
+      user: '65532:65532',
+      logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'genui-rollback', logGroup: log }),
+      environment: runtimeEnvironment,
+      healthCheck: { command: ['CMD', 'python3', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health/live', timeout=2).read()"], interval: Duration.seconds(30), timeout: Duration.seconds(5), retries: 3, startPeriod: Duration.seconds(60) },
+    });
+    rollbackContainer.addMountPoints({ sourceVolume: 'runtime-config', containerPath: '/run/genui', readOnly: false });
+    rollbackContainer.addPortMappings({ containerPort: 3000 });
 
     const albSecurity = new ec2.SecurityGroup(this, 'AlbSecurity', { vpc, allowAllOutbound: false });
     albSecurity.addIngressRule(ec2.Peer.ipv4(Fn.conditionIf(publicIngress.logicalId, '0.0.0.0/0', operatorCidr.valueAsString).toString()), ec2.Port.tcp(443), 'Public beta HTTPS or the temporary operator-only trial');
     albSecurity.addEgressRule(taskSecurity, ec2.Port.tcp(3000), 'Application and readiness probes');
     taskSecurity.addIngressRule(albSecurity, ec2.Port.tcp(3000), 'Only the ALB reaches the application');
     const alb = new elbv2.ApplicationLoadBalancer(this, 'LoadBalancer', { vpc, internetFacing: true, vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }, securityGroup: albSecurity, dropInvalidHeaderFields: true });
+    // APP-074 review m3: app/src/http/proxy.rs believes only the rightmost hop of the
+    // last X-Forwarded-For line from these subnets, which holds only while the ALB
+    // appends the client address (never `preserve`) without a client port.
+    alb.setAttribute('routing.http.xff_header_processing.mode', 'append');
+    alb.setAttribute('routing.http.xff_client_port.enabled', 'false');
     const service = new ecs.FargateService(this, 'Service', {
       cluster, taskDefinition: task, desiredCount: desiredCount.valueAsNumber,
       platformVersion: ecs.FargatePlatformVersion.VERSION1_4,
       assignPublicIp: true, vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }, securityGroups: [taskSecurity],
       enableExecuteCommand: false, circuitBreaker: { rollback: true }, healthCheckGracePeriod: Duration.seconds(90),
-      minHealthyPercent: 100, maxHealthyPercent: 200,
+      // ADR-007 D7.18: stop-then-start, so exactly one task runs at any moment
+      // (D7.5's in-process limits and D7.11's process-memory key stay defined);
+      // a deployment or rollback is a brief outage that signs members out.
+      minHealthyPercent: 0, maxHealthyPercent: 100,
     });
     const certificate = acm.Certificate.fromCertificateArn(this, 'Certificate', certificateArn.valueAsString);
     const listener = alb.addListener('Https', { port: 443, protocol: elbv2.ApplicationProtocol.HTTPS, certificates: [certificate], sslPolicy: elbv2.SslPolicy.RECOMMENDED_TLS, open: false });
@@ -240,6 +335,152 @@ export class GenuiFoundation extends Stack {
       if (construct) (construct as iam.CfnRole).cfnOptions.condition = qualificationTaskEnabled;
     }
     new CfnOutput(this, 'QualificationTaskDefinition', { value: qualification.taskDefinitionArn, condition: qualificationTaskEnabled });
+    // APP-077: optional standalone operator task (ADR-007 D7.19). Count zero: no
+    // service, schedule or target references it; an operator runs one documented
+    // command override (app/operator/overrides.json) at a time. It uses the
+    // migration execution role, which injects the existing secret as PGPASSWORD,
+    // and its own task role, which holds no sts:AssumeRole (no application
+    // database or tenant role) and reaches only the ADR-009 B1 source objects
+    // o/<tenant>/s/* under each tenant's key, for upload-sources.
+    const operatorImage = new CfnParameter(this, 'OperatorImageDigest', {
+      type: 'String', default: '', allowedPattern: OPERATOR_IMAGE_PATTERN,
+      description: 'Optional reviewed ECR digest of the separate APP-077 operator image (never the service image). Empty creates no operator task definition, task role or image pull grant.',
+    });
+    const operatorTaskEnabled = new CfnCondition(this, 'OperatorTaskEnabled', {
+      expression: Fn.conditionNot(Fn.conditionEquals(operatorImage.valueAsString, '')),
+    });
+    const operatorImagePull = new iam.CfnPolicy(this, 'OperatorImagePull', {
+      policyName: 'genui-operator-image-pull', roles: [migrationExecutionRole.roleName],
+      policyDocument: { Version: '2012-10-17', Statement: [{ Effect: 'Allow', Action: ['ecr:BatchCheckLayerAvailability', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchGetImage'], Resource: repositoryOf(operatorImage.valueAsString) }] },
+    });
+    operatorImagePull.cfnOptions.condition = operatorTaskEnabled;
+    const operatorRole = new iam.Role(this, 'OperatorRole', { assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com') });
+    const operatorTenants: Array<{ organization_id: string; kms_key_arn: string; prefix: string }> = [];
+    for (const [i, tenant] of tenantIds.entries()) {
+      // PutObject only as a conditional create (If-None-Match: *); an existing
+      // object is read back by a checksum-mode HeadObject (s3:GetObject), which
+      // for an SSE-KMS object needs kms:Decrypt. No ListBucket, no delete. Both
+      // KMS actions work only through S3 in this region and only for this
+      // tenant's B1 source objects: bucket keys are off, so S3's encryption
+      // context is the object ARN (APP-077 review M1, m3).
+      const sourceObjects = bucket.arnForObjects(`o/${tenant}/s/*`);
+      operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['s3:GetObject'], resources: [sourceObjects] }));
+      operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['s3:PutObject'], resources: [sourceObjects], conditions: { StringEquals: { 's3:if-none-match': '*' } } }));
+      operatorRole.addToPolicy(new iam.PolicyStatement({
+        actions: ['kms:GenerateDataKey', 'kms:Decrypt'], resources: [keys[i].keyArn],
+        conditions: { StringEquals: { 'kms:ViaService': `s3.${this.region}.amazonaws.com` }, StringLike: { 'kms:EncryptionContext:aws:s3:arn': sourceObjects } },
+      }));
+      operatorTenants.push({ organization_id: tenant, kms_key_arn: keys[i].keyArn, prefix: `o/${tenant}/` });
+    }
+    // ADR-003 amendment 2026-10-30: the managed operator's `revoke` removes a code's
+    // capability from the secret (read, then PutSecretValue of the whole map). Only
+    // these two actions on this one secret, and its key only through Secrets Manager.
+    // APP-078 B1: the same two actions on the auth configuration secret, so the
+    // operator channel can read and rewrite it; the operator's own credentials do
+    // the window's PutSecretValue from the composed private file.
+    operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], resources: [capabilitySecret.secretArn, authConfiguration.secretArn] }));
+    operatorRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn, authConfigurationKey.keyArn],
+      conditions: { StringEquals: { 'kms:ViaService': `secretsmanager.${this.region}.amazonaws.com` } },
+    }));
+    // ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's
+    // answers): FormaStack's existing management secret, attached by ARN for the window
+    // and the trial (approval A12) and cleared by a stack update afterwards. No copy:
+    // the stack creates no management secret or key. Empty means not attached: no
+    // injection, no grant. Both parameters or neither (the rule below). The secret
+    // uses the AWS-managed `aws/secretsmanager` key (FormaStack, 2026-10-30), so the
+    // execution role needs no kms:Decrypt statement; preflight --activate refuses an
+    // attached secret under a customer key, which would need a key-policy grant first.
+    const managementSecretArn = new CfnParameter(this, 'ProviderManagementSecretArn', {
+      type: 'String', default: '', allowedPattern: PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN,
+      constraintDescription: 'Empty, or one complete Secrets Manager secret ARN including its six-character suffix.',
+      description: 'Optional: FormaStack\'s tenant-scoped fAuth management secret (JSON tenant_id, management_key), attached to the managed operator task only (ADR-003 amendment 2026-10-30, approval A12). Empty attaches nothing. Clear it after the trial.',
+    });
+    // An identifier, not a value: NoEcho would hide it from describe-stacks, which preflight compares with the reservation.
+    Validations.of(this).acknowledge({ id: 'CloudFormation-Validate::W2509', reason: 'The parameter is a secret ARN (an identifier), never a secret value; preflight compares it in describe-stacks.' });
+    const managementUrl = new CfnParameter(this, 'ProviderManagementUrl', {
+      type: 'String', default: '', allowedPattern: PROVIDER_MANAGEMENT_URL_PATTERN,
+      constraintDescription: 'Empty, or an https origin with no path.',
+      description: 'Optional: the fAuth management origin for the attached secret (non-secret). Set exactly when ProviderManagementSecretArn is set.',
+    });
+    const managementAttached = new CfnCondition(this, 'ProviderManagementAttached', {
+      expression: Fn.conditionNot(Fn.conditionEquals(managementSecretArn.valueAsString, '')),
+    });
+    new CfnRule(this, 'ProviderManagementComplete', {
+      assertions: [{
+        assert: Fn.conditionOr(
+          Fn.conditionAnd(Fn.conditionEquals(managementSecretArn.valueAsString, ''), Fn.conditionEquals(managementUrl.valueAsString, '')),
+          Fn.conditionAnd(Fn.conditionNot(Fn.conditionEquals(managementSecretArn.valueAsString, '')), Fn.conditionNot(Fn.conditionEquals(managementUrl.valueAsString, '')))),
+        assertDescription: 'ProviderManagementSecretArn and ProviderManagementUrl are set together or left empty together.',
+      }],
+    });
+    // The operator host writes the invitation input before an issue task and empties it
+    // after (APP-078 runbook 15.3), under its own retained rotating key, initial `{}`
+    // (nothing to issue), injected whole into the operator container only, through the
+    // operator task's execution role. No task role reads it; the service task never
+    // names it. CloudFormation never rewrites it while these properties are unchanged.
+    const invitationInputKey = new kms.Key(this, 'OperatorInvitationInputKey', {
+      description: 'GenUI operator invitation input for the managed operator task (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const invitationInput = new secretsmanager.Secret(this, 'OperatorInvitationInput', {
+      description: 'GenUI operator invitation input (invitee addresses bound to minted code digests): written by the operator host immediately before an issue task and emptied right after, injected into the managed operator task only (ADR-003 amendment 2026-10-30, managed invitations)',
+      encryptionKey: invitationInputKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const operatorTask = new ecs.FargateTaskDefinition(this, 'OperatorTask', { cpu: 1024, memoryLimitMiB: 2048, taskRole: operatorRole, executionRole: migrationExecutionRole, runtimePlatform });
+    operatorTask.addVolume({ name: 'operator-scratch' });
+    const operatorContainer = operatorTask.addContainer('operator', {
+      image: ecs.ContainerImage.fromRegistry(operatorImage.valueAsString), readonlyRootFilesystem: true, user: '65532:65532',
+      entryPoint: ['python3', '-I', '-u', '/operator/app/operator/operator.py'], command: ['verify-catalog'],
+      logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'genui-operator', logGroup: log }),
+      environment: {
+        PGHOST: database.instanceEndpoint.hostname, PGPORT: '5432', PGDATABASE: 'genui', PGUSER: 'genui_migration', PGSSLROOTCERT: '/etc/ssl/certs/rds-global-bundle.pem', PGSSLMODE: 'verify-full',
+        GENUI_EVIDENCE_BUCKET: bucket.bucketName, GENUI_OPERATOR_TENANTS_JSON: this.toJsonString(operatorTenants), AWS_REGION: this.region,
+        [CAPABILITY_SECRET_ID_ENV]: capabilitySecret.secretArn,
+        // B1 review m5: `bind-provider-tenant --from-auth-configuration` reads the routing secret the
+        // operator role already holds, so no `ten_` id or issuer travels in an override (an identifier).
+        [AUTH_CONFIGURATION_SECRET_ID_ENV]: authConfiguration.secretArn,
+      },
+      secrets: {
+        PGPASSWORD: ecs.Secret.fromSecretsManager(database.secret!, 'password'),
+        [INVITATION_INPUT_ENV]: ecs.Secret.fromSecretsManager(invitationInput),
+      },
+    });
+    operatorContainer.addMountPoints({ sourceVolume: 'operator-scratch', containerPath: '/run/operator', readOnly: false });
+    // The attached management secret: two JSON-key injections and the URL, appended to the
+    // operator container's lists only when attached (AWS::NoValue removes each entry
+    // otherwise), so an empty parameter leaves the task definition exactly as before.
+    const attachedOnly = (entry: object) => Fn.conditionIf(managementAttached.logicalId, entry, Aws.NO_VALUE);
+    const operatorDefinition = operatorTask.node.defaultChild as ecs.CfnTaskDefinition;
+    const operatorEnvironmentCount = 11, operatorSecretCount = 2;  // asserted against the rendered lists in security.test.ts
+    operatorDefinition.addPropertyOverride(`ContainerDefinitions.0.Environment.${operatorEnvironmentCount}`,
+      attachedOnly({ Name: PROVIDER_MANAGEMENT_URL_ENV, Value: managementUrl.valueAsString }));
+    operatorDefinition.addPropertyOverride(`ContainerDefinitions.0.Secrets.${operatorSecretCount}`,
+      attachedOnly({ Name: PROVIDER_MANAGEMENT_KEY_ENV, ValueFrom: Fn.join('', [managementSecretArn.valueAsString, ':management_key::']) }));
+    operatorDefinition.addPropertyOverride(`ContainerDefinitions.0.Secrets.${operatorSecretCount + 1}`,
+      attachedOnly({ Name: PROVIDER_MANAGEMENT_TENANT_ENV, ValueFrom: Fn.join('', [managementSecretArn.valueAsString, ':tenant_id::']) }));
+    // The operator task's execution role (the migration execution role, whose task
+    // definition never names the secret) resolves exactly that one ARN, only when the
+    // operator task exists and the secret is attached. No other role, no KMS statement.
+    const operatorManagementRead = new iam.CfnPolicy(this, 'OperatorProviderManagementRead', {
+      policyName: 'genui-operator-provider-management-read', roles: [migrationExecutionRole.roleName],
+      policyDocument: { Version: '2012-10-17', Statement: [{ Effect: 'Allow', Action: 'secretsmanager:GetSecretValue', Resource: managementSecretArn.valueAsString }] },
+    });
+    operatorManagementRead.cfnOptions.condition = new CfnCondition(this, 'OperatorProviderManagementEnabled', {
+      expression: Fn.conditionAnd(operatorTaskEnabled, managementAttached),
+    });
+    for (const construct of [operatorTask.node.defaultChild, operatorRole.node.defaultChild, operatorRole.node.tryFindChild('DefaultPolicy')?.node.defaultChild]) {
+      if (construct) (construct as iam.CfnRole).cfnOptions.condition = operatorTaskEnabled;
+    }
+    new CfnOutput(this, 'OperatorTaskDefinition', { value: operatorTask.taskDefinitionArn, condition: operatorTaskEnabled });
+    new CfnOutput(this, 'OperatorTaskRoleArn', { value: operatorRole.roleArn, condition: operatorTaskEnabled });
+    // The operator's GENUI_PROVIDER_CAPABILITY_SECRET_ID (an identifier, not a value).
+    new CfnOutput(this, 'ProviderCapabilitySecretArn', { value: capabilitySecret.secretArn });
+    // The secret the window's PutSecretValue targets (an identifier, not a value).
+    new CfnOutput(this, 'AuthConfigurationSecretArn', { value: authConfiguration.secretArn });
+    // The operator host's invitation-input target (an identifier, not a value; APP-078 runbook 15.3).
+    new CfnOutput(this, 'OperatorInvitationInputSecretArn', { value: invitationInput.secretArn });
+    // APP-076 G11: the deny-all rollback revision on the same image (`PREVIOUS_TD`).
+    new CfnOutput(this, 'RollbackTaskDefinition', { value: rollback.taskDefinitionArn });
     new CfnOutput(this, 'DatabaseEndpoint', { value: database.instanceEndpoint.hostname });
     new CfnOutput(this, 'EvidenceBucket', { value: bucket.bucketName });
     new CfnOutput(this, 'ClusterName', { value: cluster.clusterName });

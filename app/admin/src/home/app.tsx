@@ -22,8 +22,13 @@ function Home(props: HomeProps) {
     <main class="page">
       <h1>Forma app platform</h1>
       <p class="lede">
-        Foundation workspace. Application workflows are being qualified in Phase 1.
+        Foundation workspace. The beta is by invitation only: enter the code you
+        were sent to create your account, or sign in with your organization's link.
       </p>
+      <nav aria-label="Beta access" class="entry-links">
+        <a href="/invite">Enter an invitation code</a>
+        <a href="/signin">Sign in</a>
+      </nav>
       <Counter count={props.count} />
       <p><a href="/about">About this app</a></p>
     </main>

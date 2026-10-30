@@ -66,7 +66,7 @@ fn member(stores: &Stores, label: &str, principal: &str, epoch: i64) -> TrustedR
 
 /// The operator command as an operator runs it: environment-only connection
 /// settings, genui_migration (or a forged identity) over verify-full TLS.
-fn cli_command(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> Command {
+pub(crate) fn cli_command(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> Command {
     let app = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut cmd = Command::new(fixture_python());
     cmd.current_dir(app.join("runtime"))
@@ -83,7 +83,7 @@ fn cli_command(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> 
         .stderr(Stdio::piped());
     cmd
 }
-fn wait(child: Child, label: &str) -> Output {
+pub(crate) fn wait(child: Child, label: &str) -> Output {
     let end = WallInstant::now() + Duration::from_secs(45);
     let mut child = child;
     while child.try_wait().expect("operator command status").is_none() {
@@ -96,7 +96,7 @@ fn wait(child: Child, label: &str) -> Output {
     }
     child.wait_with_output().expect("operator command output")
 }
-fn operator_as(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> Output {
+pub(super) fn operator_as(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> Output {
     wait(
         cli_command(fixture, user, password, args)
             .spawn()
@@ -104,7 +104,7 @@ fn operator_as(fixture: &Fixture, user: &str, password: &str, args: &[&str]) -> 
         args[0],
     )
 }
-fn accepted(output: Output, label: &str) -> Value {
+pub(crate) fn accepted(output: Output, label: &str) -> Value {
     assert!(
         output.status.success(),
         "operator command refused: {label}: {}",
@@ -118,7 +118,7 @@ fn accepted(output: Output, label: &str) -> Value {
     assert_eq!(text.matches('\n').count(), 1, "one JSON line: {label}");
     serde_json::from_str(&text).expect("operator JSON")
 }
-pub(super) fn operator(fixture: &Fixture, args: &[&str]) -> Value {
+pub(crate) fn operator(fixture: &Fixture, args: &[&str]) -> Value {
     accepted(
         operator_as(fixture, "genui_migration", "synthetic-migration", args),
         args[0],
@@ -129,7 +129,7 @@ fn refused(output: &Output) {
     assert!(output.stdout.is_empty());
 }
 /// A refusal for the stated fixed reason code (never a value).
-fn refused_for(output: &Output, reason: &str) {
+pub(super) fn refused_for(output: &Output, reason: &str) {
     refused(output);
     assert_eq!(
         serde_json::from_slice::<Value>(&output.stderr).expect("refusal JSON"),
@@ -166,7 +166,7 @@ async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
     superuser(fixture, sql).await[0].get::<_, i64>(0)
 }
 /// Observe an actual PostgreSQL lock wait, not a sleep.
-async fn lock_wait(fixture: &Fixture, waiters: i64) {
+pub(crate) async fn lock_wait(fixture: &Fixture, waiters: i64) {
     let operator = fixture.operator().await;
     timeout(Duration::from_secs(10), async {
         loop {
@@ -281,24 +281,233 @@ async fn admit_new(stores: &Stores, digest: &str, label: &str) -> (String, i64, 
     let pending_admission = pending(stores, &identity, &reservation).await;
     admitted(stores, &identity, &pending_admission, &sha(label)).await
 }
+/// The loopback Secrets Manager stand-in (`app/runtime/local_secrets.py`) for
+/// the environment's provider capability secret (ADR-003 amendment
+/// 2026-10-30): a child process on 127.0.0.1 that the operator reaches
+/// through the real boto3 client (botocore's service endpoint variable and
+/// throwaway signing values), answering one JSON control line per stdin
+/// line. SIMULATED; never AWS.
+pub(crate) struct FakeSecret {
+    child: std::sync::Mutex<Child>,
+    pipes: std::sync::Mutex<(ChildStdin, BufReader<ChildStdout>)>,
+    endpoint: String,
+}
+impl FakeSecret {
+    pub(crate) const ARN: &'static str =
+        "arn:aws:secretsmanager:us-east-1:000000000000:secret:genui-provider-capabilities-local-AbCdEf";
+    /// APP-078 B1: the environment's hosted sign-in configuration secret
+    /// (`AuthConfiguration` in the stack), a second stand-in instance.
+    pub(crate) const AUTH_ARN: &'static str =
+        "arn:aws:secretsmanager:us-east-1:000000000000:secret:genui-auth-configuration-local-GhIjKl";
+    pub(crate) fn start() -> Self {
+        Self::start_at(Self::ARN)
+    }
+    pub(crate) fn start_at(arn: &str) -> Self {
+        let app = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let mut child = Command::new(fixture_python())
+            .current_dir(app.join("runtime"))
+            .args(["local_secrets.py", "--secret-arn", arn])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("loopback secret stand-in available");
+        let stdin = child.stdin.take().unwrap();
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
+        let mut line = String::new();
+        stdout.read_line(&mut line).unwrap();
+        let port = serde_json::from_str::<Value>(&line).expect("stand-in port")["port"]
+            .as_u64()
+            .unwrap();
+        Self {
+            child: std::sync::Mutex::new(child),
+            pipes: std::sync::Mutex::new((stdin, stdout)),
+            endpoint: format!("http://127.0.0.1:{port}"),
+        }
+    }
+    pub(crate) fn control(&self, command: Value) -> Value {
+        let mut pipes = self.pipes.lock().unwrap();
+        writeln!(pipes.0, "{command}").unwrap();
+        pipes.0.flush().unwrap();
+        let mut line = String::new();
+        pipes.1.read_line(&mut line).unwrap();
+        serde_json::from_str(&line).expect("stand-in control reply")
+    }
+    /// The operator's environment for this stand-in (`local_secrets.environment`).
+    pub(crate) fn env(&self) -> Vec<(&'static str, String)> {
+        vec![
+            ("AWS_ENDPOINT_URL_SECRETS_MANAGER", self.endpoint.clone()),
+            (
+                "AWS_ACCESS_KEY_ID",
+                "APP074-LOCAL-SECRET-STUB-KEY-ID".into(),
+            ),
+            (
+                "AWS_SECRET_ACCESS_KEY",
+                "app074-local-secret-stub-test-value".into(),
+            ),
+            ("AWS_REGION", "us-east-1".into()),
+            ("AWS_EC2_METADATA_DISABLED", "true".into()),
+            ("AWS_CONFIG_FILE", "/dev/null".into()),
+            ("AWS_SHARED_CREDENTIALS_FILE", "/dev/null".into()),
+            ("GENUI_PROVIDER_CAPABILITY_SECRET_ID", Self::ARN.into()),
+        ]
+    }
+    /// The secret's current value (AWSCURRENT).
+    pub(crate) fn value(&self) -> String {
+        self.control(json!({"op": "get"}))["secret_string"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    }
+    /// PutSecretValue of a composed document, as the operator machine's
+    /// `aws secretsmanager put-secret-value --secret-string file://...` does
+    /// it in the window (APP-078 B1 runbook); fixture control, never AWS.
+    pub(crate) fn put(&self, text: &str) {
+        assert_eq!(
+            self.control(json!({"op": "put", "value": text}))["ok"],
+            true
+        );
+    }
+    /// What the service's next task start sees of the auth configuration
+    /// secret: `runtime.write_auth_configuration` (the supervisor's own
+    /// writer) writes `auth-config.json` and `identity-registry.json` into
+    /// `directory`, an owned 0700 directory.
+    pub(crate) fn materialize_auth(&self, directory: &std::path::Path) {
+        let text = self.value();
+        let app = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let mut child = Command::new(fixture_python())
+            .current_dir(app.join("runtime"))
+            .args([
+                "-c",
+                "import sys, runtime; print(runtime.write_auth_configuration(sys.argv[1], sys.stdin.read()))",
+            ])
+            .arg(directory)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("supervisor writer available");
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(text.as_bytes())
+            .unwrap();
+        let output = wait(child, "materialize_auth");
+        assert!(
+            output.status.success(),
+            "the supervisor refused the composed auth configuration: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "['auth-config.json', 'identity-registry.json']"
+        );
+    }
+    /// The secret's current map (AWSCURRENT).
+    pub(crate) fn capabilities(&self) -> serde_json::Map<String, Value> {
+        let text = self.control(json!({"op": "get"}))["secret_string"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        serde_json::from_str(&text).expect("capability map")
+    }
+    pub(crate) fn record(&self, organization: &str, invitation: &str) -> Option<Value> {
+        self.capabilities()
+            .get(&format!("{organization}.{invitation}"))
+            .cloned()
+    }
+    /// What the service's next task start sees: `runtime.write_capabilities`
+    /// (the supervisor's own writer) rewrites `directory` from the secret.
+    pub(crate) fn materialize(&self, directory: &std::path::Path) {
+        for entry in std::fs::read_dir(directory).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "capability") {
+                std::fs::remove_file(path).unwrap();
+            }
+        }
+        let text = self.control(json!({"op": "get"}))["secret_string"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let app = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let mut child = Command::new(fixture_python())
+            .current_dir(app.join("runtime"))
+            .args([
+                "-c",
+                "import sys, runtime; runtime.write_capabilities(sys.argv[1], sys.stdin.read())",
+            ])
+            .arg(directory)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("supervisor writer available");
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(text.as_bytes())
+            .unwrap();
+        let output = wait(child, "materialize");
+        assert!(
+            output.status.success(),
+            "the supervisor refused the operator's secret: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+impl Drop for FakeSecret {
+    fn drop(&mut self) {
+        let mut child = self.child.lock().unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
 /// The loopback fAuth management stand-in (`app/runtime/fake_fauth.py`), a
 /// child process serving on 127.0.0.1 that answers one JSON control line per
-/// request on its stdin. SIMULATED TRANSPORT. Its management key and the
-/// operator's capability directory live in the fixture's private directory.
-struct FakeProvider {
+/// request on its stdin. SIMULATED TRANSPORT. Its management key lives in the
+/// fixture's private directory; the operator writes capabilities into the
+/// `secret` stand-in, and `capabilities` is the service's materialized view
+/// of that secret, rewritten after every operator command run through
+/// `operator_with` (as if the service restarted after each one).
+/// Crate-visible for the APP-074 invitation campaign (`auth::invite_tests`),
+/// which runs one per fixture tenant over one shared secret and directory.
+pub(crate) struct FakeProvider {
     child: Child,
     stdin: Option<ChildStdin>,
     stdout: BufReader<ChildStdout>,
     url: String,
     key_file: PathBuf,
-    capabilities: PathBuf,
+    pub(crate) capabilities: PathBuf,
+    pub(crate) secret: Arc<FakeSecret>,
 }
 impl FakeProvider {
     fn start(fixture: &Fixture, tenant: &str) -> Self {
-        let root = fixture.directory.0.join("provider");
-        let capabilities = root.join("capabilities");
+        Self::start_at(fixture, tenant, "provider", None, None)
+    }
+    /// A stand-in for `tenant` under `<fixture>/<name>`, with `secret` (or a
+    /// new one) and the service view `capabilities` (created 0700 when absent)
+    /// or `<name>/capabilities`.
+    pub(crate) fn start_at(
+        fixture: &Fixture,
+        tenant: &str,
+        name: &str,
+        capabilities: Option<&std::path::Path>,
+        secret: Option<&Arc<FakeSecret>>,
+    ) -> Self {
+        let secret = secret
+            .cloned()
+            .unwrap_or_else(|| Arc::new(FakeSecret::start()));
+        let root = fixture.directory.0.join(name);
+        let capabilities = capabilities
+            .map(|p| p.to_owned())
+            .unwrap_or_else(|| root.join("capabilities"));
         for dir in [&root, &capabilities] {
-            std::fs::create_dir(dir).unwrap();
+            if !dir.exists() {
+                std::fs::create_dir(dir).unwrap();
+            }
             std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
         }
         let mut bytes = [0u8; 24];
@@ -337,9 +546,10 @@ impl FakeProvider {
             url: format!("http://127.0.0.1:{port}"),
             key_file,
             capabilities,
+            secret,
         }
     }
-    fn control(&mut self, command: Value) -> Value {
+    pub(crate) fn control(&mut self, command: Value) -> Value {
         let stdin = self.stdin.as_mut().unwrap();
         writeln!(stdin, "{command}").unwrap();
         stdin.flush().unwrap();
@@ -347,22 +557,20 @@ impl FakeProvider {
         self.stdout.read_line(&mut line).unwrap();
         serde_json::from_str(&line).expect("stand-in control reply")
     }
-    fn env(&self) -> [(&'static str, String); 3] {
-        [
+    pub(crate) fn env(&self) -> Vec<(&'static str, String)> {
+        let mut env = vec![
             ("GENUI_PROVIDER_URL", self.url.clone()),
             (
                 "GENUI_PROVIDER_MANAGEMENT_KEY_FILE",
                 self.key_file.display().to_string(),
             ),
-            (
-                "GENUI_PROVIDER_CAPABILITY_DIR",
-                self.capabilities.display().to_string(),
-            ),
-        ]
+        ];
+        env.extend(self.secret.env());
+        env
     }
-    fn capability(&self, invitation: &str) -> PathBuf {
-        self.capabilities
-            .join(format!("{ORG}.{invitation}.capability"))
+    /// This invitation's entry in the capability secret (the operator side).
+    fn capability(&self, invitation: &str) -> Option<Value> {
+        self.secret.record(ORG, invitation)
     }
 }
 impl Drop for FakeProvider {
@@ -379,13 +587,18 @@ impl Drop for FakeProvider {
         let _ = self.child.wait();
     }
 }
-fn operator_with(fixture: &Fixture, provider: &FakeProvider, args: &[&str]) -> Value {
+pub(crate) fn operator_with(fixture: &Fixture, provider: &FakeProvider, args: &[&str]) -> Value {
     let mut cmd = cli_command(fixture, "genui_migration", "synthetic-migration", args);
+    for name in ["AWS_PROFILE", "AWS_SESSION_TOKEN", "AWS_DEFAULT_PROFILE"] {
+        cmd.env_remove(name);
+    }
     cmd.envs(provider.env());
-    accepted(
+    let out = accepted(
         wait(cmd.spawn().expect("operator command available"), args[0]),
         args[0],
-    )
+    );
+    provider.secret.materialize(&provider.capabilities);
+    out
 }
 struct Invited {
     issued: Issued,
@@ -446,9 +659,9 @@ fn invite(fixture: &Fixture, provider: &FakeProvider, label: &str, grants: &[Str
 /// The provider identity completes through the stored capability (the stand-in
 /// for fAuth's hosted registration consuming the invitation): (subject, token).
 fn provider_signup(provider: &mut FakeProvider, invited: &Invited) -> (String, String) {
-    let record: Value =
-        serde_json::from_slice(&std::fs::read(provider.capability(&invited.invitation)).unwrap())
-            .unwrap();
+    let record = provider
+        .capability(&invited.invitation)
+        .expect("capability in the secret");
     let token = record["invite_token"].as_str().unwrap().to_owned();
     let reply =
         provider.control(json!({"op": "register", "invite_token": token, "email": invited.email}));
@@ -1246,7 +1459,7 @@ async fn campaign() {
         ),
         (Some(true), Some(1), Some("unknown"))
     );
-    assert!(!provider.capability(&r.invitation).exists());
+    assert!(provider.capability(&r.invitation).is_none());
     assert_eq!(
         stores
             .workspace
@@ -1322,7 +1535,7 @@ async fn campaign() {
             provider.control(json!({"op": "status", "id": invited.remote}))["status"],
             "accepted"
         );
-        assert!(!provider.capability(&invited.invitation).exists());
+        assert!(provider.capability(&invited.invitation).is_none());
     }
     assert_eq!(
         provider.control(json!({"op": "count", "method": "POST", "path": "/manage/invites"}))

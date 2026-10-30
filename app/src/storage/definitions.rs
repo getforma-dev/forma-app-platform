@@ -128,6 +128,9 @@ pub struct CurrentRevision {
     pub publication: Option<String>,
     pub revision: Option<String>,
     pub definition_digest: Option<String>,
+    /// APP-013: the saved work's current version when a command's work
+    /// premise has moved (D7.9 `Stale`); `None` for a publication's answer.
+    pub work_version: Option<i64>,
 }
 
 /// D7.9. `Stale` maps to 412 with the current revision.
@@ -181,7 +184,7 @@ pub struct SavedWorkDetail {
 }
 
 /// Lowercase local identifier (`genui.local_id`, contract `ID`).
-fn local_id(value: &str) -> bool {
+pub(super) fn local_id(value: &str) -> bool {
     let bytes = value.as_bytes();
     (1..=64).contains(&bytes.len())
         && bytes[0].is_ascii_lowercase()
@@ -326,7 +329,10 @@ async fn confirm_identity(transaction: &Transaction<'_>, request: &TrustedReques
 
 /// `count` fresh UUIDv4 identifiers and the transaction's whole-second UTC
 /// time in the contract's `YYYY-MM-DDTHH:MM:SSZ` form.
-async fn fresh(transaction: &Transaction<'_>, count: i32) -> Result<(Vec<String>, String)> {
+pub(super) async fn fresh(
+    transaction: &Transaction<'_>,
+    count: i32,
+) -> Result<(Vec<String>, String)> {
     let rows = transaction
         .query(
             "SELECT gen_random_uuid()::text,to_char(date_trunc('second',now()) AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM generate_series(1,$1::int)",
@@ -341,29 +347,35 @@ async fn fresh(transaction: &Transaction<'_>, count: i32) -> Result<(Vec<String>
     ))
 }
 
-/// The two application chains this module appends to (D7.8).
+/// The two application chains this module appends to (D7.8); the session
+/// module appends `session.signed_in` to the workspace chain.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Chain {
+pub(super) enum Chain {
     Workspace,
     Control,
+    /// APP-013: the data role's `command.committed` chain.
+    Data,
 }
 impl Chain {
     fn role(self) -> &'static str {
         match self {
             Self::Workspace => "workspace",
             Self::Control => "control",
+            Self::Data => "data",
         }
     }
 }
-struct Event<'a> {
-    kind: &'static str,
+pub(super) struct Event<'a> {
+    pub kind: &'static str,
     /// The event id, when the event is the record of one identified object
     /// (a publication's event id is its publication id, review m6); else a
     /// fresh UUID from the database.
-    id: Option<&'a str>,
-    app: &'a str,
-    work: Option<&'a str>,
-    outcome: Option<&'a str>,
+    pub id: Option<&'a str>,
+    pub app: Option<&'a str>,
+    pub work: Option<&'a str>,
+    /// The record a `command.committed` event names (APP-013); else NULL.
+    pub record: Option<&'a str>,
+    pub outcome: Option<&'a str>,
 }
 
 /// The D7.8 event hash: SHA-256 over `forma:audit-event:v1`, NUL, the previous
@@ -389,8 +401,9 @@ fn event_body(
     sequence: i64,
     kind: &str,
     actor: &str,
-    app: &str,
+    app: Option<&str>,
     work: Option<&str>,
+    record: Option<&str>,
     outcome: Option<&str>,
     occurred: &str,
     previous: &str,
@@ -406,7 +419,7 @@ fn event_body(
         "organization_id": organization,
         "outcome_digest": outcome,
         "previous_hash": previous,
-        "record_id": null,
+        "record_id": record,
         "work_id": work,
         "writer_role": chain.role(),
     })
@@ -415,14 +428,33 @@ fn event_body(
 /// D7.8 append protocol: lock the role's own head row, link the event to it,
 /// insert the event and advance the head, all in the caller's transaction.
 /// A missing head is a provisioning gap (D7.7, D7.19): `Configuration`.
-async fn append(
+pub(super) async fn append(
     transaction: &Transaction<'_>,
     chain: Chain,
     request: &TrustedRequest,
     event: Event<'_>,
 ) -> Result<String> {
+    append_as(
+        transaction,
+        chain,
+        &request.organization,
+        &request.principal,
+        event,
+    )
+    .await
+}
+
+/// As `append`, for an actor whose authority the caller's transaction has
+/// already fenced (the session module, after `lock_member_authority`).
+pub(super) async fn append_as(
+    transaction: &Transaction<'_>,
+    chain: Chain,
+    organization: &str,
+    actor: &str,
+    event: Event<'_>,
+) -> Result<String> {
     let role = chain.role();
-    let head = transaction.query("SELECT h.chain_sequence::bigint,h.head_hash::text,gen_random_uuid()::text,to_char(date_trunc('second',now()) AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM genui.audit_heads h WHERE h.organization_id=$1::text::uuid AND h.writer_role=$2 FOR UPDATE", &[&request.organization,&role]).await?;
+    let head = transaction.query("SELECT h.chain_sequence::bigint,h.head_hash::text,gen_random_uuid()::text,to_char(date_trunc('second',now()) AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM genui.audit_heads h WHERE h.organization_id=$1::text::uuid AND h.writer_role=$2 FOR UPDATE", &[&organization,&role]).await?;
     let head = head.first().ok_or(Error::Configuration)?;
     let sequence = integer(head, 0)?
         .checked_add(1)
@@ -436,21 +468,22 @@ async fn append(
     let occurred = text(head, 3)?;
     let body = event_body(
         chain,
-        &request.organization,
+        organization,
         &id,
         sequence,
         event.kind,
-        &request.principal,
+        actor,
         event.app,
         event.work,
+        event.record,
         event.outcome,
         &occurred,
         &previous,
     );
     let hash = event_hash(&previous, &body)?;
-    transaction.query("INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,actor_principal_id,app_id,work_id,record_id,code_id,outcome_digest,occurred_at,previous_hash,hash) VALUES ($1::text::uuid,$2::text::uuid,$3,$4::bigint,$5,$6::text::uuid,$7::text::uuid,$8::text::uuid,NULL,NULL,$9::text,$10::text::timestamptz,$11::text,$12::text)",
-        &[&request.organization,&id,&role,&sequence,&event.kind,&request.principal,&event.app,&event.work,&event.outcome,&occurred,&previous,&hash]).await?;
-    transaction.query("UPDATE genui.audit_heads SET chain_sequence=$1::bigint,head_hash=$2::text WHERE organization_id=$3::text::uuid AND writer_role=$4", &[&sequence,&hash,&request.organization,&role]).await?;
+    transaction.query("INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,actor_principal_id,app_id,work_id,record_id,code_id,outcome_digest,occurred_at,previous_hash,hash) VALUES ($1::text::uuid,$2::text::uuid,$3,$4::bigint,$5,$6::text::uuid,$7::text::uuid,$8::text::uuid,$13::text::uuid,NULL,$9::text,$10::text::timestamptz,$11::text,$12::text)",
+        &[&organization,&id,&role,&sequence,&event.kind,&actor,&event.app,&event.work,&event.outcome,&occurred,&previous,&hash,&event.record]).await?;
+    transaction.query("UPDATE genui.audit_heads SET chain_sequence=$1::bigint,head_hash=$2::text WHERE organization_id=$3::text::uuid AND writer_role=$4", &[&sequence,&hash,&organization,&role]).await?;
     Ok(id)
 }
 
@@ -518,6 +551,19 @@ async fn stored_revision(
     Ok(admitted)
 }
 
+/// A stored revision's admitted identity and canonical content, re-admitted
+/// as `stored_revision` does, for the query path (APP-012): the content a
+/// publication pins is never taken from storage on trust.
+pub(super) async fn stored_content(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    app: &str,
+    revision: &str,
+) -> Result<(String, Vec<u8>)> {
+    let admitted = stored_revision(transaction, organization, app, revision).await?;
+    Ok((admitted.digest, admitted.canonical))
+}
+
 impl Workspace {
     /// Drafts one immutable revision of `app` from admitted content. Needs
     /// `edit_definition` on the app; organization and app come from the
@@ -558,8 +604,9 @@ impl Workspace {
             append(transaction, Chain::Workspace, request, Event {
                 kind: "definition.drafted",
                 id: None,
-                app,
+                app: Some(app),
                 work: None,
+                record: None,
                 outcome: Some(&content.digest),
             })
             .await?;
@@ -779,8 +826,9 @@ impl Workspace {
             append(transaction, Chain::Workspace, request, Event {
                 kind: "work.saved",
                 id: None,
-                app,
+                app: Some(app),
                 work: Some(&work),
+                record: None,
                 outcome: None,
             })
             .await?;
@@ -788,8 +836,9 @@ impl Workspace {
                 append(transaction, Chain::Workspace, request, Event {
                     kind: "work.bound",
                     id: None,
-                    app,
+                    app: Some(app),
                     work: Some(&work),
+                    record: None,
                     outcome: Some(binding),
                 })
                 .await?;
@@ -1051,8 +1100,9 @@ impl Control {
             append(transaction, Chain::Control, request, Event {
                 kind: "publication.published",
                 id: Some(&publication),
-                app,
+                app: Some(app),
                 work: None,
+                record: None,
                 outcome: Some(&admitted.digest),
             })
             .await?;
@@ -1110,6 +1160,7 @@ impl Control {
                     publication: Some(text(row, 0)?),
                     revision: Some(text(row, 1)?),
                     definition_digest: Some(text(row, 2)?),
+                    work_version: None,
                 },
                 None => CurrentRevision::default(),
             })
@@ -1149,7 +1200,8 @@ mod tests {
             2,
             "definition.drafted",
             "00000000-0000-4000-8000-0000000000ca",
-            "00000000-0000-4000-8000-0000000000c9",
+            Some("00000000-0000-4000-8000-0000000000c9"),
+            None,
             None,
             Some(&outcome),
             "2026-10-29T12:00:00Z",
@@ -1160,6 +1212,7 @@ mod tests {
             "sha256:61d8914f6080bf2292799178f16505878c5c96e34476c22f8a88d03eb64ede68"
         );
         assert_eq!(Chain::Control.role(), "control");
+        assert_eq!(Chain::Data.role(), "data");
     }
 
     fn spend_review() -> (Value, AdmittedDefinition) {
