@@ -852,12 +852,13 @@ def list_codes(c, args):
                                                  "remote_invitation_id": remote})
     # APP-076 G5: who redeemed each code, by identifier, so `revoke-entitlement` and
     # `revoke-membership` can name the redeemer; with the member's and entitlement's
-    # current status (never a provider subject, address or token).
+    # current status (never a provider subject, address or token). APP-078 review M5: LEFT
+    # JOINs, so a redemption is never hidden; an absent row shows as a null status.
     redemptions = {}
     for code, redemption, principal, entitlement, committed, member_status, entitlement_status in c.execute("""SELECT d.code_id::text,
           d.redemption_id::text,d.principal_id::text,d.entitlement_id::text,d.committed_at,m.status,e.status
-          FROM genui.code_redemptions d JOIN genui.memberships m ON m.organization_id=d.organization_id AND m.principal_id=d.principal_id
-          JOIN genui.entitlements e ON e.organization_id=d.organization_id AND e.principal_id=d.principal_id AND e.entitlement_id=d.entitlement_id
+          FROM genui.code_redemptions d LEFT JOIN genui.memberships m ON m.organization_id=d.organization_id AND m.principal_id=d.principal_id
+          LEFT JOIN genui.entitlements e ON e.organization_id=d.organization_id AND e.principal_id=d.principal_id AND e.entitlement_id=d.entitlement_id
           WHERE d.organization_id=%s ORDER BY d.committed_at,d.redemption_id""", (org,)).fetchall():
         redemptions.setdefault(code, []).append({"redemption_id": redemption, "principal_id": principal, "entitlement_id": entitlement,
                                                  "redeemed_at": timestamp(committed), "membership_status": member_status,
