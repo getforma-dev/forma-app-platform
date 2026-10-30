@@ -138,7 +138,10 @@ fn the_rehearsed_parser_answers_the_four_scenario_utterances_and_nothing_else() 
     assert_eq!(rehearsed::amount("room 86"), None);
     // Multi-byte text used to slice mid-character and panic.
     assert_eq!(rehearsed::amount("Lunch at Café"), None);
-    assert_eq!(rehearsed::amount("Lunch at Café $12.50"), Some("12.50".into()));
+    assert_eq!(
+        rehearsed::amount("Lunch at Café $12.50"),
+        Some("12.50".into())
+    );
     assert_eq!(rehearsed::amount("İstanbul $12"), Some("12".into()));
     assert_eq!(rehearsed::amount("€ 5 dollars ü"), Some("5".into()));
     assert_eq!(
@@ -445,7 +448,10 @@ impl futures_core::Stream for Stalled {
 /// An anonymous POST with a body that never arrives is answered at once:
 /// the session is checked before the body is read (review: the body used to
 /// be read first, with no time bound).
-pub(crate) async fn anonymous_stalled_post(app: axum::Router, path: &str) -> axum::http::StatusCode {
+pub(crate) async fn anonymous_stalled_post(
+    app: axum::Router,
+    path: &str,
+) -> axum::http::StatusCode {
     use tower::ServiceExt;
     let request = axum::http::Request::builder()
         .method("POST")
@@ -464,8 +470,12 @@ pub(crate) async fn anonymous_stalled_post(app: axum::Router, path: &str) -> axu
 #[tokio::test]
 async fn act_checks_the_session_before_reading_the_body() {
     let auth = std::sync::Arc::new(
-        crate::auth::Auth::new(None, None, std::sync::Arc::new(crate::auth::tests::TestPages))
-            .unwrap(),
+        crate::auth::Auth::new(
+            None,
+            None,
+            std::sync::Arc::new(crate::auth::tests::TestPages),
+        )
+        .unwrap(),
     );
     let app = super::routes::router(std::sync::Arc::new(super::routes::Act::new(
         auth,

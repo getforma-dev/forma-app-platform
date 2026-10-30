@@ -177,20 +177,18 @@ async fn share(
         "share.submit"
     );
     match result {
-        Ok(shared) => {
-            document(
-                StatusCode::OK,
-                &json!({
-                    "app_id": app,
-                    "work_id": work,
-                    "grantee_principal_id": shared.grantee,
-                    "granted": shared.granted.iter().map(|g| json!({
-                        "scope": g.scope, "resource_id": g.resource,
-                        "permission": g.permission,
-                    })).collect::<Vec<_>>(),
-                }),
-            )
-        }
+        Ok(shared) => document(
+            StatusCode::OK,
+            &json!({
+                "app_id": app,
+                "work_id": work,
+                "grantee_principal_id": shared.grantee,
+                "granted": shared.granted.iter().map(|g| json!({
+                    "scope": g.scope, "resource_id": g.resource,
+                    "permission": g.permission,
+                })).collect::<Vec<_>>(),
+            }),
+        ),
         Err(storage::Error::Denied) => http::not_found(),
         Err(_) => http::unavailable(),
     }

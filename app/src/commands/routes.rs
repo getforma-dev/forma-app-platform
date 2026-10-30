@@ -513,8 +513,7 @@ fn notice(query: Option<&str>) -> Option<Notice> {
 
 /// A fresh 128-bit key per render (D7.16), 32 lowercase hex digits.
 fn fresh_key() -> Option<String> {
-    let bytes = capability::random_bytes::<16>()?;
-    Some(bytes.iter().map(|b| format!("{b:02x}")).collect())
+    capability::random_hex::<16>()
 }
 
 async fn record_page(

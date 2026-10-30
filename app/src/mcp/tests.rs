@@ -516,5 +516,8 @@ fn the_rate_is_per_token_and_per_member() {
     assert!(!admit(&a), "the token's window");
     let third = caller(DIEGO, "00000000-0000-4000-8000-0000000000ff");
     assert!(!admit(&third), "a fresh token of the same member");
-    assert!(admit(&caller(SARAH, "00000000-0000-4000-8000-0000000000fe")));
+    assert!(admit(&caller(
+        SARAH,
+        "00000000-0000-4000-8000-0000000000fe"
+    )));
 }

@@ -202,13 +202,12 @@ async fn customize_route(State(state): State<Arc<Widgets>>, request: Request) ->
         Ok(member) => member,
         Err(refusal) => return refusal,
     };
-    let bytes = match http::read_bounded(body_stream, CUSTOMIZE_BODY_LIMIT, http::HANDLER_DEADLINE)
-        .await
-    {
-        Ok(bytes) => bytes,
-        Err(http::BodyRefused::TooLarge) => return http::payload_too_large(),
-        Err(http::BodyRefused::Stalled) => return http::not_found(),
-    };
+    let bytes =
+        match http::read_bounded(body_stream, CUSTOMIZE_BODY_LIMIT, http::HANDLER_DEADLINE).await {
+            Ok(bytes) => bytes,
+            Err(http::BodyRefused::TooLarge) => return http::payload_too_large(),
+            Err(http::BodyRefused::Stalled) => return http::not_found(),
+        };
     let started = Instant::now();
     let Some((widget, current, text)) =
         customize_body(&bytes).filter(|_| parts.uri.query().is_none())

@@ -57,7 +57,11 @@ fn folder_windows_are_the_composer_and_brief_windows() {
     ));
     let explain = format!("box-explain:{ID}:{}", member.principal());
     for _ in 0..EXPLAIN_MEMBER[0].limit {
-        state.auth.limits.admit(&[(&explain, EXPLAIN_MEMBER)]).unwrap();
+        state
+            .auth
+            .limits
+            .admit(&[(&explain, EXPLAIN_MEMBER)])
+            .unwrap();
     }
     let refused = admit_explain(&state, &member).unwrap_err();
     assert_eq!(refused.code(), "too_many_requests");

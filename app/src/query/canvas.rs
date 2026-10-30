@@ -1046,8 +1046,7 @@ pub fn router(canvas: Arc<Canvas>) -> Router {
 
 /// A fresh 128-bit idempotency key per render (D7.16).
 fn fresh_key() -> Option<String> {
-    let bytes = capability::random_bytes::<16>()?;
-    Some(bytes.iter().map(|b| format!("{b:02x}")).collect())
+    capability::random_hex::<16>()
 }
 
 /// What one work reads before the page or the group route shapes it: the

@@ -311,15 +311,6 @@ fn id_arg(arguments: &Map<String, Value>, key: &str) -> Result<String, Output> {
         .ok_or_else(|| Output::invalid(&format!("`{key}` must be a lowercase UUID.")))
 }
 
-/// Today in UTC as `YYYY-MM-DD` (the action path's default date).
-fn today() -> String {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    events::timestamp(seconds)[..10].to_owned()
-}
-
 fn storage_output(error: storage::Error) -> Output {
     match error {
         storage::Error::Denied => Output::not_found(),
@@ -773,7 +764,7 @@ async fn hold(
         catalog,
         parsed,
         context,
-        &today(),
+        &crate::events::today(),
     )
     .await
     .map_err(|refusal| match refusal {

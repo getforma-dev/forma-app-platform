@@ -211,10 +211,7 @@ impl Slack {
         user: &str,
         draft: Draft,
     ) -> Option<String> {
-        let id: String = crate::auth::capability::random_bytes::<16>()?
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect();
+        let id = crate::auth::capability::random_hex::<16>()?;
         let mut drafts = self.drafts.lock().ok()?;
         drafts.retain(|_, held| held.created.elapsed() < DRAFT_TTL);
         let mine = drafts

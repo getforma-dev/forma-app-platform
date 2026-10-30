@@ -37,9 +37,6 @@ const UNAVAILABLE: &str = "Forma is unavailable right now. Try again in a moment
 fn elapsed_ms(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
-fn today() -> String {
-    events::timestamp(super::now())[..10].to_owned()
-}
 fn canvas_link(state: &Slack) -> String {
     text::link(&format!("{}/canvas", state.origin()), "Open in Forma")
 }
@@ -419,7 +416,7 @@ async fn act_message(state: &Slack, team: &str, user: &str, utterance: &str) -> 
         return text::ephemeral(REFUSED, None, false);
     }
     let demo = demo::is_demo_org(member.organization());
-    let today = today();
+    let today = crate::events::today();
     let parse = match state.parser.parse(utterance, &catalog, demo, &today).await {
         Ok(parse) => parse,
         Err(ParseFailure::Unavailable) => {

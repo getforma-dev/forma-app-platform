@@ -46,8 +46,7 @@ pub struct Drafts {
 
 /// A fresh draft id: 128 random bits as 32 lowercase hex digits.
 fn fresh_id() -> Option<String> {
-    let bytes = capability::random_bytes::<16>()?;
-    Some(bytes.iter().map(|b| format!("{b:02x}")).collect())
+    capability::random_hex::<16>()
 }
 /// The exact shape of a draft id.
 pub fn draft_id_shaped(id: &str) -> bool {

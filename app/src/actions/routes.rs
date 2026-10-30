@@ -233,15 +233,6 @@ fn document(status: StatusCode, value: &Value) -> Response {
     response
 }
 
-/// Today in UTC as `YYYY-MM-DD` (the member's date for defaults).
-fn today() -> String {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    crate::events::timestamp(seconds)[..10].to_owned()
-}
-
 /// The request body: an utterance, a receipt with optional words
 /// (multipart, APP-102), or a structured decision.
 pub(super) enum Body {
@@ -512,7 +503,7 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
         log_refused(&member, "nothing_actionable", started);
         return http::not_found();
     }
-    let today = today();
+    let today = crate::events::today();
     let mut receipt_meta: Option<(&'static str, usize)> = None;
     // "/expense", "/ledger": no parse at all.
     let bare = match &body {

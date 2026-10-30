@@ -40,31 +40,20 @@ pub fn wants_ledger(utterance: &str, values: &Map<String, Value>) -> bool {
         || lower.contains("spend by")
 }
 
-fn date_shaped(value: &str) -> bool {
-    let b = value.as_bytes();
-    b.len() == 10
-        && b[4] == b'-'
-        && b[7] == b'-'
-        && b.iter()
-            .enumerate()
-            .all(|(i, c)| matches!(i, 4 | 7) || c.is_ascii_digit())
-        && (1..=12).contains(&value[5..7].parse::<u8>().unwrap_or(0))
-        && (1..=31).contains(&value[8..10].parse::<u8>().unwrap_or(0))
-}
-
 /// The range a parse carries (`values.from`, `values.to`, both dates, in
 /// order), if any.
 pub fn range_of(values: &Map<String, Value>) -> Option<(String, String)> {
     let from = values.get("from")?.as_str()?.trim();
     let to = values.get("to")?.as_str()?.trim();
-    (date_shaped(from) && date_shaped(to) && from <= to).then(|| (from.to_owned(), to.to_owned()))
+    (super::resolve::date_shaped(from) && super::resolve::date_shaped(to) && from <= to)
+        .then(|| (from.to_owned(), to.to_owned()))
 }
 
 /// One date in words: "Oct 1", "October 1st", "Oct 1, 2026", "10/1",
 /// "2026-10-01". The year defaults to `today`'s.
 fn date_at(words: &[String], at: usize, year: i64) -> Option<(String, usize)> {
     let word = words.get(at)?;
-    if date_shaped(word) {
+    if super::resolve::date_shaped(word) {
         return Some((word.clone(), 1));
     }
     if let Some((m, d)) = word.split_once('/') {
@@ -77,7 +66,7 @@ fn date_at(words: &[String], at: usize, year: i64) -> Option<(String, usize)> {
             .map(|y| if y < 100 { 2000 + y } else { y })
             .unwrap_or(year);
         let text = format!("{y:04}-{m:02}-{d:02}");
-        return date_shaped(&text).then_some((text, 1));
+        return super::resolve::date_shaped(&text).then_some((text, 1));
     }
     let month = MONTHS
         .iter()
@@ -93,7 +82,7 @@ fn date_at(words: &[String], at: usize, year: i64) -> Option<(String, usize)> {
         _ => (year, 2),
     };
     let text = format!("{y:04}-{month:02}-{day:02}");
-    date_shaped(&text).then_some((text, used))
+    super::resolve::date_shaped(&text).then_some((text, used))
 }
 
 /// "from <date> to|through|until <date>" or "between <date> and <date>".
