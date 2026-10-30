@@ -163,8 +163,12 @@ pub struct CanvasCardProps {
     pub message: String,
     /// `POST` target of the island: the existing JSON query route.
     pub query: String,
-    /// Comma-separated exact-integer columns (digit-grouped, nothing else).
+    /// Comma-separated exact-integer columns (integer, money minor units,
+    /// decimal coefficient), kept for existing consumers.
     pub integer_columns: String,
+    /// The view's result column value types as compact JSON, the same
+    /// object the query route returns as `column_types` (APP-093 review M4).
+    pub column_types: String,
     /// A one-row summary: its first value, compact with its unit, and the
     /// exact value; the other values as small stats.
     pub has_insight: bool,
@@ -309,6 +313,7 @@ pub fn canvas_card(
         message: card.message,
         query: format!("/v1/work/{app}/{work}/queries/{}", view.id),
         integer_columns: view.integer_columns.join(","),
+        column_types: super::worker::column_types_json(&view.column_types).to_string(),
         has_receipt: card.has_receipt,
         receipt_short: digest_prefix(&card.receipt_digest),
         receipt_digest: card.receipt_digest,
@@ -368,6 +373,7 @@ pub fn canvas_card(
             .map(|column| CellProps {
                 id: column.id.clone(),
                 text: display::label(&column.text),
+                raw: String::new(),
             })
             .collect();
         canvas.rows = card

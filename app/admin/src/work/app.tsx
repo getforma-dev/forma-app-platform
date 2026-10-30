@@ -6,8 +6,10 @@ import { h, mount, createShow, createList } from '@getforma/core';
 // all, so nothing here can show a number for it. A successful run answers a
 // redirect back to this page, which re-runs the saved parameters under a
 // fresh authorization: a reload restores the views without a re-submit.
-type Pair = { id: string; label: string; value: string };
-type Cell = { id: string; text: string };
+// `raw` is a result value's exact engine string (the hover title); the shown
+// text is formatted by the column's value type (APP-093 review M4).
+type Pair = { id: string; label: string; value: string; raw: string };
+type Cell = { id: string; text: string; raw: string };
 type Row = { id: string; cells: Cell[] };
 type Card = {
   id: string;
@@ -82,7 +84,7 @@ function Work(props: WorkProps) {
               {createList(() => card.summary, item => item.id, item => (
                 <div>
                   <dt>{item.label}</dt>
-                  <dd class="value">{item.value}</dd>
+                  <dd class="value" title={item.raw}>{item.value}</dd>
                 </div>
               ))}
             </dl>
@@ -94,7 +96,7 @@ function Work(props: WorkProps) {
               </thead>
               <tbody>
                 {createList(() => card.rows, row => row.id, row => (
-                  <tr>{createList(() => row.cells, cell => cell.id, cell => <td class="value">{cell.text}</td>)}</tr>
+                  <tr>{createList(() => row.cells, cell => cell.id, cell => <td class="value" title={cell.raw}>{cell.text}</td>)}</tr>
                 ))}
               </tbody>
             </table>

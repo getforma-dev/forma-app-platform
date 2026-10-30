@@ -44,14 +44,17 @@
 //! lists the admitted library apps the member may open now, joined with the
 //! router sidecar `contracts/fixtures/library/catalog.json`.
 use super::{
-    authorization::{Action, Resource, Transaction},
+    authorization::{Action, Permit, Resource, Transaction},
     definitions::stored_content,
     pool::Data,
     require, valid_id, Error, Result, TrustedRequest,
 };
-use crate::admission::{self, digest};
+use crate::{
+    admission::{self, digest},
+    query::worker::{integer_backed, typed_column_types, ColumnType},
+};
 use serde_json::{json, Value};
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 use tokio::time::Instant;
 use tokio_postgres::Row;
 
@@ -653,10 +656,15 @@ pub struct WorkView {
     pub id: String,
     pub title: String,
     pub kind: String,
-    /// The view's exact-integer result columns (`query::worker::
-    /// integer_columns` of its stored query): the canvas island digit-groups
-    /// only these, as the server does (APP-012 review m11; ADR-011 canvas).
+    /// The view's exact-integer result columns (integer, money minor units,
+    /// decimal coefficient: `query::worker::typed_integer_columns` of its
+    /// stored query over its input's contract fields), kept for existing
+    /// consumers (APP-012 review m11; ADR-011 canvas).
     pub integer_columns: Vec<String>,
+    /// Every result column's value type (`query::worker::typed_column_types`
+    /// of the stored query over its input's contract fields): how the page
+    /// and the canvas display each value (APP-093 review M4).
+    pub column_types: BTreeMap<String, ColumnType>,
 }
 /// What the work page shows before any run: the pinned definition's title
 /// and its runnable views, in definition order.
@@ -683,12 +691,12 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
         .ok_or(Error::Unavailable)?
     {
         let query = view.get("query");
-        let single_input = query
+        let fields = query
             .and_then(|q| q.get("inputs"))
             .and_then(Value::as_array)
             .filter(|inputs| inputs.len() == 1)
             .and_then(|inputs| inputs[0].as_str())
-            .is_some_and(|input| source_fields(&content, input).is_some());
+            .and_then(|input| source_fields(&content, input));
         let qualified = query
             .and_then(|q| q.get("operations"))
             .and_then(Value::as_array)
@@ -699,16 +707,16 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
                         .is_some_and(|kind| QUALIFIED_OPERATORS.contains(&kind))
                 })
             });
-        if single_input && qualified {
+        if let (Some(fields), Some(query), true) = (fields, query, qualified) {
+            // Typed by the view's own input contract (APP-093 review M4),
+            // exactly as the engine run types its result.
+            let column_types = typed_column_types(query, &fields);
             views.push(WorkView {
                 id: label(view.get("id"))?,
                 title: label(view.get("title"))?,
                 kind: label(view.get("kind"))?,
-                integer_columns: query
-                    .map(crate::query::worker::integer_columns)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .collect(),
+                integer_columns: integer_backed(&column_types).into_iter().collect(),
+                column_types,
             });
         }
     }
@@ -765,8 +773,14 @@ pub struct OpenableWork {
     /// record page then offers its command form).
     pub can_write: bool,
 }
-/// At most this many of the organization's saved works are considered.
-const LISTING_CANDIDATES: i64 = 50;
+/// At most this many of the organization's most recent saved works are
+/// considered, newest first (APP-093 review M3: the cap was 50 in `app_id`
+/// order, which compositions crossed and which then hid the library apps).
+/// The library entries are selected apart from this cap.
+const LISTING_CANDIDATES: i64 = 100;
+/// Per library definition, at most this many of its saved works (the
+/// sidecar's seeded work first) are tried for its always-listed entry.
+const LIBRARY_CANDIDATES: i64 = 4;
 
 /// `Ok(false)` for a denial, so the listing omits the item; anything else
 /// (a store failure, which has aborted the transaction) ends the listing.
@@ -776,6 +790,113 @@ fn granted(result: Result<()>) -> Result<bool> {
         Err(Error::Denied) => Ok(false),
         Err(error) => Err(error),
     }
+}
+
+/// One listed work as the member may open it now, with the premise and the
+/// re-admitted content it was judged under.
+struct Opened {
+    item: OpenableWork,
+    definition_digest: String,
+    content: Vec<u8>,
+}
+
+/// The listing clause for one saved work, after the member fence: `discover`
+/// on its app and `record_read` on the work (which includes `run` on the app,
+/// live `source_read` on every dependency and the unrevoked creator's
+/// authority), its pinned publication under `lock_work_revision` and its
+/// stored definition re-admitted. `None` when the member may not open it.
+async fn open_listed(
+    permit: &Permit<'_, '_>,
+    org: &str,
+    app: &str,
+    work: &str,
+) -> Result<Option<Opened>> {
+    if !granted(permit.also(Action::Discover, Resource::App(app)).await)?
+        || !granted(
+            permit
+                .also(Action::RecordRead, Resource::Work { app, work })
+                .await,
+        )?
+    {
+        return Ok(None);
+    }
+    let can_write = granted(
+        permit
+            .also(Action::RecordWrite, Resource::Work { app, work })
+            .await,
+    )?;
+    let transaction = permit.transaction();
+    let premise = match premise(transaction, org, app, work).await {
+        Ok(premise) => premise,
+        Err(Error::Denied) => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let (admitted, content) =
+        stored_content(transaction, org, app, &premise.definition_revision).await?;
+    if admitted != premise.definition_digest {
+        return Err(Error::Unavailable);
+    }
+    let title = outline(&content)?.title;
+    let collections = transaction.query("SELECT collection_id::text,schema_id::text FROM genui.record_collections WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid ORDER BY collection_id", &[&org,&app,&work]).await?
+        .iter()
+        .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Some(Opened {
+        item: OpenableWork {
+            app: app.to_owned(),
+            work: work.to_owned(),
+            title,
+            collections,
+            can_write,
+        },
+        definition_digest: premise.definition_digest,
+        content,
+    }))
+}
+
+/// The library sidecar's definition digests and seeded work ids.
+fn library_keys(sidecar: &[Value]) -> (Vec<String>, Vec<String>) {
+    let member = |key: &str| -> Vec<String> {
+        sidecar
+            .iter()
+            .filter_map(|entry| entry.get(key).and_then(Value::as_str).map(str::to_owned))
+            .collect()
+    };
+    (member("definition_digest"), member("work_id"))
+}
+
+/// The member's openable library works, at most one per library
+/// definition: the saved works whose pinned publication's definition digest
+/// is a sidecar digest, selected directly by that digest (never through the
+/// capped recency listing), the sidecar's seeded work tried first. Each
+/// entry is the first candidate of its digest the member may open now.
+async fn open_library(
+    permit: &Permit<'_, '_>,
+    org: &str,
+    sidecar: &[Value],
+) -> Result<Vec<Opened>> {
+    let (digests, seeded) = library_keys(sidecar);
+    if digests.is_empty() {
+        return Ok(Vec::new());
+    }
+    let candidates = permit.transaction().query("SELECT c.app_id,c.work_id,c.digest FROM (SELECT w.app_id::text AS app_id,w.work_id::text AS work_id,p.definition_digest::text AS digest,row_number() OVER (PARTITION BY p.definition_digest ORDER BY (w.work_id::text=ANY($3::text[])) DESC,w.app_id,w.work_id) AS n FROM genui.saved_work w JOIN genui.publications p ON p.organization_id=w.organization_id AND p.app_id=w.app_id AND p.publication_id=w.publication_id WHERE w.organization_id=$1::text::uuid AND p.definition_digest::text=ANY($2::text[])) c WHERE c.n<=$4 ORDER BY c.app_id,c.n", &[&org,&digests,&seeded,&LIBRARY_CANDIDATES]).await?;
+    let mut covered = std::collections::BTreeSet::new();
+    let mut opened = Vec::new();
+    for row in &candidates {
+        let (app, work, digest) = (text(row, 0)?, text(row, 1)?, text(row, 2)?);
+        if covered.contains(&digest) {
+            continue;
+        }
+        if let Some(found) = open_listed(permit, org, &app, &work).await? {
+            // The pinned digest is re-read under the lock: it must still be
+            // the library definition the candidate was selected by.
+            if found.definition_digest == digest {
+                covered.insert(digest);
+                opened.push(found);
+            }
+        }
+    }
+    Ok(opened)
 }
 
 impl Data {
@@ -790,54 +911,36 @@ impl Data {
     /// `lock_work_revision` and its stored definition re-admitted, exactly as
     /// `work_outline` does, for the title. Nothing is written. A refused
     /// member is `Denied`; the route shows that as an empty listing.
+    ///
+    /// APP-093 review M3: the candidates are the organization's
+    /// [`LISTING_CANDIDATES`] most recent saved works (by their pinned
+    /// publication's `published_at`, newest first: `saved_work` carries no
+    /// creation time) followed by the library entries, which are selected by
+    /// their sidecar definition digest apart from that cap, so no number of
+    /// compositions hides a library app.
     pub async fn openable_works(&self, request: &TrustedRequest) -> Result<Vec<OpenableWork>> {
+        let sidecar = library_sidecar()?;
         let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
         let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
         let result = async {
             let permit = transaction.fence_member().await?;
             let org = &request.organization;
-            let candidates = permit.transaction().query("SELECT app_id::text,work_id::text FROM genui.saved_work WHERE organization_id=$1::text::uuid ORDER BY app_id,work_id LIMIT $2", &[org,&LISTING_CANDIDATES]).await?;
+            let candidates = permit.transaction().query("SELECT w.app_id::text,w.work_id::text FROM genui.saved_work w JOIN genui.publications p ON p.organization_id=w.organization_id AND p.app_id=w.app_id AND p.publication_id=w.publication_id WHERE w.organization_id=$1::text::uuid ORDER BY p.published_at DESC,w.app_id,w.work_id LIMIT $2", &[org,&LISTING_CANDIDATES]).await?;
+            let mut seen = std::collections::BTreeSet::new();
             let mut listed = Vec::new();
             for row in &candidates {
                 let (app, work) = (text(row, 0)?, text(row, 1)?);
-                let (app, work) = (app.as_str(), work.as_str());
-                if !granted(permit.also(Action::Discover, Resource::App(app)).await)?
-                    || !granted(
-                        permit
-                            .also(Action::RecordRead, Resource::Work { app, work })
-                            .await,
-                    )?
-                {
+                if !seen.insert((app.clone(), work.clone())) {
                     continue;
                 }
-                let can_write = granted(
-                    permit
-                        .also(Action::RecordWrite, Resource::Work { app, work })
-                        .await,
-                )?;
-                let transaction = permit.transaction();
-                let premise = match premise(transaction, org, app, work).await {
-                    Ok(premise) => premise,
-                    Err(Error::Denied) => continue,
-                    Err(error) => return Err(error),
-                };
-                let (admitted, content) =
-                    stored_content(transaction, org, app, &premise.definition_revision).await?;
-                if admitted != premise.definition_digest {
-                    return Err(Error::Unavailable);
+                if let Some(opened) = open_listed(&permit, org, &app, &work).await? {
+                    listed.push(opened.item);
                 }
-                let title = outline(&content)?.title;
-                let collections = transaction.query("SELECT collection_id::text,schema_id::text FROM genui.record_collections WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid ORDER BY collection_id", &[org,&app,&work]).await?
-                    .iter()
-                    .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
-                    .collect::<Result<Vec<_>>>()?;
-                listed.push(OpenableWork {
-                    app: app.to_owned(),
-                    work: work.to_owned(),
-                    title,
-                    collections,
-                    can_write,
-                });
+            }
+            for opened in open_library(&permit, org, &sidecar).await? {
+                if seen.insert((opened.item.app.clone(), opened.item.work.clone())) {
+                    listed.push(opened.item);
+                }
             }
             Ok(listed)
         }
@@ -910,45 +1013,33 @@ impl LibraryEntry {
 }
 
 impl Data {
-    /// The library catalog for the composer (`GET /v1/library`): of the saved
-    /// works the member may open now (exactly [`Data::openable_works`]'s
-    /// clause: `discover` on the app and `record_read` on the work after the
-    /// member fence, the pinned publication under `lock_work_revision`, the
-    /// definition re-admitted), those whose definition digest the library
-    /// sidecar names, with that entry's router metadata. Nothing is written;
-    /// a refused member is `Denied` (the route shows an empty catalog).
+    /// The library catalog for the composer (`GET /v1/library`): the saved
+    /// works whose pinned definition digest the library sidecar names,
+    /// selected directly by that digest (APP-093 review M3: never through the
+    /// capped workspace listing), at most one per library app (its seeded
+    /// work first), each listed only when the member may open it now under
+    /// exactly [`Data::openable_works`]'s clause (`discover` on the app and
+    /// `record_read` on the work after the member fence, the pinned
+    /// publication under `lock_work_revision`, the definition re-admitted),
+    /// with that entry's router metadata, in sidecar order. Nothing is
+    /// written; a refused member is `Denied` (the route shows an empty
+    /// catalog).
     pub async fn library_catalog(&self, request: &TrustedRequest) -> Result<Vec<LibraryEntry>> {
         let sidecar = library_sidecar()?;
-        let works = self.openable_works(request).await?;
-        if works.is_empty() {
-            return Ok(Vec::new());
-        }
         let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
         let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
         let result = async {
             let permit = transaction.fence_member().await?;
             let org = &request.organization;
             let mut listed = Vec::new();
-            for item in &works {
-                let (app, work) = (item.app.as_str(), item.work.as_str());
-                let transaction = permit.transaction();
-                let premise = match premise(transaction, org, app, work).await {
-                    Ok(premise) => premise,
-                    Err(Error::Denied) => continue,
-                    Err(error) => return Err(error),
-                };
+            for opened in open_library(&permit, org, &sidecar).await? {
                 let Some(entry) = sidecar.iter().find(|entry| {
                     entry.get("definition_digest").and_then(Value::as_str)
-                        == Some(premise.definition_digest.as_str())
+                        == Some(opened.definition_digest.as_str())
                 }) else {
                     continue;
                 };
-                let (admitted, content) =
-                    stored_content(transaction, org, app, &premise.definition_revision).await?;
-                if admitted != premise.definition_digest {
-                    return Err(Error::Unavailable);
-                }
-                let content = admission::decode(&content).map_err(|_| Error::Unavailable)?;
+                let content = admission::decode(&opened.content).map_err(|_| Error::Unavailable)?;
                 let text = |value: &Value, key: &str| -> String {
                     value
                         .get(key)
@@ -958,18 +1049,25 @@ impl Data {
                 };
                 listed.push(LibraryEntry {
                     library_id: text(entry, "library_id"),
-                    app: app.to_owned(),
-                    work: work.to_owned(),
+                    app: opened.item.app,
+                    work: opened.item.work,
                     title: text(&content, "title"),
                     description: text(&content, "description"),
-                    definition_digest: premise.definition_digest,
+                    definition_digest: opened.definition_digest,
                     purpose: text(entry, "purpose"),
                     routing: entry.get("routing").cloned().unwrap_or(Value::Null),
                     inputs: entry.get("inputs").cloned().unwrap_or(Value::Null),
                     views: entry.get("views").cloned().unwrap_or(Value::Null),
-                    can_write: item.can_write,
+                    can_write: opened.item.can_write,
                 });
             }
+            let order = |entry: &LibraryEntry| {
+                sidecar.iter().position(|item| {
+                    item.get("library_id").and_then(Value::as_str)
+                        == Some(entry.library_id.as_str())
+                })
+            };
+            listed.sort_by_key(order);
             Ok(listed)
         }
         .await;
@@ -1117,6 +1215,137 @@ mod tests {
                 .unwrap()
                 .apply(&stock, &inventory),
             Some(stock)
+        );
+    }
+
+    /// APP-093 review M4: the expense library's `totals` view is typed by
+    /// its input contract (money USD, exponent 2), so the page shows
+    /// `sum(amount)` = 26262004 minor units (the DuckDB oracle's value) as
+    /// $262,620.04, the canvas card carries the same `column_types`, and a
+    /// digit-only text cell of the `queue` view is never grouped.
+    #[test]
+    fn expense_totals_show_money_and_text_stays_verbatim() {
+        use crate::query::{
+            canvas::canvas_card,
+            page::{card, Outcome},
+            receipt::QueryReceipt,
+            worker::{result_digest, WorkerResult},
+        };
+        let bundle: Value = serde_json::from_slice(
+            &std::fs::read(repository().join("contracts/fixtures/library/expense-review.json"))
+                .unwrap(),
+        )
+        .unwrap();
+        let admitted =
+            admission::admit_definition(&admission::encode(&bundle["definition"]).unwrap())
+                .unwrap();
+        let listed = outline(&admitted.canonical).unwrap();
+        let view = |id: &str| listed.views.iter().find(|v| v.id == id).unwrap().clone();
+        let totals = view("totals");
+        let usd = ColumnType::Money {
+            currency: "USD".into(),
+            minor_unit_exponent: 2,
+        };
+        assert_eq!(
+            totals.column_types,
+            BTreeMap::from([
+                ("claims".to_owned(), ColumnType::Integer),
+                ("largest_claim".to_owned(), usd.clone()),
+                ("total_amount".to_owned(), usd.clone()),
+            ])
+        );
+        // Existing consumers keep their integer-backed column list.
+        assert_eq!(
+            totals.integer_columns,
+            ["claims", "largest_claim", "total_amount"]
+        );
+        let released = |view: &WorkView, columns: &[&str], row: Vec<Value>| {
+            let rows = vec![row];
+            WorkerResult {
+                columns: columns.iter().map(|c| (*c).to_owned()).collect(),
+                integer_columns: view.integer_columns.iter().cloned().collect(),
+                column_types: view.column_types.clone(),
+                result_digest: result_digest(&rows).unwrap(),
+                rows,
+                truncated_page: false,
+                engine_elapsed_ms: 0,
+                wall: Duration::ZERO,
+                peak_rss_bytes: 0,
+            }
+        };
+        let receipt = QueryReceipt {
+            digest: "sha256:feed".into(),
+            document: json!({"digest": "sha256:feed"}),
+        };
+        let result = released(
+            &totals,
+            &["claims", "total_amount", "largest_claim"],
+            vec![json!("240"), json!("26262004"), json!("477866")],
+        );
+        let shown = card(&totals, Outcome::Released(&result, &receipt));
+        assert_eq!(
+            shown
+                .summary
+                .iter()
+                .map(|p| (p.label.as_str(), p.value.as_str(), p.raw.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("claims", "240", "240"),
+                ("total_amount", "$262,620.04", "26262004"),
+                ("largest_claim", "$4,778.66", "477866"),
+            ]
+        );
+        let placed = canvas_card(
+            "00000000-0000-4000-8000-000000001001",
+            "00000000-0000-4000-8000-000000001004",
+            &totals,
+            shown,
+        );
+        let types: Value = serde_json::from_str(&placed.column_types).unwrap();
+        assert_eq!(
+            types["total_amount"],
+            json!({"type": "money", "currency": "USD", "minor_unit_exponent": 2})
+        );
+        assert_eq!(types["claims"], json!({"type": "integer"}));
+        // The queue: `expense_id` is text, so even a digit-only id is verbatim.
+        let queue = view("queue");
+        assert_eq!(queue.column_types["expense_id"], ColumnType::Text);
+        assert_eq!(queue.column_types["time"], ColumnType::Timestamp);
+        assert_eq!(queue.column_types["amount"], usd);
+        let result = released(
+            &queue,
+            &[
+                "expense_id",
+                "time",
+                "employee",
+                "vendor",
+                "category",
+                "amount",
+            ],
+            vec![
+                json!("100200300"),
+                json!("2026-10-01T09:00:00Z"),
+                json!("4242"),
+                json!("Acme"),
+                json!("travel"),
+                json!("123456"),
+            ],
+        );
+        let shown = card(&queue, Outcome::Released(&result, &receipt));
+        assert_eq!(
+            shown.rows[0]
+                .cells
+                .iter()
+                .map(|c| c.text.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "100200300",
+                "2026-10-01T09:00:00Z",
+                "4242",
+                "Acme",
+                "travel",
+                "$1,234.56"
+            ]
         );
     }
 

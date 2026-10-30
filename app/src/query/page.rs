@@ -11,10 +11,17 @@
 //! cells), `failed` or `denied`. Only `ready` and `empty` carry a receipt, and
 //! only `ready` carries a value; a failed or denied card is built from no
 //! result at all, so it can never show a number, a fabricated zero included
-//! (design §6.3, C06). Values are the engine's exact strings; only the
-//! columns the typed query makes integers are digit-grouped (review m11); no
-//! arithmetic happens here.
-use super::{receipt::QueryReceipt, worker::WorkerResult};
+//! (design §6.3, C06). Values are the engine's exact strings, formatted by
+//! their column's value type (APP-093 review M4): a money column's minor
+//! units as currency at its exponent, a decimal column's coefficient at its
+//! scale, an integer digit-grouped, text, dates and timestamps verbatim
+//! (review m11). The exact string stays in each cell's `raw` (the page's
+//! hover title) and the receipt's result digest covers it; the only
+//! transformation is placing digits, never arithmetic.
+use super::{
+    receipt::QueryReceipt,
+    worker::{ColumnType, WorkerResult},
+};
 use crate::storage::{WorkOutline, WorkView};
 use axum::{
     http::{header, StatusCode},
@@ -74,11 +81,17 @@ pub struct PairProps {
     pub id: String,
     pub label: String,
     pub value: String,
+    /// A result value's exact engine string (the hover title); empty for a
+    /// receipt row.
+    pub raw: String,
 }
 #[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct CellProps {
     pub id: String,
     pub text: String,
+    /// A result cell's exact engine string (the hover title); empty for a
+    /// column header.
+    pub raw: String,
 }
 #[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct RowProps {
@@ -158,15 +171,99 @@ pub fn display(value: &str) -> String {
     format!("{sign}{grouped}")
 }
 
-/// A cell's text: an integer column's exact value gains digit grouping; a
-/// text or timestamp column is shown verbatim, digits included (review m11).
-fn cell_text(value: &Value, integer: bool) -> String {
+/// An exact integer string split into its sign and ASCII digits; `None`
+/// for anything else (shown verbatim).
+fn exact_integer(value: &str) -> Option<(bool, &str)> {
+    let (negative, digits) = match value.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, value),
+    };
+    (!digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())).then_some((negative, digits))
+}
+
+/// `digits` with the decimal point `scale` places from the right, the
+/// integer part digit-grouped (`12345`, 2 → `123.45`; `5`, 2 → `0.05`).
+fn scaled(digits: &str, scale: u32) -> String {
+    let scale = scale as usize;
+    let padded = format!("{digits:0>width$}", width = scale + 1);
+    let (whole, fraction) = padded.split_at(padded.len() - scale);
+    let whole = display(whole.trim_start_matches('0'));
+    let whole = if whole.is_empty() {
+        "0".to_owned()
+    } else {
+        whole
+    };
+    if fraction.is_empty() {
+        whole
+    } else {
+        format!("{whole}.{fraction}")
+    }
+}
+
+/// The symbol a currency is shown with: `$`, `€`, `£`, or the ISO code and
+/// a space.
+fn currency_prefix(currency: &str) -> String {
+    match currency {
+        "USD" => "$".to_owned(),
+        "EUR" => "€".to_owned(),
+        "GBP" => "£".to_owned(),
+        other => format!("{other} "),
+    }
+}
+
+/// An exact engine value as its column type displays it (APP-093 review
+/// M4): money minor units as currency (`26262004`, USD, 2 → `$262,620.04`),
+/// a decimal coefficient at its scale, an integer digit-grouped; text
+/// (digits included), dates, timestamps and booleans verbatim. A value that
+/// is not an exact integer string is shown verbatim, never reinterpreted.
+pub fn format_value(value: &str, kind: &ColumnType) -> String {
+    let numeric = match kind {
+        ColumnType::Integer | ColumnType::Money { .. } | ColumnType::Decimal { .. } => {
+            exact_integer(value)
+        }
+        _ => None,
+    };
+    let Some((negative, digits)) = numeric else {
+        return value.to_owned();
+    };
+    let sign = if negative { "-" } else { "" };
+    match kind {
+        ColumnType::Money {
+            currency,
+            minor_unit_exponent,
+        } => format!(
+            "{sign}{}{}",
+            currency_prefix(currency),
+            scaled(digits, *minor_unit_exponent)
+        ),
+        ColumnType::Decimal { scale } => format!("{sign}{}", scaled(digits, *scale)),
+        _ => format!("{sign}{}", display(digits)),
+    }
+}
+
+/// A cell's text: formatted by its column's value type when the result
+/// carries one; otherwise an integer column's exact value gains digit
+/// grouping and a text or timestamp column is shown verbatim, digits
+/// included (review m11).
+fn cell_text(value: &Value, kind: Option<&ColumnType>, integer: bool) -> String {
     match value {
-        Value::String(text) if integer => display(text),
-        Value::String(text) => text.clone(),
+        Value::String(text) => match kind {
+            Some(kind) => format_value(text, kind),
+            None if integer => display(text),
+            None => text.clone(),
+        },
         Value::Bool(flag) => flag.to_string(),
         // An unknown cell is shown as unknown, never as zero.
         _ => "unknown".to_owned(),
+    }
+}
+
+/// A cell's exact engine string, for its hover title.
+fn raw_text(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        Value::Bool(flag) => flag.to_string(),
+        _ => String::new(),
     }
 }
 
@@ -175,6 +272,7 @@ fn pair(id: &str, label: &str, value: String) -> PairProps {
         id: id.to_owned(),
         label: label.to_owned(),
         value,
+        raw: String::new(),
     }
 }
 
@@ -331,6 +429,12 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
                         .get(column)
                         .is_some_and(|name| result.integer_columns.contains(name))
                 };
+                let kind = |column: usize| {
+                    result
+                        .columns
+                        .get(column)
+                        .and_then(|name| result.column_types.get(name))
+                };
                 if view.kind == "summary" && result.rows.len() == 1 {
                     card.has_summary = true;
                     card.summary = result
@@ -338,11 +442,12 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
                         .iter()
                         .zip(&result.rows[0])
                         .enumerate()
-                        .map(|(index, (column, value))| {
-                            pair(
+                        .map(|(index, (column, value))| PairProps {
+                            raw: raw_text(value),
+                            ..pair(
                                 &format!("m{index}"),
                                 column,
-                                cell_text(value, integer(index)),
+                                cell_text(value, kind(index), integer(index)),
                             )
                         })
                         .collect();
@@ -355,6 +460,7 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
                         .map(|(index, column)| CellProps {
                             id: format!("c{index}"),
                             text: column.clone(),
+                            raw: String::new(),
                         })
                         .collect();
                     card.rows = result
@@ -368,7 +474,8 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
                                 .enumerate()
                                 .map(|(column, value)| CellProps {
                                     id: format!("r{index}c{column}"),
-                                    text: cell_text(value, integer(column)),
+                                    text: cell_text(value, kind(column), integer(column)),
+                                    raw: raw_text(value),
                                 })
                                 .collect(),
                         })

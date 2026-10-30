@@ -635,6 +635,51 @@ async fn campaign() {
         &mut checks,
         "seed-library places all 13 library apps once (exact-match idempotent, no audit event), library_sources.build caches their revisions under the pinned digests, and library_catalog lists them with router metadata for the granted member only",
     );
+    // APP-093 review M3: more compositions than the recency cap (120 saved
+    // works pinning a newer publication of the authoring app) never hide a
+    // library app: library entries are selected by their sidecar digest
+    // apart from the capped listing, and the catalog keeps the seeded works.
+    const COMPOSED: &str = "00000000-0000-4000-8000-00000000c0de";
+    fixture.sql(&format!("INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope,publication_sequence) SELECT organization_id,app_id,'{COMPOSED}',definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,now()+interval '1 hour',canonical_envelope,publication_sequence+1000 FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{APP}' ORDER BY publication_sequence DESC LIMIT 1; INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) SELECT '{ORG}','{APP}',gen_random_uuid(),'{COMPOSED}',1,'APP-093 M3 composition '||g,'{PRINCIPAL}' FROM generate_series(1,120) g;"), "genui");
+    let saved: i64 = rows(
+        &fixture,
+        &format!("SELECT count(*)::text FROM genui.saved_work WHERE organization_id='{ORG}'"),
+    )
+    .await[0]
+        .parse()
+        .unwrap();
+    assert!(saved > 120 + 13, "{saved} saved works");
+    let crowded = stores.data.library_catalog(&member).await.unwrap();
+    assert_eq!(crowded.len(), 13);
+    for item in &crowded {
+        let (app, work) = ids(&item.library_id);
+        assert_eq!(
+            (item.app.as_str(), item.work.as_str()),
+            (app.as_str(), work.as_str()),
+            "the seeded work"
+        );
+    }
+    let workspace = stores.data.openable_works(&member).await.unwrap();
+    for entry in catalog["apps"].as_array().unwrap() {
+        let (app, work) = ids(entry["library_id"].as_str().unwrap());
+        assert!(
+            workspace.iter().any(|w| w.app == app && w.work == work),
+            "{} is listed",
+            entry["library_id"]
+        );
+    }
+    assert!(workspace.len() <= 100 + 13);
+    // Newest first: the listing opens with the latest compositions.
+    assert_eq!(workspace[0].app, APP);
+    assert_eq!(
+        stores.data.library_catalog(&reviewer).await.unwrap(),
+        Vec::new()
+    );
+    fixture.sql(&format!("DELETE FROM genui.saved_work WHERE organization_id='{ORG}' AND publication_id='{COMPOSED}'; DELETE FROM genui.publications WHERE organization_id='{ORG}' AND publication_id='{COMPOSED}';"), "genui");
+    check(
+        &mut checks,
+        "APP-093 M3: with 120 more saved works than the 100-work recency cap (all newer than the library), openable_works still lists all 13 seeded library works after the newest compositions and library_catalog still lists the 13 seeded works (selected by sidecar definition digest, never through the capped listing); an ungranted member still sees none",
+    );
     let (expense_app, expense_work) = ids("expense-review");
     let outline = stores
         .data
@@ -691,6 +736,33 @@ async fn campaign() {
     assert!(
         totals.integer_columns.contains("total_amount")
             && totals.integer_columns.contains("largest_claim")
+    );
+    // APP-093 review M4: the money columns carry their type, and the page
+    // shows sum(amount) = 26262004 minor units (the DuckDB oracle) as
+    // currency, the exact value kept as the hover title and in the receipt's
+    // result digest.
+    let usd = crate::query::worker::ColumnType::Money {
+        currency: "USD".into(),
+        minor_unit_exponent: 2,
+    };
+    assert_eq!(totals.column_types["total_amount"], usd);
+    assert_eq!(totals.column_types["largest_claim"], usd);
+    assert_eq!(
+        totals.column_types["claims"],
+        crate::query::worker::ColumnType::Integer
+    );
+    assert_eq!(totals.rows[0][1], json!("26262004"));
+    let totals_view = outline.views.iter().find(|v| v.id == "totals").unwrap();
+    assert_eq!(totals_view.column_types, totals.column_types);
+    let shown = crate::query::page::card(
+        totals_view,
+        crate::query::page::Outcome::Released(&totals, &totals_receipt),
+    );
+    assert_eq!(shown.summary[1].value, "$262,620.04");
+    assert_eq!(shown.summary[1].raw, "26262004");
+    check(
+        &mut checks,
+        "APP-093 M4: the expense library totals carry column_types (claims integer, total_amount and largest_claim money USD exponent 2) from the re-admitted input contract; the card shows sum(amount) 26262004 minor units as $262,620.04 with the exact value as its hover title",
     );
     library_receipts.insert("expense_totals".into(), totals_receipt.document.clone());
     let (queue, queue_receipt) = run_view(
@@ -1380,6 +1452,11 @@ async fn route_campaign(
     assert_eq!(total.headers[header::CACHE_CONTROL], "no-store");
     let (rows, total_receipt) = receipted(&total.body);
     assert_eq!(rows, json!([["1140000"]]));
+    // APP-093 review M4: the route carries each column's value type.
+    assert_eq!(
+        serde_json::from_str::<Value>(&total.body).unwrap()["column_types"],
+        json!({"total_bytes": {"type": "integer"}})
+    );
     for (key, value) in [
         ("organization_id", json!(ORG)),
         ("app_id", json!(APP)),
@@ -1996,6 +2073,145 @@ async fn route_campaign(
         &format!("foreign, revoked, pre-access and anonymous requests get the uniform 404 and invoke no engine: {denials} requests (anonymous, a pre-access session, a pre-access cookie presented as a session, a canary member replaying the Northstar ids, a member without work or source access, a revoked membership, and the member after her own source_read revocation) on the JSON route, the page and the run form; the dispatch counter did not move and the service log gained no query.dispatch line"),
     );
 
+    // --- APP-093 review m5: GET /v1/library at the route ---
+    // Without a live session (anonymous, pre-access, a pre-access cookie as a
+    // session, a revoked membership) the uniform 404; a live member of either
+    // organization gets 200 with only the library apps it may open now: none
+    // for the canary member (its organization holds no Northstar app) and the
+    // member without grants, exactly the one granted app for Maya.
+    for (label, browser) in [
+        ("anonymous", &mut anonymous),
+        ("pre-access", &mut pending),
+        ("pre-access cookie as a session", &mut swapped),
+        ("revoked membership", &mut revoked),
+    ] {
+        assert!(
+            browser.get(&routes, "/v1/library").await.uniform_404(),
+            "{label} library"
+        );
+        assert!(
+            browser
+                .post(&routes, "/v1/library", "{}")
+                .await
+                .uniform_404(),
+            "{label} library POST"
+        );
+    }
+    let library = |reply: &crate::auth::tests::Reply| -> Vec<(String, String, String)> {
+        assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+        assert_eq!(reply.headers[header::CONTENT_TYPE], "application/json");
+        assert_eq!(reply.headers[header::CACHE_CONTROL], "no-store");
+        let body: Value = serde_json::from_str(&reply.body).unwrap();
+        assert_eq!(
+            (body["schema_version"].clone(), body["synthetic"].clone()),
+            (json!(1), json!(true))
+        );
+        body["apps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| {
+                (
+                    a["library_id"].as_str().unwrap().to_owned(),
+                    a["app_id"].as_str().unwrap().to_owned(),
+                    a["work_id"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect()
+    };
+    for (label, browser) in [
+        ("canary member (foreign organization)", &mut canary),
+        ("member without library grants", &mut outsider),
+    ] {
+        assert_eq!(
+            library(&browser.get(&routes, "/v1/library").await),
+            Vec::new(),
+            "{label}"
+        );
+        assert!(
+            browser
+                .post(&routes, "/v1/library", "{}")
+                .await
+                .uniform_404(),
+            "{label} library POST"
+        );
+    }
+    assert_eq!(library(&maya.get(&routes, "/v1/library").await), Vec::new());
+    let sidecar: Value = serde_json::from_slice(
+        &std::fs::read(repository().join("contracts/fixtures/library/catalog.json")).unwrap(),
+    )
+    .unwrap();
+    let expense = sidecar["apps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["library_id"] == "expense-review")
+        .unwrap()
+        .clone();
+    let (expense_app, expense_work, expense_source) = (
+        expense["app_id"].as_str().unwrap(),
+        expense["work_id"].as_str().unwrap(),
+        expense["sources"][0]["source_id"].as_str().unwrap(),
+    );
+    let library_grants: [(&str, Vec<&str>); 4] = [
+        ("discover", vec!["--app", expense_app]),
+        ("run", vec!["--app", expense_app]),
+        (
+            "record_read",
+            vec!["--app", expense_app, "--work", expense_work],
+        ),
+        ("source_read", vec!["--source", expense_source]),
+    ];
+    for (permission, resource) in &library_grants {
+        grant(&c.fixture, &member, permission, resource);
+    }
+    assert_eq!(
+        library(&maya.get(&routes, "/v1/library").await),
+        [(
+            "expense-review".to_owned(),
+            expense_app.to_owned(),
+            expense_work.to_owned()
+        )]
+    );
+    // M4 at the route: the expense totals answer carries the money type.
+    let totals = maya
+        .post(
+            &routes,
+            &format!("/v1/work/{expense_app}/{expense_work}/queries/totals"),
+            &query_body(&json!({})),
+        )
+        .await;
+    assert_eq!(totals.status, StatusCode::OK, "{}", totals.body);
+    let (rows, _) = receipted(&totals.body);
+    assert_eq!(rows[0][1], json!("26262004"));
+    assert_eq!(
+        serde_json::from_str::<Value>(&totals.body).unwrap()["column_types"],
+        json!({"claims": {"type": "integer"},
+            "largest_claim": {"type": "money", "currency": "USD", "minor_unit_exponent": 2},
+            "total_amount": {"type": "money", "currency": "USD", "minor_unit_exponent": 2}})
+    );
+    // Without the work's record_read the app is not listed again.
+    crate::storage::definition_qualification::revoke(
+        &c.fixture,
+        &member,
+        "record_read",
+        &["--app", expense_app, "--work", expense_work],
+    );
+    assert_eq!(library(&maya.get(&routes, "/v1/library").await), Vec::new());
+    for (permission, resource) in &library_grants[..2] {
+        crate::storage::definition_qualification::revoke(&c.fixture, &member, permission, resource);
+    }
+    crate::storage::definition_qualification::revoke(
+        &c.fixture,
+        &member,
+        "source_read",
+        &["--source", expense_source],
+    );
+    check(
+        checks,
+        "APP-093 m5, GET /v1/library at the route: anonymous, pre-access, a pre-access cookie as a session and a revoked membership get the uniform 404 (POST is the fallback's 404); a live canary member and a member without grants get 200 with no app; Maya gets exactly expense-review (its seeded app and work) once granted discover, run, record_read and source_read (and its totals route answer carries column_types: claims integer, total_amount 26262004 and largest_claim money USD exponent 2), and nothing once record_read is revoked",
+    );
+
     // --- Revocation between execution and delivery denies the release ---
     let calls = counting.calls();
     let (computed, resume) = counting.pause_next();
@@ -2321,6 +2537,12 @@ async fn route_campaign(
             (down_app.clone(), "GET", "/workspace".to_owned(), Vec::new()),
             (
                 down_routes.clone(),
+                "GET",
+                "/v1/library".to_owned(),
+                Vec::new(),
+            ),
+            (
+                down_routes.clone(),
                 "POST",
                 format!("/v1/work/{APP}/{load_work}/queries/total"),
                 query_body(&window()).into_bytes(),
@@ -2356,6 +2578,7 @@ async fn route_campaign(
     let outage_ms = started.elapsed().as_millis();
     for (router, method, uri) in [
         (down_app.clone(), "GET", "/workspace".to_owned()),
+        (down_routes.clone(), "GET", "/v1/library".to_owned()),
         (
             down_routes.clone(),
             "POST",
@@ -2371,7 +2594,7 @@ async fn route_campaign(
     down.close().await.unwrap();
     check(
         checks,
-        &format!("store outage maps alike on GET /workspace and the APP-012 routes: with the workspace store unreachable, the member's live cookie and a forged cookie both get 503 unavailable (no-store) on GET /workspace, the JSON route, the page and its run form ({} requests in {outage_ms} ms, inside the 5 s handler deadline, so the answer is the storage mapping), without a cookie the uniform 404; the engine is never reached", outage.len()),
+        &format!("store outage maps alike on GET /workspace and the APP-012 routes: with the workspace store unreachable, the member's live cookie and a forged cookie both get 503 unavailable (no-store) on GET /workspace, GET /v1/library, the JSON route, the page and its run form ({} requests in {outage_ms} ms, inside the 5 s handler deadline, so the answer is the storage mapping), without a cookie the uniform 404; the engine is never reached", outage.len()),
     );
     let mut report = report;
     report["store_outage"] = json!({"requests": outage, "elapsed_ms": outage_ms, "dispatch_calls": down_counting.calls()});

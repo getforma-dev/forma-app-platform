@@ -157,6 +157,7 @@ fn exact(columns: &[&str], rows: Vec<Vec<Value>>) -> super::WorkerResult {
     super::WorkerResult {
         columns: columns.iter().map(|c| (*c).to_owned()).collect(),
         integer_columns: BTreeSet::new(),
+        column_types: Default::default(),
         result_digest: result_digest(&rows).unwrap(),
         rows,
         truncated_page: false,
@@ -447,6 +448,78 @@ fn integer_columns_follow_the_typed_query() {
     let bucketed = json!({"operations": [{"type": "time_bucket", "field": {"input_id": "x", "field_id": "time"}, "seconds": 86400, "timezone": "UTC", "output_field": "time"},
         {"type": "aggregate", "group_by": [{"input_id": "x", "field_id": "time"}], "measures": [{"id": "total", "operation": "sum", "field": {"input_id": "x", "field_id": "amount"}}]}]});
     assert_eq!(names(typed_integer_columns(&bucketed, &fields)), ["total"]);
+}
+
+/// APP-093 review M4: every result column's value type follows the typed
+/// query: a sum or extreme of money stays money in its currency and
+/// exponent, a decimal keeps its scale, a count is an integer, a bucket is a
+/// timestamp, text and enum are text; the query route returns them as
+/// `column_types`.
+#[test]
+fn column_types_follow_the_typed_query() {
+    use super::worker::{column_types_json, typed_column_types, ColumnType};
+    let fields = vec![
+        json!({"id": "time", "value_type": {"type": "timestamp"}, "nullable": false}),
+        json!({"id": "category", "value_type": {"type": "enum", "values": ["travel"]}, "nullable": false}),
+        json!({"id": "amount", "value_type": {"type": "money", "currency": "EUR", "minor_unit_exponent": 2}, "nullable": false}),
+        json!({"id": "rate", "value_type": {"type": "decimal", "unit": "percent", "scale": 4}, "nullable": false}),
+        json!({"id": "seats", "value_type": {"type": "integer", "unit": "each"}, "nullable": false}),
+        json!({"id": "due", "value_type": {"type": "date"}, "nullable": false}),
+        json!({"id": "paid", "value_type": {"type": "boolean"}, "nullable": false}),
+    ];
+    let query = json!({"operations": [
+        {"type": "time_bucket", "field": {"input_id": "x", "field_id": "time"}, "seconds": 86400, "timezone": "UTC", "output_field": "day"},
+        {"type": "aggregate", "group_by": [{"input_id": "x", "field_id": "day"}, {"input_id": "x", "field_id": "category"}], "measures": [
+            {"id": "claims", "operation": "count", "field": {"input_id": "x", "field_id": "amount"}},
+            {"id": "spend", "operation": "sum", "field": {"input_id": "x", "field_id": "amount"}},
+            {"id": "top_rate", "operation": "max", "field": {"input_id": "x", "field_id": "rate"}},
+            {"id": "rate_sum", "operation": "sum", "field": {"input_id": "x", "field_id": "rate"}},
+            {"id": "seats", "operation": "sum", "field": {"input_id": "x", "field_id": "seats"}},
+            {"id": "last_due", "operation": "max", "field": {"input_id": "x", "field_id": "due"}}]}]});
+    let types = typed_column_types(&query, &fields);
+    let eur = ColumnType::Money {
+        currency: "EUR".into(),
+        minor_unit_exponent: 2,
+    };
+    let expected: std::collections::BTreeMap<String, ColumnType> = [
+        ("day", ColumnType::Timestamp),
+        ("category", ColumnType::Text),
+        ("claims", ColumnType::Integer),
+        ("spend", eur),
+        ("top_rate", ColumnType::Decimal { scale: 4 }),
+        ("rate_sum", ColumnType::Decimal { scale: 4 }),
+        ("seats", ColumnType::Integer),
+        ("last_due", ColumnType::Date),
+    ]
+    .into_iter()
+    .map(|(name, kind)| (name.to_owned(), kind))
+    .collect();
+    assert_eq!(types, expected);
+    assert_eq!(
+        column_types_json(&types)["spend"],
+        json!({"type": "money", "currency": "EUR", "minor_unit_exponent": 2})
+    );
+    assert_eq!(
+        column_types_json(&types)["top_rate"],
+        json!({"type": "decimal", "scale": 4})
+    );
+    // A projection keeps only the named fields; a boolean stays verbatim.
+    let project = json!({"operations": [{"type": "project", "fields": [{"input_id": "x", "field_id": "paid"}, {"input_id": "x", "field_id": "amount"}]}]});
+    assert_eq!(
+        typed_column_types(&project, &fields)
+            .keys()
+            .collect::<Vec<_>>(),
+        ["amount", "paid"]
+    );
+    // An out-of-range exponent or a malformed currency types nothing.
+    for bad in [
+        json!({"type": "money", "currency": "usd", "minor_unit_exponent": 2}),
+        json!({"type": "money", "currency": "USD", "minor_unit_exponent": 40}),
+        json!({"type": "decimal", "scale": -1}),
+        json!({"type": "reference"}),
+    ] {
+        assert_eq!(ColumnType::from_value_type(&bad), None, "{bad}");
+    }
 }
 
 #[tokio::test]

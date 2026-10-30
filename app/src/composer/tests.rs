@@ -325,6 +325,45 @@ fn the_composers_own_codes_cover_prose_invented_inputs_and_unrunnable_views() {
     assert_eq!(refusal.code, "not_runnable");
 }
 
+/// APP-093 review m2 (probe P3): a data view over a `records` input is
+/// never listed by `outline` and `run_query` denies it, so the composer
+/// refuses it before anything is published, matching `outline`'s rule; the
+/// generation examples no longer teach it.
+#[test]
+fn a_view_over_a_records_input_is_not_runnable() {
+    let sources = sources(SPEND);
+    let fixture = bundle(SPEND)["definition"]["content"].clone();
+    let status = fixture["views"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|view| view["id"] == "status")
+        .unwrap()
+        .clone();
+    assert_eq!(status["query"]["inputs"], json!(["decisions"]));
+    assert!(!prompt::runnable_view(&fixture, &status));
+    // The example the model sees keeps the source views and the form only.
+    let content = runnable_content(SPEND);
+    let kept: Vec<&str> = content["views"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|view| view["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(kept, ["expenses", "queue", "decision"]);
+    assert!(!prompt::generation_system().contains("\"inputs\":[\"decisions\"]"));
+    assert!(plan::plan_generated(&content.to_string(), &sources, ORG, APP).is_ok());
+    // Probe P3: a generated definition whose first data view counts the
+    // `decisions` records input is admitted by admission (it is a typed
+    // query) but refused as not runnable before anything is published.
+    let mut hostile = content.clone();
+    hostile["views"][0]["query"] = json!({"operator_version": 1, "inputs": ["decisions"], "null_policy": "unknown",
+        "operations": [{"type": "project", "fields": [{"input_id": "decisions", "field_id": "status"}, {"input_id": "decisions", "field_id": "note"}]}]});
+    assert!(!prompt::runnable_view(&hostile, &hostile["views"][0]));
+    let refusal = plan::plan_generated(&hostile.to_string(), &sources, ORG, APP).unwrap_err();
+    assert_eq!(refusal.code, "not_runnable");
+}
+
 #[test]
 fn a_model_failure_ends_generation_and_an_absent_key_disables_it() {
     let script = Script::new(vec![Err(ModelError::Timeout)]);

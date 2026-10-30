@@ -72,6 +72,8 @@ COLUMN_TYPES = ("text", "enum", "boolean", "integer", "money", "decimal", "date"
 # Measures that need a numeric field; count/min/max take any column type.
 NUMERIC = ("integer", "money", "decimal")
 LOCAL_ID = re.compile(r"[a-z][a-z0-9_]{0,63}")
+# The contract's integer-literal grammar: ASCII digits with an optional minus (APP-093 review m4).
+INTEGER_LITERAL = re.compile(r"-?[0-9]+")
 MAX_FIELDS = 32
 POLICY = {"threads": 2, "memory_limit": "1GiB", "max_temp_directory_size": "2GiB", "enable_external_access": False,
           "autoinstall_known_extensions": False, "autoload_known_extensions": False, "allow_unsigned_extensions": False,
@@ -112,6 +114,13 @@ def parse_fields(fields):
     return typed
 
 
+def integer_literal(text):
+    """An integer literal string as an int, or the fixed refusal: ASCII digits only, so a
+    non-digit (ValueError from int()) or a Unicode digit ("١٢٣") never reaches int()."""
+    require(isinstance(text, str) and INTEGER_LITERAL.fullmatch(text) is not None, "literal_not_qualified")
+    return int(text)
+
+
 def literal_parameter(value, value_type):
     """A filter literal as a bound parameter plus its SQL cast, or a refusal; the type must be the column's."""
     require(isinstance(value, dict) and value.get("type") == value_type["type"], "literal type is not in the qualified query subset")
@@ -138,15 +147,15 @@ def literal_parameter(value, value_type):
         return value["value"], "::DATE"
     if kind == "integer":
         require(value.get("unit") == value_type.get("unit") and isinstance(value.get("value"), str), "literal_not_qualified")
-        parameter = int(value["value"])
+        parameter = integer_literal(value["value"])
     elif kind == "money":
         require(value.get("currency") == value_type.get("currency") == "USD" and value.get("minor_unit_exponent") == value_type.get("minor_unit_exponent") == 2
                 and isinstance(value.get("minor_units"), str), "literal_not_qualified")
-        parameter = int(value["minor_units"])
+        parameter = integer_literal(value["minor_units"])
     elif kind == "decimal":
         require(value.get("unit") == value_type.get("unit") and value.get("scale") == value_type.get("scale")
                 and isinstance(value.get("coefficient"), str), "literal_not_qualified")
-        parameter = int(value["coefficient"])
+        parameter = integer_literal(value["coefficient"])
     else:
         raise Refused("literal type is not in the qualified query subset")
     if not -(2**63) <= parameter < 2**63:

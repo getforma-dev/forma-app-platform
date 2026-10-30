@@ -223,7 +223,11 @@ fn require_runnable(content: &Value) -> Result<(), Refusal> {
     let runnable = content
         .get("views")
         .and_then(Value::as_array)
-        .is_none_or(|views| views.iter().all(super::prompt::runnable_view));
+        .is_none_or(|views| {
+            views
+                .iter()
+                .all(|view| super::prompt::runnable_view(content, view))
+        });
     if runnable {
         Ok(())
     } else {
