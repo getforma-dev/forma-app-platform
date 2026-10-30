@@ -71,7 +71,8 @@ app/src/query/**
 !app/src/query/mod.rs
 !app/src/query/receipt.rs
 !app/src/query/worker.rs
-# query/tests.rs and storage/query_qualification.rs are cfg(test) only.
+# query/tests.rs, storage/query_qualification.rs and storage/race_qualification.rs
+# (APP-014) are cfg(test) only; the qualification context lists them.
 !app/src/admission/
 app/src/admission/**
 !app/src/admission/mod.rs

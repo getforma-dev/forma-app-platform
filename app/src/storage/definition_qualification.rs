@@ -99,7 +99,12 @@ pub(super) fn grant(
 ) -> Value {
     permission_command(fixture, "grant-permission", principal, permission, resource)
 }
-fn revoke(fixture: &Fixture, principal: &str, permission: &str, resource: &[&str]) -> Value {
+pub(super) fn revoke(
+    fixture: &Fixture,
+    principal: &str,
+    permission: &str,
+    resource: &[&str],
+) -> Value {
     permission_command(
         fixture,
         "revoke-permission",
