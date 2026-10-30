@@ -13,9 +13,12 @@ application or signup path, and never generic SQL:
   admission ...    passed unchanged to admission_operator.main: whatever closed
                    subcommands that module defines (APP-073 and later), after
                    the same pre-connect environment checks; inside a managed
-                   (ECS) task `reconcile`, `issue` (except `issue
-                   --code-digest` without a provider invitation) and
-                   `register-source-revision` (except `--record-json`) refuse
+                   (ECS) task `issue` (except `issue --code-digest`, alone or
+                   with `--provider-input-from-secret`, never with a provider
+                   flag in argv) and `register-source-revision` (except
+                   `--record-json`) refuse; `reconcile` and `revoke` run there
+                   with the injected management configuration (ADR-003
+                   amendment 2026-10-30, managed invitations)
   upload-sources   the closed fixture-source table below: original bytes
                    normalized through the reviewed APP-004/005 adapter path of
                    fixtures/qualify.py (parser-host and its WASM guest, then
@@ -91,25 +94,26 @@ HOSTNAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
 PINNED_CA = "/etc/ssl/certs/rds-global-bundle.pem"
 # Fargate always sets these in a task's containers (review M3).
 MANAGED_TASK_VARIABLES = ("ECS_CONTAINER_METADATA_URI_V4", "ECS_CONTAINER_METADATA_URI")
-# admission subcommands never run in a managed task: `issue` prints the raw
-# code to standard output, which there is the awslogs group; `reconcile` (like
-# a provider invitation) needs the management key, which the task never holds
-# (`revoke` there removes the code's capability from the secret the task
-# definition names, ADR-003 amendment 2026-10-30);
-# `register-source-revision` reads a local record file that a command-only
-# override cannot deliver (APP-012).
-MANAGED_REFUSED = ("issue", "reconcile", "register-source-revision")
-# APP-078's managed channel admits exactly two forms of those subcommands:
-# `issue --code-digest` without a provider invitation (the operator minted the
-# code locally; the task sees and prints only its digest) and
-# `register-source-revision --record-json` (the non-secret record inline).
-# ADR-003 amendment 2026-10-30 reconciliation: the digest-only form never writes
-# the provider capability secret because it never creates a provider
-# invitation (admission_operator refuses the two together), so a managed task
-# needs no management key and prints only identifiers; `--capability-secret-id`
-# beside it is an unused identifier. A code that can obtain a signup handoff
-# (ADR-006 invitation-first) needs `issue --provider-email`, which still runs
-# only where the management key is (never a task); that path writes the secret.
+# admission subcommands that never run in a managed task as given: raw `issue`
+# prints the raw code to standard output, which there is the awslogs group, and
+# `issue --provider-email` carries the invitee's address in argv (the override,
+# CloudTrail and the log); `register-source-revision --record` reads a local
+# record file that a command-only override cannot deliver (APP-012).
+MANAGED_REFUSED = ("issue", "register-source-revision")
+# APP-078's managed channel admits exactly these forms of those subcommands:
+# `issue --code-digest` (the operator minted the code locally; the task sees and
+# prints only its digest), alone or with `--provider-input-from-secret`
+# (ADR-003 amendment 2026-10-30, managed invitations: the invitation's address,
+# role, issuer and tenant come from the injected OperatorInvitationInput
+# secret's entry for that digest, and the management key from the injected
+# ProviderManagementKey secret, so neither appears in argv), and
+# `register-source-revision --record-json` (the non-secret record inline). A
+# provider flag beside the digest is refused: the address never travels in
+# argv. `reconcile` and `revoke` run in a managed task because the management
+# configuration reaches them through the injected secret, never argv
+# (provider_management.ENV_MANAGEMENT_JSON); without it they refuse or skip
+# the provider phase exactly as on a host without provider settings.
+PROVIDER_FLAGS = ("provider_email", "provider_role", "provider_issuer", "provider_tenant")
 
 
 def managed_form_refused(parsed):
@@ -117,8 +121,7 @@ def managed_form_refused(parsed):
     if parsed is None or parsed.command not in MANAGED_REFUSED:
         return False
     if parsed.command == "issue":
-        return parsed.code_digest is None or any(
-            getattr(parsed, name) is not None for name in ("provider_email", "provider_role", "provider_issuer", "provider_tenant"))
+        return parsed.code_digest is None or any(getattr(parsed, name) is not None for name in PROVIDER_FLAGS)
     if parsed.command == "register-source-revision":
         return parsed.record is not None or parsed.record_json is None
     return True

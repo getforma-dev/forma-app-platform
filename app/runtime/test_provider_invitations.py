@@ -125,6 +125,36 @@ class ConfigTests(unittest.TestCase):
                 op.parser().parse_args(command)
             self.assertEqual(str(refusal.exception), "usage")
 
+    def test_injected_management_configuration_is_the_managed_tasks_only_source(self):
+        """ADR-003 amendment 2026-10-30 (managed invitations): the ProviderManagementKey secret, injected whole."""
+        managed = json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "https://auth.example.test", "management_key": KEY})
+        base = {pm.ENV_CAPABILITY_SECRET: ARN}
+        config = pm.load_config(dict(base, **{pm.ENV_MANAGEMENT_JSON: managed}), required=True)
+        self.assertEqual((config.scheme, config.host, config.port), ("https", "auth.example.test", 443))
+        self.assertEqual(config.authorization(), "Bearer " + KEY)
+        self.assertNotIn(KEY, repr(config))
+        # `{}` is "not configured": optional callers get None, required ones the usual missing reason.
+        self.assertIsNone(pm.load_config(dict(base, **{pm.ENV_MANAGEMENT_JSON: "{}"}), required=False))
+        self.refused(dict(base, **{pm.ENV_MANAGEMENT_JSON: "{}"}), "provider_configuration_missing")
+        # The plain variables are never merged with or preferred over the injected secret.
+        for beside in ({pm.ENV_URL: "https://auth.example.test"}, {pm.ENV_KEY_FILE: str(self.key_file)}, {pm.ENV_KEY: KEY}):
+            self.refused(dict(base, **{pm.ENV_MANAGEMENT_JSON: managed}, **beside), "provider_configuration_conflict", required=False)
+        for bad, reason in (("[]", "provider_configuration_refused"), ("{", "provider_configuration_refused"), ("x" * 5000, "provider_configuration_refused"),
+                            (json.dumps({"url": "https://auth.example.test", "management_key": KEY}), "provider_configuration_refused"),
+                            (json.dumps({"format": "other", "url": "https://auth.example.test", "management_key": KEY}), "provider_configuration_refused"),
+                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "https://auth.example.test", "management_key": KEY, "x": 1}), "provider_configuration_refused"),
+                            ('{"format":"%s","format":"%s","url":"https://a.test","management_key":"%s"}' % (pm.MANAGEMENT_FORMAT, pm.MANAGEMENT_FORMAT, KEY),
+                             "provider_configuration_refused"),
+                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "https://auth.example.test", "management_key": "plat_" + KEY[5:]}), "provider_key_refused"),
+                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "https://auth.example.test", "management_key": KEY + " x"}), "provider_key_refused"),
+                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "http://auth.example.test", "management_key": KEY}), "provider_url_refused"),
+                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": "", "management_key": KEY}), "provider_url_refused"),
+                            (json.dumps({"format": pm.MANAGEMENT_FORMAT, "url": 7, "management_key": KEY}), "provider_url_refused")):
+            with self.subTest(bad=bad[:30]):
+                self.refused(dict(base, **{pm.ENV_MANAGEMENT_JSON: bad}), reason, required=False)
+        # The injected configuration still needs the capability secret's identifier.
+        self.refused({pm.ENV_MANAGEMENT_JSON: managed}, "provider_configuration_incomplete")
+
     def test_capability_secret_is_a_full_arn_and_the_host_directory_is_retired(self):
         """ADR-003 amendment 2026-10-30 (APP-074 review M1): the secret replaces the operator-host directory."""
         for bad in ("genui-provider-capabilities", "arn:aws:s3:::bucket", ARN + "\n", ARN.replace("us-east-1", "US-EAST-1"),
@@ -546,6 +576,156 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertNotIn(token, json.dumps(listed))
         # The stored capability is the one the provider accepts for this address (hosted registration stand-in).
         self.assertIsNotNone(self.fake.register(token, email))
+
+    def managed_env(self, invitations=None, management=None):
+        """The managed operator task's environment: the two injected secrets, no plain provider variable."""
+        env = {k: v for k, v in self.provider_env().items() if k not in (pm.ENV_URL, pm.ENV_KEY_FILE, pm.ENV_KEY)}
+        env[pm.ENV_MANAGEMENT_JSON] = management if management is not None else json.dumps(
+            {"format": pm.MANAGEMENT_FORMAT, "url": self.fake.url, "management_key": KEY})
+        if invitations is not None:
+            env[op.INVITATION_INPUT_ENV] = invitations if isinstance(invitations, str) else json.dumps(
+                {"format": op.INVITATION_INPUT_FORMAT, "invitations": invitations})
+        return env
+
+    def managed_issue(self, digest, env):
+        return self.raw_cli("issue", "--organization", ORG, "--issued-by", "app078-operator", "--grant", "source_read:" + self.source,
+                            "--code-digest", digest, "--provider-input-from-secret", env=env)
+
+    def test_managed_invitation_takes_the_address_from_the_input_secret_and_prints_identifiers_only(self):
+        """ADR-003 amendment 2026-10-30 (managed invitations; APP-076 G2): the managed form of `issue`."""
+        self.ensure_backfill()
+        raw = os.urandom(32)
+        code, digest = op.encode_code(raw), op.code_digest(raw)
+        email = "Managed-%s@Example.test" % uuid.uuid4().hex[:6]
+        entry = {"organization_id": ORG, "code_digest": digest, "email": email, "role": "user", "issuer": ISSUER, "tenant": TENANT}
+        creates = self.fake.count("POST", "/manage/invites")
+        p = self.managed_issue(digest, self.managed_env([entry]))
+        self.assertEqual((p.returncode, p.stderr), (0, ""), p.stderr[-300:])
+        out = json.loads(p.stdout)
+        self.assertEqual(set(out), {"code_id", "code_digest", "kind", "max_redemptions", "expires_at", "provider_invitation"})
+        self.assertEqual(out["code_digest"], digest)
+        invitation = out["provider_invitation"]
+        self.assertEqual((invitation["operation"], invitation["state"], invitation["capability_stored"], invitation["detail"]),
+                         ("create", "confirmed", True, "created"))
+        # Exactly one server-only create, for the input's address; the output and the database never carry it.
+        self.assertEqual(self.fake.count("POST", "/manage/invites"), creates + 1)
+        self.assertEqual(self.fake.create_bodies[-1], {"email": email.lower(), "role": "user", "delivery_mode": "server_only"})
+        dump = self.dump()
+        for text in (email, email.lower(), KEY, code):
+            self.assertNotIn(text, p.stdout + p.stderr)
+            self.assertNotIn(text, dump)
+        rows = self.query("""SELECT issuer,provider_tenant_id,remote_invitation_id,intended_email_digest,provider_role,delivery_mode,operation,state
+                             FROM genui.provider_invitations WHERE organization_id=%s AND code_id=%s""", (ORG, out["code_id"]))
+        self.assertEqual(rows, [(ISSUER, TENANT, invitation["remote_invitation_id"], op.email_digest(email), "user", "server_only", "create", "confirmed")])
+        # The capability names the pre-minted digest, so the service's invitation entry finds it for the minted code.
+        record = json.loads(self.capability(invitation["invitation_id"]).read_text())
+        self.assertEqual(record["code_digest"], digest)
+        self.assertRegex(record["invite_token"], pm.TOKEN)
+        self.assertNotIn(record["invite_token"], p.stdout + p.stderr + dump)
+        self.assertEqual(self.query("SELECT organization_id::text FROM genui_private.code_index WHERE code_digest=%s", (digest,)), [(ORG,)])
+        self.assertIsNotNone(self.fake.register(record["invite_token"], email))
+        # A reused digest refuses whole: no second code, no second create.
+        before = self.dump()
+        again = self.managed_issue(digest, self.managed_env([entry]))
+        self.assertEqual(again.returncode, 1)
+        self.assertEqual((self.dump(), self.fake.count("POST", "/manage/invites")), (before, creates + 1))
+
+    def test_managed_invitation_refuses_a_missing_mismatched_or_malformed_entry_before_any_write(self):
+        self.ensure_backfill()
+        digest, other = op.code_digest(os.urandom(32)), op.code_digest(os.urandom(32))
+        email = "unused-%s@example.test" % uuid.uuid4().hex[:6]
+        entry = {"organization_id": ORG, "code_digest": digest, "email": email, "role": "user", "issuer": ISSUER, "tenant": TENANT}
+        before, creates, secret_before = self.dump(), self.fake.count("POST", "/manage/invites"), self.secret.value()
+        cases = [(self.managed_env(), "invitation_input_missing"),                                   # no input injected
+                 (self.managed_env("{}"), "invitation_input_missing"),                               # the emptied document
+                 (self.managed_env([dict(entry, code_digest=other)]), "invitation_input_missing"),   # another code's entry
+                 (self.managed_env([dict(entry, organization_id="00000000-0000-4000-8000-0000000000a2")]), "invitation_input_missing"),
+                 (self.managed_env("[not json"), "invitation_input_malformed"),
+                 (self.managed_env([dict(entry, role="admin")]), "provider_role_refused"),
+                 (self.managed_env([entry], management="{}"), "provider_configuration_missing"),     # the key not yet written (A12)
+                 (dict(self.managed_env([entry]), **{pm.ENV_URL: self.fake.url}), "provider_configuration_conflict"),
+                 ({k: v for k, v in self.managed_env([entry]).items() if k != pm.ENV_CAPABILITY_SECRET}, "provider_configuration_incomplete")]
+        for env, reason in cases:
+            with self.subTest(reason=reason):
+                p = self.managed_issue(digest, env)
+                self.assertEqual((p.returncode, p.stdout), (1, ""))
+                self.assertEqual(json.loads(p.stderr), {"refused": reason})
+                self.assertNotIn(email, p.stderr)
+        # The address in argv beside the digest is refused however it is combined.
+        for extra in (["--provider-email", email], ["--provider-email", email, "--provider-role", "user", "--provider-issuer", ISSUER, "--provider-tenant", TENANT]):
+            p = self.raw_cli("issue", "--organization", ORG, "--issued-by", "x", "--grant", "source_read:" + self.source, "--code-digest", digest,
+                             "--provider-input-from-secret", *extra, env=self.managed_env([entry]))
+            self.assertEqual((p.returncode, json.loads(p.stderr)), (1, {"refused": "invitation_input_with_flags_refused"}))
+        self.assertEqual((self.dump(), self.fake.count("POST", "/manage/invites"), self.secret.value()), (before, creates, secret_before))
+
+    def test_reconcile_and_revoke_run_with_the_injected_management_configuration(self):
+        """The managed task's reconcile and revoke need only the injected secrets (no plain provider variable)."""
+        out = self.invite("managedrevoke-%s@example.test" % uuid.uuid4().hex[:6])
+        created = out["provider_invitation"]
+        result = self.run_cli("reconcile", "--organization", ORG, env=self.managed_env())
+        self.assertEqual((result["provider_phase"], result["capability_phase"], result["capability_store"]), ("completed", "completed", "secrets_manager"))
+        revoked = self.run_cli("revoke", "--organization", ORG, "--code-id", out["code_id"], env=self.managed_env())
+        self.assertEqual((revoked["changed"], revoked["provider_phase"], revoked["capability_phase"], revoked["capabilities_destroyed"]),
+                         (True, "completed", "completed", 1))
+        self.assertEqual([r["state"] for r in revoked["provider_revocations"]], ["confirmed"])
+        self.assertEqual(self.fake.status_of(created["remote_invitation_id"]), "revoked")
+        self.assertFalse(self.capability(created["invitation_id"]).exists())
+        # With the key not yet written, reconcile refuses and revoke still ends the capability locally.
+        refused = self.run_cli("reconcile", "--organization", ORG, env=self.managed_env(management="{}"), expect=1)
+        self.assertEqual(json.loads(refused.stderr), {"refused": "provider_configuration_missing"})
+        other = self.invite("managedlocal-%s@example.test" % uuid.uuid4().hex[:6])
+        revoked = self.run_cli("revoke", "--organization", ORG, "--code-id", other["code_id"], env=self.managed_env(management="{}"))
+        self.assertEqual((revoked["changed"], revoked["provider_phase"], revoked["capability_phase"], revoked["capabilities_destroyed"]),
+                         (True, "not_configured", "completed", 1))
+
+    def test_bind_provider_tenant_from_the_auth_configuration_secret_puts_no_identifier_on_argv(self):
+        """B1 review m5: the pair comes from the AuthConfiguration secret the operator role reads."""
+        self.ensure_backfill()
+        saved = self.secret.value()
+        document = {"format": runtime.AUTH_CONFIGURATION_FORMAT,
+                    "auth_config": {"schema_version": 1, "auth_origin": "https://auth-synthetic.invalid", "app_origin": "https://beta.getforma.dev",
+                                    "issuer": "secret-iss", "audience": "secret-aud", "max_access_lifetime_seconds": 900,
+                                    "organizations": [{"organization_id": ORG, "tenant_slug": "legacy", "client_id": "legacy-platform"}]},
+                    "identity_registry": {"schema_version": 1, "registry_version": str(uuid.uuid4()),
+                                          "bindings": [{"issuer": "secret-iss", "provider_tenant_id": "ten_from_secret", "organization_id": ORG}]}}
+        env = dict(local_secrets.environment(self.secret.endpoint), **{pm.ENV_AUTH_CONFIGURATION_SECRET: ARN})
+        env.pop(pm.ENV_CAPABILITY_SECRET, None)
+        rows = lambda: self.query("SELECT issuer,provider_tenant_id,active FROM genui.provider_tenant_bindings WHERE organization_id=%s AND issuer='secret-iss'", (ORG,))
+        try:
+            self.secret.set_value(json.dumps(document))
+            p = self.raw_cli("bind-provider-tenant", "--organization", ORG, "--from-auth-configuration", env=env)
+            self.assertEqual((p.returncode, p.stderr), (0, ""), p.stderr[-300:])
+            self.assertEqual(json.loads(p.stdout), {"organization_id": ORG, "binding": "created", "active_bindings": 2, "audit_event": None,
+                                                    "source": "auth_configuration"})
+            self.assertEqual(rows(), [("secret-iss", "ten_from_secret", True)])
+            for identifier in ("secret-iss", "ten_from_secret", "legacy-platform"):
+                self.assertNotIn(identifier, p.stdout)
+            again = self.run_cli("bind-provider-tenant", "--organization", ORG, "--from-auth-configuration", env=env)
+            self.assertEqual((again["binding"], again["source"]), ("existing", "auth_configuration"))
+            # The ARN may come as an argument instead of the environment.
+            self.assertEqual(self.run_cli("bind-provider-tenant", "--organization", ORG, "--from-auth-configuration", "--auth-configuration-secret-id", ARN,
+                                          env={k: v for k, v in env.items() if k != pm.ENV_AUTH_CONFIGURATION_SECRET})["binding"], "existing")
+            # Refusals before any write: an organization the secret does not route, no ARN, a malformed ARN.
+            unrouted = self.run_cli("bind-provider-tenant", "--organization", "00000000-0000-4000-8000-0000000000a2", "--from-auth-configuration", env=env, expect=1)
+            self.assertEqual(json.loads(unrouted.stderr), {"refused": "organization_not_routed"})
+            missing = self.run_cli("bind-provider-tenant", "--organization", ORG, "--from-auth-configuration",
+                                   env={k: v for k, v in env.items() if k != pm.ENV_AUTH_CONFIGURATION_SECRET}, expect=1)
+            self.assertEqual(json.loads(missing.stderr), {"refused": "auth_configuration_secret_missing"})
+            malformed = self.run_cli("bind-provider-tenant", "--organization", ORG, "--from-auth-configuration", "--auth-configuration-secret-id", "not-an-arn",
+                                     env=env, expect=1)
+            self.assertEqual(json.loads(malformed.stderr), {"refused": "auth_configuration_secret_refused"})
+            # The secret still `{}` (5.9 not yet written): nothing to bind; a value the supervisor refuses: malformed.
+            self.secret.set_value("{}")
+            unconfigured = self.run_cli("bind-provider-tenant", "--organization", ORG, "--from-auth-configuration", env=env, expect=1)
+            self.assertEqual(json.loads(unconfigured.stderr), {"refused": "auth_configuration_unconfigured"})
+            self.secret.set_value(json.dumps(dict(document, format="other")))
+            bad = self.run_cli("bind-provider-tenant", "--organization", ORG, "--from-auth-configuration", env=env, expect=1)
+            self.assertEqual(json.loads(bad.stderr), {"refused": "auth_configuration_malformed"})
+            self.assertEqual(rows(), [("secret-iss", "ten_from_secret", True)])
+        finally:
+            self.secret.set_value(saved)
+            with self.connect("postgres", autocommit=True) as c:
+                c.execute("DELETE FROM genui.provider_tenant_bindings WHERE organization_id=%s AND issuer='secret-iss'", (ORG,))
 
     def test_issue_refuses_before_any_write_without_a_verified_provider_tenant(self):
         self.ensure_backfill()

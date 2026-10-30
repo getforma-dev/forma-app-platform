@@ -1031,6 +1031,19 @@ class AuthConfigurationInjectionTests(unittest.TestCase):
             json.dumps(auth_document(auth_config__auth_origin='https://auth-synthetic.invalid/')),
             json.dumps(auth_document(auth_config__auth_origin='https://Auth-Synthetic.invalid')),
             json.dumps(auth_document(auth_config__auth_origin='https://user@auth-synthetic.invalid')),
+            # B1 review m1: hosts the service's url crate refuses (a space, percent-encoding), and ids outside
+            # storage::valid_id (version nibble 1, variant nibble c), must refuse here too.
+            json.dumps(auth_document(auth_config__auth_origin='https://exa mple.com')),
+            json.dumps(auth_document(auth_config__auth_origin='https://ex%41mple.com')),
+            json.dumps(auth_document(auth_config__auth_origin='https://ex{ample.com')),
+            json.dumps(auth_document(auth_config__auth_origin='https://-example.com')),
+            json.dumps(auth_document(auth_config__auth_origin='https://auth-synthetic.invalid:99999')),
+            json.dumps(auth_document(identity_registry__registry_version='00000000-0000-1000-8000-0000000000b1')),
+            json.dumps(auth_document(identity_registry__registry_version='00000000-0000-4000-c000-0000000000b1')),
+            json.dumps(auth_document(auth_config__organizations=[dict(good['auth_config']['organizations'][0], organization_id='00000000-0000-1000-8000-000000000001'), good['auth_config']['organizations'][1]],
+                                     identity_registry__bindings=[dict(good['identity_registry']['bindings'][0], organization_id='00000000-0000-1000-8000-000000000001'), good['identity_registry']['bindings'][1]])),
+            # B1 review m2: two bindings for one routed organization (Registry::tenant_for would be ambiguous).
+            json.dumps(auth_document(identity_registry__bindings=good['identity_registry']['bindings'] + [dict(good['identity_registry']['bindings'][0], provider_tenant_id='ten_00000000-0000-4000-8000-00000000a003')])),
             json.dumps(auth_document(auth_config__app_origin='https://beta.getforma.dev/auth')),
             json.dumps(auth_document(auth_config__issuer='')),
             json.dumps(auth_document(auth_config__issuer='with space')),

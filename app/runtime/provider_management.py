@@ -29,8 +29,13 @@ crates/server/src/handlers/management.rs blob bc12859a):
   (:1802-1832). Repeating a revoke is therefore safe; repeating a create is not.
 
 The management key is read from the environment or a private file, never argv.
-Nothing here prints or logs the key, an `invite_token` or an address; callers
-receive fixed reason codes.
+In the managed operator task (ADR-003 amendment 2026-10-30, managed invitations)
+it arrives instead as one injected ECS secret, GENUI_PROVIDER_MANAGEMENT_JSON,
+whose value is `{}` (not configured) or exactly
+`{"format": "forma:fauth-management-configuration:v1", "url": ..., "management_key": ...}`
+written by FormaStack, the key's owner, under approval A12; the plain variables
+never appear beside it. Nothing here prints or logs the key, an `invite_token`
+or an address; callers receive fixed reason codes.
 
 Capability custody (ADR-003 amendment 2026-10-30, APP-074 review M1; it
 supersedes the operator-host 0600 directory): a token is written only into the
@@ -79,6 +84,12 @@ ENV_CAPABILITY_SECRET = "GENUI_PROVIDER_CAPABILITY_SECRET_ID"
 # so a stale setup never believes it keeps capabilities on the host.
 ENV_RETIRED_CAPABILITY_DIR = "GENUI_PROVIDER_CAPABILITY_DIR"
 ENV_NAMES = (ENV_URL, ENV_KEY, ENV_KEY_FILE)
+# ADR-003 amendment 2026-10-30 (managed invitations): the ProviderManagementKey secret, injected
+# whole into the managed operator task only. `{}` is "not configured"; otherwise exactly these keys.
+ENV_MANAGEMENT_JSON = "GENUI_PROVIDER_MANAGEMENT_JSON"
+MANAGEMENT_FORMAT = "forma:fauth-management-configuration:v1"
+MANAGEMENT_KEYS = frozenset({"format", "url", "management_key"})
+MANAGEMENT_BYTES_MAX = 4096
 # The capability secret: a full Secrets Manager ARN (its region is the client's region).
 SECRET_ARN = re.compile(r"arn:aws:secretsmanager:([a-z]{2}(?:-[a-z]+)+-[0-9]):[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]{1,512}")
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
@@ -161,11 +172,45 @@ def load_store(environ, secret_id=None, required=False):
     return CapabilitySecret(value)
 
 
+def _unique_object(pairs):
+    keys = [key for key, _ in pairs]
+    require(len(keys) == len(set(keys)), "provider_configuration_refused")
+    return dict(pairs)
+
+
+def management_configuration(text):
+    """The injected ProviderManagementKey secret, validated whole: `{}` (not configured) gives None;
+    otherwise exactly {format, url, management_key}, the key of the shape fAuth issues. The value
+    never appears in a refusal."""
+    require(isinstance(text, str) and len(text.encode("utf-8")) <= MANAGEMENT_BYTES_MAX, "provider_configuration_refused")
+    try:
+        value = json.loads(text, object_pairs_hook=_unique_object)
+    except ValueError:
+        raise Refused("provider_configuration_refused") from None
+    require(isinstance(value, dict), "provider_configuration_refused")
+    if not value:
+        return None
+    require(set(value) == MANAGEMENT_KEYS and value["format"] == MANAGEMENT_FORMAT, "provider_configuration_refused")
+    require(isinstance(value["url"], str) and 1 <= len(value["url"]) <= 512, "provider_url_refused")
+    require(isinstance(value["management_key"], str) and KEY.fullmatch(value["management_key"]) is not None, "provider_key_refused")
+    return {"url": value["url"], "management_key": value["management_key"]}
+
+
 def load_config(environ, required, secret_id=None):
     """None when no provider variable is set and none is required; otherwise all of them, validated,
     with the capability secret (a provider configuration without one is incomplete)."""
     require(ENV_RETIRED_CAPABILITY_DIR not in environ, "provider_capability_directory_retired")
     present = {name: environ.get(name) for name in ENV_NAMES if environ.get(name) is not None}
+    injected = environ.get(ENV_MANAGEMENT_JSON)
+    if injected is not None:
+        # The managed operator task: the injected secret is the only source of the URL and the
+        # key, and the plain variables are refused beside it (never merged, never preferred).
+        require(not present, "provider_configuration_conflict")
+        managed = management_configuration(injected)
+        if managed is None:
+            require(not required, "provider_configuration_missing")
+            return None
+        present = {ENV_URL: managed["url"], ENV_KEY: managed["management_key"]}
     if not present:
         require(not required, "provider_configuration_missing")
         return None
@@ -455,34 +500,62 @@ def serialize_capabilities(capabilities):
     return text
 
 
-class CapabilitySecret:
+def secrets_client(region):
+    import boto3
+    from botocore.config import Config as SdkConfig
+    return boto3.session.Session(region_name=region).client("secretsmanager", config=SdkConfig(
+        connect_timeout=SECRET_CLIENT["connect_timeout"], read_timeout=SECRET_CLIENT["read_timeout"],
+        retries={"total_max_attempts": SECRET_CLIENT["total_max_attempts"], "mode": "standard"}))
+
+
+# B1 review m5: the operator reads the environment's AuthConfiguration secret (its ARN, an identifier,
+# from this variable or `--auth-configuration-secret-id`) so `bind-provider-tenant` binds exactly the
+# (issuer, tenant) the service's registry names, with no identifier on argv.
+ENV_AUTH_CONFIGURATION_SECRET = "GENUI_AUTH_CONFIGURATION_SECRET_ID"
+
+
+class ManagedSecret:
+    """One Secrets Manager secret read whole (AWSCURRENT) with the caller's own AWS credentials; the
+    value is returned to the caller and never appears in a refusal."""
+
+    def __init__(self, secret_id, client=None):
+        match = SECRET_ARN.fullmatch(secret_id) if isinstance(secret_id, str) else None
+        require(match is not None, "secret_id_refused")
+        self.secret_id, self.region, self._client = secret_id, match.group(1), client
+
+    def __repr__(self):
+        return "%s(%s)" % (type(self).__name__, self.secret_id)
+
+    __str__ = __repr__
+
+    def client(self):
+        if self._client is None:
+            self._client = secrets_client(self.region)
+        return self._client
+
+    def read_text(self):
+        try:
+            text = self.client().get_secret_value(SecretId=self.secret_id).get("SecretString")
+        except Exception:
+            raise Refused("secret_unavailable") from None
+        require(isinstance(text, str), "secret_unavailable")
+        return text
+
+
+class CapabilitySecret(ManagedSecret):
     """The environment's capability secret, read and written with the caller's own AWS credentials
     (the operator's; the service only receives it through ECS injection)."""
 
     def __init__(self, secret_id, client=None):
         match = SECRET_ARN.fullmatch(secret_id) if isinstance(secret_id, str) else None
         require(match is not None, "capability_secret_refused")
-        self.secret_id, self.region, self._client = secret_id, match.group(1), client
-
-    def __repr__(self):
-        return "CapabilitySecret(%s)" % self.secret_id
-
-    __str__ = __repr__
-
-    def client(self):
-        if self._client is None:
-            import boto3
-            from botocore.config import Config as SdkConfig
-            self._client = boto3.session.Session(region_name=self.region).client("secretsmanager", config=SdkConfig(
-                connect_timeout=SECRET_CLIENT["connect_timeout"], read_timeout=SECRET_CLIENT["read_timeout"],
-                retries={"total_max_attempts": SECRET_CLIENT["total_max_attempts"], "mode": "standard"}))
-        return self._client
+        super().__init__(secret_id, client)
 
     def read(self):
         """The current map (AWSCURRENT)."""
         try:
-            text = self.client().get_secret_value(SecretId=self.secret_id).get("SecretString")
-        except Exception:
+            text = self.read_text()
+        except Refused:
             raise Refused("capability_secret_unavailable") from None
         return parse_capabilities(text)
 

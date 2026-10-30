@@ -59,6 +59,43 @@ create (see judge_creates). Provider settings come only from the environment
 never argv); the secret's ARN from GENUI_PROVIDER_CAPABILITY_SECRET_ID or
 `--capability-secret-id`.
 
+Managed invitations (ADR-003 amendment 2026-10-30, "managed invitations"; APP-076
+gap G2): on RDS, reachable only from tasks, a redeemable code is issued by
+`issue --code-digest <d> --provider-input-from-secret` in the managed operator
+task. The task receives two injected ECS secrets: GENUI_PROVIDER_MANAGEMENT_JSON
+(the fAuth management URL and key, written by FormaStack under approval A12;
+provider_management.management_configuration) and
+GENUI_OPERATOR_INVITATION_INPUT_JSON (a small document the operator host writes
+immediately before the task and overwrites with `{}` right after:
+`{"format": ..., "invitations": [{organization_id, code_digest, email, role,
+issuer, tenant}]}`, composed by infra/scripts/window_requests.py
+invitation-input). The command takes the one entry whose organization and code
+digest equal its arguments (refusing a missing or ambiguous entry before any
+connection) and then runs exactly the invitation path above: `pending` in the
+code's transaction, one server-only create after COMMIT, confirmed/failed/
+unknown, the invite_token only into the capability secret. The intended address
+lives only in the input secret and at the provider: never in an override,
+argv, CloudTrail, the log or this command's output, which prints identifiers,
+states and the digest only. `issue --provider-email` (the address in argv) stays
+refused in a managed task; `reconcile` and `revoke` run there with the same
+injected management configuration.
+
+Spend Review in Northstar (APP-076 gap G3, ADR-010 act 6): `seed-spend-review`
+seeds the Spend Review fixture bundle (contracts/fixtures/impl-2026-10-28.1/
+spend-review.json, the exact bytes and digests the operator seed places in the
+second fixture organization) into the named fixture organization through
+tenant_seed.seed itself, under organization scope and the organization FOR
+SHARE, in one transaction: the app shell, the seeded definition revision with its
+inputs and record schemas, the publication, the saved work, its collection and
+bindings, the expenses source revision and the seeded EXP-002 outcome, labeled
+"seeded definition" as the seed labels every fixture definition (ADR-010 §1,
+demo R3). Exact-match idempotent (`changed: false` on a repeat; any differing
+row refuses whole). No audit event: D7.8's operator kinds name none (APP-084
+item 6), as for `create-bound-work`; the retained output is the record. The
+definition is not re-admitted through the service's whole-output admission
+path (APP-010, Rust): that path is not reproducible from Python byte for byte,
+so the seeded rows are used, exactly as the seed itself placed them.
+
 Provider tenant bindings (APP-078 B1): `bind-provider-tenant` binds an existing
 organization (the two seeded ones) to its real provider tenant for an issuer, the
 row the callback's registry/database agreement needs (ADR-006; the seed binds only
@@ -128,6 +165,17 @@ LABEL = re.compile(r"[a-z0-9][a-z0-9._@-]{0,63}")
 PROVIDER_ROLES = ("user",)
 APP_PERMISSIONS = ("discover", "run", "edit_definition")
 WORK_PERMISSIONS = ("record_read", "record_write", "share_work", "export")
+# ADR-003 amendment 2026-10-30 (managed invitations): the OperatorInvitationInput secret, injected
+# whole into the managed operator task only. `{}` is the empty document the operator host writes
+# back right after the task; otherwise exactly this shape, every entry closed.
+INVITATION_INPUT_ENV = "GENUI_OPERATOR_INVITATION_INPUT_JSON"
+INVITATION_INPUT_FORMAT = "forma:operator-invitation-input:v1"
+INVITATION_INPUT_BYTES_MAX = 65536
+INVITATION_INPUT_ENTRIES_MAX = 64
+INVITATION_KEYS = frozenset({"organization_id", "code_digest", "email", "role", "issuer", "tenant"})
+# The fixture organization the Spend Review seed may target (tenant_seed.ORGANIZATIONS) and the
+# retained fixture edition the seed reads (ADR-009 D9.3; tenant_seed.make_bundles).
+SEED_EDITION = "impl-2026-10-28.1"
 
 
 # A refusal whose message is a fixed reason code, never a value (shared with provider_management).
@@ -244,10 +292,15 @@ def parser():
     q = sub.add_parser("provision")
     for arg in ("--organization", "--display-name", "--issuer", "--provider-tenant"):
         q.add_argument(arg, required=True)
-    # APP-078 B1: an existing organization's binding to its real provider tenant.
+    # APP-078 B1: an existing organization's binding to its real provider tenant. B1 review m5: in the
+    # managed task the pair comes from the injected AuthConfiguration secret (`--from-auth-configuration`,
+    # the secret's ARN from GENUI_AUTH_CONFIGURATION_SECRET_ID or `--auth-configuration-secret-id`), so no
+    # identifier is on argv and the registry and the database agree by construction.
     q = sub.add_parser("bind-provider-tenant")
-    for arg in ("--organization", "--issuer", "--provider-tenant"):
-        q.add_argument(arg, required=True)
+    q.add_argument("--organization", required=True)
+    for arg in ("--issuer", "--provider-tenant", "--auth-configuration-secret-id"):
+        q.add_argument(arg)
+    q.add_argument("--from-auth-configuration", action="store_true")
     q = sub.add_parser("issue")
     q.add_argument("--organization", required=True)
     q.add_argument("--issued-by", required=True)
@@ -263,6 +316,10 @@ def parser():
     # default GENUI_PROVIDER_CAPABILITY_SECRET_ID.
     for arg in ("--provider-email", "--provider-role", "--provider-issuer", "--provider-tenant", "--capability-secret-id"):
         q.add_argument(arg)
+    # ADR-003 amendment 2026-10-30 (managed invitations): the invitation's address, role,
+    # issuer and tenant come from the injected input secret's entry for this digest, so none
+    # of them appears in argv, the override, CloudTrail or the log.
+    q.add_argument("--provider-input-from-secret", action="store_true")
     for name in ("revoke", "extend"):
         q = sub.add_parser(name)
         q.add_argument("--organization", required=True)
@@ -303,6 +360,8 @@ def parser():
     q = sub.add_parser("create-bound-work")
     for arg in ("--organization", "--app", "--from-work", "--work", "--creator", "--input", "--source", "--revision"):
         q.add_argument(arg, required=True)
+    # APP-076 G3: the Spend Review fixture bundle seeded into a fixture organization (Northstar).
+    sub.add_parser("seed-spend-review").add_argument("--organization", required=True)
     return p
 
 
@@ -325,11 +384,14 @@ def validate(args):
         require(1 <= len(args.issuer) <= 512 and args.issuer.isascii() and args.issuer.isprintable(), "malformed_issuer")
         require(1 <= len(args.provider_tenant) <= 256 and args.provider_tenant.isascii() and args.provider_tenant.isprintable(), "malformed_provider_tenant")
     if args.command == "bind-provider-tenant":
-        # The registry's own bounds (storage/registry.rs `label`): a binding the closed
-        # registry could not name is useless. The issuer is the token's `iss` claim, the
-        # value the service compares (not necessarily the provider's origin URL).
-        require(_graphic(args.issuer, 256), "malformed_issuer")
-        require(_graphic(args.provider_tenant, 128), "malformed_provider_tenant")
+        given = (args.issuer is not None, args.provider_tenant is not None)
+        if args.from_auth_configuration:
+            require(given == (False, False), "binding_source_refused")
+            if args.auth_configuration_secret_id is not None:
+                require(provider.SECRET_ARN.fullmatch(args.auth_configuration_secret_id) is not None, "auth_configuration_secret_refused")
+        else:
+            require(given == (True, True) and args.auth_configuration_secret_id is None, "binding_source_refused")
+            check_binding(args)
     if args.command == "issue":
         require(LABEL.fullmatch(args.issued_by) is not None, "malformed_issued_by")
         require(args.kind in ("trial", "member_invite"), "kind_refused")
@@ -338,20 +400,21 @@ def validate(args):
         require(args.grant, "grant_required")
         args.templates = sorted({parse_grant(g) for g in args.grant}, key=str)
         invitation = (args.provider_email, args.provider_role, args.provider_issuer, args.provider_tenant)
+        if args.provider_input_from_secret:
+            # The managed form: the digest names the entry; every invitation field comes from it.
+            require(args.code_digest is not None, "invitation_input_requires_code_digest")
+            require(all(v is None for v in invitation), "invitation_input_with_flags_refused")
         # ADR-003/APP-073: an invitation needs the intended email, an explicit
         # least-privilege provider role and the exact provider tenant; an
         # omitted role is refused, never defaulted.
         require(all(v is None for v in invitation) or all(v is not None for v in invitation), "invitation_incomplete")
         if args.code_digest is not None:
-            # A pre-minted code is never combined with a provider invitation:
-            # that path keeps its own capability handling (APP-073).
             require(DIGEST.fullmatch(args.code_digest) is not None, "malformed_code_digest")
+            # A pre-minted code takes its provider invitation only from the injected input
+            # secret (managed invitations): the address never travels in argv beside the digest.
             require(args.provider_email is None, "code_digest_with_invitation_refused")
         if args.provider_email is not None:
-            email = args.provider_email.strip()
-            require(3 <= len(email) <= 320 and email.count("@") == 1 and email.isascii() and email.isprintable(), "malformed_email")
-            require(args.provider_role in PROVIDER_ROLES, "provider_role_refused")
-            require(1 <= len(args.provider_issuer) <= 512 and 1 <= len(args.provider_tenant) <= 256, "malformed_provider_tenant")
+            check_invitation(args)
     if args.command == "extend":
         require(1 <= args.expires_days <= DEFAULTS["code_expiry_days_max"], "expiry_out_of_range")
     if args.command in ("issue-handle", "rotate-handle", "retire-handle"):
@@ -369,6 +432,96 @@ def validate(args):
     if args.command == "create-bound-work":
         require(LOCAL_ID.fullmatch(args.input) is not None, "malformed_input")
         require(args.work != args.from_work, "work_exists")
+    return args
+
+
+def check_binding(args):
+    """The registry's own bounds (storage/registry.rs `label`): a binding the closed registry could not
+    name is useless. The issuer is the token's `iss` claim, the value the service compares (not
+    necessarily the provider's origin URL)."""
+    require(_graphic(args.issuer, 256), "malformed_issuer")
+    require(_graphic(args.provider_tenant, 128), "malformed_provider_tenant")
+
+
+def bind_from_auth_configuration(args, environ):
+    """B1 review m5: take this organization's one (issuer, provider tenant) pair from the environment's
+    AuthConfiguration secret, validated whole with the supervisor's reader (which, since review m2,
+    admits exactly one binding per routed organization), before any database connection."""
+    secret_id = args.auth_configuration_secret_id if args.auth_configuration_secret_id is not None else environ.get(provider.ENV_AUTH_CONFIGURATION_SECRET)
+    require(secret_id is not None, "auth_configuration_secret_missing")
+    try:
+        text = provider.ManagedSecret(secret_id).read_text()
+    except provider.Refused as refusal:
+        raise Refused("auth_configuration_secret_refused" if str(refusal) == "secret_id_refused" else "auth_configuration_unavailable") from None
+    try:
+        files = runtime.auth_configuration(text)
+    except (runtime.Refused, ValueError, TypeError):
+        raise Refused("auth_configuration_malformed") from None
+    require(files is not None, "auth_configuration_unconfigured")
+    bindings = [b for b in json.loads(files[runtime.IDENTITY_REGISTRY_FILE_NAME])["bindings"] if b["organization_id"] == args.organization]
+    require(len(bindings) == 1, "organization_not_routed")
+    args.issuer, args.provider_tenant = bindings[0]["issuer"], bindings[0]["provider_tenant_id"]
+    check_binding(args)
+    return args
+
+
+def check_invitation(args):
+    """The invitation fields of `issue`, whatever channel delivered them (argv or the input secret)."""
+    email = args.provider_email.strip() if isinstance(args.provider_email, str) else ""
+    require(3 <= len(email) <= 320 and email.count("@") == 1 and email.isascii() and email.isprintable(), "malformed_email")
+    require(args.provider_role in PROVIDER_ROLES, "provider_role_refused")
+    require(isinstance(args.provider_issuer, str) and isinstance(args.provider_tenant, str)
+            and 1 <= len(args.provider_issuer) <= 512 and 1 <= len(args.provider_tenant) <= 256, "malformed_provider_tenant")
+
+
+def _unique_object(pairs):
+    keys = [key for key, _ in pairs]
+    require(len(keys) == len(set(keys)), "invitation_input_malformed")
+    return dict(pairs)
+
+
+def invitation_input(text):
+    """The injected OperatorInvitationInput secret, validated whole before any connection: `{}` gives
+    [] (nothing to issue); otherwise the closed entries, each organization and digest named once.
+    A refusal names a fixed reason and never a value (the address is in the value)."""
+    require(isinstance(text, str) and len(text.encode("utf-8")) <= INVITATION_INPUT_BYTES_MAX, "invitation_input_malformed")
+    try:
+        value = json.loads(text, object_pairs_hook=_unique_object)
+    except ValueError:
+        raise Refused("invitation_input_malformed") from None
+    require(isinstance(value, dict), "invitation_input_malformed")
+    if not value:
+        return []
+    require(set(value) == {"format", "invitations"} and value["format"] == INVITATION_INPUT_FORMAT
+            and isinstance(value["invitations"], list) and len(value["invitations"]) <= INVITATION_INPUT_ENTRIES_MAX,
+            "invitation_input_malformed")
+    entries, seen = [], set()
+    for item in value["invitations"]:
+        require(isinstance(item, dict) and set(item) == INVITATION_KEYS, "invitation_input_malformed")
+        require(all(isinstance(item[key], str) for key in INVITATION_KEYS), "invitation_input_malformed")
+        identifier(item["organization_id"])
+        require(DIGEST.fullmatch(item["code_digest"]) is not None, "malformed_code_digest")
+        probe = argparse.Namespace(provider_email=item["email"], provider_role=item["role"], provider_issuer=item["issuer"],
+                                   provider_tenant=item["tenant"])
+        check_invitation(probe)
+        key = (item["organization_id"], item["code_digest"])
+        require(key not in seen, "invitation_input_malformed")
+        seen.add(key)
+        entries.append(dict(item))
+    return entries
+
+
+def bind_invitation_input(args, environ):
+    """`issue --provider-input-from-secret`: take this digest's one entry from the injected secret and
+    bind its fields as if given, so `issue` runs its existing invitation path unchanged."""
+    text = environ.get(INVITATION_INPUT_ENV)
+    require(text is not None, "invitation_input_missing")
+    matches = [e for e in invitation_input(text) if e["organization_id"] == args.organization and e["code_digest"] == args.code_digest]
+    require(len(matches) == 1, "invitation_input_missing")
+    entry = matches[0]
+    args.provider_email, args.provider_role = entry["email"], entry["role"]
+    args.provider_issuer, args.provider_tenant = entry["issuer"], entry["tenant"]
+    check_invitation(args)
     return args
 
 
@@ -538,6 +691,7 @@ def bind_provider_tenant(c, args):
     lock_organization(c, org, active=True)
     row = lock_binding(c, org, args.issuer, args.provider_tenant)
     if row is None:
+        require(not bound_elsewhere(c, org, args.issuer, args.provider_tenant), "provider_tenant_bound_elsewhere")
         c.execute("INSERT INTO genui.provider_tenant_bindings(organization_id,issuer,provider_tenant_id,active) VALUES (%s,%s,%s,true)",
                   (org, args.issuer, args.provider_tenant))
         state = "created"
@@ -546,7 +700,29 @@ def bind_provider_tenant(c, args):
         state = "existing"
     active = c.execute("SELECT count(*) FROM genui.provider_tenant_bindings WHERE organization_id=%s AND active", (org,)).fetchone()[0]
     c.commit()
-    return {"organization_id": org, "binding": state, "active_bindings": active, "audit_event": None}
+    return {"organization_id": org, "binding": state, "active_bindings": active, "audit_event": None,
+            "source": "auth_configuration" if args.from_auth_configuration else "arguments"}
+
+
+def bound_elsewhere(c, org, issuer, tenant):
+    """B1 review m6: is this (issuer, tenant) already active for another organization?
+
+    FORCE RLS scopes every `genui` read to one organization, so the other organizations are visited
+    under their own scope in turn; the candidates are the organizations that can route a sign-in
+    (genui_private.handle_index, which has no RLS and is readable by the owner) plus every
+    organization with a code. A binding elsewhere is only ever useful to an organization that can
+    sign in, so this is the set the check must cover; the scope is restored afterwards."""
+    others = {r[0] for r in c.execute("""SELECT organization_id::text FROM genui_private.handle_index
+          UNION SELECT organization_id::text FROM genui_private.code_index""").fetchall()} - {org}
+    found = False
+    for other in sorted(others):
+        c.execute("SELECT set_config('genui.organization_id',%s,true)", (other,))
+        if c.execute("""SELECT 1 FROM genui.provider_tenant_bindings WHERE organization_id=%s AND issuer=%s AND provider_tenant_id=%s AND active""",
+                     (other, issuer, tenant)).fetchone() is not None:
+            found = True
+            break
+    c.execute("SELECT set_config('genui.organization_id',%s,true)", (org,))
+    return found
 
 
 def backfill(c, args):
@@ -674,12 +850,25 @@ def list_codes(c, args):
           FROM genui.provider_invitations WHERE organization_id=%s ORDER BY created_at,operation,invitation_id""", (org,)).fetchall():
         invitations.setdefault(code, []).append({"invitation_id": invitation, "operation": operation, "state": state,
                                                  "remote_invitation_id": remote})
+    # APP-076 G5: who redeemed each code, by identifier, so `revoke-entitlement` and
+    # `revoke-membership` can name the redeemer; with the member's and entitlement's
+    # current status (never a provider subject, address or token).
+    redemptions = {}
+    for code, redemption, principal, entitlement, committed, member_status, entitlement_status in c.execute("""SELECT d.code_id::text,
+          d.redemption_id::text,d.principal_id::text,d.entitlement_id::text,d.committed_at,m.status,e.status
+          FROM genui.code_redemptions d JOIN genui.memberships m ON m.organization_id=d.organization_id AND m.principal_id=d.principal_id
+          JOIN genui.entitlements e ON e.organization_id=d.organization_id AND e.principal_id=d.principal_id AND e.entitlement_id=d.entitlement_id
+          WHERE d.organization_id=%s ORDER BY d.committed_at,d.redemption_id""", (org,)).fetchall():
+        redemptions.setdefault(code, []).append({"redemption_id": redemption, "principal_id": principal, "entitlement_id": entitlement,
+                                                 "redeemed_at": timestamp(committed), "membership_status": member_status,
+                                                 "entitlement_status": entitlement_status})
     c.commit()
     codes = [{"code_id": r[0], "kind": r[1], "status": r[2], "max_redemptions": r[3], "redeemed_count": r[4],
               "live_pending_admissions": r[5], "lapsed_pending_admissions": r[10], "denied_for_reconciliation": r[11],
               "live_reservations": r[6], "issued_at": timestamp(r[7]),
               "expires_at": timestamp(r[8]), "revoked_at": timestamp(r[9]) if r[9] else None,
-              "provider_invitations": invitations.get(r[0], [])} for r in rows[:DEFAULTS["list_rows_max"]]]
+              "provider_invitations": invitations.get(r[0], []), "redemptions": redemptions.get(r[0], [])}
+             for r in rows[:DEFAULTS["list_rows_max"]]]
     return {"organization_id": org, "codes": codes, "truncated": len(rows) > DEFAULTS["list_rows_max"]}
 
 
@@ -1033,6 +1222,50 @@ def create_bound_work(c, args):
                       (org, app, work, publication, input_id, contract, collections[(schema, version)], schema, version))
     c.commit()
     return dict(result, changed=True)
+
+
+def seed_spend_review(c, args):
+    """APP-076 G3: the Spend Review fixture bundle in a fixture organization (Northstar), through the
+    operator seed itself.
+
+    tenant_seed.make_bundle rewrites the retained edition's bundle onto the organization exactly
+    as the seed does for the second fixture organization, and tenant_seed.seed writes the same rows
+    with the same `ON CONFLICT DO NOTHING` then equality check, so a repeat is `changed: false` and a
+    differing row refuses whole. Lock order: the organization FOR SHARE first (D7.1), then the
+    seed's own writes under scope. D7.7: the organization's commit sequence (if backfilled) must
+    stay ahead of every seeded record revision, else nothing is kept. No audit event (D7.8 names
+    no kind; APP-084 item 6): this JSON output is the record.
+    """
+    import tenant_seed
+    org = args.organization
+    require(org in tenant_seed.ORGANIZATIONS, "organization_refused")
+    try:
+        bundle = tenant_seed.make_bundle("spend-review", org)
+    except Exception:
+        raise Refused("seed_bundle_refused") from None
+    begin(c, org)
+    lock_organization(c, org, active=True)
+    # tenant_seed.seed proves the migration identity itself and takes the owner role for its writes.
+    c.execute("RESET ROLE")
+    changes = []
+    try:
+        tenant_seed.seed(c, [bundle], changes)
+    except ValueError:
+        raise Refused("seed_refused") from None
+    c.execute("SET LOCAL ROLE genui_owner")
+    c.execute("SELECT set_config('genui.organization_id',%s,true)", (org,))
+    sequence = c.execute("SELECT next_commit_sequence FROM genui.organization_sequences WHERE organization_id=%s", (org,)).fetchone()
+    highest = c.execute("SELECT coalesce(max(commit_sequence),0) FROM genui.internal_record_revisions WHERE organization_id=%s", (org,)).fetchone()[0]
+    require(sequence is None or sequence[0] > highest, "commit_sequence_mismatch")
+    d, pub, w, outcome = bundle["definition"], bundle["publication"], bundle["work"], bundle["outcome"]
+    c.commit()
+    return {"organization_id": org, "label": "seeded definition", "edition": SEED_EDITION, "app_id": d["app_id"],
+            "definition_revision_id": d["revision_id"], "definition_digest": d["digest"], "publication_id": pub["publication_id"],
+            "work_id": w["work_id"], "collection_ids": [item["id"] for item in w["record_collections"]],
+            "sources": [{"source_id": s["source_id"], "revision_id": s["revision_id"]} for s in bundle["sources"]],
+            "seeded_record": {"record_id": outcome["record_id"], "version": outcome["record_version"]},
+            "author_principal_id": bundle["context"]["principal_id"], "approver_principal_id": pub["approver_id"],
+            "changed": bool(changes), "rows_inserted": len(changes), "audit_event": None}
 
 
 def verify(c, args):
@@ -1702,7 +1935,8 @@ COMMANDS = {"provision": provision, "bind-provider-tenant": bind_provider_tenant
             "reconcile": reconcile, "grant-permission": grant_permission, "revoke-permission": revoke_permission,
             "create-app": create_app, "revoke-creator-authority": revoke_creator_authority,
             "issue-handle": issue_handle, "rotate-handle": rotate_handle, "retire-handle": retire_handle,
-            "register-source-revision": register_source_revision, "create-bound-work": create_bound_work}
+            "register-source-revision": register_source_revision, "create-bound-work": create_bound_work,
+            "seed-spend-review": seed_spend_review}
 
 
 def provider_configuration(args):
@@ -1729,6 +1963,12 @@ def capability_store(args):
 def main(argv=None):
     try:
         args = validate(parser().parse_args(argv))
+        if getattr(args, "provider_input_from_secret", False):
+            # Managed invitations: the entry is bound before the provider configuration is
+            # loaded, so a missing or mismatched entry refuses before any connection or call.
+            bind_invitation_input(args, os.environ)
+        if getattr(args, "from_auth_configuration", False):
+            bind_from_auth_configuration(args, os.environ)
         args.provider_config = provider_configuration(args)
         args.capability_store = capability_store(args)
         if args.command == "defaults":

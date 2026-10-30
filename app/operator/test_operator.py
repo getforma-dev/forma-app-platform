@@ -156,13 +156,19 @@ class PackageTests(unittest.TestCase):
         digest = "sha256:" + "0" * 63 + "1"
         base = ["issue", "--organization", NORTHSTAR, "--issued-by", "ops", "--grant", "source_read:" + NORTHSTAR]
         cases = [(base + ["--code-digest", digest], False), (base, True),
+                 # ADR-003 amendment 2026-10-30 (managed invitations): the input-secret form is admitted;
+                 # any provider flag in argv (the address) is refused.
+                 (base + ["--code-digest", digest, "--provider-input-from-secret"], False),
+                 (base + ["--provider-input-from-secret"], True),
+                 (base + ["--code-digest", digest, "--provider-input-from-secret", "--provider-email", "a@b.test"], True),
                  (base + ["--code-digest", digest, "--provider-email", "a@b.test"], True),
                  (base + ["--code-digest", digest, "--provider-tenant", "t"], True),
                  (["register-source-revision", "--organization", NORTHSTAR, "--record-json", "{}"], False),
                  (["register-source-revision", "--organization", NORTHSTAR, "--record", "/run/operator/r.json"], True),
                  (["register-source-revision", "--organization", NORTHSTAR, "--record", "x", "--record-json", "{}"], True),
                  (["register-source-revision", "--organization", NORTHSTAR], True),
-                 (["reconcile", "--organization", NORTHSTAR], True), (["list", "--organization", NORTHSTAR], False)]
+                 (["reconcile", "--organization", NORTHSTAR], False), (["revoke", "--organization", NORTHSTAR, "--code-id", NORTHSTAR], False),
+                 (["seed-spend-review", "--organization", NORTHSTAR], False), (["list", "--organization", NORTHSTAR], False)]
         for argv, refused in cases:
             with self.subTest(argv=argv):
                 self.assertEqual(op.managed_form_refused(admission_operator.parser().parse_args(argv)), refused)
@@ -175,17 +181,42 @@ class PackageTests(unittest.TestCase):
         completed = cli("admission", *base, env_extra=env)
         self.assertEqual(refusal(completed), "refused_in_managed_task")
 
-    def test_issue_and_reconcile_refuse_in_a_managed_task(self):
-        # Review M3: a Fargate task's stdout is the awslogs group; the raw code must never reach it.
+    def test_raw_issue_refuses_in_a_managed_task_and_reconcile_needs_the_injected_configuration(self):
+        # Review M3: a Fargate task's stdout is the awslogs group; the raw code must never reach it, and
+        # the invitee's address never travels in argv (ADR-003 amendment 2026-10-30, managed invitations).
         org = NORTHSTAR
+        digest = "sha256:" + "0" * 63 + "1"
+        task = {"PGHOST": "db.example.test", "PGUSER": "genui_migration", "PGSSLROOTCERT": str(SCRIPT)}
         for variable in ("ECS_CONTAINER_METADATA_URI_V4", "ECS_CONTAINER_METADATA_URI"):
             for argv in (["admission", "issue", "--organization", org, "--issued-by", "ops", "--grant", "x"],
                          ["admission", "issue", "--organization", org, "--issued-by", "ops", "--grant", "x", "--provider-email", "a@b.test"],
-                         ["admission", "reconcile", "--organization", org]):
+                         ["admission", "issue", "--organization", org, "--issued-by", "ops", "--grant", "x", "--code-digest", digest,
+                          "--provider-input-from-secret", "--provider-email", "a@b.test"]):
                 with self.subTest(variable=variable, argv=argv[:3]):
-                    completed = cli(*argv, env_extra={variable: "http://169.254.170.2/v4/x", "PGHOST": "db.example.test",
-                                                      "PGUSER": "genui_migration", "PGSSLROOTCERT": str(SCRIPT)})
+                    completed = cli(*argv, env_extra=dict(task, **{variable: "http://169.254.170.2/v4/x"}))
                     self.assertEqual((completed.returncode, completed.stdout, refusal(completed)), (1, "", "refused_in_managed_task"))
+                    self.assertNotIn("a@b.test", completed.stderr)
+        # `reconcile` passes the guard; without the injected management configuration (or with it still `{}`,
+        # before FormaStack's A12 write) it refuses on configuration, before any connection; a plain provider
+        # variable beside the injected secret is a conflict.
+        for extra, code in (({}, "provider_configuration_missing"), ({"GENUI_PROVIDER_MANAGEMENT_JSON": "{}"}, "provider_configuration_missing"),
+                            ({"GENUI_PROVIDER_MANAGEMENT_JSON": "{}", "GENUI_PROVIDER_URL": "https://auth.example.test"}, "provider_configuration_conflict")):
+            with self.subTest(code=code):
+                # Inside a managed task the guard admits the form (the checkout lacks the image's pinned CA, so
+                # the managed host check answers next); outside it the configuration refusal is exact.
+                completed = cli("admission", "reconcile", "--organization", org, env_extra=dict(task, ECS_CONTAINER_METADATA_URI_V4="x", **extra))
+                self.assertEqual((completed.returncode, completed.stdout), (1, ""))
+                self.assertNotEqual(refusal(completed), "refused_in_managed_task")
+                completed = cli("admission", "reconcile", "--organization", org, env_extra=dict(task, **extra))
+                self.assertEqual((completed.returncode, completed.stdout, refusal(completed)), (1, "", code))
+        # The managed input form passes the guard too (then meets the environment checks).
+        completed = cli("admission", "issue", "--organization", org, "--issued-by", "ops", "--grant", "x", "--code-digest", digest,
+                        "--provider-input-from-secret", env_extra=dict(task, ECS_CONTAINER_METADATA_URI_V4="x"))
+        self.assertNotEqual(refusal(completed), "refused_in_managed_task")
+        # Outside a managed task, without the injected input, the form refuses on the input before any connection.
+        completed = cli("admission", "issue", "--organization", org, "--issued-by", "ops", "--grant", "source_read:" + org, "--code-digest", digest,
+                        "--provider-input-from-secret", env_extra=task)
+        self.assertEqual((completed.returncode, completed.stdout, refusal(completed)), (1, "", "invitation_input_missing"))
         # The guard reads the subcommand as admission_operator's own parser does; a form that parser
         # does not accept as `issue` never reaches it.
         completed = cli("admission", "--", "issue", "--organization", org, "--issued-by", "ops",
