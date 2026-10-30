@@ -28,7 +28,9 @@
 //! commands and display labels; the uniform 404 otherwise, and for a query
 //! string.
 use super::{
+    ledger,
     prompt::{self, CatalogApp},
+    receipt::{self, BodyRefusal, Receipt},
     resolve::{self, Draft, Refusal, Resolution},
     Kind, Parse, ParseFailure, Parsed, Parser,
 };
@@ -52,6 +54,9 @@ use std::{sync::Arc, time::Instant};
 pub const ACT_BODY_LIMIT: usize = 4096;
 /// Per member: sixty actions an hour (several per rehearsed scenario).
 pub const ACT_MEMBER: &[limits::Window] = &[limits::per(60, 3600)];
+/// Per member, receipts (a vision call each): twenty an hour, inside
+/// `ACT_MEMBER` (APP-102).
+pub const RECEIPT_MEMBER: &[limits::Window] = &[limits::per(20, 3600)];
 
 pub struct Act {
     auth: Arc<Auth>,
@@ -114,9 +119,14 @@ fn today() -> String {
     crate::events::timestamp(seconds)[..10].to_owned()
 }
 
-/// The request body: an utterance, or a structured decision.
+/// The request body: an utterance, a receipt with optional words
+/// (multipart, APP-102), or a structured decision.
 pub(super) enum Body {
     Utterance(String),
+    Receipt {
+        utterance: String,
+        receipt: Receipt,
+    },
     Decide {
         app: String,
         work: String,
@@ -227,7 +237,19 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
     if !csrf::same_origin(&parts.headers, state.auth.origin()) {
         return http::cross_site();
     }
-    let Ok(bytes) = to_bytes(body_stream, ACT_BODY_LIMIT).await else {
+    // APP-102: a multipart body carries a receipt image (larger limit).
+    let multipart = parts
+        .headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| receipt::boundary(value).is_some())
+        .map(str::to_owned);
+    let limit = if multipart.is_some() {
+        receipt::RECEIPT_BODY_LIMIT
+    } else {
+        ACT_BODY_LIMIT
+    };
+    let Ok(bytes) = to_bytes(body_stream, limit).await else {
         return http::payload_too_large();
     };
     let member = match member(&state.auth, &parts.headers).await {
@@ -235,13 +257,42 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
         Err(refusal) => return refusal,
     };
     let started = Instant::now();
-    let Some(body) = body(&bytes).filter(|_| parts.uri.query().is_none()) else {
+    let parsed_body = match multipart.as_deref() {
+        Some(content_type) => match receipt::multipart(content_type, &bytes) {
+            Ok((utterance, receipt)) => Some(Body::Receipt { utterance, receipt }),
+            Err(BodyRefusal::Malformed) => None,
+            Err(BodyRefusal::TooLarge) => {
+                log_refused(&member, "receipt_too_large", started);
+                return http::payload_too_large();
+            }
+            Err(BodyRefusal::NotAnImage) => {
+                log_refused(&member, "invalid_receipt", started);
+                return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_receipt");
+            }
+        },
+        None => body(&bytes),
+    };
+    drop(bytes);
+    let Some(body) = parsed_body.filter(|_| parts.uri.query().is_none()) else {
         log_refused(&member, "invalid_utterance", started);
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_utterance");
     };
     let demo = demo::is_demo_org(member.organization());
     let key = format!("act:{}:{}", member.organization(), member.principal());
-    if let Err(retry_after) = state.auth.limits.admit(&[(&key, ACT_MEMBER)]) {
+    let receipt_key = format!(
+        "act-receipt:{}:{}",
+        member.organization(),
+        member.principal()
+    );
+    let admitted = if matches!(body, Body::Receipt { .. }) {
+        state
+            .auth
+            .limits
+            .admit(&[(&key, ACT_MEMBER), (&receipt_key, RECEIPT_MEMBER)])
+    } else {
+        state.auth.limits.admit(&[(&key, ACT_MEMBER)])
+    };
+    if let Err(retry_after) = admitted {
         log_refused(&member, "too_many_requests", started);
         return http::too_many_requests(retry_after);
     }
@@ -263,14 +314,61 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
         return http::not_found();
     }
     let today = today();
+    let mut receipt_meta: Option<(&'static str, usize)> = None;
     let (parse, utterance): (Parse, String) = match body {
+        Body::Utterance(utterance) if ledger::bare_command(&utterance, &catalog).is_some() => {
+            let parsed =
+                ledger::bare_command(&utterance, &catalog).unwrap_or_else(|| unreachable!());
+            (
+                Parse {
+                    parsed,
+                    rehearsed: false,
+                    duration_ms: 0,
+                },
+                utterance,
+            )
+        }
+        Body::Receipt { utterance, receipt } => {
+            receipt_meta = Some((receipt.media_type, receipt.bytes.len()));
+            if !state.parser.enabled() && !demo {
+                log_refused(&member, "composer_unavailable", started);
+                return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
+            }
+            let parse = state
+                .parser
+                .parse_receipt(&utterance, &receipt, &catalog, demo, &today)
+                .await;
+            // The image leaves memory here, before resolution (DS-56).
+            drop(receipt);
+            match parse {
+                Ok(parse) => {
+                    let utterance = if utterance.is_empty() {
+                        String::from("receipt")
+                    } else {
+                        utterance
+                    };
+                    (parse, utterance)
+                }
+                Err(ParseFailure::Unavailable) => {
+                    log_refused(&member, "composer_unavailable", started);
+                    return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
+                }
+                Err(ParseFailure::CouldNotParse(code)) => {
+                    log_refused(&member, code, started);
+                    return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_parse");
+                }
+            }
+        }
         Body::Utterance(utterance) => {
             if !state.parser.enabled() && !demo {
                 log_refused(&member, "composer_unavailable", started);
                 return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
             }
             match state.parser.parse(&utterance, &catalog, demo, &today).await {
-                Ok(parse) => (parse, utterance),
+                Ok(mut parse) => {
+                    parse.parsed = ledger::with_range(parse.parsed, &utterance, &today);
+                    (parse, utterance)
+                }
                 Err(ParseFailure::Unavailable) => {
                     log_refused(&member, "composer_unavailable", started);
                     return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
@@ -323,6 +421,9 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
         principal_id = member.principal(),
         kind = parse.parsed.kind.as_str(),
         rehearsed = parse.rehearsed,
+        receipt = receipt_meta.is_some(),
+        receipt_media_type = receipt_meta.map(|(media_type, _)| media_type),
+        receipt_bytes = receipt_meta.map(|(_, length)| length),
         has_approver = parse.parsed.approver_name.is_some(),
         value_count = parse.parsed.values.len(),
         duration_ms = parse.duration_ms,
@@ -354,7 +455,9 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 duration_ms = elapsed_ms(started),
                 "confirmation card drafted"
             );
-            document(StatusCode::OK, &draft_document(&draft, parse.duration_ms))
+            let mut answer = draft_document(&draft, parse.duration_ms);
+            answer["receipt"] = Value::Bool(receipt_meta.is_some());
+            document(StatusCode::OK, &answer)
         }
         Ok(Resolution::Open {
             app,
@@ -372,9 +475,19 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 duration_ms = elapsed_ms(started),
                 "open resolved"
             );
+            let range = ledger::range_of(&parse.parsed.values);
+            let view = if ledger::wants_ledger(&utterance, &parse.parsed.values) {
+                "ledger"
+            } else {
+                "records"
+            };
             document(
                 StatusCode::OK,
-                &json!({"action": "open", "app_id": app, "work_id": work, "title": title, "placed": placed}),
+                &json!({
+                    "action": "open", "app_id": app, "work_id": work, "title": title, "placed": placed,
+                    "view": view,
+                    "range": range.map(|(from, to)| json!({"from": from, "to": to})),
+                }),
             )
         }
         Ok(Resolution::Place) => document(StatusCode::OK, &json!({"action": "place"})),

@@ -59,7 +59,7 @@ const CATEGORIES: &[(&str, &str)] = &[
     ("office", "office"),
 ];
 
-fn lower_words(text: &str) -> Vec<String> {
+pub(super) fn lower_words(text: &str) -> Vec<String> {
     text.split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '$' && c != '.')
         .filter(|w| !w.is_empty())
         .map(|w| w.to_lowercase())
@@ -115,7 +115,7 @@ pub fn amount(text: &str) -> Option<String> {
 
 /// The words after "at" up to a stop (comma, period, "last", "yesterday",
 /// "on", "for", "and", a dollar amount).
-fn merchant(text: &str) -> Option<String> {
+pub(super) fn merchant(text: &str) -> Option<String> {
     let stops = [
         "last",
         "yesterday",
@@ -149,7 +149,7 @@ fn merchant(text: &str) -> Option<String> {
     (!name.is_empty()).then(|| name.join(" "))
 }
 
-fn category(words: &[String]) -> &'static str {
+pub(super) fn category(words: &[String]) -> &'static str {
     for (keyword, category) in CATEGORIES {
         if words
             .iter()
@@ -187,7 +187,7 @@ pub fn days_before(today: &str, days: i64) -> Option<String> {
     Some(format!("{y:04}-{m:02}-{d:02}"))
 }
 
-fn spent_on(lower: &str, today: &str) -> String {
+pub(super) fn spent_on(lower: &str, today: &str) -> String {
     if lower.contains("last night") || lower.contains("yesterday") || lower.contains("last evening")
     {
         days_before(today, 1).unwrap_or_else(|| today.to_owned())
@@ -206,7 +206,7 @@ fn spent_on(lower: &str, today: &str) -> String {
 
 /// "<Name> approves", "<Name> signs off", "send (it) to <Name>", "for <Name>
 /// to approve", "ask <Name>", "approver (is) <Name>", "cc <Name>".
-fn approver(text: &str) -> Option<String> {
+pub(super) fn approver(text: &str) -> Option<String> {
     let words: Vec<&str> = text.split_whitespace().collect();
     let clean = |w: &str| {
         w.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '\'')

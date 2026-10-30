@@ -11,7 +11,7 @@ use super::{
 use crate::storage::{Member, RecordRow};
 use serde_json::{json, Value};
 
-fn expense_app() -> CatalogApp {
+pub(super) fn expense_app() -> CatalogApp {
     let field = |id: &str, spec: Value| (id.to_owned(), spec);
     CatalogApp {
         app: "00000000-0000-4000-8000-000000001681".into(),
@@ -278,7 +278,7 @@ fn the_request_body_is_an_utterance_or_a_structured_decision() {
             assert_eq!(status, "approved");
             assert_eq!(note.as_deref(), Some("ok"));
         }
-        Body::Utterance(_) => panic!("structured"),
+        Body::Utterance(_) | Body::Receipt { .. } => panic!("structured"),
     }
     assert!(body(
         br#"{"decide":{"app_id":"x","work_id":"y","record_id":"z","status":"approved"}}"#
