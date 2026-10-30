@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     http::{self, limits},
-    storage::{handle_digest, Completion, FlowKind, Lookup, PendingAdmission},
+    storage::{handle_digest, Completion, Error, FlowKind, Lookup, PendingAdmission},
 };
 use axum::{
     body::Body,
@@ -413,7 +413,10 @@ pub(crate) fn denied(auth: &Auth, pre_cookie: &str) -> Response {
     )
 }
 
-/// The protected workspace entry: a live workspace session or the uniform 404.
+/// The protected workspace entry: a live workspace session, the uniform 404
+/// for no, an unknown, an ended or a refused session, or 503 when the
+/// workspace store itself is unavailable or saturated (D7.9; the APP-012
+/// query routes answer the same).
 async fn workspace(State(auth): State<Arc<Auth>>, request: Request) -> Response {
     let Some(cookie) = cookies::read(request.headers(), cookies::SESSION) else {
         return http::not_found();
@@ -431,7 +434,8 @@ async fn workspace(State(auth): State<Arc<Auth>>, request: Request) -> Response 
             auth.revoke(&ended).await;
             http::not_found()
         }
-        Ok(Lookup::Absent) | Err(_) => http::not_found(),
+        Ok(Lookup::Absent) | Err(Error::Denied) => http::not_found(),
+        Err(_) => http::unavailable(),
     }
 }
 

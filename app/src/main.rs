@@ -392,6 +392,7 @@ async fn main() {
         "/auth/callback",
         "/workspace",
         "/record",
+        "/w/{app}/{work}",
     ] {
         require_ssr(manifest.route(route).map(|entry| entry.mode))
             .unwrap_or_else(|reason| panic!("required SSR route {route}: {reason}"));
@@ -441,6 +442,12 @@ async fn main() {
             .bind::<RecordProps>("record")
             .unwrap_or_else(bind_errors),
     });
+    // APP-012: the work page.
+    let work_page = Arc::new(genui::query::page::SsrWorkPages {
+        page: pages
+            .bind::<genui::query::page::WorkProps>("work")
+            .unwrap_or_else(bind_errors),
+    });
     pages.finalize().unwrap_or_else(|errors| {
         for error in errors {
             eprintln!("{error}");
@@ -470,6 +477,19 @@ async fn main() {
         auth: auth.clone(),
         page: auth_pages,
     });
+    // APP-012 (ADR-007 D7.10): the confined query engine beside the data
+    // store, in the image's private cache and scratch under /run/genui.
+    let engine = stores.as_ref().map(|_| {
+        Arc::new(
+            genui::query::Engine::new(genui::query::EngineSettings::image())
+                .unwrap_or_else(|_| refuse("query engine directories refused")),
+        ) as Arc<dyn genui::query::Executor>
+    });
+    let work_routes = genui::query::routes::router(Arc::new(genui::query::Work::new(
+        auth.clone(),
+        engine,
+        work_page,
+    )));
     let readiness = genui::readiness::Readiness::start(
         credential_path.into(),
         std::env::var("GENUI_HELPER_PATH")
@@ -510,7 +530,8 @@ async fn main() {
         Some(harness) => app.merge(harness),
         None => app
             .merge(auth::routes::router(auth.clone()))
-            .merge(commands::routes::router(command_routes)),
+            .merge(commands::routes::router(command_routes))
+            .merge(work_routes),
     }
     .fallback(genui::http::fallback)
     .method_not_allowed_fallback(genui::http::fallback)
@@ -668,6 +689,7 @@ mod tests {
         // Home and about stay unbound here; finalize judges only bound routes.
         let _ = pages.bind::<HomeProps>("home");
         let _ = pages.bind::<AboutProps>("about");
+        let _ = pages.bind::<genui::query::page::WorkProps>("work");
         pages.finalize().unwrap();
         ssr
     }
@@ -870,5 +892,164 @@ mod tests {
         let (_, _, body) = html(pages.record(&reader)).await;
         assert!(!body.contains("<form") && body.contains("not change it"));
         assert!(!body.contains("The record changed"));
+    }
+
+    /// APP-012: the native work page renders each view state from typed
+    /// props, with no script; only `ready` shows a value, `ready` and
+    /// `empty` show their receipt, and a failed, denied, loading or idle view
+    /// shows its message and nothing that could be read as a number.
+    #[tokio::test]
+    async fn work_page_renders_every_view_state_without_a_fabricated_zero() {
+        use genui::query::page::{self as work, Outcome, Reason, SsrWorkPages, WorkPages as _};
+        use genui::query::{QueryReceipt, WorkerResult};
+        use serde_json::json;
+        let manifest = assets::try_load_manifest::<Assets>().expect("admin/dist built");
+        require_ssr(manifest.route("/w/{app}/{work}").map(|entry| entry.mode)).unwrap();
+        let pages = load_ir_modules::<Assets>(&manifest).unwrap();
+        let ssr = SsrWorkPages {
+            page: pages.bind::<work::WorkProps>("work").unwrap(),
+        };
+        // The other pages are bound only so finalize judges the whole build.
+        let _ = pages.bind::<HomeProps>("home");
+        let _ = pages.bind::<AboutProps>("about");
+        let _ = pages.bind::<SigninProps>("signin");
+        let _ = pages.bind::<PendingProps>("pending");
+        let _ = pages.bind::<DeniedProps>("denied");
+        let _ = pages.bind::<WorkspaceProps>("workspace");
+        let _ = pages.bind::<InviteProps>("invite");
+        let _ = pages.bind::<RecordProps>("record");
+        pages.finalize().unwrap();
+        let view = |id: &str, kind: &str| genui::storage::WorkView {
+            id: id.into(),
+            title: id.into(),
+            kind: kind.into(),
+        };
+        let result = |columns: &[&str], rows: Vec<Vec<serde_json::Value>>| WorkerResult {
+            columns: columns.iter().map(|c| (*c).to_owned()).collect(),
+            result_digest: genui::query::worker::result_digest(&rows).unwrap(),
+            rows,
+            truncated_page: false,
+            engine_elapsed_ms: 0,
+            wall: Duration::ZERO,
+            peak_rss_bytes: 0,
+        };
+        let receipt = |result: &WorkerResult, digest: &str| QueryReceipt {
+            digest: digest.into(),
+            document: json!({"digest": digest, "result_digest": result.result_digest, "view_id": "total",
+                "source_revisions": [], "parameters": [], "provenance": {}}),
+        };
+        let total = result(&["total_bytes"], vec![vec![json!("1140000")]]);
+        let nothing = result(&["total_bytes"], vec![vec![serde_json::Value::Null]]);
+        let buckets = result(
+            &["minute", "destination", "bytes"],
+            vec![vec![
+                json!("2026-10-22T10:00:00Z"),
+                json!("203.0.113.9"),
+                json!("60000"),
+            ]],
+        );
+        let (ready_receipt, empty_receipt, timeline_receipt) = (
+            receipt(&total, "sha256:receipt-ready"),
+            receipt(&nothing, "sha256:receipt-empty"),
+            receipt(&buckets, "sha256:receipt-timeline"),
+        );
+        let cards = vec![
+            work::card(
+                &view("ready", "summary"),
+                Outcome::Released(&total, &ready_receipt),
+            ),
+            work::card(
+                &view("timeline", "timeline"),
+                Outcome::Released(&buckets, &timeline_receipt),
+            ),
+            work::card(
+                &view("empty", "summary"),
+                Outcome::Released(&nothing, &empty_receipt),
+            ),
+            work::card(
+                &view("failed", "summary"),
+                Outcome::Failed(Reason::Deadline),
+            ),
+            work::card(
+                &view("unavailable", "summary"),
+                Outcome::Failed(Reason::SourceUnavailable),
+            ),
+            work::card(&view("denied", "summary"), Outcome::Denied),
+            work::card(&view("loading", "summary"), Outcome::Loading),
+            work::card(&view("idle", "summary"), Outcome::Idle),
+        ];
+        let outline = genui::storage::WorkOutline {
+            title: "Northstar egress".into(),
+            views: vec![],
+        };
+        let form = work::FormValues {
+            window_start: "2026-10-22T10:00".into(),
+            window_end: "2026-10-22T10:10".into(),
+            destination: String::new(),
+        };
+        let props = work::props(
+            &outline,
+            "/w/a/w".into(),
+            "Q".repeat(43),
+            &form,
+            false,
+            cards,
+        );
+        let (status, headers, body) = html(ssr.work(&props)).await;
+        // Evidence: the rendered page of every state (synthetic props).
+        if let Some(path) = std::env::var_os("GENUI_WORK_PAGE_SNAPSHOT") {
+            std::fs::write(path, &body).unwrap();
+        }
+        assert_eq!(status, StatusCode::OK);
+        assert!(headers[header::CACHE_CONTROL]
+            .to_str()
+            .unwrap()
+            .contains("no-store"));
+        assert!(headers.contains_key(header::CONTENT_SECURITY_POLICY));
+        assert!(!body.contains("<script src"));
+        assert!(body.contains("action=\"/w/a/w\"") && body.contains("method=\"post\""));
+        assert!(body.contains(&format!("value=\"{}\"", "Q".repeat(43))));
+        assert!(body.contains("value=\"2026-10-22T10:00\""));
+        assert!(!body.contains("was not accepted"));
+        let section = |id: &str| -> String {
+            let start = body
+                .find(&format!("data-view=\"{id}\""))
+                .unwrap_or_else(|| panic!("{id}"));
+            let rest = &body[start..];
+            rest[..rest.find("</section>").unwrap()].to_owned()
+        };
+        let ready = section("ready");
+        assert!(ready.contains("data-state=\"ready\"") && ready.contains(">1,140,000<"));
+        assert!(ready.contains("sha256:receipt-ready") && ready.contains("<details"));
+        assert!(ready.contains(&total.result_digest));
+        let timeline = section("timeline");
+        assert!(timeline.contains("<table") && timeline.contains(">60,000<"));
+        assert!(timeline.contains(">minute<") && timeline.contains("sha256:receipt-timeline"));
+        let empty = section("empty");
+        assert!(empty.contains("data-state=\"empty\"") && empty.contains("No rows matched"));
+        assert!(empty.contains("sha256:receipt-empty"));
+        for (id, state, words) in [
+            ("empty", "empty", "No rows matched"),
+            ("failed", "failed", "No number is shown"),
+            ("unavailable", "failed", "source revision is not available"),
+            ("denied", "denied", "Nothing is shown"),
+            ("loading", "loading", "Nothing is shown until"),
+            ("idle", "idle", "Not run yet"),
+        ] {
+            let html = section(id);
+            assert!(html.contains(&format!("data-state=\"{state}\"")), "{id}");
+            assert!(html.contains(words), "{id}");
+            assert!(!html.contains("class=\"value\""), "{id} shows a value");
+            assert!(!html.contains(">0<") && !html.contains("1,140,000"), "{id}");
+            if id != "empty" {
+                assert!(!html.contains("<details"), "{id} shows a receipt");
+            }
+        }
+        // A refused window echoes the form, says nothing ran, and runs nothing.
+        let mut refused = props.clone();
+        refused.form_error = true;
+        refused.views = vec![work::card(&view("total", "summary"), Outcome::Idle)];
+        let (_, _, body) = html(ssr.work(&refused)).await;
+        assert!(body.contains("was not accepted") && !body.contains("class=\"value\""));
     }
 }

@@ -13,6 +13,7 @@ await build({
     { entry: 'src/denied/app.tsx', outfile: 'denied.js' },
     { entry: 'src/workspace/app.tsx', outfile: 'workspace.js' },
     { entry: 'src/record/app.tsx', outfile: 'record.js' },
+    { entry: 'src/work/app.tsx', outfile: 'work.js' },
   ],
   cssEntries: [
     { input: 'src/styles/app.css', outfile: 'app.css' },
@@ -30,6 +31,8 @@ await build({
     '/workspace': { js: ['workspace'], css: ['app'] },
     // APP-013: the record page serves /work/{app}/{work}/records/{collection}/{record}.
     '/record': { js: ['record'], css: ['app'] },
+    // APP-012: the work page (GET and POST /w/{app}/{work}).
+    '/w/{app}/{work}': { js: ['work'], css: ['app'] },
   },
   outputDir: 'dist',
   ssr: isSsr,
@@ -45,6 +48,7 @@ await build({
     denied: 'src/denied/app.tsx',
     workspace: 'src/workspace/app.tsx',
     record: 'src/record/app.tsx',
+    work: 'src/work/app.tsx',
   } } : {}),
   // Unsupported native source is a mandatory coded refusal. Strict mode also
   // rejects advisory diagnostics; FORMA_STRICT=1 enables it without the flag.

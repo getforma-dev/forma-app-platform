@@ -69,9 +69,11 @@ app/src/storage/**
 !app/src/query/
 app/src/query/**
 !app/src/query/mod.rs
+!app/src/query/page.rs
 !app/src/query/receipt.rs
+!app/src/query/routes.rs
 !app/src/query/worker.rs
-# query/tests.rs, storage/query_qualification.rs and storage/race_qualification.rs
+# query/tests.rs, query/route_tests.rs, storage/query_qualification.rs and storage/race_qualification.rs
 # (APP-014) are cfg(test) only; the qualification context lists them.
 !app/src/admission/
 app/src/admission/**
@@ -112,6 +114,10 @@ app/admin/src/workspace/**
 !app/admin/src/record/
 app/admin/src/record/**
 !app/admin/src/record/app.tsx
+!app/admin/src/work/
+app/admin/src/work/**
+!app/admin/src/work/app.tsx
+!app/admin/src/forma-types.d.ts
 !app/admin/src/styles/
 app/admin/src/styles/**
 !app/admin/src/styles/app.css
