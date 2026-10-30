@@ -12,4 +12,4 @@ This accepts an implementation direction only. It supplies no dependency/MSRV, m
 
 No implementation, dependency installation, cloud call or Git operation was performed for this review.
 
-Follow-up, 2026-10-29: after APP-008 moved to In Progress, the sole ADR change is its ticket href from `Tickets/1-selected/APP-008.md` to `Tickets/3-in-review/APP-008.md`. Reversing only that href reproduces the exact previously reviewed hash; the new target exists. Current ADR SHA-256: **`0925434de4a123c013400aeb13b600cc136fd9a5a8003a96e526ef1faf58af60`**. Decision semantics and acceptance are unchanged; no full review was repeated.
+Follow-up, 2026-10-29: after APP-008 moved to In Progress, the sole ADR change is its ticket href from `Tickets/1-selected/APP-008.md` to `Tickets/4-done/APP-008.md`. Reversing only that href reproduces the exact previously reviewed hash; the new target exists. Current ADR SHA-256: **`0925434de4a123c013400aeb13b600cc136fd9a5a8003a96e526ef1faf58af60`**. Decision semantics and acceptance are unchanged; no full review was repeated.

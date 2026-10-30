@@ -3,6 +3,8 @@
 pub mod admission;
 pub mod auth_qualification;
 pub mod config;
+pub mod imports;
 pub mod readiness;
 pub mod roles;
 pub mod storage;
+pub mod supervise;

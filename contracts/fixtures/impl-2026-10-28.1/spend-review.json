@@ -1,0 +1,448 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-0000000000c8",
+    "principal_id": "00000000-0000-4000-8000-0000000000ca"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-0000000000c8",
+    "app_id": "00000000-0000-4000-8000-0000000000c9",
+    "revision_id": "00000000-0000-4000-8000-0000000000cb",
+    "content": {
+      "title": "Spend Review",
+      "description": "Synthetic contract example; no runtime or query result is claimed.",
+      "inputs": [
+        {
+          "id": "expenses",
+          "contract_id": "expenses_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "expense_id",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "decisions",
+          "contract_id": "decisions_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "expenses",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "expenses",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "expenses"
+            ],
+            "operations": [
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "expenses",
+                    "field_id": "expense_id"
+                  },
+                  {
+                    "input_id": "expenses",
+                    "field_id": "amount"
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "queue",
+          "kind": "detail",
+          "renderer_version": 1,
+          "title": "queue",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "expenses"
+            ],
+            "operations": [
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "expenses",
+                  "field_id": "amount"
+                },
+                "comparison": "gte",
+                "value": {
+                  "type": "money",
+                  "minor_units": "20000",
+                  "currency": "USD",
+                  "minor_unit_exponent": 2
+                }
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "decision",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "decision",
+          "command_id": "record_decision"
+        },
+        {
+          "id": "status",
+          "kind": "status",
+          "renderer_version": 1,
+          "title": "status",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "decisions"
+            ],
+            "operations": [
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "decisions",
+                    "field_id": "status"
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "record_decision",
+          "record_schema_id": "decision",
+          "operation": "create",
+          "writable_fields": [
+            "status",
+            "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "expenses",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "queue",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "decision",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "status",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-0000000000c8",
+    "app_id": "00000000-0000-4000-8000-0000000000c9",
+    "publication_id": "00000000-0000-4000-8000-0000000000cc",
+    "definition_revision_id": "00000000-0000-4000-8000-0000000000cb",
+    "definition_digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9",
+    "input_contract_digests": [
+      {
+        "input_id": "expenses",
+        "digest": "sha256:e9650e90a6e8748127f430e10119a52f16b2b39263eab9c77b7a6209931325fe"
+      },
+      {
+        "input_id": "decisions",
+        "digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "decision",
+        "digest": "sha256:3c075b4099b1f49f692e0ad0fb78f4f4a7888c008ff4fe852c48d9d7298251bf"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "admission_digest": "sha256:7359dddea2a26685e53c47f3d394fa32060f8ccd9162b5de8e16afbe5989b062",
+    "policy": {
+      "id": "00000000-0000-4000-8000-0000000000d0",
+      "version": 1,
+      "kind": "independent_review"
+    },
+    "author_id": "00000000-0000-4000-8000-0000000000ca",
+    "approver_id": "00000000-0000-4000-8000-0000000000d1",
+    "approver_epoch": 1,
+    "published_at": "2026-10-28T12:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-0000000000c8",
+    "app_id": "00000000-0000-4000-8000-0000000000c9",
+    "work_id": "00000000-0000-4000-8000-0000000000cd",
+    "publication_id": "00000000-0000-4000-8000-0000000000cc",
+    "version": 1,
+    "context": "Contract-shape validation only",
+    "bindings": [
+      {
+        "input_id": "expenses",
+        "source_id": "00000000-0000-4000-8000-0000000000d2",
+        "source_revision_id": "00000000-0000-4000-8000-0000000000d3",
+        "source_digest": "sha256:8bb3fac8a6c29cb3ba4f8b4b324ea4e65726f1d08c8c254b83dd30a58e659cc1",
+        "kind": "source",
+        "contract_digest": "sha256:e9650e90a6e8748127f430e10119a52f16b2b39263eab9c77b7a6209931325fe"
+      },
+      {
+        "input_id": "decisions",
+        "kind": "records",
+        "contract_digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5",
+        "collection_id": "00000000-0000-4000-8000-0000000000ce",
+        "schema_id": "decision",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-0000000000ce",
+        "schema_id": "decision",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "expenses",
+        "source_id": "00000000-0000-4000-8000-0000000000d2",
+        "source_revision_id": "00000000-0000-4000-8000-0000000000d3",
+        "source_digest": "sha256:8bb3fac8a6c29cb3ba4f8b4b324ea4e65726f1d08c8c254b83dd30a58e659cc1"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-0000000000c8",
+      "source_id": "00000000-0000-4000-8000-0000000000d2",
+      "revision_id": "00000000-0000-4000-8000-0000000000d3",
+      "content_digest": "sha256:1f11ea8babe357e4c7a1387ec4d1a437ed11b9a3f28e49a046f8bf61df12d104",
+      "normalized_digest": "sha256:8bb3fac8a6c29cb3ba4f8b4b324ea4e65726f1d08c8c254b83dd30a58e659cc1",
+      "input_contract": {
+        "id": "expenses",
+        "contract_id": "expenses_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "expense_id",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "amount",
+            "value_type": {
+              "type": "money",
+              "currency": "USD",
+              "minor_unit_exponent": 2
+            },
+            "nullable": false
+          }
+        ]
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 5,
+      "timezone": "UTC",
+      "time_semantics": "none",
+      "units_confirmed": true,
+      "created_at": "2026-10-28T11:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-0000000000c8",
+    "app_id": "00000000-0000-4000-8000-0000000000c9",
+    "work_id": "00000000-0000-4000-8000-0000000000cd",
+    "mode": "published",
+    "definition_digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9",
+    "publication_id": "00000000-0000-4000-8000-0000000000cc",
+    "view_id": "expenses",
+    "operator_version": 1,
+    "source_revisions": [
+      {
+        "input_id": "expenses",
+        "source_id": "00000000-0000-4000-8000-0000000000d2",
+        "source_revision_id": "00000000-0000-4000-8000-0000000000d3",
+        "source_digest": "sha256:8bb3fac8a6c29cb3ba4f8b4b324ea4e65726f1d08c8c254b83dd30a58e659cc1"
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-0000000000ca",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:cd5e44ae44a68eef79bb538f397feb20b9eb69310da8de5ce208e841d96333d9",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:dc62bc9d96cd4ff342c4a081e3e4f76ca37c618ef47222c3582cd6b71a18dfbf",
+      "predicate_digest": "sha256:dc62bc9d96cd4ff342c4a081e3e4f76ca37c618ef47222c3582cd6b71a18dfbf"
+    },
+    "digest": "sha256:cbee9c90a4a65dd15545ea479edff9d65305b3168bf307f44e8304ad8db740ca"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-0000000000c9",
+    "work_id": "00000000-0000-4000-8000-0000000000cd",
+    "publication_id": "00000000-0000-4000-8000-0000000000cc",
+    "command_id": "record_decision",
+    "schema_id": "decision",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-0000000000f0",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "needs_context"
+        }
+      },
+      {
+        "field_id": "note",
+        "value": {
+          "type": "text",
+          "value": "Review required — synthetic only"
+        }
+      }
+    ],
+    "idempotency_key": "0123456789abcdef0123456789abcdef"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-0000000000c8",
+    "app_id": "00000000-0000-4000-8000-0000000000c9",
+    "work_id": "00000000-0000-4000-8000-0000000000cd",
+    "principal_id": "00000000-0000-4000-8000-0000000000ca",
+    "command_id": "record_decision",
+    "idempotency_key": "0123456789abcdef0123456789abcdef",
+    "payload_digest": "sha256:2dd0fe850705a9ec05617030dfe1a3131ff59891077a791383e1e520d9eff874",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-0000000000f0",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-0000000000f1",
+    "committed_at": "2026-10-28T12:01:00Z",
+    "retry_expires_at": "2026-10-29T12:01:00Z"
+  }
+}

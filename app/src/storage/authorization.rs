@@ -2,12 +2,15 @@ use super::{
     pool::{Control, Data, Lease, Role, RolePool, Workspace},
     require, valid_id, Error, Result,
 };
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tokio::time::{timeout_at, Instant};
-use tokio_postgres::{types::ToSql, Row};
+use tokio_postgres::{error::SqlState, types::ToSql, Row};
 
-/// No public constructor, deserializer or clone. APP-009/073 must supply the
-/// reviewed adapter/admission transition before ordinary production access.
+/// No public constructor, deserializer or clone. APP-009 must supply the
+/// reviewed session adapter before ordinary production access.
 ///
 /// ```compile_fail
 /// use genui::storage::TrustedRequest;
@@ -90,16 +93,72 @@ pub(super) struct Precheck<'a> {
 }
 pub(super) struct Permit<'a, 'r> {
     transaction: &'a mut Transaction<'r>,
+    request: &'r TrustedRequest,
     precheck: Precheck<'r>,
 }
 
+/// A member transaction carries its trusted request; the nonmember entry
+/// (ADR-007 D7.1, admission only) carries none and can never precheck, fence
+/// or obtain a `Permit`.
 pub(super) struct Transaction<'a> {
     pub lease: Lease,
     pub deadline: Instant,
-    request: &'a TrustedRequest,
+    request: Option<&'a TrustedRequest>,
+    /// Set when any statement of this transaction failed with SQLSTATE 40001
+    /// (ADR-007 D7.6): PostgreSQL has then aborted the whole transaction.
+    serialization: AtomicBool,
 }
 impl<'a> Transaction<'a> {
     pub async fn begin(pool: &Arc<RolePool>, request: &'a TrustedRequest) -> Result<Self> {
+        Self::begin_with(
+            pool,
+            request,
+            "BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE",
+            None,
+        )
+        .await
+    }
+    /// As `begin`, with lease acquisition and the transaction deadline both
+    /// bounded by `cap` (a caller's handler deadline, D7.14).
+    pub async fn begin_until(
+        pool: &Arc<RolePool>,
+        request: &'a TrustedRequest,
+        cap: Instant,
+    ) -> Result<Self> {
+        Self::begin_with(
+            pool,
+            request,
+            "BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE",
+            Some(cap),
+        )
+        .await
+    }
+    /// ADR-007 D7.6 (A1): the control role's publication transaction only.
+    /// Everything else stays READ COMMITTED. A 40001 at any statement or at
+    /// COMMIT is classified (`serialization_failed`, `commit_serializable`)
+    /// so that the caller can retry once in a new transaction. `cap` bounds
+    /// lease acquisition and the transaction deadline, so that the attempt and
+    /// its retry stay within the D7.14 handler deadline (review m5).
+    pub async fn begin_serializable(
+        pool: &Arc<RolePool>,
+        request: &'a TrustedRequest,
+        cap: Instant,
+    ) -> Result<Self> {
+        require(pool.role() == Role::Control)?;
+        Self::begin_with(
+            pool,
+            request,
+            "BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE",
+            Some(cap),
+        )
+        .await
+    }
+    async fn begin_with(
+        pool: &Arc<RolePool>,
+        request: &'a TrustedRequest,
+        isolation: &'static str,
+        cap: Option<Instant>,
+    ) -> Result<Self> {
         require(
             valid_id(&request.organization)
                 && valid_id(&request.principal)
@@ -113,50 +172,151 @@ impl<'a> Transaction<'a> {
                     &request.organization,
                 ),
         )?;
-        let lease = Lease::acquire(pool).await?;
-        let deadline = lease.transaction_deadline()?;
+        Self::open(
+            pool,
+            Some(request),
+            &request.organization,
+            &request.principal,
+            &request.epoch.to_string(),
+            isolation,
+            cap,
+        )
+        .await
+    }
+    /// ADR-007 D7.1 private nonmember entry for the admission definer calls:
+    /// workspace pool only, organization scope (or none, for the two pre-scope
+    /// lookups) and no principal or epoch. It never issues a member `Permit`.
+    /// Call it only from `storage::admission`: the type system admits any
+    /// `storage` module, so that restriction is this convention (review nit).
+    pub async fn begin_nonmember(pool: &Arc<RolePool>, organization: Option<&str>) -> Result<Self> {
+        require(pool.role() == Role::Workspace && organization.is_none_or(valid_id))?;
+        Self::open(
+            pool,
+            None,
+            organization.unwrap_or(""),
+            "",
+            "",
+            "BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE",
+            None,
+        )
+        .await
+    }
+    async fn open(
+        pool: &Arc<RolePool>,
+        request: Option<&'a TrustedRequest>,
+        organization: &str,
+        principal: &str,
+        epoch: &str,
+        isolation: &'static str,
+        cap: Option<Instant>,
+    ) -> Result<Self> {
+        let (lease, deadline) = match cap {
+            None => {
+                let lease = Lease::acquire(pool).await?;
+                let deadline = lease.transaction_deadline()?;
+                (lease, deadline)
+            }
+            Some(cap) => {
+                // Nothing has been sent on a lease that is still being
+                // acquired, so abandoning the acquisition at `cap` is safe.
+                let lease = timeout_at(cap, Lease::acquire(pool))
+                    .await
+                    .map_err(|_| Error::Deadline)??;
+                let deadline = lease.transaction_deadline()?.min(cap);
+                if deadline <= Instant::now() {
+                    return Err(Error::Deadline);
+                }
+                (lease, deadline)
+            }
+        };
         let transaction = Self {
             lease,
             deadline,
             request,
+            serialization: AtomicBool::new(false),
         };
-        transaction
-            .batch("BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE")
-            .await?;
+        transaction.batch(isolation).await?;
         #[cfg(test)]
         transaction.lease.checkpoint("begin").await;
         transaction.query("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch',$3,true)",
-            &[&request.organization, &request.principal, &request.epoch.to_string()]).await?;
+            &[&organization, &principal, &epoch]).await?;
         Ok(transaction)
+    }
+    fn member(&self) -> Result<&'a TrustedRequest> {
+        self.request.ok_or(Error::Denied)
+    }
+    /// Records a 40001 refusal; it never leaves storage (D7.9).
+    fn note(&self, error: &tokio_postgres::Error) {
+        if error.code() == Some(&SqlState::T_R_SERIALIZATION_FAILURE) {
+            self.serialization.store(true, Ordering::Relaxed);
+        }
+    }
+    /// Whether a statement of this transaction failed with SQLSTATE 40001, so
+    /// PostgreSQL has rolled the whole transaction back (D7.6).
+    pub fn serialization_failed(&self) -> bool {
+        self.serialization.load(Ordering::Relaxed)
     }
     pub async fn batch(&self, sql: &str) -> Result<()> {
         timeout_at(self.deadline, self.lease.client().batch_execute(sql))
             .await
             .map_err(|_| Error::Deadline)?
-            .map_err(|_| Error::Unavailable)
+            .map_err(|error| {
+                self.note(&error);
+                Error::Unavailable
+            })
     }
     pub async fn query(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
         timeout_at(self.deadline, self.lease.client().query(sql, params))
             .await
             .map_err(|_| Error::Deadline)?
-            .map_err(|_| Error::Unavailable)
+            .map_err(|error| {
+                self.note(&error);
+                Error::Unavailable
+            })
+    }
+    /// As `query`, but a database refusal keeps its SQLSTATE so that the
+    /// storage module can classify it (ADR-007 D7.9). Nothing leaves storage.
+    pub async fn query_classified(
+        &self,
+        sql: &str,
+        params: &[&(dyn ToSql + Sync)],
+    ) -> Result<std::result::Result<Vec<Row>, SqlState>> {
+        match timeout_at(self.deadline, self.lease.client().query(sql, params))
+            .await
+            .map_err(|_| Error::Deadline)?
+        {
+            Ok(rows) => Ok(Ok(rows)),
+            Err(error) => {
+                self.note(&error);
+                error.code().cloned().map(Err).ok_or(Error::Unavailable)
+            }
+        }
     }
     pub async fn precheck(&self, action: Action, resource: Resource<'a>) -> Result<Precheck<'a>> {
+        let request = self.member()?;
         require(self.lease.role() != Role::Worker)?;
-        let rows = self.query("SELECT o.status,m.status,m.membership_epoch FROM genui.organizations o JOIN genui.memberships m USING(organization_id) WHERE o.organization_id=$1::text::uuid AND m.principal_id=$2::text::uuid", &[&self.request.organization,&self.request.principal]).await?;
+        let rows = self.query("SELECT o.status,m.status,m.membership_epoch FROM genui.organizations o JOIN genui.memberships m USING(organization_id) WHERE o.organization_id=$1::text::uuid AND m.principal_id=$2::text::uuid", &[&request.organization,&request.principal]).await?;
         let row = rows.first().ok_or(Error::Denied)?;
         require(
             text(row, 0)? == "active"
                 && text(row, 1)? == "active"
-                && integer(row, 2)? == self.request.epoch,
+                && integer(row, 2)? == request.epoch,
         )?;
+        self.entitlement(request).await?;
         let precheck = Precheck { action, resource };
-        self.permissions(&precheck).await?;
+        self.permissions(request, &precheck).await?;
         Ok(precheck)
     }
-    async fn permissions(&self, precheck: &Precheck<'_>) -> Result<()> {
-        let org = &self.request.organization;
-        let principal = &self.request.principal;
+    /// APP-073 (ADR-003, ADR-004): every member action also needs a current
+    /// trial entitlement, judged on the wall clock of this statement so that
+    /// an entitlement expiring inside the transaction is not honored later.
+    async fn entitlement(&self, request: &TrustedRequest) -> Result<()> {
+        let rows = self.query("SELECT 1 FROM genui.entitlements WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND status='active' AND expires_at>clock_timestamp() LIMIT 1", &[&request.organization,&request.principal]).await?;
+        require(!rows.is_empty())
+    }
+    async fn permissions(&self, request: &TrustedRequest, precheck: &Precheck<'_>) -> Result<()> {
+        let org = &request.organization;
+        let principal = &request.principal;
         let action = precheck.action.permission();
         let rows = match precheck.resource {
             Resource::Organization if precheck.action == Action::AdminPolicy => self.query(
@@ -169,26 +329,44 @@ impl<'a> Transaction<'a> {
                 require(valid_id(source))?;
                 self.query("SELECT 1 FROM genui.source_permissions p JOIN genui.sources s USING(organization_id,source_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.source_id=$3::text::uuid AND p.permission='source_read'", &[org,principal,&source]).await?
             }
+            // ADR-007 amendment 2026-10-29 (APP-010 review M2): the work's
+            // creator, until the operator revokes it, holds record_read and
+            // record_write on that work. Creator authority replaces only the
+            // work_permissions lookup; the app `run` clause and every
+            // dependency's live `source_read` still apply, and membership
+            // revocation ends it at the precheck above.
             Resource::Work { app, work } if matches!(precheck.action, Action::RecordRead | Action::RecordWrite | Action::ShareWork | Action::Export) => {
                 require(valid_id(app) && valid_id(work))?;
-                self.query("SELECT 1 FROM genui.work_permissions p JOIN genui.saved_work w USING(organization_id,app_id,work_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.app_id=$3::text::uuid AND p.work_id=$4::text::uuid AND p.permission=$5 AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=p.organization_id AND a.principal_id=p.principal_id AND a.app_id=p.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=p.organization_id AND d.app_id=p.app_id AND d.work_id=p.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id=p.principal_id AND s.source_id=d.source_id AND s.permission='source_read')))", &[org,principal,&app,&work,&action]).await?
+                self.query("SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=$3::text::uuid AND w.work_id=$4::text::uuid AND (EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id=$2::text::uuid AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission=$5) OR ($5 IN ('record_read','record_write') AND w.created_by=$2::text::uuid AND w.creator_revoked_at IS NULL)) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id=$2::text::uuid AND a.app_id=w.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id=$2::text::uuid AND s.source_id=d.source_id AND s.permission='source_read')))", &[org,principal,&app,&work,&action]).await?
             }
             _ => return Err(Error::Denied),
         };
         require(!rows.is_empty())
     }
     pub async fn fence<'t>(&'t mut self, precheck: Precheck<'a>) -> Result<Permit<'t, 'a>> {
-        let rows = self.query("SELECT organization_active,member_active,membership_epoch FROM genui_private.lock_member_authority($1::text::uuid,$2::text::uuid,$3)", &[&self.request.organization,&self.request.principal,&self.request.epoch]).await?;
+        let request = self.member()?;
+        let rows = self.query("SELECT organization_active,member_active,membership_epoch FROM genui_private.lock_member_authority($1::text::uuid,$2::text::uuid,$3)", &[&request.organization,&request.principal,&request.epoch]).await?;
         let row = rows.first().ok_or(Error::Denied)?;
-        require(boolean(row, 0)? && boolean(row, 1)? && integer(row, 2)? == self.request.epoch)?;
-        self.permissions(&precheck).await?;
+        require(boolean(row, 0)? && boolean(row, 1)? && integer(row, 2)? == request.epoch)?;
+        // Entitlement revocation advances the epoch under the member lock
+        // (operator channel), so this re-read after the fence also observes
+        // expiry that happened since the precheck.
+        self.entitlement(request).await?;
+        self.permissions(request, &precheck).await?;
         Ok(Permit {
             transaction: self,
+            request,
             precheck,
         })
     }
     pub async fn finish(self, commit: bool) -> Result<()> {
         self.lease.finish(commit, self.deadline).await
+    }
+    /// D7.6: `Ok(true)` committed; `Ok(false)` PostgreSQL refused the COMMIT
+    /// with 40001 and rolled the transaction back, so a retry is safe. Any other
+    /// COMMIT failure stays `Error::UnknownOutcome` and is never retried.
+    pub async fn commit_serializable(self) -> Result<bool> {
+        self.lease.commit_serializable(self.deadline).await
     }
 }
 
@@ -213,13 +391,25 @@ pub struct Record {
     pub version: i64,
 }
 
-impl Permit<'_, '_> {
+impl<'r> Permit<'_, 'r> {
+    /// The fenced transaction, for the storage operation that obtained this
+    /// permit; nothing outside `storage` ever sees it.
+    pub(super) fn transaction(&self) -> &Transaction<'r> {
+        self.transaction
+    }
+    /// A further permission of the same member, re-read after the fence (for
+    /// example `source_read` on each source a saved work binds).
+    pub(super) async fn also(&self, action: Action, resource: Resource<'_>) -> Result<()> {
+        self.transaction
+            .permissions(self.request, &Precheck { action, resource })
+            .await
+    }
     async fn publication(&self, publication: &str) -> Result<Publication> {
         require(valid_id(publication))?;
         let Resource::App(app) = self.precheck.resource else {
             return Err(Error::Denied);
         };
-        let rows = self.transaction.query("SELECT publication_id::text,definition_digest::text FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND publication_id=$3::text::uuid", &[&self.transaction.request.organization,&app,&publication]).await?;
+        let rows = self.transaction.query("SELECT publication_id::text,definition_digest::text FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND publication_id=$3::text::uuid", &[&self.request.organization,&app,&publication]).await?;
         let row = rows.first().ok_or(Error::Denied)?;
         Ok(Publication {
             publication_id: text(row, 0)?,
@@ -236,14 +426,14 @@ impl Permit<'_, '_> {
         let Resource::Work { app, work } = self.precheck.resource else {
             return Err(Error::Denied);
         };
-        let pin = self.transaction.query("SELECT publication_id::text,version FROM genui.saved_work WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[&self.transaction.request.organization,&app,&work]).await?;
+        let pin = self.transaction.query("SELECT publication_id::text,version FROM genui.saved_work WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[&self.request.organization,&app,&work]).await?;
         let pin = pin.first().ok_or(Error::Denied)?;
         let publication = text(pin, 0)?;
         let version = integer(pin, 1)?;
-        let locked = self.transaction.query("SELECT publication_id::text,work_version FROM genui_private.lock_work_revision($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5)", &[&self.transaction.request.organization,&app,&work,&publication,&version]).await?;
+        let locked = self.transaction.query("SELECT publication_id::text,work_version FROM genui_private.lock_work_revision($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5)", &[&self.request.organization,&app,&work,&publication,&version]).await?;
         let locked = locked.first().ok_or(Error::Denied)?;
         require(text(locked, 0)? == publication && integer(locked, 1)? == version)?;
-        let rows = self.transaction.query("SELECT record_id::text,current_version FROM genui.internal_records WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND collection_id=$4::text::uuid AND record_id=$5::text::uuid", &[&self.transaction.request.organization,&app,&work,&collection,&record]).await?;
+        let rows = self.transaction.query("SELECT record_id::text,current_version FROM genui.internal_records WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND collection_id=$4::text::uuid AND record_id=$5::text::uuid", &[&self.request.organization,&app,&work,&collection,&record]).await?;
         let row = rows.first().ok_or(Error::Denied)?;
         Ok(Record {
             record_id: text(row, 0)?,

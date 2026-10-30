@@ -26,6 +26,12 @@ jobs:
           python3 -m venv app/runtime/.venv
           app/runtime/.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r app/runtime/requirements.lock -r contracts/requirements.lock
           mkdir -p "$RUNNER_TEMP/tenant-foundation"
+      - name: Check schema-version and catalog-bound pins, runner and pin-check unit tests
+        run: |
+          python3 scripts/check-schema-pins.py
+          app/runtime/.venv/bin/python -m unittest discover -s scripts -p 'test_*.py' -v
+          app/runtime/.venv/bin/python -m unittest discover -s app/runtime -v
+          app/runtime/.venv/bin/python -m unittest discover -s app/qualification -v
       - name: Build source-owned native page assets
         working-directory: app/admin
         run: |
@@ -44,6 +50,12 @@ jobs:
       - name: Qualify real TLS pools, cancellation, tenant authorization and composed readiness
         working-directory: app
         run: GENUI_NATIVE_REPORT="$RUNNER_TEMP/tenant-foundation/native.json" cargo +1.93.1 test --locked --lib storage::qualification::native_postgres_campaign -- --ignored --exact --nocapture
+      - name: Qualify admission operations and the operator command over TLS (APP-073)
+        working-directory: app
+        run: GENUI_ADMISSION_REPORT="$RUNNER_TEMP/tenant-foundation/admission.json" cargo +1.93.1 test --locked --lib storage::admission_qualification::native_admission_campaign -- --ignored --exact --nocapture
+      - name: Qualify managed-entry cleanup on real TLS transports (APP-075)
+        working-directory: app
+        run: cargo +1.93.1 test --locked --lib storage::managed_qualification::tests::managed_cleanup_with_real_transports -- --ignored --exact --nocapture
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

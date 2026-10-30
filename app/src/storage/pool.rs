@@ -355,6 +355,9 @@ pub(super) struct RolePool {
     pub registry: Arc<Registry>,
 }
 impl RolePool {
+    pub fn role(&self) -> Role {
+        self.manager.role
+    }
     async fn acquire(self: &Arc<Self>) -> Result<Lease> {
         let deadline = Instant::now() + ACQUIRE;
         let admitted = capacity().admitted[self.manager.role.index()]
@@ -423,13 +426,39 @@ impl Lease {
     pub async fn acquire(owner: &Arc<RolePool>) -> Result<Self> {
         owner.acquire().await
     }
-    pub async fn finish(mut self, commit: bool, transaction_deadline: Instant) -> Result<()> {
+    pub async fn finish(self, commit: bool, transaction_deadline: Instant) -> Result<()> {
         let command = if commit { "COMMIT" } else { "ROLLBACK" };
         match timeout_at(transaction_deadline, self.client().batch_execute(command)).await {
             Ok(Ok(())) => (),
             _ if commit => return Err(Error::UnknownOutcome),
             _ => return Err(Error::Unavailable),
         }
+        self.release().await
+    }
+    /// ADR-007 D7.6 (A1): COMMIT of a SERIALIZABLE transaction. PostgreSQL
+    /// reports 40001 only for a transaction it has aborted, so `Ok(false)` is a
+    /// definite rollback and the connection is reset and reused as usual. Any
+    /// other COMMIT failure, a transport loss included, is `UnknownOutcome`.
+    pub async fn commit_serializable(self, transaction_deadline: Instant) -> Result<bool> {
+        // APP-010 review m1: the definition campaign pauses here to doom the
+        // transaction through SSI (40001 at COMMIT) or to end its backend.
+        #[cfg(test)]
+        self.checkpoint("commit").await;
+        let committed =
+            match timeout_at(transaction_deadline, self.client().batch_execute("COMMIT")).await {
+                Ok(Ok(())) => true,
+                Ok(Err(error))
+                    if error.code()
+                        == Some(&tokio_postgres::error::SqlState::T_R_SERIALIZATION_FAILURE) =>
+                {
+                    false
+                }
+                _ => return Err(Error::UnknownOutcome),
+            };
+        self.release().await?;
+        Ok(committed)
+    }
+    async fn release(mut self) -> Result<()> {
         #[cfg(test)]
         self.checkpoint("finish").await;
         let role = self.role();
@@ -491,7 +520,7 @@ async fn verify_schema_version(client: &Client) -> Result<()> {
         )
         .await
         .map_err(|_| Error::Unavailable)?;
-    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 2 {
+    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 5 {
         return Err(Error::Unavailable);
     }
     Ok(())

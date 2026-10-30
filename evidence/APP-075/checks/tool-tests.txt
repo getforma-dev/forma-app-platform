@@ -1,0 +1,11 @@
+test_a_directory_reinclude_must_be_closed_by_its_exclusion (test_tools.AllowlistTests.test_a_directory_reinclude_must_be_closed_by_its_exclusion) ... ok
+test_directory_reincludes_are_not_files (test_tools.AllowlistTests.test_directory_reincludes_are_not_files) ... ok
+test_expected_pins_recompute_every_entry_pin_from_the_seeded_files (test_tools.SeedInputTests.test_expected_pins_recompute_every_entry_pin_from_the_seeded_files) ... ok
+test_seed_inputs_are_the_entry_table (test_tools.SeedInputTests.test_seed_inputs_are_the_entry_table) ... ok
+test_the_seed_reads_the_pinned_edition (test_tools.SeedInputTests.test_the_seed_reads_the_pinned_edition) ... ok
+test_source_names_include_compile_time_inputs (test_tools.SourceTests.test_source_names_include_compile_time_inputs) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.010s
+
+OK

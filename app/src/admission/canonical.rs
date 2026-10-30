@@ -1,5 +1,6 @@
 //! forma-json-v1, the restricted canonical JSON of contract edition
-//! impl-2026-10-28.1 (`contracts/README.md`; `loads` and `canonical` in
+//! impl-2026-10-28.1, unchanged in edition impl-2026-10-29.2
+//! (`contracts/README.md`; `loads` and `canonical` in
 //! `contracts/validate.py`). Deliberately not RFC 8785/JCS.
 //!
 //! Values are null, booleans, strings of Unicode scalar values, integers of

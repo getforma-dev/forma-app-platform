@@ -15,12 +15,20 @@ from validate import canonical, digest, validate_bundle  # noqa: E402
 ORGANIZATIONS = ("00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002")
 SPACE = "00000000-0000-4000-8000-000000000384"
 ISSUER = "app008-fixture-only"
+# Synthetic fixture entitlement window (APP-073); fixed so the seed stays idempotent.
+ENTITLEMENT_WINDOW = ("2026-10-01T00:00:00+00:00", "2036-10-01T00:00:00+00:00")
+# APP-010 (plan Task 6): each fixture organization's owner_publish policy, version 1,
+# seeded by the operator package under scope (never by a migration). Policy rows
+# carry no audit event: D7.8's operator kinds are closed and name none.
+OWNER_PUBLISH_POLICY = "00000000-0000-4000-8000-0000000000e0"
 
 
 def make_bundles():
     result = []
     for name, organization in (("northstar", ORGANIZATIONS[0]), ("northstar", ORGANIZATIONS[1]), ("spend-review", ORGANIZATIONS[1])):
-        bundle = copy.deepcopy(json.loads((CONTRACTS / "fixtures" / (name + ".json")).read_text()))
+        # PH01 seeding is edition impl-2026-10-28.1 data (operator-seeded revisions; ADR-009 D9.3), so it reads
+        # that edition's retained fixtures, not the current edition's.
+        bundle = copy.deepcopy(json.loads((CONTRACTS / "fixtures" / "impl-2026-10-28.1" / (name + ".json")).read_text()))
         old = bundle["context"]["organization_id"]
         def replace(value):
             if isinstance(value, dict): return {k: replace(v) for k, v in value.items()}
@@ -38,7 +46,11 @@ def seed(connection, bundles):
     """Caller owns the entire transaction; a changed existing seed refuses whole.
 
     All bundles validate before the first SQL write. This only seeds the declared
-    synthetic contract shape and never provisions a provider or active entitlement.
+    synthetic contract shape and never provisions a provider. Since APP-073 every
+    member action requires a current entitlement, so each active synthetic member
+    receives one deterministic, explicitly synthetic entitlement (fixed window,
+    kind member_invite); it is fixture authority, never an admission result.
+    Since APP-010 each organization also receives its owner_publish policy row.
     """
     from psycopg import sql
     if connection.autocommit:
@@ -77,9 +89,13 @@ def seed(connection, bundles):
         for principal, (status, epoch) in actors.items():
             put('principals', ('organization_id','principal_id','issuer','provider_tenant_id','provider_subject'), (o,principal,ISSUER,tenant,'usr_'+principal), 2)
             put('memberships', ('organization_id','principal_id','status','membership_epoch'), (o,principal,status,epoch), 2)
+            if status == 'active':
+                put('entitlements', ('organization_id','principal_id','entitlement_id','status','kind','starts_at','expires_at','revoked_at'),
+                    (o,principal,'0000e000-0000-4000-8000-'+principal[-12:],'active','member_invite',*ENTITLEMENT_WINDOW,None), 3)
         put('organization_permissions', ('organization_id','principal_id','permission'),
             (o,'00000000-0000-4000-8000-000000000f00','admin_policy'), 3)
         put('spaces', ('organization_id','space_id','display_name'), (o,SPACE,'Synthetic fixture space'), 2)
+        put('publication_policies', ('organization_id','policy_id','policy_version','kind'), (o,OWNER_PUBLISH_POLICY,1,'owner_publish'), 3)
         put('apps', ('organization_id','app_id','space_id','owner_principal_id'), (o,a,SPACE,p), 2)
         put('definition_revisions', ('organization_id','app_id','revision_id','schema_version','digest','canonical_content'), (o,a,r,1,d['digest'],canonical(d['content'])), 3)
         for item in d['content']['inputs']:
@@ -90,8 +106,9 @@ def seed(connection, bundles):
                 (o,a,r,item['id'],item['version'],digest('record-schema',item),canonical(item)), 5)
         policy = pub['policy']
         put('publication_policies', ('organization_id','policy_id','policy_version','kind'), (o,policy['id'],policy['version'],policy['kind']), 3)
-        put('publications', ('organization_id','app_id','publication_id','definition_revision_id','definition_digest','policy_id','policy_version','policy_kind','author_id','approver_id','approver_epoch','renderer_version','operator_version','admission_digest','published_at','canonical_envelope'),
-            (o,a,publication,r,pub['definition_digest'],policy['id'],policy['version'],policy['kind'],pub['author_id'],pub['approver_id'],pub['approver_epoch'],1,1,pub['admission_digest'],pub['published_at'],canonical(pub)), 3)
+        # ADR-007 amendment (APP-010 review M1): each seeded app has one publication, its first.
+        put('publications', ('organization_id','app_id','publication_id','definition_revision_id','definition_digest','policy_id','policy_version','policy_kind','author_id','approver_id','approver_epoch','renderer_version','operator_version','admission_digest','published_at','canonical_envelope','publication_sequence'),
+            (o,a,publication,r,pub['definition_digest'],policy['id'],policy['version'],policy['kind'],pub['author_id'],pub['approver_id'],pub['approver_epoch'],1,1,pub['admission_digest'],pub['published_at'],canonical(pub),1), 3)
         for item in d['content']['inputs']:
             put('publication_inputs', ('organization_id','app_id','publication_id','input_id','definition_revision_id','kind','contract_digest'),
                 (o,a,publication,item['id'],r,item['kind'],digest('input-contract',item)), 4)

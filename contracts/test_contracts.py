@@ -4,14 +4,53 @@ import json
 import unittest
 from pathlib import Path
 
+import make_fixtures
 from schema import SCHEMA as SOURCE_SCHEMA
-from validate import ContractError, SCHEMA, canonical, digest, loads, payload_digest, validate, validate_bundle
+from validate import (ContractError, SCHEMA, canonical, digest, domain_name, exact_rational, loads, payload_digest, validate,
+                      validate_bundle, validate_exact_rational, validate_problem)
 
 ROOT = Path(__file__).resolve().parent
+RETAINED = ROOT / "fixtures" / "impl-2026-10-28.1"
+# The fixture identities edition impl-2026-10-28.1 locked; its copies are retained byte-identically.
+EDITION_ONE_FIXTURES = {
+    "canonical-vectors": "33b46ff5970bdcd5259f23bdb5e9a7fcda4c5eeffebe93e0fedfebf5f661203d",
+    "negative-vectors": "089e9a3017adda324a2a150fb68d5aa497889cd104d2f7096b9128d520764e75",
+    "northstar": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+    "spend-review": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+}
 
 
 def fixture(name="northstar"):
     return loads((ROOT / "fixtures" / (name + ".json")).read_bytes())
+
+
+def retained(name):
+    return loads((RETAINED / (name + ".json")).read_bytes())
+
+
+def rehash_receipt(receipt):
+    receipt["digest"] = digest("query-receipt", {k: v for k, v in receipt.items() if k != "digest"})
+
+
+def run_negative_vectors(case, vectors, load):
+    for vector in vectors:
+        with case.subTest(case=vector["name"]):
+            bundle = load(vector.get("fixture", "northstar"))
+            target = bundle
+            path = vector["path"]
+            for key in path[:-1]:
+                target = target[key]
+            if vector.get("operation") == "remove":
+                del target[path[-1]]
+            else:
+                target[path[-1]] = vector["value"]
+            # Preserve cryptographic validity when isolating a semantic refusal.
+            if vector.get("rehash_definition"):
+                bundle["definition"]["digest"] = digest("app-definition", bundle["definition"]["content"])
+            if vector.get("rehash_receipt"):
+                rehash_receipt(bundle["receipt"])
+            with case.assertRaisesRegex(ContractError, vector["expected"]):
+                validate_bundle(bundle)
 
 
 class ContractTests(unittest.TestCase):
@@ -25,26 +64,7 @@ class ContractTests(unittest.TestCase):
         self.assertNotEqual(fixture()["definition"]["digest"], fixture("spend-review")["definition"]["digest"])
 
     def test_negative_fixture_vectors(self):
-        vectors = json.loads((ROOT / "fixtures" / "negative-vectors.json").read_text())
-        for vector in vectors:
-            with self.subTest(case=vector["name"]):
-                bundle = fixture(vector.get("fixture", "northstar"))
-                target = bundle
-                path = vector["path"]
-                for key in path[:-1]:
-                    target = target[key]
-                if vector.get("operation") == "remove":
-                    del target[path[-1]]
-                else:
-                    target[path[-1]] = vector["value"]
-                # Preserve cryptographic validity when isolating a semantic refusal.
-                if vector.get("rehash_definition"):
-                    bundle["definition"]["digest"] = digest("app-definition", bundle["definition"]["content"])
-                if vector.get("rehash_receipt"):
-                    receipt = bundle["receipt"]
-                    receipt["digest"] = digest("query-receipt", {k: v for k, v in receipt.items() if k != "digest"})
-                with self.assertRaisesRegex(ContractError, vector["expected"]):
-                    validate_bundle(bundle)
+        run_negative_vectors(self, json.loads((ROOT / "fixtures" / "negative-vectors.json").read_text()), fixture)
 
     def test_valid_owner_publication_policy(self):
         bundle = fixture()
@@ -128,12 +148,169 @@ class ContractTests(unittest.TestCase):
                 validate(value)
 
 
+class EditionTwoTests(unittest.TestCase):
+    """Edition impl-2026-10-29.2 (ADR-009 D9.6) over the retained edition impl-2026-10-28.1."""
+
+    def test_edition_two_retains_every_edition_one_vector(self):
+        for name, identity in EDITION_ONE_FIXTURES.items():
+            with self.subTest(fixture=name):
+                self.assertEqual(hashlib.sha256((RETAINED / (name + ".json")).read_bytes()).hexdigest(), identity)
+        current = json.loads((ROOT / "fixtures" / "canonical-vectors.json").read_text())
+        for vector in json.loads((RETAINED / "canonical-vectors.json").read_text()):
+            with self.subTest(vector=vector["name"]):
+                self.assertIn(vector, current)
+                self.assertEqual(canonical(vector["value"]).hex(), vector["utf8_hex"])
+                self.assertEqual(digest("result", vector["value"]), vector["digest"])
+        for name in ("northstar", "spend-review"):
+            with self.subTest(bundle=name):
+                bundle = retained(name)
+                validate_bundle(bundle)
+                self.assertEqual(bundle["definition"]["schema_version"], 1)
+                self.assertEqual(bundle["definition"]["digest"], digest("app-definition", bundle["definition"]["content"]))
+        run_negative_vectors(self, json.loads((RETAINED / "negative-vectors.json").read_text()), retained)
+        # An edition-one job state still validates; edition two never reinterprets it.
+        validate({"kind": "job_state", "schema_version": 1, "organization_id": retained("northstar")["context"]["organization_id"],
+                  "job_id": "00000000-0000-4000-8000-000000000777", "state": "queued", "claim_sequence": 0})
+
+    def test_exact_rational_lowest_terms_and_38_digit_bound(self):
+        self.assertEqual(exact_rational(1140000, 10), {"type": "exact_rational", "numerator": "114000", "denominator": "1"})
+        self.assertEqual(exact_rational(6, -4), {"type": "exact_rational", "numerator": "-3", "denominator": "2"})
+        self.assertEqual(exact_rational(0, -7), {"type": "exact_rational", "numerator": "0", "denominator": "1"})
+        largest = 10 ** 38 - 1
+        for value in (exact_rational(largest, 1), exact_rational(-largest, largest - 1), exact_rational(1, largest)):
+            validate_exact_rational(value)
+        with self.assertRaisesRegex(ContractError, "zero denominator"):
+            exact_rational(1, 0)
+        for numerator, denominator in ((10 ** 38, 1), (1, 10 ** 38), (-(10 ** 38), 3)):
+            with self.subTest(numerator=numerator, denominator=denominator), self.assertRaisesRegex(ContractError, "38 digits"):
+                exact_rational(numerator, denominator)
+        for value, expected in (({"numerator": "2", "denominator": "4"}, "lowest terms"), ({"numerator": "0", "denominator": "2"}, "lowest terms"),
+                                ({"numerator": "-6", "denominator": "9"}, "lowest terms"), ({"numerator": "1", "denominator": "0"}, "schema:"),
+                                ({"numerator": "1", "denominator": "-2"}, "schema:"), ({"numerator": "-0", "denominator": "1"}, "schema:"),
+                                ({"numerator": "1" * 39, "denominator": "1"}, "schema:"), ({"numerator": 1, "denominator": "1"}, "schema:"),
+                                ({"numerator": "1", "denominator": "1", "unit": "byte"}, "schema:")):
+            with self.subTest(value=value), self.assertRaisesRegex(ContractError, expected):
+                validate_exact_rational({"type": "exact_rational", **value})
+        vectors = [v for v in json.loads((ROOT / "fixtures" / "canonical-vectors.json").read_text()) if "rational" in v]
+        self.assertGreaterEqual(len(vectors), 3)
+        for vector in vectors:
+            with self.subTest(vector=vector["name"]):
+                self.assertEqual(exact_rational(int(vector["rational"]["numerator"]), int(vector["rational"]["denominator"])), vector["value"])
+                validate_exact_rational(vector["value"])
+
+    def test_job_state_cancelled_and_queue_fields(self):
+        org = fixture()["context"]["organization_id"]
+        queued = {"kind": "job_state", "schema_version": 2, "organization_id": org, "job_id": "00000000-0000-4000-8000-000000000777",
+                  "state": "queued", "claim_sequence": 0, "cancel_requested": False, "queue_position": 1, "expected_wait_seconds": 30}
+        validate(queued)
+
+        def variant(**changes):
+            value = {k: v for k, v in queued.items() if k not in ("queue_position", "expected_wait_seconds")}
+            value.update(changes)
+            return value
+        validate(variant(state="running", claim_sequence=1))
+        validate(variant(state="running", claim_sequence=1, cancel_requested=True))
+        validate(variant(state="cancelled", cancel_requested=True))
+        validate(variant(state="cancelled", claim_sequence=1, cancel_requested=True))
+        validate(variant(state="done", claim_sequence=1, cancel_requested=True, result_digest=digest("result", {"example": True})))
+        for code in ("formula_refused", "macro_refused", "time_limit", "worker_lost", "authority_revoked", "resource_limit"):
+            validate(variant(state="failed", claim_sequence=1, failure_code=code))
+        # Claimed but not yet started (D9.4 steps 2-3): still queued, no position, a cancel request may be pending.
+        validate(variant(claim_sequence=1))
+        validate(variant(claim_sequence=1, cancel_requested=True))
+        for value, expected in ((variant(queue_position=1), "travel together"),
+                                (variant(state="running", claim_sequence=1, queue_position=2, expected_wait_seconds=60), "only a queued job"),
+                                (variant(state="cancelled"), "cancelled requires a cancel request"),
+                                (variant(state="cancelled", cancel_requested=True, result_digest=digest("result", {})), "done iff"),
+                                (variant(state="cancelled", cancel_requested=True, failure_code="cancelled"), "failed iff"),
+                                ({**queued, "queue_position": 0}, "schema:"), ({**queued, "expected_wait_seconds": -1}, "schema:"),
+                                ({k: v for k, v in queued.items() if k != "cancel_requested"}, "schema:"),
+                                ({**variant(state="cancelled", cancel_requested=True), "schema_version": 1}, "schema:"),
+                                (variant(state="failed", claim_sequence=1, failure_code="Formula Refused"), "schema:")):
+            with self.subTest(value=value), self.assertRaisesRegex(ContractError, expected):
+                validate(value)
+        payloads = [v for v in json.loads((ROOT / "fixtures" / "canonical-vectors.json").read_text()) if v.get("domain") == "forma:job-payload:v1"]
+        self.assertEqual(len(payloads), 1)
+        self.assertEqual(digest("job-payload", payloads[0]["value"]), payloads[0]["digest"])
+        self.assertNotEqual(digest("job-payload", payloads[0]["value"]), digest("result", payloads[0]["value"]))
+
+    def test_receipt_operator_and_renderer_identity_lists(self):
+        bundle = fixture()
+        content, publication, receipt = bundle["definition"]["content"], bundle["publication"], bundle["receipt"]
+        self.assertEqual((bundle["definition"]["schema_version"], publication["schema_version"], receipt["schema_version"]), (2, 2, 2))
+        used = sorted({op["type"] for view in content["views"] if "query" in view for op in view["query"]["operations"]})
+        self.assertEqual(publication["operators"], [{"id": name, "version": 1} for name in used])
+        self.assertEqual(publication["renderers"], [{"kind": kind, "version": 1} for kind in sorted({view["kind"] for view in content["views"]})])
+        self.assertEqual((publication["operator_version"], publication["renderer_version"], receipt["operator_version"]), (1, 1, 1))
+        view = next(view for view in content["views"] if view["id"] == receipt["view_id"])
+        self.assertEqual(receipt["operators"], [{"id": name, "version": 1} for name in sorted({op["type"] for op in view["query"]["operations"]})])
+        self.assertEqual(receipt["renderers"], [{"kind": view["kind"], "version": 1}])
+        sources = {source["revision_id"]: source for source in bundle["sources"]}
+        for entry in receipt["source_revisions"]:
+            self.assertEqual(entry["mapping_version"], sources[entry["source_revision_id"]]["mapping_version"])
+        self.assertFalse(receipt["partial"])
+        validate_bundle(bundle)
+        # A registry edition above one is a valid publication shape; a zero version is not.
+        validate({**publication, "operator_version": 2, "renderer_version": 3})
+        for key in ("operator_version", "renderer_version"):
+            with self.subTest(key=key), self.assertRaisesRegex(ContractError, "schema:"):
+                validate({**publication, key: 0})
+        # An edition-two definition never travels with an edition-one publication or receipt (no lists, no partial).
+        older = fixture()
+        older['publication'] = {k: v for k, v in older['publication'].items() if k not in ('operators', 'renderers')} | {'schema_version': 1}
+        with self.assertRaisesRegex(ContractError, 'edition-two definition requires edition-two publication and receipt'):
+            validate_bundle(older)
+        older = make_fixtures.northstar(coverage='partial')
+        receipt = {k: v for k, v in older['receipt'].items() if k not in ('operators', 'renderers')} | {'schema_version': 1, 'partial': False}
+        receipt['source_revisions'] = [{k: v for k, v in item.items() if k != 'mapping_version'} for item in receipt['source_revisions']]
+        rehash_receipt(receipt)
+        older['receipt'] = receipt
+        with self.assertRaisesRegex(ContractError, 'edition-two definition requires edition-two publication and receipt'):
+            validate_bundle(older)
+        # Partial coverage of a read input is the only meaning of a partial receipt.
+        partial = make_fixtures.northstar(coverage="partial")
+        self.assertTrue(partial["receipt"]["partial"])
+        validate_bundle(partial)
+        partial["receipt"]["partial"] = False
+        rehash_receipt(partial["receipt"])
+        with self.assertRaisesRegex(ContractError, "receipt partial"):
+            validate_bundle(partial)
+
+    def test_problem_codes_and_limit_bodies(self):
+        validate_problem({"status": 413, "code": "payload_too_large"})
+        for limit in ("organization_queue", "task_queue", "imports_per_day", "stored_original_bytes", "queries_per_hour"):
+            validate_problem({"status": 429, "code": "limit_exceeded", "limit": limit, "retry_after_seconds": 30})
+        for code in ("source_deleted", "source_quarantined", "unknown_value_in_aggregate", "lookup_ambiguous", "resource_limit"):
+            validate_problem({"status": 422, "code": code})
+        for body, expected in (({"status": 422, "code": "payload_too_large"}, "payload_too_large is 413"),
+                               ({"status": 429, "code": "limit_exceeded", "retry_after_seconds": 30}, "429 names its limit"),
+                               ({"status": 422, "code": "source_deleted", "limit": "task_queue"}, "429 names its limit"),
+                               ({"status": 429, "code": "limit_exceeded", "limit": "task_queue"}, "429 names its limit"),
+                               ({"status": 422, "code": "limit_exceeded", "limit": "task_queue", "retry_after_seconds": 1}, "limit_exceeded is 429"),
+                               ({"status": 429, "code": "limit_exceeded", "limit": "jobs", "retry_after_seconds": 1}, "schema:"),
+                               ({"status": 422, "code": "narrow_the_sql"}, "schema:"),
+                               ({"status": 413.0, "code": "payload_too_large"}, "float"),
+                               ({"status": 429, "code": "limit_exceeded", "limit": "task_queue", "retry_after_seconds": True}, "text or integers"),
+                               ({"status": 200, "code": "source_deleted"}, "schema:")):
+            with self.subTest(body=body), self.assertRaisesRegex(ContractError, expected):
+                validate_problem(body)
+
+    def test_normalized_rows_digest_domain(self):
+        vectors = [v for v in json.loads((ROOT / "fixtures" / "canonical-vectors.json").read_text()) if v.get("domain") == "forma:normalized-rows:v1"]
+        self.assertEqual(len(vectors), 2)
+        for vector in vectors:
+            with self.subTest(vector=vector["name"]):
+                self.assertIsInstance(vector["value"], list)
+                self.assertEqual(digest("normalized-rows", vector["value"]), vector["digest"])
+        self.assertIn(vectors[0]["digest"], {source["rows_digest"] for source in fixture()["sources"]})
+
+
 class CanonicalTests(unittest.TestCase):
     def test_golden_vectors(self):
         for vector in json.loads((ROOT / "fixtures" / "canonical-vectors.json").read_text()):
             with self.subTest(name=vector["name"]):
                 self.assertEqual(canonical(vector["value"]).hex(), vector["utf8_hex"])
-                self.assertEqual(digest("result", vector["value"]), vector["digest"])
+                self.assertEqual(digest(domain_name(vector.get("domain", "forma:result:v1")), vector["value"]), vector["digest"])
 
     def test_key_order_does_not_change_digest(self):
         self.assertEqual(digest("result", {"b": 2, "a": 1}), digest("result", {"a": 1, "b": 2}))

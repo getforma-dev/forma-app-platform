@@ -1,0 +1,14 @@
+{
+  "url": "https://api.github.com/repos/getforma-dev/forma-app-platform/compare/e195ebfdc605dbec9b7e5d895ecc4b2ebdf02819...main",
+  "html_url": "https://github.com/getforma-dev/forma-app-platform/compare/e195ebfdc605dbec9b7e5d895ecc4b2ebdf02819...main",
+  "status": "diverged",
+  "ahead_by": 1,
+  "behind_by": 40,
+  "total_commits": 1,
+  "base_commit": {
+    "sha": "e195ebfdc605dbec9b7e5d895ecc4b2ebdf02819"
+  },
+  "merge_base_commit": {
+    "sha": "f5fbf8edf15d136ffcba7bd30602fc9b22774fff"
+  }
+}

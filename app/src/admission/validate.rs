@@ -1,7 +1,12 @@
 //! Whole-output admission of one `app_definition` of contract edition
-//! impl-2026-10-28.1: `$defs.app_definition` in `contracts/schema.py` and
-//! `validate`/`_definition` in `contracts/validate.py` (design section 6.2,
-//! C04, C13).
+//! impl-2026-10-29.2: `$defs.app_definition` (schema version 1, the shape of
+//! the retained edition impl-2026-10-28.1) or `$defs.app_definition_v2`
+//! (schema version 2) in `contracts/schema.py`, and `validate`/`_definition` in
+//! `contracts/validate.py` (design section 6.2, C04, C13; ADR-009 D9.6). A
+//! definition's `schema_version` selects its closed shape; a stored version-1
+//! definition admits unchanged with its original digest. Version 2 adds
+//! `coverage` to every input contract and the window-derived ratio
+//! denominator `{"type": "window_minutes"}`.
 //!
 //! The document is decoded as forma-json-v1 and walked against the closed
 //! grammar, the renderer and operator registries and the complexity limits;
@@ -34,8 +39,11 @@ pub const MAX_OPERATIONS: usize = 8;
 pub const MAX_DEFINITION_BYTES: usize = 262_144;
 /// Rows on one result page.
 pub const MAX_PAGE_ROWS: u64 = 500;
-/// The registered definition schema version.
-pub const SCHEMA_VERSION: u32 = 1;
+/// Registered definition schema versions: 1 is edition impl-2026-10-28.1's
+/// shape, 2 edition impl-2026-10-29.2's.
+pub const SCHEMA_VERSIONS: [u32; 2] = [1, 2];
+/// Digits in each integer of an `exact_rational` (ADR-002, ADR-009 D9.6).
+pub const MAX_RATIONAL_DIGITS: usize = 38;
 /// The registered renderer version.
 pub const RENDERER_VERSION: u32 = 1;
 /// The registered operator version.
@@ -52,6 +60,7 @@ pub const OPERATORS: [&str; 8] = [
 const MEASURES: [&str; 4] = ["count", "sum", "min", "max"];
 const COMPARISONS: [&str; 6] = ["eq", "ne", "lt", "lte", "gt", "gte"];
 const LOOKUP_RULES: [&str; 2] = ["exact", "cidr_exact_then_longest"];
+const COVERAGE: [&str; 2] = ["complete", "partial"];
 #[rustfmt::skip]
 const VALUE_TYPES: [&str; 9] = [
     "text", "boolean", "integer", "decimal", "date", "timestamp", "enum", "reference", "money",
@@ -93,7 +102,8 @@ pub struct AdmittedDefinition {
     /// forma-json-v1 bytes of the definition content, at most
     /// [`MAX_DEFINITION_BYTES`].
     pub canonical: Vec<u8>,
-    /// The contract schema version the definition was admitted under.
+    /// The contract schema version the definition was admitted under, one of
+    /// [`SCHEMA_VERSIONS`].
     pub schema_version: u32,
     /// The registered renderer version every view names.
     pub renderer_version: u32,
@@ -147,7 +157,7 @@ pub fn admit_definition(bytes: &[u8]) -> Result<AdmittedDefinition, AdmissionErr
     Ok(AdmittedDefinition {
         digest: identity,
         canonical,
-        schema_version: SCHEMA_VERSION,
+        schema_version: walk.edition,
         renderer_version: RENDERER_VERSION,
         operator_version: OPERATOR_VERSION,
         view_count: definition.content.views.len(),
@@ -173,6 +183,8 @@ struct Content {
 struct Contract {
     id: String,
     fields: Vec<Field>,
+    /// A records input declaring partial coverage (schema version 2).
+    partial_records: bool,
 }
 
 struct Field {
@@ -235,8 +247,7 @@ enum Operation {
     TimeBucket(FieldRef),
     Ratio {
         numerator: String,
-        /// A prior measure, or `None` for a constant.
-        denominator: Option<String>,
+        denominator: Denominator,
         output: String,
     },
     Lookup {
@@ -244,6 +255,15 @@ enum Operation {
         right: FieldRef,
         cidr: bool,
     },
+}
+
+enum Denominator {
+    /// A prior measure's id.
+    Measure(String),
+    /// A positive integer constant.
+    Constant,
+    /// The admitted half-open window's length in minutes (schema version 2).
+    WindowMinutes,
 }
 
 enum Literal {
@@ -292,6 +312,10 @@ type Unregistered = fn(String) -> AdmissionError;
 #[derive(Default)]
 struct Walk {
     worst: Option<AdmissionError>,
+    /// The definition's schema version; an unregistered one is walked as the
+    /// widest registered shape, so no edition-one or edition-two member is
+    /// reported as unknown because of the version alone.
+    edition: u32,
 }
 
 impl Walk {
@@ -591,12 +615,16 @@ impl Walk {
         ];
         let map = self.object("$", value, &required, &[])?;
         self.choice("$.kind", map.get("kind"), &["app_definition"], None);
-        self.version(
-            "$.schema_version",
-            map.get("schema_version"),
-            SCHEMA_VERSION,
-            None,
-        );
+        let version = map.get("schema_version");
+        self.edition = version
+            .and_then(Value::as_u64)
+            .and_then(|version| {
+                SCHEMA_VERSIONS
+                    .into_iter()
+                    .find(|v| u64::from(*v) == version)
+            })
+            .unwrap_or(SCHEMA_VERSIONS[SCHEMA_VERSIONS.len() - 1]);
+        self.version("$.schema_version", version, self.edition, None);
         for key in ["organization_id", "app_id", "revision_id"] {
             self.string(&member("$", key), map.get(key), Grammar::Uuid);
         }
@@ -663,7 +691,10 @@ impl Walk {
     }
 
     fn input_contract(&mut self, path: &str, value: &Value) -> Option<Contract> {
-        let required = ["id", "contract_id", "contract_version", "kind", "fields"];
+        let mut required = vec!["id", "contract_id", "contract_version", "kind", "fields"];
+        if self.edition >= 2 {
+            required.push("coverage");
+        }
         let map = self.object(path, value, &required, &[])?;
         let at = |key: &str| member(path, key);
         let id = self.id(&at("id"), map.get("id"));
@@ -674,11 +705,14 @@ impl Walk {
             1,
             None,
         );
-        self.choice(&at("kind"), map.get("kind"), &["source", "records"], None);
+        let kind = self.choice(&at("kind"), map.get("kind"), &["source", "records"], None);
+        let coverage = self.choice(&at("coverage"), map.get("coverage"), &COVERAGE, None);
         let fields = self.each(&at("fields"), map.get("fields"), 1..=32, Self::field);
         Some(Contract {
             id: id?,
             fields: fields?,
+            partial_records: kind.as_deref() == Some("records")
+                && coverage.as_deref() == Some("partial"),
         })
     }
 
@@ -691,6 +725,7 @@ impl Walk {
         Some(Contract {
             id: id?,
             fields: fields?,
+            partial_records: false,
         })
     }
 
@@ -1063,18 +1098,32 @@ impl Walk {
         })
     }
 
-    /// A prior measure's id, or `None` for a positive integer constant.
-    fn denominator(&mut self, path: &str, value: &Value) -> Option<Option<String>> {
-        let tag = self.tag(path, value, &["measure", "constant"], None)?;
+    /// A prior measure, a positive integer constant or, in schema version 2,
+    /// the window's minutes.
+    fn denominator(&mut self, path: &str, value: &Value) -> Option<Denominator> {
+        let tags: &[&'static str] = if self.edition >= 2 {
+            &["measure", "constant", "window_minutes"]
+        } else {
+            &["measure", "constant"]
+        };
+        let tag = self.tag(path, value, tags, None)?;
         let at = |key: &str| member(path, key);
-        if tag == "measure" {
-            let map = self.object(path, value, &["type", "id"], &[])?;
-            return Some(Some(self.id(&at("id"), map.get("id"))?));
+        match tag {
+            "measure" => {
+                let map = self.object(path, value, &["type", "id"], &[])?;
+                Some(Denominator::Measure(self.id(&at("id"), map.get("id"))?))
+            }
+            "window_minutes" => {
+                self.object(path, value, &["type"], &[])?;
+                Some(Denominator::WindowMinutes)
+            }
+            _ => {
+                let map = self.object(path, value, &["type", "value", "unit"], &[])?;
+                self.string(&at("value"), map.get("value"), Grammar::Positive);
+                self.id(&at("unit"), map.get("unit"));
+                Some(Denominator::Constant)
+            }
         }
-        let map = self.object(path, value, &["type", "value", "unit"], &[])?;
-        self.string(&at("value"), map.get("value"), Grammar::Positive);
-        self.id(&at("unit"), map.get("unit"));
-        Some(None)
     }
 
     fn field_ref(&mut self, path: &str, value: &Value) -> Option<FieldRef> {
@@ -1203,6 +1252,13 @@ impl Content {
             "$.content.inputs",
             "input id",
         )?;
+        for (position, input) in self.inputs.iter().enumerate() {
+            require(
+                !input.partial_records,
+                &format!("$.content.inputs[{position}].coverage"),
+                "records input requires complete coverage",
+            )?;
+        }
         let mut fields: Fields = BTreeMap::new();
         for (position, input) in self.inputs.iter().enumerate() {
             let path = format!("$.content.inputs[{position}].fields");
@@ -1430,9 +1486,26 @@ impl Query {
                 } => {
                     let declared = measures.contains(numerator.as_str());
                     require(declared, &path, "ratio requires prior declared numerator")?;
-                    if let Some(denominator) = denominator {
-                        let declared = measures.contains(denominator.as_str());
-                        require(declared, &path, "ratio requires prior declared denominator")?;
+                    match denominator {
+                        Denominator::Measure(denominator) => {
+                            let declared = measures.contains(denominator.as_str());
+                            require(declared, &path, "ratio requires prior declared denominator")?;
+                        }
+                        Denominator::Constant => {}
+                        Denominator::WindowMinutes => {
+                            let Some((start, end)) = &self.window else {
+                                return Err(refused(
+                                    &path,
+                                    "window_minutes denominator requires a window",
+                                ));
+                            };
+                            let span = epoch_seconds(end) - epoch_seconds(start);
+                            require(
+                                span % 60 == 0,
+                                &path,
+                                "window must be a whole number of minutes",
+                            )?;
+                        }
                     }
                     require(measures.insert(output), &path, "duplicate derived measure")?;
                 }
@@ -1456,6 +1529,115 @@ impl Query {
             .copied()
             .ok_or_else(|| refused(path, "unknown query field"))
     }
+}
+
+/// Seconds since 1970-01-01T00:00:00Z of an admitted `YYYY-MM-DDTHH:MM:SSZ`
+/// instant (proleptic Gregorian days from civil date).
+fn epoch_seconds(instant: &str) -> i64 {
+    let bytes = instant.as_bytes();
+    let field = |range: std::ops::Range<usize>| i64::from(number(&bytes[range]).unwrap_or(0));
+    let (year, month, day) = (field(0..4), field(5..7), field(8..10));
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let year_of_era = year - era * 400;
+    let day_of_year = (153 * ((month + 9) % 12) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let days = era * 146_097 + day_of_era - 719_468;
+    days * 86_400 + field(11..13) * 3600 + field(14..16) * 60 + field(17..19)
+}
+
+/// Reduces two exact decimal integers, each at most [`MAX_RATIONAL_DIGITS`]
+/// digits, to the canonical `exact_rational` value of edition impl-2026-10-29.2
+/// (`{"type": "exact_rational", "numerator", "denominator"}` in lowest terms
+/// with a positive denominator), as validate.py `exact_rational` does. The
+/// engine's integer sums arrive as decimal strings (ADR-009 D9.7).
+pub fn exact_rational(numerator: &str, denominator: &str) -> Result<Value, AdmissionError> {
+    let (negative, numerator) = signed_decimal("$.numerator", numerator)?;
+    let (flip, denominator) = signed_decimal("$.denominator", denominator)?;
+    require(denominator != 0, "$.denominator", "zero denominator")?;
+    let divisor = gcd(numerator, denominator);
+    let (numerator, denominator) = (numerator / divisor, denominator / divisor);
+    let sign = if negative != flip && numerator != 0 {
+        "-"
+    } else {
+        ""
+    };
+    Ok(serde_json::json!({
+        "type": "exact_rational",
+        "numerator": format!("{sign}{numerator}"),
+        "denominator": denominator.to_string(),
+    }))
+}
+
+/// Checks one `$defs.exact_rational` value: the closed shape, a canonical
+/// signed numerator and positive denominator of at most 38 digits each, and
+/// lowest terms (validate.py `validate_exact_rational`).
+pub fn check_exact_rational(value: &Value) -> Result<(), AdmissionError> {
+    let map = value
+        .as_object()
+        .ok_or_else(|| refused("$", "expected an object"))?;
+    for key in map.keys() {
+        require(
+            ["type", "numerator", "denominator"].contains(&key.as_str()),
+            &member("$", key),
+            "unknown field",
+        )?;
+    }
+    require(
+        map.get("type").and_then(Value::as_str) == Some("exact_rational"),
+        "$.type",
+        "expected exact_rational",
+    )?;
+    let numerator = map
+        .get("numerator")
+        .and_then(Value::as_str)
+        .filter(|text| Grammar::Integer.admits(text))
+        .ok_or_else(|| refused("$.numerator", Grammar::Integer.rule()))?;
+    let denominator = map
+        .get("denominator")
+        .and_then(Value::as_str)
+        .filter(|text| digits(text, MAX_RATIONAL_DIGITS))
+        .ok_or_else(|| {
+            refused(
+                "$.denominator",
+                "expected a positive integer of at most 38 digits",
+            )
+        })?;
+    let (_, numerator) = signed_decimal("$.numerator", numerator)?;
+    let (_, denominator) = signed_decimal("$.denominator", denominator)?;
+    require(
+        gcd(numerator, denominator) == 1,
+        "$",
+        "exact_rational must be in lowest terms",
+    )
+}
+
+/// A canonical decimal integer (`0`, or an optional `-` and `[1-9][0-9]*`) of
+/// at most [`MAX_RATIONAL_DIGITS`] digits, as its sign and magnitude.
+fn signed_decimal(path: &str, text: &str) -> Result<(bool, u128), AdmissionError> {
+    let (negative, magnitude) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text),
+    };
+    let canonical = (magnitude == "0" && !negative) || digits(magnitude, usize::MAX);
+    require(canonical, path, "expected a decimal integer")?;
+    require(
+        magnitude.len() <= MAX_RATIONAL_DIGITS,
+        path,
+        "exact_rational exceeds 38 digits",
+    )?;
+    // At most 38 decimal digits always fit: 10^38 - 1 < 2^127.
+    let value = magnitude
+        .bytes()
+        .fold(0_u128, |value, digit| value * 10 + u128::from(digit - b'0'));
+    Ok((negative, value))
+}
+
+fn gcd(mut a: u128, mut b: u128) -> u128 {
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
 }
 
 /// validate.py `compatible`: a filter literal against the field it compares.

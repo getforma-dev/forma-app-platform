@@ -1,6 +1,6 @@
 # ADR-004: Tenant transactions, pool ownership and foundation delivery
 
-Accepted implementation direction, 2026-10-29. This resolves the [APP-008 planning review](../../evidence/APP-008/planning-review.md); it is not implementation or test evidence. [APP-008](../../Tickets/3-in-review/APP-008.md) owns the complete tenant foundation. Platform §6.3, C01/C07/C11 and ADR-003 remain controlling. Later session, admission, publication and command workflows retain their own gates.
+Accepted implementation direction, 2026-10-29. This resolves the [APP-008 planning review](../../evidence/APP-008/planning-review.md); it is not implementation or test evidence. [APP-008](../../Tickets/4-done/APP-008.md) owns the complete tenant foundation. Platform §6.3, C01/C07/C11 and ADR-003 remain controlling. Later session, admission, publication and command workflows retain their own gates.
 
 *Amendment 2026-10-29 ([ADR-005](ADR-005-PHASE-1-SEQUENCING.md)):* slice 3's actual PostgreSQL/RDS isolation, reuse, race and recovery qualification is now owned by APP-075/077/078; APP-008 closes on slices 1–2 plus exact-source CI and landing. Every managed obligation below is unchanged and PH01 still cannot pass without it; the text is retained as the original decision.
 

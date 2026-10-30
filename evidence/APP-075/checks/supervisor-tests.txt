@@ -1,0 +1,23 @@
+test_a_partly_written_run_file_is_removed (test_qualification_supervisor.SupervisorTests.test_a_partly_written_run_file_is_removed) ... ok
+test_a_pass_requires_six_passed_checks (test_qualification_supervisor.SupervisorTests.test_a_pass_requires_six_passed_checks) ... ok
+test_accepts_the_task_platform_and_image_environment (test_qualification_supervisor.SupervisorTests.test_accepts_the_task_platform_and_image_environment) ... ok
+test_drains_stderr_without_forwarding_it (test_qualification_supervisor.SupervisorTests.test_drains_stderr_without_forwarding_it) ... ok
+test_kills_the_child_at_the_original_deadline (test_qualification_supervisor.SupervisorTests.test_kills_the_child_at_the_original_deadline) ... ok
+test_launches_exact_executable_and_arguments_with_private_files_and_no_secrets (test_qualification_supervisor.SupervisorTests.test_launches_exact_executable_and_arguments_with_private_files_and_no_secrets) ... ok
+test_missing_ambiguous_or_failed_results_never_pass (test_qualification_supervisor.SupervisorTests.test_missing_ambiguous_or_failed_results_never_pass) ... ok
+test_refresh_failures_are_sanitized (test_qualification_supervisor.SupervisorTests.test_refresh_failures_are_sanitized) ... ok
+test_refreshes_until_the_executable_exits (test_qualification_supervisor.SupervisorTests.test_refreshes_until_the_executable_exits) ... ok
+test_refuses_absent_open_or_out_of_bounds_manifests (test_qualification_supervisor.SupervisorTests.test_refuses_absent_open_or_out_of_bounds_manifests) ... ok
+test_refuses_ca_executable_mount_and_preexisting_file_substitution (test_qualification_supervisor.SupervisorTests.test_refuses_ca_executable_mount_and_preexisting_file_substitution) ... ok
+test_refuses_every_other_argument_list_including_serve (test_qualification_supervisor.SupervisorTests.test_refuses_every_other_argument_list_including_serve) ... ok
+test_refuses_every_variable_outside_the_allowlist (test_qualification_supervisor.SupervisorTests.test_refuses_every_variable_outside_the_allowlist) ... ok
+test_refuses_operator_password_and_migration_channel (test_qualification_supervisor.SupervisorTests.test_refuses_operator_password_and_migration_channel) ... ok
+test_refuses_unarmed_injected_auth_and_wrong_uid (test_qualification_supervisor.SupervisorTests.test_refuses_unarmed_injected_auth_and_wrong_uid) ... ok
+test_registry_bytes_match_the_rust_vector (test_qualification_supervisor.SupervisorTests.test_registry_bytes_match_the_rust_vector) ... ok
+test_reviewed_ca_pin_is_the_packaged_bundle (test_qualification_supervisor.SupervisorTests.test_reviewed_ca_pin_is_the_packaged_bundle) ... ok
+test_sigterm_kills_the_child_removes_files_and_reports (test_qualification_supervisor.SupervisorTests.test_sigterm_kills_the_child_removes_files_and_reports) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 3.802s
+
+OK

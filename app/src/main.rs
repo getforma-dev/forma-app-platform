@@ -32,6 +32,15 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
+    // The image names its parser bytes in parser-manifest.json and sets this
+    // variable; startup refuses if the guest or host on disk differ (ADR-009
+    // D9.1, integrity only). Without it no parse can run.
+    if std::env::var_os(genui::imports::sandbox::MANIFEST_ENV).is_some() {
+        if let Err(reason) = genui::imports::sandbox::verify_manifest() {
+            eprintln!("parser manifest refused: {reason}");
+            std::process::exit(1);
+        }
+    }
     let credential_path =
         std::env::var("GENUI_RUNTIME_CONFIG_FILE").expect("GENUI_RUNTIME_CONFIG_FILE is required");
     let config = genui::config::Config::load(std::path::Path::new(&credential_path))

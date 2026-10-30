@@ -13,8 +13,8 @@
       "path": "expected.json"
     },
     {
-      "bytes": 12773,
-      "digest": "sha256:29221b7a63b8f19786fbac0a2443543d9245186333be928ba4917b70bc387459",
+      "bytes": 12827,
+      "digest": "sha256:7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
       "path": "setup.json"
     }
   ],
@@ -29,16 +29,12 @@
       "path": "design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md"
     },
     {
-      "digest": "sha256:9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45",
-      "path": "contracts/implementation-lock.json"
-    },
-    {
       "digest": "sha256:45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
-      "path": "contracts/fixtures/northstar.json"
+      "path": "contracts/fixtures/impl-2026-10-28.1/northstar.json"
     },
     {
       "digest": "sha256:4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
-      "path": "contracts/fixtures/spend-review.json"
+      "path": "contracts/fixtures/impl-2026-10-28.1/spend-review.json"
     }
   ],
   "sources": [

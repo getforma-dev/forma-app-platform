@@ -17,19 +17,45 @@ COPY app/migrations ./migrations
 COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml
 COPY spikes/APP-006/src /source/spikes/APP-006/src
 COPY --from=browser /source/admin/dist ./admin/dist
-RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry --mount=type=cache,id=genui-cargo-target-${TARGETARCH},target=/source/app/target cargo build --release --locked && cp /source/app/target/release/forma-app-platform /source/genui
+RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=genui-cargo-target-${TARGETARCH},target=/source/app/target cargo build --release --locked && cp /source/app/target/release/forma-app-platform /source/genui
+
+# parser-host and its WASM guest: their own workspace, lockfile and pinned
+# toolchain, never in the app's Cargo graph (ADR-009 D9.1). Paths are fixed so
+# parser/.cargo/config.toml's --remap-path-prefix keeps them out of the guest.
+# One build job here plus two in `native` keeps aggregate Cargo jobs at three.
+# The two stages run in parallel on one registry cache, and Cargo's
+# package-cache lock lives outside that mount, so both mount it sharing=locked.
+FROM rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31 AS parser
+WORKDIR /source/parser
+ENV CARGO_BUILD_JOBS=1
+ARG TARGETARCH
+RUN rustup target add --toolchain 1.93.1 wasm32-unknown-unknown && rustup component add --toolchain 1.93.1 clippy rustfmt
+COPY parser/ ./
+RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=genui-parser-target-${TARGETARCH},target=/source/parser/target \
+    python3 verify_vendor.py \
+    && cargo build --locked --release -p parser-guest --target wasm32-unknown-unknown \
+    && cargo build --locked --release -p parser-host \
+    && mkdir /source/parser-out \
+    && cp target/wasm32-unknown-unknown/release/parser_guest.wasm target/release/parser-host /source/parser-out/ \
+    && rustc -vV > /source/rustc-vv.txt \
+    && python3 write_manifest.py --source /source/parser \
+        --guest /source/parser-out/parser_guest.wasm --guest-path /app/parser/parser_guest.wasm \
+        --host /source/parser-out/parser-host --host-path /app/parser/parser-host \
+        --rustc-vv /source/rustc-vv.txt --output /source/parser-out/parser-manifest.json
 
 FROM python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
 WORKDIR /app
 COPY app/runtime/requirements.lock ./requirements.lock
 RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r requirements.lock
+COPY --from=parser /source/parser-out/parser_guest.wasm /source/parser-out/parser-host /app/parser/
+COPY --from=parser /source/parser-out/parser-manifest.json /app/parser-manifest.json
 COPY --from=native /source/genui /app/genui
 COPY app/runtime/runtime.py /app/runtime.py
 COPY app/migrations /app/migrations
 COPY app/certs/rds-global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
 RUN mkdir -p /run/genui && chown 65532:65532 /run/genui && chmod 0700 /run/genui
 VOLUME ["/run/genui"]
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 GENUI_RUNTIME_CONFIG_FILE=/run/genui/credentials.json GENUI_RDS_CA_FILE=/etc/ssl/certs/rds-global-bundle.pem AWS_CONFIG_FILE=/dev/null AWS_SHARED_CREDENTIALS_FILE=/dev/null
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 GENUI_RUNTIME_CONFIG_FILE=/run/genui/credentials.json GENUI_RDS_CA_FILE=/etc/ssl/certs/rds-global-bundle.pem AWS_CONFIG_FILE=/dev/null AWS_SHARED_CREDENTIALS_FILE=/dev/null GENUI_PARSER_MANIFEST_FILE=/app/parser-manifest.json
 USER 65532:65532
 EXPOSE 3000
 ENTRYPOINT ["python3", "/app/runtime.py"]

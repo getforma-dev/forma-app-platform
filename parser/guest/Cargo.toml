@@ -1,0 +1,15 @@
+[package]
+name = "parser-guest"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.93"
+publish = false
+[lib]
+crate-type = ["cdylib", "rlib"]
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+zip.workspace = true
+calamine = { version = "=0.37.0", default-features = false }
+quick-xml = "=0.42.0"
+csv-core = "=0.1.13"

@@ -84,14 +84,64 @@ def parser_binding(output):
             "app004_recorded_wasm_sha256": qualified["wasm_sha256"], "app004_recorded_host": recorded["host"], "app004_recorded_platform": qualified["platform"]}
 
 
-def parser_checks(output, manifest):
-    host = ROOT / "spikes/APP-004/target/debug/parser-host"
-    wasm = ROOT / "spikes/APP-004/target/wasm32-unknown-unknown/release/parser_guest.wasm"
-    binding = parser_binding(output)
-    artifact_pins = {str(path.relative_to(ROOT)): sha(path) for path in (host, wasm)}
-    binding["wasm_sha256"] = artifact_pins[str(wasm.relative_to(ROOT))]
-    binding["wasm_matches_app004_recorded_bytes"] = binding["wasm_sha256"] == binding["app004_recorded_wasm_sha256"]
-    binding["basis"] = "recorded APP-004 source files, Cargo.lock, vendored ZIP provenance and rustc/cargo identity are byte-identical and the locked build was rerun; byte identity with the recorded arm64 macOS artifact is reported, not required, because wasm32 bytes embed absolute registry/checkout paths"
+def image_parser_binding(output, host, wasm, manifest_path):
+    """Bind parser bytes extracted from a built image to this checkout's parser/ (ADR-009 D9.1).
+
+    The guest under test is the image's own bytes; nothing is rebuilt. The image
+    build's parser-manifest.json names the guest digest and the sources digest,
+    Cargo.lock, vendored ZIP provenance and rustc that produced it. Each source
+    input is recomputed from this checkout and must match, and rustc must be the
+    release and commit APP-004 qualified. The host only runs the guest; its
+    digest is reported, and matches the manifest when the image's own host runs.
+    """
+    parser_root = ROOT / "parser"
+    image = json.loads(manifest_path.read_text())
+    spec = importlib.util.spec_from_file_location("parser_write_manifest", parser_root / "write_manifest.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    tree, count = module.sources_sha256(parser_root)
+    source = image["source"]
+    with (output / "parser-build.log").open("w") as log:
+        result = subprocess.run([sys.executable, "verify_vendor.py"], cwd=parser_root, capture_output=True, text=True, timeout=120)
+        log.write("$ python verify_vendor.py\n" + result.stdout + result.stderr + "\n")
+    if result.returncode:
+        raise AssertionError("parser vendored ZIP verification failed")
+    qualified = json.loads((ROOT / "evidence/APP-004/build-metadata.json").read_text())
+    recorded = dict(line.split(": ", 1) for line in qualified["rustc"].splitlines() if ": " in line)
+    channel = tomllib.loads((parser_root / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
+    wasm_digest = sha(wasm)
+    mismatches = [name for name, ok in (
+        ("schema", image.get("schema") == module.SCHEMA),
+        ("guest_sha256", "sha256:" + image["guest"]["sha256"] == wasm_digest),
+        ("sources_sha256", source["sources_sha256"] == tree and source["source_files"] == count),
+        ("cargo_lock_sha256", source["cargo_lock_sha256"] == sha(parser_root / "Cargo.lock")[7:]),
+        ("vendor_provenance_sha256", source["vendor_provenance_sha256"] == sha(parser_root / "vendor/provenance.json")[7:]),
+        ("rust_toolchain", source["rust_toolchain"] == channel == source["rustc"]["release"] == recorded["release"]),
+        ("rustc_commit", source["rustc"]["commit-hash"] == recorded["commit-hash"] and source["rustc"]["LLVM version"] == recorded["LLVM version"]),
+    ) if not ok]
+    if mismatches:
+        raise AssertionError("image parser bytes are not bound to this checkout's parser/: " + " ".join(mismatches))
+    return {"mode": "image-bytes", "parser_manifest_sha256": sha(manifest_path), "sources_sha256": tree, "source_files": count,
+            "cargo_lock_sha256": source["cargo_lock_sha256"], "vendor_provenance_sha256": source["vendor_provenance_sha256"], "vendor_verification": result.stdout.strip(),
+            "rustc": source["rustc"], "app004_recorded_rustc_commit": recorded["commit-hash"],
+            "host_sha256": sha(host), "host_matches_manifest": "sha256:" + image["host"]["sha256"] == sha(host),
+            "basis": "the guest bytes are the image's own; the manifest written by the image build binds them to parser/ sources, Cargo.lock, vendored ZIP provenance and rustc, each recomputed from this checkout; no rebuild and no cross-host byte identity"}
+
+
+def parser_checks(output, manifest, image=None):
+    if image:
+        host, wasm, manifest_path = image
+        binding = image_parser_binding(output, host, wasm, manifest_path)
+        artifact_pins = {"parser_host": sha(host), "parser_guest": sha(wasm)}
+        binding["wasm_sha256"] = artifact_pins["parser_guest"]
+    else:
+        host = ROOT / "spikes/APP-004/target/debug/parser-host"
+        wasm = ROOT / "spikes/APP-004/target/wasm32-unknown-unknown/release/parser_guest.wasm"
+        binding = parser_binding(output)
+        artifact_pins = {str(path.relative_to(ROOT)): sha(path) for path in (host, wasm)}
+        binding["wasm_sha256"] = artifact_pins[str(wasm.relative_to(ROOT))]
+        binding["wasm_matches_app004_recorded_bytes"] = binding["wasm_sha256"] == binding["app004_recorded_wasm_sha256"]
+        binding["basis"] = "recorded APP-004 source files, Cargo.lock, vendored ZIP provenance and rustc/cargo identity are byte-identical and the locked build was rerun; byte identity with the recorded arm64 macOS artifact is reported, not required, because wasm32 bytes embed absolute registry/checkout paths"
     reports = {}
 
     def one(entry):
@@ -106,7 +156,7 @@ def parser_checks(output, manifest):
             raise AssertionError("parser host failed: " + entry["id"])
         report = json.loads(result.stdout)
         save(output / "parser" / (entry["id"] + ".json"), report)
-        if report["input_sha256"] != entry["original_digest"] or report["wasm_sha256"] != artifact_pins[str(wasm.relative_to(ROOT))] or report["interface_imports"] != []:
+        if report["input_sha256"] != entry["original_digest"] or report["wasm_sha256"] != binding["wasm_sha256"] or report["interface_imports"] != []:
             raise AssertionError("parser input/module binding mismatch")
         result = report["result"]
         if entry["parser_expect"] == "accepted":
@@ -198,13 +248,14 @@ def seed_manifest_checks(output):
     return result
 
 
-def run(output):
+def run(output, image=None):
     output = Path(output)
     if output.exists() and any(output.iterdir()):
         raise SystemExit("choose a new output directory; retain earlier evidence")
     output.mkdir(parents=True, exist_ok=True)
     summary = {"passed": False, "started_at": datetime.now(timezone.utc).isoformat(), "python": platform.python_version(), "platform": platform.platform(),
-               "command": "spikes/APP-005/.venv/bin/python fixtures/qualify.py --output " + str(output.relative_to(ROOT) if output.is_absolute() and output.is_relative_to(ROOT) else output)}
+               "command": "spikes/APP-005/.venv/bin/python fixtures/qualify.py --output " + str(output.relative_to(ROOT) if output.is_absolute() and output.is_relative_to(ROOT) else output)
+               + ("".join(f" --parser-{name} {path}" for name, path in zip(("host", "wasm", "manifest"), image)) if image else "")}
     try:
         manifest = load_package()
         summary["source_pins"] = {str(p.relative_to(ROOT)): sha(p) for p in [*sorted((ROOT / "fixtures").glob("*.py")), ROOT / "spikes/APP-004/Cargo.lock", ROOT / "spikes/APP-004/guest/src/lib.rs", ROOT / "spikes/APP-004/host/src/lib.rs", ROOT / "spikes/APP-005/query.py", ROOT / "spikes/APP-005/requirements.lock", ROOT / "contracts/implementation-lock.json", DEFAULT / "manifest.json"]}
@@ -215,7 +266,7 @@ def run(output):
                 raise AssertionError(name + " failed")
         oracle = verify()
         save(output / "oracle.json", oracle)
-        reports, pins, binding = parser_checks(output, manifest)
+        reports, pins, binding = parser_checks(output, manifest, image)
         summary["parser_artifacts"] = pins
         summary["parser_binding"] = binding
         summary["parser_cases"] = len(reports)
@@ -235,4 +286,11 @@ def run(output):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    run(parser.parse_args().output)
+    parser.add_argument("--parser-host", type=Path, help="with --parser-wasm and --parser-manifest: qualify parser bytes extracted from a built image")
+    parser.add_argument("--parser-wasm", type=Path)
+    parser.add_argument("--parser-manifest", type=Path)
+    arguments = parser.parse_args()
+    image = (arguments.parser_host, arguments.parser_wasm, arguments.parser_manifest)
+    if any(image) and not all(image):
+        parser.error("--parser-host, --parser-wasm and --parser-manifest go together")
+    run(arguments.output, tuple(path.resolve() for path in image) if all(image) else None)

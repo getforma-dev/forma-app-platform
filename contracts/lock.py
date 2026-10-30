@@ -9,6 +9,20 @@ LOCK = ROOT / "contracts/implementation-lock.json"
 SOURCE = "design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md"
 DEMO_LOCK = "design/forma-northstar-demo/platform-contract-lock.json"
 SOURCE_SHA = "f209ccb05aa895080c6fd424fe979d65f276959536ee7d57b371428e1d049fd5"
+EDITION = "impl-2026-10-29.2"
+# Edition impl-2026-10-28.1's lock file and the fixture identities it locked. Its fixtures are retained
+# byte-identically under contracts/fixtures/impl-2026-10-28.1/ and must keep these identities (ADR-002).
+RETAINED = {
+    "impl-2026-10-28.1": {
+        "lock_sha256": "9bf0bc694bd75ea7a370c9b852809f53c4a312978fe31bb4ce61e5a4e6569a45",
+        "artifacts": {
+            "contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json": "33b46ff5970bdcd5259f23bdb5e9a7fcda4c5eeffebe93e0fedfebf5f661203d",
+            "contracts/fixtures/impl-2026-10-28.1/negative-vectors.json": "089e9a3017adda324a2a150fb68d5aa497889cd104d2f7096b9128d520764e75",
+            "contracts/fixtures/impl-2026-10-28.1/northstar.json": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+            "contracts/fixtures/impl-2026-10-28.1/spend-review.json": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+        },
+    },
+}
 
 
 def sha(path):
@@ -19,12 +33,16 @@ def expected():
     assert sha(SOURCE) == SOURCE_SHA, "Frozen shared source changed"
     original = json.loads((ROOT / DEMO_LOCK).read_text())
     assert original["contract_edition"] == "prep-2026-10-22.1" and original["sha256"] == SOURCE_SHA, "Frozen companion lock changed"
+    for edition in RETAINED.values():
+        for path, identity in edition["artifacts"].items():
+            assert sha(path) == identity, f"Retained edition artifact changed: {path}"
     files = sorted(str(p.relative_to(ROOT)) for p in (ROOT / "contracts").glob("*") if p.is_file() and p.name != LOCK.name)
-    files += sorted(str(p.relative_to(ROOT)) for p in (ROOT / "contracts/fixtures").glob("*.json"))
-    files += ["docs/architecture/ADR-002-CONTRACT-EDITION.md", "evidence/APP-002/dependencies.json", ".github/workflows/contracts.yml"]
-    return {"edition": "impl-2026-10-28.1", "source_edition": "prep-2026-10-22.1", "status": "synthetic contract qualification; not runtime authorization or persistence",
+    files += sorted(str(p.relative_to(ROOT)) for p in (ROOT / "contracts/fixtures").rglob("*.json"))
+    files += ["docs/architecture/ADR-002-CONTRACT-EDITION.md", "docs/architecture/ADR-009-PHASE-2-DATA-PLANE.md",
+              "evidence/APP-002/dependencies.json", ".github/workflows/contracts.yml"]
+    return {"edition": EDITION, "source_edition": "prep-2026-10-22.1", "status": "synthetic contract qualification; not runtime authorization or persistence",
             "canonical_encoding": "forma-json-v1", "sources": {SOURCE: SOURCE_SHA, DEMO_LOCK: sha(DEMO_LOCK)},
-            "artifacts": {path: sha(path) for path in sorted(files)}}
+            "retained_editions": RETAINED, "artifacts": {path: sha(path) for path in sorted(files)}}
 
 
 if __name__ == "__main__":
@@ -36,4 +54,5 @@ if __name__ == "__main__":
         print("Wrote implementation edition lock")
     else:
         assert json.loads(LOCK.read_text()) == value, "Contract lock stale or artifact drifted; review changes before regenerating"
-        print(f"Contract edition lock matches {len(value['artifacts'])} artifacts and both frozen source identities")
+        print(f"Contract edition {EDITION} lock matches {len(value['artifacts'])} artifacts, "
+              f"{sum(len(e['artifacts']) for e in RETAINED.values())} retained edition-one artifacts and both frozen source identities")

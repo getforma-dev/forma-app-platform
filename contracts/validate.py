@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -32,9 +33,20 @@ def valid_date(value):
 
 
 VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FORMATS)
+# Edition impl-2026-10-29.2 adds normalized-rows (ADR-009 D9.3) and job-payload (genui.jobs.payload_digest, D9.4).
 DOMAINS = {name: f"forma:{name}:v1" for name in (
     "app-definition", "input-contract", "record-schema", "query", "query-receipt",
-    "command-payload", "source-binding", "result")}
+    "command-payload", "source-binding", "result", "normalized-rows", "job-payload")}
+REGISTRY_EDITION = 1  # The operator and renderer registry edition every admitted definition names.
+MAX_RATIONAL_DIGITS = 38
+
+
+def _part(name):
+    return Draft202012Validator({"$ref": "#/$defs/" + name, "$defs": SCHEMA["$defs"]}, format_checker=FORMATS)
+
+
+PROBLEM_VALIDATOR = _part("problem")
+RATIONAL_VALIDATOR = _part("exact_rational")
 
 
 class ContractError(ValueError):
@@ -101,6 +113,66 @@ def digest(domain, value):
     return "sha256:" + hashlib.sha256(DOMAINS[domain].encode("ascii") + b"\x00" + canonical(value)).hexdigest()
 
 
+def domain_name(domain):
+    """The short registry name of a full `forma:<name>:v1` domain."""
+    names = {full: name for name, full in DOMAINS.items()}
+    require(domain in names, "unregistered digest domain")
+    return names[domain]
+
+
+def rows_digest(rows):
+    """forma:normalized-rows:v1 over the forma-json-v1 array of typed rows in their sorted order (ADR-009 D9.3)."""
+    require(isinstance(rows, list), "normalized rows are an array")
+    return digest("normalized-rows", rows)
+
+
+def exact_rational(numerator, denominator):
+    """Reduce exact integers (each at most 38 digits) to the canonical exact_rational value."""
+    require(type(numerator) is int and type(denominator) is int, "exact_rational takes integers")
+    require(denominator != 0, "zero denominator")
+    require(max(len(str(abs(numerator))), len(str(abs(denominator)))) <= MAX_RATIONAL_DIGITS, "exact_rational exceeds 38 digits")
+    if denominator < 0:
+        numerator, denominator = -numerator, -denominator
+    divisor = math.gcd(numerator, denominator)
+    return {"type": "exact_rational", "numerator": str(numerator // divisor), "denominator": str(denominator // divisor)}
+
+
+def validate_exact_rational(value):
+    errors = sorted(RATIONAL_VALIDATOR.iter_errors(value), key=lambda e: str(list(e.path)))
+    if errors:
+        raise ContractError("schema: " + errors[0].message)
+    require(math.gcd(int(value["numerator"]), int(value["denominator"])) == 1, "exact_rational must be in lowest terms")
+    return value
+
+
+def validate_problem(body):
+    """application/problem+json bodies for the codes this edition registers."""
+    canonical(body)
+    require(all(type(v) is int for v in body.values() if not isinstance(v, str)), "problem members are text or integers")
+    errors = sorted(PROBLEM_VALIDATOR.iter_errors(body), key=lambda e: str(list(e.path)))
+    if errors:
+        raise ContractError("schema: " + errors[0].message)
+    require(body["code"] != "payload_too_large" or body["status"] == 413, "payload_too_large is 413")
+    require(body["code"] != "limit_exceeded" or body["status"] == 429, "limit_exceeded is 429")
+    names = body["code"] == "limit_exceeded" and "limit" in body and "retry_after_seconds" in body
+    require((body["status"] == 429) == names and ("limit" in body or "retry_after_seconds" in body) == names,
+            "a 429 names its limit and Retry-After seconds, and only a 429 does")
+    return body
+
+
+def _seconds(instant):
+    return int(datetime.fromisoformat(instant.replace("Z", "+00:00")).timestamp())
+
+
+def _sorted_identities(items, key, label):
+    names = [item[key] for item in items]
+    require(names == sorted(set(names)), label + " identities must be sorted and unique")
+
+
+def _operator_identities(queries):
+    return [{"id": name, "version": REGISTRY_EDITION} for name in sorted({op["type"] for query in queries for op in query["operations"]})]
+
+
 def payload_digest(command):
     return digest("command-payload", {k: v for k, v in command.items() if k != "idempotency_key"})
 
@@ -126,6 +198,9 @@ def compatible(value, field):
 
 def _definition(content):
     inputs = unique(content["inputs"], "id", "input id")
+    for item in inputs.values():
+        if "coverage" in item and item["kind"] == "records":
+            require(item["coverage"] == "complete", "records input requires complete coverage")
     fields = {name: unique(item["fields"], "id", "input field") for name, item in inputs.items()}
     records = unique(content["record_schemas"], "id", "record schema")
     record_fields = {name: unique(item["fields"], "id", "record field") for name, item in records.items()}
@@ -198,6 +273,10 @@ def _definition(content):
                 require(op["numerator"] in measures, "ratio requires prior declared numerator")
                 if op["denominator"]["type"] == "measure":
                     require(op["denominator"]["id"] in measures, "ratio requires prior declared denominator")
+                if op["denominator"]["type"] == "window_minutes":
+                    require("window" in query, "window_minutes denominator requires a window")
+                    span = _seconds(query["window"]["end"]) - _seconds(query["window"]["start"])
+                    require(span % 60 == 0, "window must be a whole number of minutes")
                 require(op["output_field"] not in measures, "duplicate derived measure")
                 measures.add(op["output_field"])
     layout = unique(content["default_layout"], "view_id", "layout view")
@@ -220,6 +299,9 @@ def validate(entity):
         _definition(entity["content"])
         require(entity["digest"] == digest("app-definition", entity["content"]), "definition digest mismatch")
     elif kind == "publication":
+        if entity["schema_version"] == 2:
+            _sorted_identities(entity["operators"], "id", "operator")
+            _sorted_identities(entity["renderers"], "kind", "renderer")
         if entity["policy"]["kind"] == "independent_review":
             require(entity["author_id"] != entity["approver_id"], "independent reviewer must differ from author")
         unique(entity["input_contract_digests"], "input_id", "publication input")
@@ -230,6 +312,8 @@ def validate(entity):
         unique(entity["source_dependencies"], "input_id", "source dependency")
     elif kind == "source_revision":
         require(entity["input_contract"]["kind"] == "source", "source revision needs source contract")
+        if entity["schema_version"] == 2:
+            require(entity["coverage"] == entity["input_contract"]["coverage"], "source coverage mismatch")
         unique(entity["input_contract"]["fields"], "id", "source field")
         require(entity["row_count"] <= (1000000 if entity["format"] == "csv" else 10000), "source row cap exceeded")
         for coord in entity["provenance_sample"]:
@@ -240,6 +324,8 @@ def validate(entity):
                 require(coord["row"] <= 10000 and coord["column"] <= 32, "XLSX coordinate out of bounds")
     elif kind == "query_receipt":
         require((entity["mode"] == "published") == ("publication_id" in entity), "only published receipt names publication")
+        if entity["schema_version"] == 2:
+            _sorted_identities(entity["operators"], "id", "operator")
         unique(entity["source_revisions"], "input_id", "receipt source")
         unique(entity["parameters"], "field_id", "receipt parameter")
         require(entity["digest"] == digest("query-receipt", {k: v for k, v in entity.items() if k != "digest"}), "receipt digest mismatch")
@@ -252,6 +338,13 @@ def validate(entity):
     elif kind == "job_state":
         require((entity["state"] == "done") == ("result_digest" in entity), "done iff committed result reference exists")
         require((entity["state"] == "failed") == ("failure_code" in entity), "failed iff failure code exists")
+        if entity["schema_version"] == 2:
+            queued = entity["state"] == "queued"
+            # A claimed job reads queued until its start commits (D9.4 steps 2-3): no position, and a cancel
+            # request may already be pending. Only a queued job ever carries position and wait.
+            require(("queue_position" in entity) == ("expected_wait_seconds" in entity), "queue position and expected wait travel together")
+            require(queued or "queue_position" not in entity, "only a queued job has a queue position")
+            require(entity["state"] != "cancelled" or entity["cancel_requested"], "cancelled requires a cancel request")
     return entity
 
 
@@ -299,10 +392,30 @@ def validate_bundle(bundle):
         else:
             require(any(c["id"] == binding["collection_id"] and c["schema_id"] == binding["schema_id"] and c["schema_version"] == binding["schema_version"] for c in work["record_collections"]), "record collection mismatch")
             require(binding["schema_id"] in schemas and schemas[binding["schema_id"]]["fields"] == inputs[name]["fields"], "record input schema mismatch")
-    require(work["source_dependencies"] == required_sources == receipt["source_revisions"], "source evidence dependency mismatch")
+    receipt_sources = [{k: v for k, v in item.items() if k != "mapping_version"} for item in receipt["source_revisions"]]
+    require(work["source_dependencies"] == required_sources == receipt_sources, "source evidence dependency mismatch")
     views = {x["id"]: x for x in content["views"]}
     require(receipt["view_id"] in views and "query" in views[receipt["view_id"]], "receipt must name query view")
     require(receipt["provenance"]["query_digest"] == digest("query", views[receipt["view_id"]]["query"]), "receipt query mismatch")
+    queries = [view["query"] for view in content["views"] if "query" in view]
+    if definition["schema_version"] == 2:
+        # An edition-two definition's publication and receipts carry the identity lists, mapping versions and partial.
+        require(pub["schema_version"] == 2 and receipt["schema_version"] == 2, "edition-two definition requires edition-two publication and receipt")
+    if pub["schema_version"] == 2:
+        require(pub["operator_version"] == pub["renderer_version"] == REGISTRY_EDITION, "publication registry edition mismatch")
+        require(pub["operators"] == _operator_identities(queries), "publication operator identities mismatch")
+        renderers = [{"kind": kind, "version": REGISTRY_EDITION} for kind in sorted({view["kind"] for view in content["views"]})]
+        require(pub["renderers"] == renderers, "publication renderer identities mismatch")
+    if receipt["schema_version"] == 2:
+        view = views[receipt["view_id"]]
+        require(receipt["operator_version"] == REGISTRY_EDITION, "receipt registry edition mismatch")
+        require(receipt["operators"] == _operator_identities([view["query"]]), "receipt operator identities mismatch")
+        require(receipt["renderers"] == [{"kind": view["kind"], "version": REGISTRY_EDITION}], "receipt renderer identities mismatch")
+        for item in receipt["source_revisions"]:
+            require(item["mapping_version"] == sources[item["source_revision_id"]]["mapping_version"], "receipt mapping version mismatch")
+        read = [sources[binding["source_revision_id"]] for name, binding in bindings.items() if binding["kind"] == "source" and name in view["query"]["inputs"]]
+        partial = any(source.get("coverage") == "partial" for source in read)
+        require(receipt["partial"] == partial, "receipt partial must equal the partial coverage of the inputs it reads")
     declaration = next((x for x in content["commands"] if x["id"] == command["command_id"]), None)
     require(declaration is not None and declaration["record_schema_id"] == command["schema_id"], "command is undeclared")
     require((declaration["operation"] == "create") == (command["expected_record_version"] == 0), "create expects absent record; update expects an existing version")

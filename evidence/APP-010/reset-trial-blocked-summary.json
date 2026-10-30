@@ -1,0 +1,26 @@
+{
+  "all_owned_resources_removed": false,
+  "environment": {
+    "database_transport": "fresh random loopback port; no ambient PostgreSQL overrides",
+    "docker_transport": "local Unix socket"
+  },
+  "failure": {
+    "message": "provenance_document_drift",
+    "type": "Refused"
+  },
+  "finished_at": "2026-10-29T22:42:43.799840+00:00",
+  "not_exercised": [
+    "RDS IAM/TLS",
+    "actual imported/normalized sources",
+    "authored applications",
+    "provider identities/sessions",
+    "native per-principal authorization",
+    "APP-057 shared rehearsal reset",
+    "backup recovery"
+  ],
+  "passed": false,
+  "schema_version": 1,
+  "scope": "owned disposable local synthetic fixture setup/reset, not backup restore or a shared managed reset",
+  "started_at": "2026-10-29T22:42:43.767004+00:00",
+  "workspaces": []
+}

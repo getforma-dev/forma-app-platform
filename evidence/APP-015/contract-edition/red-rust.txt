@@ -1,0 +1,11 @@
+error[E0432]: unresolved imports `super::validate::check_exact_rational`, `super::validate::exact_rational`
+ --> src/admission/tests.rs:9:23
+error[E0425]: cannot find value `NORMALIZED_ROWS` in module `digest`
+    --> src/admission/tests.rs:1391:30
+error[E0425]: cannot find function `normalized_rows` in module `digest`
+    --> src/admission/tests.rs:1395:25
+error[E0425]: cannot find value `NORMALIZED_ROWS` in module `digest`
+    --> src/admission/tests.rs:1401:38
+error[E0425]: cannot find value `JOB_PAYLOAD` in module `digest`
+    --> src/admission/tests.rs:1402:38
+error: could not compile `forma-app-platform` (lib test) due to 5 previous errors

@@ -1,0 +1,671 @@
+{
+  "cleanup": {
+    "e220a1683391050718e9854f1ba9dec577b8c82c34a5b189a502f153999499d7": true,
+    "genui-app075-check-f5b04d7c83-entry-list": true,
+    "genui-app075-check-f5b04d7c83-entry-unarmed": true,
+    "genui-app075-check-f5b04d7c83-mount": true,
+    "genui-app075-check-f5b04d7c83-probe": true,
+    "genui-app075-check-f5b04d7c83-supervisor-ca-directory-mount": true,
+    "genui-app075-check-f5b04d7c83-supervisor-default-unarmed": true,
+    "genui-app075-check-f5b04d7c83-supervisor-image-volume-no-tmp": true,
+    "genui-app075-check-f5b04d7c83-supervisor-no-credential-source": true,
+    "genui-app075-check-f5b04d7c83-supervisor-operator-password": true,
+    "genui-app075-check-f5b04d7c83-supervisor-program-directory-mount": true,
+    "genui-app075-check-f5b04d7c83-supervisor-run-extra-argument": true,
+    "genui-app075-check-f5b04d7c83-supervisor-serve": true
+  },
+  "cleanup_complete": true,
+  "context_source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db",
+  "context_source_count": 42,
+  "entry_unarmed": {
+    "exit_code": 101,
+    "result": {
+      "ca_sha256_self_consistency_only": null,
+      "checks": [],
+      "cleanup_applicable": false,
+      "cleanup_confirmed": false,
+      "declared_control_plane_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+      "error": "configuration_refused",
+      "limits": [
+        "Fixture identities are synthetic; no hosted identity or application admission is established.",
+        "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
+        "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
+      ],
+      "manifest_sha256": null,
+      "original_expires_at": null,
+      "original_issued_at": null,
+      "passed": false,
+      "resource_pins": {
+        "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+        "catalog_sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+        "database_version": 5,
+        "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+        "migrations_manifest_sha256": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
+        "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+        "seed_program_sha256": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
+        "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+        "seed_validator_sha256": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
+        "source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db"
+      },
+      "run_id": null,
+      "schema_version": 1,
+      "scope": "APP-008 isolated application-data-read-only qualification"
+    }
+  },
+  "expectations": [
+    {
+      "detail": {
+        "extra": [],
+        "missing": []
+      },
+      "expectation": "qualification context is exactly the explicit allowlist",
+      "met": true
+    },
+    {
+      "detail": {
+        "missing": []
+      },
+      "expectation": "every compile-time input the entry binds is in the exported context",
+      "met": true
+    },
+    {
+      "expectation": "every compiled Rust source is in the context and in the entry's source bundle",
+      "met": true
+    },
+    {
+      "expectation": "context carries the reviewed RDS CA bundle",
+      "met": true
+    },
+    {
+      "detail": {
+        "differing": []
+      },
+      "expectation": "service context bytes equal the base revision",
+      "met": true
+    },
+    {
+      "expectation": "service context has no qualification inputs",
+      "met": true
+    },
+    {
+      "expectation": "image runs the supervisor as UID 65532 with only `run`",
+      "met": true
+    },
+    {
+      "expectation": "image exposes no port and declares only the private run volume",
+      "met": true
+    },
+    {
+      "expectation": "image environment carries no credential, endpoint or arming value",
+      "met": true
+    },
+    {
+      "expectation": "probe ran as UID 65532",
+      "met": true
+    },
+    {
+      "expectation": "reviewed RDS CA is pinned at the fixed path, read-only",
+      "met": true
+    },
+    {
+      "expectation": "executable matches its build identity, mode 0555",
+      "met": true
+    },
+    {
+      "expectation": "supervisor and runtime helper equal the repository files",
+      "met": true
+    },
+    {
+      "expectation": "no set-id file under /app",
+      "met": true
+    },
+    {
+      "expectation": "executable selected exactly refuses an unarmed run before any store exists",
+      "met": true
+    },
+    {
+      "expectation": "executable's source-bundle pin equals the recomputation from the exported context",
+      "met": true
+    },
+    {
+      "detail": {
+        "expected": {
+          "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+          "catalog_sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+          "database_version": 5,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_program_sha256": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "seed_validator_sha256": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
+          "source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db"
+        },
+        "reported": {
+          "catalog_query_sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+          "catalog_sha256": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+          "database_version": 5,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_program_sha256": "c9073aee151f25006219acb15d0e7ac35c01a76751ee3392c02f8f26aa50d4ad",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "seed_validator_sha256": "c5ae11fe470e39ccdf8bd0dfd6b667d212642540061ffab3f29159d0c6a3fc0c",
+          "source_bundle_sha256": "a885748970cdc0244f3d28aa1d88e409085bebc97ad0a0768855222518dbd2db"
+        }
+      },
+      "expectation": "executable's resource pins equal the repository recomputation",
+      "met": true
+    },
+    {
+      "expectation": "the managed entry is an ignored test of the executable",
+      "met": true
+    },
+    {
+      "expectation": "supervisor serve exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor run-extra-argument exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor default-unarmed exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor operator-password exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor ca-directory-mount exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor program-directory-mount exits 2 with configuration_refused and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "supervisor no-credential-source exits 3 with credential_refresh_unavailable and launches nothing",
+      "met": true
+    },
+    {
+      "expectation": "image-volume case: the only mount is the image's anonymous /run/genui volume (no tmpfs, no /tmp)",
+      "met": true
+    },
+    {
+      "expectation": "supervisor image-volume-no-tmp exits 3 with credential_refresh_unavailable and launches nothing",
+      "met": true
+    }
+  ],
+  "ignored_tests": [
+    "imports::sandbox::tests::actual_parser_host_parses_refuses_and_lists_sheets",
+    "storage::admission_qualification::native_admission_campaign",
+    "storage::definition_qualification::native_definition_campaign",
+    "storage::managed_qualification::managed_readonly_entry",
+    "storage::managed_qualification::tests::child_entry",
+    "storage::managed_qualification::tests::managed_cleanup_with_real_transports",
+    "storage::qualification::native_postgres_campaign"
+  ],
+  "image": "genui-app075-qualification:recheck",
+  "image_identity": {
+    "architecture": "arm64",
+    "cmd": [
+      "run"
+    ],
+    "entrypoint": [
+      "python3",
+      "/app/qualification_supervisor.py"
+    ],
+    "env_names": [
+      "AWS_CONFIG_FILE",
+      "AWS_SHARED_CREDENTIALS_FILE",
+      "GPG_KEY",
+      "LANG",
+      "PATH",
+      "PYTHONDONTWRITEBYTECODE",
+      "PYTHONUNBUFFERED",
+      "PYTHON_SHA256",
+      "PYTHON_VERSION"
+    ],
+    "exposed_ports": [],
+    "id": "sha256:d3af3ac012d54bfb11f2ba3f4483b3b897c85af66717b0100771e187e34d250e",
+    "os": "linux",
+    "size": 498091602,
+    "user": "65532:65532",
+    "volumes": [
+      "/run/genui"
+    ]
+  },
+  "image_volume_mounts": [
+    {
+      "Destination": "/run/genui",
+      "RW": true,
+      "Type": "volume"
+    }
+  ],
+  "label": "genui-app075-check-f5b04d7c83",
+  "passed": true,
+  "probe": {
+    "app_files": [
+      "/app/qualification/build-identity.json",
+      "/app/qualification/genui-storage-tests",
+      "/app/qualification_supervisor.py",
+      "/app/requirements.lock",
+      "/app/runtime.py"
+    ],
+    "ca_mode": "0o444",
+    "ca_sha256": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+    "egid": 65532,
+    "euid": 65532,
+    "executable_mode": "0o555",
+    "executable_sha256": "b3ea2a49c18f7a5a8fef1afcbfdeecfa56f81a329af4819576e551f42e8f2255",
+    "identity": {
+      "cargo_artifact": "genui-df3b8685482dcc7f",
+      "executable": "/app/qualification/genui-storage-tests",
+      "executable_sha256": "b3ea2a49c18f7a5a8fef1afcbfdeecfa56f81a329af4819576e551f42e8f2255",
+      "rustc": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+      "schema_version": 1
+    },
+    "run_directory": [
+      "0o700",
+      65532
+    ],
+    "runtime_sha256": "689462bf2abc4b81d0603677ec0a1940f75e81be85a6bfa9bec3115020602e04",
+    "setid_files": [],
+    "supervisor_sha256": "26ce5ee32623243ebc89bd5163d6bdb519a441ba358db010b7f7d133754dccfd"
+  },
+  "qualification_context": {
+    "count": 50,
+    "files": {
+      "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+      "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+      "app/certs/rds-global-bundle.pem": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+      "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+      "app/migrations/catalog-v5.json": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+      "app/migrations/manifest.json": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
+      "app/qualification/Dockerfile": "0086034301cb3a77917a47d4a3164a400e0aba40ed1c3948a9b331cb5193c04b",
+      "app/qualification/Dockerfile.dockerignore": "f015e183f76bdbcfe830964e3675e6ed83a730cb68f2b7fb1441afe7ab0169c7",
+      "app/runtime/qualification_supervisor.py": "26ce5ee32623243ebc89bd5163d6bdb519a441ba358db010b7f7d133754dccfd",
+      "app/runtime/requirements.lock": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+      "app/runtime/runtime.py": "689462bf2abc4b81d0603677ec0a1940f75e81be85a6bfa9bec3115020602e04",
+      "app/src/admission/canonical.rs": "08488f65e6d3779f9489c25ea7a055a31a12d9dc421f76b9e49d8bacd0cd00f1",
+      "app/src/admission/digest.rs": "78e442c73e87552c8fa3139acb57bb487a911c545ccd74ed0cec5e5be991a821",
+      "app/src/admission/mod.rs": "b9a2ca07a14b84ca155d00c45c9463c142c95680dd425a97561b3767b1e54d91",
+      "app/src/admission/tests.rs": "04cc85b3676dfcc93b4a9bdb4e31bc3fffc62290a93f947445b19e1423b206b3",
+      "app/src/admission/validate.rs": "aca6aee5f9635f0364558f2ce0ce35c193430342175c511b5833bf1f642bcdc8",
+      "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+      "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+      "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+      "app/src/imports/mod.rs": "0ee00f587a340c84b849c87e15ca7c15f99cbe8eb8720a78f58c98a34ff65910",
+      "app/src/imports/sandbox.rs": "f7694478eb0f30a22883cbf9ab4d506ae799e04451ab2e700f9ad9b3536e29d1",
+      "app/src/lib.rs": "4e1cde5773a1e2d43b7c9331b2ab0265b0903beb520b7a0a82202048a27c2d2b",
+      "app/src/readiness.rs": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513",
+      "app/src/roles.rs": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216",
+      "app/src/storage/admission.rs": "e32e7beafddae3800108ef5eb6541f2a98cd751e281edc47e98084e345380414",
+      "app/src/storage/admission_qualification.rs": "090114f4dc160429b56e44375871baec39bea95c476682e2623b19885b171680",
+      "app/src/storage/authorization.rs": "eeba7ab4917fe9a16672e3f696b07fb10d50fa0add3aa5f9df119ca409a22174",
+      "app/src/storage/catalog.rs": "1dc1e2d2441322a97c2507abbc8182e56183f5ddfe0eca8619c8e52b3623e803",
+      "app/src/storage/definition_qualification.rs": "0d3ecadf7b68e238bc367bbcdd345e30f94f00534a8a428f6c687ebdd5b497a2",
+      "app/src/storage/definitions.rs": "e92c593ed255e745db6be6c9d22aa55cdd4cd0f2ea7dc3130075a3aad7135af6",
+      "app/src/storage/managed_qualification.rs": "e8a176624ae6c2fa3e8fdb40c4847b1cbc583456a4ac3a63c157484402c8bf50",
+      "app/src/storage/managed_qualification/tests.rs": "f32073eb285aa15e353e723b2983219d8f872308bd98acaf09ae1e0da98f43b1",
+      "app/src/storage/mod.rs": "14718f4937f0d3dde1fe96409c6c8236342487577d809c0cc053a705bc3eedcb",
+      "app/src/storage/pool.rs": "eb1230fce5cfea313bfbb7745b29ef25f5ee574d053ec352e5acdba5d607eae7",
+      "app/src/storage/qualification.rs": "1855ff8b55bcaceef613a48b0d05d402fa6356212dd8334ca56d6408353aa9ed",
+      "app/src/storage/qualification_cases.rs": "80e3fbbd31a16e5cb022882bd56107f6d01327d98026df4cf134445e3f3cf9d8",
+      "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+      "app/src/storage/tests.rs": "6e2a1747c398f0a064a25e945ba3b2a9ce65bdedd17e6750a1f8ae66b4d63232",
+      "app/src/supervise.rs": "52720ab1f8abb185bacc9791c6a9c9cb2167fc927f6c45ecbc23a4e66663cb28",
+      "contracts/fixtures/canonical-vectors.json": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
+      "contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json": "33b46ff5970bdcd5259f23bdb5e9a7fcda4c5eeffebe93e0fedfebf5f661203d",
+      "contracts/fixtures/impl-2026-10-28.1/negative-vectors.json": "089e9a3017adda324a2a150fb68d5aa497889cd104d2f7096b9128d520764e75",
+      "contracts/fixtures/impl-2026-10-28.1/northstar.json": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+      "contracts/fixtures/impl-2026-10-28.1/spend-review.json": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+      "contracts/fixtures/negative-vectors.json": "315a9d32e91dbeaf21c0ad3ec6f8e882315e46ef23b7db4c3c47f4b161ae1cbc",
+      "contracts/fixtures/northstar.json": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
+      "contracts/fixtures/spend-review.json": "186162da87532f368ed3c74faafc46c04780cc7331c095dc92f729bead0f0851",
+      "contracts/implementation-lock.json": "c1c1c80d7e327c53e2558da37befb97c9dbf6900bed56225e17518f79d952923",
+      "spikes/APP-006/Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+      "spikes/APP-006/src/lib.rs": "4fbfa5be174bde8f1a5410f66e4b5d53abae03d8860f7b02921b1eb99e68e39e"
+    }
+  },
+  "recorded_at": "2026-10-29T23:30:43.758629+00:00",
+  "scope": "APP-075 local confined qualification-image checks; no AWS/RDS/registry",
+  "service_context": {
+    "base_revision": "d6986c2",
+    "base_tracked_files": 1563,
+    "count": 155,
+    "files": {
+      ".dockerignore": "da51c639259dbd6efcb108d70ff81ee9153d64fa8bed9d16e4a9516b516619d8",
+      "app/Cargo.lock": "4f944984c2a4f47e3825a46a83a04cedb60783c1344a072accf7daa3f88ed293",
+      "app/Cargo.toml": "4dd80b0ce1af0171bbee3dfa9e6eefa11880161cd5f2ceca2e5c5eb259b04d55",
+      "app/Dockerfile": "67881c3224d19d542d8c2a2c5c630ebd878dc868d07d5abae592961f702925ec",
+      "app/admin/build.ts": "e10c5974fa648f2223a06470c6cf4ed5edbeb80636874aa69ef06f092188d7d4",
+      "app/admin/package-lock.json": "a5850cd7fed748d29a1270bc05f41912c3ae9fa2058e6941d6af36c440e7acfd",
+      "app/admin/package.json": "ee3e1d528fd3a9c5776a44d11300de92c6d4fbd8c831dcd19cefa3308eaef70f",
+      "app/admin/src/about/app.tsx": "7bd3e6488d907b74e19b579a6cd6f77e47802ce02013c340923edf70611381b3",
+      "app/admin/src/home/app.tsx": "70d76cc4226e22523c321884f884100928b5241acc5a14b5bb49a69c16bbc804",
+      "app/admin/src/styles/app.css": "8098e2c0b9b4368f0dd8bbdda48d30b1fabf8585a7c916adc9e6e98f21947a83",
+      "app/admin/tsconfig.json": "8f54953b133871cc1c728d72bf59b8e03eb929a85a60da177368619f5a2049a4",
+      "app/certs/rds-global-bundle.pem": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+      "app/migrations/0001_role_foundation.sql": "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963",
+      "app/migrations/0002_tenant_foundation.sql": "7b163e780756f03a2c18947ef0ccdbf04ade7f9e58521579ee4bfffcfc76aec5",
+      "app/migrations/0003_admission.sql": "55e65c50327b184ffc2ff6028f9a6760b01e0cd292d737f31ff3b6fa6d9d99af",
+      "app/migrations/0004_entitlement_reads.sql": "138c655d06674b0cc8251c5f15f91ab4769a268b0aa3863b24ca4e189a3681c2",
+      "app/migrations/0005_definition_work_grants.sql": "541e4e0b26037bd295e190c90197c3ec5f1691102ed14318d443d4268588c893",
+      "app/migrations/catalog-query.json": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba",
+      "app/migrations/catalog-v1.json": "4182e1425f2c7fc9d9540f2837cb92f07cd2521c86adc81f3add6e606e92aac9",
+      "app/migrations/catalog-v2.json": "51418a12cf45809b2e4a3ea7e9ee6deeed8d2189a4dbc936fe220698ef031954",
+      "app/migrations/catalog-v3.json": "04b33a6b65a194faed8b2938f5731fad23e2a17d01d818cdbb98980b902169a8",
+      "app/migrations/catalog-v4.json": "336f870e8280abc697dfc8dfa75265fa7920184e2d6cec6ebf709d2e2b1e43c6",
+      "app/migrations/catalog-v5.json": "02e1c79b1a7be6e5a42d04fe3f5ddaee4463a3a57b5fca0f9d36ffb22421e6ff",
+      "app/migrations/manifest.json": "b3cc807003a3488d91f5edfb67d82fae1a7af6e612f057d6be5d48961ecb1013",
+      "app/runtime/requirements.lock": "db9f588c6a9d70dbd4d23559eefb241099bad76adec243600f9ccbbc04e38f4b",
+      "app/runtime/runtime.py": "689462bf2abc4b81d0603677ec0a1940f75e81be85a6bfa9bec3115020602e04",
+      "app/src/admission/canonical.rs": "08488f65e6d3779f9489c25ea7a055a31a12d9dc421f76b9e49d8bacd0cd00f1",
+      "app/src/admission/digest.rs": "78e442c73e87552c8fa3139acb57bb487a911c545ccd74ed0cec5e5be991a821",
+      "app/src/admission/mod.rs": "b9a2ca07a14b84ca155d00c45c9463c142c95680dd425a97561b3767b1e54d91",
+      "app/src/admission/validate.rs": "aca6aee5f9635f0364558f2ce0ce35c193430342175c511b5833bf1f642bcdc8",
+      "app/src/auth_qualification.rs": "79d95b8b82a6ff52a087a5db868e6aeb32b323a46016d3fdf5726582bfe8fa70",
+      "app/src/auth_qualification/tests.rs": "638e6b3dbd7fc01f89b4ab1484c65c771ec5db1e98840a534811ae57a25520da",
+      "app/src/config.rs": "ef8c976b8992c356fa855f5fca0c78ab8751bb78f87732e24645e49ad7da3ea7",
+      "app/src/imports/mod.rs": "0ee00f587a340c84b849c87e15ca7c15f99cbe8eb8720a78f58c98a34ff65910",
+      "app/src/imports/sandbox.rs": "f7694478eb0f30a22883cbf9ab4d506ae799e04451ab2e700f9ad9b3536e29d1",
+      "app/src/lib.rs": "4e1cde5773a1e2d43b7c9331b2ab0265b0903beb520b7a0a82202048a27c2d2b",
+      "app/src/main.rs": "cf50fddee17cfe911ce9fa37534752067523a81d6da16efabaebe5024915f77a",
+      "app/src/readiness.rs": "aff294091508d86e635e2f53f1239ce1cd660f38fc4e604d9ccd14387e9dd513",
+      "app/src/roles.rs": "a34fbde1c58782635f7bfc3432028e73edbfe48efb03204c7fcfaa13c0eb3216",
+      "app/src/storage/admission.rs": "e32e7beafddae3800108ef5eb6541f2a98cd751e281edc47e98084e345380414",
+      "app/src/storage/authorization.rs": "eeba7ab4917fe9a16672e3f696b07fb10d50fa0add3aa5f9df119ca409a22174",
+      "app/src/storage/catalog.rs": "1dc1e2d2441322a97c2507abbc8182e56183f5ddfe0eca8619c8e52b3623e803",
+      "app/src/storage/definition_qualification.rs": "0d3ecadf7b68e238bc367bbcdd345e30f94f00534a8a428f6c687ebdd5b497a2",
+      "app/src/storage/definitions.rs": "e92c593ed255e745db6be6c9d22aa55cdd4cd0f2ea7dc3130075a3aad7135af6",
+      "app/src/storage/mod.rs": "14718f4937f0d3dde1fe96409c6c8236342487577d809c0cc053a705bc3eedcb",
+      "app/src/storage/pool.rs": "eb1230fce5cfea313bfbb7745b29ef25f5ee574d053ec352e5acdba5d607eae7",
+      "app/src/storage/qualification.rs": "1855ff8b55bcaceef613a48b0d05d402fa6356212dd8334ca56d6408353aa9ed",
+      "app/src/storage/qualification_cases.rs": "80e3fbbd31a16e5cb022882bd56107f6d01327d98026df4cf134445e3f3cf9d8",
+      "app/src/storage/registry.rs": "f992051e1e92eb7e7551d272c25fc8bf63afae031d13f9906c25ec4ba30e8e75",
+      "app/src/storage/tests.rs": "6e2a1747c398f0a064a25e945ba3b2a9ce65bdedd17e6750a1f8ae66b4d63232",
+      "app/src/supervise.rs": "52720ab1f8abb185bacc9791c6a9c9cb2167fc927f6c45ecbc23a4e66663cb28",
+      "parser/.cargo/config.toml": "52182ad656e05d285cd0e81bb70798b9beae6f0b73c9da75806e7d7d2f7ddbb4",
+      "parser/Cargo.lock": "d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+      "parser/Cargo.toml": "65d3ba090b7cef30188828978ac1cc751c59ede94db326765938ede23ee26c74",
+      "parser/fixtures/actual-coordinate.xlsx": "5dbf7a9c538346807ab195abd58192da9ca1414bbe336d5bc46dd17879a4c83d",
+      "parser/fixtures/actual-strings.xlsx": "10deb5a6c2d0917bfcf28c28c1292fa0aabc6639192d33a2e635b10506ee48af",
+      "parser/fixtures/bad-numeric.xlsx": "0711b034cc7636c8a2e12f333b63b54646602bbf1e44cd14650ec3ec88db0ba3",
+      "parser/fixtures/content-type-macro.xlsx": "14d1a507997737ef2e35a72e1cba08d7e0d6f7ec6fab3065b665e71b19ef3113",
+      "parser/fixtures/csv-config.json": "a100f51fb96129dab34355c954301e9692890074782601582f351ff392a6a2f7",
+      "parser/fixtures/declared-strings.xlsx": "dfe8d6f9da96bad0335fda3e86de6662b77ea31f19146845d1964f083474d403",
+      "parser/fixtures/deep.xml.xlsx": "2e3aae7c6f34956e7f53c6d9c0b5bc0806aebf17fd818c9462548a146bac9335",
+      "parser/fixtures/dimension.xlsx": "6d549b7cc519de5191d20c8403985992516a0e52681340f588425cceafca91b8",
+      "parser/fixtures/doctype.xlsx": "65950d2ee4e40df73950636f73f1753bff68de18381f374b08b7741bf75fc6e7",
+      "parser/fixtures/duplicate-cell.xlsx": "4207f5e5bcbeb8ad1a17487600702d61d4d6f5b4a737833e5d10a68e60fbd047",
+      "parser/fixtures/duplicate-values.xlsx": "a1d56ead7971ee4f62aef98c5cba669852db3f9ab377bfea18d52fb495a71d5b",
+      "parser/fixtures/external.xlsx": "d781bc449fa52f0eff47efd955a19842b2d759c1ad1a21d1d77e587636807cff",
+      "parser/fixtures/formula.xlsx": "7d3e6a82961a8c062a27f2aef7988b78c7ddb833a25e868be495a55f839a1d7a",
+      "parser/fixtures/literal.csv": "7a3c349a1a025e56f8eb61007319222a3853560f9a346260eb64f3ba587e88d0",
+      "parser/fixtures/macro.xlsx": "f8902ffb8124c8938857ba65ba7a57a2dc104e5df64eda1654b60403228e6239",
+      "parser/fixtures/unselected-formula.xlsx": "ecd72f3f3a78b270a4869e9589881a6ff4e8e530d6f77c0ea305460d96b020ab",
+      "parser/fixtures/valid.xlsx": "f345b3805cb38ca8cf9ec2617af71d4b7864479e7170be2fd0f9fcdc3227ad87",
+      "parser/fixtures/xlsx-config.json": "ddbc0581c731a55ab90d94b48a8371273383150cae475299c5439ccef03ca3c1",
+      "parser/fixtures/zero-exponents.xlsx": "7966e8e4946730ee22d1fa75d1e5986b671db5c011afe4f158c5ecca842d25cf",
+      "parser/guest/Cargo.toml": "7117c1d6c51cdb68c702336ae2bd7570d85df4de5d6a02633550aca87254a9aa",
+      "parser/guest/src/lib.rs": "a77cac6f685e64c73aee1f8b0e02f62568068dfaa2a356ff2648c384b29d80b3",
+      "parser/host/Cargo.toml": "b8805cc5698a91ddf669f408628750e99a3145f99ff7ec5072969948370caae7",
+      "parser/host/src/job.rs": "63fd913010b00b9b9ee23aa9b8be47f4e639f5beb80c13493be6732935e90914",
+      "parser/host/src/lib.rs": "15aeb204e3fe07cd3ba188e905ca4fe9bea59ebac2559e5695b105b3059c09c9",
+      "parser/host/src/main.rs": "e943030f76ceb69ff86cbea1708e8cdcebede5bad3fc17f8a98e098307bbf6a2",
+      "parser/host/tests/job.rs": "78a61f68a204a1a4b5b87e1676dc3120a5d25b8c91992f66989ce7fd14f55f74",
+      "parser/host/tests/qualification.rs": "6ea18170236c805d5215ca708dd90a6a4e9b3965663a8ea4e941bb2fc327fa01",
+      "parser/make_fixtures.py": "22fb7b4926503167481503c4e6d9ea298b1f8341eab21d65111172a97dec4036",
+      "parser/rust-toolchain.toml": "16d599dd673f1b247a0e5495d988f5ba9ba7552af318c23d0fb97ddc9c7d2843",
+      "parser/vendor/provenance.json": "5259d9a04cb06b892c19fa17a0c99b0951a40484ae1c25ea98332a12bcf20e1a",
+      "parser/vendor/zip-9.1.3-manifest.patch": "e47e10033e551589dad96bb4746640f69994f4b4fd1d00e50d0090c07e71b529",
+      "parser/vendor/zip-9.1.3/.cargo_vcs_info.json": "ae1462cca483ee32262e55aaba315c70173cdfd2aa86b7fa924b88ab9ae45646",
+      "parser/vendor/zip-9.1.3/.config/nextest.toml": "14e322c8cf375dcdb4a958aa31241919ce9d980d83f7037631b35758118c35a9",
+      "parser/vendor/zip-9.1.3/.devcontainer/Dockerfile": "da2c5f0c0d807645b643049a4274aeaab4285bf1ff098149202b7dabb6d1a065",
+      "parser/vendor/zip-9.1.3/.devcontainer/devcontainer.json": "0d2df6fce0a6b997a5af6ae2d003c614b957dae615cdca0b52563674f6929750",
+      "parser/vendor/zip-9.1.3/.gitattributes": "2de207c48edfd82a312d889c7706c149f1af74282c9afd604d8105137bacf411",
+      "parser/vendor/zip-9.1.3/.gitignore": "f8496809fc6aacd169f8a68e4bc9b4f4a3730bb9f7ec3bdfad16ba7080cae8c8",
+      "parser/vendor/zip-9.1.3/.pre-commit-config.yaml": "c798befbcb86b8e78e63bc99816e8c264a7005c7e7263317651162033eb58242",
+      "parser/vendor/zip-9.1.3/.whitesource": "e41e029d9f8a8bd0fa745a9ede64b2303860f6c9833b954fd992a99dae388b9f",
+      "parser/vendor/zip-9.1.3/CHANGELOG.md": "c3746a139a7f9d5b3bdd832d910c51b0b823ab8ea03b3682be1e26a615b50f6a",
+      "parser/vendor/zip-9.1.3/CODE_OF_CONDUCT.md": "77930b2129928632cae79e10d0863885b34729e4f144f3ae5443cff65997196a",
+      "parser/vendor/zip-9.1.3/CONTRIBUTING.md": "758a5eb9b17c36b581fc4bf3e4013174839f4f49d4b66ded111ad86fb90adc7f",
+      "parser/vendor/zip-9.1.3/Cargo.lock": "47c6c161a901b165b7ec00c83731ab4707b1c0e86aa664f656c6ace0bbfa4f59",
+      "parser/vendor/zip-9.1.3/Cargo.toml": "be97a6d400d799cf3569224496fb1afd706a7f95ed917caa5b771aef4298a0e5",
+      "parser/vendor/zip-9.1.3/Cargo.toml.orig": "2c76dd6a9215e547f59302476b95b45c21ea2e4a7d325a0b9a6bc3cf61f54f0f",
+      "parser/vendor/zip-9.1.3/LICENSE": "58545fed1565e42d687aecec6897d35c6d37ccb71479a137c0deb2203e125c79",
+      "parser/vendor/zip-9.1.3/README.md": "992542d62cee9ee833dbd2a82f37081110f76418fac0d25d1fb0132e54022ee7",
+      "parser/vendor/zip-9.1.3/SECURITY.md": "ac1630e1d2329e74e6d3e690bae60d05190febdd639c6b930091246c99849f40",
+      "parser/vendor/zip-9.1.3/cliff.toml": "e2bcd52127fe7f7ffd9a61c64641b3174a5d20bfac52bb1a021a2ebfed247cfd",
+      "parser/vendor/zip-9.1.3/release-plz.toml": "b8c373b742ee6b0fcf0c70264dab35b125c1e8b6df3360123aeeba4477a99222",
+      "parser/vendor/zip-9.1.3/src/aes.rs": "4f825360eec67d5e60de2f4ba2b351447b912a111251aa0f774d567833f6a556",
+      "parser/vendor/zip-9.1.3/src/aes_ctr.rs": "e9706368b1819d817884066b18ec730e5aa12161adca8096ccf4107c17b83542",
+      "parser/vendor/zip-9.1.3/src/compression.rs": "82f11c05dc482f71b17e2c2a3e1106d8c0c548c228c2c6ab68e68186c7d1ef4d",
+      "parser/vendor/zip-9.1.3/src/cp437.rs": "062b8ba1c10220c888b4ba9ac6970d3e298bbbeab4ca372f07bbdb956ba636be",
+      "parser/vendor/zip-9.1.3/src/crc32.rs": "581fe38c48d96d8441f487a58c95bda044945cd278e9a5cb07dd0a73deaf1e7e",
+      "parser/vendor/zip-9.1.3/src/datetime.rs": "af4477d267f52eb4d8f0c647ecf20732a6a3b2e8722deaf15c7f9b652ff943e0",
+      "parser/vendor/zip-9.1.3/src/extra_fields/aex_encryption.rs": "ca18ad2b4e09d9f8f59caa7cf91049897c9afc36282e2866c8193e31c8e64600",
+      "parser/vendor/zip-9.1.3/src/extra_fields/custom_extra_field.rs": "b4a5621b4487b999975bc6a209bc12d1f3a5b2b1cdeb7d669dcf291135673a8d",
+      "parser/vendor/zip-9.1.3/src/extra_fields/data_stream_alignment.rs": "c3e6968cfe4e1af15e02a1719844fb9fcc2b346c5422a094a8373ca7bf1d62c4",
+      "parser/vendor/zip-9.1.3/src/extra_fields/extended_timestamp.rs": "9d35b1f958e2473bd5fea4e317d8e9af72773a9af930995ea8baa618c0467490",
+      "parser/vendor/zip-9.1.3/src/extra_fields/extra_field.rs": "e70df79156b7ca2f09474b3f4c75aa48916bb84eb22a1c8eed39d00b87f4815d",
+      "parser/vendor/zip-9.1.3/src/extra_fields/mod.rs": "1d312fbbd25bffaa7cd83d8a46525d0d364603d1533d6f5d64bc4e8dd2b44819",
+      "parser/vendor/zip-9.1.3/src/extra_fields/ntfs.rs": "f5c8aa0b7e86df16a9a5d98948d0ea2aefad9a28d3416ef347e5ba30924800f2",
+      "parser/vendor/zip-9.1.3/src/extra_fields/zip64_extended_information.rs": "a2ec3a66b5597acba8d89ce59aeab723b396a82eecc94d12131199fbc24ff964",
+      "parser/vendor/zip-9.1.3/src/extra_fields/zipinfo_utf8.rs": "e3c04c7e1866be64318577960d6b1316e916e21dbb8201e943bd950c186b748d",
+      "parser/vendor/zip-9.1.3/src/format/aes.rs": "979a6b65b5eda88fc6d01483ec9c0c8173ad63caea621a54946d2c622bb0dfbe",
+      "parser/vendor/zip-9.1.3/src/format/blocks.rs": "8b1d0ba5516abd3733f69ac25f2df5355ddb58a903a4ef91e807fc350fc662e3",
+      "parser/vendor/zip-9.1.3/src/format/compression.rs": "069fd399550de59aeb2eae6e6956ad77c65e7dc1887600658086fa120d0c1c3d",
+      "parser/vendor/zip-9.1.3/src/format/data_descriptor.rs": "5ea3983be330d55b3a69883c0b9fc1292513dc5bbd0234d57cd83fd643227f56",
+      "parser/vendor/zip-9.1.3/src/format/extra_fields.rs": "7d53e1a36647e12ff4db5221c7b76c73f014b86f1664a555674ef0e8b4ec3f5a",
+      "parser/vendor/zip-9.1.3/src/format/find_central_directory.rs": "0063ed5c1837c4948c73ef597bdc52779ecb572a5bb5cee93cfad4273bc7f33c",
+      "parser/vendor/zip-9.1.3/src/format/flags.rs": "a8acb10e1376b3fec6bd3018758fc39ecedaa0b6112993008194ac8f62e945ae",
+      "parser/vendor/zip-9.1.3/src/format/functions.rs": "2935f16f08ec52bd8e7d34da9a09232d9f9308e3bccfb4fa67a889ae51e637da",
+      "parser/vendor/zip-9.1.3/src/format/magic.rs": "d86ca717d532796164e9fcbd12d844cfe831a9480ec26de95fcbf00a3615ecc3",
+      "parser/vendor/zip-9.1.3/src/format/mod.rs": "7932a6038240523df64119ebba4bdb0118b02633dd6a7e669a9f4c8010582e41",
+      "parser/vendor/zip-9.1.3/src/format/system.rs": "5fc53dce6c697d6a3d01bf15c33fcdd5f29d297d11a2c1d5356d2d5d8ea12b70",
+      "parser/vendor/zip-9.1.3/src/legacy/huffman.rs": "ad002f35e033592a68dceb43ca24c4fb79f82d14136bde26f1adec4946efb79a",
+      "parser/vendor/zip-9.1.3/src/legacy/implode.rs": "3001034b014aeb770cd815d66b269f517ea8ec22a36cd9a9f6f55931c40e0560",
+      "parser/vendor/zip-9.1.3/src/legacy/mod.rs": "fc792ab7f4a99471094011f4023ba68c7b93b2c85f6dc628a16c37452f65e000",
+      "parser/vendor/zip-9.1.3/src/legacy/reduce.rs": "60934251a2f7b870ad422a90ba5015137fbef50c1ce68413a59615fd09d75e34",
+      "parser/vendor/zip-9.1.3/src/legacy/shrink.rs": "4d9dad5ab3fc01ca10f7790fb3f9c4e1b9972616e5ca31c436558a2eb51081f3",
+      "parser/vendor/zip-9.1.3/src/lib.rs": "8f005fe6af7c8dc44531354618bcf9ec984dd8fe4ae288ea9d7b33136057f9b6",
+      "parser/vendor/zip-9.1.3/src/path.rs": "8b93c93937161ba308bff6061fe33818e7d2572b54895fd99ea7b7c4f4c6785e",
+      "parser/vendor/zip-9.1.3/src/read/config.rs": "2357aff84586da747f8228d3bf44a782ed89e4430d902afe0da144b187286ce1",
+      "parser/vendor/zip-9.1.3/src/read/extract.rs": "20fee5f5f84036af35fcc856a4e7d2af46ba73475c5b7bf2d1f626ddfa7c103d",
+      "parser/vendor/zip-9.1.3/src/read/magic_finder.rs": "0404ef29c6764deca88c882dd0389fd43d8adfa014f23f57fa7f21ccd5f44518",
+      "parser/vendor/zip-9.1.3/src/read/mod.rs": "3930a61000d6b6037ad0da382a1f61b28e9d04d1cc507e4a1fcc92c1ec082487",
+      "parser/vendor/zip-9.1.3/src/read/readers.rs": "7ec732949fd913b402355e1848a2fd2d4ca46e2a7493c7cee101013f8efc981f",
+      "parser/vendor/zip-9.1.3/src/read/stream.rs": "9a8f334d0647a5ceb1fd785dfc4046f0bfac8d5644964cfcd9db880b0d207667",
+      "parser/vendor/zip-9.1.3/src/read/zip_archive.rs": "8375fdc6e3cc36bda7f94470aee4565ecdfa066f23894aa908c9ffa7f0cec9be",
+      "parser/vendor/zip-9.1.3/src/read/zipfile.rs": "fc08a05f7fa61f75e2d647883b35b9234513c8392129433cf88c2618cf9531e1",
+      "parser/vendor/zip-9.1.3/src/result.rs": "7cb4d1314901d3d45531bc0c5d98416d3e9cb7d9c21c19cec9b0a8ce40a44bf6",
+      "parser/vendor/zip-9.1.3/src/types.rs": "fed64c3e3e79eed857885331d81e1c5dacf06d81b02edc891a9ee06e399f1029",
+      "parser/vendor/zip-9.1.3/src/unstable.rs": "a2fd3728a37f06e883cbf2d80258d7aa11603bf7b2e85c3e7f74491731cb1f2d",
+      "parser/vendor/zip-9.1.3/src/write.rs": "11d622d360708f807bc6c54cd9ec2ff46368ee2347120742e6e70055437bf12e",
+      "parser/vendor/zip-9.1.3/src/write/options.rs": "bb6b376d1dd687f072801b4dedae8b47e371f375292131fdc807cbea3938ba44",
+      "parser/vendor/zip-9.1.3/src/zipcrypto.rs": "3649aafff39fd7da0127e82fc42fd106518a5409ea3eaebe646162599b26ecb5",
+      "parser/verify_vendor.py": "dab4730cbc486e0cc54c7d877cad50b33845fee3b57eb8db33b796dbd45be842",
+      "parser/write_manifest.py": "c08f751712bd7fd669cb51e56a5995581eb799bf1dd6862884208648711a8244",
+      "spikes/APP-006/Cargo.toml": "9ca03539a0f419a2481d6d03e2a2e9eebc78c7e5b03b6c6e68800bf7c923d30b",
+      "spikes/APP-006/src/lib.rs": "4fbfa5be174bde8f1a5410f66e4b5d53abae03d8860f7b02921b1eb99e68e39e"
+    }
+  },
+  "supervisor_cases": [
+    {
+      "case": "serve",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": null,
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "run-extra-argument",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": null,
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "default-unarmed",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": null,
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "operator-password",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": null,
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "ca-directory-mount",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": "b8d373c8-5cc6-4cf1-a580-32478330b1b1",
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "program-directory-mount",
+      "exit_code": 2,
+      "stderr": [],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "configuration_refused",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": "b8d373c8-5cc6-4cf1-a580-32478330b1b1",
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "no-credential-source",
+      "exit_code": 3,
+      "stderr": [
+        "credential_refresh_unavailable"
+      ],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "credential_refresh_unavailable",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": "b8d373c8-5cc6-4cf1-a580-32478330b1b1",
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    },
+    {
+      "case": "image-volume-no-tmp",
+      "exit_code": 3,
+      "stderr": [
+        "credential_refresh_unavailable"
+      ],
+      "summary": {
+        "child_exit": null,
+        "deadline_kill": false,
+        "error": "credential_refresh_unavailable",
+        "files_removed": true,
+        "launched": false,
+        "passed": false,
+        "refresh_failures": 0,
+        "refreshes": 0,
+        "result_retained": false,
+        "run_id": "b8d373c8-5cc6-4cf1-a580-32478330b1b1",
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 0
+      }
+    }
+  ]
+}

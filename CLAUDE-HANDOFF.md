@@ -16,6 +16,21 @@ What changed today:
 
 The dependency order below ("APP-009 needs APP-006/008/073…") is superseded by ADR-005; the board (`python3 Tickets/_tools/board.py next`) is authoritative.
 
+### Checkpoint 2026-10-29 ~21:30 UTC (before the session usage reset)
+
+Landed on `main`: PR 1 (`2172ad4`) — APP-006, APP-008, APP-011 Done. On `phase-one-spikes` (pushed, tip `7d566b2`): ADR-007 revised and amended after three reviews; ADR-009 revised and re-reviewed (no blockers); Phase 2 execution plan (`docs/planning/PHASE-2-EXECUTION-PLAN.md`) and the APP-027/APP-081 split; migrations 0003 (admission) and 0004 (entitlement reads) with the storage admission module and `admission_operator.py`, all review majors fixed; contract edition `impl-2026-10-29.2`; parser-host packaging (Phase 2 Task A4). fAuth is live at `https://auth-staging.getforma.dev` (FORMA-367 cleared; DNS A record by GenUI via the Porkbun API, key held privately in the session scratchpad, not in git); SES production access pending (FORMA-366).
+
+Update at ~22:30 UTC: APP-075 (B1–B3) and APP-073 items 6–7 (provider invitations, reconciliation) are merged with all local checks green; both still need an independent review (APP-075 also a fresh `check_image.py` run, its image allowlist grew). APP-073's provider slice works against a loopback fake only; live fAuth invitation evidence is APP-074/076. Provider operations write no audit events because D7.8's kinds are closed — an ADR-007 amendment if wanted.
+
+In flight when the checkpoint was written (each in its own worktree under `.claude/worktrees/`; nothing pushed from them yet):
+- APP-073 items 6–7 (provider invitations and reconciliation) — worktree `agent-a0fdb56e28a311db3`.
+- APP-075 managed entry (plan B1–B3) — worktree `agent-aafe83d78bac0d915`.
+- Independent review of the parser packaging → `evidence/APP-017/parser-packaging/independent-review.md`.
+
+Parser packaging review landed (`evidence/APP-017/parser-packaging/independent-review.md`, changes requested, no blockers): fix M1 (pipefail and per-section test counts in the release record), M2 (verify the CI run through `gh api` or attestations, pin the repository, compose on push only), M3 (bind `parser-host` digest in the record and check against the image manifest) before APP-017 uses the release gate; **M4 is a design decision before Task A5**: the guest's 5e9 fuel exhausts at about 16,000 five-column CSV records and refuses a 10,000 × 32 XLSX, so ADR-009 D9.2/B5's bounds are unreachable — amend the bounds, cut per-cell cost and requalify, or raise fuel by ADR amendment.
+
+Resume order: merge or finish those three (check each worktree's `git log`/`git status`); then APP-010's migration 0005 (definitions/work grants, plan Task 6), APP-009 sessions (0006, Task 7, needs the private fAuth identifiers file in the FormaStack journey folder), APP-077 operator package, Task 8 APP-074 local, Tasks 9–11. Victor still owes: the GenUI always-on figure.
+
 ### State at the Fable → Opus switch (2026-10-29, evening UTC)
 
 Planning is complete; execution continues in the same session on Opus 5.5 High with ultracode off. Landed on `phase-one-spikes` and pushed: ADR-008 and the restructure (`5551421`, `ebfb8fb`), ADR-007 revised after its independent review (`5fb4766`), the migration runner generalization (plan Task 3, merged `a1d072a`), and the fixtures-workflow binding fix (merged `4931aef`). Victor approved FORMA-367 (lean always-on fAuth, about $33/month, SES SMTP) to the FormaStack session, which deploys as soon as its image is qualified; GenUI's own always-on figure (about $150–170/month, ADR-008) is still his to approve.
@@ -96,7 +111,7 @@ Phase1 must prove **invite → verified sign-in → current tenant entitlement �
 | Design requirements and phases | [Source guide](docs/planning/SOURCE-GUIDE.md), [roadmap](docs/planning/ROADMAP.md), [quality gates](docs/planning/QUALITY-GATES.md), [ticket index](Tickets/TRACKER.md), [external gates](Tickets/external-dependencies.json) |
 | Runtime and infrastructure | [App runbook](app/README.md), [infra runbook](infra/README.md), [environment](docs/planning/SYNTHETIC-ENVIRONMENT.md), [cost record](docs/planning/SYNTHETIC-ENVIRONMENT-COST.md) |
 | Completed cloud foundation | [APP-007 managed evidence](evidence/APP-007/managed/README.md), [GateWasm teardown](evidence/APP-007/gatewasm-teardown.md) |
-| Local tenant implementation | [APP-008 ticket](Tickets/3-in-review/APP-008.md), [schema evidence](evidence/APP-008/schema/README.md), [native evidence](evidence/APP-008/native/README.md), [final native R5 review](evidence/APP-008/native/r5/independent-review.md), [schema compatibility review](evidence/APP-008/schema/independent-compatibility-review.md) |
+| Local tenant implementation | [APP-008 ticket](Tickets/4-done/APP-008.md), [schema evidence](evidence/APP-008/schema/README.md), [native evidence](evidence/APP-008/native/README.md), [final native R5 review](evidence/APP-008/native/r5/independent-review.md), [schema compatibility review](evidence/APP-008/schema/independent-compatibility-review.md) |
 | Managed tenant work still needed | [Full managed plan](evidence/APP-008/managed-plan.md), [preparation slices](evidence/APP-008/managed-harness-preparation.md), [accepted shared-case extraction](evidence/APP-008/native/shared-cases/README.md), [unfinished entry handoff](evidence/APP-008/native/managed-entry/HANDOFF.md), [incomplete independent review](evidence/APP-008/native/managed-entry/independent-handoff-review.md) |
 | Fixtures | [Fixture package](fixtures/README.md), [APP-011 independent review](evidence/APP-011/independent-review.md), [final reset receipt](evidence/APP-011/reset-independent-catalog-path-final/summary.json) |
 | Auth consumer | [Verifier spike](spikes/APP-006/README.md), [callback contract](evidence/APP-006/hosted-callback/README.md), [private secret transport](evidence/APP-006/hosted-callback/secret-wiring/README.md), [schema1 sequencing](evidence/APP-006/hosted-callback/schema-one-sequence/README.md) |
