@@ -54,6 +54,7 @@ COPY --chmod=0444 app/runtime/runtime.py app/runtime/tenant_seed.py app/runtime/
 COPY --chmod=0444 app/migrations/ /operator/app/migrations/
 COPY --chmod=0444 contracts/validate.py contracts/schema.json /operator/contracts/
 COPY --chmod=0444 contracts/fixtures/impl-2026-10-28.1/northstar.json contracts/fixtures/impl-2026-10-28.1/spend-review.json /operator/contracts/fixtures/impl-2026-10-28.1/
+COPY --chmod=0444 contracts/fixtures/library/ /operator/contracts/fixtures/library/
 COPY --chmod=0444 fixtures/qualify.py fixtures/verify.py /operator/fixtures/
 COPY --chmod=0444 fixtures/phase-one/v1/manifest.json /operator/fixtures/phase-one/v1/
 COPY --chmod=0444 fixtures/phase-one/v1/sources/northstar-events.csv /operator/fixtures/phase-one/v1/sources/

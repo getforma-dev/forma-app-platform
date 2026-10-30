@@ -54,6 +54,7 @@ contracts/fixtures/library/**
 !contracts/fixtures/library/audit-trail.json
 !contracts/fixtures/library/budget-vs-actual.json
 !contracts/fixtures/library/cash-flow.json
+!contracts/fixtures/library/expense-claims.json
 !contracts/fixtures/library/expense-review.json
 !contracts/fixtures/library/hiring-funnel.json
 !contracts/fixtures/library/incident-timeline.json
