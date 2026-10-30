@@ -218,6 +218,15 @@ COMMAND_GRANTS = set().union(
     _role_columns('genui_data','audit_heads','SELECT','organization_id','writer_role','chain_sequence','head_hash'),
     _role_columns('genui_data','audit_heads','UPDATE','chain_sequence','head_hash'),
 )
+# Migration 0009 (ADR-011 pitch, APP-100): the Slack link table, genui_workspace's
+# column SELECT and INSERT and the UPDATE of the columns a re-link or unlink rewrites.
+SLACK_TABLES = ('slack_links',)
+SLACK_COLUMNS = ('organization_id','link_id','principal_id','team_id','slack_user_id','membership_epoch_at_link','linked_at')
+SLACK_GRANTS = set().union(
+    _role_columns('genui_workspace','slack_links','SELECT',*SLACK_COLUMNS,'revoked_at'),
+    _role_columns('genui_workspace','slack_links','INSERT',*SLACK_COLUMNS),
+    _role_columns('genui_workspace','slack_links','UPDATE','principal_id','membership_epoch_at_link','linked_at','revoked_at'),
+)
 # 0007's RESTRICTIVE row bindings beyond the audit chains: the data role claims,
 # commits and reads outcomes only as the scoped principal, and records itself as
 # a revision's updater.
@@ -317,6 +326,20 @@ def admission_checks(pg, passed, denied):
         assert rows==[('code_index',False,False,'genui_owner',0),('handle_index',False,False,'genui_owner',0)],rows
     passed('0008 work_shares is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; only genui_admit holds a privilege on it (INSERT, nine columns), no application role any',
            tables=list(SHARING_TABLES))
+    with pg.connect('postgres') as c:
+        rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",(list(SLACK_TABLES),)).fetchall()
+        assert rows==[(t,True,True,'genui_owner') for t in SLACK_TABLES],rows
+        rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
+          AND tablename = ANY(%s) ORDER BY tablename""",(list(SLACK_TABLES),)).fetchall()
+        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in SLACK_TABLES],rows
+        links=set(c.execute("""SELECT grantee,privilege_type,column_name FROM information_schema.column_privileges
+          WHERE table_schema='genui' AND table_name='slack_links' AND grantee<>'genui_owner'""").fetchall())
+        assert links=={(r,p,col) for (r,_,p,col) in SLACK_GRANTS},links
+        assert c.execute("""SELECT count(*) FROM information_schema.role_table_grants WHERE table_schema='genui' AND table_name='slack_links'
+          AND grantee<>'genui_owner'""").fetchone()==(0,)
+    passed('0009 slack_links is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; only genui_workspace holds column SELECT, INSERT and the four re-link/unlink UPDATE columns, no table-level grant',
+           tables=list(SLACK_TABLES))
     passed('0003 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the two genui_private indexes carry no RLS',
            tables=list(ADMISSION_TABLES))
 
@@ -332,7 +355,7 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
         # Application roles reach 0003's relations only through 0004's entitlement
         # reads, 0005's and 0007's own-chain audit append (D7.8) and 0006's narrow
