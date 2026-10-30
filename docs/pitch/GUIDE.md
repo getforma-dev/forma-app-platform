@@ -105,6 +105,7 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 | **Agent token** | A member-minted bearer token for MCP clients. It never exceeds the member's own rights and is revocable. |
 | **Slack link** | Binds a Slack user to a member through `/forma link`. A Slack id alone confers nothing. |
 | **MCP** | Model Context Protocol: the open standard agents use to call tools. Forma serves eight tools at `/v1/mcp`. |
+| **Folder** | A card that holds files (PDF, CSV, XLSX, images). `/folder formation <instruction>` has the AI form an app or a cited brief from it; every number and quote traces back to its file. |
 | **Stack / fence** | A pile of cards you can shuffle, and a labeled area that groups cards. Fences are not built yet. |
 | **fAuth** | Forma's identity service: hosted sign-in and the organization's identity provider. |
 | **Forma Stack** | The Rust framework underneath: server-rendered FMIR pages plus registered canvas islands. |
