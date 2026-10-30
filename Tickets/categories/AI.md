@@ -15,3 +15,4 @@ Authorized discovery, bounded generation, explanation and evaluation.
 | 101 | [APP-101: Instant pick and live transform: prebuilt apps land at once and reshape to the request](../0-backlog/APP-101.md) | [PH08](../phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-094 |
 | 102 | [APP-102: Receipt upload and the expense ledger: a photo becomes a reviewed row, every row adds up live](../0-backlog/APP-102.md) | [PH08](../phases/PH08.md) | S14 | AI | P0 | M | Backlog | APP-093, APP-095 |
 | 103 | [APP-103: Canvas utility widgets: weather, calculator and clock that a member customizes in words](../0-backlog/APP-103.md) | [PH08](../phases/PH08.md) | S14 | AI | P1 | M | Backlog | APP-094, APP-101 |
+| 107 | [APP-107: Workflow library: the approval processes real companies run, end to end](../0-backlog/APP-107.md) | [PH08](../phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095, APP-099, APP-100 |
