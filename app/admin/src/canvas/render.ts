@@ -3,6 +3,11 @@
 // runs under Trusted Types; nothing here assigns markup). A card shows a
 // value only from a released query result that carries its receipt; every
 // other state is built from a message alone (ADR-011 I3).
+import { chartFigure, chartOf } from './chart';
+import {
+  amount, columnTypes, decimalValue, integer, label, money, receivedAt, when,
+  type ColumnType, type Shown,
+} from './display';
 
 export type Pair = { id: string; label: string; value: string };
 type Child = Node | string | null | undefined | false;
@@ -95,45 +100,57 @@ export function receiptRows(receipt: Record<string, unknown>): Pair[] {
   return rows;
 }
 
-/**
- * A key row's value as the card shows it (`query::canvas::abbreviate`): each
- * `sha256:` digest and UUID shortened to its ends; the inspector keeps every
- * full value, and the receipt's own digest is shown in full.
- */
-export function abbreviate(value: string): string {
-  return value
-    .split(' ')
-    .map((token) => {
-      if (/^sha256:[0-9a-f]{64}$/.test(token)) return `sha256:${token.slice(7, 19)}…${token.slice(-6)}`;
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(token)) return `${token.slice(0, 8)}…${token.slice(-4)}`;
-      return token;
-    })
-    .join(' ');
-}
-
-/** The identities a card always shows (`query::canvas::key_row`). */
-export function isKeyRow(id: string): boolean {
-  return ['result', 'mode', 'principal', 'membership', 'policy'].includes(id) ||
-    id.startsWith('source-') || id.startsWith('parameter-');
-}
-
-function pairs(document_: Document, rows: Pair[], className?: string, short = false): HTMLDListElement {
-  const dl = el(document_, 'dl', className ? { class: className } : {});
+function pairs(document_: Document, rows: Pair[]): HTMLDListElement {
+  const dl = el(document_, 'dl', {});
   for (const row of rows) {
-    const shown = short ? abbreviate(row.value) : row.value;
-    dl.append(el(document_, 'div', {}, el(document_, 'dt', {}, row.label), el(document_, 'dd', {}, el(document_, 'code', {}, shown))));
+    dl.append(el(document_, 'div', {}, el(document_, 'dt', {}, row.label), el(document_, 'dd', {}, el(document_, 'code', {}, row.value))));
   }
   return dl;
 }
 
+function svgNode(document_: Document, tag: string, attributes: Record<string, string>): SVGElement {
+  const node = document_.createElementNS('http://www.w3.org/2000/svg', tag) as SVGElement;
+  for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
+  return node;
+}
+
+/** The verified seal (as `canvas/app.tsx` draws it). */
+function seal(document_: Document): SVGElement {
+  const icon = svgNode(document_, 'svg', { class: 'cv-seal', viewBox: '0 0 16 16', width: '16', height: '16', 'aria-hidden': 'true' });
+  icon.append(
+    svgNode(document_, 'path', { d: 'M8 1.2l5.4 2v4.1c0 3.3-2.3 6.2-5.4 7.3C4.9 13.5 2.6 10.6 2.6 7.3V3.2z' }),
+    svgNode(document_, 'path', { class: 'cv-seal-check', d: 'M5.4 8.1l1.8 1.8 3.5-3.6' }),
+  );
+  return icon;
+}
+
+/**
+ * The receipt, always on the card (ADR-011): one compact line, "Verified",
+ * the digest's first eight hex digits, the source count and when this page
+ * received it; a click opens every receipt field in full, inline, and the
+ * receipt document itself.
+ */
 export function receiptSection(document_: Document, receipt: Record<string, unknown>): HTMLElement {
   const rows = receiptRows(receipt);
-  const details = el(document_, 'details', {}, el(document_, 'summary', {}, 'All receipt fields'), pairs(document_, rows),
+  const digest = text(receipt, 'digest');
+  const sources = rows.filter((row) => row.id.startsWith('source-')).length;
+  const time = receivedAt();
+  const summary = el(document_, 'summary', { title: digest },
+    seal(document_),
+    el(document_, 'span', { class: 'cv-verified' }, 'Verified'),
+    el(document_, 'code', { class: 'cv-receipt-id' }, digest.replace(/^sha256:/, '').slice(0, 8)),
+    el(document_, 'span', { class: 'cv-receipt-meta' }, `${sources} ${sources === 1 ? 'source' : 'sources'}`),
+    el(document_, 'span', { class: 'cv-receipt-meta' }, time),
+    el(document_, 'span', { class: 'cv-receipt-toggle', 'aria-hidden': 'true' }));
+  const raw = el(document_, 'details', { class: 'cv-receipt-raw' },
+    el(document_, 'summary', {}, 'Receipt document (JSON)'),
     el(document_, 'pre', {}, JSON.stringify(receipt, null, 2)));
-  return el(document_, 'section', { class: 'cv-receipt', 'aria-label': 'Receipt' },
-    el(document_, 'p', { class: 'cv-receipt-head' }, el(document_, 'span', {}, 'Receipt'), ' ', el(document_, 'code', {}, text(receipt, 'digest'))),
-    pairs(document_, rows.filter((row) => isKeyRow(row.id)), 'cv-receipt-key', true),
-    details);
+  return el(document_, 'details', { class: 'cv-receipt', 'aria-label': 'Receipt' },
+    summary,
+    el(document_, 'div', { class: 'cv-receipt-body' },
+      pairs(document_, rows),
+      raw,
+      el(document_, 'p', { class: 'cv-receipt-note' }, `Received ${time}, as this page saw it; the time is not part of the receipt.`)));
 }
 
 function body(card: HTMLElement): HTMLElement {
@@ -164,6 +181,8 @@ export type QueryResponse = {
   rows: unknown[][];
   truncated_page: boolean;
   receipt: Record<string, unknown>;
+  /** Per-column value types (pivot/fix-093), aligned with `columns` or by name. */
+  column_types?: unknown;
 };
 
 /** A body the JSON query route answered with 200, or null if it is not one (then no number). */
@@ -180,12 +199,79 @@ export function released(value: unknown): QueryResponse | null {
   return candidate as QueryResponse;
 }
 
+/**
+ * The one formatter of a released cell (pivot/fix-093's seam): from the
+ * column's declared type when the result carries one; money with its
+ * currency at its minor-unit exponent, decimal at its scale, integers
+ * grouped (compact with bytes when the column's name says bytes), dates and
+ * timestamps readable, text never grouped. Without a type, a cell shows as
+ * released (a date or timestamp readable). An unknown cell is "unknown",
+ * never zero. `exact` is the lossless value; `raw` the released text.
+ */
+export function formatValue(value: unknown, type: ColumnType | undefined, column = ''): Shown {
+  if (value === null || value === undefined) return { text: 'unknown', exact: 'unknown', raw: 'unknown' };
+  if (typeof value === 'boolean') return { text: String(value), exact: String(value), raw: String(value) };
+  let raw = typeof value === 'string' ? value : '';
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const inner = record.minor_units ?? record.coefficient ?? record.value;
+    if (typeof inner === 'string') raw = inner;
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value)) raw = String(value);
+  if (!raw) return { text: 'unknown', exact: 'unknown', raw: 'unknown' };
+  const parsed = integer(raw);
+  const shown = (pair: [string, string]): Shown => ({ text: pair[0], exact: pair[1], raw });
+  switch (type?.type) {
+    case 'money':
+      return parsed ? { ...shown(money(parsed[0], parsed[1], type.currency, type.minor_unit_exponent)), raw: `${raw} minor units (${type.currency})` } : shown([raw, raw]);
+    case 'decimal':
+      return parsed ? shown(decimalValue(parsed[0], parsed[1], type.scale)) : shown([raw, raw]);
+    case 'integer':
+      return parsed ? shown(amount(column.toLowerCase().includes('bytes'), parsed[0], parsed[1])) : shown([raw, raw]);
+    case 'text':
+    case 'boolean':
+      return shown([raw, raw]);
+    default: {
+      const readable = when(raw);
+      return shown([readable ?? raw, raw]);
+    }
+  }
+}
+
+/** A cell's title: the exact value, and the raw text when it differs. */
+function titleOf(shown: Shown): string {
+  return shown.raw === shown.exact || shown.raw === shown.text ? shown.exact : `${shown.exact} · ${shown.raw}`;
+}
+
+const NUMERIC = ['integer', 'money', 'decimal'];
+
+function table(document_: Document, columns: string[], rows: unknown[][], types: (ColumnType | undefined)[]): HTMLElement {
+  const head = el(document_, 'tr', {});
+  for (const column of columns) head.append(el(document_, 'th', { scope: 'col' }, label(column)));
+  const body_ = el(document_, 'tbody', {});
+  for (const row of rows) {
+    const tr = el(document_, 'tr', {});
+    row.forEach((value, index) => {
+      const type = types[index];
+      const shown = formatValue(value, type, columns[index] ?? '');
+      tr.append(el(document_, 'td', { class: NUMERIC.includes(type?.type ?? '') ? 'value num' : 'value', title: titleOf(shown) }, shown.text));
+    });
+    body_.append(tr);
+  }
+  return el(document_, 'div', { class: 'cv-table' }, el(document_, 'table', {}, el(document_, 'thead', {}, head), body_));
+}
+
 /** A released result with its receipt: `ready` or `empty` (`page::card`). */
 export function renderReleased(card: HTMLElement, result: QueryResponse): void {
   const document_ = card.ownerDocument;
   const integers = new Set((card.dataset.integers ?? '').split(',').filter(Boolean));
   const kind = card.dataset.kind ?? '';
-  const empty = result.rows.every((row) => row.every((cell) => cell === null));
+  const empty = result.rows.every((row) => row.every((cell_) => cell_ === null));
+  // Declared types when the result carries them; otherwise the view's
+  // exact-integer columns are integers and every other column is as released.
+  const declared = columnTypes(result.columns, result.column_types);
+  const types = result.columns.map((column, index): ColumnType | undefined =>
+    declared[index] ?? (integers.has(column) ? { type: 'integer' } : undefined));
   const children: Node[] = [];
   if (empty) {
     setState(card, 'empty', 'empty');
@@ -193,36 +279,35 @@ export function renderReleased(card: HTMLElement, result: QueryResponse): void {
   } else {
     setState(card, 'ready', 'ready');
     children.push(el(document_, 'p', { class: 'cv-message', role: 'status' }, result.truncated_page ? 'Showing the first page of rows.' : ''));
-    const integer = (index: number) => integers.has(result.columns[index] ?? '');
+    const format = (value: unknown, index: number) => formatValue(value, types[index], result.columns[index] ?? '');
     if (kind === 'summary' && result.rows.length === 1) {
-      const dl = el(document_, 'dl', { class: 'cv-summary' });
-      result.columns.forEach((column, index) => {
-        dl.append(el(document_, 'div', {}, el(document_, 'dt', {}, column), el(document_, 'dd', { class: 'value' }, cellText(result.rows[0]?.[index], integer(index)))));
-      });
-      children.push(dl);
-    } else {
-      // One integer column gets a proportional bar drawn from the released
-      // values themselves (no other number is introduced).
-      const integerIndexes = result.columns.map((_, index) => index).filter(integer);
-      const barColumn = integerIndexes.length === 1 ? integerIndexes[0] : -1;
-      const max = barColumn < 0 ? 0 : Math.max(0, ...result.rows.map((row) => Number(row[barColumn]) || 0));
-      const head = el(document_, 'tr', {});
-      for (const column of result.columns) head.append(el(document_, 'th', { scope: 'col' }, column));
-      const rows = el(document_, 'tbody', {});
-      for (const row of result.rows) {
-        const tr = el(document_, 'tr', {});
-        row.forEach((cell, index) => {
-          const td = el(document_, 'td', { class: 'value' }, cellText(cell, integer(index)));
-          if (index === barColumn && max > 0 && typeof cell === 'string') {
-            const share = Math.max(0, Math.min(1, Number(cell) / max));
-            td.classList.add('has-bar');
-            td.style.setProperty('--share', share.toFixed(4));
+      const shown = result.columns.map((column, index) => [column, format(result.rows[0]?.[index], index)] as const);
+      const [first, ...rest] = shown;
+      if (first) {
+        const insight = el(document_, 'div', { class: 'cv-insight' },
+          el(document_, 'p', { class: 'cv-insight-label' }, label(first[0])),
+          el(document_, 'p', { class: 'cv-insight-value value', title: titleOf(first[1]) }, first[1].text),
+          el(document_, 'p', { class: 'cv-insight-exact' }, first[1].exact));
+        if (rest.length) {
+          const stats = el(document_, 'dl', { class: 'cv-stats' });
+          for (const [column, value] of rest) {
+            stats.append(el(document_, 'div', {}, el(document_, 'dt', {}, label(column)), el(document_, 'dd', { class: 'value', title: titleOf(value) }, value.text)));
           }
-          tr.append(td);
-        });
-        rows.append(tr);
+          insight.append(stats);
+        }
+        children.push(insight);
       }
-      children.push(el(document_, 'div', { class: 'cv-table' }, el(document_, 'table', {}, el(document_, 'thead', {}, head), rows)));
+    } else {
+      const texts = result.rows.map((row) => row.map((value) => (typeof value === 'string' ? value : value === null || value === undefined ? 'unknown' : String(value))));
+      const chart = chartOf(result.columns, texts, types, (text_, index) => format(text_, index));
+      const rows = table(document_, result.columns, result.rows, types);
+      if (chart) {
+        children.push(chartFigure(document_, chart));
+        const count = result.rows.length;
+        children.push(el(document_, 'details', { class: 'cv-rows' }, el(document_, 'summary', {}, `${count} ${count === 1 ? 'row' : 'rows'}`), rows));
+      } else {
+        children.push(rows);
+      }
     }
   }
   children.push(receiptSection(document_, result.receipt));
@@ -244,10 +329,11 @@ export type FormJson = {
   id: string; title: string; command: string; action: string; csrf: string;
   idempotency_key: string; collection: string; publication: string; schema: string;
   schema_version: string; record: string; record_version: string; work_version: string;
-  fields: FieldJson[];
+  fields: FieldJson[]; submit?: string;
 };
+export type OriginJson = { id: string; kind: string; text: string };
 export type GroupJson = {
-  id: string; app: string; work: string; app_card: string; title: string; label: string;
+  id: string; app: string; work: string; app_card: string; title: string; label: string; origins?: OriginJson[];
   href: string; csrf: string; window_start: string; window_end: string; destination: string;
   cards: CardJson[]; forms: FormJson[];
 };
@@ -295,35 +381,48 @@ export function buildForm(document_: Document, form: FormJson): HTMLFormElement 
     if (field.read_only) row.append(el(document_, 'span', { class: 'cv-muted' }, 'not changed by this command'));
     node.append(row);
   }
-  node.append(el(document_, 'button', { type: 'submit' }, `Submit ${form.command}`));
+  node.append(el(document_, 'button', { type: 'submit' }, form.submit || label(form.command)));
   return node;
 }
 
 export function buildFormCard(document_: Document, form: FormJson): HTMLElement {
   return el(document_, 'article', { class: 'cv-card cv-form', 'data-card': form.id, 'data-kind': 'form', 'aria-label': form.title },
-    el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, form.title), el(document_, 'span', { class: 'badge' }, 'command')),
+    el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, form.title), el(document_, 'span', { class: 'badge' }, 'record')),
     buildForm(document_, form),
     el(document_, 'p', { class: 'cv-outcome', role: 'status', 'data-outcome': '' }));
+}
+
+/** An origin label's style: library, adapted, generated or seeded. */
+export function originKind(text_: string): string {
+  const lower = text_.toLowerCase();
+  if (lower.includes('generat')) return 'generated';
+  if (lower.includes('adapt')) return 'adapted';
+  if (lower.includes('seed')) return 'seeded';
+  return 'library';
 }
 
 /** The same group the server renders, idle, from its JSON. */
 export function buildGroup(document_: Document, group: GroupJson, labels: string[]): HTMLElement {
   const window_ = el(document_, 'form', { method: 'post', action: group.href, class: 'cv-window', 'data-window': '' },
     input(document_, 'csrf', group.csrf),
-    el(document_, 'label', {}, el(document_, 'span', {}, 'Window start (UTC)'), el(document_, 'input', { name: 'window_start', type: 'datetime-local', step: '1', value: group.window_start })),
-    el(document_, 'label', {}, el(document_, 'span', {}, 'Window end (UTC, excluded)'), el(document_, 'input', { name: 'window_end', type: 'datetime-local', step: '1', value: group.window_end })),
+    el(document_, 'label', {}, el(document_, 'span', {}, 'From (UTC)'), el(document_, 'input', { name: 'window_start', type: 'datetime-local', step: '1', value: group.window_start })),
+    el(document_, 'label', {}, el(document_, 'span', {}, 'Until (UTC, excluded)'), el(document_, 'input', { name: 'window_end', type: 'datetime-local', step: '1', value: group.window_end })),
     el(document_, 'label', {}, el(document_, 'span', {}, 'Destination (optional)'), el(document_, 'input', { name: 'destination', type: 'text', value: group.destination })),
-    el(document_, 'button', { type: 'submit' }, 'Run views'));
-  const chips = labels.length
-    ? el(document_, 'p', { class: 'cv-labels', 'aria-label': 'How this app was assembled' }, ...labels.map((label) => el(document_, 'span', { class: 'cv-label-chip' }, label)))
-    : null;
+    el(document_, 'div', { class: 'cv-window-actions' },
+      el(document_, 'button', { type: 'submit' }, 'Run views'),
+      el(document_, 'a', { href: group.href }, 'Open work page')));
+  // The composer's honest assembly labels when it placed this app; the
+  // server's origin chips otherwise.
+  const origins = labels.length
+    ? labels.map((text_) => ({ kind: originKind(text_), text: text_ }))
+    : (group.origins ?? []).filter((origin) => typeof origin?.text === 'string');
+  const chips = el(document_, 'p', { class: 'cv-origins', 'aria-label': 'How this app was assembled', title: group.label },
+    ...origins.map((origin) => el(document_, 'span', { class: 'cv-origin', 'data-origin': originKind(origin.kind === 'seeded' ? 'seeded' : origin.text) }, origin.text)));
   const app = el(document_, 'article', { class: 'cv-card cv-app', 'data-card': group.app_card, 'data-kind': 'app', 'aria-label': group.title },
-    el(document_, 'p', { class: 'cv-eyebrow' }, 'App'),
     el(document_, 'h2', {}, group.title),
     chips,
-    el(document_, 'p', { class: 'cv-provenance' }, group.label),
-    window_,
-    el(document_, 'p', { class: 'cv-app-links' }, el(document_, 'a', { href: group.href }, 'Open the work page')));
+    el(document_, 'p', { class: 'sr-only' }, group.label),
+    window_);
   const section = el(document_, 'section', { class: 'cv-group', id: group.id, 'data-app': group.app, 'data-work': group.work, 'aria-label': group.title }, app);
   for (const card of group.cards) {
     section.append(el(document_, 'article', {

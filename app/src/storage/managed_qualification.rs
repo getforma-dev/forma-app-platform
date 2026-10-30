@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 99] = [
+const SOURCES: [(&str, &[u8]); 100] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -299,6 +299,10 @@ const SOURCES: [(&str, &[u8]); 99] = [
     (
         "app/src/query/canvas.rs",
         include_bytes!("../query/canvas.rs"),
+    ),
+    (
+        "app/src/query/canvas_display.rs",
+        include_bytes!("../query/canvas_display.rs"),
     ),
     (
         "app/src/query/canvas_tests.rs",

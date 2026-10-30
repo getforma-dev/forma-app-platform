@@ -6,6 +6,7 @@
 //! work page ([`routes`]) and turns each view's outcome into what the page
 //! shows ([`page`]).
 pub mod canvas;
+pub mod canvas_display;
 pub mod page;
 pub mod receipt;
 pub mod routes;
