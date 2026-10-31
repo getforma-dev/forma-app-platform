@@ -3859,7 +3859,7 @@
     },
     {
       "id": "APP-122",
-      "title": "Talking to things: every address is an AI scope, with four typed outcomes (answer, new view, command, forma)",
+      "title": "Two AI jobs: Ask (read-only conversation about the data) and Shape (change an item's look or view), separated by where you type",
       "path": "0-backlog/APP-122.md",
       "Field": "Value",
       "---": "---",

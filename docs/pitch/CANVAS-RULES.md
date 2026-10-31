@@ -1,12 +1,12 @@
 # Canvas rules: what is on a canvas, how you talk to it, how things are named
 
-This is the single reference for the canvas model and its grammar. The decisions are recorded in APP-120 (model and grammar), APP-121 (naming), APP-122 (talking to things) and APP-119 (commands versus apps). Where this page and the code disagree, the code is wrong: file a ticket.
+This is the single reference for the canvas model and its grammar. The decisions are recorded in APP-120 (model and grammar), APP-121 (naming), APP-122 (Ask and Shape) and APP-119 (commands versus apps). Where this page and the code disagree, the code is wrong: file a ticket.
 
 ## The one sentence
 
 **Type `/` and a verb to change the canvas, `/` and a name to tell that thing something, or just type a sentence.**
 
-Whatever you tell, the rule is the same: **answers are free, views are cheap and undoable, records only change through the app's own commands.**
+The AI does two separate jobs, and where you type picks the job: **Ask** answers questions about your data and never changes anything; **Shape** changes how an item looks or what it shows and never answers. Records only change through an app's own commands.
 
 ## What a canvas holds
 
@@ -28,7 +28,8 @@ Whatever you tell, the rule is the same: **answers are free, views are cheap and
 | --- | --- | --- |
 | **Library** | **Apps** (category → app → cards) and **Widgets** | `L`, `/apps [query]`, the Library button |
 | **Commands** | Every verb, with its arguments and an example | `/commands`, `/help` |
-| **Shortcuts** | Keys and gestures | `?` (anywhere), `/shortcuts` |
+| **Ask** | A read-only conversation about your data (APP-122) | `?` + text in the bar, ⋯ → Ask about this |
+| **Shortcuts** | Keys and gestures | `?` (outside the bar), `/shortcuts` |
 
 Every Library row shows:
 - a dot: filled when the item is on your canvas, hollow when it is not;
@@ -69,62 +70,47 @@ The pane always reflects the canvas.
 | | `/unite <app>` · `/split` | Assembles an app's cards into one frame, and takes them apart again |
 | | `/focus` | Opens the selected card large, in focus mode |
 | Make | `/folder <name> formation <instruction>` | Builds an app from a folder's files |
-| | `/forma <words>` | Asks the AI about, or builds from, your whole canvas (APP-122) |
+| | `/forma <words>` | Picks or builds an app from a sentence (APP-122) |
+| | `/shape <card or widget> <words>` | Changes how an item looks or what it shows (APP-122) |
+| Ask | `? <question>` | Opens the Ask tab with your question; read-only (APP-122) |
 | | `/rename …` · `/alias …` | Names things (APP-121) |
 | Help | `/apps [query]` · `/commands` · `/shortcuts` · `/agent` | Library · Commands · Shortcuts · Connect an agent |
 
 Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/clock`, `/note`, `/folder` on its own, and `/help`.
 
-## Talking to things: the address is the scope, the words go to the AI
+## Two jobs: Ask and Shape (APP-122)
 
-`/<anything> <words>` sends your words to the AI, limited to that thing (APP-122):
+The AI does two separate jobs. **Where you type decides the job, never the AI.** A question cannot change a card, because the Ask job has no way to change anything.
 
-| You type | The AI sees | Example |
+| | **Ask** | **Shape** |
 | --- | --- | --- |
-| `/forma <words>`, or a plain sentence | Your whole canvas and library | "build me a vendor tracker" |
-| `/<app> <words>` | That app: all its records and cards | `/expenses why did spend jump in March?` |
-| `/<app>.<card> <words>` | That one card and its data | `/expenses.total add the math for me` |
-| `/<folder> <words>` | The folder's files | `/q3-metrics turn this into a metrics app` |
-| `/<widget> <words>` | That widget | `/calculator make it a TI-84` |
+| What it is | A conversation about your data, like talking to an analyst | Changing how a canvas item looks or what it shows |
+| Where | The **Ask** tab in the right pane, with its own input. `?` in the bar opens it with your text | The bar: `/<card or widget> <words>`, or the **Shape** field on a card or widget |
+| Examples | "where are all the red invoices?" · "why did spend jump in March?" · "summarize Q3" | `/expenses.total by month` · `/expenses.ledger highlight overdue in red` · `/calculator make it a TI-84` |
+| What comes back | Text with receipts and links to the records it used | A preview of the changed item; nothing applies until you click **Apply** |
+| Can it change anything? | **No.** It runs read-only: it cannot change records, cards or the canvas | Only the look and the view: chart type, colors, columns, filters, the math shown. **Never records**, and it never answers in words |
+| Scope | The selection, an `@` mention (`@expenses.total`), or the whole canvas. A chip shows which, and you can remove it | The item you addressed |
 
-- A card question and an app question are the same feature at different widths. "Why is this number high?" fits the card; "who files the most?" fits the app.
-- **`/<name>` on its own** puts the thing on the canvas, the same as `/app` or `/card`.
-- **The selection is the scope.** With something selected, a plain sentence goes to it. The bar shows a removable chip ("to: expenses.total").
-- **`@folder`** in a sentence points at one of your folders: "build a metrics app from @Q3 metrics".
-- The old `/folder <name> formation …` keeps working as an alias of `/<folder> …`.
+**The only overlap is two explicit buttons:**
+- An Ask answer has **Make it a card**. It hands the answer to Shape as a preview of a new card. Nothing is added until you click.
+- Every card's ⋯ menu has **Ask about this**. It opens Ask scoped to that card. Nothing changes.
 
-### Three layers, separated by what changes
+**The rest of the bar:**
+- **Do:** `/<app> <words>` runs one of the app's own commands (`/expenses $86 Nobu, Sarah approves`). The confirm card names the command before any record changes.
+- **Forma:** a plain sentence, or `/forma <words>`, picks or builds an app. `/<folder> <words>` builds from a folder's files; the old `/folder <name> formation …` still works. Both confirm first.
+- **Place:** `/<name>` on its own puts the thing on the canvas.
 
-| Layer | What it is | What can change it |
+### Three layers, and what may change each
+
+| Layer | What it is | Changed by |
 | --- | --- | --- |
-| **Records** | The app's governed data | Only the app's own commands (file, approve), always confirmed. Plus formation, which creates a *new* app with its own records, also confirmed |
-| **Cards** | A view: which records, which math, what shape | The AI, freely. A card stores no data; it reads live from the records, with receipts |
-| **Answers** | An insight or a summary | Nothing. Read-only and temporary unless pinned |
+| **Records** | The app's governed data | **Do** (the app's own commands) or **Forma** (a new app from files), always confirmed |
+| **Cards and widgets** | Views: which records, which math, what look. They store no data and read live, with receipts | **Shape**, previewed and applied by you. A shaped card is labeled *adapted* and has **Revert** |
+| **Answers** | What Ask tells you | Nothing; read-only. Pinning one goes through Shape |
 
-**Answers are free, views are cheap and undoable, records only change through the app's own commands.**
-
-"Make me a new card from this data in the shape of …" is not recording data. It is a new view over the same records, its math is computed live, and every number still traces to its source records.
-
-### Four outcomes, always shown before they take effect
-
-The AI turns your words into exactly one typed outcome. Model output is data, never code (ADR-011 I5).
-
-| Outcome | What happens | Confirmation |
-| --- | --- | --- |
-| **Answer** | An insight with receipts appears beside the item. Nothing changes | None needed. **Make it a card** pins it as a card |
-| **New view** | A preview of a new or changed card | **Add as new card** (default) or **Replace this card**. A replaced card is labeled *adapted* and has **Revert** |
-| **Command** | One of the app's own commands ("Submit claim", "Approve") | The confirm card names the command; it runs only if the app defines it |
-| **Forma** | Something new: a card set, or an app from a folder's files | A confirm card; an app from files is the one AI path that creates records |
-
-- **The AI's guess only has to be visible and one click from right.** Chips on every result switch the outcome: Answer · New card · Change this card · Command.
-- **`?` forces read-only:** `/expenses.total ? why is this high` can only answer.
-- Nothing is forced onto a new canvas item first. New is the default; in place is one click.
-
-### Where things belong
-
+- "Make me a new card from this data in the shape of …" is Shape, not recording data. It's a new view over the same records, and every number still traces to its source records.
 - A card made from an app's data belongs to that app, marked "made by you". Only you see it until the app's owner adds it for everyone.
-- Widgets have no records, so changing one only restyles it.
-- A card that combines two apps (expenses with time off) is a new app: formation, deferred.
+- A card that combines two apps (expenses with time off) is a new app: Forma, deferred.
 
 ## Adding and removing
 
