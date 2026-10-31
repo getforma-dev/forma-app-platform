@@ -29,10 +29,6 @@
       "path": "docs"
     },
     {
-      "name": "forma-app-platform (sibling clone, optional)",
-      "path": "../forma-app-platform"
-    },
-    {
       "name": "Forma framework (optional)",
       "path": "../../Forma"
     },

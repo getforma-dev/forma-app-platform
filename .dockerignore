@@ -82,6 +82,7 @@ app/src/slack/**
 # APP-108: folders (boxes): files, real data, apps built from them.
 !app/src/boxes/
 app/src/boxes/**
+!app/src/boxes/ask.rs
 !app/src/boxes/brief.rs
 !app/src/boxes/derive.rs
 !app/src/boxes/explain.rs

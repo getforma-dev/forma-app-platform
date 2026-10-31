@@ -96,6 +96,7 @@ async fn mutations_refuse_cross_site_first_and_everything_else_is_the_uniform_40
         format!("/v1/boxes/{ID}/share"),
         format!("/v1/boxes/{ID}/name"),
         format!("/v1/boxes/{ID}/brief"),
+        format!("/v1/boxes/{ID}/ask"),
         format!("/v1/boxes/explain/{ID}/{ID}"),
     ];
     for uri in &posts {
@@ -155,6 +156,7 @@ fn long_paths_are_exactly_the_parser_normalizer_and_model_routes() {
         format!("/v1/boxes/{ID}/files"),
         format!("/v1/boxes/{ID}/apps"),
         format!("/v1/boxes/{ID}/brief"),
+        format!("/v1/boxes/{ID}/ask"),
         format!("/v1/boxes/{ID}/files/{ID}/preview"),
         format!("/v1/boxes/{ID}/files/{ID}/data"),
         format!("/v1/boxes/{ID}/files/{ID}/attach"),
@@ -377,4 +379,324 @@ async fn real_haiku_folder_smoke() {
         "replied": cited.is_ok(), "input_tokens": cited.as_ref().ok().and_then(|r| r.input_tokens), "output_tokens": cited.as_ref().ok().and_then(|r| r.output_tokens),
         "cited_statements": parts.iter().filter(|p| p.get("cite").is_some()).count(), "kept_parts": parts.len()})
     );
+}
+
+// --- APP-124: start from your data ---
+
+fn data_file(
+    name: &str,
+    columns: &[(&str, super::inspect::ColumnType)],
+    rows: i64,
+) -> super::derive::DataFile {
+    use super::inspect::Column;
+    let columns: Vec<Column> = columns
+        .iter()
+        .map(|(id, kind)| Column {
+            id: (*id).into(),
+            header: (*id).into(),
+            kind: *kind,
+            nullable: false,
+        })
+        .collect();
+    let contract = super::register::contract(
+        &super::register::input_id(name),
+        "0a1b2c3d-0000-4000-8000-000000000000",
+        &columns,
+    );
+    super::derive::DataFile {
+        file: crate::storage::BoxFile {
+            box_id: ID.into(),
+            file_id: ID.into(),
+            name: name.into(),
+            kind: "csv".into(),
+            media_type: "text/csv".into(),
+            bytes: 10,
+            content_digest: format!("sha256:{}", "a".repeat(64)),
+            object_key: "k".into(),
+            created_at: "2026-10-31T00:00:00Z".into(),
+            data: None,
+        },
+        data: crate::storage::FileData {
+            source_id: "0a1b2c3d-0000-4000-8000-000000000000".into(),
+            revision_id: "0a1b2c3d-0000-4000-8000-000000000001".into(),
+            normalized_digest: format!("sha256:{}", "b".repeat(64)),
+            row_count: rows,
+            contract,
+            contract_digest: format!("sha256:{}", "c".repeat(64)),
+            created_at: "2026-10-31T00:00:00Z".into(),
+        },
+        sample: Vec::new(),
+    }
+}
+
+/// Make a card: exactly one card, the most useful view by rule (a chart of
+/// a number over dates or categories, else the totals, else the rows),
+/// admitted whole like any generated definition and runnable.
+#[test]
+fn make_a_card_is_one_admitted_view_chosen_by_rule() {
+    use super::inspect::ColumnType::*;
+    let org = "00000000-0000-4000-8000-0000000000c1";
+    let app = "00000000-0000-4000-8000-0000000000c2";
+    for (columns, kind) in [
+        (
+            vec![("month", Date), ("region", Text), ("revenue", Money)],
+            "chart",
+        ),
+        (vec![("region", Text), ("revenue", Money)], "chart"),
+        (vec![("revenue", Money), ("signups", Integer)], "summary"),
+        (vec![("region", Text), ("owner", Text)], "summary"),
+    ] {
+        let file = data_file("Q3 metrics.csv", &columns, 12);
+        let content = super::derive::card_definition("Q3 board pack", &file);
+        let views = content["views"].as_array().unwrap();
+        assert_eq!(views.len(), 1, "{columns:?}");
+        assert_eq!(views[0]["kind"], kind, "{columns:?}");
+        assert_eq!(content["default_layout"].as_array().unwrap().len(), 1);
+        assert_eq!(content["title"], "Q3 board pack");
+        assert!(content["record_schemas"].as_array().unwrap().is_empty());
+        assert!(content["commands"].as_array().unwrap().is_empty());
+        crate::composer::plan::admit(&content, org, app).expect("admitted");
+        crate::composer::plan::require_runnable(&content).expect("runnable");
+    }
+    // Named after the folder; after the file when the folder has no name of its own.
+    assert_eq!(
+        super::derive::card_title("Q3 board pack", "box", "q3.csv"),
+        "Q3 board pack"
+    );
+    assert_eq!(
+        super::derive::card_title("Untitled folder", "box", "Q3 metrics.csv"),
+        "Q3 metrics"
+    );
+    assert_eq!(
+        super::derive::card_title("Uploads", "uploads", "spend.xlsx"),
+        "spend"
+    );
+    for (title, slug) in [
+        ("Q3 board pack", "q3-board-pack"),
+        ("  Spend: 2026!  ", "spend-2026"),
+        ("2026 sales", "data-2026-sales"),
+        ("Ünïcode only", "unicode-only"),
+        ("Ventas año", "ventas-ano"),
+        (&"long name ".repeat(6), "long-name-long-name-long-na"),
+    ] {
+        let made = super::derive::card_slug(title);
+        assert_eq!(made, slug, "{title}");
+        assert!(crate::composer::commands::valid_slug(&made), "{made}");
+        assert!(crate::composer::commands::valid_slug(&format!(
+            "{made}-card"
+        )));
+    }
+}
+
+fn folder_table(rows: &[[&str; 3]], total: usize) -> super::ask::FolderTable {
+    use super::inspect::ColumnType::*;
+    super::ask::FolderTable {
+        file_id: ID.into(),
+        name: "q3_metrics.csv".into(),
+        sha256: format!("sha256:{}", "d".repeat(64)),
+        sheet: None,
+        columns: vec![
+            ("month".into(), Date),
+            ("region".into(), Text),
+            ("revenue".into(), Money),
+        ],
+        rows: rows
+            .iter()
+            .map(|r| r.iter().map(|c| (*c).to_owned()).collect())
+            .collect(),
+        total_rows: total,
+    }
+}
+
+/// Ask on a folder: the body is exactly `{"question"}`; a rehearsed count or
+/// total references every row it used and adds money exactly; a partial
+/// read says so; the answer names each row's file and row, from the server.
+#[test]
+fn folder_ask_answers_with_the_rows_it_used() {
+    use super::ask::{document, question_of, rehearsed, user};
+    use serde_json::json;
+    let object = |v: serde_json::Value| v.as_object().unwrap().clone();
+    assert_eq!(
+        question_of(&object(json!({"question": " how many? "}))).as_deref(),
+        Some("how many?")
+    );
+    for refused in [
+        json!({}),
+        json!({"question": ""}),
+        json!({"question": 1}),
+        json!({"question": "x", "scope": {}}),
+        json!({"question": "a\u{7}b"}),
+    ] {
+        assert!(question_of(&object(refused.clone())).is_none(), "{refused}");
+    }
+    let rows = [
+        ["2026-07-01", "North", "214215.91"],
+        ["2026-07-01", "South", "353481.49"],
+        ["2026-08-01", "East", "12"],
+    ];
+    let tables = vec![folder_table(&rows, 3)];
+    let count = rehearsed("how many rows are there?", &tables).unwrap();
+    assert_eq!(count.text, "q3_metrics.csv has 3 rows.");
+    assert_eq!(count.references, ["f1r1", "f1r2", "f1r3"]);
+    let total = rehearsed("what's the total revenue", &tables).unwrap();
+    assert_eq!(
+        total.text,
+        "revenue in q3_metrics.csv adds up to $567,709.40 (3 rows)."
+    );
+    assert_eq!(total.references.len(), 3);
+    let partial = vec![folder_table(&rows, 450)];
+    assert!(rehearsed("how many", &partial)
+        .unwrap()
+        .text
+        .contains("at least 3 rows"));
+    assert!(rehearsed("sum it", &partial)
+        .unwrap()
+        .text
+        .contains("not the full total"));
+    let change = rehearsed("make it a chart", &tables).unwrap();
+    assert!(change.text.starts_with("Ask only reads") && change.references.is_empty());
+    assert!(
+        rehearsed("why did the south grow?", &tables).is_none(),
+        "reasoning goes to the model"
+    );
+    // The document: exactly {text, references}; each reference the file, its digest and the row.
+    let answer = crate::composer::ask::Answer {
+        text: "South is largest.".into(),
+        references: vec!["f1r2".into()],
+    };
+    let doc = document(&answer, &tables);
+    assert_eq!(
+        doc.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["references", "text"]
+    );
+    assert_eq!(
+        doc["references"],
+        json!([{"ref": "f1r2", "file_id": ID, "file": "q3_metrics.csv", "sha256": format!("sha256:{}", "d".repeat(64)), "sheet": null, "row": 2, "label": "2026-07-01 · South · 353481.49"}])
+    );
+    // The model sees the rows by reference and may cite only those.
+    let (message, known) = user("which region is largest?", &tables);
+    assert!(message.contains("\"f1r3\"") && !message.contains("\"f1r4\""));
+    assert_eq!(known.len(), 3);
+    assert!(
+        crate::composer::ask::judge(r#"{"text":"South.","references":["f1r2"]}"#, &known).is_ok()
+    );
+    assert_eq!(
+        crate::composer::ask::judge(r#"{"text":"South.","references":["f1r9"]}"#, &known),
+        Err("unknown_reference")
+    );
+    assert_eq!(
+        crate::composer::ask::judge(r#"{"text":"x","chart":"bar"}"#, &known),
+        Err("view_spec")
+    );
+    // A long table is cut to the model's byte cap and marked partial.
+    let long: Vec<[&str; 3]> = (0..200)
+        .map(|_| ["2026-07-01", "a very long region name", "1.00"])
+        .collect();
+    let (message, known) = user("q", &[folder_table(&long, 200)]);
+    assert!(known.len() <= 200 && message.len() <= 60_000);
+}
+
+/// APP-124 review: one address function for the server's judgment and the
+/// canvas's folder addresses (`boxes.ts` `folderSlug`, the same vectors in
+/// `canvas-cards.test.ts`): NFKD, marks dropped, 64 characters; so a card
+/// named "Ventas ano" is judged against the folder "Ventas año" the canvas
+/// answers to as `/ventas-ano`. The names a card is offered, in order.
+#[test]
+fn card_addresses_are_judged_as_the_canvas_addresses_folders() {
+    use super::derive::{address_slug, card_slug};
+    for (label, slug) in [
+        ("Ventas año", "ventas-ano"),
+        ("Ventas ano", "ventas-ano"),
+        ("Ünïcode only", "unicode-only"),
+        ("  Spend: 2026!  ", "spend-2026"),
+        ("ﬁnance Ⅳ", "finance-iv"),
+        (
+            &"long name ".repeat(8),
+            "long-name-long-name-long-name-long-name-long-name-long-name-long",
+        ),
+    ] {
+        assert_eq!(address_slug(label), slug, "{label}");
+    }
+    assert_eq!(card_slug("Ventas ano"), address_slug("Ventas año"));
+    // A folder address longer than a card's base is compared whole.
+    let folder = "abcdefghij abcdefghij abcde card";
+    assert_eq!(address_slug(folder), "abcdefghij-abcdefghij-abcde-card");
+    let base = card_slug("abcdefghij abcdefghij abcdefghij");
+    assert_eq!(base, "abcdefghij-abcdefghij-abcde");
+    assert_eq!(
+        super::routes::card_addresses(&base)[1],
+        address_slug(folder),
+        "the -card name is the folder's own address: judged taken"
+    );
+    assert_eq!(
+        super::routes::card_addresses("q3"),
+        ["q3", "q3-card", "q3-2", "q3-3", "q3-4", "q3-5", "q3-6", "q3-7", "q3-8", "q3-9"]
+    );
+}
+
+/// APP-124 review: a rehearsed total skips a cell that is not a number and
+/// says how many it skipped (never no answer); Ask with no readable table is
+/// its text answer, not a 503.
+#[test]
+fn folder_ask_total_skips_cells_that_are_not_numbers() {
+    use super::ask::{no_table, rehearsed};
+    let rows = [
+        ["2026-07-01", "North", "214215.91"],
+        ["2026-07-01", "South", "n/a"],
+        ["2026-08-01", "East", ""],
+        ["2026-08-01", "West", "12"],
+    ];
+    let total = rehearsed("what's the total revenue", &[folder_table(&rows, 4)]).unwrap();
+    assert_eq!(
+        total.text,
+        "revenue in q3_metrics.csv adds up to $214,227.91 (2 rows; 1 cell that is not a number was skipped)."
+    );
+    assert_eq!(total.references, ["f1r1", "f1r4"]);
+    let rows = [["2026-07-01", "North", "x"], ["2026-07-01", "South", "y"]];
+    let none = rehearsed("sum", &[folder_table(&rows, 2)]).unwrap();
+    assert!(none
+        .text
+        .contains("$0.00 (0 rows; 2 cells that are not numbers were skipped)"));
+    assert!(none.references.is_empty());
+    assert!(no_table(0)
+        .text
+        .contains("no table (CSV or XLSX) to read yet"));
+    assert!(no_table(1)
+        .text
+        .contains("one table (CSV or XLSX) could not be read"));
+    assert!(no_table(3)
+        .text
+        .starts_with("None of this folder's 3 tables"));
+    assert!(no_table(2).references.is_empty());
+}
+
+/// ADR-011 I4 (APP-124 review): a folder build's idempotency key answers the
+/// first result for the same member, folder and body; another body is
+/// refused; another scope is its own key.
+#[tokio::test]
+async fn a_folder_build_key_answers_its_first_result() {
+    use super::routes::replay_claim;
+    let scope = |n: u8| format!("org:member:box:{n:032x}-{}", std::process::id());
+    let first = replay_claim(scope(1), r#"{"one_card":true}"#.into()).unwrap();
+    *first.lock().await = Some(serde_json::json!({"app_id": "a"}));
+    let again = replay_claim(scope(1), r#"{"one_card":true}"#.into()).unwrap();
+    assert_eq!(
+        again.lock().await.as_ref().unwrap()["app_id"],
+        "a",
+        "a repeat answers the first result"
+    );
+    assert!(
+        replay_claim(scope(1), r#"{"purpose":"x"}"#.into()).is_none(),
+        "the same key with another body is refused"
+    );
+    let other = replay_claim(scope(2), r#"{"one_card":true}"#.into()).unwrap();
+    assert!(other.lock().await.is_none(), "another key runs");
+    // A first request that failed leaves nothing: the repeat runs.
+    let failed = replay_claim(scope(3), "{}".into()).unwrap();
+    drop(failed.lock().await);
+    assert!(replay_claim(scope(3), "{}".into())
+        .unwrap()
+        .lock()
+        .await
+        .is_none());
 }

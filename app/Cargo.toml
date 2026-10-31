@@ -33,6 +33,8 @@ rustls = { version = "=0.23.46", default-features = false, features = ["ring", "
 rustls-pki-types = { version = "=1.15.1", features = ["std"] }
 # APP-095: the SSE body stream type (already in the lock through axum/hyper).
 futures-core = "=0.3.34"
+# APP-124 review: NFKD for the shared address slug (already in the lock through url/idna).
+unicode-normalization = "=0.1.26"
 # ADR-012 D12.1: the dev binary calls its own router in process (seeding,
 # session keepalive); already in the lock through axum. Feature `dev-stand` only.
 tower = { version = "=0.5.3", features = ["util"], optional = true }

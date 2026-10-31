@@ -446,6 +446,16 @@ impl<'a> Transaction<'a> {
     /// read-only transaction takes no row lock). The checks and the reads
     /// that follow share one snapshot, so a revocation committed after it
     /// began is not seen by either; nothing here can write.
+    /// APP-124 (Ask on a folder): the member half of a `READ ONLY` read with
+    /// no work in it: current membership, epoch and entitlement, without the
+    /// `lock_member_authority` row lock (refused in a read-only snapshot);
+    /// the snapshot itself orders the checks with every read after them.
+    pub(super) async fn read_only_member(&self) -> Result<()> {
+        let request = self.member()?;
+        require(self.lease.role() != Role::Worker)?;
+        self.current_member(request).await?;
+        self.entitlement(request).await
+    }
     pub(super) async fn read_only_grants(&self, works: &[(&str, &str)]) -> Result<Vec<Grants>> {
         let request = self.member()?;
         require(self.lease.role() != Role::Worker)?;

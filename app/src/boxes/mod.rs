@@ -15,6 +15,7 @@
 //! place; Victor chose "Folder" on 2026-10-30), the slash words are
 //! [`COMMAND_ALIASES`] and the AI keyword is [`AI_KEYWORD`]
 //! (`/folder <name|number> formation <instruction>`).
+pub mod ask;
 pub mod brief;
 pub mod derive;
 pub mod explain;

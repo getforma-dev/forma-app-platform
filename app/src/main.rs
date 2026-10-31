@@ -1294,6 +1294,15 @@ mod tests {
         // No organization picker; the intent bar posts nowhere but the page.
         assert!(!content.to_lowercase().contains("organization picker"));
         assert!(content.contains("What do you need?"));
+        // APP-124: the empty canvas's three ways to start; the third is a
+        // file picker (and a drop target) that makes a folder of the files.
+        assert!(
+            content.contains("data-empty-describe") && content.contains("Describe what you need")
+        );
+        assert!(
+            content.contains("Drop files or upload") && content.contains("data-empty-upload-pick")
+        );
+        assert!(content.contains("type=\"file\"") && content.contains("data-empty-upload"));
         // The library pane: categories in order, numbers, the card ids the
         // island toggles, the command slug, and titles escaped.
         let security = content.find(">Security<").expect("security category");

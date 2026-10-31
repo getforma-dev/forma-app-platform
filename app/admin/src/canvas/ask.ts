@@ -25,6 +25,13 @@
 // `placePinnedAnswer`) and, when its records come from one list, **Make it
 // a card** (a Shape preview of a new card over the answer's records;
 // nothing is added without a click).
+//
+// APP-124: a folder is a scope too (the folder's **Ask** button, or the
+// selected folder card): the question goes to `POST /v1/boxes/{box}/ask`,
+// which reads the folder's tables read-only and answers exactly `{text,
+// references}`, each reference a row with its file (name, SHA-256), sheet
+// and row number, from the server. A folder answer has no Pin or Make it a
+// card (those keep record receipts); **Make a card** is on the folder.
 import { activeCanvasItem, boardWorks, focusCard, placeUtilityCard, workCard } from './board';
 import { answeredLine, newCardId, pinnedAnswer, pinRequest, storeCard, type Answer, type StoredCard } from './cards';
 import { selectedCanvasItem } from './controls';
@@ -34,6 +41,9 @@ import { el, isUuid } from './render';
 import { addressOfItem, addressOfWork, previewNewCard, removeButton, resolveTarget, type Target } from './shape';
 import type { Completion } from './slash';
 import { firstWord, MAX_RECORD_SET, mentionsOf, splitAddress } from './talk-view';
+// After the board's modules: `box-api` must not be evaluated first (an import cycle through `render`).
+import { contentUrl, folderAnswer, type RowReference } from './box-api';
+import { openViewer } from './box-viewer';
 
 export const ASK_URL = '/v1/ask';
 const MAX_WORKS = 12;
@@ -41,8 +51,13 @@ const MAX_WORKS = 12;
 const SHOWN_REFERENCES = 12;
 
 type ScopeWork = { app_id: string; work_id: string; address: string; collection?: string };
-/** A card (one work, its collection when it has one), an app (one work), or the canvas (every app on it). */
-export type Scope = { kind: 'card' | 'app' | 'canvas'; address: string; works: ScopeWork[] };
+/** A card (one work, its collection when it has one), an app (one work), the canvas (every app on it), or a folder (APP-124: its tables). */
+export type Scope = { kind: 'card' | 'app' | 'canvas' | 'folder'; address: string; works: ScopeWork[]; box_id?: string };
+
+/** APP-124: a folder's scope: its tables, read by the folder's own route. `name` is what the chip shows. */
+export function folderScope(boxId: string, name: string): Scope | null {
+  return isUuid(boxId) ? { kind: 'folder', address: name.slice(0, 60) || 'Folder', works: [], box_id: boxId } : null;
+}
 
 /** A records, ledger or form card's collection: its element's, else its id's (`l-<work>-<collection>`). */
 function collectionOf(card: CardRow, element: HTMLElement | null): string | undefined {
@@ -70,6 +85,9 @@ export function scopeOfTarget(target: Target, element: HTMLElement | null = null
 /** The scope for a canvas item: a card of an app (its address, work and collection), an app card or frame (the app), else null. */
 export function scopeOfItem(item: HTMLElement | null): Scope | null {
   if (!item) return null;
+  // APP-124: a folder card asks about the folder's tables.
+  const folder = item.matches?.('.bx-card[data-box]') ? item : item.querySelector?.<HTMLElement>('.bx-card[data-box]');
+  if (folder?.dataset.box) return folderScope(folder.dataset.box, folder.querySelector('.bx-title')?.textContent ?? '');
   const address = addressOfItem(item);
   if (!address) return null;
   const target = resolveTarget(address);
@@ -127,6 +145,7 @@ export function askLine(text: string): { scope: Scope | null; question: string; 
 }
 
 export function scopeText(scope: Scope): string {
+  if (scope.kind === 'folder') return `Asking about 📁 ${scope.address} (its tables)`;
   if (scope.kind === 'card') return `Asking about /${scope.address}`;
   if (scope.kind === 'app') return `Asking about /${scope.address} (all its records)`;
   const n = scope.works.length;
@@ -163,6 +182,7 @@ let pinned = false;
 const REFUSALS: Record<string, string> = {
   composer_unavailable: 'That question needs the AI model, and none is configured here. Try: “where are the red invoices”, “how many”, “what’s the total”.',
   could_not_answer: 'The answer came back in the wrong shape, so it was not shown. Nothing changed.',
+  folder_unavailable: 'That question needs the AI model, and none is configured here. Nothing changed.',
   too_many_requests: 'Too many questions in a short time. Try again in a moment.',
   invalid_request: 'Ask in a short sentence (up to 500 characters).',
 };
@@ -243,7 +263,18 @@ export async function ask(question: string, explicit: Scope | null = null): Prom
     entry(document_, 'note', 'Still answering the previous question; this one is next.');
     return;
   }
-  entry(document_, 'you', el(document_, 'span', { class: 'cv-ask-scope-mini' }, current.kind === 'canvas' ? 'canvas' : `/${current.address}`), text);
+  entry(document_, 'you', el(document_, 'span', { class: 'cv-ask-scope-mini' }, current.kind === 'canvas' ? 'canvas' : current.kind === 'folder' ? `📁 ${current.address}` : `/${current.address}`), text);
+  if (current.kind === 'folder') {
+    busy = true;
+    try {
+      await askFolder(document_, current, text);
+    } finally {
+      busy = false;
+      const next = queued.shift();
+      if (next) void ask(next.text, next.scope);
+    }
+    return;
+  }
   if (!current.works.length) {
     entry(document_, 'note', 'Put an app on the canvas first (the Library, L), then ask about it.');
     return;
@@ -291,6 +322,65 @@ export async function ask(question: string, explicit: Scope | null = null): Prom
     const next = queued.shift();
     if (next) void ask(next.text, next.scope);
   }
+}
+
+/** One row a folder answer used: the file and row, its provenance under "Receipt", and "Open file". */
+function rowItem(document_: Document, reference: RowReference, boxId: string): HTMLElement {
+  const where = `${reference.file}${reference.sheet ? ` · ${reference.sheet}` : ''} · row ${reference.row}`;
+  const open = el(document_, 'button', { type: 'button', class: 'cv-ask-ref', title: 'Open the file' }, reference.label ? `${where}: ${reference.label}` : where);
+  open.addEventListener('click', () => openViewer({
+    file_id: reference.file_id, name: reference.file, kind: /\.xlsx$/i.test(reference.file) ? 'xlsx' : 'csv', media_type: '', bytes: 0,
+    sha256: reference.sha256, created_at: '', content_url: contentUrl(boxId, reference.file_id), data: null,
+  }, boxId));
+  return el(document_, 'li', {}, open,
+    el(document_, 'details', { class: 'cv-ask-receipt' },
+      el(document_, 'summary', {}, 'Receipt'),
+      el(document_, 'dl', {},
+        ...([['File', reference.file], ['SHA-256', reference.sha256], ['Sheet', reference.sheet ?? '—'], ['Row', `${reference.row} (under the header)`]] as const)
+          .map(([label, value]) => el(document_, 'div', {}, el(document_, 'dt', {}, label), el(document_, 'dd', {}, el(document_, 'code', {}, value)))))));
+}
+
+/** APP-124: a question about a folder's tables: `POST /v1/boxes/{box}/ask`; the answer and every row it used. */
+async function askFolder(document_: Document, current: Scope, text: string): Promise<void> {
+  const boxId = current.box_id ?? '';
+  const pending = entry(document_, 'note', 'Reading the folder’s tables…');
+  if (!isUuid(boxId)) {
+    pending.textContent = 'That folder is not available to you.';
+    return;
+  }
+  let response: Response;
+  try {
+    response = await fetch(`/v1/boxes/${boxId}/ask`, {
+      method: 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: text }),
+    });
+  } catch {
+    pending.textContent = 'The question could not be sent. Check your connection.';
+    return;
+  }
+  const body = (await response.json().catch(() => null)) as unknown;
+  if (response.status === 404) {
+    pending.textContent = 'That folder is not available to you.';
+    return;
+  }
+  const answer = response.ok ? folderAnswer(body) : null;
+  if (!answer) {
+    const code = typeof (body as { code?: unknown } | null)?.code === 'string' ? String((body as { code: string }).code) : '';
+    pending.textContent = (code === 'composer_unavailable' ? REFUSALS.folder_unavailable : REFUSALS[code]) ?? 'Ask could not answer right now. Nothing changed.';
+    return;
+  }
+  pending.remove();
+  const list = el(document_, 'ul', { class: 'cv-ask-refs', 'aria-label': 'Rows this answer used' });
+  for (const reference of answer.references.slice(0, SHOWN_REFERENCES)) list.append(rowItem(document_, reference, boxId));
+  const rest = answer.references.slice(SHOWN_REFERENCES);
+  if (rest.length) {
+    list.append(el(document_, 'li', { class: 'cv-ask-more' },
+      el(document_, 'details', {},
+        el(document_, 'summary', {}, `${rest.length} more ${rest.length === 1 ? 'row' : 'rows'}`),
+        el(document_, 'ul', { class: 'cv-ask-refs' }, ...rest.map((reference) => rowItem(document_, reference, boxId))))));
+  }
+  entry(document_, 'forma', el(document_, 'p', {}, answer.text), ...(answer.references.length ? [list] : []));
 }
 
 function showScope(): void {

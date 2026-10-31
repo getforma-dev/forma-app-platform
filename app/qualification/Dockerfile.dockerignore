@@ -77,6 +77,7 @@
 !app/src/widgets/state.rs
 !app/src/widgets/tests.rs
 !app/src/widgets/weather.rs
+!app/src/boxes/ask.rs
 !app/src/boxes/brief.rs
 !app/src/boxes/derive.rs
 !app/src/boxes/explain.rs
