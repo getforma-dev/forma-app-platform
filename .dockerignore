@@ -224,6 +224,9 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/data-sheet.ts
 !app/admin/src/canvas/explain.ts
 !app/admin/src/canvas/folder-bar.ts
+# APP-112 / APP-116: plain-word canvas actions and the timing chips.
+!app/admin/src/canvas/sentences.ts
+!app/admin/src/canvas/timing.ts
 !app/admin/src/canvas/widgets/
 app/admin/src/canvas/widgets/**
 !app/admin/src/canvas/widgets/index.ts

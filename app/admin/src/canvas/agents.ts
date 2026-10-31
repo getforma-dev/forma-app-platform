@@ -13,7 +13,7 @@ import { el, isUuid } from './render';
 export const TOKENS_URL = '/v1/agent-tokens';
 const PLACEHOLDER = '<YOUR_FORMA_TOKEN>';
 
-type TokenJson = { token_id: string; label: string; created_at: string; last_used_at: string | null };
+type TokenJson = { token_id: string; label: string; created_at: string; last_used_at: string | null; expires_at?: string | null };
 
 function mcpUrl(served: unknown): string {
   return typeof served === 'string' && /^https?:\/\/[^/]+\/v1\/mcp$/.test(served)
@@ -65,6 +65,19 @@ function when(stamp: string | null): string {
   if (Number.isNaN(date.getTime())) return stamp;
   const shown = displayWhen(date.toISOString());
   return shown ? `${shown} UTC` : stamp;
+}
+
+/** `expires in 29 days` from the server's `expires_at` (empty when it sent none). */
+export function expiresIn(stamp: string | null | undefined, now = Date.now()): string {
+  if (!stamp) return '';
+  const at = new Date(stamp).getTime();
+  if (Number.isNaN(at)) return '';
+  const left = at - now;
+  if (left <= 0) return 'expired';
+  const days = Math.floor(left / 86_400_000);
+  if (days === 0) return 'expires today';
+  if (days === 1) return 'expires in 1 day';
+  return `expires in ${days} days`;
 }
 
 async function listTokens(): Promise<{ tokens: TokenJson[]; url: string } | null> {
@@ -128,7 +141,8 @@ function buildPanel(document_: Document): HTMLDialogElement {
       })());
       return el(document_, 'li', { class: 'cv-agent-item' },
         el(document_, 'span', { class: 'cv-agent-name' }, token.label),
-        el(document_, 'span', { class: 'cv-agent-meta' }, `created ${when(token.created_at)} · ${token.last_used_at ? `last used ${when(token.last_used_at)}` : 'never used'}`),
+        el(document_, 'span', { class: 'cv-agent-meta', title: token.expires_at ? `Expires ${when(token.expires_at)}` : '' },
+          [`created ${when(token.created_at)}`, token.last_used_at ? `last used ${when(token.last_used_at)}` : 'never used', expiresIn(token.expires_at)].filter(Boolean).join(' · ')),
         revoke);
     }));
   };
@@ -147,11 +161,12 @@ function buildPanel(document_: Document): HTMLDialogElement {
           method: 'POST', credentials: 'same-origin', cache: 'no-store',
           headers: { 'content-type': 'application/json' }, body: JSON.stringify({ label }),
         });
-        const body = (await response.json().catch(() => null)) as { token?: unknown; label?: unknown } | null;
+        const body = (await response.json().catch(() => null)) as { token?: unknown; label?: unknown; expires_at?: unknown } | null;
         if (response.status === 201 && body && typeof body.token === 'string') {
           minted.hidden = false;
           minted.replaceChildren(
-            el(document_, 'p', { class: 'cv-agent-once' }, `Token for ${String(body.label)}. It is shown once: copy it into your agent now.`),
+            el(document_, 'p', { class: 'cv-agent-once' }, `Token for ${String(body.label)}. It is shown once: copy it into your agent now.${
+              typeof body.expires_at === 'string' && expiresIn(body.expires_at) ? ` It ${expiresIn(body.expires_at)}.` : ''}`),
             copyable(document_, 'Token', body.token),
           );
           status.textContent = '';

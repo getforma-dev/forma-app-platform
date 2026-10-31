@@ -54,19 +54,20 @@ export function parametersOf(form: HTMLFormElement | null): Parameters | null {
 }
 
 const NO_NUMBER = 'No number is shown.';
+const WINDOW = 'That time range isn’t valid: the start must come before the end.';
 function failure(status: number, code: string): [string, string, string] {
-  if (status === 404) return ['denied', 'denied', 'You do not have access to this result. Nothing is shown.'];
+  if (status === 404) return ['denied', 'denied', 'You don’t have access to this card.'];
   if (status === 422 && code === 'narrow_the_query') {
-    return ['failed', 'failed', `This result is past its budget or larger than one page. Narrow the window. ${NO_NUMBER}`];
+    return ['failed', 'failed', 'Too much data for one card. Narrow the time range.'];
   }
   if (status === 422 && code === 'query_refused') {
-    return ['failed', 'failed', `This view uses an operation that is not qualified yet. ${NO_NUMBER}`];
+    return ['failed', 'failed', 'This card uses a calculation that isn’t supported yet.'];
   }
-  if (status === 422) return ['failed', 'failed', 'The window was not accepted. Give a start before the end, as UTC date and time. Nothing ran.'];
+  if (status === 422) return ['failed', 'failed', WINDOW];
   if (status === 503 && code === 'source_unavailable') {
-    return ['failed', 'failed', `This result could not be computed: its source revision is not available. ${NO_NUMBER}`];
+    return ['failed', 'failed', 'This card’s data isn’t available right now.'];
   }
-  return ['failed', 'failed', `This result could not be computed. ${NO_NUMBER}`];
+  return ['failed', 'failed', 'This card couldn’t load.'];
 }
 
 const sleep = (seconds: number) => new Promise((resolve) => setTimeout(resolve, seconds * 1000));
@@ -78,7 +79,7 @@ export async function runView(card: HTMLElement, parameters: Parameters): Promis
   const epoch = String(Number(card.dataset.epoch ?? '0') + 1);
   card.dataset.epoch = epoch;
   const current = () => card.dataset.epoch === epoch;
-  renderNoValue(card, 'loading', 'running', 'Running on your organization’s data. Nothing is shown until the result is released.');
+  renderNoValue(card, 'loading', 'loading', 'Loading…');
   for (let attempt = 0; ; attempt += 1) {
     let response: Response | null;
     try {
@@ -93,19 +94,19 @@ export async function runView(card: HTMLElement, parameters: Parameters): Promis
         })
         : Promise.resolve(null)));
     } catch {
-      if (current()) renderNoValue(card, 'failed', 'failed', `This result could not be computed. ${NO_NUMBER}`);
+      if (current()) renderNoValue(card, 'failed', 'failed', 'This card couldn’t load. Check your connection.');
       return;
     }
     if (!response || !current()) return;
     if (response.status === 429 && attempt < MAX_BUSY_RETRIES) {
       const wait = Math.min(10, Math.max(1, Number(response.headers.get('retry-after')) || 2));
-      renderNoValue(card, 'loading', 'busy', 'Busy: the query engine has no room for this run yet. Retrying in a moment. Nothing is shown until the result is computed.');
+      renderNoValue(card, 'loading', 'busy', 'Busy. Trying again in a moment…');
       await sleep(wait);
       if (!current()) return;
       continue;
     }
     if (response.status === 429) {
-      renderNoValue(card, 'loading', 'busy', 'Busy: the query engine has no room for this run yet. Run again in a few seconds. Nothing is shown until the result is computed.');
+      renderNoValue(card, 'failed', 'busy', 'Still busy. Try again in a few seconds.');
       return;
     }
     const body: unknown = await response.json().catch(() => null);
@@ -113,7 +114,7 @@ export async function runView(card: HTMLElement, parameters: Parameters): Promis
     if (response.ok) {
       const result = released(body);
       if (result) renderReleased(card, result);
-      else renderNoValue(card, 'failed', 'failed', `No receipt came with this result. ${NO_NUMBER}`);
+      else renderNoValue(card, 'failed', 'failed', `This result came without its proof. ${NO_NUMBER}`);
       return;
     }
     const code = typeof body === 'object' && body !== null && typeof (body as { code?: unknown }).code === 'string'

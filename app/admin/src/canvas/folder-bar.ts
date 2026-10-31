@@ -19,7 +19,8 @@ import { eventOriginatesInTextEntry } from '../canvas-vendor/index';
 import { setUtteranceRouter, submitAction } from './actions';
 import { call, BoxError, makeApp, noun, nouns, refusalText, wantsBrief, type Box } from './box-api';
 import { openBrief } from './brief';
-import { canvasHost, placeWork } from './board';
+import { canvasHost, placeWork, workCard } from './board';
+import { formationChip } from './timing';
 import { isModalOpen } from './box-viewer';
 import { el, isUuid } from './render';
 
@@ -202,7 +203,9 @@ async function route(text: string, report: Report): Promise<boolean> {
         report(`Generating an app from ${target.name}…`);
         const built = await makeApp(target.box_id, text);
         hooks.onBuilt(target.box_id);
+        const placing = performance.now();
         report(`${built.title}: built from ${target.name}. ${await placeWork(built.app_id, built.work_id, [])}`);
+        void formationChip(built.timings, performance.now() - placing, built.work_id, workCard(built.work_id, 'app'));
       } catch (inner) {
         report(refusalText(inner));
       }
@@ -216,7 +219,9 @@ async function route(text: string, report: Report): Promise<boolean> {
   if (answer.via === 'folder' && isUuid(answer.app_id) && isUuid(answer.work_id)) {
     hooks.onBuilt(target.box_id);
     const title = typeof answer.title === 'string' ? answer.title.slice(0, 120) : 'The app';
+    const placing = performance.now();
     report(`${title}: built from ${target.name}. ${await placeWork(answer.app_id, answer.work_id, [])}`);
+    void formationChip(answer.timings, performance.now() - placing, answer.work_id, workCard(answer.work_id, 'app'));
     return true;
   }
   // An ordinary action (a record, an open): the usual path, without the folder.

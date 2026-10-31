@@ -1710,6 +1710,7 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
 .cv-folder-empty { padding: 0.5rem 0.6rem; }
 @media (max-width: 760px) {
   .cv-folder-chip { max-width: 130px; }
+}
 /* --- APP-106: focus mode and unite --- */
 .cv-card-head > h3 { flex: 1 1 auto; min-width: 0; }
 .cv-card-focus {
@@ -2049,4 +2050,176 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
 .cv-note-status.is-alert { color: var(--cv-bad); }
 @media (prefers-color-scheme: dark) {
   .cv-note { --cv-note: color-mix(in srgb, #f5c542 9%, var(--cv-surface)); }
+}
+
+/* --- APP-112 / APP-116: the More menu, card tools, stack controls, timing chips, polish --- */
+.cv-more-button { min-width: 34px; }
+.cv-more-button svg { fill: currentColor; stroke: none; }
+.cv-more-menu { left: auto; right: -0.3rem; min-width: 17rem; transform: none; }
+.cv-menu-label { margin: 0.35rem 0.6rem 0.15rem; color: var(--cv-faint); font-size: 0.68rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; }
+.cv-menu-check {
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--cv-line);
+  position: relative;
+  transition: background-color 140ms ease;
+}
+.cv-menu-check::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cv-surface);
+  box-shadow: 0 1px 2px rgb(17 24 39 / 25%);
+  content: "";
+  transition: transform 140ms var(--cv-ease);
+}
+[aria-checked="true"] > .cv-menu-check { background: var(--cv-accent); }
+[aria-checked="true"] > .cv-menu-check::after { transform: translateX(12px); }
+
+/* Card header tools: focus and take off the canvas, quiet until hover or focus. */
+.cv-card-tools { display: inline-flex; flex: none; align-items: center; gap: 2px; margin: -4px -6px -4px 0; }
+.cv-card-tools .cv-card-focus { margin: 0; }
+.cv-card-remove { font-size: 1.05rem; line-height: 1; }
+.cv-card-remove:hover { color: var(--cv-bad); background: rgb(180 35 24 / 8%); }
+@media (hover: none) { .cv-card-focus { opacity: 0.85; } }
+.cv-card-head > h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The app card: title, tools, chips, then the collapsible time range. */
+.cv-app { position: relative; }
+.cv-app > h2 { margin: 0 0 0.45rem; font-size: 1.02rem; line-height: 1.3; }
+.cv-window-wrap { margin-top: 0.65rem; border-top: 1px solid var(--cv-hairline); padding-top: 0.55rem; }
+.cv-window-wrap > summary {
+  width: max-content;
+  padding: 0.15rem 0.1rem;
+  color: var(--cv-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.cv-window-wrap > summary::-webkit-details-marker { display: none; }
+.cv-window-wrap > summary::before { display: inline-block; margin-right: 0.35rem; content: "▸"; transition: transform 140ms ease; }
+.cv-window-wrap[open] > summary::before { transform: rotate(90deg); }
+.cv-window-wrap > summary:hover { color: var(--cv-accent); }
+.cv-window-wrap .cv-window { margin-top: 0.5rem; }
+.cv-name { flex-wrap: nowrap; white-space: nowrap; }
+.cv-name input { min-width: 0; width: 7.5rem; border: 1px solid var(--cv-line); border-radius: 7px; background: var(--cv-surface); color: var(--cv-text); }
+
+/* Loading skeleton and the failed state's retry. */
+.cv-card-skeleton { display: grid; gap: 0.55rem; padding: 0.4rem 0 0.2rem; }
+.cv-card-skeleton .cv-skeleton-bar { height: 10px; }
+.cv-card-skeleton .cv-skeleton-bar:first-child { height: 26px; }
+.cv-card-skeleton[data-skeleton="records"] .cv-skeleton-bar:first-child,
+.cv-card-skeleton[data-skeleton="ledger"] .cv-skeleton-bar:first-child { height: 14px; }
+.cv-retry {
+  margin-top: 0.6rem;
+  height: 30px;
+  padding: 0 0.85rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 8px;
+  background: var(--cv-surface);
+  color: var(--cv-accent);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.cv-retry:hover { border-color: var(--cv-accent); background: var(--cv-accent-soft); }
+
+/* Stack controls: previous / next and spread. */
+.cv-stack-nav { display: inline-flex; gap: 2px; margin-left: auto; }
+.cv-stack-nav + .cv-stack-count { margin-left: 0; }
+.cv-stack-step, .cv-stack-spread {
+  height: 24px;
+  min-width: 24px;
+  padding: 0 0.4rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 7px;
+  background: var(--cv-surface);
+  color: var(--cv-text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+}
+.cv-stack-step:hover, .cv-stack-spread:hover { border-color: var(--cv-accent); color: var(--cv-accent); }
+.cv-stack.is-expanded .cv-stack-nav { visibility: hidden; }
+
+/* Library: the empty search and long names. */
+.cv-lib-none { margin: 1.5rem 1.25rem; padding: 1.1rem; border: 1px dashed var(--cv-line); border-radius: 12px; color: var(--cv-muted); font-size: 0.85rem; text-align: center; }
+.cv-lib-none[hidden] { display: none; }
+.cv-lib-none p { margin: 0 0 0.5rem; }
+.cv-lib-none-title { color: var(--cv-text); font-weight: 650; }
+.cv-lib-none-clear { padding: 0.3rem 0.7rem; border: 1px solid var(--cv-line); border-radius: 8px; background: var(--cv-surface); color: var(--cv-accent); font: inherit; font-weight: 600; cursor: pointer; }
+.cv-lib-app-title, .cv-lib-card-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The shortcuts sheet: action, click path, keys. */
+.cv-shortcuts-panel { width: min(820px, 100%); }
+.cv-shortcuts-head { align-items: flex-start; }
+.cv-shortcuts-sub { margin: 0.2rem 0 0; color: var(--cv-muted); font-size: 0.82rem; }
+.cv-shortcuts-grid { grid-template-columns: minmax(0, 1fr); gap: 1.1rem; }
+.cv-shortcuts-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.cv-shortcuts-table th, .cv-shortcuts-table td { padding: 0.32rem 0.4rem; border-top: 1px solid var(--cv-hairline); text-align: left; vertical-align: top; }
+.cv-shortcuts-table tr:first-child > * { border-top: 0; }
+.cv-shortcuts-table th[scope="row"] { width: 26%; color: var(--cv-text); font-weight: 600; }
+.cv-shortcuts-click { color: var(--cv-muted); }
+.cv-shortcuts-keys { width: 15rem; color: var(--cv-faint); text-align: right; white-space: nowrap; }
+.cv-shortcuts-keys code { padding: 0.05rem 0.3rem; border-radius: 5px; background: var(--cv-accent-soft); color: var(--cv-accent); font: 600 0.72rem/1.4 var(--cv-mono); }
+
+/* APP-116 timing chips: drawn only while "Show timings" is on. */
+.cv-timing-line { position: absolute; bottom: calc(100% + 64px); left: 50%; display: flex; justify-content: center; width: max-content; max-width: calc(100vw - 2rem); transform: translateX(-50%); pointer-events: none; }
+.cv-shell:not(.show-timings) .cv-timing-line { display: none; }
+.cv-timing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.22rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--cv-seal) 30%, var(--cv-line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cv-seal) 7%, var(--cv-surface));
+  color: var(--cv-text);
+  font: 600 0.72rem/1.35 var(--cv-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+}
+.cv-timing-mark { font-family: var(--cv-sans); }
+.cv-timing-dock { box-shadow: var(--cv-shadow); animation: cv-toast 260ms var(--cv-ease) both; }
+.cv-timing-card, .cv-activity-chip { width: max-content; max-width: 100%; margin-top: 0.6rem; }
+.cv-activity-chip { border-color: color-mix(in srgb, var(--cv-accent) 35%, var(--cv-line)); background: var(--cv-accent-soft); }
+.show-timings .cv-intent-status { bottom: calc(100% + 96px); }
+
+@media (max-width: 760px) {
+  /* Phone: no minimap over the toolbar; toasts wrap inside the screen. */
+  .cv-canvas [data-forma-canvas] .forma-canvas-navigator { display: none; }
+  .cv-intent-status { border-radius: 14px; padding: 0.45rem 0.8rem; font-size: 0.78rem; text-align: center; width: max-content; }
+  .cv-lib-app .cv-lib-stack:not(.cv-lib-unite) { display: none; }
+  .cv-more-menu { right: -3.2rem; max-height: 60vh; overflow: auto; }
+  .cv-shortcuts { padding: 0; place-items: stretch; }
+  .cv-shortcuts-panel { max-height: 100vh; border-radius: 0; }
+  .cv-shortcuts-grid { grid-template-columns: minmax(0, 1fr); }
+  .cv-shortcuts-table th[scope="row"] { width: 34%; }
+  .cv-shortcuts-keys { width: auto; white-space: normal; }
+  .cv-timing-line { bottom: calc(100% + 56px); }
+  .cv-timing-dock { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .show-timings .cv-intent-status { bottom: calc(100% + 96px); }
+  .cv-lib-slug { display: none; }
+  .cv-stack-spread { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cv-timing-dock { animation: none; }
+}
+/* Records: long text cells are cut with an ellipsis (the full text on hover), so status, filer and decision fit. */
+.cv-records-table td.value:not(.num) { max-width: 13rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* While a confirmation card is up, it speaks for itself: the toast and the timing line step aside. */
+.cv-dock:has(.cv-confirm-host > *) :is(.cv-intent-status, .cv-timing-line) { visibility: hidden; }
+.cv-card .cv-retry { display: inline-flex; align-items: center; width: auto; }
+@media (max-width: 760px) {
+  .cv-dock:has(.cv-confirm-host > *) .cv-tools { visibility: hidden; }
 }

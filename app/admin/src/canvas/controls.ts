@@ -32,7 +32,8 @@ import { removeWidgets } from './widgets/index';
 import { collapseAll, dissolve, expand, isStackItem, shuffle, stackOfItem, stackSelection } from './stacks';
 import { focusFromItem, isFocusOpen, trapTab } from './focus';
 import { isModalOpen } from './box-viewer';
-import { isNoteItem, removeNoteItem } from './notes';
+import { isNoteItem, newNote, removeNoteItem } from './notes';
+import { toggleTimings } from './timing';
 import { frameCardsOfItem, isUniteItem, splitFromItem, uniteFromItem } from './unite';
 
 const selection = new Set<HTMLElement>();
@@ -84,14 +85,24 @@ function setTool(next: 'move' | 'hand'): void {
   announce(next === 'hand' ? 'Hand tool: drag anywhere to pan.' : 'Move tool.');
 }
 
-function zoomMenu(open?: boolean): void {
-  const menu = documentRef?.getElementById('cv-zoom-menu');
-  const button = documentRef?.querySelector<HTMLElement>('[data-tool="zoom-menu"]');
+/** The toolbar's two menus: zoom (`100% ▾`) and More (`⋯`, APP-112's click paths). */
+const MENUS = { 'zoom-menu': 'cv-zoom-menu', 'more-menu': 'cv-more-menu' } as const;
+type MenuTool = keyof typeof MENUS;
+function toggleMenu(tool: MenuTool, open?: boolean): void {
+  const menu = documentRef?.getElementById(MENUS[tool]);
+  const button = documentRef?.querySelector<HTMLElement>(`[data-tool="${tool}"]`);
   if (!menu || !button) return;
   const show = open ?? menu.hidden;
+  if (show) for (const other of Object.keys(MENUS) as MenuTool[]) if (other !== tool) toggleMenu(other, false);
   menu.hidden = !show;
   button.setAttribute('aria-expanded', String(show));
   if (show) menu.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
+}
+function openMenu(): boolean {
+  return Object.values(MENUS).some((id) => documentRef?.getElementById(id)?.hidden === false);
+}
+function closeMenus(): void {
+  for (const tool of Object.keys(MENUS) as MenuTool[]) toggleMenu(tool, false);
 }
 
 function zoomToSelection(): void {
@@ -136,10 +147,47 @@ function uniteSelected(split = false): void {
   void Promise.resolve(outcome).then(announce);
 }
 
+/** The selected cards, or the active one: what the More menu's card actions act on. */
+function chosenItems(): HTMLElement[] {
+  const items = [...selection].filter((item) => item.isConnected);
+  if (!items.length) {
+    const active = canvasApi()?.activeItem();
+    if (active) items.push(active);
+  }
+  return items;
+}
+function stackChosen(): void {
+  if (!stackSelection(chosenItems())) announce('Select two or more cards first (Shift + click their headers), then choose Stack them.');
+  selection.clear();
+  renderSelection();
+}
+function spreadChosen(): void {
+  const stacks = chosenItems().map((item) => stackOfItem(item)).filter((stack) => stack !== null);
+  if (!stacks.length) announce('Select a stack first.');
+  for (const stack of stacks) dissolve(stack);
+}
+function removeChosen(): void {
+  const items = chosenItems();
+  if (!items.length) {
+    announce('Select a card first, or use the × on its header.');
+    return;
+  }
+  for (const item of items) selection.add(item);
+  removeSelected();
+  announce(`${items.length === 1 ? 'The card is' : `${items.length} cards are`} back in the library. Nothing was deleted.`);
+}
+
 function action(name: string): void {
   const canvas = canvasApi();
   if (!canvas) return;
   switch (name) {
+    case 'library': toggleLibrary(); break;
+    case 'new-note': void newNote('').then(announce); break;
+    case 'timings': toggleTimings(); break;
+    case 'split': uniteSelected(true); break;
+    case 'stack': stackChosen(); break;
+    case 'spread': spreadChosen(); break;
+    case 'remove': removeChosen(); break;
     case 'zoom-in': canvas.zoomBy(1.25); break;
     case 'zoom-out': canvas.zoomBy(1 / 1.25); break;
     case 'zoom-reset': canvas.resetZoom(); break;
@@ -156,68 +204,82 @@ function action(name: string): void {
   refreshZoomLabel();
 }
 
-const SHORTCUTS: [string, [string, string][]][] = [
-  ['Move around', [
-    ['Scroll, two-finger swipe', 'Pan'],
-    ['Shift + scroll', 'Pan sideways'],
-    ['Space + drag, middle-drag', 'Pan'],
-    [`${MOD} + scroll, pinch`, 'Zoom at the cursor'],
-    [`${MOD} + =  ·  ${MOD} + −`, 'Zoom in · out'],
-    ['Shift + 0', 'Zoom to 100%'],
-    ['Shift + 1', 'Zoom to fit'],
-    ['Shift + 2', 'Zoom to selection'],
-  ]],
-  ['Tools', [
-    ['V', 'Move: select and drag cards'],
-    ['H', 'Hand: drag anywhere to pan'],
+/**
+ * APP-112: every action with both of its paths, the click and the keys or
+ * command ("Unite app: App card → Unite · U"). Every command has a click
+ * path; not every click has a command.
+ */
+const ACTIONS: [string, [what: string, click: string, keys: string][]][] = [
+  ['Bring things in', [
+    ['An app for a request', 'Type it in plain words in the bar', 'Enter'],
+    ['A card', 'Library → click the card', '/card 3.2'],
+    ['A whole app', 'Library → Add all', '/app expense'],
+    ['Every app you can open', 'Library', '/apps'],
+    ['Weather, calculator, clock', 'Library → Utilities, or say “show the weather in Austin”', '/weather Austin'],
+    ['Restyle a widget', 'The widget’s Restyle field', '/calculator make it a TI-84'],
+    ['A note', '⋯ → New note, or Library → Notes', '/note text'],
+    ['A folder', '+ Folder in the toolbar, or drop files on the canvas', '/folder new Q3'],
+    ['An app from a folder', 'Folder → ✨ Formation, or click the folder and type', '/folder 1 formation …'],
+    ['A brief of a folder', 'Folder → Brief me', '/folder 1 formation brief me'],
+    ['File an expense', 'Say it: “I spent $86 at Nobu, Sarah approves”', '/expense …'],
+    ['Approve or reject', 'Records card → Approve · Reject, or say “approve the Nobu dinner”', '—'],
   ]],
   ['Cards', [
-    ['Click a header', 'Select'],
-    ['Shift + click', 'Add to the selection'],
-    ['Drag a header', 'Move'],
-    ['Arrow keys · Shift', 'Nudge 1 px · 10 px'],
-    ['Delete', 'Back to the library (no data changes)'],
-    ['Esc', 'Clear the selection'],
+    ['Select', 'Click a header · Shift + click to add', '—'],
+    ['Move', 'Drag the header', 'Arrow keys · Shift: 10 px'],
+    ['Focus', 'The [ ] button on a card, or ⋯ → Focus', 'F'],
+    ['Unite an app', 'App card → Unite, Library → Unite, or ⋯ → Unite app', 'U · /unite expense'],
+    ['Break it apart', 'Frame → Break apart, or ⋯ → Break app apart', 'Shift + U · /split expense'],
+    ['Take off the canvas', 'The × on a card, or ⋯ → Take off the canvas', 'Delete'],
+    ['Stack', 'Drag onto a card and hold, Library → Stack, or ⋯ → Stack them', `${MOD} + G`],
+    ['Leaf through a stack', 'The ‹ › on the stack', '← · →'],
+    ['Fan a stack out', 'The +N on the stack', 'Enter · Esc folds'],
+    ['Spread a stack', 'Spread on the stack, or ⋯ → Spread a stack', `${MOD} + Shift + G`],
+    ['Rename a stack', 'Double-click its name', '—'],
   ]],
-  ['Stacks', [
-    ['Drag onto a card, hold', 'Stack them'],
-    [`${MOD} + G`, 'Stack the selection'],
-    [`${MOD} + Shift + G`, 'Spread a stack out'],
-    ['← · →, Shift + scroll', 'Leaf through a stack'],
-    ['Enter, double-click, +N', 'Fan a stack out'],
-    ['Double-click the name', 'Rename a stack'],
-  ]],
-  ['Focus and unite', [
-    ['F', 'Focus the selected card'],
-    ['← · →, swipe', 'Previous · next card in focus'],
-    ['Esc', 'Back to the canvas'],
-    ['U', 'Unite the selected card’s app'],
-    ['Shift + U', 'Break the app apart'],
+  ['Move around', [
+    ['Pan', 'Scroll, or drag with the hand tool', 'Space + drag'],
+    ['Zoom', 'The zoom menu (100% ▾), or pinch', `${MOD} + = · ${MOD} + −`],
+    ['100% · fit · selection', 'The zoom menu', 'Shift + 0 · 1 · 2'],
+    ['Move tool · hand tool', 'The arrow · hand in the toolbar', 'V · H'],
+    ['Arrange by app', '⋯ → Arrange by app', '/arrange'],
   ]],
   ['Canvas', [
-    ['L', 'Library'],
-    ['/', 'Commands in the bar: /card 3.2, /app expense'],
-    ['?', 'This sheet'],
+    ['Library', 'Library at the top', 'L'],
+    ['Show timings', '⋯ → Show timings, or say “show timings”', '#timing=1'],
+    ['This sheet', '⋯ → Shortcuts and commands', '?'],
   ]],
 ];
 
-function showSheet(): void {
+function keys(document_: Document, text: string): Node[] {
+  if (text === '—') return [document_.createTextNode('—')];
+  return text.split(/(\s·\s|\s\+\s)/).map((part) => (/^(\s·\s|\s\+\s)$/.test(part)
+    ? document_.createTextNode(part)
+    : el(document_, part.startsWith('/') || part.startsWith('#timing') ? 'code' : 'kbd', {}, part)));
+}
+
+export function showSheet(): void {
   if (!documentRef) return;
   if (!sheet) {
     const document_ = documentRef;
     const close = el(document_, 'button', { type: 'button', class: 'cv-lib-close', 'aria-label': 'Close the shortcuts', title: 'Close (Esc)' }, '×');
     sheet = el(document_, 'div', { id: 'cv-shortcuts', class: 'cv-shortcuts', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'cv-shortcuts-title', hidden: '' },
       el(document_, 'div', { class: 'cv-shortcuts-panel' },
-        el(document_, 'header', { class: 'cv-shortcuts-head' }, el(document_, 'h2', { id: 'cv-shortcuts-title' }, 'Keyboard shortcuts'), close),
+        el(document_, 'header', { class: 'cv-shortcuts-head' },
+          el(document_, 'div', {},
+            el(document_, 'h2', { id: 'cv-shortcuts-title' }, 'Shortcuts and commands'),
+            el(document_, 'p', { class: 'cv-shortcuts-sub' }, 'Everything works by clicking. Keys and / commands are shortcuts.')),
+          close),
         el(document_, 'div', { class: 'cv-shortcuts-grid' },
-          ...SHORTCUTS.map(([title, rows]) => el(document_, 'section', {},
+          ...ACTIONS.map(([title, rows]) => el(document_, 'section', {},
             el(document_, 'h3', {}, title),
-            el(document_, 'dl', {}, ...rows.flatMap(([keys, what]) => [
-              el(document_, 'dt', {}, what),
-              el(document_, 'dd', {}, ...keys.split(/(\s·\s|\s\+\s|,\s)/).map((part) => (/^(\s·\s|\s\+\s|,\s)$/.test(part)
-                ? part
-                : el(document_, 'kbd', {}, part)))),
-            ])))))));
+            el(document_, 'table', { class: 'cv-shortcuts-table' },
+              el(document_, 'thead', { class: 'sr-only' }, el(document_, 'tr', {},
+                el(document_, 'th', { scope: 'col' }, 'Action'), el(document_, 'th', { scope: 'col' }, 'Click'), el(document_, 'th', { scope: 'col' }, 'Keys or command'))),
+              el(document_, 'tbody', {}, ...rows.map(([what, click, shortcut]) => el(document_, 'tr', {},
+                el(document_, 'th', { scope: 'row' }, what),
+                el(document_, 'td', { class: 'cv-shortcuts-click' }, click),
+                el(document_, 'td', { class: 'cv-shortcuts-keys' }, ...keys(document_, shortcut)))))))))));
     close.addEventListener('click', hideSheet);
     sheet.addEventListener('click', (event) => {
       if (event.target === sheet) hideSheet();
@@ -281,10 +343,9 @@ function onKey(event: KeyboardEvent): void {
       hideSheet();
       return;
     }
-    const menu = documentRef?.getElementById('cv-zoom-menu');
-    if (menu && !menu.hidden) {
+    if (openMenu()) {
       event.preventDefault();
-      zoomMenu(false);
+      closeMenus();
       return;
     }
     if (typing) return;
@@ -453,16 +514,16 @@ export function startControls(document_: Document): void {
     const target = event.target as Element | null;
     const button = target?.closest<HTMLElement>('[data-tool]');
     if (button) {
-      if (button.dataset.tool === 'zoom-menu') {
-        zoomMenu();
+      const tool = button.dataset.tool ?? '';
+      if (tool in MENUS) {
+        toggleMenu(tool as MenuTool);
         return;
       }
-      action(button.dataset.tool ?? '');
-      if (button.closest('#cv-zoom-menu')) zoomMenu(false);
+      action(tool);
+      if (button.closest('.cv-zoom-menu')) closeMenus();
       return;
     }
-    const menu = document_.getElementById('cv-zoom-menu');
-    if (menu && !menu.hidden && !target?.closest('.cv-zoom')) zoomMenu(false);
+    if (openMenu() && !target?.closest('.cv-zoom')) closeMenus();
   });
   // Selection: a press on a card selects it (Shift adds or removes); a
   // press on the empty canvas clears it.

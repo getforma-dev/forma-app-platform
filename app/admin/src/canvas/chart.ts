@@ -158,7 +158,14 @@ export function chartOf(
   const placed: number[] = [];
   for (const index of wanted) {
     const previous = placed[placed.length - 1];
-    if (previous !== undefined && (centres[index] as number) - (centres[previous] as number) < 44) {
+    // Two ticks with the same label say nothing twice (APP-116 polish: "Oct 30 Oct 30").
+    if (previous !== undefined && axisText(index)[0] === axisText(previous)[0]) {
+      if (index === byX[n - 1] && placed.length > 1) placed.pop();
+      else continue;
+    }
+    // The last label of a line is anchored at its end, so it needs more room.
+    const room = lineMode && index === byX[n - 1] ? 84 : 44;
+    if (previous !== undefined && placed[placed.length - 1] === previous && (centres[index] as number) - (centres[previous] as number) < room) {
       if (index === byX[n - 1]) placed.pop();
       else continue;
     }

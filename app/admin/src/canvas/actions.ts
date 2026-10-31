@@ -11,9 +11,11 @@
 // `place` falls back to the composer (`compose.ts`). The utterance travels
 // only in a JSON body, never in a URL; the card shows typed values the
 // server composed, never the model's text.
-import { focusCard, placeWork, refreshGroupRecords } from './board';
+import { focusCard, placeWork, refreshGroupRecords, workCard } from './board';
+import { showTiming, type Step } from './timing';
+import { routeSentence } from './sentences';
 import { postCommand, type CommandOutcome } from './commands';
-import { submitIntent } from './compose';
+import { clearIntentBar, submitIntent } from './compose';
 import { runSlash } from './slash';
 import { label } from './display';
 import { isDismissKey, showDockCard } from './dock-card';
@@ -177,7 +179,7 @@ async function shareWith(draft: Draft): Promise<string> {
  * Shows the confirmation card; resolves with the member's choice, or
  * `replaced` when another dock card (the chooser) took its place.
  */
-function confirmCard(document_: Document, draft: Draft, utterance: string, receipt: PendingReceipt | null = null): Promise<'confirm' | 'edit' | 'cancel' | 'replaced'> {
+function confirmCard(document_: Document, draft: Draft, utterance: string, receipt: PendingReceipt | null = null, understoodMs: number | null = null): Promise<'confirm' | 'edit' | 'cancel' | 'replaced'> {
   return new Promise((resolve) => {
     const list = el(document_, 'dl', { class: 'cv-confirm-values' });
     for (const value of draft.values) {
@@ -213,7 +215,7 @@ function confirmCard(document_: Document, draft: Draft, utterance: string, recei
       chips,
       draft.rule ? el(document_, 'p', { class: 'cv-confirm-rule' }, draft.rule) : null,
       ...(draft.flags ?? []).map((flag) => el(document_, 'p', { class: 'cv-flag', 'data-state': flag.state }, flag.label)),
-      el(document_, 'p', { class: 'cv-confirm-note' }, 'Nothing is written until you confirm. The command is committed through the audited path with a server-minted key.'),
+      el(document_, 'p', { class: 'cv-confirm-note' }, `${understoodMs !== null ? `Understood in ${understoodMs} ms. ` : ''}Nothing is written until you confirm. The command is committed through the audited path with a server-minted key.`),
       el(document_, 'div', { class: 'cv-confirm-actions' }, confirm, edit, cancel));
     let close = () => undefined as void;
     const done = (choice: 'confirm' | 'edit' | 'cancel') => {
@@ -256,6 +258,9 @@ export async function submitUtterance(text: string, report: (message: string) =>
     await runSlash(text, report);
     return;
   }
+  // APP-112: a canvas action said in plain words ("unite the expense app"),
+  // before the folder lane (an active folder chip never swallows one).
+  if (!app && !receiptAttached && await routeSentence(text, report)) return;
   if (!app && !receiptAttached && utteranceRouter && await utteranceRouter(text, report)) return;
   await submitAction(text, report, app);
 }
@@ -289,13 +294,17 @@ export async function submitAction(text: string, report: (message: string) => vo
   }
   const parse = Math.round(performance.now() - started);
   document.getElementById('cv-canvas')?.setAttribute('data-last-act-ms', String(parse));
+  const understood: Step = { label: 'understand', ms: parse, server: answer.action === 'draft' && typeof answer.draft.parse_ms === 'number' ? answer.draft.parse_ms : null };
   if (answer.action === 'place') {
-    await submitIntent(text, report, pin);
+    await submitIntent(text, report, pin, [understood]);
     return;
   }
   if (answer.action === 'open') {
     report(answer.placed ? 'Placing it on your canvas…' : 'Bringing it up…');
+    const placing = performance.now();
     const placed = await placeWork(answer.app_id, answer.work_id);
+    showTiming('Open', [understood, { label: 'on canvas', ms: performance.now() - placing }], workCard(answer.work_id, answer.view));
+    clearIntentBar();
     void refreshGroupRecords(answer.work_id, true);
     const ledger = answer.view === 'ledger' ? ledgerCardFor(answer.app_id, answer.work_id) : null;
     if (ledger) {
@@ -309,7 +318,9 @@ export async function submitAction(text: string, report: (message: string) => vo
   }
   const draft = answer.draft;
   report(draft.action === 'create' ? `Understood in ${parse} ms. Review the record, then confirm.` : `Understood in ${parse} ms. Review the decision, then confirm.`);
-  const choice = await confirmCard(document, draft, text, receipt);
+  const asked = confirmCard(document, draft, text, receipt, parse);
+  showTiming(draft.action === 'create' ? 'Draft' : 'Decision', [{ ...understood, label: 'draft' }], document.querySelector<HTMLElement>('#cv-confirm .cv-confirm'));
+  const choice = await asked;
   if (choice === 'edit') {
     if (receipt) restoreReceipt(document, receipt);
     const input = document.getElementById('intent-input') as HTMLInputElement | null;
@@ -327,15 +338,28 @@ export async function submitAction(text: string, report: (message: string) => vo
   }
   // Another dock card (the chooser) took its place: that card reports now.
   if (choice === 'replaced') return;
-  report('Committing through the audited command path…');
+  report('Saving through the audited path…');
+  const committing = performance.now();
   const result = await postDraft(draft);
   if (result.kind !== 'committed') {
     report(result.message);
     return;
   }
+  const saved = performance.now() - committing;
+  const sharing = performance.now();
   const shared = await shareWith(draft);
+  const shareMs = performance.now() - sharing;
+  const placing = performance.now();
   const placed = await placeWork(draft.app_id, draft.work_id);
+  const placeMs = performance.now() - placing;
   void refreshGroupRecords(draft.work_id, true);
+  showTiming(draft.action === 'create' ? 'Filed' : 'Decided', [
+    { ...understood, label: 'draft' },
+    { label: 'saved', ms: saved },
+    ...(shared ? [{ label: 'shared', ms: shareMs }] : []),
+    { label: 'on canvas', ms: placeMs },
+  ], workCard(draft.work_id, 'records'));
+  clearIntentBar();
   const verb = draft.action === 'create' ? 'Filed' : label(draft.command_id);
   report(`${verb}: record v${result.recordVersion}, commit ${result.commit}, audit ${result.audit.slice(0, 8)}. ${shared} ${placed === 'That app is already on your canvas.' ? '' : placed}`.trim());
 }

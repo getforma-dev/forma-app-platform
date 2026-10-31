@@ -117,7 +117,12 @@ function build(document_: Document, stack: Omit<Stack, 'item' | 'root' | 'holder
       title,
       el(document_, 'span', { class: 'cv-stack-pos', 'data-stack-pos': '' }),
       el(document_, 'span', { class: 'cv-stack-dots', 'data-stack-dots': '', 'aria-hidden': 'true' }),
-      el(document_, 'button', { type: 'button', class: 'cv-stack-count', 'data-stack-count': '', title: 'Fan out (Enter)' })),
+      // APP-112: the click path for ←/→ and Cmd/Ctrl+Shift+G.
+      el(document_, 'span', { class: 'cv-stack-nav' },
+        el(document_, 'button', { type: 'button', class: 'cv-stack-step', 'data-stack-step': '-1', 'aria-label': 'Previous card (←)', title: 'Previous card (←)' }, '‹'),
+        el(document_, 'button', { type: 'button', class: 'cv-stack-step', 'data-stack-step': '1', 'aria-label': 'Next card (→)', title: 'Next card (→)' }, '›')),
+      el(document_, 'button', { type: 'button', class: 'cv-stack-count', 'data-stack-count': '', title: 'Fan out (Enter)' }),
+      el(document_, 'button', { type: 'button', class: 'cv-stack-spread', 'data-stack-spread': '', title: 'Spread the cards onto the canvas (⌘/Ctrl + Shift + G)' }, 'Spread')),
     holder);
   return { root, holder };
 }
@@ -291,6 +296,16 @@ function rename(stack: Stack): void {
 }
 
 function wire(stack: Stack): void {
+  for (const button of stack.root.querySelectorAll<HTMLElement>('[data-stack-step]')) {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      shuffle(stack, Number(button.dataset.stackStep) || 1);
+    });
+  }
+  stack.root.querySelector('[data-stack-spread]')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    dissolve(stack);
+  });
   stack.root.querySelector('[data-stack-count]')?.addEventListener('click', (event) => {
     event.stopPropagation();
     if (stack.fanned) collapse(stack);

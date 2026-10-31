@@ -13,7 +13,9 @@
 // sequence, version) is the record's own.
 import { postDraft, requestDecision, type Draft } from './actions';
 import { label } from './display';
-import { el, isUuid, pulseTarget } from './render';
+import { el, isUuid, pulseTarget, retryButton, skeleton } from './render';
+import { liveArrival } from './board';
+import { showActivity, showLiveTiming, showTiming } from './timing';
 
 export type RecordValueJson = { field_id: string; value: unknown; display: string };
 export type RecordJson = {
@@ -66,7 +68,7 @@ export function buildRecordsCard(document_: Document, card: RecordsCardJson): HT
   },
   el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, card.title), el(document_, 'span', { class: 'badge' }, 'records')),
   el(document_, 'p', { class: 'cv-records-summary', 'data-summary': '' }, card.summary),
-  el(document_, 'div', { class: 'cv-card-body', 'data-body': '' }, el(document_, 'p', { class: 'cv-message', role: 'status' }, 'Loading records…')),
+  el(document_, 'div', { class: 'cv-card-body', 'data-body': '' }, skeleton(document_, 'records'), el(document_, 'p', { class: 'sr-only', role: 'status' }, 'Loading records…')),
   el(document_, 'p', { class: 'cv-records-provenance', 'data-provenance': '' }),
   el(document_, 'p', { class: 'cv-outcome', role: 'status', 'data-outcome': '' }));
   return node;
@@ -145,11 +147,15 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
       const targets = nextOf(record, decide?.transitions ?? [], statusField, status);
       const isPending = listing.can_write && froms.has(status) && targets.length > 0;
       const tr = el(document_, 'tr', { 'data-record': record.record_id, 'data-version': String(record.version), 'data-status': status });
-      if (!previous.has(`${record.record_id}@${record.version}`) && previous.size) tr.classList.add('is-new');
+      if (!previous.has(`${record.record_id}@${record.version}`) && previous.size) {
+        tr.classList.add('is-new');
+        // APP-116: a change made through an agent (MCP) or Slack: who and when (the event carries no tool or duration).
+        if (record.via) showActivity(card, record.via, status ? `${valueOf(record, shown[0]?.id ?? '')?.display ?? 'record'} ${status}` : 'record changed');
+      }
       shown.forEach((field, index) => {
         const value = valueOf(record, field.id);
         const numeric = field.type === 'money' || field.type === 'integer' || field.type === 'decimal';
-        const cell = el(document_, 'td', { class: numeric ? 'value num' : 'value', title: `${label(field.id)} · version ${record.version}` }, value?.display ?? '—');
+        const cell = el(document_, 'td', { class: numeric ? 'value num' : 'value', title: `${label(field.id)}: ${value?.display ?? '—'} · version ${record.version}` }, value?.display ?? '—');
         // APP-107: the PO reference and the PO match, beside the first value (display only).
         if (index === 0 && record.reference) cell.append(el(document_, 'span', { class: 'cv-ref-chip', title: 'Purchase order reference' }, record.reference));
         if (index === 0) for (const flag of record.flags ?? []) cell.append(el(document_, 'span', { class: 'cv-flag-chip', 'data-state': flag.state, title: flag.label }, flag.state === 'match' ? 'PO match' : flag.state === 'mismatch' ? 'PO mismatch' : 'PO not found'));
@@ -210,12 +216,18 @@ export async function refreshRecords(card: HTMLElement, live = false): Promise<v
   const listing = response?.ok ? recordsJson(body) : null;
   if (!listing) {
     const denied = response?.status === 404;
-    const message = denied ? 'You do not have access to these records. Nothing is shown.' : 'The records could not be read right now.';
+    const message = denied ? 'You don’t have access to these records.' : 'The records couldn’t load.';
     card.dataset.state = denied ? 'denied' : 'failed';
-    card.querySelector<HTMLElement>('[data-body]')?.replaceChildren(el(card.ownerDocument, 'p', { class: 'cv-message', role: 'alert' }, message));
+    card.querySelector<HTMLElement>('[data-body]')?.replaceChildren(el(card.ownerDocument, 'p', { class: 'cv-message', role: 'alert' }, message),
+      ...(denied ? [] : [retryButton(card.ownerDocument)]));
     return;
   }
   renderRecords(card, listing);
+  // APP-116: on a live update, the time from the event's arrival to the redrawn card.
+  const arrived = live && listing.work_id ? liveArrival(listing.work_id) : undefined;
+  if (arrived !== undefined && performance.now() - arrived < 15000) {
+    showLiveTiming(card, performance.now() - arrived);
+  }
   if (live) {
     const item = pulseTarget(card);
     item.classList.remove('is-live-updated');
@@ -236,6 +248,7 @@ async function decideRecord(card: HTMLElement, listing: RecordsJson, record: Rec
     outcome.setAttribute('role', 'status');
     outcome.textContent = 'Preparing the decision…';
   }
+  const started = performance.now();
   try {
     let draft: Draft;
     try {
@@ -247,8 +260,11 @@ async function decideRecord(card: HTMLElement, listing: RecordsJson, record: Rec
       }
       return;
     }
-    if (outcome) outcome.textContent = `Committing ${label(to)}…`;
+    if (outcome) outcome.textContent = `Saving: ${label(to)}…`;
+    const drafted = performance.now() - started;
+    const committing = performance.now();
     const result = await postDraft(draft);
+    const saved = performance.now() - committing;
     if (result.kind === 'committed') {
       if (outcome) {
         outcome.replaceChildren();
@@ -256,7 +272,13 @@ async function decideRecord(card: HTMLElement, listing: RecordsJson, record: Rec
         outcome.append(el(card.ownerDocument, 'strong', {}, `${label(to)}. `), `Record version ${result.recordVersion}, commit ${result.commit}. Audit event `, el(card.ownerDocument, 'code', {}, result.audit));
       }
       deciding.delete(id);
+      const reading = performance.now();
       await refreshRecords(card, true);
+      showTiming('Decision', [
+        { label: 'draft', ms: drafted, server: typeof draft.parse_ms === 'number' ? draft.parse_ms : null },
+        { label: 'saved', ms: saved },
+        { label: 'shown', ms: performance.now() - reading },
+      ], card);
     } else if (outcome) {
       outcome.replaceChildren();
       outcome.setAttribute('role', 'alert');

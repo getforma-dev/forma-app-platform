@@ -165,11 +165,30 @@ function setState(card: HTMLElement, state: string, badge: string): void {
   if (chip) chip.textContent = badge;
 }
 
-/** A card with no value: idle, running (`loading`), busy, failed or denied. */
+/**
+ * A card with no value: idle, running (`loading`: a skeleton, the message for
+ * screen readers), busy, failed (with "Try again") or denied.
+ */
 export function renderNoValue(card: HTMLElement, state: string, badge: string, message: string): void {
   const document_ = card.ownerDocument;
   setState(card, state, badge);
-  body(card).replaceChildren(el(document_, 'p', { class: 'cv-message', role: state === 'failed' || state === 'denied' ? 'alert' : 'status' }, message));
+  if (state === 'loading' && badge !== 'busy') {
+    body(card).replaceChildren(skeleton(document_), el(document_, 'p', { class: 'sr-only', role: 'status' }, message));
+    return;
+  }
+  body(card).replaceChildren(el(document_, 'p', { class: 'cv-message', role: state === 'failed' || state === 'denied' ? 'alert' : 'status' }, message),
+    ...(state === 'failed' ? [retryButton(document_)] : []));
+}
+
+/** APP-116 polish: the placeholder a card shows while its result loads. */
+export function skeleton(document_: Document, kind = 'card'): HTMLElement {
+  const bar = (width: string) => el(document_, 'span', { class: 'cv-skeleton-bar', 'data-width': width });
+  return el(document_, 'div', { class: 'cv-card-skeleton', 'data-skeleton': kind, 'aria-hidden': 'true' }, bar('40'), bar('70'), bar('90'), bar('55'));
+}
+
+/** "Try again" under a failed card; the board re-runs that card's app (`data-card-retry`). */
+export function retryButton(document_: Document): HTMLElement {
+  return el(document_, 'button', { type: 'button', class: 'cv-retry', 'data-card-retry': '' }, 'Try again');
 }
 
 export type QueryResponse = {
@@ -284,7 +303,8 @@ export function renderReleased(card: HTMLElement, result: QueryResponse): void {
         const insight = el(document_, 'div', { class: 'cv-insight' },
           el(document_, 'p', { class: 'cv-insight-label' }, label(first[0])),
           el(document_, 'p', { class: 'cv-insight-value value', title: titleOf(first[1]) }, first[1].text),
-          el(document_, 'p', { class: 'cv-insight-exact' }, first[1].exact));
+          // The exact figure only when the headline rounds it ($257K → $256,982.10).
+          first[1].exact && first[1].exact !== first[1].text ? el(document_, 'p', { class: 'cv-insight-exact' }, first[1].exact) : null);
         if (rest.length) {
           const stats = el(document_, 'dl', { class: 'cv-stats' });
           for (const [column, value] of rest) {
@@ -382,9 +402,16 @@ export function buildForm(document_: Document, form: FormJson): HTMLFormElement 
   return node;
 }
 
+/** "New leave_request record" → "New leave request" (the schema id in plain words). */
+export function formTitle(title: string): string {
+  const match = title.match(/^New ([a-z][a-z0-9_]*) record$/);
+  return match ? `New ${(match[1] ?? '').replace(/_/g, ' ')}` : title;
+}
+
 export function buildFormCard(document_: Document, form: FormJson): HTMLElement {
-  return el(document_, 'article', { class: 'cv-card cv-form', 'data-card': form.id, 'data-kind': 'form', 'aria-label': form.title },
-    el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, form.title), el(document_, 'span', { class: 'badge' }, 'record')),
+  const title = formTitle(form.title);
+  return el(document_, 'article', { class: 'cv-card cv-form', 'data-card': form.id, 'data-kind': 'form', 'aria-label': title },
+    el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, title), el(document_, 'span', { class: 'badge' }, 'form')),
     buildForm(document_, form),
     el(document_, 'p', { class: 'cv-outcome', role: 'status', 'data-outcome': '' }));
 }
@@ -403,11 +430,11 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
   const window_ = el(document_, 'form', { method: 'post', action: group.href, class: 'cv-window', 'data-window': '' },
     input(document_, 'csrf', group.csrf),
     el(document_, 'label', {}, el(document_, 'span', {}, 'From (UTC)'), el(document_, 'input', { name: 'window_start', type: 'datetime-local', step: '1', value: group.window_start })),
-    el(document_, 'label', {}, el(document_, 'span', {}, 'Until (UTC, excluded)'), el(document_, 'input', { name: 'window_end', type: 'datetime-local', step: '1', value: group.window_end })),
+    el(document_, 'label', {}, el(document_, 'span', {}, 'Until (UTC)'), el(document_, 'input', { name: 'window_end', type: 'datetime-local', step: '1', value: group.window_end })),
     el(document_, 'label', {}, el(document_, 'span', {}, 'Destination (optional)'), el(document_, 'input', { name: 'destination', type: 'text', value: group.destination })),
     el(document_, 'div', { class: 'cv-window-actions' },
-      el(document_, 'button', { type: 'submit' }, 'Run views'),
-      el(document_, 'a', { href: group.href }, 'Open work page')));
+      el(document_, 'button', { type: 'submit' }, 'Refresh cards'),
+      el(document_, 'a', { href: group.href }, 'Open full page')));
   // The composer's honest assembly labels when it placed this app; the
   // server's origin chips otherwise.
   const origins = labels.length
@@ -419,7 +446,7 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
     el(document_, 'h2', {}, group.title),
     chips,
     el(document_, 'p', { class: 'sr-only' }, group.label),
-    window_);
+    el(document_, 'details', { class: 'cv-window-wrap' }, el(document_, 'summary', {}, 'Time range and filters'), window_));
   const section = el(document_, 'section', { class: 'cv-group', id: group.id, 'data-app': group.app, 'data-work': group.work, 'aria-label': group.title }, app);
   for (const card of group.cards) {
     section.append(el(document_, 'article', {

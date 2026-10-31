@@ -10,6 +10,7 @@ import { startFocus } from './focus';
 import { NOTE_COMMAND, startNotes } from './notes';
 import { registerCommands, startSlash } from './slash';
 import { startBoxes } from './boxes';
+import { startTimings } from './timing';
 // APP-103 utility widgets, registered as canvas slash commands (APP-101):
 // `/weather`, `/calculator`, `/clock` in the `/` list and `/apps`; a command
 // with words restyles the selected widget of that kind (`runWidget`).
@@ -265,7 +266,7 @@ function IntentBar(props: IntentProps) {
         aria-describedby="intent-status"
       />
       <button id="intent-submit" type="submit" disabled={() => busy()}>
-        {() => (busy() ? 'Composing…' : 'Compose')}
+        {() => (busy() ? 'Working…' : 'Compose')}
       </button>
       <p id="intent-status" class={() => statusClass()} role="status">
         {() => status()}
@@ -365,25 +366,28 @@ function Canvas(props: CanvasProps) {
                   ))}
                 </p>
                 <p class="sr-only">{group.label}</p>
-                <form method="post" action={group.href} class="cv-window" data-window>
-                  <input type="hidden" name="csrf" value={group.csrf} />
-                  <label>
-                    <span>From (UTC)</span>
-                    <input name="window_start" type="datetime-local" step="1" value={group.windowStart} />
-                  </label>
-                  <label>
-                    <span>Until (UTC, excluded)</span>
-                    <input name="window_end" type="datetime-local" step="1" value={group.windowEnd} />
-                  </label>
-                  <label>
-                    <span>Destination (optional)</span>
-                    <input name="destination" type="text" value={group.destination} />
-                  </label>
-                  <div class="cv-window-actions">
-                    <button type="submit">Run views</button>
-                    <a href={group.href}>Open work page</a>
-                  </div>
-                </form>
+                <details class="cv-window-wrap">
+                  <summary>Time range and filters</summary>
+                  <form method="post" action={group.href} class="cv-window" data-window>
+                    <input type="hidden" name="csrf" value={group.csrf} />
+                    <label>
+                      <span>From (UTC)</span>
+                      <input name="window_start" type="datetime-local" step="1" value={group.windowStart} />
+                    </label>
+                    <label>
+                      <span>Until (UTC)</span>
+                      <input name="window_end" type="datetime-local" step="1" value={group.windowEnd} />
+                    </label>
+                    <label>
+                      <span>Destination (optional)</span>
+                      <input name="destination" type="text" value={group.destination} />
+                    </label>
+                    <div class="cv-window-actions">
+                      <button type="submit">Refresh cards</button>
+                      <a href={group.href}>Open full page</a>
+                    </div>
+                  </form>
+                </details>
               </article>
               {createList(() => group.cards, card => card.id, card => (
                 <article
@@ -752,12 +756,28 @@ function Canvas(props: CanvasProps) {
               <button type="button" role="menuitem" data-tool="zoom-reset"><span>Zoom to 100%</span><span class="cv-kbd-group">⇧ 0</span></button>
               <button type="button" role="menuitem" data-tool="fit"><span>Zoom to fit</span><span class="cv-kbd-group">⇧ 1</span></button>
               <button type="button" role="menuitem" data-tool="selection"><span>Zoom to selection</span><span class="cv-kbd-group">⇧ 2</span></button>
+            </div>
+          </div>
+          <div class="cv-zoom cv-more">
+            <button type="button" class="cv-zoom-button cv-more-button" data-tool="more-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="cv-more-menu" title="More actions" aria-label="More actions">
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" /><circle cx="8" cy="8" r="1.3" /><circle cx="12.5" cy="8" r="1.3" /></svg>
+            </button>
+            <div id="cv-more-menu" class="cv-zoom-menu cv-more-menu" role="menu" aria-label="More actions" hidden>
+              <p class="cv-menu-label" aria-hidden="true">Canvas</p>
+              <button type="button" role="menuitem" data-tool="library"><span>Library</span><span class="cv-kbd-group">L</span></button>
+              <button type="button" role="menuitem" data-tool="new-note"><span>New note</span><span class="cv-kbd-group">/note</span></button>
+              <button type="button" role="menuitem" data-tool="reset-layout" title="View layout only: saved in this browser"><span>Arrange by app</span><span class="cv-kbd-group">/arrange</span></button>
+              <button type="button" role="menuitemcheckbox" aria-checked="false" data-tool="timings"><span>Show timings</span><span class="cv-menu-check" aria-hidden="true"></span></button>
               <span class="cv-zoom-sep" aria-hidden="true"></span>
-              <button type="button" role="menuitem" data-tool="focus"><span>Focus selected</span><span class="cv-kbd-group">F</span></button>
+              <p class="cv-menu-label" aria-hidden="true">Selected cards</p>
+              <button type="button" role="menuitem" data-tool="focus"><span>Focus</span><span class="cv-kbd-group">F</span></button>
               <button type="button" role="menuitem" data-tool="unite"><span>Unite app</span><span class="cv-kbd-group">U</span></button>
+              <button type="button" role="menuitem" data-tool="split"><span>Break app apart</span><span class="cv-kbd-group">⇧ U</span></button>
+              <button type="button" role="menuitem" data-tool="stack"><span>Stack them</span><span class="cv-kbd-group">⌘ G</span></button>
+              <button type="button" role="menuitem" data-tool="spread"><span>Spread a stack</span><span class="cv-kbd-group">⌘ ⇧ G</span></button>
+              <button type="button" role="menuitem" data-tool="remove"><span>Take off the canvas</span><span class="cv-kbd-group">Del</span></button>
               <span class="cv-zoom-sep" aria-hidden="true"></span>
-              <button type="button" role="menuitem" data-tool="reset-layout" title="View layout only: saved in this browser"><span>Reset layout</span></button>
-              <button type="button" role="menuitem" data-tool="help"><span>Keyboard shortcuts</span><span class="cv-kbd-group">?</span></button>
+              <button type="button" role="menuitem" data-tool="help"><span>Shortcuts and commands</span><span class="cv-kbd-group">?</span></button>
             </div>
           </div>
         </div>
@@ -770,6 +790,8 @@ function Canvas(props: CanvasProps) {
 
 await activateIslands({ IntentBar });
 startBoard(document);
+// APP-116: timing chips (off by default; the More menu or ?timing=1).
+startTimings(document);
 startSlash(document);
 registerCommands(WIDGET_COMMANDS.map((command) => ({
   ...command,

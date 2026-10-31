@@ -6,6 +6,7 @@
 // keys on; a refusal keeps the state. The sentence travels in a JSON body
 // only, never in a URL.
 import { el } from '../render';
+import { showTiming } from '../timing';
 import { validState, type WidgetKind, type WidgetState } from './state';
 
 export const CUSTOMIZE_URL = '/v1/widgets/customize';
@@ -155,6 +156,9 @@ export async function customize(widget: WidgetCard, text: string): Promise<boole
     const ms = Math.round(performance.now() - started);
     widget.card.ownerDocument.getElementById('cv-canvas')?.setAttribute('data-last-restyle-ms', String(ms));
     widget.apply(next);
+    // APP-116: the round trip, with the server's own duration (the model's turn included).
+    const server = typeof body?.duration_ms === 'number' ? body.duration_ms : null;
+    showTiming('Restyle', [{ label: body?.source === 'model' ? 'restyle (model)' : 'restyle', ms, server }], widget.card);
     // ADR-011 I5: a state the model chose is labeled as such.
     if (body?.source === 'model' && !widget.chips.querySelector('.wg-ai')) {
       widget.chips.append(el(widget.card.ownerDocument, 'span', { class: 'badge wg-ai', title: 'Restyled by the model within the widget’s fixed styles' }, 'AI-styled'));
