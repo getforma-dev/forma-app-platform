@@ -1,0 +1,22 @@
+# Pinned developer tools (ADR-012 D12.4; AGENTS.md:13). `just doctor` compares
+# what is installed with this file and exits non-zero on any difference.
+#
+#   <tool> <version> [<since>]
+#
+# rustc, node and python must also agree with the files their own tools read
+# (rust-toolchain.toml, .node-version, .python-version); doctor checks both.
+# `<since>` marks a tool the workflow adopts in a later ADR-012 plan step:
+# doctor reports it but does not fail while it is missing.
+# "present" means any version: Docker Desktop updates itself and the
+# repository pins images by digest, not the engine.
+#
+# Install: rustup (rust-toolchain.toml), nvm/fnm (.node-version),
+# `uv python install` (.python-version), Homebrew for uv, just, process-compose.
+rustc            1.93.1
+node             22.21.0
+npm              11.6.2
+python           3.11.14
+uv               0.12.22
+just             1.59.0
+process-compose  1.124.0  step-4
+docker           present

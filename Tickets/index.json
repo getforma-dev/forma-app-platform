@@ -273,9 +273,12 @@
         "APP-120",
         "APP-121",
         "APP-122",
-        "APP-123"
+        "APP-123",
+        "APP-125",
+        "APP-126",
+        "APP-127"
       ],
-      "ticket_count": 33,
+      "ticket_count": 36,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -289,7 +292,8 @@
     "APP-084",
     "APP-085",
     "APP-087",
-    "APP-088"
+    "APP-088",
+    "APP-125"
   ],
   "tickets": [
     {
@@ -3913,6 +3917,88 @@
       "dependencies": [
         "APP-122",
         "APP-097"
+      ]
+    },
+    {
+      "id": "APP-125",
+      "title": "Developer workflow step 1: pins, dev profile, per-checkout venvs, no committed symlink",
+      "path": "0-backlog/APP-125.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "125",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-012](../../docs/architecture/ADR-012-DEVELOPER-WORKFLOW.md) D12.4, D12.7 and implementation-plan step 1 (accepted by Victor, 2026-10-31: \"Accept and build\"). Evidence: [DEV-WORKFLOW-INVENTORY.md](../../docs/planning/DEV-WORKFLOW-INVENTORY.md) \u00a7B.1, \u00a7B.2, \u00a7B.7.",
+      "Requirements": "C15",
+      "Depends on": "None",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
+      "Branch / PR": "`pivot/devflow` (built; not merged into `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": []
+    },
+    {
+      "id": "APP-126",
+      "title": "Developer workflow step 2: the front door (justfile, campaign catalog, VS Code workspace)",
+      "path": "0-backlog/APP-126.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "126",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-012](../../docs/architecture/ADR-012-DEVELOPER-WORKFLOW.md) D12.3, D12.5 and implementation-plan step 2 (accepted by Victor, 2026-10-31: \"Accept and build\"). Evidence: [DEV-WORKFLOW-INVENTORY.md](../../docs/planning/DEV-WORKFLOW-INVENTORY.md) \u00a7B.4, \u00a7B.5, \u00a7D.",
+      "Requirements": "C15",
+      "Depends on": "APP-125",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
+      "Branch / PR": "`pivot/devflow` (built; not merged into `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-125"
+      ]
+    },
+    {
+      "id": "APP-127",
+      "title": "Developer workflow step 3: the beta deploy in Git (ops/beta, $PRIV per checkout, --approved gate)",
+      "path": "0-backlog/APP-127.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "127",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-012](../../docs/architecture/ADR-012-DEVELOPER-WORKFLOW.md) D12.6, D12.7 and implementation-plan step 3 (accepted by Victor, 2026-10-31: \"Accept and build\"). Evidence: [DEV-WORKFLOW-INVENTORY.md](../../docs/planning/DEV-WORKFLOW-INVENTORY.md) \u00a7C. Every [MUTATION] still needs Victor's word per action ([DEPLOY-RUNBOOK.md](../../docs/pitch/DEPLOY-RUNBOOK.md)).",
+      "Requirements": "C15, SR9",
+      "Depends on": "APP-126",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
+      "Branch / PR": "`pivot/devflow` (built; not merged into `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-126"
       ]
     }
   ]

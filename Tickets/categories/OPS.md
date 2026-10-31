@@ -20,3 +20,6 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 81 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](../0-backlog/APP-080.md) | [PH05](../phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-077, APP-078 |
 | 86 | [APP-086: Close the managed qualification and native campaign residuals (APP-075 and APP-008 reviews)](../0-backlog/APP-086.md) | [PH07](../phases/PH07.md) | S13 | OPS | P2 | M | Backlog | APP-075, APP-078 |
 | 89 | [APP-089: Harden the container images: base CVEs and effective scan-on-push](../0-backlog/APP-089.md) | [PH02](../phases/PH02.md) | S03 | OPS | P1 | M | Backlog | APP-075, APP-078 |
+| 125 | [APP-125: Developer workflow step 1: pins, dev profile, per-checkout venvs, no committed symlink](../0-backlog/APP-125.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | None |
+| 126 | [APP-126: Developer workflow step 2: the front door (justfile, campaign catalog, VS Code workspace)](../0-backlog/APP-126.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125 |
+| 127 | [APP-127: Developer workflow step 3: the beta deploy in Git (ops/beta, $PRIV per checkout, --approved gate)](../0-backlog/APP-127.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | M | Backlog | APP-126 |

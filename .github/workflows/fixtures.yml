@@ -17,7 +17,7 @@ jobs:
           python-version: '3.11.14'
       - name: Install recorded parser and locked fixture dependencies
         run: |
-          rustup toolchain install 1.93.1 --profile minimal --target wasm32-unknown-unknown
+          rustup toolchain install 1.93.1 --profile minimal --component clippy,rustfmt --target wasm32-unknown-unknown
           python3 -m venv spikes/APP-005/.venv
           spikes/APP-005/.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r contracts/requirements.lock -r spikes/APP-005/requirements.lock -r app/runtime/requirements.lock
           mkdir -p "$RUNNER_TEMP/fixture-qualification"
@@ -25,8 +25,8 @@ jobs:
         working-directory: spikes/APP-004
         run: |
           python3 verify_vendor.py
-          cargo +1.93.1 build --locked -p parser-guest --target wasm32-unknown-unknown --release
-          cargo +1.93.1 build --locked -p parser-host
+          cargo build --locked -p parser-guest --target wasm32-unknown-unknown --release
+          cargo build --locked -p parser-host
       - name: Check original bytes, arithmetic, parsing and the supported query subset
         run: spikes/APP-005/.venv/bin/python fixtures/qualify.py --output "$RUNNER_TEMP/fixture-qualification/parser-query"
       - name: Qualify disposable two-organization setup and deterministic reset
