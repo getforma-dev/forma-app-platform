@@ -8,6 +8,7 @@ type SigninProps = { action: string; hasAction: boolean; failed: boolean };
 function Signin(props: SigninProps) {
   return (
     <main class="page">
+      <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
       <h1>Sign in</h1>
       {props.failed ? (
         <p class="notice" role="alert">

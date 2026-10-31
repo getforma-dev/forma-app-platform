@@ -16,9 +16,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 struct Assets;
 
 #[derive(PageProps)]
-struct HomeProps {
-    count: u32,
-}
+struct HomeProps {}
 #[derive(PageProps)]
 struct AboutProps {}
 
@@ -365,12 +363,12 @@ async fn main() {
 async fn home(State(state): State<Arc<AppState>>) -> Response {
     let route = "/";
     // Route mode is fixed at startup; an SSR failure never selects a shell.
-    let ctx = RenderCtx::new().with_title("Home");
+    let ctx = RenderCtx::new().with_title("Forma Canvas");
     let rendered = match &state.home {
-        Some(home) => home.render(&HomeProps { count: 7 }, &ctx),
+        Some(home) => home.render(&HomeProps {}, &ctx),
         None => render_browser_shell(
             &PageConfig {
-                title: "Home",
+                title: "Forma Canvas",
                 route_pattern: route,
                 manifest: &state.manifest,
                 config_json: None,
@@ -454,6 +452,35 @@ mod tests {
             .find(|d| d.starts_with("form-action"))
             .unwrap()
             .to_owned()
+    }
+
+    // APP-138: the public entry is native, with no scaffold Counter island.
+    #[tokio::test]
+    async fn home_is_native_and_keeps_the_invitation_entry() {
+        let manifest = assets::try_load_manifest::<Assets>().unwrap();
+        let modules = load_ir_modules::<Assets>(&manifest).unwrap();
+        let home = modules.bind::<HomeProps>("home").unwrap();
+        modules.bind::<AboutProps>("about").unwrap();
+        modules.bind::<InviteProps>("invite").unwrap();
+        modules.bind::<SigninProps>("signin").unwrap();
+        modules.bind::<PendingProps>("pending").unwrap();
+        modules.bind::<DeniedProps>("denied").unwrap();
+        modules.bind::<WorkspaceProps>("workspace").unwrap();
+        modules.bind::<RecordProps>("record").unwrap();
+        modules
+            .bind::<genui::query::page::WorkProps>("work")
+            .unwrap();
+        modules
+            .bind::<genui::query::canvas::CanvasProps>("canvas")
+            .unwrap();
+        modules.finalize().unwrap();
+        let ctx = RenderCtx::new().with_title("Forma Canvas");
+        let (status, headers, body) = html(respond("/", home.render(&HomeProps {}, &ctx))).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(headers["cache-control"], "no-store");
+        assert!(body.contains("href=\"/invite\"") && body.contains("href=\"/signin\""));
+        assert!(!body.contains("<script") && !body.contains("data-forma-island"));
+        assert!(manifest.route("/").unwrap().js.is_empty());
     }
 
     fn pages() -> SsrPages {
@@ -1291,12 +1318,10 @@ mod tests {
         assert!(content.contains("action=\"/auth/signout\"") && content.contains(&"S".repeat(43)));
         // No organization picker; the intent bar posts nowhere but the page.
         assert!(!content.to_lowercase().contains("organization picker"));
-        assert!(content.contains("What do you need?"));
+        assert!(content.contains("From idea to") && content.contains("working app."));
         // APP-124: the empty canvas's three ways to start; the third is a
         // file picker (and a drop target) that makes a folder of the files.
-        assert!(
-            content.contains("data-empty-describe") && content.contains("Describe what you need")
-        );
+        assert!(content.contains("data-empty-describe") && content.contains("Describe an app"));
         assert!(
             content.contains("Drop files or upload") && content.contains("data-empty-upload-pick")
         );

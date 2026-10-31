@@ -284,8 +284,9 @@ function Canvas(props: CanvasProps) {
       <header class="cv-top">
         <div class="cv-identity">
           <a class="cv-brand" href="/canvas" aria-label="Forma canvas">
-            <span class="cv-brand-mark" aria-hidden="true"></span>
-            <span>Forma</span>
+            <span class="cv-brand-mark" aria-hidden="true"><span></span></span>
+            <span class="cv-wordmark">forma<span class="cv-brand-dot">.</span></span>
+            <span class="cv-product">canvas</span>
           </a>
           {createShow(() => props.hasOrganization, () => (
             <span class="cv-org" title="Your organization">{props.organization}</span>
@@ -338,26 +339,37 @@ function Canvas(props: CanvasProps) {
         data-member={props.memberKey}
       >
         <section id="cv-empty" class="cv-empty" aria-labelledby="cv-empty-title">
-          <h1 id="cv-empty-title">What do you need?</h1>
-          <p class="cv-empty-copy">Type / and a verb to change the canvas, / and an app’s name to tell that app something, or just a sentence.</p>
-          <div class="cv-suggestions" aria-label="Suggestions">
-            <button type="button" data-intent="/forma Create a book club reading list">Create a reading list</button>
-            <button type="button" data-intent="/folder new My project">Create a project folder</button>
-            <button type="button" data-intent="/widget weather"><code>/widget weather</code></button>
-          </div>
-          <div class="cv-empty-choices" aria-label="Ways to start">
-            <button type="button" class="cv-empty-choice cv-empty-describe" data-empty-describe>
-              Describe what you need
-            </button>
-            {createShow(() => props.hasLibrary, () => (
-              <button type="button" class="cv-empty-choice cv-empty-library" data-lib-open>
-                Browse your library <span class="cv-empty-library-count">{props.librarySummary}</span>
+          <div class="cv-welcome">
+            <p class="cv-eyebrow"><span class="cv-welcome-dot" aria-hidden="true"></span> A little space. A lot of possibility.</p>
+            <h1 id="cv-empty-title">From idea to<br /><span>working app.</span></h1>
+            <p class="cv-empty-copy">Describe what you need. Bring your data. Shape a workspace that works the way you do.</p>
+            <div class="cv-empty-choices" aria-label="Ways to start">
+              <button type="button" class="cv-empty-choice cv-empty-describe" data-empty-describe>
+                <span class="cv-choice-top"><span class="cv-choice-icon" aria-hidden="true">✳</span><span class="cv-choice-number" aria-hidden="true">01 / CREATE</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
+                <span class="cv-choice-title">Describe an app</span>
+                <span class="cv-choice-copy">Start with an idea. Make it something you can use.</span>
               </button>
-            ))}
-            <button type="button" class="cv-empty-choice cv-empty-upload" data-empty-upload-pick title="A new folder holds your files: CSV, XLSX, PDF, images or text">
-              Drop files or upload <span class="cv-empty-upload-hint">a new folder holds them</span>
-            </button>
-            <input type="file" class="sr-only" data-empty-upload multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.txt,.md" aria-label="Upload files into a new folder" />
+              <button type="button" class="cv-empty-choice cv-empty-upload" data-empty-upload-pick title="A new folder holds your files: CSV, XLSX, PDF, images or text">
+                <span class="cv-choice-top"><svg class="cv-choice-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 3h9v10H3zM12 16v-4m-3 2 3-3 3 3" /></svg><span class="cv-choice-number" aria-hidden="true">02 / CONNECT</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
+                <span class="cv-choice-title">Bring your files</span>
+                <span class="cv-choice-copy">Drop files or upload. Give your next app a starting point.</span>
+              </button>
+              {createShow(() => props.hasLibrary, () => (
+                <button type="button" class="cv-empty-choice cv-empty-library" data-lib-open>
+                  <span class="cv-choice-top"><svg class="cv-choice-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg><span class="cv-choice-number" aria-hidden="true">03 / DISCOVER</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
+                  <span class="cv-choice-title">Open your library</span>
+                  <span class="cv-choice-copy">Your apps, cards and tools, ready when you are.</span>
+                  <span class="cv-empty-library-count">{props.librarySummary}</span>
+                </button>
+              ))}
+              <input type="file" class="sr-only" data-empty-upload multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.txt,.md" aria-label="Upload files into a new folder" />
+            </div>
+            <div class="cv-suggestions" aria-label="Suggestions">
+              <span class="cv-suggestions-label">Or try</span>
+              <button type="button" data-intent="/forma Create a book club reading list">Create a reading list <span aria-hidden="true">↗</span></button>
+              <button type="button" data-intent="/folder new My project">Create a project folder <span aria-hidden="true">↗</span></button>
+              <button type="button" data-intent="/widget weather">Add the weather <span aria-hidden="true">↗</span></button>
+            </div>
           </div>
         </section>
         <div id="cv-board" class="cv-board">
@@ -807,8 +819,9 @@ function Canvas(props: CanvasProps) {
             </div>
           </div>
         </div>
-        <IntentBar placeholder="Describe what you need, or type / for commands" />
-        <p class="cv-layout-note">Layout saved in this browser</p>
+        <span class="cv-dock-brand" aria-hidden="true">YOUR NEXT MOVE <span>↗</span></span>
+        <IntentBar placeholder="Describe an app, ask a question, or type /" />
+        <p class="cv-layout-note"><span class="cv-save-dot" aria-hidden="true"></span> Layout saved locally</p>
       </footer>
     </div>
   );

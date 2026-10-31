@@ -24,7 +24,7 @@ Run from the main checkout, in this order:
 4. `just status` and `just status clean`: both running, the URLs as above.
 5. Open the three windows (Chrome, 1440×900, zoom 100%), and reload each one after any reset.
 6. Sarah's window: type `/expenses` and Enter, so the Expenses app is on her canvas. Her canvas only updates live for an app that is on it (pitfall 5).
-7. Diego's and Alex's windows: empty canvases (the "What do you need?" page). If Diego's is not empty, Library → Remove on each app.
+7. Diego's and Alex's windows: empty canvases (the "From idea to working app." page). If Diego's is not empty, Library → Remove on each app.
 8. Finder: `docs/pitch/folder-fixture/` open, `q3_pipeline.csv` ready to drag.
 9. Optional, for the ⏱ shots: ⋯ → **Show timings**, or `/canvas#timing=1` *(not re-run today)*.
 10. Optional fallback for beat 1: keep a clearly labeled recording of an earlier clean-instance rehearsal ready to play. Capture it **before** the reset in step 2; do not prebuild in another :4010 window, since all those windows share Alex's organization and database and the app would appear on the live canvas. If no recording is ready, skip the fallback and continue to beat 2 when the model is slow.

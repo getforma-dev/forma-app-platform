@@ -48,6 +48,7 @@ type WorkProps = {
 function Work(props: WorkProps) {
   return (
     <main class="page work">
+      <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
       <h1>{props.title}</h1>
       <p class="lede">
         Saved work.

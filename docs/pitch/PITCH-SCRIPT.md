@@ -75,7 +75,7 @@ Core beats 1–4: about 3 min 45 s. With 5 and 6: about 4 min 25 s.
 
 ### Beat 1: a new customer, from nothing (75 s, Alex on :4010)
 
-*Alex's window: the empty canvas, "What do you need?". Don't click the example chips under it (pitfall 1 in RECORDING.md).*
+*Alex's window: the empty canvas, "From idea to working app.". Don't click the example chips under it (pitfall 1 in RECORDING.md).*
 
 This is a company that signed up a minute ago. No apps, no templates, no data. And here there are no rehearsed shortcuts: everything you'll see in this window is the real model.
 

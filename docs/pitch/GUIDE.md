@@ -32,7 +32,7 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 
 The full rules (what is on a canvas, names and aliases, verbs, the Ask and Shape jobs, adding and removing, shortcuts) are in [CANVAS-RULES.md](CANVAS-RULES.md).
 
-**Start from your data (APP-124).** An empty canvas offers three ways in: **Describe what you need**, **Browse your library**, and **Drop files or upload** (a new folder holds the files). A folder with files offers **Ask** (a read-only question about its tables, each answer row with its file and row), **Make a card** (a minimal app with one card, the most useful view of its data, linked back to the folder) and **✨ Make an app** (the full formation); both Make buttons confirm first. Details: [CANVAS-RULES.md](CANVAS-RULES.md#start-from-your-data-app-124).
+**Start from your data (APP-124).** An empty canvas offers three ways in: **Describe an app**, **Open your library**, and **Bring your files** (drop or upload) (a new folder holds the files). A folder with files offers **Ask** (a read-only question about its tables, each answer row with its file and row), **Make a card** (a minimal app with one card, the most useful view of its data, linked back to the folder) and **✨ Make an app** (the full formation); both Make buttons confirm first. Details: [CANVAS-RULES.md](CANVAS-RULES.md#start-from-your-data-app-124).
 
 **Intent bar (bottom).** One sentence to learn: **Type `/` and a verb to change the canvas, `/` and an app's name to tell that app something, or just a sentence.**
 
@@ -121,7 +121,7 @@ The hint after an address comes from the app's definition: the server derives it
 
 **Folders (APP-108).** Lead with click → type:
 
-1. **Click** "+ Folder" (toolbar or the Library's Widgets → Folder row), drop files on empty canvas, or **Drop files or upload** on an empty canvas: a folder opens with its name ready to edit (click the title any time to rename). Files brought from the empty canvas just land; the folder's buttons are the next step (APP-124).
+1. **Click** "+ Folder" (toolbar or the Library's Widgets → Folder row), drop files on empty canvas, or **Bring your files** (drop or upload) on an empty canvas: a folder opens with its name ready to edit (click the title any time to rename). Files brought from the empty canvas just land; the folder's buttons are the next step (APP-124).
 2. **Drop** PDFs, images, CSV, XLSX or text onto it, or use "Add files" (up to 20 files, 20 MB each). A CSV or XLSX is read at once and shows its column types and first rows; adjust any type, or keep the defaults ("Keep as card" places a data card with receipts).
 3. **Click the folder** to make it active: its chip appears in the bar ("📁 Q3 board pack ×") and plain sentences now act on it: "build a metrics app and explain it", "brief me". × or Esc clears it.
 4. **Buttons** (with files): "Ask" (the Ask tab scoped to the folder's tables, APP-124), "Make a card" (one card, after its confirm, APP-124), "✨ Make an app" (formation: an editable prompt, prefilled "Build an app that shows the key metrics and explain them") and "Brief me" (an overview, a paragraph per file and key points; PDF statements cited "file, p. N").

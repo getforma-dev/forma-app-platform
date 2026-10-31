@@ -286,9 +286,10 @@
         "APP-133",
         "APP-135",
         "APP-136",
-        "APP-137"
+        "APP-137",
+        "APP-138"
       ],
-      "ticket_count": 46,
+      "ticket_count": 47,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -4305,6 +4306,32 @@
       "dependencies": [
         "APP-127"
       ]
+    },
+    {
+      "id": "APP-138",
+      "title": "Forma Canvas \u2014 shared Forma brand and application design",
+      "path": "3-in-review/APP-138.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "In review",
+      "Priority": "P1",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "138",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor's October 31 request: apply getforma.dev's shared Forma identity to the app, with a distinct product treatment. [Design direction](../../docs/architecture/FORMA-BRAND.md).",
+      "Requirements": "C11, SR1",
+      "Depends on": "None",
+      "External dependencies": "None",
+      "Assignee": "Codex \u2014 GenUI",
+      "Branch / PR": "`pivot/forma-brand`",
+      "Team": "GenUI",
+      "Blocked by": "None",
+      "Unblock evidence": "Not applicable.",
+      "dependencies": []
     }
   ]
 }
