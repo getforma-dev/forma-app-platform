@@ -2257,6 +2257,14 @@ async fn campaign() {
             &json!({"address": "expense-review.records", "words": "only red invoices", "target": card_target}).to_string(),
         )
         .await;
+    // A computed number (rehearsed, demo organization) cites every record it counted.
+    let counted = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "how many are there", "scope": card_scope}).to_string(),
+        )
+        .await;
     crate::demo::configure_for_tests(false, &[]);
     assert_eq!(rehearsed.status, StatusCode::OK, "{}", rehearsed.text());
     assert!(
@@ -2272,14 +2280,6 @@ async fn campaign() {
         rehearsed.text()
     );
     assert_eq!(rehearsed.json()["receipts"][0]["record_id"], first_record);
-    // A computed number cites every record it counted.
-    let counted = stand
-        .post(
-            composer::talk::ASK_PATH,
-            Some(&maya_cookie),
-            &json!({"question": "how many are there", "scope": card_scope}).to_string(),
-        )
-        .await;
     assert_eq!(counted.status, StatusCode::OK, "{}", counted.text());
     assert_eq!(
         counted.json()["receipts"].as_array().unwrap().len(),
