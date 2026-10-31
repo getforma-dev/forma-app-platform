@@ -568,9 +568,26 @@ async fn campaign() {
     );
 
     // --- ADR-011 prebuilt library (APP-094): seeded, cached, run, receipted ---
+    // The library's size is its catalog's: it was 13 when this campaign was
+    // written and has grown since (APP-107, 20 apps); APP-131. The operator's
+    // seed and the catalog listing must both cover all of it.
+    let library: Value = serde_json::from_slice(include_bytes!(
+        "../../../contracts/fixtures/library/catalog.json"
+    ))
+    .unwrap();
+    let library_apps = library["apps"].as_array().unwrap().len();
+    // Apps may share a source: library_sources.build caches each source once.
+    let library_sources = library["apps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|app| app["sources"].as_array().unwrap())
+        .map(|source| source["source_id"].as_str().unwrap())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
     let seeded = operator(&fixture, &["seed-library", "--organization", ORG]);
     assert_eq!(seeded["changed"], true);
-    assert_eq!(seeded["apps"].as_array().unwrap().len(), 13);
+    assert_eq!(seeded["apps"].as_array().unwrap().len(), library_apps);
     assert_eq!(seeded["audit_event"], Value::Null);
     let again = operator(&fixture, &["seed-library", "--organization", ORG]);
     assert_eq!(
@@ -593,7 +610,7 @@ async fn campaign() {
         String::from_utf8_lossy(&built.stderr)
     );
     let built: Value = serde_json::from_slice(&built.stdout).unwrap();
-    assert_eq!(built.as_array().unwrap().len(), 13);
+    assert_eq!(built.as_array().unwrap().len(), library_sources);
     let catalog: Value = serde_json::from_slice(
         &std::fs::read(repository().join("contracts/fixtures/library/catalog.json")).unwrap(),
     )
@@ -617,7 +634,7 @@ async fn campaign() {
     // The catalog the composer reads: every library app the member may open,
     // with its router metadata; a member without the grants sees none.
     let listed = stores.data.library_catalog(&member).await.unwrap();
-    assert_eq!(listed.len(), 13);
+    assert_eq!(listed.len(), library_apps);
     for item in &listed {
         assert!(item.routing["intent_examples"].as_array().unwrap().len() >= 4);
         assert!(!item.purpose.is_empty() && !item.title.is_empty());
@@ -633,7 +650,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "seed-library places all 13 library apps once (exact-match idempotent, no audit event), library_sources.build caches their revisions under the pinned digests, and library_catalog lists them with router metadata for the granted member only",
+        "seed-library places every library app of contracts/fixtures/library/catalog.json once (exact-match idempotent, no audit event), library_sources.build caches their revisions under the pinned digests, and library_catalog lists them with router metadata for the granted member only",
     );
     // APP-093 review M3: more compositions than the recency cap (120 saved
     // works pinning a newer publication of the authoring app) never hide a
@@ -648,9 +665,9 @@ async fn campaign() {
     .await[0]
         .parse()
         .unwrap();
-    assert!(saved > 120 + 13, "{saved} saved works");
+    assert!(saved > 120 + library_apps as i64, "{saved} saved works");
     let crowded = stores.data.library_catalog(&member).await.unwrap();
-    assert_eq!(crowded.len(), 13);
+    assert_eq!(crowded.len(), library_apps);
     for item in &crowded {
         let (app, work) = ids(&item.library_id);
         assert_eq!(
@@ -668,7 +685,7 @@ async fn campaign() {
             entry["library_id"]
         );
     }
-    assert!(workspace.len() <= 100 + 13);
+    assert!(workspace.len() <= 100 + library_apps);
     // Newest first: the listing opens with the latest compositions.
     assert_eq!(workspace[0].app, APP);
     assert_eq!(
@@ -678,7 +695,7 @@ async fn campaign() {
     fixture.sql(&format!("DELETE FROM genui.saved_work WHERE organization_id='{ORG}' AND publication_id='{COMPOSED}'; DELETE FROM genui.publications WHERE organization_id='{ORG}' AND publication_id='{COMPOSED}';"), "genui");
     check(
         &mut checks,
-        "APP-093 M3: with 120 more saved works than the 100-work recency cap (all newer than the library), openable_works still lists all 13 seeded library works after the newest compositions and library_catalog still lists the 13 seeded works (selected by sidecar definition digest, never through the capped listing); an ungranted member still sees none",
+        "APP-093 M3: with 120 more saved works than the 100-work recency cap (all newer than the library), openable_works still lists every seeded library work after the newest compositions and library_catalog still lists every seeded work (selected by sidecar definition digest, never through the capped listing); an ungranted member still sees none",
     );
     let (expense_app, expense_work) = ids("expense-review");
     let outline = stores
