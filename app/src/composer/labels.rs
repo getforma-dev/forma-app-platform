@@ -4,33 +4,49 @@
 //!
 //! `POST /v1/apps/{app}/labels` changes one label:
 //!
-//! - `{"scope":"organization","card":"","name","address","aliases","description"}`:
-//!   the app's display name, address (`/spend`), kept aliases and
-//!   description; with a `card` (`ledger`), that card's display name and
-//!   description. The app's owner or an admin only (`Workspace::label_app`);
-//!   audited `app.labeled`.
+//! - `{"scope":"organization","card":"","name","address","description"}`:
+//!   the app's display name, address (`/team-spend`) and description; with
+//!   a `card` (`ledger`), that card's display name and description. The
+//!   app's owner or an admin only (`Workspace::label_app`); audited
+//!   `app.labeled`. There are no editable organization aliases: the only
+//!   names beyond the address are system-managed, the catalog's built-in
+//!   aliases (`/expense`) and the addresses kept when an owner renames one.
 //! - `{"scope":"personal","card","name","aliases"}`: the member's own name
 //!   for a card and own shortcuts (`/exp`, `/q3`), on an app they can open
 //!   (`Workspace::label_mine`); audited `app.aliased`.
 //!
 //! Every key but `scope` is optional: an absent key keeps the stored value,
 //! `null` or `""` clears it, so the catalog's name shows again. Names are
-//! case-insensitive (lowercased) addresses `[a-z][a-z0-9-]{1,31}`; no address,
-//! alias or shortcut takes a verb ([`VERBS`]) or another app's address or
-//! alias, and renaming an address keeps the old one as an alias. A personal
-//! shortcut that an organization name later takes is dropped when read (the
-//! organization's address wins).
+//! case-insensitive (lowercased) addresses `[a-z][a-z0-9-]{1,31}`. A new
+//! organization address (and so a kept one) never takes any name another
+//! app answers to: its catalog address or aliases (hidden or not; catalog
+//! names always stay with their app), another label's current or kept
+//! address, a saved work's `/name`, or a verb or verb alias ([`VERBS`]); an
+//! app's display name is never another app's name or display title. Only a
+//! library app or an app shared beyond its owner gets an address. Renaming
+//! an address keeps the old one (`kept`). A personal shortcut takes none of
+//! those either, and one an organization name later takes is dropped when
+//! read (the organization's address wins). A label names only a card the
+//! app has.
+//!
+//! Namespaced addresses (APP-121, like `/plugin:skill`): `app:<name>` always
+//! names an app (its address, an alias or the member's own shortcut), never
+//! by title and never a verb, so it is never ambiguous; `GET /v1/commands`
+//! carries each app's full form (`namespaced`) and MCP `app_hint` accepts
+//! it ([`pick_listed`]).
 //!
 //! Refusals: the uniform 404 for no session, an app of another organization,
 //! an app the member cannot open and (organization scope) a member who is
 //! neither its owner nor an admin; 403 `cross_site`; 413; 422
-//! `invalid_label`, `invalid_name`, `verb_name` or `name_taken`; 503.
+//! `invalid_label` (also: no such card), `invalid_name`, `verb_name`,
+//! `name_taken`, `not_shared` (an address for a private app) or
+//! `too_many_labels`; 503.
 use crate::{
     auth::{csrf, Auth},
     http::{self, UniformPath},
     storage::{
-        self, address_shaped, card_shaped, label_description, label_name, Error, LabelChange,
-        Labeled, Labels, NameRules,
+        self, address_shaped, card_shaped, label_description, label_name, shortcut_shaped, Error,
+        LabelChange, Labeled, Labels, NameRules,
     },
 };
 use axum::{
@@ -47,10 +63,13 @@ use std::sync::{Arc, OnceLock};
 pub const LABELS_PATH: &str = "/v1/apps/{app}/labels";
 const BODY_LIMIT: usize = 4096;
 
-/// The canvas verbs (`command-registry.ts`: the sixteen with APP-122's
-/// `/shape` and `/ask`, their hidden
-/// aliases) and the reserved list names: no address, alias or shortcut
-/// may take one.
+/// The canvas verbs and every alias the canvas registers for one
+/// (`command-registry.ts` and the modules that register verbs: the sixteen
+/// with APP-122's `/shape` and `/ask`, the widget verbs, `agents.ts`,
+/// `controls.ts`, `notes.ts`, `unite.ts`, `slash.ts`, `box-api.ts`
+/// `FOLDER_ALIASES`) and the reserved list names: no address, alias or
+/// shortcut may take one. `app/admin/test` checks this list against the
+/// canvas's registrations.
 pub const VERBS: &[&str] = &[
     "app",
     "card",
@@ -74,6 +93,15 @@ pub const VERBS: &[&str] = &[
     "note",
     "help",
     "new",
+    "agents",
+    "mcp",
+    "keys",
+    "notes",
+    "break",
+    "storage",
+    "box",
+    "boxes",
+    "folders",
 ];
 
 pub fn router(auth: Arc<Auth>) -> Router {
@@ -82,9 +110,17 @@ pub fn router(auth: Arc<Auth>) -> Router {
         .with_state(auth)
 }
 
-/// Every library app's catalog address and aliases, by app id.
-pub fn catalog_names() -> &'static BTreeMap<String, Vec<String>> {
-    static NAMES: OnceLock<BTreeMap<String, Vec<String>>> = OnceLock::new();
+/// One library app's catalog names: its address, then its aliases, and
+/// its display title (the sidecar's `command.title`, else its title).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct CatalogNames {
+    pub names: Vec<String>,
+    pub title: String,
+}
+
+/// Every library app's catalog names, by app id.
+pub fn catalog_names() -> &'static BTreeMap<String, CatalogNames> {
+    static NAMES: OnceLock<BTreeMap<String, CatalogNames>> = OnceLock::new();
     NAMES.get_or_init(|| {
         storage::library_sidecar()
             .unwrap_or_default()
@@ -102,26 +138,38 @@ pub fn catalog_names() -> &'static BTreeMap<String, Vec<String>> {
                         .filter_map(Value::as_str)
                         .map(str::to_owned),
                 );
-                Some((app, names))
+                let title = command
+                    .get("title")
+                    .or_else(|| entry.get("title"))
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned();
+                Some((app, CatalogNames { names, title }))
             })
             .collect()
     })
 }
 
 /// The rules a label write of `app` is judged by: its own catalog names
-/// (kept forever), every other app's, and the verbs.
+/// (kept forever), every name and display title of every other catalog
+/// app, the verbs, and whether `app` is a library app.
 pub fn rules_for(app: &str) -> NameRules {
-    let names = catalog_names();
-    let others = || names.iter().filter(|(id, _)| id.as_str() != app);
+    let catalog = catalog_names();
+    let others = || catalog.iter().filter(|(id, _)| id.as_str() != app);
     NameRules {
-        own: names.get(app).cloned().unwrap_or_default(),
+        own: catalog
+            .get(app)
+            .map(|entry| entry.names.clone())
+            .unwrap_or_default(),
         others: others()
-            .filter_map(|(_, list)| list.first().cloned())
+            .flat_map(|(_, entry)| entry.names.iter().cloned())
             .collect(),
-        other_aliases: others()
-            .flat_map(|(_, list)| list.iter().skip(1).cloned())
+        titles: others()
+            .map(|(_, entry)| entry.title.to_lowercase())
+            .filter(|title| !title.is_empty())
             .collect(),
         verbs: VERBS.iter().map(|verb| (*verb).to_owned()).collect(),
+        library: catalog.contains_key(app),
     }
 }
 
@@ -141,28 +189,25 @@ pub struct Naming {
     pub name: Option<String>,
     pub description: Option<String>,
     pub address: Option<String>,
-    /// The organization's kept aliases (beyond the catalog's).
-    pub aliases: Vec<String>,
+    /// The addresses kept when the app's address was renamed (system-managed).
+    pub kept: Vec<String>,
     /// The member's own shortcuts that no organization name takes.
     pub mine: Vec<String>,
     pub cards: Vec<CardNaming>,
     pub can_label: bool,
-    /// Names other apps' organization labels took (a catalog alias of this
-    /// app among them no longer answers for it).
-    pub claimed: BTreeSet<String>,
 }
 
-/// Every organization name: the catalog's and the labels' addresses and aliases.
+/// Every organization name: the catalog's and the labels' current and kept addresses.
 fn organization_names(labels: &Labels) -> BTreeSet<String> {
     catalog_names()
         .values()
-        .flatten()
+        .flat_map(|entry| entry.names.iter())
         .cloned()
         .chain(
             labels
                 .organization
                 .iter()
-                .flat_map(|l| l.address.iter().chain(&l.aliases).cloned()),
+                .flat_map(|l| l.address.iter().chain(&l.kept).cloned()),
         )
         .collect()
 }
@@ -178,12 +223,6 @@ pub fn naming(labels: &Labels, app: &str) -> Naming {
     };
     let mut naming = Naming {
         can_label: labels.labelable.contains(app),
-        claimed: labels
-            .organization
-            .iter()
-            .filter(|l| l.app != app)
-            .flat_map(|l| l.address.iter().chain(&l.aliases).cloned())
-            .collect(),
         ..Naming::default()
     };
     for label in labels.organization.iter().filter(|l| l.app == app) {
@@ -191,7 +230,7 @@ pub fn naming(labels: &Labels, app: &str) -> Naming {
             naming.name = label.name.clone();
             naming.description = label.description.clone();
             naming.address = label.address.clone();
-            naming.aliases = label.aliases.clone();
+            naming.kept = label.kept.clone();
         } else {
             naming.cards.push(CardNaming {
                 card: label.card.clone(),
@@ -223,7 +262,7 @@ pub fn naming(labels: &Labels, app: &str) -> Naming {
     naming
 }
 
-/// The address, aliases (catalog, organization, then the member's own) and
+/// The address, aliases (catalog, kept addresses, then the member's own) and
 /// title an app is shown with, from its catalog slug, aliases and title.
 pub fn effective(
     naming: &Naming,
@@ -234,13 +273,8 @@ pub fn effective(
     let address = naming.address.clone().unwrap_or_else(|| slug.to_owned());
     let mut seen = BTreeSet::from([address.clone()]);
     let all = std::iter::once(slug.to_owned())
-        .chain(
-            aliases
-                .iter()
-                .filter(|alias| !naming.claimed.contains(*alias))
-                .cloned(),
-        )
-        .chain(naming.aliases.iter().cloned())
+        .chain(aliases.iter().cloned())
+        .chain(naming.kept.iter().cloned())
         .chain(naming.mine.iter().cloned())
         .filter(|name| seen.insert(name.clone()))
         .collect();
@@ -251,6 +285,46 @@ pub fn effective(
     )
 }
 
+/// One app as a hint may name it: its id, address, aliases and display title.
+pub struct Listed<'a> {
+    pub app: &'a str,
+    pub address: &'a str,
+    pub aliases: &'a [String],
+    pub title: &'a str,
+}
+
+/// The app a name or address names (`/team-spend`, `expense`, `Team spend`,
+/// `app:expenses`), in passes: an exact address, then an alias, then a
+/// display title only when exactly one app has it (case-insensitive). A
+/// label's display name never wins over another app's address or alias.
+/// The namespaced form `app:<name>` matches an address or alias only.
+pub fn pick_listed(listed: &[Listed<'_>], hint: &str) -> Option<String> {
+    let wanted = hint.trim().trim_start_matches('/').to_lowercase();
+    let (wanted, namespaced) = match wanted.strip_prefix("app:") {
+        Some(name) => (name.trim().to_owned(), true),
+        None => (wanted, false),
+    };
+    if wanted.is_empty() {
+        return None;
+    }
+    if let Some(app) = listed.iter().find(|app| app.address == wanted) {
+        return Some(app.app.to_owned());
+    }
+    if let Some(app) = listed.iter().find(|app| app.aliases.contains(&wanted)) {
+        return Some(app.app.to_owned());
+    }
+    if namespaced {
+        return None;
+    }
+    let mut titled = listed
+        .iter()
+        .filter(|app| app.title.to_lowercase() == wanted);
+    match (titled.next(), titled.next()) {
+        (Some(app), None) => Some(app.app.to_owned()),
+        _ => None,
+    }
+}
+
 /// `naming` as the JSON the canvas reads beside a `GET /v1/commands` entry.
 pub fn naming_json(naming: &Naming) -> Map<String, Value> {
     let mut map = Map::new();
@@ -258,7 +332,7 @@ pub fn naming_json(naming: &Naming) -> Map<String, Value> {
         "description".into(),
         json!(naming.description.clone().unwrap_or_default()),
     );
-    map.insert("org_aliases".into(), json!(naming.aliases));
+    map.insert("kept".into(), json!(naming.kept));
     map.insert("mine".into(), json!(naming.mine));
     map.insert("can_label".into(), json!(naming.can_label));
     map.insert(
@@ -314,13 +388,13 @@ fn optional_text(
     }
 }
 
-/// A list of addresses (`["/Spend", "team-spend"]`), each shaped; `None` refuses all.
+/// A list of a member's shortcuts (`["/Exp", "e"]`), each shaped; `None` refuses all.
 pub fn names(value: &Value) -> Option<Vec<String>> {
     match value {
         Value::Null => Some(Vec::new()),
         Value::Array(list) if list.len() <= storage::MAX_LABEL_ALIASES => list
             .iter()
-            .map(|item| item.as_str().and_then(address_shaped))
+            .map(|item| item.as_str().and_then(shortcut_shaped))
             .collect(),
         _ => None,
     }
@@ -342,7 +416,7 @@ pub fn parse_body(bytes: &[u8]) -> Result<Body, &'static str> {
     };
     let allowed: &[&str] = match (personal, card.is_empty()) {
         (true, _) => &["scope", "card", "name", "aliases"],
-        (false, true) => &["scope", "card", "name", "description", "address", "aliases"],
+        (false, true) => &["scope", "card", "name", "description", "address"],
         (false, false) => &["scope", "card", "name", "description"],
     };
     if object.keys().any(|key| !allowed.contains(&key.as_str())) {
@@ -461,7 +535,7 @@ async fn label(
             .await;
         answer(
             result,
-            |label| json!({"app_id": label.app, "card": label.card, "name": label.name, "description": label.description, "address": label.address, "aliases": label.aliases}),
+            |label| json!({"app_id": label.app, "card": label.card, "name": label.name, "description": label.description, "address": label.address, "kept": label.kept}),
         )
     };
     if response.status() == StatusCode::OK {
@@ -490,13 +564,13 @@ mod tests {
     #[test]
     fn bodies_are_closed_and_shaped() {
         let body =
-            parse_body(br#"{"scope":"organization","name":"Team spend","address":"/Spend"}"#)
+            parse_body(br#"{"scope":"organization","name":"Team spend","address":"/Team-Spend"}"#)
                 .unwrap();
         assert!(!body.personal && body.card.is_empty());
         assert_eq!(body.change.name, Some(Some("Team spend".into())));
-        assert_eq!(body.change.address, Some(Some("spend".into())));
+        assert_eq!(body.change.address, Some(Some("team-spend".into())));
         assert_eq!(
-            body.change.aliases, None,
+            body.change.description, None,
             "absent keys keep the stored value"
         );
         let card = parse_body(
@@ -510,6 +584,8 @@ mod tests {
             &br#"{"scope":"organization","card":"total","address":"q3"}"#[..],
             br#"{"scope":"personal","description":"x"}"#,
             br#"{"scope":"organization","name":"x","grants":["admin"]}"#,
+            // No editable organization aliases (2026-10-31 decision).
+            br#"{"scope":"organization","aliases":["team"]}"#,
             br#"{"scope":"everyone","name":"x"}"#,
             br#"{"scope":"organization","card":"Total"}"#,
             br#"{"scope":"organization","name":"a\u0007b"}"#,
@@ -520,8 +596,11 @@ mod tests {
             parse_body(br#"{"scope":"personal","aliases":["/Exp","team spend"]}"#).err(),
             Some("invalid_name")
         );
-        let mine = parse_body(br#"{"scope":"personal","aliases":["/EXP"]}"#).unwrap();
-        assert_eq!(mine.change.aliases, Some(vec!["exp".to_owned()]));
+        let mine = parse_body(br#"{"scope":"personal","aliases":["/EXP","e"]}"#).unwrap();
+        assert_eq!(
+            mine.change.aliases,
+            Some(vec!["exp".to_owned(), "e".to_owned()])
+        );
     }
 
     #[test]
@@ -532,15 +611,91 @@ mod tests {
             ["expenses".to_owned(), "expense".to_owned()]
         );
         assert!(!rules.others.contains("expenses") && rules.others.contains("time-off"));
-        // Vendor spend's hidden /spend may become another app's address; its
-        // address may not.
-        assert!(
-            rules.other_aliases.contains("spend")
-                && rules.others.contains("vendor-spend-breakdown")
-        );
+        // Every name another app answers to, its hidden aliases among them
+        // (Vendor spend's /spend), stays with that app.
+        for name in ["spend", "vendors", "vendor-spend-breakdown", "pto", "claim"] {
+            assert_eq!(rules.others.contains(name), name != "claim", "{name}");
+        }
+        assert!(rules.titles.contains("time off") && !rules.titles.contains("expenses"));
+        assert!(rules.library && !rules_for("00000000-0000-4000-8000-00000000e0a1").library);
         for verb in ["card", "app", "rename", "alias", "weather"] {
             assert!(rules.verbs.contains(verb), "{verb}");
         }
+        // The canvas's verb aliases (review finding 4).
+        for alias in [
+            "agents", "mcp", "keys", "notes", "break", "storage", "box", "boxes", "folders",
+        ] {
+            assert!(VERBS.contains(&alias), "{alias}");
+        }
+    }
+
+    #[test]
+    fn a_hint_names_an_address_then_an_alias_then_one_title() {
+        let none: Vec<String> = Vec::new();
+        let expense_aliases = vec!["expenses".to_owned(), "expense".to_owned()];
+        let vendor_aliases = vec!["spend".to_owned(), "vendors".to_owned()];
+        let listed = [
+            // Another app labeled "Expenses": its name never wins.
+            Listed {
+                app: "vendor",
+                address: "vendor-spend-breakdown",
+                aliases: &vendor_aliases,
+                title: "Expenses",
+            },
+            Listed {
+                app: "expenses",
+                address: "team-spend",
+                aliases: &expense_aliases,
+                title: "Team spend",
+            },
+            Listed {
+                app: "notes",
+                address: "notes",
+                aliases: &none,
+                title: "Shared",
+            },
+            Listed {
+                app: "other",
+                address: "other",
+                aliases: &none,
+                title: "Shared",
+            },
+        ];
+        assert_eq!(
+            pick_listed(&listed, "/expenses").as_deref(),
+            Some("expenses")
+        );
+        assert_eq!(
+            pick_listed(&listed, "Expenses").as_deref(),
+            Some("expenses")
+        );
+        assert_eq!(
+            pick_listed(&listed, "/team-spend").as_deref(),
+            Some("expenses")
+        );
+        assert_eq!(
+            pick_listed(&listed, "team spend").as_deref(),
+            Some("expenses")
+        );
+        assert_eq!(pick_listed(&listed, "spend").as_deref(), Some("vendor"));
+        assert_eq!(
+            pick_listed(&listed, "shared"),
+            None,
+            "two apps share the title"
+        );
+        assert_eq!(pick_listed(&listed, "  "), None);
+        // The namespaced form names an address or alias, never a title.
+        assert_eq!(
+            pick_listed(&listed, "/app:expenses").as_deref(),
+            Some("expenses")
+        );
+        assert_eq!(
+            pick_listed(&listed, "app:team-spend").as_deref(),
+            Some("expenses")
+        );
+        assert_eq!(pick_listed(&listed, "app:notes").as_deref(), Some("notes"));
+        assert_eq!(pick_listed(&listed, "app:team spend"), None);
+        assert_eq!(pick_listed(&listed, "app:"), None);
     }
 
     #[test]
@@ -551,7 +706,7 @@ mod tests {
                     app: EXPENSES.into(),
                     card: String::new(),
                     name: Some("Team spend".into()),
-                    address: Some("spend".into()),
+                    address: Some("team-spend".into()),
                     ..Label::default()
                 },
                 Label {
@@ -566,7 +721,7 @@ mod tests {
                     app: EXPENSES.into(),
                     card: String::new(),
                     name: None,
-                    aliases: vec!["exp".into(), "spend".into(), "pto".into()],
+                    aliases: vec!["exp".into(), "team-spend".into(), "pto".into()],
                 },
                 MemberLabel {
                     app: EXPENSES.into(),
@@ -581,7 +736,7 @@ mod tests {
         assert_eq!(
             naming.mine,
             ["exp"],
-            "/spend and /pto are organization names"
+            "/team-spend and /pto are organization names"
         );
         assert!(!naming.can_label);
         assert_eq!(naming.cards[0].name.as_deref(), Some("Q3 spend"));
@@ -592,18 +747,18 @@ mod tests {
             &["expense".into(), "claim".into()],
             "Expenses",
         );
-        assert_eq!(address, "spend");
+        assert_eq!(address, "team-spend");
         assert_eq!(aliases, ["expenses", "expense", "claim", "exp"]);
         assert_eq!(title, "Team spend");
-        // Vendor spend no longer answers to the /spend Expenses took.
-        let vendor = super::naming(&labels, "00000000-0000-4000-8000-000000001101");
+        // Catalog names always stay with their app: Vendor spend keeps /spend.
+        let vendor = super::naming(&labels, "00000000-0000-4000-8000-000000001081");
         let (_, kept, _) = effective(
             &vendor,
             "vendor-spend-breakdown",
             &["vendor-spend".into(), "spend".into()],
             "Vendor spend",
         );
-        assert_eq!(kept, ["vendor-spend"]);
+        assert_eq!(kept, ["vendor-spend", "spend"]);
         // No labels: everything falls back to the catalog.
         let plain = super::naming(&Labels::default(), EXPENSES);
         assert_eq!(

@@ -27,8 +27,10 @@
 //! `storage::COMMAND_MARKER` and the slug. No migration: the slug lives on
 //! the saved work's existing `context`. A teammate the named work is shared
 //! with sees it in their list (the listing clause). The slug is
-//! `[a-z][a-z0-9-]{1,31}`, never `apps`, a library slug or alias, or a name
-//! the member already sees (422 `name_taken`).
+//! `[a-z][a-z0-9-]{1,31}`, never `apps`, a verb, a library slug or alias,
+//! an organization label's address or alias (APP-121, whoever can open that
+//! app; judged under the naming lock in `create_work`) or a name the member
+//! already sees (422 `name_taken`).
 //!
 //! Refusals: the uniform 404 for no session, a work the member may not open
 //! and a member storage denies; 403 `cross_site`; 413; 422 `invalid_name`;
@@ -265,6 +267,8 @@ async fn commands(stores: &storage::Stores, member: &TrustedRequest) -> Result<V
                 .collect()
         };
         let mut entry_json = json!({
+            // APP-121: the full form `app:<address>` always names this app.
+            "namespaced": format!("app:{address}"),
             "slug": address,
             "aliases": aliases,
             "title": title,
@@ -283,6 +287,7 @@ async fn commands(stores: &storage::Stores, member: &TrustedRequest) -> Result<V
     for named in stores.data.named_works(member).await? {
         let record = !named.work.collections.is_empty();
         listed.push(json!({
+            "namespaced": format!("app:{}", named.slug),
             "slug": named.slug,
             "aliases": [],
             "title": named.work.title,
@@ -409,19 +414,10 @@ async fn name(
     {
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "name_taken");
     }
-    // APP-121: nor an address or alias the organization gave an app.
-    match stores.workspace.labels(&member).await {
-        Ok(labels)
-            if labels
-                .organization
-                .iter()
-                .any(|l| l.address.as_ref() == Some(&slug) || l.aliases.contains(&slug)) =>
-        {
-            return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "name_taken");
-        }
-        Ok(_) => {}
-        Err(error) => return refusal(&error),
-    }
+    // APP-121: nor an address or alias the organization gave any app
+    // (whoever can open it): `create_work` judges that under the
+    // organization's naming lock, which the label writes take too, and
+    // refuses it as below (Denied: `name_taken`).
     let lock = naming_lock(member.organization());
     let _naming = lock.lock().await;
     match stores.data.named_works(&member).await {

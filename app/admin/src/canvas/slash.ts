@@ -32,6 +32,13 @@
 // (`showChooser`) lives here too: the top apps plus "Build something new",
 // one click proceeds.
 //
+// APP-121: the full form `/app:<name>`, `/card:<x>`, `/widget:<kind>`,
+// `/folder:<name>` runs exactly what it names (`findNamespaced`); typing
+// `/app:` lists the apps (verb-shadowed ones as `/app:notes`), `/card:`,
+// `/widget:` and `/folder:` their verb's suggestions. Rows and hints show an
+// app's short form when unambiguous, else the namespaced one (`appForm`),
+// and a member's own shortcut reads "/e → app:expenses (your shortcut)".
+//
 // Nothing from the server is rendered as markup: titles and purposes are
 // text nodes; ids are checked UUIDs.
 import { submitAction } from './actions';
@@ -39,8 +46,8 @@ import { addressLine } from './address-chip';
 import { boardWorks, placeWork } from './board';
 import { openCommandSheet } from './command-sheet';
 import {
-  APPS_SECTION, argumentHint, findCommand, type CardLabel, groupCommands, matchAddresses, matchCommands, registerCommands, setAddresses, signature,
-  type Address, type CanvasCommand, type CommandGroup, type Runnable,
+  addressRowName, appForm, APPS_SECTION, argumentHint, findCommand, type CardLabel, groupCommands, matchAddresses, matchAppNamespace, matchCommands,
+  registerCommands, setAddresses, signature, type Address, type CanvasCommand, type CommandGroup, type Runnable,
 } from './command-registry';
 import { submitIntent, type Choice } from './compose';
 import { isDismissKey, showDockCard } from './dock-card';
@@ -106,7 +113,7 @@ export type ServerCommand = {
   kind: 'library' | 'saved'; app_id: string; work_id?: string; record: boolean;
   hint: string; examples: string[];
   /** APP-121: the organization's labels and the member's own shortcuts (optional: an older server sends none). */
-  description?: string; org_aliases?: string[]; mine?: string[]; can_label?: boolean; cards?: CardLabel[];
+  description?: string; kept?: string[]; mine?: string[]; can_label?: boolean; cards?: CardLabel[];
 };
 
 /** The hint when the server sent none (an older server): what words can do. */
@@ -128,7 +135,7 @@ export function serverAddress(entry: ServerCommand): Address {
     args: [{ name: hint, kind: 'text', required: false }],
     examples: entry.examples.length ? entry.examples : [`/${entry.slug}`],
     description: entry.description ?? '',
-    orgAliases: entry.org_aliases ?? [],
+    kept: entry.kept ?? [],
     mine: entry.mine ?? [],
     canLabel: entry.can_label === true,
     cards: entry.cards ?? [],
@@ -156,7 +163,8 @@ export function serverAddress(entry: ServerCommand): Address {
   };
 }
 
-const NAME = /^[a-z][a-z0-9-]{1,31}$/;
+// APP-121: a member's own shortcut may be one letter (`/e`).
+const NAME = /^[a-z][a-z0-9-]{0,31}$/;
 const names = (value: unknown, limit: number): string[] =>
   (Array.isArray(value) ? value.filter((a): a is string => typeof a === 'string' && NAME.test(a)).slice(0, limit) : []);
 const short = (value: unknown, limit: number): string => (typeof value === 'string' ? value.slice(0, limit) : '');
@@ -196,7 +204,7 @@ export function parseCommands(body: unknown): ServerCommand[] {
         ? entry.examples.filter((e): e is string => typeof e === 'string' && e.startsWith('/')).slice(0, 4).map((e) => e.slice(0, 200))
         : [],
       description: short(entry.description, 280),
-      org_aliases: names(entry.org_aliases, 8),
+      kept: names(entry.kept, 8),
       mine: names(entry.mine, 8),
       can_label: entry.can_label === true,
       cards: parseCards(entry.cards),
@@ -222,7 +230,7 @@ export function ensureCommands(): Promise<void> {
 
 /** `/name rest`: runs the command, or explains how to see the list. */
 export async function runSlash(text: string, report: Report): Promise<void> {
-  const match = text.match(/^\/([a-z0-9-]{1,32})(?:\s+([\s\S]*))?$/i);
+  const match = text.match(/^\/([a-z0-9-]{1,32}(?::[a-z0-9][a-z0-9.-]{0,80})?)(?:\s+([\s\S]*))?$/i);
   if (!match) {
     report('Type / to see your commands.');
     return;
@@ -338,7 +346,25 @@ export function showChooser(text: string, choices: Choice[], report: Report): vo
 
 // --- The autocomplete under the intent bar ---
 
-type Entry = { kind: 'command'; command: Runnable } | { kind: 'completion'; completion: Completion };
+/** A command row; `text` is what it fills and runs (an app's form, `/app:notes`), else `/<slug>`. */
+type Entry = { kind: 'command'; command: Runnable; text?: string } | { kind: 'completion'; completion: Completion };
+
+/** APP-121: the namespace being typed (`/app:ex` → app, `ex`), if any (exported for the tests). */
+export function namespacePrefix(value: string): { space: 'app' | 'card' | 'widget' | 'folder'; prefix: string } | null {
+  const match = value.match(/^\/(app|card|widget|folder):([a-z0-9.-]*)$/i);
+  return match ? { space: (match[1] ?? '').toLowerCase() as 'app', prefix: match[2] ?? '' } : null;
+}
+
+/** APP-121: a verb's suggestion in its full form (`/card 3.2` → `/card:3.2`); a fill-only one (`/folder new `) stays. */
+export function namespaced(space: string, completion: Completion): Completion {
+  const rest = completion.value.startsWith(`/${space} `) ? completion.value.slice(space.length + 2) : '';
+  return rest && /^[a-z0-9][a-z0-9.-]*$/i.test(rest) ? { ...completion, value: `/${space}:${rest}` } : completion;
+}
+
+/** APP-121: the `/app:` list for `prefix` (exported for the tests): every app, as `/app:<address>`. */
+export function slashAppNamespace(prefix: string): Address[] {
+  return matchAppNamespace(prefix);
+}
 
 /** Wires the `/` autocomplete onto the intent bar (once). */
 export function startSlash(document_: Document): void {
@@ -404,8 +430,9 @@ export function startSlash(document_: Document): void {
   const accept = (entry: Entry, key: 'Tab' | 'Enter' | 'click') => {
     if (entry.kind === 'command') {
       // A command with no arguments runs on Enter; otherwise its name fills the bar.
-      if (key !== 'Tab' && entry.command.args.length === 0) run(`/${entry.command.slug}`);
-      else fill(`/${entry.command.slug} `);
+      const text = entry.text ?? `/${entry.command.slug}`;
+      if (key !== 'Tab' && entry.command.args.length === 0) run(text);
+      else fill(`${text} `);
       return;
     }
     const value = entry.completion.value;
@@ -468,19 +495,21 @@ export function startSlash(document_: Document): void {
       sync();
       return;
     }
-    // APP-122: `/<app>.<card>` lists the app's cards; `/<app>.<card> words` shapes it.
-    const dotted = value.match(/^\/([a-z0-9][a-z0-9-]*\.[a-z0-9-]*)(\s+[\s\S]*)?$/i);
-    if (dotted) {
-      const words = dotted[2] !== undefined;
+    // APP-122: `/<app>.<card>` lists the app's cards; `/<app>.<card> words`
+    // (and its full form `/card:<app>.<card> words`) shapes it. `/card:x`
+    // with no words is APP-121's `/card:` list, below.
+    const dotted = value.match(/^\/(card:)?([a-z0-9][a-z0-9-]*\.[a-z0-9-]*)(\s+[\s\S]*)?$/i);
+    if (dotted && (!dotted[1] || dotted[3] !== undefined)) {
+      const words = dotted[3] !== undefined;
       hintKey = `.${words}`;
       hint.replaceChildren(
-        el(document_, 'code', { class: 'cv-slash-sig' }, `/${dotted[1]} `, el(document_, 'mark', {}, '<what it should show>')),
+        el(document_, 'code', { class: 'cv-slash-sig' }, `/${dotted[1] ?? ''}${dotted[2]} `, el(document_, 'mark', {}, '<what it should show>')),
         el(document_, 'span', { class: 'cv-slash-note' }, words ? 'Shape: a preview first, then Apply' : 'A card: Enter places it, a space then words shape it'),
         el(document_, 'span', { class: 'cv-slash-example' }, 'e.g. ', el(document_, 'code', {}, '/expenses.ledger only red invoices')));
       hint.hidden = false;
       describe(true);
       const dot = completers.get('.');
-      if (!words && dot) renderCompletions(dot.complete(dotted[1] ?? ''), dot.select);
+      if (!words && dot) renderCompletions(dot.complete(dotted[2] ?? ''), dot.select);
       else {
         entries = [];
         list.hidden = true;
@@ -489,7 +518,7 @@ export function startSlash(document_: Document): void {
       sync();
       return;
     }
-    const argument = value.match(/^\/([a-z0-9-]+)\s+([\s\S]*)$/i);
+    const argument = value.match(/^\/([a-z0-9-]+(?::[a-z0-9][a-z0-9.-]*)?)\s+([\s\S]*)$/i);
     if (argument) {
       const command = findCommand(argument[1] ?? '');
       const rest = argument[2] ?? '';
@@ -509,6 +538,27 @@ export function startSlash(document_: Document): void {
       return;
     }
     hideHint();
+    // APP-121: `/app:` lists apps; `/card:`, `/widget:`, `/folder:` their verb's suggestions.
+    const spaced = namespacePrefix(value);
+    if (spaced?.space === 'app') {
+      const found = slashAppNamespace(spaced.prefix);
+      entries = found.map((address) => ({ kind: 'command', command: address, text: `/app:${address.slug}` }));
+      list.replaceChildren(...found.map((address, index) => option(entries[index]!, index,
+        el(document_, 'span', { class: 'cv-slash-name' }, `/app:${address.slug}`),
+        el(document_, 'span', { class: 'cv-slash-title' }, address.title),
+        el(document_, 'span', { class: 'cv-slash-purpose' }, address.hint))));
+      list.hidden = found.length === 0;
+      highlight(found.length ? 0 : -1);
+      sync();
+      return;
+    }
+    if (spaced) {
+      const completer = completers.get(spaced.space);
+      if (completer) renderCompletions(completer.complete(spaced.prefix).map((completion) => namespaced(spaced.space, completion)), completer.select);
+      else close();
+      sync();
+      return;
+    }
     const match = value.match(/^\/([a-z0-9-]*)$/i);
     if (!match) {
       close();
@@ -532,10 +582,10 @@ export function startSlash(document_: Document): void {
     const { title: appsTitle, addresses } = slashAddressSection(prefix);
     if (addresses.length) {
       nodes.push(section('cv-slash-cat-apps', appsTitle, addresses.map((address) => {
-        const entry: Entry = { kind: 'command', command: address };
+        const entry: Entry = { kind: 'command', command: address, text: `/${appForm(address)}` };
         entries.push(entry);
         return option(entry, entries.length - 1,
-          el(document_, 'span', { class: 'cv-slash-name' }, `/${address.slug}`),
+          el(document_, 'span', { class: 'cv-slash-name' }, addressRowName(address, prefix)),
           el(document_, 'span', { class: 'cv-slash-title' }, address.title),
           el(document_, 'span', { class: 'cv-slash-purpose' }, address.hint));
       })));
@@ -566,7 +616,7 @@ export function startSlash(document_: Document): void {
       const entry = entries[active];
       if (!entry || event.shiftKey) return;
       // Enter on a fully typed command name runs it as typed.
-      if (event.key === 'Enter' && entry.kind === 'command' && /^\/[a-z0-9-]+$/i.test(input.value.trim()) && findCommand(input.value.trim().slice(1))?.slug === entry.command.slug) {
+      if (event.key === 'Enter' && entry.kind === 'command' && /^\/[a-z0-9-]+(?::[a-z0-9][a-z0-9.-]*)?$/i.test(input.value.trim()) && findCommand(input.value.trim().slice(1))?.slug === entry.command.slug) {
         event.preventDefault();
         run(input.value.trim());
         return;

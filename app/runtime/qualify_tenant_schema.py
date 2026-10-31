@@ -260,13 +260,13 @@ BOX_GRANTS = set().union(
 # SELECT and INSERT and the UPDATE of the label columns; no DELETE.
 LABEL_TABLES = ('app_labels','member_labels')
 LABEL_COLUMNS = {
-    'app_labels': ('organization_id','app_id','card','name','description','address','aliases','updated_by','updated_at'),
+    'app_labels': ('organization_id','app_id','card','name','description','address','kept','updated_by','updated_at'),
     'member_labels': ('organization_id','principal_id','app_id','card','name','aliases','updated_at'),
 }
 LABEL_GRANTS = set().union(
     *(_role_columns('genui_workspace',table,'SELECT',*columns) for table,columns in LABEL_COLUMNS.items()),
     *(_role_columns('genui_workspace',table,'INSERT',*columns) for table,columns in LABEL_COLUMNS.items()),
-    _role_columns('genui_workspace','app_labels','UPDATE','name','description','address','aliases','updated_by','updated_at'),
+    _role_columns('genui_workspace','app_labels','UPDATE','name','description','address','kept','updated_by','updated_at'),
     _role_columns('genui_workspace','member_labels','UPDATE','name','aliases','updated_at'),
 )
 
@@ -1138,10 +1138,13 @@ def session_checks(pg, passed, denied):
           JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",
                        (list(LABEL_TABLES),)).fetchall()
         assert rows==[(t,True,True,'genui_owner') for t in sorted(LABEL_TABLES)],rows
-        rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
+        rows=c.execute("""SELECT tablename,policyname,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
           AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(LABEL_TABLES),)).fetchall()
-        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in sorted(LABEL_TABLES)],rows
-    passed('0014 naming relations (organization labels, personal labels) are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy',
+        principal="(principal_id = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid)"
+        assert rows==[('app_labels','tenant_scope','PERMISSIVE',['public'],'ALL',policy,policy),
+                      ('member_labels','member_labels_principal','RESTRICTIVE',['genui_workspace'],'ALL',principal,principal),
+                      ('member_labels','tenant_scope','PERMISSIVE',['public'],'ALL',policy,policy)],rows
+    passed('0014 naming relations (organization labels, personal labels) are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the workspace reads and writes only the scoped principal\'s personal labels (RESTRICTIVE member_labels_principal)',
            tables=list(LABEL_TABLES))
     flow=("""INSERT INTO genui.prelogin_flows(organization_id,flow_id,cookie_digest,state_digest,kind,code_verifier_ciphertext,client_address_class,
       created_at,expires_at) VALUES (%s,%s,%s,%s,'signin',%s,'v4:192.0.2.1',now(),now()+interval '10 minutes')""",
@@ -1789,6 +1792,7 @@ def qualify():
                 assert c.execute("""SELECT count(*) FROM pg_policies WHERE schemaname='genui' AND policyname<>'tenant_scope'
                   AND NOT (permissive='RESTRICTIVE' AND tablename IN ('audit_events','audit_heads'))
                   AND NOT (permissive='RESTRICTIVE' AND tablename='saved_work' AND policyname='saved_work_creator')
+                  AND NOT (permissive='RESTRICTIVE' AND tablename='member_labels' AND policyname='member_labels_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename IN ('command_claims','command_outcomes','internal_record_revisions'))""").fetchone()==(0,)
                 # 0007's RESTRICTIVE principal bindings, exactly (checked in detail by command_checks).
                 assert set(c.execute("""SELECT tablename,policyname,cmd FROM pg_policies WHERE schemaname='genui' AND permissive='RESTRICTIVE'

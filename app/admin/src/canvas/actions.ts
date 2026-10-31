@@ -12,6 +12,7 @@
 // only in a JSON body, never in a URL; the card shows typed values the
 // server composed, never the model's text.
 import { addressChip, addressFor } from './address-chip';
+import { appForm } from './command-registry';
 import { focusCard, placeWork, refreshGroupRecords, workCard } from './board';
 import { showTiming, type Step } from './timing';
 import { routeSentence } from './sentences';
@@ -245,7 +246,7 @@ function confirmCard(document_: Document, draft: Draft, utterance: string, recei
       ...(draft.flags ?? []).map((flag) => el(document_, 'p', { class: 'cv-flag', 'data-state': flag.state }, flag.label)),
       el(document_, 'p', { class: 'cv-confirm-note' }, `${understoodMs !== null ? `Understood in ${understoodMs} ms. ` : ''}Nothing is written until you confirm. The command is committed through the audited path with a server-minted key.`),
       // APP-120: which app this goes to, by its address ("via /expenses").
-      address ? el(document_, 'p', { class: 'cv-confirm-via' }, 'via ', addressChip(document_, address.slug, { interactive: false })) : null,
+      address ? el(document_, 'p', { class: 'cv-confirm-via' }, 'via ', addressChip(document_, appForm(address), { interactive: false })) : null,
       el(document_, 'div', { class: 'cv-confirm-actions' }, confirm, edit, cancel));
     let close = () => undefined as void;
     const done = (choice: 'confirm' | 'edit' | 'cancel') => {

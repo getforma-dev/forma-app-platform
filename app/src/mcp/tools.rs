@@ -752,35 +752,51 @@ async fn catalog_of(
     Ok((context.library, catalog))
 }
 
-/// The catalog app an agent's hint names: its id, its title or its schema
-/// (case-insensitive), else the one app whose title contains the hint.
-/// Anything else (a foreign organization's app id among them) is nothing.
 /// APP-121: the app id a listed name or address names (`Team spend`,
-/// `/spend`, `Expenses`, `/expense`), as `forma_list_apps` shows them.
+/// `/team-spend`, `Expenses`, `/expense`), as `forma_list_apps` shows them:
+/// an exact address first, then an alias, then a display name only when one
+/// app has it (`composer::labels::pick_listed`), so another app's label
+/// never takes a name from the app that answers to it.
 fn listed_hint(
     library: &[crate::storage::LibraryApp],
     labels: &crate::storage::Labels,
     hint: &str,
 ) -> Option<String> {
-    let wanted = hint.trim().trim_start_matches('/').to_lowercase();
-    library.iter().find_map(|app| {
-        let naming = crate::composer::labels::naming(labels, &app.app);
-        let display = crate::composer::matcher::display_title(&app.definition_digest)
-            .unwrap_or_else(|| app.title.clone());
-        let (address, aliases, title) = crate::composer::matcher::command(app)
-            .map(|(slug, aliases)| {
-                crate::composer::labels::effective(&naming, &slug, &aliases, &display)
-            })
-            .unwrap_or((
-                String::new(),
-                Vec::new(),
-                naming.name.clone().unwrap_or(display),
-            ));
-        (title.to_lowercase() == wanted || address == wanted || aliases.contains(&wanted))
-            .then(|| app.app.clone())
-    })
+    let named: Vec<(String, String, Vec<String>, String)> = library
+        .iter()
+        .map(|app| {
+            let naming = crate::composer::labels::naming(labels, &app.app);
+            let display = crate::composer::matcher::display_title(&app.definition_digest)
+                .unwrap_or_else(|| app.title.clone());
+            let (address, aliases, title) = crate::composer::matcher::command(app)
+                .map(|(slug, aliases)| {
+                    crate::composer::labels::effective(&naming, &slug, &aliases, &display)
+                })
+                .unwrap_or((
+                    String::new(),
+                    Vec::new(),
+                    naming.name.clone().unwrap_or(display),
+                ));
+            (app.app.clone(), address, aliases, title)
+        })
+        .collect();
+    let listed: Vec<crate::composer::labels::Listed<'_>> = named
+        .iter()
+        .map(
+            |(app, address, aliases, title)| crate::composer::labels::Listed {
+                app,
+                address,
+                aliases,
+                title,
+            },
+        )
+        .collect();
+    crate::composer::labels::pick_listed(&listed, hint)
 }
 
+/// The catalog app an agent's hint names: its id, its title or its schema
+/// (case-insensitive), else the one app whose title contains the hint.
+/// Anything else (a foreign organization's app id among them) is nothing.
 fn app_for_hint<'a>(catalog: &'a [CatalogApp], hint: &str) -> Option<&'a CatalogApp> {
     let wanted = hint.trim().to_lowercase();
     if wanted.is_empty() {

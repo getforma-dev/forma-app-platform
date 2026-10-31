@@ -1,19 +1,26 @@
 -- ADR-011 pitch, APP-121 (pivot/naming): user naming. Additive only.
 --
 -- * app_labels: the organization's labels of an app (card '') or of one of
---   its cards (card = the card's name within the app, `ledger`, `total`):
---   a display name and a description, and for the app its address (`/spend`)
---   and kept aliases. Written by the app's owner or a holder of
---   `admin_policy`, audited `app.labeled` on the workspace chain. A label
---   never touches the definition, its revision, its publication or any
---   receipt; without a row everything falls back to the catalog's names.
+--   its cards (card = the card's name within the app, `ledger`, `totals`):
+--   a display name and a description, and for the app its address
+--   (`/team-spend`) and its kept addresses (`kept`: the addresses it had
+--   before a rename, kept automatically so nothing breaks; never edited
+--   directly, and there are no other organization aliases). Written by
+--   the app's owner or a holder of `admin_policy`, audited `app.labeled`
+--   on the workspace chain. A label never touches the definition, its
+--   revision, its publication or any receipt; without a row everything
+--   falls back to the catalog's names.
 --   Addresses are unique in an organization (the index below; addresses and
---   aliases are lowercase by shape, so the uniqueness is case-insensitive);
---   aliases and the catalog's names are checked by the command under a
---   per-organization advisory lock.
+--   kept addresses are lowercase by shape, so the uniqueness is
+--   case-insensitive); kept addresses, the catalog's names and saved works'
+--   names are checked by the command under a per-organization advisory lock.
 -- * member_labels: one member's own shortcuts (`/exp` → an app, `/q3` → a
---   card) and own card names, visible to that member only, audited
---   `app.aliased`. An organization address always wins over a personal alias.
+--   card; one letter is enough, `/e`) and own card names, visible to that
+--   member only, audited `app.aliased`. An organization address always
+--   wins over a personal alias.
+--   Defence in depth: a RESTRICTIVE policy binds genui_workspace to the
+--   scoped principal's own rows (`genui.principal_id`, set by every member
+--   transaction), as saved_work_creator does for saved work.
 --
 -- Both relations are organization-leading, state ENABLE/FORCE RLS and the
 -- tenant_scope policy (D7.3, D7.5). genui_workspace gets column SELECT and
@@ -34,13 +41,13 @@ CREATE TABLE genui.app_labels (
  name text CHECK (length(name) BETWEEN 1 AND 60 AND name !~ '[[:cntrl:]]'),
  description text CHECK (length(description) BETWEEN 1 AND 280 AND description !~ '[[:cntrl:]]'),
  address text CHECK (address ~ '^[a-z][a-z0-9-]{1,31}$'),
- aliases text[] NOT NULL DEFAULT '{}'::text[] CHECK (cardinality(aliases) <= 8
-  AND array_to_string(aliases,',') ~ '^([a-z][a-z0-9-]{1,31}(,[a-z][a-z0-9-]{1,31})*)?$'),
+ kept text[] NOT NULL DEFAULT '{}'::text[] CHECK (cardinality(kept) <= 8
+  AND array_to_string(kept,',') ~ '^([a-z][a-z0-9-]{1,31}(,[a-z][a-z0-9-]{1,31})*)?$'),
  updated_by uuid NOT NULL, updated_at timestamptz NOT NULL,
  PRIMARY KEY (organization_id,app_id,card),
  FOREIGN KEY (organization_id,app_id) REFERENCES genui.apps,
  FOREIGN KEY (organization_id,updated_by) REFERENCES genui.principals,
- CHECK (card = '' OR (address IS NULL AND cardinality(aliases) = 0))
+ CHECK (card = '' OR (address IS NULL AND cardinality(kept) = 0))
 );
 CREATE UNIQUE INDEX app_labels_one_address ON genui.app_labels (organization_id,address) WHERE address IS NOT NULL;
 
@@ -49,7 +56,7 @@ CREATE TABLE genui.member_labels (
  card text NOT NULL CHECK (card = '' OR card ~ '^[a-z0-9][a-z0-9-]{0,47}$'),
  name text CHECK (length(name) BETWEEN 1 AND 60 AND name !~ '[[:cntrl:]]'),
  aliases text[] NOT NULL DEFAULT '{}'::text[] CHECK (cardinality(aliases) <= 8
-  AND array_to_string(aliases,',') ~ '^([a-z][a-z0-9-]{1,31}(,[a-z][a-z0-9-]{1,31})*)?$'),
+  AND array_to_string(aliases,',') ~ '^([a-z][a-z0-9-]{0,31}(,[a-z][a-z0-9-]{0,31})*)?$'),
  updated_at timestamptz NOT NULL,
  PRIMARY KEY (organization_id,principal_id,app_id,card),
  FOREIGN KEY (organization_id,principal_id) REFERENCES genui.principals,
@@ -67,10 +74,15 @@ BEGIN
  END LOOP;
 END $$;
 
+-- The workspace reads and writes only the scoped principal's own personal labels.
+CREATE POLICY member_labels_principal ON genui.member_labels AS RESTRICTIVE FOR ALL TO genui_workspace
+ USING (principal_id = nullif(current_setting('genui.principal_id',true),'')::uuid)
+ WITH CHECK (principal_id = nullif(current_setting('genui.principal_id',true),'')::uuid);
+
 -- genui_workspace: column reads and inserts, the label columns' UPDATE; no DELETE.
-GRANT SELECT(organization_id,app_id,card,name,description,address,aliases,updated_by,updated_at),
- INSERT(organization_id,app_id,card,name,description,address,aliases,updated_by,updated_at),
- UPDATE(name,description,address,aliases,updated_by,updated_at) ON genui.app_labels TO genui_workspace;
+GRANT SELECT(organization_id,app_id,card,name,description,address,kept,updated_by,updated_at),
+ INSERT(organization_id,app_id,card,name,description,address,kept,updated_by,updated_at),
+ UPDATE(name,description,address,kept,updated_by,updated_at) ON genui.app_labels TO genui_workspace;
 GRANT SELECT(organization_id,principal_id,app_id,card,name,aliases,updated_at),
  INSERT(organization_id,principal_id,app_id,card,name,aliases,updated_at),
  UPDATE(name,aliases,updated_at) ON genui.member_labels TO genui_workspace;

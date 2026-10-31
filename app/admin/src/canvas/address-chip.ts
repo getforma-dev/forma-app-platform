@@ -6,7 +6,7 @@
 // or approve one") and the confirm card's footer ("via /expenses"). A
 // clickable chip puts "/expenses " in the bar and focuses it, so people learn
 // the address by clicking it. Built with `el()` only: text nodes, no markup.
-import { addressList, type Address } from './command-registry';
+import { allAddresses, appForm, type Address } from './command-registry';
 import { el } from './render';
 
 /** Puts `text` in the intent bar, focused with the caret at the end; the autocomplete then shows its hint. */
@@ -46,12 +46,12 @@ export function aliasNote(document_: Document, aliases: string[]): HTMLElement |
 /** "/expenses — Expenses · file a claim or approve one": the bar's hint for an address. */
 export function addressLine(document_: Document, address: Pick<Address, 'slug' | 'title' | 'hint'>): HTMLElement {
   return el(document_, 'span', { class: 'cv-addr-line' },
-    addressChip(document_, address.slug, { interactive: false }),
+    addressChip(document_, appForm(address), { interactive: false }),
     el(document_, 'span', { class: 'cv-addr-what' }, ` — ${address.title}${address.hint ? ` · ${address.hint}` : ''}`));
 }
 
 /** The address an app (or a saved work) answers to: a saved app by its work, a library app by its id. */
-export function addressFor(app: string, work = '', list: Address[] = addressList()): Address | undefined {
+export function addressFor(app: string, work = '', list: Address[] = allAddresses()): Address | undefined {
   return (work ? list.find((address) => address.kind === 'saved' && address.work === work) : undefined)
     ?? list.find((address) => address.kind === 'library' && address.app === app);
 }
@@ -61,15 +61,16 @@ export function addressFor(app: string, work = '', list: Address[] = addressList
  * (the card carries `data-app` and `data-work`, set by the board). Idempotent:
  * an existing chip is replaced when the address changed, removed when none.
  */
-export function decorateAppCard(card: HTMLElement, list: Address[] = addressList()): void {
+export function decorateAppCard(card: HTMLElement, list: Address[] = allAddresses()): void {
   const document_ = card.ownerDocument;
   const address = addressFor(card.dataset.app ?? '', card.dataset.work ?? '', list);
+  const form = address ? appForm(address) : undefined;
   const existing = card.querySelector<HTMLElement>('.cv-addr-chip');
-  if (existing?.dataset.address === address?.slug) return;
+  if (existing?.dataset.address === form) return;
   existing?.remove();
-  if (!address) return;
+  if (!address || !form) return;
   const title = card.querySelector('h2');
-  const chip = addressChip(document_, address.slug);
+  const chip = addressChip(document_, form);
   chip.classList.add('cv-app-addr');
   if (title) title.after(chip);
   else card.prepend(chip);
@@ -77,6 +78,6 @@ export function decorateAppCard(card: HTMLElement, list: Address[] = addressList
 
 /** Every app card on the page (addresses arrive after the cards). */
 export function decorateAppCards(document_: Document): void {
-  const list = addressList();
+  const list = allAddresses();
   for (const card of document_.querySelectorAll<HTMLElement>('.cv-app')) if (card.dataset.app) decorateAppCard(card, list);
 }
