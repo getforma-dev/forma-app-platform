@@ -552,7 +552,36 @@ fn integer_text(raw: &str) -> Option<String> {
 
 /// Resolves `parsed` for `member` (module notes). `today` is the member's
 /// date for defaults.
+/// As [`resolve_draft`], with the app's display name (APP-121: the
+/// organization's label, else the catalog's display title) on the confirm
+/// card and in Slack, never the stored definition's title.
+#[allow(clippy::too_many_arguments)]
 pub async fn resolve(
+    stores: &Stores,
+    member: &TrustedRequest,
+    library: &[LibraryApp],
+    catalog: &[CatalogApp],
+    parsed: &Parsed,
+    utterance: &str,
+    today: &str,
+) -> Result<Resolution, Refusal> {
+    let mut resolution =
+        resolve_draft(stores, member, library, catalog, parsed, utterance, today).await?;
+    let (app, title) = match &mut resolution {
+        Resolution::Draft(draft) => (draft.app.clone(), &mut draft.title),
+        Resolution::Open { app, title, .. } => (app.clone(), title),
+        _ => return Ok(resolution),
+    };
+    let fallback = library
+        .iter()
+        .find(|l| l.app == app)
+        .and_then(|l| crate::composer::matcher::display_title(&l.definition_digest))
+        .unwrap_or_else(|| title.clone());
+    *title = crate::composer::labels::title_of(stores, member, &app, fallback).await;
+    Ok(resolution)
+}
+
+async fn resolve_draft(
     stores: &Stores,
     member: &TrustedRequest,
     library: &[LibraryApp],

@@ -3,7 +3,7 @@
 // APP-119: commands are verbs, apps are addresses, from the server with a
 // derived hint and examples; `/slug …` still runs them. The right pane has
 // three tabs, Library, Commands and Shortcuts: `?` is Shortcuts.
-// APP-120: one grammar. `/` lists the twelve verbs in four groups (Place,
+// APP-120: one grammar (APP-121 adds /rename and /alias: fourteen). `/` lists the verbs in four groups (Place,
 // Arrange, Make, Help) and no address; the first letter adds the Apps
 // section; the old widget verbs and `/help` are hidden aliases; a bare
 // `/<address>` places the app and `/<address> words` tells it something.
@@ -45,7 +45,8 @@ async function seeded() {
   const slash = await import('../src/canvas/slash.ts');
   const library = await import('../src/canvas/library.ts');
   const widgets = await import('../src/canvas/widgets/index.ts');
-  // The twelve verbs as the modules register them (some describe themselves,
+  const naming = await import('../src/canvas/naming.ts');
+  // The fourteen verbs as the modules register them (some describe themselves,
   // some rely on KNOWN), and the hidden aliases.
   registry.registerCommands([
     library.APPS_COMMAND, library.CARD_COMMAND, library.APP_COMMAND, library.FOCUS_COMMAND,
@@ -59,20 +60,21 @@ async function seeded() {
     { slug: 'shortcuts', aliases: ['keys'], title: 'Shortcuts', purpose: 'Every action', run: noop },
     { slug: 'agent', aliases: ['agents', 'mcp'], title: 'Connect an agent', purpose: 'Mint a token', run: noop },
     slash.COMMANDS,
+    naming.RENAME_COMMAND, naming.ALIAS_COMMAND,
   ]);
   registry.setAddresses(slash.parseCommands(SERVER).map(slash.serverAddress));
   return { registry, slash };
 }
 
 const slugsOf = (groups: { commands: { slug: string }[] }[]) => groups.flatMap((group) => group.commands.map((command) => command.slug));
-const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'apps', 'commands', 'shortcuts', 'agent'];
+const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'rename', 'alias', 'apps', 'commands', 'shortcuts', 'agent'];
 
-test('/ lists the 12 verbs in four groups and no addresses; a first letter adds the Apps section (APP-120)', async () => {
+test('/ lists the 14 verbs in four groups and no addresses; a first letter adds the Apps section (APP-120)', async () => {
   const { registry, slash } = await seeded();
   const { sheetGroups } = await import('../src/canvas/command-sheet.ts');
   const groups = slash.slashGroups('');
   assert.deepEqual(slugsOf(groups), VERBS);
-  assert.deepEqual(groups.map((group) => [group.category, group.commands.length]), [['Place', 3], ['Arrange', 4], ['Make', 1], ['Help', 4]]);
+  assert.deepEqual(groups.map((group) => [group.category, group.commands.length]), [['Place', 3], ['Arrange', 4], ['Make', 3], ['Help', 4]]);
   assert.deepEqual(slash.slashAddresses('', () => true), [], 'no app under / alone, even on the canvas');
   assert.deepEqual(slash.slashAddressSection('', () => true).addresses, []);
   // The Commands tab: the same four groups; hidden aliases show on their verb's row only.

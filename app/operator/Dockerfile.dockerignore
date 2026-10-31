@@ -30,6 +30,7 @@
 !app/migrations/0011_boxes.sql
 !app/migrations/0012_review_fixes.sql
 !app/migrations/0013_agent_governance.sql
+!app/migrations/0014_labels.sql
 !app/migrations/0009_slack_links.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
@@ -46,6 +47,7 @@
 !app/migrations/catalog-v11.json
 !app/migrations/catalog-v12.json
 !app/migrations/catalog-v13.json
+!app/migrations/catalog-v14.json
 !app/certs/rds-global-bundle.pem
 !contracts/validate.py
 !contracts/schema.json

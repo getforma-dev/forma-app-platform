@@ -587,6 +587,9 @@ async fn campaign() {
     assert_eq!(apps["library"].as_array().unwrap().len(), 1);
     assert_eq!(apps["library"][0]["app_id"], EXPENSE_APP);
     assert_eq!(apps["library"][0]["files_records"], true);
+    // APP-121: the agent reads the name and address people see.
+    assert_eq!(apps["library"][0]["title"], "Expenses");
+    assert_eq!(apps["library"][0]["address"], "/expenses");
     let fields: Vec<&str> = apps["library"][0]["record_fields"]
         .as_array()
         .unwrap()

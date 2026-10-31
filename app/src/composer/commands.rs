@@ -234,6 +234,8 @@ fn library_copy(
 async fn commands(stores: &storage::Stores, member: &TrustedRequest) -> Result<Vec<Value>, Error> {
     let context = stores.workspace.composer_context(member).await?;
     let catalog = crate::actions::prompt::catalog(&context.library);
+    // APP-121: the organization's labels and the member's own.
+    let labels = stores.workspace.labels(member).await?;
     let mut listed = Vec::new();
     for app in &context.library {
         let Some((slug, aliases)) = super::matcher::command(app) else {
@@ -244,20 +246,39 @@ async fn commands(stores: &storage::Stores, member: &TrustedRequest) -> Result<V
                 && (entry.create_command().is_some() || entry.decide_command().is_some())
         });
         let (hint, examples) = library_copy(app, &slug, entry);
-        // APP-120: the catalog's display title, else the definition's.
+        // APP-120: the catalog's display title, else the definition's;
+        // APP-121: the organization's label first, and its address,
+        // kept aliases and the member's own shortcuts.
         let title = super::matcher::display_title(&app.definition_digest)
             .unwrap_or_else(|| app.title.clone());
-        listed.push(json!({
-            "slug": slug,
+        let naming = super::labels::naming(&labels, &app.app);
+        let (address, aliases, title) = super::labels::effective(&naming, &slug, &aliases, &title);
+        let examples: Vec<String> = if address == slug {
+            examples
+        } else {
+            examples
+                .into_iter()
+                .map(|example| match example.strip_prefix(&format!("/{slug}")) {
+                    Some(rest) => format!("/{address}{rest}"),
+                    None => example,
+                })
+                .collect()
+        };
+        let mut entry_json = json!({
+            "slug": address,
             "aliases": aliases,
             "title": title,
-            "purpose": super::matcher::purpose(app),
+            "purpose": naming.description.clone().unwrap_or_else(|| super::matcher::purpose(app)),
             "kind": "library",
             "app_id": app.app,
             "record": entry.is_some(),
             "hint": hint,
             "examples": examples,
-        }));
+        });
+        if let Some(object) = entry_json.as_object_mut() {
+            object.extend(super::labels::naming_json(&naming));
+        }
+        listed.push(entry_json);
     }
     for named in stores.data.named_works(member).await? {
         let record = !named.work.collections.is_empty();
@@ -382,8 +403,24 @@ async fn name(
         Ok(detail) => detail,
         Err(error) => return refusal(&error),
     };
-    if RESERVED.contains(&slug.as_str()) || super::matcher::library_slugs().contains(&slug) {
+    if RESERVED.contains(&slug.as_str())
+        || super::labels::VERBS.contains(&slug.as_str())
+        || super::matcher::library_slugs().contains(&slug)
+    {
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "name_taken");
+    }
+    // APP-121: nor an address or alias the organization gave an app.
+    match stores.workspace.labels(&member).await {
+        Ok(labels)
+            if labels
+                .organization
+                .iter()
+                .any(|l| l.address.as_ref() == Some(&slug) || l.aliases.contains(&slug)) =>
+        {
+            return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "name_taken");
+        }
+        Ok(_) => {}
+        Err(error) => return refusal(&error),
     }
     let lock = naming_lock(member.organization());
     let _naming = lock.lock().await;

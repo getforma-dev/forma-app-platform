@@ -693,7 +693,14 @@ function adopt(section: HTMLElement, y: number, animate: boolean, include: (card
   // default arrangement, so two windows of the pitch show the same canvas.
   const saved = demo() ? new Map<string, Partial<WidgetCanvasItemState>>() : loadLayout(app, work);
   const cards = Array.from(section.querySelectorAll<HTMLElement>(':scope > .cv-card'));
-  for (const card of cards) decorateCard(card);
+  for (const card of cards) {
+    // APP-120 gap / APP-121: every card knows its app and work once it
+    // leaves the section, so the app card gets its address chip and every
+    // card its label on whichever path placed it.
+    card.dataset.app = app;
+    card.dataset.work = work;
+    decorateCard(card);
+  }
   const title = section.getAttribute('aria-label') ?? 'App';
   const group: Group = { app, work, title, section, cards, items: [], pinned: saved.size > 0, saved };
   groups.set(work, group);

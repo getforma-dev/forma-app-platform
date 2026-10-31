@@ -44,6 +44,7 @@ The pane always reflects the canvas.
 - Every app and card has a **name** (what you read) and an **address** (what you type). An app's address is its name in lowercase with hyphens: Expenses → `/expenses`. A card's address is `app.card`: `/expenses.ledger`. Every card also has a number in the Library: `3.2`.
 - The address is shown wherever the thing appears: the Library row, the card header (a `/expenses` chip; click it to put it in the bar), the hint while you type, and the confirm card ("via /expenses").
 - **Aliases** are extra addresses that also work. `/expense` is an alias of `/expenses`, kept forever.
+- **Where you name things** (APP-121): the ✎ on a Library app or card row (name, address, aliases, description, and your own shortcuts); double-click a card's title on the canvas; `/rename` and `/alias`. Someone who may not rename a card for everyone gets their own name for it; the app itself is renamed only by its owner or an admin.
 - **Who can rename** (APP-121):
 
   | What | Who | Seen by |
@@ -54,8 +55,9 @@ The pane always reflects the canvas.
 - **Naming rules:**
   - Addresses are unique in an organization, regardless of letter case.
   - Nothing may take a verb's name (`/card`, `/app` …).
-  - A personal alias never overrides an organization address.
-  - Renaming keeps the old address as an alias, so nothing breaks.
+  - An app's address is never taken by another app. A hidden alias of another app can be: an address beats an alias, so `/spend` (once an alias of Vendor spend) answers for Expenses after the owner gives Expenses the address `/spend`.
+  - A personal alias never overrides an organization name: it cannot take any app's address or alias, and one the organization later takes stops working.
+  - Renaming keeps the old address as an alias, so nothing breaks. The catalog's own names (`/expenses`, `/expense`) always stay.
   - Renaming a card changes only its label, never its data or receipts.
   - Every change is audited.
 
@@ -70,7 +72,8 @@ The pane always reflects the canvas.
 | | `/unite <app>` · `/split` | Assembles an app's cards into one frame, and takes them apart again |
 | | `/focus` | Opens the selected card large, in focus mode |
 | Make | `/folder <name> formation <instruction>` | Builds an app from a folder's files |
-| | `/rename …` · `/alias …` | Names things (APP-121) |
+| | `/rename <app or app.card> <new name> [/address]` | Names an app (and gives it a new address) or a card: `/rename expenses Team spend /spend`, `/rename expenses.total Q3 spend` (APP-121) |
+| | `/alias <shortcut> <app or app.card>` | Your own shortcut: `/alias exp expenses`, `/alias q3 expenses.total`; `/alias exp` alone removes it (APP-121) |
 | Ask | `? <question>` | Opens the Ask tab with your question; read-only (APP-122) |
 | Help | `/apps [query]` · `/commands` · `/shortcuts` · `/agent` | Library · Commands · Shortcuts · Connect an agent |
 
@@ -135,5 +138,6 @@ Planned (APP-123): **Make it a card** on answers, persistent personal cards, `@`
 | Enter · Esc on a stack | Fan it out, fold it back |
 | Arrow keys · Shift + arrow | Move the selection 1 px · 10 px |
 | Double-click a stack's name | Rename the stack |
+| Double-click a card's title | Rename the card (for everyone if you own the app, else for you); Enter saves, Esc cancels |
 
 No shortcut fires while you are typing.

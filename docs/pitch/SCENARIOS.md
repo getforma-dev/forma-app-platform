@@ -14,7 +14,7 @@ Demo organization: Northstar (`00000000-0000-4000-8000-000000000001`), listed in
 
 ## The one sentence (APP-120)
 
-Teach this first: **Type `/` and a verb to change the canvas, `/` and an app's name to tell that app something, or just a sentence.** The canvas holds things; apps are the only governed thing. Apps contain cards (`expenses.ledger`, or `3.2`); widgets (Weather, Calculator, Clock, Note, Folder) are yours and one-off; stacks, unite frames and focus only arrange. `/` alone shows the twelve verbs (Place `/app` `/card` `/widget`; Arrange `/arrange` `/unite` `/split` `/focus`; Make `/folder <name> formation <instruction>`; Help `/apps` `/commands` `/shortcuts` `/agent`); every app answers to its `/name`, shown as a grey chip wherever the app appears. Every older command still works as a hidden alias (`/expense`, `/pto`, `/weather`, `/note`, `/help`).
+Teach this first: **Type `/` and a verb to change the canvas, `/` and an app's name to tell that app something, or just a sentence.** The canvas holds things; apps are the only governed thing. Apps contain cards (`expenses.ledger`, or `3.2`); widgets (Weather, Calculator, Clock, Note, Folder) are yours and one-off; stacks, unite frames and focus only arrange. `/` alone shows the fourteen verbs (Place `/app` `/card` `/widget`; Arrange `/arrange` `/unite` `/split` `/focus`; Make `/folder <name> formation <instruction>`, `/rename`, `/alias`; Help `/apps` `/commands` `/shortcuts` `/agent`); every app answers to its `/name`, shown as a grey chip wherever the app appears. Every older command still works as a hidden alias (`/expense`, `/pto`, `/weather`, `/note`, `/help`).
 
 ## Scenario 1: employee expense → manager approval, live
 

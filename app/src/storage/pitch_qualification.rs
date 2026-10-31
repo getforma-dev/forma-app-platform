@@ -492,6 +492,7 @@ async fn campaign() {
             .merge(crate::query::routes::router(work.clone()))
             .merge(sharing::router(auth.clone()))
             .merge(composer::commands::router(auth.clone()))
+            .merge(composer::labels::router(auth.clone()))
             .merge(events::routes::router(auth.clone()))
             // APP-109: the records listing and the member's notes work.
             .merge(crate::actions::routes::records_router(auth.clone()))
@@ -1472,6 +1473,223 @@ async fn campaign() {
         &mut checks,
         &format!("batched canvas reads (APP-113): for Maya ({compared} works compared) and the teammate ({mate_compared}), the batched listing and library catalog equal the serial ones, and the batched outline and records reads equal work_outline and list_records per work (an unknown work and a malformed id refused alike); for Maya's {} works the listing and reads took {batched_transactions} transactions and {batched_statements} statements in {batched_ms} ms (one work at a time: {serial_transactions} transactions, {serial_statements} statements, {serial_ms} ms); GET /canvas took {} transactions and {} statements per page, p50 {page_ms} ms over {PAGES}",
             listed.len(), page_transactions / PAGES, page_statements / PAGES),
+    );
+
+    // --- APP-121: naming (organization labels, personal shortcuts) ---
+    const EXPENSES_APP: &str = "00000000-0000-4000-8000-000000001681";
+    // Maya owns Expenses here (the seed's author owns the library); the
+    // teammate gets the library as a plain member.
+    c.fixture.sql(&format!("UPDATE genui.apps SET owner_principal_id='{maya_id}' WHERE organization_id='{ORG}' AND app_id='{EXPENSES_APP}'"), "genui");
+    operator(
+        &c.fixture,
+        &[
+            "grant-library-access",
+            "--organization",
+            ORG,
+            "--principal",
+            &mate_id,
+        ],
+    );
+    let labels_path = format!("/v1/apps/{EXPENSES_APP}/labels");
+    let governed = |app: &str| {
+        format!("SELECT (SELECT count(*) FROM genui.definition_revisions WHERE app_id='{app}')*1000+(SELECT count(*) FROM genui.publications WHERE app_id='{app}')*100+(SELECT count(*) FROM genui.query_receipts)")
+    };
+    let before = scalar(&c.fixture, &governed(EXPENSES_APP)).await;
+    let labeled = "SELECT count(*) FROM genui.audit_events WHERE kind='app.labeled'";
+    let entry = |answer: &Answer| -> Value {
+        answer.json()["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["app_id"] == EXPENSES_APP && c["kind"] == "library")
+            .cloned()
+            .unwrap()
+    };
+    // A non-owner and a foreign organization's member cannot rename: the uniform 404.
+    for (who, cookie) in [("teammate", &mate_cookie), ("outsider", &outsider_cookie)] {
+        let refused = stand
+            .post(
+                &labels_path,
+                Some(cookie),
+                &json!({"scope": "organization", "name": "Mine now", "address": "mine"})
+                    .to_string(),
+            )
+            .await;
+        assert!(refused.uniform_404(), "{who}: {}", refused.text());
+    }
+    let foreign = stand
+        .post(
+            &labels_path,
+            Some(&outsider_cookie),
+            &json!({"scope": "personal", "aliases": ["exp"]}).to_string(),
+        )
+        .await;
+    assert!(foreign.uniform_404(), "{}", foreign.text());
+    assert_eq!(scalar(&c.fixture, labeled).await, 0);
+    // The app card's header and placement messages read the display name
+    // (the catalog's "Expenses"), never the stored definition's title
+    // ("Expense claims"): the group JSON's title (APP-120 gap).
+    let expenses_group = "/v1/canvas/works/00000000-0000-4000-8000-000000001681/00000000-0000-4000-8000-000000001684";
+    let group = stand.get(expenses_group, Some(&mate_cookie)).await;
+    assert_eq!(group.status, StatusCode::OK, "{}", group.text());
+    assert_eq!(group.json()["title"], "Expenses");
+    // The owner renames Expenses "Team spend" at /spend; a repeat writes nothing.
+    let body =
+        json!({"scope": "organization", "name": "Team spend", "address": "/Spend"}).to_string();
+    let renamed = stand.post(&labels_path, Some(&maya_cookie), &body).await;
+    assert_eq!(renamed.status, StatusCode::OK, "{}", renamed.text());
+    assert_eq!(renamed.json()["saved"], true);
+    assert_eq!(renamed.json()["label"]["address"], "spend");
+    let again = stand.post(&labels_path, Some(&maya_cookie), &body).await;
+    assert_eq!(again.json()["saved"], false, "idempotent");
+    assert_eq!(
+        scalar(&c.fixture, labeled).await,
+        1,
+        "one app.labeled event"
+    );
+    // Every member sees it; /expenses and /expense still answer.
+    let seen = entry(
+        &stand
+            .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+            .await,
+    );
+    assert_eq!(seen["slug"], "spend");
+    assert_eq!(seen["title"], "Team spend");
+    assert_eq!(seen["can_label"], false);
+    for alias in ["expenses", "expense"] {
+        assert!(
+            seen["aliases"].as_array().unwrap().contains(&json!(alias)),
+            "{alias}"
+        );
+    }
+    let group = stand.get(expenses_group, Some(&mate_cookie)).await;
+    assert_eq!(
+        group.json()["title"],
+        "Team spend",
+        "the card header reads the label"
+    );
+    let vendor = stand
+        .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+        .await
+        .json()["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["slug"] == "vendor-spend-breakdown")
+        .cloned()
+        .unwrap();
+    assert!(
+        !vendor["aliases"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("spend")),
+        "an address beats another app's hidden alias"
+    );
+    assert_eq!(
+        entry(
+            &stand
+                .get(composer::commands::COMMANDS_PATH, Some(&maya_cookie))
+                .await
+        )["can_label"],
+        true
+    );
+    // Names already taken or naming a verb are refused.
+    for (change, code) in [
+        (json!({"address": "time-off"}), "name_taken"),
+        (json!({"address": "card"}), "verb_name"),
+        (json!({"aliases": ["weather"]}), "verb_name"),
+        (json!({"address": "Team Spend"}), "invalid_name"),
+    ] {
+        let mut body = change.clone();
+        body["scope"] = json!("organization");
+        let refused = stand
+            .post(&labels_path, Some(&maya_cookie), &body.to_string())
+            .await;
+        assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY, "{change}");
+        assert_eq!(refused.json()["code"], code, "{change}");
+    }
+    // A personal shortcut works for its member only.
+    let mine = stand
+        .post(
+            &labels_path,
+            Some(&mate_cookie),
+            &json!({"scope": "personal", "aliases": ["/exp"]}).to_string(),
+        )
+        .await;
+    assert_eq!(mine.status, StatusCode::OK, "{}", mine.text());
+    let mate_entry = entry(
+        &stand
+            .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+            .await,
+    );
+    assert!(mate_entry["aliases"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("exp")));
+    assert_eq!(mate_entry["mine"], json!(["exp"]));
+    let maya_entry = entry(
+        &stand
+            .get(composer::commands::COMMANDS_PATH, Some(&maya_cookie))
+            .await,
+    );
+    assert!(!maya_entry["aliases"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("exp")));
+    for (alias, code) in [
+        ("spend", "name_taken"),
+        ("expense", "name_taken"),
+        ("pto", "name_taken"),
+        ("card", "verb_name"),
+    ] {
+        let refused = stand
+            .post(
+                &labels_path,
+                Some(&mate_cookie),
+                &json!({"scope": "personal", "aliases": ["exp", alias]}).to_string(),
+            )
+            .await;
+        assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY, "{alias}");
+        assert_eq!(refused.json()["code"], code, "{alias}");
+    }
+    // The owner names a card; the teammate sees it; the governed rows and
+    // receipts are untouched by every label.
+    let card = stand
+        .post(
+            &labels_path,
+            Some(&maya_cookie),
+            &json!({"scope": "organization", "card": "total", "name": "Q3 spend"}).to_string(),
+        )
+        .await;
+    assert_eq!(card.status, StatusCode::OK, "{}", card.text());
+    let cards = entry(
+        &stand
+            .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+            .await,
+    )["cards"]
+        .clone();
+    assert_eq!(cards[0]["card"], "total");
+    assert_eq!(cards[0]["name"], "Q3 spend");
+    assert_eq!(scalar(&c.fixture, &governed(EXPENSES_APP)).await, before);
+    // The outsider's list never carries the labels; storage under RLS shows
+    // the other organization none of them.
+    let outside = stand
+        .get(composer::commands::COMMANDS_PATH, Some(&outsider_cookie))
+        .await;
+    assert!(!outside.text().contains("Team spend"));
+    let scoped = |org: &str| {
+        format!("SET ROLE genui_workspace; SELECT set_config('genui.organization_id','{org}',false); SELECT (SELECT count(organization_id) FROM genui.app_labels)*10+(SELECT count(organization_id) FROM genui.member_labels);")
+    };
+    let last = |out: String| out.trim().lines().last().unwrap_or("").trim().to_owned();
+    assert_eq!(last(c.fixture.sql(&scoped(OTHER), "genui")), "0");
+    assert_eq!(last(c.fixture.sql(&scoped(ORG), "genui")), "21");
+    assert_eq!(
+        c.fixture.sql("SELECT string_agg(relname||':'||relrowsecurity||relforcerowsecurity,',' ORDER BY relname) FROM pg_class WHERE relnamespace='genui'::regnamespace AND relname IN ('app_labels','member_labels')", "genui").trim(),
+        "app_labels:truetrue,member_labels:truetrue"
+    );
+    check(
+        &mut checks,
+        "naming (APP-121): the group JSON (app card header, placement messages) reads \"Expenses\", then the label; the owner renamed Expenses \"Team spend\" at /spend (one app.labeled event; a repeat writes nothing; /spend was Vendor spend's hidden alias and moved: an address beats an alias); the teammate sees the name and address while /expenses and /expense stay aliases and Vendor spend no longer answers to /spend; a teammate (non-owner) and a foreign organization's member get the uniform 404 on the label route; a taken address, a verb and a malformed name are refused (422); the teammate's personal /exp is listed for them only, and a personal alias taking /spend, /expense, /pto or /card is refused; the card label \"Q3 spend\" reaches every member while definitions, publications and receipts are unchanged; app_labels and member_labels are ENABLE+FORCE RLS and another organization's scope reads none",
     );
 
     // --- Chain integrity ---

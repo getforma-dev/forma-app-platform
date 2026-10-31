@@ -40,7 +40,7 @@ The full rules (what is on a canvas, names and aliases, verbs, the Ask and Shape
 - **Widgets** (one-off, yours, no governed data): Weather, Calculator, Clock, Note and Folder. A folder holds files; its one power, formation, makes an app that links back to it. A note keeps its private storage but is a widget to you.
 - **Arrangements** (layout only): stacks, unite frames and focus. They are never listed in the Library.
 
-**Verbs: twelve, in four groups.** They come from one registry (`canvas/command-registry.ts`). `/` alone lists exactly these, each with its signature (`<required>`, `[optional]`). From the first letter (`/e…`), the matching verbs come first, then a separate section, "Apps — type /name and what you want": the matching apps on your canvas and your saved apps (an app's exact name or alias is always offered, even on a clean canvas). After `/name `, a hint row marks the argument being typed and shows an example. Tab fills a suggestion, Enter runs it, ↑/↓ move.
+**Verbs: fourteen, in four groups** (APP-121 added `/rename` and `/alias` to Make). They come from one registry (`canvas/command-registry.ts`). `/` alone lists exactly these, each with its signature (`<required>`, `[optional]`). From the first letter (`/e…`), the matching verbs come first, then a separate section, "Apps — type /name and what you want": the matching apps on your canvas and your saved apps (an app's exact name or alias is always offered, even on a clean canvas). After `/name `, a hint row marks the argument being typed and shows an example. Tab fills a suggestion, Enter runs it, ↑/↓ move.
 
 | Group | Verb | Does |
 | --- | --- | --- |
@@ -77,7 +77,7 @@ The hint after an address comes from the app's definition: the server derives it
 **The right pane: Library | Commands | Shortcuts.** One pane, three tabs. `L` and `/apps` open it on Library. `/commands` and `/help` open it on Commands. `?` (on the canvas and in the empty bar), `/shortcuts` and ⋯ → Shortcuts and commands open it on Shortcuts: one convention, as on GitHub, Gmail and Linear, `?` means the keyboard shortcuts. `L` on another tab switches to Library; `L` on Library closes the pane. The × and Esc close it (Esc clears a search first), and focus returns to what opened it. The tabs are ARIA tabs (←/→, Home, End). At phone width the pane is the bottom sheet, with the tabs on top.
 - Library: two sections. **Apps** (Category → App → numbered cards) and **Widgets** (Weather, Calculator, Clock, Note, Folder; the Note and Folder rows expand to your notes and folders). Every row shows an on-canvas dot (filled when it is on the canvas), its name in grey (an app's `/address` chip with "also /…", a card's `app.card`, a widget's `/weather`) and an Add/Remove toggle; app rows read "n of m cards". The pane is a pure projection of the board: it re-renders from one `canvas:changed` event after every add and remove.
 - An app row also shows its hint and an example; a click on the example puts it in the bar. "Stack" brings an app as a stack; search finds by name, number, address, alias, hint or `app.card`.
-- Commands: the twelve verbs in their four groups, with arguments, aliases, examples and a search; the footer reads "Your apps answer to /name — see /apps".
+- Commands: the fourteen verbs in their four groups, with arguments, aliases, examples and a search; the footer reads "Your apps answer to /name — see /apps".
 
 **Stacks.**
 - Making one: drag a card onto another and hold, or select several cards and press Cmd/Ctrl+G.

@@ -23,6 +23,15 @@
 // in the Commands tab's groups. There is no `/remove`: the card's ×, Delete
 // or the Library's Remove take things off. This module holds data only: no
 // DOM, no fetch.
+//
+// APP-121: people name things. `/rename <app|app.card> <new name> [/address]`
+// and `/alias <shortcut> <app|app.card>` are verbs of the Make group (14
+// verbs in all). An address carries the organization's labels (its name,
+// address, kept aliases, description and card names, from the server) and
+// the member's own shortcuts: `/exp` → an app joins its aliases (for that
+// member only); `/q3` → a card is a card shortcut (`findCardShortcut`), and
+// `findCommand` runs it as `/card <app>.<card>`. The server already drops a
+// shortcut an organization name took (the organization's address wins).
 
 export type Category = 'Place' | 'Arrange' | 'Make' | 'Help';
 /** The order the surfaces list groups in. */
@@ -61,6 +70,9 @@ export type Runnable = Omit<CanvasCommand, 'category'> & { aliases: string[]; ar
 export type Command = Runnable & { category: Category };
 export type CommandGroup = { category: Category; commands: Command[] };
 
+/** APP-121: a card's labels: the organization's name and description, the member's own name and shortcuts. */
+export type CardLabel = { card: string; name: string; description: string; myName: string; mine: string[] };
+
 /** An app the member can address (`/expense …`): a library app or a named saved one. */
 export type Address = Runnable & {
   /** What to type after `/slug` (server-derived; the catalog may override it). */
@@ -69,13 +81,23 @@ export type Address = Runnable & {
   app: string;
   work?: string;
   record: boolean;
+  /** APP-121: the organization's description of the app (empty: none). */
+  description?: string;
+  /** APP-121: the aliases the organization kept (beyond the catalog's). */
+  orgAliases?: string[];
+  /** APP-121: the member's own shortcuts to the app (already among `aliases`). */
+  mine?: string[];
+  /** APP-121: whether the member may change the organization's labels (owner or admin). */
+  canLabel?: boolean;
+  /** APP-121: labeled cards, by their name within the app (`total`). */
+  cards?: CardLabel[];
 };
 
 const arg = (name: string, kind: ArgKind, required = false): CommandArg => ({ name, kind, required });
 type Meta = Pick<Command, 'category' | 'args' | 'examples'> & { usage?: string };
 
-/** The twelve verbs in their order; what the registry knows about each (apps are never here, APP-119). */
-export const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'apps', 'commands', 'shortcuts', 'agent'] as const;
+/** The fourteen verbs in their order; what the registry knows about each (apps are never here, APP-119). */
+export const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'rename', 'alias', 'apps', 'commands', 'shortcuts', 'agent'] as const;
 /** APP-120: the widget kinds `/widget` places; the first four are also hidden verbs of their own. */
 export const WIDGET_KINDS = ['weather', 'calculator', 'clock', 'note', 'folder'] as const;
 export type WidgetName = typeof WIDGET_KINDS[number];
@@ -98,6 +120,18 @@ const KNOWN: Record<string, Meta> = {
     args: [arg('name', 'folder', true), arg('formation <instruction>', 'text')],
     examples: ['/folder Q3 board pack formation build a metrics app', '/folder 1 formation brief me'],
     usage: '/folder <name> formation <instruction>',
+  },
+  rename: {
+    category: 'Make',
+    args: [arg('app or app.card', 'card', true), arg('new name [/address]', 'text', true)],
+    examples: ['/rename expenses Team spend /spend', '/rename expenses.total Q3 spend'],
+    usage: '/rename <app|app.card> <new name> [/address]',
+  },
+  alias: {
+    category: 'Make',
+    args: [arg('shortcut', 'text', true), arg('app or app.card', 'card', true)],
+    examples: ['/alias exp expenses', '/alias q3 expenses.total'],
+    usage: '/alias <shortcut> <app|app.card>',
   },
   apps: { category: 'Help', args: [arg('query', 'app')], examples: ['/apps', '/apps purchase'] },
   commands: { category: 'Help', args: [arg('search', 'text')], examples: ['/commands', '/commands folder'] },
@@ -197,9 +231,38 @@ export function findAddress(name: string): Address | undefined {
   return all.find((address) => address.slug === key) ?? all.find((address) => address.aliases.includes(key));
 }
 
-/** What `/name` runs: a verb, else an app's address (every `/expense …` path is unchanged). */
+/** APP-121: the card a member's own shortcut names (`/q3` → `expenses.total`). */
+export function findCardShortcut(name: string): { address: Address; card: string } | undefined {
+  const key = name.toLowerCase();
+  for (const address of addressList()) {
+    const card = (address.cards ?? []).find((label) => label.mine.includes(key));
+    if (card) return { address, card: card.card };
+  }
+  return undefined;
+}
+
+/** APP-121: a card's display name for this member: their own, else the organization's, else `fallback`. */
+export function cardLabel(address: Address | undefined, card: string, fallback: string): string {
+  const label = address?.cards?.find((entry) => entry.card === card);
+  return label?.myName || label?.name || fallback;
+}
+
+/** What `/name` runs: a verb, else an app's address (every `/expense …` path is unchanged), else a card shortcut. */
 export function findCommand(name: string): Runnable | undefined {
-  return findVerb(name) ?? findAddress(name);
+  const found = findVerb(name) ?? findAddress(name);
+  if (found) return found;
+  const shortcut = findCardShortcut(name);
+  if (!shortcut) return undefined;
+  const target = `${shortcut.address.slug}.${shortcut.card}`;
+  return {
+    slug: name.toLowerCase(),
+    title: cardLabel(shortcut.address, shortcut.card, target),
+    purpose: `Your shortcut to ${target}`,
+    aliases: [],
+    args: [],
+    examples: [`/${name.toLowerCase()}`],
+    run: (text: string, report?: Report) => findVerb('card')?.run(`${target} ${text}`.trim(), report),
+  };
 }
 
 /** Verbs grouped by category, in category order, empty categories left out. */

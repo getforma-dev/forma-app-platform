@@ -37,7 +37,7 @@ import { addressLine } from './address-chip';
 import { boardWorks, placeWork } from './board';
 import { openCommandSheet } from './command-sheet';
 import {
-  APPS_SECTION, argumentHint, findCommand, groupCommands, matchAddresses, matchCommands, registerCommands, setAddresses, signature,
+  APPS_SECTION, argumentHint, findCommand, type CardLabel, groupCommands, matchAddresses, matchCommands, registerCommands, setAddresses, signature,
   type Address, type CanvasCommand, type CommandGroup, type Runnable,
 } from './command-registry';
 import { submitIntent, type Choice } from './compose';
@@ -103,6 +103,8 @@ export type ServerCommand = {
   slug: string; aliases: string[]; title: string; purpose: string;
   kind: 'library' | 'saved'; app_id: string; work_id?: string; record: boolean;
   hint: string; examples: string[];
+  /** APP-121: the organization's labels and the member's own shortcuts (optional: an older server sends none). */
+  description?: string; org_aliases?: string[]; mine?: string[]; can_label?: boolean; cards?: CardLabel[];
 };
 
 /** The hint when the server sent none (an older server): what words can do. */
@@ -123,6 +125,11 @@ export function serverAddress(entry: ServerCommand): Address {
     record: entry.record,
     args: [{ name: hint, kind: 'text', required: false }],
     examples: entry.examples.length ? entry.examples : [`/${entry.slug}`],
+    description: entry.description ?? '',
+    orgAliases: entry.org_aliases ?? [],
+    mine: entry.mine ?? [],
+    canLabel: entry.can_label === true,
+    cards: entry.cards ?? [],
     run: async (text: string, report: Report = () => undefined) => {
       const rest = text.trim();
       if (entry.kind === 'saved' && entry.work_id) {
@@ -134,7 +141,7 @@ export function serverAddress(entry: ServerCommand): Address {
       if (!rest && placeApp && (await placeApp(serverAddress(entry), report))) return;
       // `/expenses <words>` (and `/expense <words>`) is always the action path
       // for that app (APP-102 with APP-101).
-      if (rest && EXPENSES.includes(entry.slug)) {
+      if (rest && [entry.slug, ...entry.aliases].some((name) => EXPENSES.includes(name))) {
         await submitAction(rest, report, entry.app_id);
         return;
       }
@@ -145,6 +152,22 @@ export function serverAddress(entry: ServerCommand): Address {
       await submitIntent(rest.length >= 3 ? rest : entry.title, report, { app_id: entry.app_id });
     },
   };
+}
+
+const NAME = /^[a-z][a-z0-9-]{1,31}$/;
+const names = (value: unknown, limit: number): string[] =>
+  (Array.isArray(value) ? value.filter((a): a is string => typeof a === 'string' && NAME.test(a)).slice(0, limit) : []);
+const short = (value: unknown, limit: number): string => (typeof value === 'string' ? value.slice(0, limit) : '');
+
+/** APP-121: the labeled cards of an entry (`[{card, name, description, my_name, mine}]`). */
+function parseCards(value: unknown): CardLabel[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): CardLabel[] => {
+    const card = (item as Record<string, unknown> | null)?.card;
+    if (typeof card !== 'string' || !/^[a-z0-9][a-z0-9-]{0,47}$/.test(card)) return [];
+    const entry = item as Record<string, unknown>;
+    return [{ card, name: short(entry.name, 60), description: short(entry.description, 280), myName: short(entry.my_name, 60), mine: names(entry.mine, 8) }];
+  }).slice(0, 64);
 }
 
 /** Parses `GET /v1/commands` (exported for the tests); `hint` and `examples` are optional. */
@@ -159,7 +182,7 @@ export function parseCommands(body: unknown): ServerCommand[] {
     if (entry.kind === 'saved' && !isUuid(entry.work_id)) return [];
     return [{
       slug: entry.slug,
-      aliases: Array.isArray(entry.aliases) ? entry.aliases.filter((a): a is string => typeof a === 'string').slice(0, 8) : [],
+      aliases: names(entry.aliases, 24),
       title: String(entry.title ?? '').slice(0, 120),
       purpose: String(entry.purpose ?? '').slice(0, 200),
       kind: entry.kind,
@@ -170,6 +193,11 @@ export function parseCommands(body: unknown): ServerCommand[] {
       examples: Array.isArray(entry.examples)
         ? entry.examples.filter((e): e is string => typeof e === 'string' && e.startsWith('/')).slice(0, 4).map((e) => e.slice(0, 200))
         : [],
+      description: short(entry.description, 280),
+      org_aliases: names(entry.org_aliases, 8),
+      mine: names(entry.mine, 8),
+      can_label: entry.can_label === true,
+      cards: parseCards(entry.cards),
     }];
   });
 }

@@ -285,3 +285,133 @@ test('the address chip: Library row, app card header, bar hint and confirm card;
   assert.equal(commandName({ action: 'decide', command_id: 'decide', schema_id: 'expense_claim', values: [{ field_id: 'status', label: 'Status', display: 'approved', value: { type: 'enum', value: 'approved' } }] }), 'Approve claim');
   assert.equal(commandName({ action: 'decide', command_id: 'decide', schema_id: 'access_request', values: [{ field_id: 'status', label: 'Status', display: 'denied', value: 'denied' }] }), 'Deny request');
 });
+
+// --- APP-120 gaps, fixed with APP-121 ---
+
+test('the app card on the canvas gets its /expenses chip and its display name even when it was placed without data-app (APP-120 gap)', async () => {
+  const { doc, document_, library } = await setup();
+  const board = document_.createElement('div');
+  board.setAttribute('id', 'cv-board');
+  const card = document_.createElement('article');
+  card.setAttribute('class', 'cv-card cv-app');
+  card.setAttribute('data-card', `a-${EXPENSE_WORK}`);
+  const title = document_.createElement('h2');
+  title.textContent = 'Expense claims';
+  card.append(title);
+  board.append(card);
+  assert.equal(card.dataset.app, undefined, 'as the library\'s placement left it before the fix');
+  library.labelCanvasCards(doc);
+  assert.equal(card.dataset.app, EXPENSE_APP);
+  const chips = card.querySelectorAll('.cv-addr-chip');
+  assert.equal(chips.length, 1);
+  assert.equal(chips[0]!.textContent, '/expenses');
+  assert.equal(title.textContent, 'Expenses', 'the display name, not the stored definition title');
+  library.labelCanvasCards(doc);
+  assert.equal(card.querySelectorAll('.cv-addr-chip').length, 1, 'idempotent');
+});
+
+// --- APP-121: naming ---
+
+const LABELED = {
+  commands: [
+    { slug: 'spend', aliases: ['expenses', 'expense', 'claim', 'exp'], title: 'Team spend', purpose: 'Our team spend', kind: 'library', app_id: EXPENSE_APP, record: true,
+      hint: 'file a claim or approve one', examples: ['/spend $86 at Nobu', '/spend'],
+      description: 'Our team spend', org_aliases: [], mine: ['exp'], can_label: true,
+      cards: [{ card: 'ledger', name: 'Q3 spend', description: 'The Q3 ledger', my_name: null, mine: ['q3'] }] },
+    { slug: 'time-off', aliases: ['pto', 'leave', 'vacation'], title: 'Time off', purpose: 'Book time off', kind: 'library', app_id: PTO_APP, record: true,
+      hint: 'dates and reason', examples: ['/time-off Nov 24–26'], can_label: false, cards: [] },
+  ],
+};
+
+async function labeled() {
+  const context = await setup();
+  const { registry, slash, library, expenses, pto } = context;
+  registry.setAddresses(slash.parseCommands(LABELED).map(slash.serverAddress));
+  const list = registry.addressList();
+  // Every indexed row (earlier tests' rows stay in the module), as `applyAddresses` does.
+  for (const app of library.libraryApps()) library.decorate(app, library.rowAddress(app, list));
+  library.applyLabels(list);
+  void expenses; void pto;
+  return context;
+}
+
+test('labels: the renamed app answers to /spend and its old names, a member\'s /exp and /q3 resolve, and names show on rows and canvas cards (APP-121)', async () => {
+  const { doc, document_, registry, library, expenses, expensesRow } = await labeled();
+  for (const name of ['spend', 'expenses', 'expense', 'exp']) assert.equal(registry.findCommand(name)?.slug, 'spend', name);
+  // Library: the app's and the card's labels; the card's address follows the app's.
+  assert.equal(expensesRow.querySelector('.cv-lib-app-title')?.textContent, 'Team spend');
+  const ledger = expenses.cards.find((card) => card.slug === 'ledger')!;
+  assert.equal(ledger.title, 'Q3 spend');
+  assert.equal(ledger.base, 'Expense ledger');
+  assert.equal(ledger.row.querySelector('.cv-lib-card-title')?.textContent, 'Q3 spend');
+  assert.equal(library.cardAddress(ledger), 'spend.ledger');
+  assert.equal(library.findCards('expenses.ledger')[0]?.id, ledger.id, 'the old address still finds the card');
+  assert.ok(expensesRow.querySelector('[data-lib-edit]'), 'a ✎ on the row');
+  // `/q3`: the member's own card shortcut runs `/card spend.ledger`.
+  const q3 = registry.findCommand('q3')!;
+  assert.equal(q3.title, 'Q3 spend');
+  assert.match(q3.purpose, /spend\.ledger/);
+  // Canvas cards: the ledger card's header reads its label, the app card the app's name.
+  const board = document_.createElement('div');
+  board.setAttribute('id', 'cv-board-2');
+  const card = document_.createElement('article');
+  card.setAttribute('class', 'cv-card');
+  card.setAttribute('data-card', ledger.id);
+  const head = document_.createElement('header');
+  const h3 = document_.createElement('h3');
+  h3.textContent = 'Expense ledger';
+  head.append(h3);
+  card.append(head);
+  board.append(card);
+  library.labelCanvasCards(doc);
+  assert.equal(h3.textContent, 'Q3 spend');
+  assert.equal(h3.getAttribute('title'), 'The Q3 ledger');
+  assert.equal(card.getAttribute('aria-label'), 'Q3 spend');
+});
+
+test('/rename and /alias post the right label; a non-owner renames a card for themselves only and cannot rename the app (APP-121)', async () => {
+  const { registry, slash } = await labeled();
+  const naming = await import('../src/canvas/naming.ts');
+  const library = await import('../src/canvas/library.ts');
+  registry.registerCommands([library.CARD_COMMAND, naming.RENAME_COMMAND, naming.ALIAS_COMMAND]);
+  assert.deepEqual(naming.parseRename('expenses Team spend /Spend'), { target: 'expenses', name: 'Team spend', address: 'spend' });
+  assert.deepEqual(naming.parseRename('expenses.total Q3 spend'), { target: 'expenses.total', name: 'Q3 spend', address: null });
+  assert.equal(naming.findTarget('expenses')?.card, null);
+  assert.equal(naming.findTarget('expenses.ledger')?.card?.slug, 'ledger');
+  assert.equal(naming.findTarget('q3')?.card?.slug, 'ledger');
+  assert.equal(naming.findTarget('3.0')?.card, null, 'the app card names its app');
+  const posted: { url: string; body: unknown }[] = [];
+  (globalThis as { fetch?: unknown }).fetch = async (url: string, init?: { body?: string }) => {
+    if (url === slash.COMMANDS_URL) return { ok: true, status: 200, json: async () => LABELED };
+    posted.push({ url, body: JSON.parse(init?.body ?? 'null') });
+    return { ok: true, status: 200, json: async () => ({ saved: true }) };
+  };
+  const reports: string[] = [];
+  const report = (message: string) => reports.push(message);
+  // The owner: the app for everyone, with a new address; a card for everyone.
+  await registry.findCommand('rename')!.run('expenses Team spend /spend', report);
+  await registry.findCommand('rename')!.run('expenses.ledger Q3 spend', report);
+  // A shortcut of their own, then taken back.
+  await registry.findCommand('alias')!.run('mine expenses', report);
+  await registry.findCommand('alias')!.run('exp', report);
+  assert.deepEqual(posted, [
+    { url: `/v1/apps/${EXPENSE_APP}/labels`, body: { scope: 'organization', name: 'Team spend', address: 'spend' } },
+    { url: `/v1/apps/${EXPENSE_APP}/labels`, body: { scope: 'organization', card: 'ledger', name: 'Q3 spend' } },
+    { url: `/v1/apps/${EXPENSE_APP}/labels`, body: { scope: 'personal', card: '', aliases: ['exp', 'mine'] } },
+    { url: `/v1/apps/${EXPENSE_APP}/labels`, body: { scope: 'personal', card: '', aliases: [] } },
+  ]);
+  assert.match(reports[0]!, /Team spend at \/spend/);
+  assert.match(reports[1]!, /for everyone\. Its data and receipts are unchanged/);
+  // Time off: this member is no owner. The app is refused without a request; a card becomes their own name.
+  posted.length = 0;
+  await registry.findCommand('rename')!.run('pto Leave', report);
+  assert.equal(posted.length, 0);
+  assert.match(reports.at(-1)!, /Only the owner of Time off or an admin/);
+  await registry.findCommand('rename')!.run('pto.records My requests', report);
+  assert.deepEqual(posted, [{ url: `/v1/apps/${PTO_APP}/labels`, body: { scope: 'personal', card: 'records', name: 'My requests' } }]);
+  assert.match(reports.at(-1)!, /for you/);
+  // What a refusal says.
+  assert.match(naming.labelMessage(422, 'verb_name', '/card'), /^\/card is a command’s name/);
+  assert.match(naming.labelMessage(422, 'name_taken', '/spend'), /already taken/);
+  assert.match(naming.labelMessage(404, '', '/spend'), /Only its owner or an admin/);
+});

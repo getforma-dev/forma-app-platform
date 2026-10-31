@@ -3,6 +3,7 @@ import { submitUtterance } from './actions';
 import { startAgents } from './agents';
 import { startBoard } from './board';
 import { startLibrary } from './library';
+import { startNaming } from './naming';
 import { startControls } from './controls';
 import { startStacks } from './stacks';
 import { startUnite } from './unite';
@@ -814,6 +815,8 @@ registerCompleter('clock', zoneSuggestions, { select: false });
 startAgents(document);
 restoreWidgets();
 startLibrary(document);
+// APP-121: /rename, /alias, the Library's ✎ and double-click a card title.
+startNaming(document);
 // APP-108: boxes (cards, upload, viewer, data, /storage, the pane's Boxes).
 startBoxes(document);
 startControls(document);
