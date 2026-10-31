@@ -88,8 +88,8 @@ test('/ex shows the matching verbs, then an Apps section with derived hints (APP
   const onCanvas = (address: Parameters<typeof slash.listedAddress>[0]) => slash.listedAddress(address, works);
   assert.deepEqual(slugsOf(slash.slashGroups('ex')), [], 'no verb starts with ex');
   const apps = slash.slashAddresses('ex', onCanvas);
-  assert.deepEqual(apps.map((address) => address.slug), ['expense-review', 'expense']);
-  assert.deepEqual(apps.map((address) => address.hint), ['what to show … or review', 'what you spent']);
+  assert.deepEqual(apps.map((address) => address.slug), ['expense', 'expense-review'], 'shorter own-name match first');
+  assert.deepEqual(apps.map((address) => address.hint), ['what you spent', 'what to show … or review']);
   assert.equal(registry.APPS_SECTION, 'Apps — type /name and what you want');
   // Verbs first, then apps: `/a` lists `/apps` and `/arrange`, apps only by their own names.
   assert.deepEqual(slugsOf(slash.slashGroups('a')), ['apps', 'arrange']);
@@ -98,7 +98,7 @@ test('/ex shows the matching verbs, then an Apps section with derived hints (APP
   assert.deepEqual(slash.slashAddresses('ex', clean), []);
   const fallback = slash.slashAddressSection('ex', clean);
   assert.equal(fallback.title, slash.LIBRARY_SECTION, 'a clean canvas falls back to the library');
-  assert.ok(fallback.addresses.some((address) => address.slug === 'expense'), '/e on a clean canvas still finds /expense');
+  assert.equal(fallback.addresses[0]?.slug, 'expense', '/e ranks the app whose own name starts with e, shortest first');
   assert.ok(fallback.addresses.length <= 5);
   assert.deepEqual(slash.slashAddressSection('', clean).addresses, [], 'nothing under / alone');
   assert.deepEqual(slash.slashAddresses('b', clean).map((address) => address.slug), ['big-claims']);

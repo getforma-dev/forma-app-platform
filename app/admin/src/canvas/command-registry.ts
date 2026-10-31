@@ -183,13 +183,20 @@ export function matchCommands(prefix: string): Command[] {
 export function matchAddresses(prefix: string, listed: (address: Address) => boolean = () => true): Address[] {
   const key = prefix.toLowerCase();
   if (!key) return [];
-  return addressList().filter((address) => {
-    const exact = address.slug === key || address.aliases.includes(key);
-    const hit = exact || address.slug.startsWith(key)
-      || address.aliases.some((alias) => alias.startsWith(key))
-      || (key.length > 1 && address.title.toLowerCase().includes(key));
-    return hit && (exact || listed(address));
-  });
+  // Rank: exact name, then the app's own name starting with the prefix, then
+  // an alias, then the title; shorter names first within a rank.
+  const rank = (address: Address): number => {
+    if (address.slug === key || address.aliases.includes(key)) return 0;
+    if (address.slug.startsWith(key)) return 1;
+    if (address.aliases.some((alias) => alias.startsWith(key))) return 2;
+    if (key.length > 1 && address.title.toLowerCase().includes(key)) return 3;
+    return 9;
+  };
+  return addressList()
+    .map((address) => ({ address, rank: rank(address) }))
+    .filter(({ address, rank: r }) => r < 9 && (r === 0 || listed(address)))
+    .sort((a, b) => a.rank - b.rank || a.address.slug.length - b.address.slug.length || a.address.slug.localeCompare(b.address.slug))
+    .map(({ address }) => address);
 }
 
 /** The Library's search over addresses: any word of the slug, aliases, title, hint or examples. */
