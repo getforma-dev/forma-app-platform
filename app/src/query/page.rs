@@ -568,7 +568,9 @@ pub fn props(
         form_error,
         views,
         has_query,
-        records_only: !has_query,
+        // No runnable source views, and the work actually has collections.
+        // An empty definition must not claim that it keeps records.
+        records_only: !has_query && !outline.collections.is_empty(),
         has_records: !chrome.records.is_empty(),
         records: chrome.records,
         canvas: chrome.canvas,

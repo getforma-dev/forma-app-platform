@@ -288,13 +288,12 @@ impl Data {
                 .collect();
             let readable_keys: Vec<(&str, &str)> = readable.iter().map(|&i| keys[i]).collect();
             let pinned = pinned_many(transaction, org, &readable_keys).await?;
-            // Every readable work, not only those whose records were asked
-            // for. `work_outline` returns the same collections to anyone who
-            // passed `record_read`, and `can_write` from the after-fence
-            // `record_write` grant (`fence_works`). Omitting them here made
-            // the batch outline look like a work with no collections and no
-            // write permission.
+            // Same collections and after-fence `record_write` bit as
+            // `work_outline`, whether or not this call also lists records.
             let collection_rows = collections_many(transaction, org, &readable_keys).await?;
+            if pinned.len() != readable.len() || collection_rows.len() != readable.len() {
+                return Err(Error::Unavailable);
+            }
             let mut reads: Vec<WorkReads> = (0..keys.len())
                 .map(|_| WorkReads {
                     outline: Err(Error::Denied),

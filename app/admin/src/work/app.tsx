@@ -89,12 +89,12 @@ function Work(props: WorkProps) {
             <input id="destination" name="destination" type="text" value={props.destination} />
           </div>
           <button type="submit">Run views</button>
-          {createShow(() => props.formError, () => (
-            <p class="notice" role="alert">
-              The window was not accepted. Give a start before the end, as UTC date and time. Nothing ran.
-            </p>
-          ))}
         </form>
+      ))}
+      {createShow(() => props.formError, () => (
+        <p class="notice" role="alert">
+          The window was not accepted. Give a start before the end, as UTC date and time. Nothing ran.
+        </p>
       ))}
       {createList(() => props.views, card => card.id, card => (
         <section class="view" data-view={card.id} data-state={card.state} aria-label={card.title}>

@@ -1010,6 +1010,26 @@ mod tests {
         assert!(records_body.contains("/canvas#g-work"));
         assert!(records_body.contains("New Claim record"));
         assert!(records_body.contains("/work/app/work/records/collection/"));
+        let mut no_records = outline.clone();
+        no_records.collections.clear();
+        no_records.can_write = false;
+        let blank = work::props(
+            &no_records,
+            "/w/a/w".into(),
+            "Q".repeat(43),
+            &work::FormValues::default(),
+            true,
+            Vec::new(),
+            work::WorkChrome {
+                records: Vec::new(),
+                canvas: work::canvas_href("work"),
+            },
+        );
+        assert!(!blank.records_only && !blank.has_query && blank.form_error);
+        let (_, _, blank_body) = html(ssr.work(&blank)).await;
+        assert!(!blank_body.contains("This work keeps records."));
+        assert!(!blank_body.contains("Window start"));
+        assert!(blank_body.contains("was not accepted"));
         // A refused window echoes the form, says nothing ran, and runs nothing.
         let mut refused = props.clone();
         refused.form_error = true;
