@@ -14,7 +14,7 @@
 // - zoom keys: Cmd/Ctrl + `=`/`+` and `-` (the browser's page zoom is held
 //   back), Shift + 0 (100%), Shift + 1 (fit all), Shift + 2 (selection);
 // - L opens the library, `?` this sheet of shortcuts (APP-118: its command
-//   list is the registry's, and it links to the `/commands` sheet);
+//   list is the registry's verbs, and it links to the pane's Commands tab);
 // - APP-106: F focuses the selected card (`focus.ts`), U unites its app and
 //   Shift + U breaks it apart (`unite.ts`); the toolbar menu has both;
 // - a selected stack: ← / → leaf through it, Enter fans it out;
@@ -247,8 +247,9 @@ const ACTIONS: [string, [what: string, click: string, keys: string][]][] = [
     ['Arrange by app', '⋯ → Arrange by app', '/arrange'],
   ]],
   ['Canvas', [
-    ['Library', 'Library at the top', 'L'],
-    ['Every command', 'This sheet → All commands', '/commands · /help'],
+    ['Library', 'Library at the top', 'L · /apps'],
+    ['Every command', 'Library → Commands tab, or this sheet → All commands', '/commands · /help'],
+    ['Address an app', 'Library: each app shows its /address and an example', '/expense …'],
     ['Show timings', '⋯ → Show timings, or say “show timings”', '#timing=1'],
     ['This sheet', '⋯ → Shortcuts and commands', '?'],
   ]],

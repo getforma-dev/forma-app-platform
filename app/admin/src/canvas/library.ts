@@ -8,14 +8,22 @@
 // places this session under "My apps", and the `/card` and `/app` commands
 // with their autocomplete. APP-118: the pane is the app directory: `/apps
 // [query]` opens it (filtered), and its suggestions place an app the way
-// the pane's Add does. Placing goes through the board (`addCards`),
+// the pane's Add does. APP-119: apps are addresses: each row shows its
+// address (`/expense`), the server-derived hint and an example
+// (`GET /v1/commands`, `onAddressesChange`), a saved app's row gets the
+// name it was saved as, and the search covers aliases and hints. The pane
+// itself (open, close, its Library and Commands tabs) is `pane.ts`.
+// Placing goes through the board (`addCards`),
 // which fetches a work through the group route (re-authorized) and runs its
 // views through the governed query route; nothing here reads data.
 //
 // Titles are text nodes; ids are the server's card ids.
 import { addCards, boardWorks, isOnBoard, onBoardChange, removeCards } from './board';
+import { addressList, addressText, onAddressesChange, type Address } from './command-registry';
+import { insertCommand, startCommandSheet } from './command-sheet';
+import { closePane, isPaneOpen, onPaneTab, openPane, startPane, togglePane } from './pane';
 import { stackCards } from './stacks';
-import { registerCommands, registerCompleter, type Completion } from './slash';
+import { ensureCommands, registerCommands, registerCompleter, type Completion } from './slash';
 import { announce, el, isUuid } from './render';
 import { removeWidgets, runWidget, widgetCount, WIDGET_COMMANDS } from './widgets/index';
 import type { WidgetKind } from './widgets/state';
@@ -26,50 +34,41 @@ type CardRow = { id: string; number: string; title: string; kind: string; row: H
 type AppRow = {
   app: string; work: string; number: string; title: string; slug: string;
   row: HTMLElement; cards: CardRow[]; widget?: WidgetKind;
+  /** APP-119: the app's address, once the server's list arrived. */
+  address?: Address;
 };
 
 let documentRef: Document | null = null;
 let pane: HTMLElement | null = null;
-let toggle: HTMLElement | null = null;
 let search: HTMLInputElement | null = null;
 const apps: AppRow[] = [];
-let lastFocus: HTMLElement | null = null;
 
 const phone = () => matchMedia('(max-width: 760px)').matches;
 
+/** Whether the right pane is open (on either tab: Esc and × close it). */
 export function isLibraryOpen(): boolean {
-  return pane?.dataset.open === 'true';
+  return isPaneOpen();
 }
 
+/** Opens the right pane on its Library tab. */
 export function openLibrary(focusSearch = true): void {
-  if (!pane || !documentRef) return;
-  if (!isLibraryOpen()) lastFocus = documentRef.activeElement as HTMLElement | null;
-  pane.dataset.open = 'true';
-  documentRef.getElementById('cv-shell')?.classList.add('is-library-open');
-  toggle?.setAttribute('aria-expanded', 'true');
-  sync();
-  if (focusSearch && matchMedia('(pointer: fine)').matches) search?.focus({ preventScroll: true });
+  openPane('library', { focus: focusSearch });
 }
 
-/** APP-118: opens the pane filtered by `query` (every app when empty). */
+/** APP-118: opens the Library tab filtered by `query` (every app when empty). */
 export function showLibrary(query = ''): void {
-  if (!pane) return;
   openLibrary();
   if (search) search.value = query;
   filter(query);
 }
 
 export function closeLibrary(): void {
-  if (!pane || !documentRef || !isLibraryOpen()) return;
-  pane.dataset.open = 'false';
-  documentRef.getElementById('cv-shell')?.classList.remove('is-library-open');
-  toggle?.setAttribute('aria-expanded', 'false');
-  if (pane.contains(documentRef.activeElement)) (lastFocus ?? toggle)?.focus({ preventScroll: true });
+  closePane();
 }
 
+/** `L`: the Library tab, or closes the pane when it shows the Library already. */
 export function toggleLibrary(): void {
-  if (isLibraryOpen()) closeLibrary();
-  else openLibrary();
+  togglePane('library');
 }
 
 function expand(app: AppRow, open: boolean): void {
@@ -183,7 +182,10 @@ function adoptNewWorks(): void {
     section.querySelector('.cv-lib-apps')?.append(row);
     recount(section);
     const indexed = index(row);
-    if (indexed) apps.push(indexed);
+    if (indexed) {
+      apps.push(indexed);
+      decorate(indexed, rowAddress(indexed, addressList()));
+    }
   }
 }
 
@@ -395,8 +397,14 @@ export function findApps(query: string): AppRow[] {
   const list = apps.filter((app) => !app.widget);
   if (!q) return list;
   if (/^\d+$/.test(q)) return list.filter((app) => app.number === q);
+  const aliases = (app: AppRow) => app.address?.aliases ?? [];
   return list
-    .map((app) => ({ app, value: app.slug === q ? 100 : app.slug.startsWith(q) ? 60 : score(app.title, q) }))
+    .map((app) => ({
+      app,
+      value: app.slug === q || aliases(app).includes(q) ? 100
+        : app.slug.startsWith(q) || aliases(app).some((alias) => alias.startsWith(q)) ? 60
+          : Math.max(score(app.title, q), app.address ? score(app.address.hint, q) - 15 : 0),
+    }))
     .filter((entry) => entry.value > 0)
     .sort((a, b) => b.value - a.value)
     .map((entry) => entry.app);
@@ -409,7 +417,7 @@ function clearBar(): void {
 }
 
 /** APP-118: `/apps [query]` opens the Library (filtered); it never places a canvas card. */
-const APPS_COMMAND = {
+export const APPS_COMMAND = {
   slug: 'apps',
   title: 'Library',
   purpose: 'Open the Library, filtered by a name or number; every app you can bring in',
@@ -480,7 +488,7 @@ function appsCompletions(rest: string): Completion[] {
     ...findApps(query).slice(0, 9).map((app) => ({
       badge: app.number,
       title: app.title,
-      detail: `Place it · ${app.cards.length} cards${app.slug ? ` · /${app.slug}` : ''}${app.cards.length && app.cards.every(onBoard) ? ' · on canvas' : ''}`,
+      detail: `${app.slug ? `/${app.slug} · ` : ''}${app.address ? `${app.address.hint} · ` : ''}place it · ${app.cards.length} cards${app.cards.length && app.cards.every(onBoard) ? ' · on canvas' : ''}`,
       value: `/app ${app.slug || app.number}`,
     })),
   ];
@@ -494,14 +502,81 @@ function appCompletions(rest: string): Completion[] {
   }));
 }
 
+// --- APP-119: every row shows its address, hint and an example ---
+
+/** The address a row answers to: a saved app by its work, a library app by its slug. */
+export function rowAddress(row: { slug: string; work: string; widget?: unknown }, list: Address[]): Address | undefined {
+  if (row.widget) return undefined;
+  return list.find((address) => address.kind === 'saved' && address.work === row.work)
+    ?? (row.slug ? list.find((address) => address.kind === 'library' && address.slug === row.slug) : undefined);
+}
+
+/** The first example that says more than the bare address. */
+export function firstExample(address: Address): string {
+  return address.examples.find((example) => example.trim().includes(' ')) ?? address.examples[0] ?? `/${address.slug}`;
+}
+
+function decorate(app: AppRow, address: Address | undefined): void {
+  if (!documentRef || app.address === address) return;
+  const document_ = documentRef;
+  app.address = address;
+  app.row.querySelector('.cv-lib-address')?.remove();
+  const base = app.row.dataset.searchBase ?? app.row.dataset.search ?? '';
+  app.row.dataset.searchBase = base;
+  if (!address) {
+    app.row.dataset.search = base;
+    return;
+  }
+  if (!app.slug) {
+    app.slug = address.slug;
+    const expandButton = app.row.querySelector('[data-lib-expand]');
+    const on = expandButton?.querySelector('[data-lib-on]');
+    if (expandButton && !expandButton.querySelector('.cv-lib-slug')) expandButton.insertBefore(el(document_, 'code', { class: 'cv-lib-slug' }, `/${address.slug}`), on ?? null);
+  }
+  app.row.dataset.search = `${base} ${addressText(address)}`;
+  const example = firstExample(address);
+  const tryIt = el(document_, 'button', { type: 'button', class: 'cv-lib-example', 'data-lib-example': '', title: 'Put this example in the bar' }, el(document_, 'code', {}, example));
+  tryIt.addEventListener('click', (event) => {
+    event.stopPropagation();
+    insertCommand(example);
+  });
+  const line = el(document_, 'p', { class: 'cv-lib-address' },
+    el(document_, 'code', { class: 'cv-lib-addr' }, `/${address.slug}`),
+    el(document_, 'span', { class: 'cv-lib-addr-hint' }, address.hint),
+    tryIt);
+  app.row.querySelector('.cv-lib-app-head')?.after(line);
+}
+
+/** Decorates every row from the member's addresses (they load after the page). */
+function applyAddresses(): void {
+  const list = addressList();
+  for (const app of apps) decorate(app, rowAddress(app, list));
+  if (search?.value) filter(search.value);
+}
+
 /** Wires the pane once (after the board started). */
 export function startLibrary(document_: Document): void {
   if (pane) return;
   documentRef = document_;
+  startPane(document_);
+  startCommandSheet(document_);
   pane = document_.getElementById('cv-library');
-  toggle = document_.getElementById('cv-library-toggle');
   search = document_.getElementById('cv-lib-search') as HTMLInputElement | null;
   if (!pane) return;
+  onPaneTab('library', {
+    show: (focus) => {
+      sync();
+      void ensureCommands();
+      if (focus && matchMedia('(pointer: fine)').matches) search?.focus({ preventScroll: true });
+    },
+    // Esc clears the search first, then closes the pane.
+    escape: () => {
+      if (!search?.value) return false;
+      search.value = '';
+      filter('');
+      return true;
+    },
+  });
   for (const row of pane.querySelectorAll<HTMLElement>('.cv-lib-app')) {
     const app = index(row);
     if (app) apps.push(app);
@@ -512,7 +587,7 @@ export function startLibrary(document_: Document): void {
   replaceNotesApp();
   // Small libraries open expanded; a large one shows its apps first.
   if (apps.filter((app) => !app.widget).length <= 3) for (const app of apps) if (!app.widget) expand(app, true);
-  toggle?.addEventListener('click', () => toggleLibrary());
+  document_.getElementById('cv-library-toggle')?.addEventListener('click', () => toggleLibrary());
   document_.addEventListener('click', (event) => {
     const target = event.target as Element | null;
     if (notesClick(target)) return;
@@ -557,19 +632,9 @@ export function startLibrary(document_: Document): void {
       if (first) void toggleCard(first);
     }
   });
-  pane.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !event.defaultPrevented) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (search && search.value) {
-        search.value = '';
-        filter('');
-      } else {
-        closeLibrary();
-      }
-    }
-  });
   onBoardChange(sync);
+  onAddressesChange(applyAddresses);
+  applyAddresses();
   onNotesChange(syncNotes);
   registerCommands([APPS_COMMAND, CARD_COMMAND, APP_COMMAND]);
   registerCompleter('apps', appsCompletions);

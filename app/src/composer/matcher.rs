@@ -364,6 +364,27 @@ pub fn command(app: &LibraryApp) -> Option<(String, Vec<String>)> {
     ))
 }
 
+/// APP-119: a library app's address copy from the sidecar: the optional
+/// `command.hint` and `command.examples` overrides (demo-quality copy) and
+/// the routing `intent_examples` the derived examples are made from.
+pub fn address_copy(app: &LibraryApp) -> (Option<String>, Vec<String>, Vec<String>) {
+    let Some(entry) = sidecar().get(&app.definition_digest) else {
+        return (None, Vec::new(), Vec::new());
+    };
+    let command = entry.get("command");
+    let hint = command
+        .and_then(|c| c.get("hint"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let examples = strings(command.and_then(|c| c.get("examples")))
+        .map(str::to_owned)
+        .collect();
+    let intents = strings(entry.get("routing").and_then(|r| r.get("intent_examples")))
+        .map(str::to_owned)
+        .collect();
+    (hint, examples, intents)
+}
+
 /// APP-104: the library pane's grouping of a library app, by its pinned
 /// definition digest: its position in the sidecar, the sidecar's `library_id`, the first routing
 /// capability's prefix (`finance.expenses.claim` → `finance`) and its

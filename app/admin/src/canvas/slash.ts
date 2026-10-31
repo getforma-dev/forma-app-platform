@@ -1,15 +1,20 @@
 // APP-101 slash commands: the intent bar's explicit lane, instant and never
 // a guess. APP-118: every command lives in one registry
 // (`command-registry.ts`: name, aliases, category, description, typed
-// arguments, examples), fed by the canvas modules (`registerCommands`) and
-// by the member's apps from the server (`GET /v1/commands`: every library
-// app with its slug and aliases, and the member's named saved apps). This
-// module draws the autocomplete from it: `/` lists the commands by category,
-// each with its argument signature; after `/name ` a hint row shows the
-// argument being typed and an example, and live suggestions appear for the
-// arguments that have values (apps, cards, folders, cities, zones; each
-// module registers its own with `registerCompleter`). `?` in the empty bar
-// opens the command sheet (`/commands`).
+// arguments, examples), fed by the canvas modules (`registerCommands`).
+// APP-119: commands are verbs, apps are addresses. The member's apps from
+// the server (`GET /v1/commands`: every library app with its slug, aliases,
+// derived hint and examples, and the member's named saved apps) are
+// addresses (`setAddresses`). This module draws the autocomplete: `/` alone
+// lists the verbs by category, each with its argument signature; from the
+// first letter the verbs that match come first, then a separate section
+// "Apps — type /name and what you want" with the matching apps on the
+// canvas and the saved apps (an exact slug or alias of any app is always
+// offered). After `/name ` a hint row shows the argument being typed and an
+// example, and live suggestions appear for the arguments that have values
+// (apps, cards, folders, cities, zones; each module registers its own with
+// `registerCompleter`). `?` in the empty bar opens the right pane on its
+// Commands tab (`/commands`).
 //
 // `/name rest` runs that command: a library app opens at once through the
 // pinned compose (`{"intent", "app_id"}`, no routing, no model call) and
@@ -22,11 +27,11 @@
 // Nothing from the server is rendered as markup: titles and purposes are
 // text nodes; ids are checked UUIDs.
 import { submitAction } from './actions';
-import { placeWork } from './board';
+import { boardWorks, placeWork } from './board';
 import { openCommandSheet } from './command-sheet';
 import {
-  argumentHint, findCommand, groupCommands, matchCommands, registerCommands, serverMeta, setServerCommands, signature,
-  type CanvasCommand, type Command, type CommandGroup,
+  APPS_SECTION, argumentHint, findCommand, groupCommands, matchAddresses, matchCommands, registerCommands, setAddresses, signature,
+  type Address, type CanvasCommand, type CommandGroup, type Runnable,
 } from './command-registry';
 import { submitIntent, type Choice } from './compose';
 import { isDismissKey, showDockCard } from './dock-card';
@@ -60,18 +65,30 @@ const ENTRY = /\b(approve|approved|reject|rejected|decline|deny|accept|file|subm
 /** The slug whose bare form opens the ledger (`actions::ledger::bare_command`). */
 const LEDGER = ['expense'];
 
-type ServerCommand = {
+export type ServerCommand = {
   slug: string; aliases: string[]; title: string; purpose: string;
   kind: 'library' | 'saved'; app_id: string; work_id?: string; record: boolean;
+  hint: string; examples: string[];
 };
 
-function serverCommand(entry: ServerCommand): CanvasCommand {
+/** The hint when the server sent none (an older server): what words can do. */
+const fallbackHint = (record: boolean) => (record ? 'what to show or file' : 'what to show');
+
+/** An app from the server as an address: `/slug words` opens it, files or decides (APP-101/102). */
+export function serverAddress(entry: ServerCommand): Address {
+  const hint = entry.hint || fallbackHint(entry.record);
   return {
     slug: entry.slug,
     aliases: entry.aliases,
     title: entry.title,
     purpose: entry.purpose,
-    ...serverMeta(entry.slug, entry.record),
+    hint,
+    kind: entry.kind,
+    app: entry.app_id,
+    work: entry.work_id,
+    record: entry.record,
+    args: [{ name: hint, kind: 'text', required: false }],
+    examples: entry.examples.length ? entry.examples : [`/${entry.slug}`],
     run: async (text: string, report: Report = () => undefined) => {
       const rest = text.trim();
       if (entry.kind === 'saved' && entry.work_id) {
@@ -94,7 +111,8 @@ function serverCommand(entry: ServerCommand): CanvasCommand {
   };
 }
 
-function parseCommands(body: unknown): ServerCommand[] {
+/** Parses `GET /v1/commands` (exported for the tests); `hint` and `examples` are optional. */
+export function parseCommands(body: unknown): ServerCommand[] {
   const list = (body as { commands?: unknown } | null)?.commands;
   if (!Array.isArray(list)) return [];
   return list.flatMap((value): ServerCommand[] => {
@@ -112,6 +130,10 @@ function parseCommands(body: unknown): ServerCommand[] {
       app_id: entry.app_id,
       work_id: typeof entry.work_id === 'string' ? entry.work_id : undefined,
       record: entry.record === true,
+      hint: typeof entry.hint === 'string' ? entry.hint.slice(0, 160) : '',
+      examples: Array.isArray(entry.examples)
+        ? entry.examples.filter((e): e is string => typeof e === 'string' && e.startsWith('/')).slice(0, 4).map((e) => e.slice(0, 200))
+        : [],
     }];
   });
 }
@@ -122,12 +144,13 @@ export function refreshCommands(): Promise<void> {
   loaded = fetch(COMMANDS_URL, { credentials: 'same-origin', cache: 'no-store' })
     .then((response) => (response.ok ? response.json() : null))
     .then((body) => {
-      setServerCommands(parseCommands(body).map(serverCommand));
+      setAddresses(parseCommands(body).map(serverAddress));
     })
     .catch(() => undefined);
   return loaded;
 }
-function ensureCommands(): Promise<void> {
+/** The member's commands, read once (the Library asks too: its rows show each app's address). */
+export function ensureCommands(): Promise<void> {
   return loaded ?? refreshCommands();
 }
 
@@ -148,13 +171,27 @@ export async function runSlash(text: string, report: Report): Promise<void> {
   await command.run(match[2] ?? '', report);
 }
 
-/** The `/` list for `prefix`: the registry's commands, grouped by category (exported for the tests). */
+/** The `/` list's verbs for `prefix`, grouped by category (exported for the tests). */
 export function slashGroups(prefix: string): CommandGroup[] {
   return groupCommands(matchCommands(prefix));
 }
 
-/** `/commands [search]` (aliases `/help`): the command sheet, never a canvas card. */
-const COMMANDS: CanvasCommand = {
+/**
+ * Decision 4 (APP-119): the canvas layout lives in this browser, so the
+ * `/x…` list's Apps section shows the apps on the canvas and the saved
+ * (named) apps; `matchAddresses` still offers an exact slug of any app.
+ */
+export function listedAddress(address: Address, works = boardWorks()): boolean {
+  return address.kind === 'saved' || works.some((work) => work.app === address.app);
+}
+
+/** The `/x…` list's Apps section for `prefix` (empty for `/` alone; exported for the tests). */
+export function slashAddresses(prefix: string, listed: (address: Address) => boolean = (address) => listedAddress(address)): Address[] {
+  return matchAddresses(prefix, listed);
+}
+
+/** `/commands [search]` (aliases `/help`): the right pane's Commands tab, never a canvas card. */
+export const COMMANDS: CanvasCommand = {
   slug: 'commands',
   aliases: ['help'],
   title: 'All commands',
@@ -163,9 +200,14 @@ const COMMANDS: CanvasCommand = {
     const input = document.getElementById('intent-input') as HTMLInputElement | null;
     if (input) input.value = '';
     openCommandSheet(text.trim(), input);
-    report('Every command is in the sheet. Click one to put it in the bar.');
+    report('Every command is in the Commands tab. Click one to put it in the bar.');
   },
 };
+
+/** `?` in the empty bar: the right pane on its Commands tab. */
+export function openHelp(from: HTMLElement | null): Promise<void> {
+  return ensureCommands().then(() => openCommandSheet('', from));
+}
 
 // --- The near-tie chooser ---
 
@@ -214,7 +256,7 @@ export function showChooser(text: string, choices: Choice[], report: Report): vo
 
 // --- The autocomplete under the intent bar ---
 
-type Entry = { kind: 'command'; command: Command } | { kind: 'completion'; completion: Completion };
+type Entry = { kind: 'command'; command: Runnable } | { kind: 'completion'; completion: Completion };
 
 /** Wires the `/` autocomplete onto the intent bar (once). */
 export function startSlash(document_: Document): void {
@@ -296,7 +338,7 @@ export function startSlash(document_: Document): void {
     });
     return node;
   };
-  const showHint = (command: Command, rest: string) => {
+  const showHint = (command: Runnable, rest: string) => {
     const shown = argumentHint(command, rest);
     const key = JSON.stringify(shown);
     if (key !== hintKey) {
@@ -348,21 +390,32 @@ export function startSlash(document_: Document): void {
       close();
       return;
     }
-    const groups = slashGroups(match[1] ?? '');
+    const prefix = match[1] ?? '';
     entries = [];
-    const nodes = groups.map((group) => {
-      const heading = `cv-slash-cat-${group.category.toLowerCase()}`;
-      return el(document_, 'li', { role: 'group', 'aria-labelledby': heading, class: 'cv-slash-group' },
-        el(document_, 'span', { id: heading, class: 'cv-slash-cat', role: 'presentation' }, group.category),
-        el(document_, 'ul', { role: 'none', class: 'cv-slash-items' }, ...group.commands.map((command) => {
-          const entry: Entry = { kind: 'command', command };
-          entries.push(entry);
-          return option(entry, entries.length - 1,
-            el(document_, 'span', { class: 'cv-slash-name' }, signature(command)),
-            el(document_, 'span', { class: 'cv-slash-title' }, command.title),
-            el(document_, 'span', { class: 'cv-slash-purpose' }, command.purpose));
-        })));
-    });
+    const section = (id: string, title: string, items: Node[]) => el(document_, 'li', { role: 'group', 'aria-labelledby': id, class: 'cv-slash-group' },
+      el(document_, 'span', { id, class: 'cv-slash-cat', role: 'presentation' }, title),
+      el(document_, 'ul', { role: 'none', class: 'cv-slash-items' }, ...items));
+    const nodes = slashGroups(prefix).map((group) => section(`cv-slash-cat-${group.category.toLowerCase()}`, group.category,
+      group.commands.map((command) => {
+        const entry: Entry = { kind: 'command', command };
+        entries.push(entry);
+        return option(entry, entries.length - 1,
+          el(document_, 'span', { class: 'cv-slash-name' }, signature(command)),
+          el(document_, 'span', { class: 'cv-slash-title' }, command.title),
+          el(document_, 'span', { class: 'cv-slash-purpose' }, command.purpose));
+      })));
+    // APP-119: apps are addresses, in their own section after the verbs.
+    const addresses = slashAddresses(prefix);
+    if (addresses.length) {
+      nodes.push(section('cv-slash-cat-apps', APPS_SECTION, addresses.map((address) => {
+        const entry: Entry = { kind: 'command', command: address };
+        entries.push(entry);
+        return option(entry, entries.length - 1,
+          el(document_, 'span', { class: 'cv-slash-name' }, `/${address.slug}`),
+          el(document_, 'span', { class: 'cv-slash-title' }, address.title),
+          el(document_, 'span', { class: 'cv-slash-purpose' }, address.hint));
+      })));
+    }
     list.replaceChildren(...nodes);
     list.hidden = entries.length === 0;
     highlight(entries.length ? 0 : -1);
@@ -373,10 +426,10 @@ export function startSlash(document_: Document): void {
     else close();
   });
   input.addEventListener('keydown', (event) => {
-    // `?` in the empty bar opens the command sheet.
+    // `?` in the empty bar opens the right pane on Commands.
     if (event.key === '?' && input.value === '' && !event.metaKey && !event.ctrlKey && !event.altKey) {
       event.preventDefault();
-      void ensureCommands().then(() => openCommandSheet('', input));
+      void openHelp(input);
       return;
     }
     if (list.hidden || !entries.length) {

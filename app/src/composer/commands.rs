@@ -7,7 +7,16 @@
 //! `COMMANDS`), its title and one-line purpose and whether it keeps records
 //! (the action path's catalog); and every named saved work the member may
 //! open now (`Data::named_works`, the workspace listing's clause). Nothing
-//! else is listed and nothing is written. The canvas resolves `/slug rest`
+//! else is listed and nothing is written. APP-119: apps are addresses, not
+//! commands; each entry also carries its `hint` (what to type after
+//! `/slug`) and `examples`, derived from the definition (`address_hint`:
+//! the create command's writable fields, status and initial fields left
+//! out, labeled, then "… or approve/reject" from the decide command's
+//! transitions; "what to show" for an app that keeps no records) and from
+//! the sidecar's `routing.intent_examples`; the sidecar's optional
+//! `command.hint` and `command.examples` override both. Every app the member
+//! can open is listed: the canvas layout lives in the browser (DS-06,
+//! DS-67), so the canvas narrows its `/` list to what is on it. The canvas resolves `/slug rest`
 //! from this list and posts the pinned compose (`{"intent", "app_id"}`), the
 //! pinned action (`{"utterance", "app_id"}`) or opens a named work directly.
 //!
@@ -88,6 +97,112 @@ fn refusal(error: &Error) -> Response {
     }
 }
 
+/// What an app that keeps no records answers to.
+pub const SHOW_HINT: &str = "what to show";
+/// A saved app with records: words can also file or decide.
+const SAVED_RECORD_HINT: &str = "what to show, or what to file or decide";
+/// Bounds of the address copy.
+const HINT_CHARS: usize = 120;
+const EXAMPLES: usize = 3;
+const EXAMPLE_CHARS: usize = 160;
+
+/// A field id as a member reads it (`spent_on` → "spent on").
+fn label(field: &str) -> String {
+    field.replace('_', " ")
+}
+
+/// The verb a transition's target status names (`approved` → "approve").
+fn verb(status: &str) -> String {
+    let word = status.rsplit('_').next().unwrap_or(status);
+    match word {
+        "approved" => "approve",
+        "rejected" => "reject",
+        "granted" => "grant",
+        "denied" => "deny",
+        "disputed" => "dispute",
+        "paid" => "pay",
+        "reviewed" => "review",
+        "declined" => "decline",
+        "accepted" => "accept",
+        "closed" => "close",
+        "resolved" => "resolve",
+        other => other,
+    }
+    .to_owned()
+}
+
+/// APP-119: the hint derived from the definition (module notes): the create
+/// command's writable fields (status and initial fields left out), labeled,
+/// then "… or approve/reject" from the decide command's transitions.
+pub fn address_hint(entry: Option<&crate::actions::prompt::CatalogApp>) -> String {
+    let Some(entry) = entry else {
+        return SHOW_HINT.to_owned();
+    };
+    let fields: Vec<String> = entry
+        .create_command()
+        .map(|create| {
+            create
+                .writable
+                .iter()
+                .filter(|field| {
+                    field.as_str() != "status"
+                        && !create.rules.initial.iter().any(|(id, _, _)| id == *field)
+                })
+                .map(|field| label(field))
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut verbs: Vec<String> = Vec::new();
+    for (_, _, to) in entry
+        .decide_command()
+        .map(|decide| decide.transitions.as_slice())
+        .unwrap_or_default()
+    {
+        let verb = verb(to);
+        if !verbs.contains(&verb) {
+            verbs.push(verb);
+        }
+    }
+    let head = if fields.is_empty() {
+        SHOW_HINT.to_owned()
+    } else {
+        fields.join(", ")
+    };
+    let hint = if verbs.is_empty() {
+        head
+    } else {
+        format!("{head} … or {}", verbs.join("/"))
+    };
+    hint.chars().take(HINT_CHARS).collect()
+}
+
+/// A library app's hint and examples: the sidecar's override, else the
+/// derived hint and its intent examples addressed to `/slug`.
+fn library_copy(
+    app: &crate::storage::LibraryApp,
+    slug: &str,
+    entry: Option<&crate::actions::prompt::CatalogApp>,
+) -> (String, Vec<String>) {
+    let (hint, examples, intents) = super::matcher::address_copy(app);
+    let hint = hint
+        .map(|hint| hint.chars().take(HINT_CHARS).collect())
+        .unwrap_or_else(|| address_hint(entry));
+    let examples = if examples.is_empty() {
+        intents
+            .iter()
+            .map(|intent| format!("/{slug} {intent}"))
+            .collect()
+    } else {
+        examples
+    };
+    let examples = examples
+        .into_iter()
+        .take(EXAMPLES)
+        .map(|example| example.chars().take(EXAMPLE_CHARS).collect())
+        .collect();
+    (hint, examples)
+}
+
 /// The member's commands as JSON entries (module notes).
 async fn commands(stores: &storage::Stores, member: &TrustedRequest) -> Result<Vec<Value>, Error> {
     let context = stores.workspace.composer_context(member).await?;
@@ -97,10 +212,11 @@ async fn commands(stores: &storage::Stores, member: &TrustedRequest) -> Result<V
         let Some((slug, aliases)) = super::matcher::command(app) else {
             continue;
         };
-        let record = catalog.iter().any(|entry| {
+        let entry = catalog.iter().find(|entry| {
             entry.app == app.app
                 && (entry.create_command().is_some() || entry.decide_command().is_some())
         });
+        let (hint, examples) = library_copy(app, &slug, entry);
         listed.push(json!({
             "slug": slug,
             "aliases": aliases,
@@ -108,10 +224,13 @@ async fn commands(stores: &storage::Stores, member: &TrustedRequest) -> Result<V
             "purpose": super::matcher::purpose(app),
             "kind": "library",
             "app_id": app.app,
-            "record": record,
+            "record": entry.is_some(),
+            "hint": hint,
+            "examples": examples,
         }));
     }
     for named in stores.data.named_works(member).await? {
+        let record = !named.work.collections.is_empty();
         listed.push(json!({
             "slug": named.slug,
             "aliases": [],
@@ -120,7 +239,9 @@ async fn commands(stores: &storage::Stores, member: &TrustedRequest) -> Result<V
             "kind": "saved",
             "app_id": named.work.app,
             "work_id": named.work.work,
-            "record": !named.work.collections.is_empty(),
+            "record": record,
+            "hint": if record { SAVED_RECORD_HINT } else { SHOW_HINT },
+            "examples": [format!("/{}", named.slug)],
         }));
     }
     Ok(listed)
@@ -327,6 +448,87 @@ mod tests {
         for slug in ["expense", "expense-review", "spend", "traffic", "mrr"] {
             assert!(reserved.contains(slug), "{slug}");
         }
+    }
+
+    /// A library app from its fixture's definition, as storage reads it.
+    fn library(fixture: &str) -> crate::storage::LibraryApp {
+        let path = format!(
+            "{}/../contracts/fixtures/library/{fixture}",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let bundle: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let content = bundle["definition"]["content"].clone();
+        crate::storage::LibraryApp {
+            app: bundle["definition"]["app_id"].as_str().unwrap().into(),
+            publication: "00000000-0000-4000-8000-000000000068".into(),
+            definition_digest: bundle["definition"]["digest"].as_str().unwrap().into(),
+            title: content["title"].as_str().unwrap().into(),
+            description: content["description"].as_str().unwrap().into(),
+            inputs: Vec::new(),
+            record_schemas: content["record_schemas"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|schema| {
+                    (
+                        schema["id"].as_str().unwrap().to_owned(),
+                        schema["fields"].clone(),
+                    )
+                })
+                .collect(),
+            views: Vec::new(),
+            content,
+        }
+    }
+
+    fn copy(fixture: &str) -> (String, String, Vec<String>) {
+        let app = library(fixture);
+        let catalog = crate::actions::prompt::catalog(std::slice::from_ref(&app));
+        let entry = catalog.first();
+        let (slug, _) = crate::composer::matcher::command(&app).unwrap();
+        let (hint, examples) = library_copy(&app, &slug, entry);
+        (address_hint(entry), hint, examples)
+    }
+
+    /// APP-119: hints come from the definition; the catalog override wins.
+    #[test]
+    fn address_hints_are_derived_from_the_definition() {
+        // Expense claims: `submit` writes amount, merchant, category,
+        // spent_on, note and status (status is initial, left out); `decide`
+        // moves submitted → approved | rejected.
+        let (derived, hint, examples) = copy("expense-claims.json");
+        assert_eq!(
+            derived,
+            "amount, merchant, category, spent on, note … or approve/reject"
+        );
+        // The demo copy overrides it (sidecar `command.hint`/`examples`).
+        assert_eq!(hint, "what you spent");
+        assert_eq!(
+            examples[0],
+            "/expense $86 at Nobu, client dinner, Sarah approves"
+        );
+        // Purchase requests: the two-step approval reads approve/reject once.
+        let (derived, _, _) = copy("purchase-requests.json");
+        assert_eq!(
+            derived,
+            "item, vendor, amount, cost center, justification … or approve/reject"
+        );
+        let (derived, _, _) = copy("access-requests.json");
+        assert_eq!(derived, "system, role, reason, expires on … or grant/deny");
+        // A review app files nothing; it shows, and decides by review.
+        let (derived, hint, examples) = copy("expense-review.json");
+        assert_eq!(derived, "what to show … or review");
+        assert_eq!(hint, derived, "no override: the derived hint is served");
+        assert_eq!(
+            examples,
+            [
+                "/expense-review expense review queue",
+                "/expense-review approve expenses",
+                "/expense-review which expense claims are waiting"
+            ]
+        );
+        // An app that keeps no records answers to "what to show".
+        assert_eq!(address_hint(None), SHOW_HINT);
     }
 
     #[tokio::test]

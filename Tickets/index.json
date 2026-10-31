@@ -3790,7 +3790,7 @@
       "Depends on": "APP-118",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent on `pivot/notes`)",
-      "Branch / PR": "Not started (`pivot/addresses`)",
+      "Branch / PR": "`pivot/addresses`",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
