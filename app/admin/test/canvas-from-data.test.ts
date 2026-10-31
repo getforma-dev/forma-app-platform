@@ -121,11 +121,14 @@ function freshDocument(): FakeDocument {
   return document_;
 }
 
-type Call = { url: string; method: string; body: Record<string, unknown> | null };
+type Call = { url: string; method: string; body: Record<string, unknown> | null; key?: string };
 function fakeFetch(answer: (call: Call) => { status: number; body: unknown }): Call[] {
   const calls: Call[] = [];
-  (globalThis as { fetch?: unknown }).fetch = async (url: string, init: { method?: string; body?: string } = {}) => {
-    const call = { url, method: init.method ?? 'GET', body: init.body ? JSON.parse(init.body) as Record<string, unknown> : null };
+  (globalThis as { fetch?: unknown }).fetch = async (url: string, init: { method?: string; body?: string; headers?: Record<string, string> } = {}) => {
+    const call = {
+      url, method: init.method ?? 'GET', body: init.body ? JSON.parse(init.body) as Record<string, unknown> : null,
+      ...(init.headers?.['idempotency-key'] ? { key: init.headers['idempotency-key'] } : {}),
+    };
     calls.push(call);
     const { status, body } = answer(call);
     return { ok: status < 300, status, json: async () => body };
@@ -213,6 +216,46 @@ test('a folder with files offers Ask, Make a card and Make an app; Make waits fo
   assert.deepEqual(builds, [{ one_card: true }, { purpose: 'the key metrics and explain them' }]);
   const { refusalText, BoxError } = await import('../src/canvas/box-api.ts');
   assert.match(refusalText(new BoxError('no_data_files', 422)), /no table \(CSV or XLSX\)/);
+});
+
+test('Make a card and Make an app send one idempotency key per confirm, reused when it is sent again (ADR-011 I4, APP-124 review)', async () => {
+  const document_ = freshDocument();
+  const calls = fakeFetch((call) => (call.url.endsWith('/apps')
+    ? { status: 503, body: { code: 'unavailable' } }
+    : { status: 200, body: { box: contents(true, 2), files: [], apps: [] } }));
+  const boxes = await import('../src/canvas/boxes.ts');
+  const { card } = boxes.buildBoxCard(contents(true, 2)) as unknown as { card: FakeNode };
+  document_.body.append(card);
+  const form = card.querySelector('form')!;
+  const builds = () => calls.filter((c) => c.method === 'POST' && c.url === `/v1/boxes/${BOX}/apps`);
+  button(card, 'Make a card')!.click();
+  form.click('submit');
+  await settle();
+  assert.equal(form.hidden, false, 'a failed Make a card keeps its confirm open');
+  form.click('submit');
+  await settle();
+  const [first, again] = builds();
+  assert.match(first!.key ?? '', /^[0-9a-f]{32}$/, '128 random bits as 32 lowercase hex digits');
+  assert.equal(again!.key, first!.key, 'sent again, the same key: the server answers the first result');
+  // Make an app: its own key, kept when sent again; other words are another key.
+  button(card, '✨ Make an app')!.click();
+  form.click('submit');
+  await settle();
+  form.click('submit');
+  await settle();
+  const [, , app, appAgain] = builds();
+  assert.deepEqual(app!.body, { purpose: 'the key metrics and explain them' });
+  assert.match(app!.key ?? '', /^[0-9a-f]{32}$/);
+  assert.notEqual(app!.key, first!.key, 'another confirm, another key');
+  assert.equal(appAgain!.key, app!.key, 'Make an app sent again keeps its key');
+  const purpose = card.all().find((node) => node.tagName === 'input' && (node.getAttribute('aria-label') ?? '').startsWith('What app'))!;
+  purpose.value = 'a churn dashboard';
+  form.click('submit');
+  await settle();
+  assert.deepEqual(builds()[4]!.body, { purpose: 'a churn dashboard' });
+  assert.notEqual(builds()[4]!.key, app!.key, 'other words, another key');
+  // Ask and the other routes carry no key.
+  assert.ok(calls.filter((c) => !c.url.endsWith('/apps')).every((c) => c.key === undefined));
 });
 
 test('the Make buttons are the owner’s; a folder without files offers none of the three (APP-124)', async () => {

@@ -1322,6 +1322,147 @@ async fn campaign() {
         .contains("frame-src 'self'"));
     check(&mut checks, "reload: the folders, files, the registered revision, the derived app's provenance and the stored explanation and brief read back; the canvas page allows same-origin frames for the viewer");
 
+    // --- APP-124 review: a bad newest table, names judged whole, idempotent builds ---
+    let folder = |name: &'static str| {
+        let stand = &stand;
+        let cookie = maya_cookie.clone();
+        async move {
+            stand
+                .post(
+                    "/v1/boxes",
+                    Some(&cookie),
+                    &json!({"name": name}).to_string(),
+                )
+                .await
+                .json()["box"]["box_id"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        }
+    };
+    // The canvas addresses "Ventas año" as /ventas-ano (NFKD, marks dropped);
+    // an untitled folder's card is named after its file, "Ventas ano".
+    folder("Ventas año").await;
+    let ventas = folder("Untitled folder").await;
+    let headers_only = folder("Only headers").await;
+    assert_eq!(
+        upload(&stand, &maya_cookie, &ventas, "Ventas ano.csv", &metrics)
+            .await
+            .status,
+        StatusCode::CREATED
+    );
+    // A newer table the sealed parser cannot read (a header, no rows).
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    for target in [&ventas, &headers_only] {
+        assert_eq!(
+            upload(
+                &stand,
+                &maya_cookie,
+                target,
+                "empty.csv",
+                b"month,revenue\n"
+            )
+            .await
+            .status,
+            StatusCode::CREATED
+        );
+    }
+    // Organization labels (of an app Maya never opened) hold two names.
+    c.fixture.sql(&format!("INSERT INTO genui.app_labels(organization_id,app_id,card,address,kept,updated_by,updated_at) SELECT '{ORG}',a.app_id,'','ventas-ano-card',ARRAY['ventas-ano-2'],w.created_by,now() FROM genui.apps a, genui.saved_work w WHERE a.organization_id='{ORG}' AND a.app_id<>'{AUTHORING_APP}' AND w.organization_id='{ORG}' AND w.work_id='{one_card}' ORDER BY a.app_id LIMIT 1"), "genui");
+    let publications_sql =
+        format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}'");
+    let publications = scalar(&c.fixture, &publications_sql).await;
+    let key = "0123456789abcdef0123456789abcdef";
+    let make = |body: Value, key: &'static str| {
+        let stand = &stand;
+        let cookie = maya_cookie.clone();
+        let path = format!("/v1/boxes/{ventas}/apps");
+        async move {
+            stand
+                .call(
+                    "POST",
+                    &path,
+                    Some(&cookie),
+                    Some(&body.to_string()),
+                    &[("idempotency-key", key)],
+                )
+                .await
+        }
+    };
+    let carded = make(json!({"one_card": true}), key).await;
+    assert_eq!(carded.status, StatusCode::CREATED, "{}", carded.text());
+    let carded = carded.json();
+    assert_eq!(
+        (carded["title"].clone(), carded["files"].clone()),
+        (json!("Ventas ano"), json!(1)),
+        "the older readable table, past the unreadable newest one"
+    );
+    assert_eq!(
+        carded["address"], "ventas-ano-3",
+        "/ventas-ano is the folder Ventas año; -card and -2 are held by labels"
+    );
+    assert_eq!(
+        scalar(&c.fixture, &publications_sql).await,
+        publications + 1,
+        "one publication: the name was judged before publishing (no orphan)"
+    );
+    let repeat = make(json!({"one_card": true}), key).await;
+    assert_eq!(repeat.status, StatusCode::CREATED, "{}", repeat.text());
+    assert_eq!(repeat.headers["idempotent-replayed"], "true");
+    let repeat = repeat.json();
+    assert_eq!(
+        (
+            repeat["app_id"].clone(),
+            repeat["work_id"].clone(),
+            repeat["address"].clone()
+        ),
+        (
+            carded["app_id"].clone(),
+            carded["work_id"].clone(),
+            carded["address"].clone()
+        ),
+        "a repeat answers the first result"
+    );
+    assert_eq!(
+        scalar(&c.fixture, &publications_sql).await,
+        publications + 1,
+        "a repeat makes nothing"
+    );
+    let reused = make(json!({"purpose": "a metrics app"}), key).await;
+    assert_eq!(
+        (reused.status, reused.json()["code"].clone()),
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            json!("idempotency_key_reused")
+        )
+    );
+    let malformed = make(json!({"one_card": true}), "not-a-key").await;
+    assert_eq!(
+        (malformed.status, malformed.json()["code"].clone()),
+        (StatusCode::BAD_REQUEST, json!("malformed_request"))
+    );
+    // Ask on a folder whose only table cannot be read: its text answer.
+    let asks = stub.calls("folder_ask").len();
+    let unreadable = stand
+        .post(
+            &format!("/v1/boxes/{headers_only}/ask"),
+            Some(&maya_cookie),
+            &json!({"question": "how many rows?"}).to_string(),
+        )
+        .await;
+    assert_eq!(unreadable.status, StatusCode::OK, "{}", unreadable.text());
+    let unreadable = unreadable.json();
+    assert_eq!(unreadable["references"], json!([]));
+    assert!(
+        unreadable["text"]
+            .as_str()
+            .unwrap()
+            .contains("one table (CSV or XLSX) could not be read"),
+        "{unreadable}"
+    );
+    assert_eq!(stub.calls("folder_ask").len(), asks, "no model call");
+    check(&mut checks, "APP-124 review: Make a card on an untitled folder walks past a newest table the sealed parser cannot read (a header, no rows) to the older readable one, Ventas ano.csv, and is named after it; its /name is judged whole before anything is published: /ventas-ano is the folder Ventas año as the canvas addresses it (NFKD, marks dropped), /ventas-ano-card and /ventas-ano-2 are held by organization labels of an app Maya never opened, so the card is /ventas-ano-3 with exactly one new publication (no orphan); an Idempotency-Key makes Make a card (here) and folder formation (the demo's rehearsed build, below) answer their first result (201, Idempotent-Replayed, nothing new published), the same key with another body is 422 idempotency_key_reused and a malformed key 400; Ask on a folder whose only table cannot be read answers its text (200, no references, no model call), not 503");
+
     // --- The demo organization: rehearsed sentence, explanation, brief ---
     crate::demo::configure_for_tests(true, &[ORG]);
     let demo_box = stand
@@ -1349,14 +1490,20 @@ async fn campaign() {
     }
     let calls = stub.bodies.lock().unwrap().len();
     let started = Instant::now();
-    let rehearsed = stand
-        .post(
-            &format!("/v1/boxes/{demo_box}/apps"),
+    // Folder formation with an Idempotency-Key (ADR-011 I4, APP-124 review).
+    let formation_path = format!("/v1/boxes/{demo_box}/apps");
+    let formation_body =
+        json!({"purpose": "Build an app that shows the key metrics and explain them"}).to_string();
+    let formation = || {
+        stand.call(
+            "POST",
+            &formation_path,
             Some(&maya_cookie),
-            &json!({"purpose": "Build an app that shows the key metrics and explain them"})
-                .to_string(),
+            Some(&formation_body),
+            &[("idempotency-key", "fedcba9876543210fedcba9876543210")],
         )
-        .await;
+    };
+    let rehearsed = formation().await;
     assert_eq!(
         rehearsed.status,
         StatusCode::CREATED,
@@ -1369,6 +1516,20 @@ async fn campaign() {
     let (demo_app, demo_work) = (
         rehearsed["app_id"].as_str().unwrap().to_owned(),
         rehearsed["work_id"].as_str().unwrap().to_owned(),
+    );
+    let publications = scalar(&c.fixture, &publications_sql).await;
+    let formed_again = formation().await;
+    assert_eq!(formed_again.status, StatusCode::CREATED);
+    assert_eq!(formed_again.headers["idempotent-replayed"], "true");
+    assert_eq!(
+        formed_again.json()["work_id"],
+        demo_work.as_str(),
+        "formation sent again answers its first result"
+    );
+    assert_eq!(
+        scalar(&c.fixture, &publications_sql).await,
+        publications,
+        "nothing new is published"
     );
     let demo_explained = stand
         .post(
@@ -1438,7 +1599,7 @@ async fn campaign() {
         calls,
         "the demo's rehearsed paths call no model"
     );
-    check(&mut checks, "demo (DS-73..DS-75, APP-124): in the demo organization the rehearsed sentence builds the metrics app over the folder's data files by rule, admitted and labeled generated; its explanation, the folder's brief (the fixture PDF cited by page) and Ask on the folder (a row count referencing all 12 rows, the exact revenue total) answer with no model call");
+    check(&mut checks, "demo (DS-73..DS-75, APP-124): in the demo organization the rehearsed sentence builds the metrics app over the folder's data files by rule, admitted and labeled generated (sent again with its Idempotency-Key: the same work, nothing new published); its explanation, the folder's brief (the fixture PDF cited by page) and Ask on the folder (a row count referencing all 12 rows, the exact revenue total) answer with no model call");
     crate::demo::configure_for_tests(false, &[]);
 
     // The local stand for a browser walk (scratch only, synthetic sessions).

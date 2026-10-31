@@ -25,7 +25,11 @@
 //! - `POST /v1/boxes/{box}/apps {"purpose","file_ids"?}`: an app built from
 //!   the box (long deadline: it may wait on the model). APP-124: with
 //!   `"one_card": true` (`purpose` optional) it is **Make a card**: a
-//!   minimal app with exactly one card, by rule ([`card_from_box`]).
+//!   minimal app with exactly one card, by rule ([`card_from_box`]). An
+//!   `Idempotency-Key` (32 lowercase hex digits; malformed is 400) makes
+//!   either idempotent (ADR-011 I4): a repeat by the member on the folder
+//!   answers the first result (201, `Idempotent-Replayed: true`), the same
+//!   key with another body is 422 `idempotency_key_reused`.
 //! - `POST /v1/boxes/{box}/ask {"question"}`: APP-124, Ask on a folder
 //!   (`super::ask`): a read-only answer over its parsed tables, with the
 //!   file and row of every row it used.
@@ -1191,7 +1195,9 @@ pub async fn build_from_box(
 /// The folder (its owner only, else the uniform 404) and up to `at_most`
 /// of its data files, registered (inferred defaults for any not yet
 /// confirmed), each with its first rows: confirmed files first (the member
-/// chose their types), then the newest others.
+/// chose their types), then the newest others. A file that cannot be read
+/// or registered is skipped and the next one tried, so a bad newest file
+/// never hides an older good table (APP-124 review).
 async fn box_data(
     state: &Boxes,
     member: &TrustedRequest,
@@ -1219,7 +1225,10 @@ async fn box_data(
         .filter(|f| only.is_none_or(|ids| ids.contains(&f.file_id)))
         .collect();
     candidates.sort_by_key(|f| (f.data.is_none(), std::cmp::Reverse(f.created_at.clone())));
-    for file in candidates.into_iter().take(at_most) {
+    for file in candidates {
+        if data.len() >= at_most {
+            break;
+        }
         let (registered, table) = match &file.data {
             Some(registered) => match inspect_file(state, member, file).await {
                 Ok((_, table, _)) => (registered.clone(), table),
@@ -1385,9 +1394,9 @@ async fn build_with(
 /// and saved under a `/name` when one is free (`derive::card_slug`, then
 /// `-card`, then `-2` … `-9`; never a verb, a reserved word, a library
 /// address or alias, a name the member already sees or one of their
-/// folders' names). The name is judged under the organization's naming lock,
-/// as `POST /v1/work/{app}/{work}/name` judges it; an organization label
-/// that holds it (judged in storage) leaves the app unnamed.
+/// folders' addresses, nor one an organization label holds). The name is
+/// judged whole under the organization's naming lock, as `POST
+/// /v1/work/{app}/{work}/name` judges it, before anything is published.
 pub async fn card_from_box(
     state: &Boxes,
     member: &TrustedRequest,
@@ -1417,26 +1426,22 @@ pub async fn card_from_box(
     );
     let lock = composer::commands::naming_lock(member.organization());
     let naming = lock.lock().await;
-    let mut address = free_address(state, member, &derive::card_slug(&title)).await;
-    let named = |slug: &str| format!("{}{slug}\n{intent}", storage::COMMAND_MARKER);
-    let placed = match &address {
-        Some(slug) => {
-            match publish_rule_built(state, member, &context, &content, &named(slug)).await {
-                Ok(placed) => placed,
-                // An organization label holds the name (storage's judgment):
-                // the card is made unnamed.
-                Err(Refused::NotFound) => {
-                    address = None;
-                    publish_rule_built(state, member, &context, &content, &intent)
-                        .await
-                        .map_err(build_refusal)?
-                }
-                Err(refused) => return Err(build_refusal(refused)),
-            }
-        }
-        None => publish_rule_built(state, member, &context, &content, &intent)
-            .await
-            .map_err(build_refusal)?,
+    // The name is judged whole before anything is published (organization
+    // labels included), so a held name never leaves an orphan publication.
+    let address = free_address(state, member, &derive::card_slug(&title)).await;
+    let saved_as = match &address {
+        Some(slug) => format!("{}{slug}\n{intent}", storage::COMMAND_MARKER),
+        None => intent.clone(),
+    };
+    let placed = match publish_rule_built(state, member, &context, &content, &saved_as).await {
+        Ok(placed) => placed,
+        // Only a label written by another task between the judgment above
+        // and the save refuses the name now (storage judges labels under its
+        // own advisory lock): the publication is logged as orphaned
+        // (`composer.publication_orphaned`) and nothing is republished; a
+        // retry judges again and takes the next free name.
+        Err(Refused::NotFound) if address.is_some() => return Err(BuildRefusal::Unavailable),
+        Err(refused) => return Err(build_refusal(refused)),
     };
     drop(naming);
     timings.push(("generation_ms", 0));
@@ -1475,7 +1480,10 @@ pub async fn card_from_box(
 }
 
 /// The first free `/name` for a one-card app (see [`card_from_box`]), or
-/// none. The caller holds the organization's naming lock.
+/// none. The caller holds the organization's naming lock. A folder's name is
+/// compared as the canvas addresses it ([`derive::address_slug`], the
+/// canvas's `folderSlug`); an organization label's address or kept address
+/// is judged in storage, organization-wide, before anything is published.
 async fn free_address(state: &Boxes, member: &TrustedRequest, base: &str) -> Option<String> {
     let stores = state.auth.stores.as_ref()?;
     let named = stores.data.named_works(member).await.ok()?;
@@ -1485,7 +1493,7 @@ async fn free_address(state: &Boxes, member: &TrustedRequest, base: &str) -> Opt
         .await
         .ok()?
         .iter()
-        .map(|b| derive::card_slug(&b.name))
+        .map(|b| derive::address_slug(folder_label(b)))
         .collect();
     let library = composer::matcher::library_slugs();
     let taken = |slug: &str| {
@@ -1495,10 +1503,37 @@ async fn free_address(state: &Boxes, member: &TrustedRequest, base: &str) -> Opt
             || named.iter().any(|n| n.slug == slug)
             || folders.iter().any(|f| f == slug)
     };
+    let candidates: Vec<String> = card_addresses(base)
+        .into_iter()
+        .filter(|slug| composer::commands::valid_slug(slug) && !taken(slug))
+        .collect();
+    if candidates.is_empty() {
+        return None;
+    }
+    let held = stores
+        .workspace
+        .labels_holding(member, &candidates)
+        .await
+        .ok()?;
+    candidates.into_iter().find(|slug| !held.contains(slug))
+}
+
+/// The names a one-card app is offered, in order: the base, `-card`, then
+/// `-2` … `-9`.
+pub fn card_addresses(base: &str) -> Vec<String> {
     std::iter::once(base.to_owned())
         .chain(std::iter::once(format!("{base}-card")))
         .chain((2..=9).map(|n| format!("{base}-{n}")))
-        .find(|slug| composer::commands::valid_slug(slug) && !taken(slug))
+        .collect()
+}
+
+/// A folder's label as the canvas shows it (`boxes.ts` `boxLabel`).
+fn folder_label(row: &BoxRow) -> &str {
+    if row.kind == "uploads" {
+        "Uploads"
+    } else {
+        &row.name
+    }
 }
 
 fn build_refusal(refused: Refused) -> BuildRefusal {
@@ -1575,19 +1610,130 @@ async fn apps(
     let closed = value
         .keys()
         .all(|k| k == "purpose" || k == "file_ids" || k == "one_card");
-    if one_card && closed && (value.get("purpose").is_none() || purpose.is_some()) {
-        return match card_from_box(&state, &member, &box_id, only.as_deref()).await {
-            Ok(built) => document(StatusCode::CREATED, &built_json(&built)),
+    let card = one_card && closed && (value.get("purpose").is_none() || purpose.is_some());
+    let purpose = match (card, purpose, closed, one_card) {
+        (true, _, _, _) => None,
+        (false, Some(purpose), true, false) => Some(purpose),
+        _ => return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_intent"),
+    };
+    // ADR-011 I4 (APP-124 review): an `Idempotency-Key` makes Make a card
+    // and folder formation idempotent: a repeat answers the first result.
+    let key = match parts.headers.get("idempotency-key") {
+        None => None,
+        Some(header) => match header
+            .to_str()
+            .ok()
+            .filter(|k| storage::idempotency_key_shaped(k))
+        {
+            Some(key) => Some(key.to_owned()),
+            None => return http::problem(StatusCode::BAD_REQUEST, "malformed_request"),
+        },
+    };
+    let run = async {
+        let built = match &purpose {
+            None => card_from_box(&state, &member, &box_id, only.as_deref()).await,
+            Some(purpose) => {
+                build_from_box(&state, &member, &box_id, purpose, only.as_deref()).await
+            }
+        };
+        built.map(|built| built_json(&built))
+    };
+    let Some(key) = key else {
+        return match run.await {
+            Ok(built) => document(StatusCode::CREATED, &built),
             Err(refused) => refused.response(),
         };
-    }
-    let (Some(purpose), true, false) = (purpose, closed, one_card) else {
-        return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_intent");
     };
-    match build_from_box(&state, &member, &box_id, &purpose, only.as_deref()).await {
-        Ok(built) => document(StatusCode::CREATED, &built_json(&built)),
+    let scope = format!(
+        "{}:{}:{box_id}:{key}",
+        member.organization(),
+        member.principal()
+    );
+    let Some(first) = replay_claim(scope, Value::Object(value.clone()).to_string()) else {
+        return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "idempotency_key_reused");
+    };
+    // A repeat waits for the first request with the key, then answers its
+    // result; a refused or abandoned first request leaves nothing, so the
+    // repeat runs.
+    let mut first = first.lock().await;
+    if let Some(built) = first.as_ref() {
+        tracing::info!(
+            event = "box.build_replayed",
+            organization_id = member.organization(),
+            box_id,
+            app_id = built["app_id"].as_str().unwrap_or(""),
+            "folder build answered from its idempotency key"
+        );
+        let mut response = document(StatusCode::CREATED, built);
+        response
+            .headers_mut()
+            .insert("idempotent-replayed", HeaderValue::from_static("true"));
+        return response;
+    }
+    match run.await {
+        Ok(built) => {
+            let response = document(StatusCode::CREATED, &built);
+            *first = Some(built);
+            response
+        }
         Err(refused) => refused.response(),
     }
+}
+
+/// How long a folder build's idempotency key answers its first result, and
+/// how many keys the process keeps (the oldest are forgotten first).
+const REPLAY_FOR: Duration = Duration::from_secs(24 * 60 * 60);
+const MAX_REPLAYS: usize = 4096;
+
+/// One idempotency key of `POST /v1/boxes/{box}/apps`: the body it was
+/// first sent with and, once that request succeeded, its answer.
+struct Replay {
+    body: String,
+    at: Instant,
+    first: Arc<tokio::sync::Mutex<Option<Value>>>,
+}
+
+/// ADR-011 I4 for Make a card and folder formation (APP-124 review): the
+/// first result of a `(organization, member, folder, key)`, kept in this
+/// process for [`REPLAY_FOR`], as the naming lock is (the pitch runs one
+/// task; a storage table is the multi-task fix, recorded in APP-124).
+/// `None` when the key was first sent with another body.
+pub(super) fn replay_claim(
+    scope: String,
+    body: String,
+) -> Option<Arc<tokio::sync::Mutex<Option<Value>>>> {
+    static REPLAYS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, Replay>>,
+    > = std::sync::OnceLock::new();
+    let mut replays = REPLAYS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let now = Instant::now();
+    replays.retain(|_, replay| now.duration_since(replay.at) < REPLAY_FOR);
+    if let Some(replay) = replays.get(&scope) {
+        return (replay.body == body).then(|| replay.first.clone());
+    }
+    while replays.len() >= MAX_REPLAYS {
+        let oldest = replays
+            .iter()
+            .min_by_key(|(_, replay)| replay.at)
+            .map(|(scope, _)| scope.clone());
+        match oldest {
+            Some(oldest) => replays.remove(&oldest),
+            None => break,
+        };
+    }
+    let first = Arc::new(tokio::sync::Mutex::new(None));
+    replays.insert(
+        scope,
+        Replay {
+            body,
+            at: now,
+            first: first.clone(),
+        },
+    );
+    Some(first)
 }
 
 async fn rename(

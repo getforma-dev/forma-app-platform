@@ -216,19 +216,36 @@ pub fn card_title(box_name: &str, box_kind: &str, file_name: &str) -> String {
     }
 }
 
-/// The address a one-card app is offered under: its title lowercased, runs
-/// of other characters one hyphen, at most 27 characters (room for `-card`), starting with a
-/// letter (`Q3 board pack` → `q3-board-pack`, `2026 sales` → `data-2026-sales`).
-pub fn card_slug(title: &str) -> String {
+/// A name as an address, exactly as the canvas derives a folder's address
+/// (`boxes.ts` `folderSlug`): compatibility-decomposed (NFKD), lowercased,
+/// combining marks dropped (`año` → `ano`), runs of other characters one
+/// hyphen, no leading hyphen, at most 64 characters, no trailing hyphen.
+/// One function for both sides, so a card's `/name` is judged against the
+/// folders' addresses the canvas actually answers to.
+pub fn address_slug(label: &str) -> String {
+    use unicode_normalization::{char::is_combining_mark, UnicodeNormalization};
     let mut slug = String::new();
-    for c in title.to_lowercase().chars() {
+    for c in label
+        .nfkd()
+        .flat_map(char::to_lowercase)
+        .filter(|c| !is_combining_mark(*c))
+    {
         if c.is_ascii_lowercase() || c.is_ascii_digit() {
             slug.push(c);
-        } else if !slug.ends_with('-') && !slug.is_empty() {
+        } else if !slug.is_empty() && !slug.ends_with('-') {
             slug.push('-');
         }
     }
-    let mut slug = slug.trim_end_matches('-').to_owned();
+    slug.truncate(64);
+    slug.trim_end_matches('-').to_owned()
+}
+
+/// The address a one-card app is offered under: [`address_slug`] of its
+/// title, starting with a letter, at most 27 characters (room for `-card`)
+/// (`Q3 board pack` → `q3-board-pack`, `2026 sales` → `data-2026-sales`,
+/// `Ventas año` → `ventas-ano`).
+pub fn card_slug(title: &str) -> String {
+    let mut slug = address_slug(title);
     if !slug.starts_with(|c: char| c.is_ascii_lowercase()) {
         slug = format!("data-{slug}");
     }

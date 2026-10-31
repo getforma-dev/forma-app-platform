@@ -40,7 +40,7 @@
 // its button. The empty canvas offers "Drop files or upload" (a file picker
 // and a drop target), which makes a new folder holding the files.
 import {
-  ACCEPT, createBox, FOLDER_ALIASES, FOLDER_COMMAND, FORMATION_PROMPT, NOUN, noun, NOUN_PLURAL, nouns, renameBox, wantsBrief, defaultColumns, fetchPreview, formatBytes, getBox, isDataFile, lineage, listBoxes, makeApp, makeCard, makeData,
+  ACCEPT, createBox, FOLDER_ALIASES, FOLDER_COMMAND, FORMATION_PROMPT, NOUN, noun, NOUN_PLURAL, nouns, renameBox, wantsBrief, defaultColumns, fetchPreview, formatBytes, getBox, isDataFile, lineage, idempotencyKey, listBoxes, makeApp, makeCard, makeData,
   MAX_BOX_FILES, MAX_FILE_BYTES, refusalText, uploadFile, uploadsBox,
   type Box, type BoxContents, type BoxFile, type Preview,
 } from './box-api';
@@ -472,14 +472,23 @@ export function buildBoxCard(initial: BoxContents) {
     else say('Ask is not available on this page.');
   });
   cancelFormation.addEventListener('click', () => { form.hidden = true; });
+  // ADR-011 I4: one idempotency key per confirm, reused when the same confirm is sent again after a failure
+  // (the server answers the first result); a new one once it succeeded or what it makes changed.
+  let pending: { what: string; key: string } | null = null;
+  const keyFor = (what: string): string => {
+    if (pending?.what !== what) pending = { what, key: idempotencyKey() };
+    return pending.key;
+  };
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     if (build.disabled) return;
     if (making === 'card') {
       build.disabled = true;
       say(`Making one card from this ${noun}…`);
-      void buildCard(boxId).then((message) => {
-        say(message);
+      void buildCard(boxId, keyFor('card')).then(({ text, made }) => {
+        say(text);
+        if (!made) return;
+        pending = null;
         form.hidden = true;
         return refresh();
       }).finally(() => { build.disabled = false; });
@@ -489,8 +498,10 @@ export function buildBoxCard(initial: BoxContents) {
     if (!words) return;
     build.disabled = true;
     say(`Generating an app from this ${noun} (file names, confirmed columns and a few sample rows only)…`);
-    void buildApp(boxId, words).then((message) => {
-      say(message);
+    void buildAppOnce(boxId, words, keyFor(`app:${words}`)).then(({ text, made }) => {
+      say(text);
+      if (!made) return;
+      pending = null;
       form.hidden = true;
       purpose.value = FORMATION_PROMPT;
       return refresh();
@@ -570,10 +581,15 @@ export function cardSummary(contents: BoxContents): string {
   return `Forma makes a small app, “${named}”, with one card: the most useful view of ${first.name}. It links back to this ${noun}.`;
 }
 
-/** APP-124 **Make a card**: one card from the folder's data, placed with its app's address; says so. */
-async function buildCard(boxId: string): Promise<string> {
+/** APP-124 **Make a card**: one card from the folder's data, placed with its app's address; says so (`made`: it was made). */
+async function buildCard(boxId: string, key: string): Promise<{ text: string; made: boolean }> {
+  let made: Awaited<ReturnType<typeof makeCard>>;
   try {
-    const made = await makeCard(boxId);
+    made = await makeCard(boxId, key);
+  } catch (error) {
+    return { text: refusalText(error), made: false };
+  }
+  try {
     // The new app's `/name` joins the member's addresses before it is placed, so its card shows the chip.
     if (made.address) await refreshCommands();
     const placing = performance.now();
@@ -581,24 +597,34 @@ async function buildCard(boxId: string): Promise<string> {
     if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') decorateAppCards(document);
     void formationChip(made.timings, performance.now() - placing, made.work_id, workCard(made.work_id, 'app'));
     void open.get(boxId)?.refresh();
-    return `${made.title}: one card from this ${noun}${made.address ? `, at /${made.address}` : ''}. ${placed}`;
+    return { text: `${made.title}: one card from this ${noun}${made.address ? `, at /${made.address}` : ''}. ${placed}`, made: true };
   } catch (error) {
-    return refusalText(error);
+    return { text: `${made.title} was made, but could not be placed: ${refusalText(error)}`, made: true };
   }
 }
 
 /** Builds an app from a box (capped context on the server), places it, and says so. */
 async function buildApp(boxId: string, purpose: string, report?: Report): Promise<string> {
   report?.(`Generating an app from the ${noun}…`);
+  return (await buildAppOnce(boxId, purpose)).text;
+}
+
+/** As `buildApp`, with the confirm's idempotency key; `made`: the server made the app. */
+async function buildAppOnce(boxId: string, purpose: string, key?: string): Promise<{ text: string; made: boolean }> {
+  let built: Awaited<ReturnType<typeof makeApp>>;
   try {
-    const built = await makeApp(boxId, purpose);
+    built = await makeApp(boxId, purpose, undefined, key);
+  } catch (error) {
+    return { text: refusalText(error), made: false };
+  }
+  try {
     const placing = performance.now();
     const placed = await placeWork(built.app_id, built.work_id, []);
     void formationChip(built.timings, performance.now() - placing, built.work_id, workCard(built.work_id, 'app'));
     void open.get(boxId)?.refresh();
-    return `${built.title}: generated from ${built.files} ${built.files === 1 ? 'file' : 'files'} of the ${noun}. ${placed}`;
+    return { text: `${built.title}: generated from ${built.files} ${built.files === 1 ? 'file' : 'files'} of the ${noun}. ${placed}`, made: true };
   } catch (error) {
-    return refusalText(error);
+    return { text: `${built.title} was made, but could not be placed: ${refusalText(error)}`, made: true };
   }
 }
 
@@ -844,9 +870,13 @@ const FOLDER = {
   },
 };
 
-/** A folder's name as an address: lowercase, runs of other characters a hyphen (`Q3 board pack` → `q3-board-pack`). */
+/**
+ * A folder's name as an address (`Q3 board pack` → `q3-board-pack`, `Ventas año` → `ventas-ano`):
+ * NFKD, lowercase, combining marks dropped, runs of other characters a hyphen, at most 64 characters.
+ * The server judges a one-card app's `/name` against these with the same function (`derive::address_slug`).
+ */
 export function folderSlug(label: string): string {
-  return label.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+  return label.normalize('NFKD').toLowerCase().replace(/\p{M}+/gu, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 64).replace(/-+$/, '');
 }
 
 /**

@@ -163,14 +163,17 @@ function card(value: unknown): Card | null {
   return isUuid(v.app_id) && isUuid(v.work_id) ? { app_id: v.app_id, work_id: v.work_id, title: str(v.title) ? v.title : 'Data' } : null;
 }
 
-export async function call(method: string, url: string, body?: unknown): Promise<Record<string, unknown>> {
+export async function call(method: string, url: string, body?: unknown, key?: string): Promise<Record<string, unknown>> {
   let response: Response;
   try {
     response = await fetch(url, {
       method,
       credentials: 'same-origin',
       cache: 'no-store',
-      ...(body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+      ...(body === undefined ? {} : {
+        headers: { 'content-type': 'application/json', ...(key ? { 'idempotency-key': key } : {}) },
+        body: JSON.stringify(body),
+      }),
     });
   } catch {
     throw new BoxError('network', 0);
@@ -276,9 +279,19 @@ export async function makeData(boxId: string, fileId: string, columns: Confirmed
   return { data: dataInfo(json.data), card: card(json.card) };
 }
 
-export async function makeApp(boxId: string, purpose: string, fileIds?: string[]): Promise<{ app_id: string; work_id: string; title: string; files: number; timings: unknown }> {
+/**
+ * ADR-011 I4 (APP-124 review): a key for one confirm of Make a card or ✨ Make an app, 128 random bits as
+ * 32 lowercase hex digits; the confirm reuses it on retry, so the server answers the first result.
+ */
+export function idempotencyKey(): string {
+  const random = new Uint8Array(16);
+  crypto.getRandomValues(random);
+  return Array.from(random, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+export async function makeApp(boxId: string, purpose: string, fileIds?: string[], key?: string): Promise<{ app_id: string; work_id: string; title: string; files: number; timings: unknown }> {
   if (!isUuid(boxId)) throw new BoxError('not_found', 404);
-  const json = await call('POST', `/v1/boxes/${boxId}/apps`, fileIds ? { purpose, file_ids: fileIds.filter(isUuid) } : { purpose });
+  const json = await call('POST', `/v1/boxes/${boxId}/apps`, fileIds ? { purpose, file_ids: fileIds.filter(isUuid) } : { purpose }, key);
   if (!isUuid(json.app_id) || !isUuid(json.work_id)) throw new BoxError('unavailable', 500);
   return { app_id: json.app_id, work_id: json.work_id, title: str(json.title) ? json.title : 'Generated app', files: num(json.files) ? json.files : 0, timings: json.timings };
 }
@@ -289,9 +302,9 @@ export async function makeApp(boxId: string, purpose: string, fileIds?: string[]
  * card, the most useful view of its data, linked back to the folder, and
  * names it (`address`, the app's `/name`) when a name is free.
  */
-export async function makeCard(boxId: string): Promise<{ app_id: string; work_id: string; title: string; address: string | null; timings: unknown }> {
+export async function makeCard(boxId: string, key?: string): Promise<{ app_id: string; work_id: string; title: string; address: string | null; timings: unknown }> {
   if (!isUuid(boxId)) throw new BoxError('not_found', 404);
-  const json = await call('POST', `/v1/boxes/${boxId}/apps`, { one_card: true });
+  const json = await call('POST', `/v1/boxes/${boxId}/apps`, { one_card: true }, key);
   if (!isUuid(json.app_id) || !isUuid(json.work_id)) throw new BoxError('unavailable', 500);
   const address = str(json.address) && /^[a-z][a-z0-9-]{1,31}$/.test(json.address) ? json.address : null;
   return { app_id: json.app_id, work_id: json.work_id, title: str(json.title) ? json.title.slice(0, 120) : 'Card', address, timings: json.timings };

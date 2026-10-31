@@ -10,8 +10,10 @@
 //!   byte. Nothing is written anywhere: the tables are parsed from the
 //!   immutable originals by the sealed parser, as the preview is.
 //! - **The tables**: the folder's CSV/XLSX files (confirmed first, then the
-//!   newest; at most [`MAX_TABLES`]), each read whole up to [`MAX_ROWS`]
-//!   rows. A registered file reads with its confirmed types.
+//!   newest; at most [`MAX_TABLES`] that could be read: an unreadable file
+//!   is skipped and the next one tried), each read whole up to [`MAX_ROWS`]
+//!   rows. A registered file reads with its confirmed types. No readable
+//!   table is a text answer pointing to Brief me (200), never a 503.
 //! - **The answer** is one closed shape, exactly `{"text", "references"}`:
 //!   plain text (at most 1500 characters) and every row it used, each with
 //!   receipt-like provenance from the server, never from the model: the file
@@ -21,7 +23,9 @@
 //!   refused; a reference to a row it was not shown is refused).
 //! - In a demo organization the rehearsed questions (how many rows, the
 //!   total, what is in it, a change request) are computed from the rows with
-//!   no model call; a count or total references every row it counted.
+//!   no model call; a count or total references every row it counted; a
+//!   cell of the summed column that is not a number is skipped and the
+//!   answer says how many were.
 //!   Anything else goes to the model; without one, `composer_unavailable`.
 //!
 //! Refusals: 403 `cross_site`; the uniform 404; 413; 400
@@ -347,24 +351,48 @@ pub fn rehearsed(question: &str, tables: &[FolderTable]) -> Option<Answer> {
                 ColumnType::Decimal(scale) => scale,
                 _ => 0,
             };
-            let mut total: i128 = 0;
+            // A cell that is not a number of the column's type is skipped
+            // and said (never a guess, never the whole answer refused).
+            let mut total: Option<i128> = Some(0);
             let mut counted = 0;
+            let mut skipped = 0;
+            let mut used = Vec::new();
             for (row, values) in table.rows.iter().enumerate() {
                 let raw = values.get(column).map(String::as_str).unwrap_or("");
-                let canonical = inspect::canonical(kind, true, raw)?;
+                let Some(canonical) = inspect::canonical(kind, true, raw) else {
+                    skipped += 1;
+                    continue;
+                };
                 if canonical.is_empty() {
                     continue;
                 }
-                total = total.checked_add(scaled(&canonical, scale)?)?;
+                let Some(value) = scaled(&canonical, scale) else {
+                    skipped += 1;
+                    continue;
+                };
+                total = total.and_then(|t| t.checked_add(value));
                 counted += 1;
-                references.push(reference(index, row));
+                used.push(reference(index, row));
             }
             let header = &table.columns[column].0;
+            let Some(total) = total else {
+                parts.push(format!(
+                    "{header} in {} is too large to add exactly",
+                    table.name
+                ));
+                continue;
+            };
+            references.extend(used);
             let amount = number_text(total, scale, kind == ColumnType::Money);
+            let skipped = match skipped {
+                0 => String::new(),
+                1 => "; 1 cell that is not a number was skipped".to_owned(),
+                n => format!("; {n} cells that are not numbers were skipped"),
+            };
             parts.push(if table.partial() {
-                format!("{header} in {} adds up to {amount} over the first {counted} {} read (not the full total: the file has {} rows)", table.name, rows_word(counted), table.total_rows)
+                format!("{header} in {} adds up to {amount} over the first {counted} {} read (not the full total: the file has {} rows{skipped})", table.name, rows_word(counted), table.total_rows)
             } else {
-                format!("{header} in {} adds up to {amount} ({counted} {})", table.name, rows_word(counted))
+                format!("{header} in {} adds up to {amount} ({counted} {}{skipped})", table.name, rows_word(counted))
             });
         }
         if parts.is_empty() {
@@ -411,22 +439,28 @@ pub fn rehearsed(question: &str, tables: &[FolderTable]) -> Option<Answer> {
 // --- The route ---
 
 /// The tables Ask reads: the folder's CSV/XLSX files this member may read,
-/// confirmed first, then the newest, at most [`MAX_TABLES`]. `Err` when
-/// the folder has data files and none could be read.
+/// confirmed first, then the newest, at most [`MAX_TABLES`] that could be
+/// read: a file that cannot be read is skipped and the next one tried, so a
+/// bad newest file never hides an older good table (APP-124 review). The
+/// second value counts the data files that could not be read.
 async fn tables(
     state: &Boxes,
     member: &crate::storage::TrustedRequest,
     files: &[BoxFile],
-) -> Result<Vec<FolderTable>, ()> {
+) -> (Vec<FolderTable>, usize) {
     let mut candidates: Vec<&BoxFile> = files
         .iter()
         .filter(|f| matches!(f.kind.as_str(), "csv" | "xlsx"))
         .collect();
     candidates.sort_by_key(|f| (f.data.is_none(), std::cmp::Reverse(f.created_at.clone())));
-    let tried = !candidates.is_empty();
+    let mut unreadable = 0;
     let mut out = Vec::new();
-    for file in candidates.into_iter().take(MAX_TABLES) {
+    for file in candidates {
+        if out.len() >= MAX_TABLES {
+            break;
+        }
         let Ok((_, table, inferred)) = routes::inspect_file(state, member, file).await else {
+            unreadable += 1;
             continue;
         };
         // A registered file reads with the types its member confirmed.
@@ -455,10 +489,21 @@ async fn tables(
             rows: table.rows.into_iter().take(MAX_ROWS).collect(),
         });
     }
-    if tried && out.is_empty() {
-        return Err(());
+    (out, unreadable)
+}
+
+/// The answer when no table could be read: text only, pointing to Brief me.
+pub fn no_table(unreadable: usize) -> Answer {
+    let noun = super::NOUN_LOWER;
+    let text = match unreadable {
+        0 => format!("This {noun} has no table (CSV or XLSX) to read yet. Brief me reads its PDFs; Ask reads its tables."),
+        1 => format!("This {noun}'s one table (CSV or XLSX) could not be read. Brief me reads its PDFs; Ask reads its tables."),
+        n => format!("None of this {noun}'s {n} tables (CSV or XLSX) could be read. Brief me reads its PDFs; Ask reads its tables."),
+    };
+    Answer {
+        text,
+        references: Vec::new(),
     }
-    Ok(out)
 }
 
 /// `POST /v1/boxes/{box}/ask`.
@@ -505,9 +550,7 @@ pub async fn ask_post(
         Err(Error::Denied) => return http::not_found(),
         Err(_) => return http::unavailable(),
     };
-    let Ok(tables) = tables(&state, &member, &view.files).await else {
-        return http::unavailable();
-    };
+    let (tables, unreadable) = tables(&state, &member, &view.files).await;
     let log = |source: &str, code: &str, references: usize| {
         tracing::info!(
             event = "box.asked",
@@ -525,14 +568,7 @@ pub async fn ask_post(
     };
     if tables.is_empty() {
         log("none", "no_tables", 0);
-        let answer = Answer {
-            text: format!(
-                "This {} has no table (CSV or XLSX) to read yet. Brief me reads its PDFs; Ask reads its tables.",
-                super::NOUN_LOWER
-            ),
-            references: Vec::new(),
-        };
-        return routes::document(StatusCode::OK, &document(&answer, &tables));
+        return routes::document(StatusCode::OK, &document(&no_table(unreadable), &tables));
     }
     if let Some(answer) = demo.then(|| rehearsed(&question, &tables)).flatten() {
         log("rehearsed", "ok", answer.references.len());

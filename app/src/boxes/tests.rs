@@ -475,7 +475,8 @@ fn make_a_card_is_one_admitted_view_chosen_by_rule() {
         ("Q3 board pack", "q3-board-pack"),
         ("  Spend: 2026!  ", "spend-2026"),
         ("2026 sales", "data-2026-sales"),
-        ("Ünïcode only", "n-code-only"),
+        ("Ünïcode only", "unicode-only"),
+        ("Ventas año", "ventas-ano"),
         (&"long name ".repeat(6), "long-name-long-name-long-na"),
     ] {
         let made = super::derive::card_slug(title);
@@ -593,4 +594,109 @@ fn folder_ask_answers_with_the_rows_it_used() {
         .collect();
     let (message, known) = user("q", &[folder_table(&long, 200)]);
     assert!(known.len() <= 200 && message.len() <= 60_000);
+}
+
+/// APP-124 review: one address function for the server's judgment and the
+/// canvas's folder addresses (`boxes.ts` `folderSlug`, the same vectors in
+/// `canvas-cards.test.ts`): NFKD, marks dropped, 64 characters; so a card
+/// named "Ventas ano" is judged against the folder "Ventas año" the canvas
+/// answers to as `/ventas-ano`. The names a card is offered, in order.
+#[test]
+fn card_addresses_are_judged_as_the_canvas_addresses_folders() {
+    use super::derive::{address_slug, card_slug};
+    for (label, slug) in [
+        ("Ventas año", "ventas-ano"),
+        ("Ventas ano", "ventas-ano"),
+        ("Ünïcode only", "unicode-only"),
+        ("  Spend: 2026!  ", "spend-2026"),
+        ("ﬁnance Ⅳ", "finance-iv"),
+        (
+            &"long name ".repeat(8),
+            "long-name-long-name-long-name-long-name-long-name-long-name-long",
+        ),
+    ] {
+        assert_eq!(address_slug(label), slug, "{label}");
+    }
+    assert_eq!(card_slug("Ventas ano"), address_slug("Ventas año"));
+    // A folder address longer than a card's base is compared whole.
+    let folder = "abcdefghij abcdefghij abcde card";
+    assert_eq!(address_slug(folder), "abcdefghij-abcdefghij-abcde-card");
+    let base = card_slug("abcdefghij abcdefghij abcdefghij");
+    assert_eq!(base, "abcdefghij-abcdefghij-abcde");
+    assert_eq!(
+        super::routes::card_addresses(&base)[1],
+        address_slug(folder),
+        "the -card name is the folder's own address: judged taken"
+    );
+    assert_eq!(
+        super::routes::card_addresses("q3"),
+        ["q3", "q3-card", "q3-2", "q3-3", "q3-4", "q3-5", "q3-6", "q3-7", "q3-8", "q3-9"]
+    );
+}
+
+/// APP-124 review: a rehearsed total skips a cell that is not a number and
+/// says how many it skipped (never no answer); Ask with no readable table is
+/// its text answer, not a 503.
+#[test]
+fn folder_ask_total_skips_cells_that_are_not_numbers() {
+    use super::ask::{no_table, rehearsed};
+    let rows = [
+        ["2026-07-01", "North", "214215.91"],
+        ["2026-07-01", "South", "n/a"],
+        ["2026-08-01", "East", ""],
+        ["2026-08-01", "West", "12"],
+    ];
+    let total = rehearsed("what's the total revenue", &[folder_table(&rows, 4)]).unwrap();
+    assert_eq!(
+        total.text,
+        "revenue in q3_metrics.csv adds up to $214,227.91 (2 rows; 1 cell that is not a number was skipped)."
+    );
+    assert_eq!(total.references, ["f1r1", "f1r4"]);
+    let rows = [["2026-07-01", "North", "x"], ["2026-07-01", "South", "y"]];
+    let none = rehearsed("sum", &[folder_table(&rows, 2)]).unwrap();
+    assert!(none
+        .text
+        .contains("$0.00 (0 rows; 2 cells that are not numbers were skipped)"));
+    assert!(none.references.is_empty());
+    assert!(no_table(0)
+        .text
+        .contains("no table (CSV or XLSX) to read yet"));
+    assert!(no_table(1)
+        .text
+        .contains("one table (CSV or XLSX) could not be read"));
+    assert!(no_table(3)
+        .text
+        .starts_with("None of this folder's 3 tables"));
+    assert!(no_table(2).references.is_empty());
+}
+
+/// ADR-011 I4 (APP-124 review): a folder build's idempotency key answers the
+/// first result for the same member, folder and body; another body is
+/// refused; another scope is its own key.
+#[tokio::test]
+async fn a_folder_build_key_answers_its_first_result() {
+    use super::routes::replay_claim;
+    let scope = |n: u8| format!("org:member:box:{n:032x}-{}", std::process::id());
+    let first = replay_claim(scope(1), r#"{"one_card":true}"#.into()).unwrap();
+    *first.lock().await = Some(serde_json::json!({"app_id": "a"}));
+    let again = replay_claim(scope(1), r#"{"one_card":true}"#.into()).unwrap();
+    assert_eq!(
+        again.lock().await.as_ref().unwrap()["app_id"],
+        "a",
+        "a repeat answers the first result"
+    );
+    assert!(
+        replay_claim(scope(1), r#"{"purpose":"x"}"#.into()).is_none(),
+        "the same key with another body is refused"
+    );
+    let other = replay_claim(scope(2), r#"{"one_card":true}"#.into()).unwrap();
+    assert!(other.lock().await.is_none(), "another key runs");
+    // A first request that failed leaves nothing: the repeat runs.
+    let failed = replay_claim(scope(3), "{}".into()).unwrap();
+    drop(failed.lock().await);
+    assert!(replay_claim(scope(3), "{}".into())
+        .unwrap()
+        .lock()
+        .await
+        .is_none());
 }

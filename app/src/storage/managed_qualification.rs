@@ -275,10 +275,7 @@ const SOURCES: [(&str, &[u8]); 173] = [
         "app/src/auth_qualification/tests.rs",
         include_bytes!("../auth_qualification/tests.rs"),
     ),
-    (
-        "app/src/boxes/ask.rs",
-        include_bytes!("../boxes/ask.rs"),
-    ),
+    ("app/src/boxes/ask.rs", include_bytes!("../boxes/ask.rs")),
     (
         "app/src/boxes/brief.rs",
         include_bytes!("../boxes/brief.rs"),
