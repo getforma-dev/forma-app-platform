@@ -595,6 +595,9 @@ export function startSlash(document_: Document): void {
     highlight(entries.length ? 0 : -1);
     sync();
   };
+  // Whatever the bar runs clears it in code (no input event), so a submit
+  // always closes the list and the hint (the /ask hint lingered, 2026-10-31).
+  form.addEventListener('submit', () => close());
   input.addEventListener('input', () => {
     if (input.value.startsWith('/')) void ensureCommands().then(render);
     else if (input.value.startsWith('?')) render();
