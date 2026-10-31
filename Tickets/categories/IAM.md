@@ -16,3 +16,4 @@ Authenticated principals, tenant boundaries and service authority.
 | 80 | [APP-079: Hosted identity acceptance deferred from Phase 1](../9-blocked/APP-079.md) | [PH06](../phases/PH06.md) | S12 | IAM | P1 | L | Blocked | APP-076 |
 | 82 | [APP-082: Prove route-level admission races and provider faults on the local public entry (deferred from APP-074)](../0-backlog/APP-082.md) | [PH07](../phases/PH07.md) | S13 | IAM | P1 | M | Backlog | APP-074 |
 | 84 | [APP-084: Close the admission and provider review residuals (APP-073 reviews)](../0-backlog/APP-084.md) | [PH07](../phases/PH07.md) | S13 | IAM | P1 | M | Backlog | APP-073 |
+| 117 | [APP-117: Readable organization addresses: sign-in alias (done), organization in every URL, subdomains](../0-backlog/APP-117.md) | [PH08](../phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-096 |

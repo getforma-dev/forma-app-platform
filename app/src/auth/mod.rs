@@ -14,6 +14,7 @@
 //! APP-074 adds the public invitation entry (`invite`): `GET /invite` and
 //! `POST /invite/validate`, the backend PAR with the confidential provider
 //! `invite_token`, and the trusted-proxy restriction of the limit keys.
+pub mod aliases;
 pub mod capability;
 pub mod cookies;
 pub mod csrf;

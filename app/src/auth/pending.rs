@@ -110,7 +110,7 @@ async fn fresh_sign_in(
         &auth.stores,
         cookies::read(headers, cookies::ORGANIZATION_HINT),
     ) {
-        if let Some(digest) = handle_digest(&handle) {
+        if let Some(digest) = handle_digest(&super::aliases::canonical(&handle)) {
             if let Ok(Some(organization)) = stores.workspace.resolve_handle(&digest).await {
                 if organization == pre.organization() {
                     location = format!("/signin/{handle}");

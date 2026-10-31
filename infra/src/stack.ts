@@ -81,6 +81,31 @@ export const DEMO_MODE_ENV = 'GENUI_DEMO_MODE';
 // context: no variable, every member keeps the neutral label.
 export const DISPLAY_NAMES_JSON_ENV = 'GENUI_DISPLAY_NAMES_JSON';
 export const DISPLAY_NAMES_CONTEXT = 'displayNamesFile';
+// Readable sign-in aliases (2026-10-31): `/signin/northstar` routes as the
+// organization's random handle. Read at synth from the private file named by the
+// `signinAliasesFile` context ({"aliases":[{"name","handle"}]}); passed inline as
+// GENUI_SIGNIN_ALIASES_JSON (app/src/auth/aliases.rs). Absent: no aliases.
+export const SIGNIN_ALIASES_JSON_ENV = 'GENUI_SIGNIN_ALIASES_JSON';
+export const SIGNIN_ALIASES_CONTEXT = 'signinAliasesFile';
+const HANDLE = /^[a-z2-7]{26}$/;
+const ALIAS = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+export function signinAliasesEnvironment(path: unknown): Record<string, string> {
+  if (path === undefined) return {};
+  if (typeof path !== 'string' || path === '') throw new Error('signinAliasesFile must name a file');
+  const aliases = JSON.parse(readFileSync(path, 'utf8'))?.aliases;
+  if (!Array.isArray(aliases) || aliases.length > 20) throw new Error('signinAliasesFile: aliases must be a list of at most 20');
+  const seen = new Set<string>();
+  const clean = aliases.map((alias: any) => {
+    const keys = Object.keys(alias ?? {}).sort().join(',');
+    if (keys !== 'handle,name' || typeof alias.name !== 'string' || typeof alias.handle !== 'string'
+      || !ALIAS.test(alias.name) || alias.name.length < 2 || alias.name.length === 26 || !HANDLE.test(alias.handle) || seen.has(alias.name)) {
+      throw new Error('signinAliasesFile: each alias is exactly {name, handle} with a unique readable name');
+    }
+    seen.add(alias.name);
+    return { name: alias.name, handle: alias.handle };
+  });
+  return { [SIGNIN_ALIASES_JSON_ENV]: JSON.stringify({ aliases: clean }) };
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 // app/src/directory.rs MAX_NAME_CHARACTERS and usable_name: 1..=80 characters (Unicode scalar
 // values, not UTF-16 units), not blank, no control character (Rust char::is_control is Cc: C0,
@@ -321,6 +346,7 @@ export class GenuiFoundation extends Stack {
       [DEMO_ORGANIZATIONS_ENV]: DEMO_ORGANIZATION_ID,
       [DEMO_MODE_ENV]: '1',
       ...displayNamesEnvironment(this.node.tryGetContext(DISPLAY_NAMES_CONTEXT)),
+      ...signinAliasesEnvironment(this.node.tryGetContext(SIGNIN_ALIASES_CONTEXT)),
     };
     const container = task.addContainer('workspace', {
       image: ecs.ContainerImage.fromRegistry(image.valueAsString), readonlyRootFilesystem: true,

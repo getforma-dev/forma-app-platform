@@ -114,10 +114,10 @@ aws ecs wait services-stable --cluster $CLUSTER --services $SERVICE
   - the abandoned window keeps only the compute it already used.
 
   A window that has requested activation cannot be abandoned: `--activate` records the time in the ledger before it calls AWS.
-- [ ] 3.2 `cd infra && npm run synth -- --quiet -c displayNamesFile=$PRIV/display-names.json`. Then:
+- [ ] 3.2 `cd infra && npm run synth -- --quiet -c displayNamesFile=$PRIV/display-names.json -c signinAliasesFile=$PRIV/signin-aliases.json`. Then:
   - copy `cdk.out/GenuiSyntheticFoundation.template.json` to `$W/template.json`;
   - record its sha256 in `$W/template.sha256`.
-- [ ] 3.3 Diff against the live template [local]: `cd infra && npx cdk diff GenuiSyntheticFoundation --no-lookups -c displayNamesFile=$PRIV/display-names.json --template $W/template-before.json > $W/cdk-diff.txt`.
+- [ ] 3.3 Diff against the live template [local]: `cd infra && npx cdk diff GenuiSyntheticFoundation --no-lookups -c displayNamesFile=$PRIV/display-names.json -c signinAliasesFile=$PRIV/signin-aliases.json --template $W/template-before.json > $W/cdk-diff.txt`.
 
   `--template` compares with the file saved at 1.3 (it implies `--method=template`), so the diff makes no AWS call and creates no change set. It shows the content of every change, including task definition environment, policies and the ALB attributes. CloudFormation's change set only lists resources, and it cannot see parameter values.
 - [ ] 3.4 Create the change set:

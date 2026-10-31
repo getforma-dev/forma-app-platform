@@ -17,6 +17,7 @@
 !app/src/demo.rs
 !app/src/directory.rs
 !app/src/origins.rs
+!app/src/auth/aliases.rs
 !app/src/auth/capability.rs
 !app/src/auth/cookies.rs
 !app/src/auth/csrf.rs

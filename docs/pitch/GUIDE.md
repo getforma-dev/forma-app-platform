@@ -21,7 +21,7 @@ Forma is a canvas where teams describe what they need and get working apps: expe
 
 | What | Where or who |
 | --- | --- |
-| Sign-in | The **Northstar sign-in link**, `https://beta.getforma.dev/signin/<Northstar handle>` (the handle is in `forma-app-platform/evidence/APP-009/handles.json`). The bare `/signin` page only says "open your organization's sign-in link". |
+| Sign-in | **https://beta.getforma.dev/signin/northstar** (readable alias, after the next deploy) or the original Northstar link, `https://beta.getforma.dev/signin/<Northstar handle>` (the handle is in `forma-app-platform/evidence/APP-009/handles.json`). The bare `/signin` page only says "open your organization's sign-in link". |
 | Diego Ramos (files expenses) | Laptop, Victor's getforma.dev account. |
 | Sarah Chen (approves) | Phone, Victor's outlook account. |
 | Slack | Workspace "Forma Beta", app "Forma". Each persona has run `/forma link` once. |

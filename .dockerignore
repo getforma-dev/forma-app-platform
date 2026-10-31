@@ -24,6 +24,7 @@ app/src/imports/**
 !app/src/imports/sandbox.rs
 !app/src/auth/
 app/src/auth/**
+!app/src/auth/aliases.rs
 !app/src/auth/capability.rs
 !app/src/auth/cookies.rs
 !app/src/auth/csrf.rs

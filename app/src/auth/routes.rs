@@ -76,7 +76,8 @@ pub(crate) fn clear_all(response: &mut Response) {
 
 /// A well-formed sign-in handle (no lookup: shape only).
 fn handle_action(handle: &str) -> Option<String> {
-    (handle.len() <= 64 && handle_digest(handle).is_some()).then(|| format!("/signin/{handle}"))
+    (handle.len() <= 64 && handle_digest(&super::aliases::canonical(handle)).is_some())
+        .then(|| format!("/signin/{handle}"))
 }
 
 fn signin(auth: &Auth, action: Option<String>, failed: bool) -> Response {
@@ -157,7 +158,7 @@ async fn signin_handle_page(
 async fn start(auth: &Auth, handle: &str, class: &str) -> Result<(String, String), ()> {
     let provider = auth.provider.as_ref().ok_or(())?;
     let stores = auth.stores.as_ref().ok_or(())?;
-    let digest = handle_digest(handle).ok_or(())?;
+    let digest = handle_digest(&super::aliases::canonical(handle)).ok_or(())?;
     let organization = stores
         .workspace
         .resolve_handle(&digest)

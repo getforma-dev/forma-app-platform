@@ -5,7 +5,7 @@ import { Match, Template } from 'aws-cdk-lib/assertions';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ALB_IDLE_TIMEOUT_SECONDS, DISPLAY_NAMES_CONTEXT, DISPLAY_NAMES_JSON_ENV, AUTH_CONFIGURATION_ENV, DEMO_MODE_ENV, DEMO_ORGANIZATIONS_ENV, DEMO_ORGANIZATION_ID, displayNamesEnvironment, MAX_DISPLAY_NAME_CHARACTERS, TENANT_IDS, usableDisplayName, AUTH_CONFIGURATION_SECRET_ID_ENV, CANVAS_EVENTS_URL, CANVAS_EVENTS_URL_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, COMPOSE_DEADLINE_SECONDS, COMPOSER_KEY_ENV, GenuiFoundation, SLACK_APP_PLACEHOLDER, SLACK_BOT_TOKEN_ENV, SLACK_SIGNING_SECRET_ENV, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_URL_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
+import { ALB_IDLE_TIMEOUT_SECONDS, SIGNIN_ALIASES_CONTEXT, SIGNIN_ALIASES_JSON_ENV, DISPLAY_NAMES_CONTEXT, DISPLAY_NAMES_JSON_ENV, AUTH_CONFIGURATION_ENV, DEMO_MODE_ENV, DEMO_ORGANIZATIONS_ENV, DEMO_ORGANIZATION_ID, displayNamesEnvironment, MAX_DISPLAY_NAME_CHARACTERS, TENANT_IDS, usableDisplayName, AUTH_CONFIGURATION_SECRET_ID_ENV, CANVAS_EVENTS_URL, CANVAS_EVENTS_URL_ENV, CAPABILITY_SECRET_ENV, CAPABILITY_SECRET_ID_ENV, COMPOSE_DEADLINE_SECONDS, COMPOSER_KEY_ENV, GenuiFoundation, SLACK_APP_PLACEHOLDER, SLACK_BOT_TOKEN_ENV, SLACK_SIGNING_SECRET_ENV, IMAGE_DIGEST_PATTERN, INVITATION_INPUT_ENV, OPERATOR_CIDR_PATTERN, OPERATOR_IMAGE_PATTERN, PROVIDER_MANAGEMENT_KEY_ENV, PROVIDER_MANAGEMENT_SECRET_ARN_PATTERN, PROVIDER_MANAGEMENT_TENANT_ENV, PROVIDER_MANAGEMENT_URL_ENV, PROVIDER_MANAGEMENT_URL_PATTERN, QUALIFICATION_IMAGE_PATTERN } from '../src/stack.js';
 
 const template = Template.fromStack(new GenuiFoundation(new App(), 'SecurityQualification'));
 const document = template.toJSON();
@@ -820,4 +820,20 @@ test('display names follow the service rule (directory.rs usable_name), stricter
 test('the demo organization is the first configured tenant (Northstar), and the ALB idle timeout derives from the composer deadline', () => {
   assert.equal(DEMO_ORGANIZATION_ID, TENANT_IDS[0]);
   assert.equal(ALB_IDLE_TIMEOUT_SECONDS, COMPOSE_DEADLINE_SECONDS + 10);
+});
+
+test('sign-in aliases reach the service task only from the synth context file', () => {
+  const serviceEnv = (doc: Template) => {
+    const defs = Object.values(doc.toJSON().Resources).filter((r: any) => r.Type === 'AWS::ECS::TaskDefinition') as any[];
+    const service = defs.find(d => (d.Properties.ContainerDefinitions[0].Environment ?? []).some((v: any) => v.Name === DEMO_MODE_ENV));
+    return Object.fromEntries(service.Properties.ContainerDefinitions[0].Environment.map((v: any) => [v.Name, v.Value]));
+  };
+  assert.equal(serviceEnv(template)[SIGNIN_ALIASES_JSON_ENV], undefined);
+  const dir = mkdtempSync(join(tmpdir(), 'aliases-'));
+  const file = join(dir, 'aliases.json');
+  writeFileSync(file, JSON.stringify({ aliases: [{ name: 'northstar', handle: 'se45m37vabqrfvbh3gbwn22qkm' }] }));
+  const named = Template.fromStack(new GenuiFoundation(new App({ context: { [SIGNIN_ALIASES_CONTEXT]: file } }), 'Aliased'));
+  assert.equal(serviceEnv(named)[SIGNIN_ALIASES_JSON_ENV], '{"aliases":[{"name":"northstar","handle":"se45m37vabqrfvbh3gbwn22qkm"}]}');
+  writeFileSync(file, JSON.stringify({ aliases: [{ name: 'North Star', handle: 'se45m37vabqrfvbh3gbwn22qkm' }] }));
+  assert.throws(() => new GenuiFoundation(new App({ context: { [SIGNIN_ALIASES_CONTEXT]: file } }), 'BadAlias'));
 });
