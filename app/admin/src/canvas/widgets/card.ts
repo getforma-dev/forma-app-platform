@@ -1,5 +1,7 @@
 // APP-103: the shell every widget card shares: a header (mark, title, the
-// "widget" label, remove), the widget's body, and a "restyle in words" field
+// "widget" label, remove), the widget's body, and a "shape in words" field
+// (APP-122: the Restyle field renamed Shape; `/shape <widget>` reaches the same
+// mechanism)
 // that posts the member's sentence with the widget's closed state to
 // `POST /v1/widgets/customize`. The answer is judged again here
 // (`validState`) and applied only as data attributes the widgets stylesheet
@@ -54,9 +56,9 @@ export function buildCard(document_: Document, kind: WidgetKind, id: string, sta
   const close = el(document_, 'button', { type: 'button', class: 'wg-close', 'aria-label': `Remove ${title.toLowerCase()}`, title: 'Remove' }, '×');
   const body = el(document_, 'div', { class: 'wg-body' });
   const input = el(document_, 'input', {
-    type: 'text', name: 'restyle', maxlength: '300', autocomplete: 'off', placeholder: HINTS[kind], 'aria-label': `Restyle the ${title.toLowerCase()} in words`,
+    type: 'text', name: 'shape', maxlength: '300', autocomplete: 'off', placeholder: HINTS[kind], 'aria-label': `Shape the ${title.toLowerCase()} in words`,
   });
-  const submit = el(document_, 'button', { type: 'submit' }, 'Restyle');
+  const submit = el(document_, 'button', { type: 'submit' }, 'Shape');
   const form = el(document_, 'form', { class: 'wg-customize', autocomplete: 'off' }, input, submit);
   const card = el(document_, 'article', {
     class: 'cv-card cv-widget', 'data-kind': 'widget', 'data-widget': kind, 'data-widget-id': id, 'aria-label': title,
@@ -108,15 +110,15 @@ export function buildCard(document_: Document, kind: WidgetKind, id: string, sta
       submit.disabled = false;
     });
   });
-  // Keys typed into the restyle field belong to the field, not the canvas.
+  // Keys typed into the Shape field belong to the field, not the canvas.
   form.addEventListener('keydown', (event) => event.stopPropagation());
   return widget;
 }
 
 const REFUSALS: Record<string, string> = {
-  could_not_customize: 'That restyle is outside what this widget can show. Nothing changed.',
-  composer_unavailable: 'Restyling in words is not available on this server right now. Nothing changed.',
-  too_many_requests: 'Too many restyles in a short time. Try again in a moment.',
+  could_not_customize: 'That shape is outside what this widget can show. Nothing changed.',
+  composer_unavailable: 'Shaping in words is not available on this server right now. Nothing changed.',
+  too_many_requests: 'Too many shapes in a short time. Try again in a moment.',
   invalid_request: 'Say it in a short sentence (up to 300 characters). Nothing changed.',
 };
 
@@ -126,7 +128,7 @@ const REFUSALS: Record<string, string> = {
  */
 export async function customize(widget: WidgetCard, text: string): Promise<boolean> {
   widget.card.dataset.busy = 'true';
-  widget.announce('Restyling…');
+  widget.announce('Shaping…');
   const started = performance.now();
   try {
     let response: Response;
@@ -139,13 +141,13 @@ export async function customize(widget: WidgetCard, text: string): Promise<boole
         body: JSON.stringify({ widget: widget.kind, state: widget.state, text }),
       });
     } catch {
-      widget.announce('The restyle could not be sent. Nothing changed.');
+      widget.announce('The shape could not be sent. Nothing changed.');
       return false;
     }
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (!response.ok) {
       const code = typeof body?.code === 'string' ? body.code : '';
-      widget.announce(REFUSALS[code] ?? 'The restyle could not be applied right now. Nothing changed.');
+      widget.announce(REFUSALS[code] ?? 'The shape could not be applied right now. Nothing changed.');
       return false;
     }
     const next = body && body.widget === widget.kind ? validState(widget.kind, body.state) : null;
@@ -158,12 +160,12 @@ export async function customize(widget: WidgetCard, text: string): Promise<boole
     widget.apply(next);
     // APP-116: the round trip, with the server's own duration (the model's turn included).
     const server = typeof body?.duration_ms === 'number' ? body.duration_ms : null;
-    showTiming('Restyle', [{ label: body?.source === 'model' ? 'restyle (model)' : 'restyle', ms, server }], widget.card);
+    showTiming('Shape', [{ label: body?.source === 'model' ? 'shape (model)' : 'shape', ms, server }], widget.card);
     // ADR-011 I5: a state the model chose is labeled as such.
     if (body?.source === 'model' && !widget.chips.querySelector('.wg-ai')) {
-      widget.chips.append(el(widget.card.ownerDocument, 'span', { class: 'badge wg-ai', title: 'Restyled by the model within the widget’s fixed styles' }, 'AI-styled'));
+      widget.chips.append(el(widget.card.ownerDocument, 'span', { class: 'badge wg-ai', title: 'Shaped by the model within the widget’s fixed styles' }, 'AI-styled'));
     }
-    widget.announce(body?.changed === false ? 'Already looks like that.' : `Restyled in ${ms} ms.`);
+    widget.announce(body?.changed === false ? 'Already looks like that.' : `Shaped in ${ms} ms.`);
     return true;
   } finally {
     delete widget.card.dataset.busy;

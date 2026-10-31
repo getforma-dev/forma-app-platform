@@ -476,6 +476,10 @@ async fn campaign() {
         crate::widgets::customize::Customizer::new(None, "none"),
         crate::widgets::weather::OpenMeteo::new(),
     )));
+    let talk = composer::talk::router(Arc::new(composer::talk::Talk::new(
+        auth.clone(),
+        composer.clone(),
+    )));
     let routes = crate::http::uniform_with_many(
         axum::Router::new()
             .route(
@@ -505,10 +509,13 @@ async fn campaign() {
         vec![
             (
                 composer::routes::PATH,
-                composer::routes::router(Arc::new(Compose::new(auth.clone(), composer))),
+                composer::routes::router(Arc::new(Compose::new(auth.clone(), composer.clone()))),
             ),
             (crate::widgets::WEATHER_PATH, widgets.clone()),
             (crate::widgets::CUSTOMIZE_PATH, widgets),
+            // APP-122: Ask and Shape, as product::routes mounts them.
+            (composer::talk::ASK_PATH, talk.clone()),
+            (composer::talk::SHAPE_PATH, talk),
         ],
     );
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
@@ -1690,6 +1697,257 @@ async fn campaign() {
     check(
         &mut checks,
         "naming (APP-121): the group JSON (app card header, placement messages) reads \"Expenses\", then the label; the owner renamed Expenses \"Team spend\" at /spend (one app.labeled event; a repeat writes nothing; /spend was Vendor spend's hidden alias and moved: an address beats an alias); the teammate sees the name and address while /expenses and /expense stay aliases and Vendor spend no longer answers to /spend; a teammate (non-owner) and a foreign organization's member get the uniform 404 on the label route; a taken address, a verb and a malformed name are refused (422); the teammate's personal /exp is listed for them only, and a personal alias taking /spend, /expense, /pto or /card is refused; the card label \"Q3 spend\" reaches every member while definitions, publications and receipts are unchanged; app_labels and member_labels are ENABLE+FORCE RLS and another organization's scope reads none",
+    );
+
+    // --- APP-122: Ask (read-only, text with receipts) and Shape (closed specs) ---
+    let ask_scope = |kind: &str, address: &str| {
+        json!({"kind": kind, "address": address,
+            "works": [{"app_id": EXPENSE_APP, "work_id": work_id, "address": "expense-review"}]})
+    };
+    let listing = stand
+        .get(
+            &format!("/v1/work/{EXPENSE_APP}/{work_id}/records"),
+            Some(&maya_cookie),
+        )
+        .await;
+    assert_eq!(listing.status, StatusCode::OK, "{}", listing.text());
+    let first_record = listing.json()["records"][0]["record_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // Every governed table Ask could touch, and the audit chain, counted.
+    let counts = "SELECT (SELECT count(*) FROM genui.internal_records)*1000000+(SELECT count(*) FROM genui.internal_record_revisions)*10000+(SELECT count(*) FROM genui.audit_events)*10+(SELECT count(*) FROM genui.query_receipts)";
+    let saved = "SELECT coalesce(sum(version),0)::bigint FROM genui.saved_work";
+    let (rows_before, saved_before) = (
+        scalar(&c.fixture, counts).await,
+        scalar(&c.fixture, saved).await,
+    );
+    let calls_before = stub.calls();
+    // "Where are all the red invoices?": the model (stub) cites r1; the
+    // receipts are storage's, never the model's.
+    stub.script(vec![
+        json!({"text": "One record needs attention: it is waiting on more context.", "references": ["r1"]}).to_string(),
+    ]);
+    let asked = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "where are all the red invoices?", "scope": ask_scope("card", "expense-review.records")}).to_string(),
+        )
+        .await;
+    assert_eq!(asked.status, StatusCode::OK, "{}", asked.text());
+    let answer = asked.json();
+    let mut keys: Vec<&str> = answer
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        ["receipts", "references", "text"],
+        "only text, receipts and references"
+    );
+    assert_eq!(answer["references"][0]["record_id"], first_record);
+    let receipt = &answer["receipts"][0];
+    assert_eq!(receipt["record_id"], first_record);
+    assert_eq!(receipt["app_id"], EXPENSE_APP);
+    assert_eq!(receipt["publication_id"], listing.json()["publication_id"]);
+    assert_eq!(
+        receipt["definition_digest"],
+        listing.json()["definition_digest"]
+    );
+    assert!(receipt["version"].as_i64().unwrap() >= 1);
+    assert_eq!(stub.calls(), calls_before + 1);
+    // The model saw the records as data under Ask's system prompt.
+    let sent = stub.bodies.lock().unwrap().last().cloned().unwrap();
+    assert!(
+        sent["system"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("You can only read"),
+        "{sent}"
+    );
+    assert_eq!(
+        scalar(&c.fixture, counts).await,
+        rows_before,
+        "Ask wrote no row"
+    );
+    assert_eq!(scalar(&c.fixture, saved).await, saved_before);
+    // Ask's schema rejects a view spec (server-side): nothing of it is shown.
+    stub.script(vec![
+        json!({"text": "Made the red ones red", "highlight": [{"field": "status", "op": "eq", "value": "needs_context", "color": "crimson"}]}).to_string(),
+    ]);
+    let refused = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "make the red ones red", "scope": ask_scope("canvas", "")})
+                .to_string(),
+        )
+        .await;
+    assert_eq!(
+        refused.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        refused.text()
+    );
+    assert_eq!(refused.json()["code"], "could_not_answer");
+    assert!(!refused.text().contains("crimson"));
+    // The Ask transaction is READ ONLY: a forced write in it fails (25006).
+    let forced = stores
+        .data
+        .read_only_forced_write(&maya_request, &[(EXPENSE_APP, work_id.as_str())])
+        .await
+        .unwrap();
+    assert_eq!(
+        forced.as_deref(),
+        Some("25006"),
+        "read_only_sql_transaction"
+    );
+    assert_eq!(scalar(&c.fixture, counts).await, rows_before);
+    // Shape: a card's view spec over its fields; the shape route returns only it.
+    let fields = json!([{"id": "status", "type": "enum", "values": ["submitted", "approved", "rejected", "needs_context"]},
+        {"id": "amount", "type": "money"}, {"id": "time", "type": "timestamp"}]);
+    let card_target = json!({"kind": "card", "app_id": EXPENSE_APP, "work_id": work_id, "card": "records", "fields": fields});
+    stub.script(vec![
+        json!({"highlight": [{"field": "status", "op": "in", "value": ["submitted"], "color": "crimson"}]}).to_string(),
+    ]);
+    let shaped = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "expense-review.records", "words": "highlight overdue in red", "target": card_target}).to_string(),
+        )
+        .await;
+    assert_eq!(shaped.status, StatusCode::OK, "{}", shaped.text());
+    assert_eq!(
+        shaped.json(),
+        json!({"target": "card", "spec": {"highlight": [{"field": "status", "op": "in", "value": ["submitted"], "color": "crimson"}]}})
+    );
+    // Shape's schema rejects prose, and a view that would drop receipts.
+    for (reply, words) in [
+        ("The red invoices are the ones waiting on context.".to_owned(), "where are the red invoices"),
+        (json!({"text": "Two are red", "references": ["r1"]}).to_string(), "which are red"),
+        (json!({"presentation": "number", "measure": {"op": "sum", "field": "amount"}, "receipts": false}).to_string(), "total by month"),
+    ] {
+        stub.script(vec![reply.clone()]);
+        let refused = stand
+            .post(
+                composer::talk::SHAPE_PATH,
+                Some(&maya_cookie),
+                &json!({"address": "expense-review.records", "words": words, "target": card_target}).to_string(),
+            )
+            .await;
+        assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY, "{reply}: {}", refused.text());
+        assert_eq!(refused.json()["code"], "could_not_shape", "{reply}");
+    }
+    // An app: a closed theme; prose refused.
+    stub.script(vec![
+        json!({"mode": "dark", "accent": "green", "density": "compact"}).to_string(),
+    ]);
+    let themed = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "expense-review", "words": "dark green, compact", "target": {"kind": "app", "app_id": EXPENSE_APP, "work_id": work_id}}).to_string(),
+        )
+        .await;
+    assert_eq!(themed.status, StatusCode::OK, "{}", themed.text());
+    assert_eq!(
+        themed.json(),
+        json!({"target": "app", "spec": {"mode": "dark", "accent": "green", "density": "compact"}})
+    );
+    // A widget: the APP-103 customizer, reached through /shape.
+    stub.script(vec![
+        json!({"skin": "ti84", "accent": "default", "font": "lcd"}).to_string(),
+    ]);
+    let widget = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "calculator", "words": "make it a TI-84", "target": {"kind": "widget", "widget": "calculator",
+                "state": {"skin": "default", "accent": "default", "font": "default"}}}).to_string(),
+        )
+        .await;
+    assert_eq!(widget.status, StatusCode::OK, "{}", widget.text());
+    assert_eq!(widget.json()["spec"]["skin"], "ti84");
+    assert_eq!(
+        scalar(&c.fixture, counts).await,
+        rows_before,
+        "Shape wrote no row"
+    );
+    assert_eq!(scalar(&c.fixture, saved).await, saved_before);
+    // A foreign organization, an anonymous caller and a forged session get
+    // the uniform 404 on both routes, and the model is never called for them.
+    let calls = stub.calls();
+    for cookie in [Some(outsider_cookie.as_str()), None, Some("forged-session")] {
+        let asked = stand
+            .post(
+                composer::talk::ASK_PATH,
+                cookie,
+                &json!({"question": "where are the red invoices", "scope": ask_scope("card", "")})
+                    .to_string(),
+            )
+            .await;
+        assert!(asked.uniform_404(), "ask: {}", asked.text());
+        let shaped = stand
+            .post(composer::talk::SHAPE_PATH, cookie,
+                &json!({"address": "expense-review.records", "words": "only red", "target": card_target}).to_string())
+            .await;
+        assert!(shaped.uniform_404(), "shape: {}", shaped.text());
+    }
+    let theme = stand
+        .post(composer::talk::SHAPE_PATH, Some(&outsider_cookie),
+            &json!({"address": "expense-review", "words": "dark", "target": {"kind": "app", "app_id": EXPENSE_APP, "work_id": work_id}}).to_string())
+        .await;
+    assert!(theme.uniform_404(), "{}", theme.text());
+    assert_eq!(stub.calls(), calls, "no model call for a refused caller");
+    // In a demo organization (APP-098), the rehearsed question is answered
+    // from the same records without a model call.
+    crate::demo::configure_for_tests(true, &[ORG]);
+    let rehearsed = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "where are all the red invoices?", "scope": ask_scope("card", "expense-review.records")}).to_string(),
+        )
+        .await;
+    let rehearsed_shape = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "expense-review.records", "words": "only red invoices", "target": card_target}).to_string(),
+        )
+        .await;
+    crate::demo::configure_for_tests(false, &[]);
+    assert_eq!(rehearsed.status, StatusCode::OK, "{}", rehearsed.text());
+    assert!(
+        rehearsed.json()["text"]
+            .as_str()
+            .unwrap()
+            .contains("need attention")
+            || rehearsed.json()["text"]
+                .as_str()
+                .unwrap()
+                .contains("needs attention"),
+        "{}",
+        rehearsed.text()
+    );
+    assert_eq!(rehearsed.json()["receipts"][0]["record_id"], first_record);
+    assert_eq!(
+        rehearsed_shape.status,
+        StatusCode::OK,
+        "{}",
+        rehearsed_shape.text()
+    );
+    assert_eq!(rehearsed_shape.json()["spec"]["filters"][0]["op"], "in");
+    assert_eq!(stub.calls(), calls, "rehearsed: no model call");
+    assert_eq!(scalar(&c.fixture, counts).await, rows_before);
+    check(
+        &mut checks,
+        "ask and shape (APP-122): POST /v1/ask answered exactly {text, receipts, references} for \"where are all the red invoices?\", each receipt storage's (record id, version, publication, definition digest), with record, revision, audit and receipt row counts and saved-work versions identical before and after; a model reply carrying a view spec was refused server-side (422 could_not_answer); a forced write in the Ask transaction failed with SQLSTATE 25006 (READ ONLY); POST /v1/shape answered only a closed spec per target (a card highlight, an app theme dark/green/compact, a widget's TI-84 state through the customizer); prose, an answer object and a view with receipts:false were refused (422 could_not_shape); a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on both routes with no model call; in a demo organization the rehearsed question and shape answered without a model call; no row was written by either route",
     );
 
     // --- Chain integrity ---

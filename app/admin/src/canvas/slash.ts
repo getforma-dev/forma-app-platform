@@ -13,8 +13,10 @@
 // offered). After `/name ` a hint row shows the argument being typed and an
 // example, and live suggestions appear for the arguments that have values
 // (apps, cards, folders, cities, zones; each module registers its own with
-// `registerCompleter`). `?` in the empty bar opens the right pane on its
-// Shortcuts tab, as `?` on the canvas does; `/commands` opens Commands.
+// `registerCompleter`). `/commands` opens Commands. APP-122: `?` as the
+// first character is Ask (the hint says so; Enter opens the Ask tab with the
+// question, `talk.ts`), and `/<app>.<card>` lists that app's cards; after a
+// space the words shape the card (the dot is the rule).
 // APP-120: `/` alone lists the twelve verbs in four groups (Place, Arrange,
 // Make, Help); from the first letter the hidden aliases (`/weather`, `/note`)
 // match too and the Apps section joins. A bare `/<address>` places the app
@@ -284,7 +286,7 @@ export const COMMANDS: CanvasCommand = {
   },
 };
 
-/** `?` in the empty bar: the right pane on its Shortcuts tab (`?` means the keyboard shortcuts, everywhere). */
+/** The right pane on its Shortcuts tab (`/shortcuts`, ⋯ → Shortcuts; APP-122: `?` is Ask now). */
 export function openHelp(from: HTMLElement | null): void {
   openShortcuts(from);
 }
@@ -452,6 +454,41 @@ export function startSlash(document_: Document): void {
   };
   const render = () => {
     const value = input.value;
+    // APP-122: `?` first is Ask; the hint names the job (Enter asks).
+    if (value.startsWith('?')) {
+      entries = [];
+      list.hidden = true;
+      hintKey = '?';
+      hint.replaceChildren(
+        el(document_, 'code', { class: 'cv-slash-sig' }, el(document_, 'mark', {}, '? <question>')),
+        el(document_, 'span', { class: 'cv-slash-note' }, 'Ask: a read-only question about your data · Enter asks'),
+        el(document_, 'span', { class: 'cv-slash-example' }, 'e.g. ', el(document_, 'code', {}, '? where are the red invoices')));
+      hint.hidden = false;
+      describe(true);
+      sync();
+      return;
+    }
+    // APP-122: `/<app>.<card>` lists the app's cards; `/<app>.<card> words` shapes it.
+    const dotted = value.match(/^\/([a-z0-9][a-z0-9-]*\.[a-z0-9-]*)(\s+[\s\S]*)?$/i);
+    if (dotted) {
+      const words = dotted[2] !== undefined;
+      hintKey = `.${words}`;
+      hint.replaceChildren(
+        el(document_, 'code', { class: 'cv-slash-sig' }, `/${dotted[1]} `, el(document_, 'mark', {}, '<what it should show>')),
+        el(document_, 'span', { class: 'cv-slash-note' }, words ? 'Shape: a preview first, then Apply' : 'A card: Enter places it, a space then words shape it'),
+        el(document_, 'span', { class: 'cv-slash-example' }, 'e.g. ', el(document_, 'code', {}, '/expenses.ledger only red invoices')));
+      hint.hidden = false;
+      describe(true);
+      const dot = completers.get('.');
+      if (!words && dot) renderCompletions(dot.complete(dotted[1] ?? ''), dot.select);
+      else {
+        entries = [];
+        list.hidden = true;
+        highlight(-1);
+      }
+      sync();
+      return;
+    }
     const argument = value.match(/^\/([a-z0-9-]+)\s+([\s\S]*)$/i);
     if (argument) {
       const command = findCommand(argument[1] ?? '');
@@ -510,15 +547,10 @@ export function startSlash(document_: Document): void {
   };
   input.addEventListener('input', () => {
     if (input.value.startsWith('/')) void ensureCommands().then(render);
+    else if (input.value.startsWith('?')) render();
     else close();
   });
   input.addEventListener('keydown', (event) => {
-    // `?` in the empty bar opens the right pane on Shortcuts, as on the canvas.
-    if (event.key === '?' && input.value === '' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      event.preventDefault();
-      openHelp(input);
-      return;
-    }
     if (list.hidden || !entries.length) {
       if (event.key === 'Escape' && !pop.hidden) {
         event.preventDefault();

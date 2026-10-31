@@ -72,6 +72,12 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         live_events,
         demo_organizations,
     }));
+    // APP-122: Ask and Shape, two routes with two closed output shapes,
+    // under the long deadline (each may wait on the fast model).
+    let talk_routes = composer::talk::router(Arc::new(composer::talk::Talk::new(
+        auth.clone(),
+        composer.clone(),
+    )));
     // APP-093 (ADR-011): the composer route, under its own deadline.
     let compose_routes = composer::routes::router(Arc::new(composer::routes::Compose::new(
         auth.clone(),
@@ -117,6 +123,8 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         (mcp::PATH, mcp_routes),
         (widgets::WEATHER_PATH, widget_routes.clone()),
         (widgets::CUSTOMIZE_PATH, widget_routes),
+        (composer::talk::ASK_PATH, talk_routes.clone()),
+        (composer::talk::SHAPE_PATH, talk_routes),
     ];
     (router, long)
 }

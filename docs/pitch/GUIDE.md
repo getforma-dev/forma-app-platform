@@ -13,7 +13,7 @@ Forma is a canvas where teams describe what they need and get working apps: expe
 3. **Receipt photo to a row.** Drop a receipt and the exact row to be added appears before anything is written.
 4. **Slack.** `/forma …` files the expense, and Sarah gets Approve/Reject in a direct message.
 5. **Any agent.** Claude (or OpenAI) acts through Forma's MCP server under the member's own permissions, marked "via Claude".
-6. **Your canvas, your way.** Bring cards from the library pane, stack and shuffle them, and restyle widgets in words ("make it a TI-84 in Matrix style").
+6. **Your canvas, your way.** Bring cards from the library pane, stack and shuffle them, and shape widgets in words ("make it a TI-84 in Matrix style").
 7. **Proof on every number.** Each governed figure carries a receipt (`Verified …`) that identifies the source revision and query.
 8. **Folders: your files become apps.** Drop PDFs and spreadsheets into a folder, click it, and say "build a metrics app and explain it". The CSVs are parsed and typed at once, the app is built from them, labeled "Built from folder", and its summary's numbers each come from a receipt that names the file.
 
@@ -46,13 +46,15 @@ The full rules (what is on a canvas, names and aliases, verbs, the Ask and Shape
 | --- | --- | --- |
 | Place | `/app <app name or number>` | Places every card of an app (`/app expenses`, `/app 3`). A bare `/<address>` does the same (`/expenses`). |
 | Place | `/card <app.card or number>` | Places one card (`/card expenses.ledger` and `/card 3.2` are the same card). |
-| Place | `/widget <weather\|calculator\|clock\|note\|folder> [args]` | Places a widget (`/widget weather Austin`, `/widget note Call the auditor`). Restyle a widget in words (`/widget calculator make it a TI-84`). `/widget folder` opens the folder picker. |
+| Place | `/widget <weather\|calculator\|clock\|note\|folder> [args]` | Places a widget (`/widget weather Austin`, `/widget note Call the auditor`). `/widget folder` opens the folder picker. |
 | Arrange | `/arrange` | Lays the board out by app. |
 | Arrange | `/unite <app>`, `/split <united app>` | Assembles an app's cards into one frame; breaks it apart again. |
 | Arrange | `/focus [app.card or number]` | Opens the selected card (or the one named) in focus. |
 | Make | `/folder <name> formation <instruction>` | Builds an app from a folder's files (`/folder Q3 formation build a metrics app`). `/folder` alone opens the picker; `/folder new <name>` makes one. |
+| Shape | `/shape <app.card\|app\|widget> <words>` | Changes how a card, an app (a theme on every card) or a widget looks or what it shows: a preview, then **Apply** (or **Add as new card**), labeled *shaped* with **Revert** (APP-122). `/<app>.<card> <words>` is the shortcut for a card (`/expenses.ledger only red invoices`). |
+| Ask | `? <question>` | Opens the Ask tab with the question: a read-only answer with receipts; it changes nothing (APP-122). `/ask` is the same. |
 | Help | `/apps [query]` | Opens the Library, filtered. It never places a canvas card. |
-| Help | `/commands [search]`, `/shortcuts`, `/agent` | The pane's Commands tab, its Shortcuts tab (`?`), and "Connect an agent". |
+| Help | `/commands [search]`, `/shortcuts`, `/agent` | The pane's Commands tab, its Shortcuts tab, and "Connect an agent". |
 | — | Any other sentence | The instant pick and live reshape; a short chooser when two apps fit equally; "Build something new" generates one. |
 
 **Aliases: nothing breaks.** These are accepted and autocompleted from their first letter but not listed under `/` alone: `/weather`, `/calculator`, `/clock` and `/note` (= `/widget <kind>`), `/help` (= `/commands`), `/folder` alone (the picker), and every app's old name (`/expense`, `/pto`, `/purchase`, …). There is no `/remove`: the card's ×, Delete on a selection, or the Library's Remove take things off (as in Figma and Miro).
@@ -93,7 +95,7 @@ The hint after an address comes from the app's definition: the server derives it
 - Shift+0 / 1 / 2 zoom to 100% / fit / selection.
 - Click a header to select, Shift+click to add, and drag to move.
 - Delete returns a card to the library; it never deletes data.
-- `?` (on the canvas or in the empty bar) opens the pane's Shortcuts tab: every action with its click path and its keys or /command, and a link at the top to the Commands tab, where every command has its arguments.
+- `?` on the canvas puts `? ` in the bar, ready to ask; `?` first in the bar opens the Ask tab (APP-122). `/shortcuts` (or ⋯ → Shortcuts and commands) opens the pane's Shortcuts tab: every action with its click path and its keys or /command, and a link at the top to the Commands tab, where every command has its arguments.
 
 **Folders (APP-108).** Lead with click → type:
 

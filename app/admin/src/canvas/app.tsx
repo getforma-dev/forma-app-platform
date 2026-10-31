@@ -12,6 +12,7 @@ import { NOTE_COMMAND, startNotes } from './notes';
 import { registerCommands, registerCompleter, startSlash } from './slash';
 import { startBoxes } from './boxes';
 import { startTimings } from './timing';
+import { startTalk } from './talk';
 // APP-103 widgets, registered as canvas slash commands (APP-101). APP-120:
 // `/widget <kind> [args]` is the one Place verb; `/weather`, `/calculator`
 // and `/clock` stay as its hidden aliases; a command with words restyles the
@@ -680,6 +681,7 @@ function Canvas(props: CanvasProps) {
           <div class="cv-pane-tabs" role="tablist" aria-label="Library, commands and shortcuts">
             <button type="button" role="tab" id="cv-tab-library" class="cv-pane-tab" aria-selected="true" aria-controls="cv-panel-library" data-pane-tab="library">Library</button>
             <button type="button" role="tab" id="cv-tab-commands" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-commands" data-pane-tab="commands">Commands</button>
+            <button type="button" role="tab" id="cv-tab-ask" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-ask" data-pane-tab="ask">Ask</button>
             <button type="button" role="tab" id="cv-tab-shortcuts" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-shortcuts" data-pane-tab="shortcuts">Shortcuts</button>
           </div>
           <button type="button" class="cv-lib-close" data-lib-close aria-label="Close the pane" title="Close (Esc)">
@@ -740,6 +742,7 @@ function Canvas(props: CanvasProps) {
           </div>
         </div>
         <div id="cv-panel-commands" class="cv-pane-panel cv-commands" role="tabpanel" aria-labelledby="cv-tab-commands" hidden></div>
+        <div id="cv-panel-ask" class="cv-pane-panel cv-ask" role="tabpanel" aria-labelledby="cv-tab-ask" hidden></div>
         <div id="cv-panel-shortcuts" class="cv-pane-panel cv-shortcuts" role="tabpanel" aria-labelledby="cv-tab-shortcuts" hidden></div>
       </aside>
       <footer class="cv-dock">
@@ -787,7 +790,11 @@ function Canvas(props: CanvasProps) {
               <button type="button" role="menuitem" data-tool="spread"><span>Spread a stack</span><span class="cv-kbd-group">⌘ ⇧ G</span></button>
               <button type="button" role="menuitem" data-tool="remove"><span>Take off the canvas</span><span class="cv-kbd-group">Del</span></button>
               <span class="cv-zoom-sep" aria-hidden="true"></span>
-              <button type="button" role="menuitem" data-tool="help"><span>Shortcuts and commands</span><span class="cv-kbd-group">?</span></button>
+              <p class="cv-menu-label" aria-hidden="true">Ask and Shape</p>
+              <button type="button" role="menuitem" data-tool="ask-about"><span>Ask about this</span><span class="cv-kbd-group">?</span></button>
+              <button type="button" role="menuitem" data-tool="shape"><span>Shape…</span><span class="cv-kbd-group">/shape</span></button>
+              <span class="cv-zoom-sep" aria-hidden="true"></span>
+              <button type="button" role="menuitem" data-tool="help"><span>Shortcuts and commands</span><span class="cv-kbd-group">/shortcuts</span></button>
             </div>
           </div>
         </div>
@@ -826,6 +833,8 @@ startFocus(document);
 // APP-109: `/note`, saved as the member's own records.
 registerCommands([NOTE_COMMAND]);
 startNotes(document);
+// APP-122: Ask (the Ask tab, `?` first in the bar) and Shape (`/shape`, the dot).
+startTalk(document);
 
 mount(
   () =>

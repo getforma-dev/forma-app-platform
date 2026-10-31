@@ -1,3 +1,5 @@
+// APP-122: a fourth tab, Ask (`ask.ts`): a read-only conversation about the
+// data; `?` first in the bar opens it, and `?` no longer opens Shortcuts.
 // APP-119: the right-hand pane, one pane with three tabs: Library (the apps
 // and cards you can bring in, `library.ts`), Commands (the verbs with their
 // arguments and examples, `command-sheet.ts`) and Shortcuts (every action
@@ -11,8 +13,8 @@
 // The markup is the page's (`app.tsx`, `#cv-library`); this module only
 // wires it.
 
-export type PaneTab = 'library' | 'commands' | 'shortcuts';
-export const PANE_TABS: readonly PaneTab[] = ['library', 'commands', 'shortcuts'];
+export type PaneTab = 'library' | 'commands' | 'ask' | 'shortcuts';
+export const PANE_TABS: readonly PaneTab[] = ['library', 'commands', 'ask', 'shortcuts'];
 
 type TabHooks = {
   /** The tab became visible (`focus`: move focus into it). */

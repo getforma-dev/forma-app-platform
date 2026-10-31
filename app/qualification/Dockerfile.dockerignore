@@ -89,6 +89,7 @@
 !app/src/commands/routes.rs
 !app/src/commands/tests.rs
 !app/src/composer/mod.rs
+!app/src/composer/ask.rs
 !app/src/composer/commands.rs
 !app/src/composer/labels.rs
 !app/src/composer/lineage.rs
@@ -97,6 +98,8 @@
 !app/src/composer/plan.rs
 !app/src/composer/prompt.rs
 !app/src/composer/routes.rs
+!app/src/composer/shape.rs
+!app/src/composer/talk.rs
 !app/src/composer/transform.rs
 !app/src/composer/tests.rs
 !app/src/admission/mod.rs

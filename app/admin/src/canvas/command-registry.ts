@@ -32,10 +32,17 @@
 // member only); `/q3` → a card is a card shortcut (`findCardShortcut`), and
 // `findCommand` runs it as `/card <app>.<card>`. The server already drops a
 // shortcut an organization name took (the organization's address wins).
+//
+// APP-122: two AI jobs, chosen by where you type. `/shape <address> <words>`
+// (group Shape) changes how a card, an app (its theme) or a widget looks or
+// what it shows; `?` first in the bar (group Ask, listed as `? <question>`;
+// `/ask` is the same) asks a read-only question. `/<app>.<card> <words>` is
+// the shortcut for a card's Shape (the dot is the rule; `slash.ts`). Sixteen
+// verbs in six groups.
 
-export type Category = 'Place' | 'Arrange' | 'Make' | 'Help';
+export type Category = 'Place' | 'Arrange' | 'Make' | 'Shape' | 'Ask' | 'Help';
 /** The order the surfaces list groups in. */
-export const CATEGORIES: readonly Category[] = ['Place', 'Arrange', 'Make', 'Help'];
+export const CATEGORIES: readonly Category[] = ['Place', 'Arrange', 'Make', 'Shape', 'Ask', 'Help'];
 /** APP-120: the one sentence the grammar teaches. */
 export const GRAMMAR = 'Type / and a verb to change the canvas, / and an app’s name to tell that app something, or just a sentence.';
 /** The heading of the addresses' section in the `/x…` list. */
@@ -61,6 +68,8 @@ export interface CanvasCommand {
   usage?: string;
   /** APP-120: a hidden alias of this verb (`/weather` of `/widget`): runs and autocompletes, never listed under `/` alone. */
   aliasOf?: string;
+  /** APP-122: what a click on its Commands row puts in the bar, when not `/slug ` (`? ` for Ask). */
+  insert?: string;
   run(text: string, report?: Report): void | Promise<void>;
 }
 
@@ -94,10 +103,10 @@ export type Address = Runnable & {
 };
 
 const arg = (name: string, kind: ArgKind, required = false): CommandArg => ({ name, kind, required });
-type Meta = Pick<Command, 'category' | 'args' | 'examples'> & { usage?: string };
+type Meta = Pick<Command, 'category' | 'args' | 'examples'> & { usage?: string; insert?: string };
 
-/** The fourteen verbs in their order; what the registry knows about each (apps are never here, APP-119). */
-export const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'rename', 'alias', 'apps', 'commands', 'shortcuts', 'agent'] as const;
+/** The sixteen verbs in their order; what the registry knows about each (apps are never here, APP-119). */
+export const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'rename', 'alias', 'shape', 'ask', 'apps', 'commands', 'shortcuts', 'agent'] as const;
 /** APP-120: the widget kinds `/widget` places; the first four are also hidden verbs of their own. */
 export const WIDGET_KINDS = ['weather', 'calculator', 'clock', 'note', 'folder'] as const;
 export type WidgetName = typeof WIDGET_KINDS[number];
@@ -133,6 +142,19 @@ const KNOWN: Record<string, Meta> = {
     examples: ['/alias exp expenses', '/alias q3 expenses.total'],
     usage: '/alias <shortcut> <app|app.card>',
   },
+  shape: {
+    category: 'Shape',
+    args: [arg('card, app or widget', 'card', true), arg('words', 'text', true)],
+    examples: ['/shape expenses.ledger only red invoices', '/shape expenses dark green, compact', '/shape calculator make it a TI-84', '/expenses.ledger highlight overdue in red'],
+    usage: '/shape <app.card|app|widget> <words>',
+  },
+  ask: {
+    category: 'Ask',
+    args: [arg('question', 'text', true)],
+    examples: ['? where are the red invoices', '? what is the total by category'],
+    usage: '? <question>',
+    insert: '? ',
+  },
   apps: { category: 'Help', args: [arg('query', 'app')], examples: ['/apps', '/apps purchase'] },
   commands: { category: 'Help', args: [arg('search', 'text')], examples: ['/commands', '/commands folder'] },
   shortcuts: { category: 'Help', args: [], examples: ['/shortcuts'] },
@@ -153,6 +175,7 @@ function complete(command: CanvasCommand): Command {
     args: command.args ?? known?.args ?? [],
     examples: command.examples ?? known?.examples ?? [`/${command.slug}`],
     ...(command.usage ?? known?.usage ? { usage: command.usage ?? known?.usage } : {}),
+    ...(command.insert ?? known?.insert ? { insert: command.insert ?? known?.insert } : {}),
   };
 }
 

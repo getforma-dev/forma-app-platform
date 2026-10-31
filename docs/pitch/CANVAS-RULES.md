@@ -84,7 +84,7 @@ The pane always reflects the canvas.
 | | `/rename <app or app.card> <new name> [/address]` | Names an app (and gives it a new address) or a card: `/rename expenses Team spend /spend`, `/rename expenses.total Q3 spend` (APP-121) |
 | | `/alias <shortcut> <app or app.card>` | Your own shortcut: `/alias exp expenses`, `/alias q3 expenses.total`; `/alias exp` alone removes it (APP-121) |
 | Shape | `/shape <address> <words>` | Changes how a card, an app (its theme) or a widget looks or what it shows (APP-122) |
-| Ask | `? <question>` | Opens the Ask tab with your question; read-only (APP-122) |
+| Ask | `? <question>` | Opens the Ask tab with your question; read-only (APP-122). `/ask <question>` is the same |
 | Help | `/apps [query]` · `/commands` · `/shortcuts` · `/agent` | Library · Commands · Shortcuts · Connect an agent |
 
 Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/clock`, `/note`, `/folder` on its own, and `/help`.
@@ -123,6 +123,15 @@ An app has no look of its own; its look is its cards, so shaping an app themes t
 - **Forma:** a plain sentence picks or builds an app; `/folder <name> formation …` builds one from a folder's files. Both confirm first. A question typed as a plain sentence goes to Forma and stops at its confirm card; type `?` first to ask.
 - **Place:** `/<name>` on its own puts the thing on the canvas.
 
+**As built (APP-122), where the details were open:**
+
+- **"Red"** has no color in the data: Ask and Shape read it as *needs attention*, a record waiting on a decision (submitted, pending, requested, open, overdue, unpaid) or refused, disputed or flagged. "Overdue" is waiting on a decision.
+- **Ask's scope** is the selected card's app, else every app on the canvas (at most 12). It reads the apps' records in one read-only transaction; each receipt names the record, its version and commit, and the app's publication and definition.
+- **What a card's Shape runs over:** a records or ledger card, its records (each row keeps its record's receipt; a grouped or summed number lists the records it came from); a view card, its released result (the query's receipt stays on the card). Shaping an app card themes its app. A form or a note has no data to shape, and **notes and folders cannot be shaped yet**.
+- **`/<app>.<card>` with no words** places the card, as `/card` does.
+- **A widget's Shape field** applies at once, as Restyle did; `/shape <widget>` previews first, like every other `/shape`.
+- **Without the AI model** Ask and Shape answer only the demo organization's rehearsed sentences (APP-098: "where are the red …", "how many", "what's the total"; "only red invoices", "highlight overdue in red", "total by month", "dark green, compact", "make it a TI-84"); anything else says the model is not configured.
+
 ### Three layers, and what may change each
 
 | Layer | What it is | Changed by |
@@ -146,7 +155,7 @@ Planned (APP-123): **Make it a card** on answers, persistent personal cards, `@`
 
 | Keys | Does |
 | --- | --- |
-| `?` | Puts `? ` in the bar, ready to ask (APP-122) |
+| `?` | Puts `? ` in the bar, ready to ask (APP-122); `/shortcuts` opens the Shortcuts tab |
 | `L` | Library |
 | `F` · `U` · `Shift+U` | Focus, unite, split the selected card or app |
 | `V` · `H` | Move tool, hand tool |

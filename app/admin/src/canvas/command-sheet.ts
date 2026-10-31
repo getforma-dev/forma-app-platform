@@ -42,13 +42,16 @@ export function insertCommand(text: string): void {
 function commandRow(document_: Document, command: Command): HTMLElement {
   const name = el(document_, 'button', { type: 'button', class: 'cv-commands-item', title: `Put /${command.slug} in the bar` },
     el(document_, 'code', { class: 'cv-commands-sig' },
-      el(document_, 'strong', {}, `/${command.slug}`),
-      ...(command.usage
+      // APP-122: Ask is typed `? <question>`, not `/ask`.
+      ...(command.usage?.startsWith('?')
+        ? [el(document_, 'strong', {}, '?'), el(document_, 'span', { class: 'cv-commands-arg is-required' }, command.usage.slice(1))]
+        : [el(document_, 'strong', {}, `/${command.slug}`)]),
+      ...(command.usage?.startsWith('?') ? [] : command.usage
         ? [el(document_, 'span', { class: 'cv-commands-arg is-required' }, command.usage.slice(command.slug.length + 1))]
         : command.args.map((argument) => el(document_, 'span', { class: argument.required ? 'cv-commands-arg is-required' : 'cv-commands-arg' }, ` ${argLabel(argument)}`)))),
     el(document_, 'span', { class: 'cv-commands-title' }, command.title),
     el(document_, 'span', { class: 'cv-commands-purpose' }, command.purpose));
-  name.addEventListener('click', () => insertCommand(command.args.length ? `/${command.slug} ` : `/${command.slug}`));
+  name.addEventListener('click', () => insertCommand(command.insert ?? (command.args.length ? `/${command.slug} ` : `/${command.slug}`)));
   const examples = command.examples.filter((example) => example !== `/${command.slug}` || command.args.length === 0).slice(0, 2);
   const also = [...hiddenAliases(command.slug).map((alias) => alias.slug), ...command.aliases];
   const meta = el(document_, 'div', { class: 'cv-commands-meta' },

@@ -108,6 +108,7 @@ app/src/commands/**
 !app/src/composer/
 app/src/composer/**
 !app/src/composer/mod.rs
+!app/src/composer/ask.rs
 !app/src/composer/commands.rs
 !app/src/composer/labels.rs
 !app/src/composer/lineage.rs
@@ -116,6 +117,8 @@ app/src/composer/**
 !app/src/composer/plan.rs
 !app/src/composer/prompt.rs
 !app/src/composer/routes.rs
+!app/src/composer/shape.rs
+!app/src/composer/talk.rs
 !app/src/composer/transform.rs
 # composer/tests.rs is cfg(test) only; the qualification context lists it.
 !app/src/storage/
@@ -246,6 +249,11 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/address-chip.ts
 # APP-121: naming (/rename, /alias, the Library's ✎, double-click a card title).
 !app/admin/src/canvas/naming.ts
+# APP-122: Ask (the Ask tab) and Shape (/shape, the dot), and their data side.
+!app/admin/src/canvas/ask.ts
+!app/admin/src/canvas/shape.ts
+!app/admin/src/canvas/talk.ts
+!app/admin/src/canvas/talk-view.ts
 !app/admin/src/canvas/widgets/
 app/admin/src/canvas/widgets/**
 !app/admin/src/canvas/widgets/index.ts

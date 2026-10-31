@@ -47,7 +47,8 @@ use std::sync::{Arc, OnceLock};
 pub const LABELS_PATH: &str = "/v1/apps/{app}/labels";
 const BODY_LIMIT: usize = 4096;
 
-/// The canvas verbs (`command-registry.ts`: the fourteen, their hidden
+/// The canvas verbs (`command-registry.ts`: the sixteen with APP-122's
+/// `/shape` and `/ask`, their hidden
 /// aliases) and the reserved list names: no address, alias or shortcut
 /// may take one.
 pub const VERBS: &[&str] = &[
@@ -61,6 +62,8 @@ pub const VERBS: &[&str] = &[
     "folder",
     "rename",
     "alias",
+    "shape",
+    "ask",
     "apps",
     "commands",
     "shortcuts",
