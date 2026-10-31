@@ -190,6 +190,22 @@ export function slashAddresses(prefix: string, listed: (address: Address) => boo
   return matchAddresses(prefix, listed);
 }
 
+/** Shown when none of the member's placed or saved apps match: library apps
+ *  they could address, so `/e` on a clean canvas still finds `/expense`. */
+export const LIBRARY_SECTION = 'From your library — type /name and what you want';
+const LIBRARY_SUGGESTIONS = 5;
+
+/** The Apps section of the dropdown: placed and saved apps first; when none
+ *  match, up to five matching library apps under their own heading. */
+export function slashAddressSection(
+  prefix: string,
+  listed: (address: Address) => boolean = (address) => listedAddress(address),
+): { title: string; addresses: Address[] } {
+  const own = slashAddresses(prefix, listed);
+  if (own.length || !prefix) return { title: APPS_SECTION, addresses: own };
+  return { title: LIBRARY_SECTION, addresses: matchAddresses(prefix).slice(0, LIBRARY_SUGGESTIONS) };
+}
+
 /** `/commands [search]` (aliases `/help`): the right pane's Commands tab, never a canvas card. */
 export const COMMANDS: CanvasCommand = {
   slug: 'commands',
@@ -405,9 +421,9 @@ export function startSlash(document_: Document): void {
           el(document_, 'span', { class: 'cv-slash-purpose' }, command.purpose));
       })));
     // APP-119: apps are addresses, in their own section after the verbs.
-    const addresses = slashAddresses(prefix);
+    const { title: appsTitle, addresses } = slashAddressSection(prefix);
     if (addresses.length) {
-      nodes.push(section('cv-slash-cat-apps', APPS_SECTION, addresses.map((address) => {
+      nodes.push(section('cv-slash-cat-apps', appsTitle, addresses.map((address) => {
         const entry: Entry = { kind: 'command', command: address };
         entries.push(entry);
         return option(entry, entries.length - 1,

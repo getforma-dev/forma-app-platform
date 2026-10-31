@@ -785,7 +785,7 @@ function Canvas(props: CanvasProps) {
             </div>
           </div>
         </div>
-        <IntentBar placeholder="Describe the app you need, or type / for your apps" />
+        <IntentBar placeholder="Describe what you need, or type / for commands" />
         <p class="cv-layout-note">Layout saved in this browser</p>
       </footer>
     </div>

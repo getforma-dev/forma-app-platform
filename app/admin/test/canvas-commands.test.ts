@@ -96,6 +96,11 @@ test('/ex shows the matching verbs, then an Apps section with derived hints (APP
   // Decision 4: on a clean canvas the section lists only saved apps …
   const clean = (address: Parameters<typeof slash.listedAddress>[0]) => slash.listedAddress(address, []);
   assert.deepEqual(slash.slashAddresses('ex', clean), []);
+  const fallback = slash.slashAddressSection('ex', clean);
+  assert.equal(fallback.title, slash.LIBRARY_SECTION, 'a clean canvas falls back to the library');
+  assert.ok(fallback.addresses.some((address) => address.slug === 'expense'), '/e on a clean canvas still finds /expense');
+  assert.ok(fallback.addresses.length <= 5);
+  assert.deepEqual(slash.slashAddressSection('', clean).addresses, [], 'nothing under / alone');
   assert.deepEqual(slash.slashAddresses('b', clean).map((address) => address.slug), ['big-claims']);
   // … but an exact slug or alias of any app the member can open is offered (`/pto` in the demo).
   assert.deepEqual(slash.slashAddresses('pto', clean).map((address) => address.slug), ['pto']);
