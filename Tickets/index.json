@@ -279,9 +279,11 @@
         "APP-126",
         "APP-127",
         "APP-128",
-        "APP-129"
+        "APP-129",
+        "APP-132",
+        "APP-135"
       ],
-      "ticket_count": 39,
+      "ticket_count": 41,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -4090,6 +4092,62 @@
       "dependencies": [
         "APP-107",
         "APP-113"
+      ]
+    },
+    {
+      "id": "APP-132",
+      "title": "Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)",
+      "path": "0-backlog/APP-132.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Bug",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "132",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-012](../../docs/architecture/ADR-012-DEVELOPER-WORKFLOW.md) D12.8 (\"the clean slate shows the composer: a sentence builds the first app\") and [ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md) invariants I3\u2013I5 (admission decides; model output is data).",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-128",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
+      "Branch / PR": "`pivot/clean-generate` (in progress)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-128"
+      ]
+    },
+    {
+      "id": "APP-135",
+      "title": "MVP overbuild and hard-code audit: everything that only works because of the seeded library, the demo organization or fixed data",
+      "path": "0-backlog/APP-135.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "135",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md) (the demo is a concept car; honesty owed at release) and [ADR-012](../../docs/architecture/ADR-012-DEVELOPER-WORKFLOW.md) D12.8 (the clean slate). Complements APP-098, which registers shortcuts behind `GENUI_DEMO_MODE`; this ticket finds the ones that are **not** behind the flag.",
+      "Requirements": "C01, C11",
+      "Depends on": "APP-132",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-132"
       ]
     }
   ]
