@@ -2676,3 +2676,13 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
 .cv-canvas [data-forma-canvas] .navigator-item.is-active { border-color: var(--cv-accent); background: var(--cv-chart); }
 .cv-canvas [data-forma-canvas] .forma-canvas-navigator-viewport { border-color: var(--cv-accent); background: var(--cv-accent-soft); }
 @media (max-width: 760px) { .cv-eyebrow { font-size: 9px; } }
+/* Keep every pane tab and close control reachable at the narrowest width. */
+@media (max-width: 760px) {
+  .cv-lib-head { gap: 6px; }
+  .cv-pane-tabs { min-width: 0; gap: 2px; padding: 2px; }
+  .cv-pane-tab { padding: 6px; font-size: 11px; }
+  .cv-lib-close { flex-shrink: 0; }
+  .cv-commands-cat ul, .cv-commands-item { grid-template-columns: minmax(0, 1fr); }
+  .cv-commands-row, .cv-commands-item, .cv-commands-item > * { min-width: 0; }
+  .cv-commands-sig { overflow-wrap: anywhere; white-space: normal; }
+}

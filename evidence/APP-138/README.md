@@ -33,3 +33,7 @@ Chromium/Playwright, local pitch and isolated browser contexts; existing stored 
 ## Limits and rollback
 
 No live-provider sign-in, real upload, model generation or write/approval command was exercised for this presentation-only change. Their existing action attributes and handlers are preserved and covered by existing tests. No data migration, cloud call, authorization change or framework update. Revert APP-138 source to restore the former presentation.
+
+### Final narrow-screen review fix
+
+The reviewer applied a ten-line, mobile-only Tier B fix after the 320×568 check found tabs pushing the pane close button offscreen and long command text widening its grid. Header gap, tab padding/type size and command grid minimums now fit the narrow surface. Browser recheck: header 320/320 client/scroll width, command list 273/273, close button right edge 302 (inside viewport). Strict production build also passes from an isolated output directory, avoiding writes to the running watcher's output. No further broad test repeat was needed for these ten CSS lines. The native input focus action and file-picker opening/cancellation were also checked; no upload occurred.
