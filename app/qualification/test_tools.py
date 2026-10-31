@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import re
 import sys
+import tomllib
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -105,9 +106,11 @@ def service_native_copies():
 
 def compiled_rust_sources():
     """Every .rs file under app/src that a release build compiles: the module tree from lib.rs
-    and main.rs minus every `#[cfg(test)]` module declaration (and its `#[path]`)."""
+    and main.rs minus every `#[cfg(test)]` or `#[cfg(feature = "…")]` module declaration (and its
+    `#[path]`), and minus every `[[bin]]` with `required-features`. The Dockerfile enables no
+    feature (ADR-007 D7.13, ADR-012 D12.1: `dev-stand` builds genui-dev only locally; APP-131)."""
     root = harness.APP / "src"
-    declaration = re.compile(r'(#\[cfg\(test\)\]\s*)?(?:#\[path = "([^"]+)"\]\s*)?(?:pub(?:\(crate\))? )?mod (\w+);')
+    declaration = re.compile(r'(#\[cfg\((?:test|feature = "[\w-]+")\)\]\s*)?(?:#\[path = "([^"]+)"\]\s*)?(?:pub(?:\(crate\))? )?mod (\w+);')
 
     def declared(path, text, tests_only):
         module_dir = path.parent if path.name in ("mod.rs", "lib.rs", "main.rs") else path.parent / path.stem
@@ -132,6 +135,9 @@ def compiled_rust_sources():
                 test_only.add(child)
                 if child.is_file():
                     pending.append(child)
+    manifest = tomllib.loads((harness.APP / "Cargo.toml").read_text())
+    test_only.update((harness.APP / binary["path"]).resolve() for binary in manifest.get("bin", [])
+                     if binary.get("required-features"))
     compiled = []
     for path in sorted(root.rglob("*.rs")):
         resolved = path.resolve()
@@ -169,6 +175,9 @@ class ServiceImageTests(unittest.TestCase):
         for name in ("app/src/query/canvas_tests.rs", "app/src/query/tests.rs", "app/src/composer/tests.rs",
                      "app/src/storage/qualification.rs", "app/src/storage/managed_qualification/tests.rs",
                      "app/src/auth_qualification/tests.rs", "app/src/admission/tests.rs"):
+            self.assertNotIn(name, compiled)
+        # Feature-gated code (dev-stand: genui-dev and its module) is not in a release build.
+        for name in ("app/src/bin/genui-dev.rs", "app/src/dev/mod.rs", "app/src/dev/seed.rs"):
             self.assertNotIn(name, compiled)
 
     def test_service_context_admits_every_compiled_source_and_only_tracked_files(self):

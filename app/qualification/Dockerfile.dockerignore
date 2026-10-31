@@ -18,8 +18,13 @@
 !app/src/directory.rs
 # ADR-012 D12.1: the dev binary's sources (feature dev-stand, never compiled
 # here) are bound by the managed qualification's source inventory.
-!app/src/dev/
-!app/src/bin/
+# Listed file by file: a directory re-include admits the whole directory, and
+# check_image.allowlist refuses one not closed by its `dir/**` (APP-131).
+!app/src/bin/genui-dev.rs
+!app/src/dev/db.rs
+!app/src/dev/mod.rs
+!app/src/dev/personas.rs
+!app/src/dev/seed.rs
 !app/src/origins.rs
 !app/src/pages.rs
 !app/src/product.rs
