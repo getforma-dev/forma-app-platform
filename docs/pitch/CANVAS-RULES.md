@@ -94,9 +94,12 @@ Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/cl
 | `F` · `U` · `Shift+U` | Focus, unite, split the selected card or app |
 | `V` · `H` | Move tool, hand tool |
 | Space + drag · scroll | Pan |
-| ⌘/Ctrl + scroll · pinch | Zoom |
+| ⌘/Ctrl + `=` · ⌘/Ctrl + `−` · pinch | Zoom in, zoom out |
 | `Shift+0` · `1` · `2` | Zoom to 100%, fit everything, fit the selection |
 | ⌘/Ctrl + `G` · ⌘/Ctrl + `Shift+G` | Stack the selection · spread a stack |
 | ← / → on a stack | Flip through it |
+| Enter · Esc on a stack | Fan it out, fold it back |
+| Arrow keys · Shift + arrow | Move the selection 1 px · 10 px |
+| Double-click a stack's name | Rename the stack |
 
 No shortcut fires while you are typing.

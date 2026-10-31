@@ -30,6 +30,8 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 
 ## Using the canvas
 
+The full rules (what is on a canvas, names and aliases, verbs, adding and removing, shortcuts) are in [CANVAS-RULES.md](CANVAS-RULES.md).
+
 **Intent bar (bottom).** Type a sentence, `/` for commands, or `/name` to address one of your apps.
 
 **Commands are verbs; apps are addresses (APP-119).** Commands are things you *do*. They come from one registry (`canvas/command-registry.ts`). Typing `/` alone lists only them, by category, each with its argument signature (`<required>`, `[optional]`). From the first letter (`/e…`), the list shows the matching commands first, then a separate section, "Apps — type /name and what you want". That section lists the matching apps on your canvas and your saved apps. An app's exact name or alias is always offered, even on a clean canvas (`/pto`). After `/name `, a hint row marks the argument being typed and shows an example. Live suggestions appear for apps, cards, folders, cities and zones. Tab fills a suggestion, Enter runs it, and ↑/↓ move through the list.
