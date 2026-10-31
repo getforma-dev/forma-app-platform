@@ -413,6 +413,7 @@ fn a_tool_answer_carries_text_and_structured_content() {
         text: "Two rows.".into(),
         structured: json!({"rows": [1, 2]}),
         is_error: false,
+        note: None,
     }
     .result();
     assert_eq!(ok["isError"], false);
@@ -479,14 +480,9 @@ fn draft_values_are_typed_hints_or_refused() {
 
 #[test]
 fn agent_token_labels_are_closed_bodies() {
-    assert_eq!(
-        tokens::parse_label(br#"{"label":"Claude"}"#).as_deref(),
-        Some("Claude")
-    );
-    assert_eq!(
-        tokens::parse_label(br#"{"label":" OpenAI "}"#).as_deref(),
-        Some("OpenAI")
-    );
+    let label = |body: &[u8]| tokens::parse_mint(body).ok().map(|m| m.label);
+    assert_eq!(label(br#"{"label":"Claude"}"#).as_deref(), Some("Claude"));
+    assert_eq!(label(br#"{"label":" OpenAI "}"#).as_deref(), Some("OpenAI"));
     for bad in [
         &br#"{"label":"<b>x</b>"}"#[..],
         br#"{"label":""}"#,
@@ -494,8 +490,95 @@ fn agent_token_labels_are_closed_bodies() {
         br#"{}"#,
         b"label=Claude",
     ] {
-        assert_eq!(tokens::parse_label(bad), None);
+        assert_eq!(label(bad), None);
     }
+}
+
+#[test]
+fn agent_token_scopes_only_narrow_and_are_closed() {
+    use crate::storage::{AgentScope, AGENT_TOKEN_DAYS};
+    let minted = tokens::parse_mint(br#"{"label":"Claude"}"#).unwrap();
+    assert_eq!(
+        (minted.scope, minted.days),
+        (AgentScope::default(), AGENT_TOKEN_DAYS)
+    );
+    let minted = tokens::parse_mint(
+        br#"{"label":"Sec bot","scope":{"spaces":["security"]},"actions":["read","draft"],"expires_in_days":7}"#,
+    )
+    .unwrap();
+    assert!(!minted.scope.all && minted.scope.spaces == ["security"] && minted.days == 7);
+    assert_eq!(minted.scope.actions, ["read", "draft"]);
+    for bad in [
+        &br#"{"label":"x","scope":{"spaces":["hr"]}}"#[..],
+        br#"{"label":"x","scope":{}}"#,
+        br#"{"label":"x","scope":{"spaces":[],"apps":[]}}"#,
+        br#"{"label":"x","scope":{"spaces":["people","people"]}}"#,
+        br#"{"label":"x","scope":{"apps":["not-a-uuid"]}}"#,
+        br#"{"label":"x","scope":{"spaces":["people"],"grants":["admin"]}}"#,
+        br#"{"label":"x","scope":"everything"}"#,
+        br#"{"label":"x","actions":[]}"#,
+        br#"{"label":"x","actions":["delete"]}"#,
+        br#"{"label":"x","expires_in_days":31}"#,
+        br#"{"label":"x","expires_in_days":0}"#,
+        br#"{"label":"x","expires_in_days":"7"}"#,
+        br#"{"label":"x","role":"admin"}"#,
+    ] {
+        assert_eq!(
+            tokens::parse_mint(bad),
+            Err(tokens::MintRefusal::Scope),
+            "{}",
+            String::from_utf8_lossy(bad)
+        );
+    }
+}
+
+#[test]
+fn every_tool_maps_to_a_scope_action_and_scope_refusals_are_uniform() {
+    use super::{scope, tools};
+    use crate::storage::AgentScope;
+    for name in tools::NAMES {
+        assert!(
+            crate::storage::SCOPE_ACTIONS.contains(&scope::action_of(name)),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        scope::space_of("00000000-0000-4000-8000-000000001701"),
+        "people"
+    );
+    assert_eq!(
+        scope::space_of("00000000-0000-4000-8000-000000001881"),
+        "security"
+    );
+    assert_eq!(
+        scope::space_of("00000000-0000-4000-8000-000000001681"),
+        "finance"
+    );
+    assert_eq!(
+        scope::space_of("00000000-0000-4000-8000-0000000abcde"),
+        "mine"
+    );
+    let read_only = AgentScope {
+        all: false,
+        spaces: vec!["security".into()],
+        apps: vec![],
+        actions: vec!["read".into(), "draft".into()],
+    };
+    assert!(!scope::allows_app(
+        &read_only,
+        "00000000-0000-4000-8000-000000001701"
+    ));
+    assert!(scope::allows_app(
+        &read_only,
+        "00000000-0000-4000-8000-000000001881"
+    ));
+    let refused = tools::Output::out_of_scope("scope_space", Some("people"), None, None);
+    let denial = tools::Output::out_of_scope("not_found", None, None, None);
+    assert_eq!(
+        refused.result(),
+        denial.result(),
+        "the agent sees the uniform denial"
+    );
 }
 
 /// Review: the limit was per token only, so a member could mint tokens to

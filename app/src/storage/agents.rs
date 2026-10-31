@@ -15,6 +15,7 @@
 //! it from then on.
 use super::{
     authorization::Transaction,
+    governance::AgentScope,
     pool::Workspace,
     require,
     sessions::{agent_token_digest, fresh_agent_token, AgentCaller},
@@ -115,7 +116,23 @@ impl Workspace {
         request: &TrustedRequest,
         label: &str,
     ) -> Result<MintedAgentToken> {
-        require(agent_label_shaped(label))?;
+        self.mint_scoped_agent_token(request, label, &AgentScope::default(), AGENT_TOKEN_DAYS)
+            .await
+    }
+
+    /// APP-115 (0013): mints a token with the member's chosen scope and an
+    /// expiry of 1 to `AGENT_TOKEN_DAYS` days. The scope is stored as given;
+    /// it never grants anything (`mcp::scope` only refuses).
+    pub async fn mint_scoped_agent_token(
+        &self,
+        request: &TrustedRequest,
+        label: &str,
+        scope: &AgentScope,
+        days: i32,
+    ) -> Result<MintedAgentToken> {
+        require(
+            agent_label_shaped(label) && scope.shaped() && (1..=AGENT_TOKEN_DAYS).contains(&days),
+        )?;
         let token = fresh_agent_token(&request.organization)?;
         let cap = Instant::now() + AGENT_HANDLER_DEADLINE;
         let transaction = Transaction::begin_until(&self.inner, request, cap).await?;
@@ -129,8 +146,8 @@ impl Workspace {
                 .try_get(0)
                 .map_err(|_| Error::Unavailable)?;
             require(live < MAX_LIVE_AGENT_TOKENS)?;
-            let rows = transaction.query("INSERT INTO genui.agent_tokens(organization_id,token_id,token_digest,principal_id,label,membership_epoch_at_mint,registry_sha256,created_at,expires_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text,$3::text::uuid,$4::text,$5::bigint,$6::text,now(),now()+make_interval(days=>$7)) RETURNING token_id::text,to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),to_char(expires_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')",
-                &[&request.organization,&agent_token_digest(&token),&request.principal,&label,&request.epoch,&request.registry_sha256,&AGENT_TOKEN_DAYS]).await?;
+            let rows = transaction.query("INSERT INTO genui.agent_tokens(organization_id,token_id,token_digest,principal_id,label,membership_epoch_at_mint,registry_sha256,created_at,expires_at,scope_kind,scope_spaces,scope_apps,scope_actions) VALUES ($1::text::uuid,gen_random_uuid(),$2::text,$3::text::uuid,$4::text,$5::bigint,$6::text,now(),now()+make_interval(days=>$7),$8::text,$9::text[],$10::text[]::uuid[],$11::text[]) RETURNING token_id::text,to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),to_char(expires_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')",
+                &[&request.organization,&agent_token_digest(&token),&request.principal,&label,&request.epoch,&request.registry_sha256,&days,&scope.kind(),&scope.spaces,&scope.apps,&scope.actions]).await?;
             let row = rows.first().ok_or(Error::Unavailable)?;
             Ok((text(row, 0)?, text(row, 1)?, text(row, 2)?))
         }

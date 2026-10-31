@@ -18,6 +18,8 @@ The onboarding explainer. It covers who talks to Forma, how they connect, and wh
 - An agent connected with your token can list your apps, run views, draft records, file them after you confirm, decide approvals you are allowed to decide, share, and build from your folders.
 - It cannot see another team's data. It cannot skip an approval step or approve its own request.
 - Every action it takes is recorded and shown with a chip on the canvas, for example "via Claude" or "via OpenAI".
+- You can narrow a token when you create it: only some spaces (for example Security), only some actions (read, draft, commit, decide, share, build apps), and an expiry of up to 30 days. A scope never adds a right you do not have.
+- Every call an agent makes is logged: what it touched, whether it was allowed, and why it was refused. See it under "Connect an agent" → **Activity**.
 - To revoke a token, use "Connect an agent". Signing out also ends your tokens.
 
 **Forma's AI** never touches permissions or data directly.

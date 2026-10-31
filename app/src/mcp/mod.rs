@@ -34,6 +34,8 @@
 //! The log carries the token id, the member, the method, the tool, the
 //! outcome code and the duration; never the token, an argument or a value.
 pub mod drafts;
+pub mod governance;
+pub mod scope;
 pub mod tokens;
 pub mod tools;
 
@@ -45,7 +47,7 @@ use crate::{
     composer::Composer,
     http::{self, limits},
     query::Work,
-    storage::AgentCaller,
+    storage::{AccessEntry, AgentCaller, MAX_TOUCHED},
 };
 use axum::{
     body::to_bytes,
@@ -310,6 +312,137 @@ fn log(caller: &AgentCaller, method: &str, tool: &str, outcome: &str, started: I
     );
 }
 
+/// The ids a call touched: every `app_id`, `work_id`, `record_id`,
+/// `folder_id` and `file_id` in its arguments and its answer (at most
+/// `MAX_TOUCHED` of each), plus the app a refusal judged.
+pub(crate) fn touched(arguments: &Value, output: &tools::Output) -> AccessEntry {
+    fn walk(value: &Value, entry: &mut AccessEntry, depth: usize) {
+        if depth > 6 {
+            return;
+        }
+        match value {
+            Value::Object(map) => {
+                for (key, item) in map {
+                    let list = match key.as_str() {
+                        "app_id" => Some(&mut entry.apps),
+                        "work_id" => Some(&mut entry.works),
+                        "record_id" => Some(&mut entry.records),
+                        "folder_id" => Some(&mut entry.folders),
+                        "file_id" => Some(&mut entry.files),
+                        _ => None,
+                    };
+                    match (list, item.as_str()) {
+                        (Some(list), Some(id))
+                            if crate::storage::valid_identifier(id)
+                                && !list.iter().any(|known| known == id)
+                                && list.len() < MAX_TOUCHED =>
+                        {
+                            list.push(id.to_owned());
+                        }
+                        _ => walk(item, entry, depth + 1),
+                    }
+                }
+            }
+            Value::Array(items) => {
+                for item in items {
+                    walk(item, entry, depth + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut entry = AccessEntry::default();
+    if let Some(app) = output.note.as_ref().and_then(|n| n.app.as_ref()) {
+        entry.apps.push(app.clone());
+    }
+    walk(arguments, &mut entry, 0);
+    if !output.is_error {
+        walk(&output.structured, &mut entry, 0);
+    }
+    entry
+}
+
+/// The log's display label of an allowed call: the answer's title, else
+/// the first touched library app's title.
+fn resource_label(tool: &str, entry: &AccessEntry, output: &tools::Output) -> Option<String> {
+    if let Some(resource) = output.note.as_ref().and_then(|n| n.resource.as_ref()) {
+        return Some(resource.clone());
+    }
+    if output.is_error {
+        return None;
+    }
+    // A listing names what it showed, not one of the listed apps.
+    let plural = |n: usize, noun: &str| format!("{n} {noun}{}", if n == 1 { "" } else { "s" });
+    match tool {
+        tools::LIST_APPS | tools::LIST_PENDING => {
+            return Some(format!(
+                "{}, {}",
+                plural(entry.apps.len(), "app"),
+                plural(
+                    entry.records.len().max(entry.works.len()),
+                    if tool == tools::LIST_APPS {
+                        "work"
+                    } else {
+                        "record"
+                    }
+                )
+            ))
+        }
+        tools::LIST_FOLDERS => return Some(plural(entry.folders.len(), "folder")),
+        _ => {}
+    }
+    ["title", "work_title", "app_title", "name"]
+        .iter()
+        .find_map(|key| output.structured.get(*key).and_then(Value::as_str))
+        .map(str::to_owned)
+        .or_else(|| {
+            entry
+                .apps
+                .iter()
+                .find_map(|app| scope::library_title(app))
+                .map(str::to_owned)
+        })
+}
+
+/// APP-115: appends the call to the organization's agent access chain. A
+/// failure is logged and never changes the answer (the call already ran).
+async fn record_access(
+    auth: &Auth,
+    caller: &AgentCaller,
+    tool: &str,
+    arguments: &Value,
+    output: &tools::Output,
+    started: Instant,
+) {
+    let Some(stores) = auth.stores.as_ref() else {
+        return;
+    };
+    let mut entry = touched(arguments, output);
+    entry.tool = tool.to_owned();
+    entry.refused = output.is_error.then(|| output.code.to_owned());
+    entry.space = output
+        .note
+        .as_ref()
+        .and_then(|n| n.space)
+        .map(str::to_owned)
+        .or_else(|| {
+            entry
+                .apps
+                .first()
+                .map(|app| scope::space_of(app).to_owned())
+        });
+    entry.resource_label = resource_label(tool, &entry, output);
+    entry.duration_ms = i32::try_from(started.elapsed().as_millis()).unwrap_or(i32::MAX);
+    if let Err(error) = stores.workspace.record_agent_access(caller, &entry).await {
+        tracing::warn!(
+            event = "mcp.access_log_failed",
+            token_id = caller.token_id,
+            error = %error,
+            "agent access not logged"
+        );
+    }
+}
+
 /// The rate keys of a call: its token, and its member across all tokens.
 pub(crate) fn keys(caller: &AgentCaller) -> (String, String) {
     let organization = caller.request.organization();
@@ -382,6 +515,7 @@ async fn handle(State(state): State<Arc<Mcp>>, request: Request) -> Response {
             }
             let output = tools::call(&state, &caller, name, &arguments).await;
             log(&caller, &method, name, output.code, started);
+            record_access(&auth, &caller, name, &arguments, &output, started).await;
             rpc_result(&id, output.result())
         }
         _ => {

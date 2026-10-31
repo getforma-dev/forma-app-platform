@@ -26,8 +26,18 @@ counts as a failed call (and a failed `tools/list` fails the run). The Forma
 origin must be https unless it is a loopback stand, and no request follows a
 redirect, so neither credential is ever replayed to another location.
 
+APP-115 `--scope-demo` (the governance demo moment, rehearsable, no model):
+with a token scoped to the Security space (`FORMA_SCOPED_AGENT_TOKEN`, or the
+stand file's `security_token` from `storage::mcp_campaign`'s stand), it lists
+the apps the token sees and then tries to draft a vacation request in the
+People space's Time off app. Forma refuses with the uniform "Not found." and
+the canvas's Connect an agent -> Activity panel shows the call as "refused:
+outside scope (People)". The report says whether Time off was listed (it must
+not be) and whether the draft was refused (it must be); exit 0 only then.
+
 Usage:
   GENUI_ENV_FILE=<clone>/.env app/scripts/mcp_haiku_agent.py --stand-file <scratch>/workflows-stand.json
+  app/scripts/mcp_haiku_agent.py --scope-demo --stand-file <scratch>/mcp-stand.json
 """
 import argparse
 import importlib.util
@@ -125,11 +135,50 @@ class RpcError(Exception):
     pass
 
 
+TIME_OFF_DRAFT = {"app_hint": "Time off",
+                  "values": {"leave_type": "vacation", "start": "2026-11-10", "end": "2026-11-12", "days": 3}}
+
+
+def scope_demo(stand):
+    """APP-115: a Security-scoped token tries the People space's Time off app (module notes)."""
+    token = os.environ.get("FORMA_SCOPED_AGENT_TOKEN") or stand.get("security_token")
+    origin = stand.get("origin") or os.environ.get("FORMA_ORIGIN")
+    if not (token and origin):
+        print(json.dumps({"skipped": "no scoped Forma token or origin"}))
+        return 0
+    if not origin_allowed(origin):
+        print(json.dumps({"refused": "the Forma origin must be https (plain http only for a loopback stand)"}))
+        return 2
+    forma = Forma(origin, token)
+    started = time.monotonic()
+    try:
+        listed = forma.rpc("tools/call", {"name": "forma_list_apps", "arguments": {}})
+        titles = [a.get("title", "") for a in (listed.get("structuredContent") or {}).get("library", [])]
+        t0 = time.monotonic()
+        drafted = forma.rpc("tools/call", {"name": "forma_draft_record", "arguments": TIME_OFF_DRAFT})
+        draft_ms = round((time.monotonic() - t0) * 1000)
+    except RpcError as error:
+        print(json.dumps({"passed": False, "error": str(error)}))
+        return 1
+    text = "\n".join(c.get("text", "") for c in drafted.get("content", []) if c.get("type") == "text")
+    report = {"scope_demo": True, "listed_titles": titles, "time_off_listed": "Time off" in titles,
+              "time_off_refused": bool(drafted.get("isError")) and text.strip() == "Not found.",
+              "draft_ms": draft_ms, "total_ms": round((time.monotonic() - started) * 1000),
+              "see": "Connect an agent -> Activity: refused: outside scope (People)"}
+    report["passed"] = report["time_off_refused"] and not report["time_off_listed"]
+    print(json.dumps(report, indent=2))
+    return 0 if report["passed"] else 1
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--stand-file", default=os.environ.get("GENUI_WORKFLOWS_STAND_FILE"))
     parser.add_argument("--model", default=MODEL)
+    parser.add_argument("--scope-demo", action="store_true",
+                        help="APP-115: a Security-scoped token tries the Time off app (no model call)")
     args = parser.parse_args()
+    if args.scope_demo:
+        return scope_demo(json.loads(Path(args.stand_file).read_text()) if args.stand_file else {})
     try:
         key = read_key(Path(os.environ.get("GENUI_ENV_FILE", ROOT / ".env")))
     except read_env.EnvError as error:

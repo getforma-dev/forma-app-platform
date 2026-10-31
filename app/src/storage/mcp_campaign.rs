@@ -92,6 +92,12 @@ const EXPENSE_SOURCE: &str = "00000000-0000-4000-8000-000000003000";
 const FOREIGN_APP: &str = "00000000-0000-4000-8000-000000000065";
 const FOREIGN_WORK: &str = "00000000-0000-4000-8000-000000000066";
 const UNIFORM: &str = "{\"code\":\"not_found\",\"status\":404}";
+/// APP-115: the People (time off) and Security (access requests) library apps.
+const TIME_OFF_APP: &str = "00000000-0000-4000-8000-000000001701";
+const TIME_OFF_WORK: &str = "00000000-0000-4000-8000-000000001704";
+const TIME_OFF_SOURCE: &str = "00000000-0000-4000-8000-00000000301a";
+const ACCESS_APP: &str = "00000000-0000-4000-8000-000000001881";
+const ACCESS_SOURCE: &str = "00000000-0000-4000-8000-000000003020";
 
 #[test]
 #[ignore = "requires local Docker and the locked migration/contract Python environments"]
@@ -418,7 +424,8 @@ async fn campaign() {
             })))
             .merge(crate::actions::routes::records_router(auth.clone()))
             .merge(crate::query::routes::router(work.clone()))
-            .merge(mcp::tokens::router(auth.clone())),
+            .merge(mcp::tokens::router(auth.clone()))
+            .merge(mcp::governance::router(auth.clone())),
         vec![(
             mcp::PATH,
             mcp::router(Arc::new(mcp::Mcp::new(work.clone(), composer))),
@@ -1065,6 +1072,365 @@ async fn campaign() {
     );
     drop(diego_stream);
 
+    // --- APP-115: scoped agent tokens, the access log, the timeline ---
+    for (app_id, source) in [(TIME_OFF_APP, TIME_OFF_SOURCE), (ACCESS_APP, ACCESS_SOURCE)] {
+        for permission in ["discover", "run"] {
+            grant(&fixture, EMPLOYEE, permission, &["--app", app_id]);
+        }
+        grant(&fixture, EMPLOYEE, "source_read", &["--source", source]);
+    }
+    let mint_scoped = |cookie: &str, body: Value| {
+        let app = app.clone();
+        let cookie = cookie.to_owned();
+        async move {
+            send(
+                &app,
+                "POST",
+                "/v1/agent-tokens",
+                Some(&cookie),
+                &body.to_string(),
+                &SAME_ORIGIN,
+            )
+            .await
+        }
+    };
+    for bad in [
+        json!({"label": "Sec", "scope": {"spaces": ["hr"]}}),
+        json!({"label": "Sec", "scope": {"spaces": []}}),
+        json!({"label": "Sec", "actions": ["read", "admin"]}),
+        json!({"label": "Sec", "expires_in_days": 31}),
+        json!({"label": "Sec", "grants": ["admin"]}),
+    ] {
+        let refused = mint_scoped(&diego, bad.clone()).await;
+        assert_eq!(refused.status, StatusCode::BAD_REQUEST, "{bad}");
+        assert!(
+            refused.body.contains("malformed_scope"),
+            "{bad}: {}",
+            refused.body
+        );
+    }
+    let minted = mint_scoped(
+        &diego,
+        json!({"label": "Security bot", "scope": {"spaces": ["security"]}, "actions": ["read", "draft"], "expires_in_days": 7}),
+    )
+    .await;
+    assert_eq!(minted.status, StatusCode::CREATED, "{}", minted.body);
+    let minted = minted.json();
+    assert_eq!(
+        minted["scope"],
+        json!({"kind": "selected", "spaces": ["security"], "apps": [], "actions": ["read", "draft"]})
+    );
+    let security = minted["token"].as_str().unwrap().to_owned();
+    let security_id = minted["token_id"].as_str().unwrap().to_owned();
+    let lifetime = scalar(&fixture, &format!("SELECT extract(epoch FROM expires_at-created_at)::bigint FROM genui.agent_tokens WHERE token_id='{security_id}'")).await;
+    assert_eq!(lifetime, 7 * 86_400);
+    assert_eq!(
+        scalar(&fixture, "SELECT count(*) FROM genui.agent_tokens WHERE scope_kind='all' AND cardinality(scope_actions)=6").await,
+        scalar(&fixture, "SELECT count(*) FROM genui.agent_tokens WHERE scope_kind='all'").await,
+        "existing and unscoped tokens keep every action"
+    );
+    // In scope: the security app is listed and drafted; the People and
+    // Finance apps are not listed.
+    let listed = client
+        .call(&security, mcp::tools::LIST_APPS, json!({}))
+        .await;
+    let listed = ok(&listed).clone();
+    let library: Vec<&str> = listed["library"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["app_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        library,
+        [ACCESS_APP],
+        "only the in-scope library app is listed"
+    );
+    assert!(
+        !listed.to_string().contains(EXPENSE_APP) && !listed.to_string().contains(TIME_OFF_APP)
+    );
+    // Out of scope: People (time off) by hint, by id and by a pending record.
+    let frozen = footprint(&fixture).await;
+    let nothing = client
+        .call(
+            &security,
+            mcp::tools::DRAFT_RECORD,
+            json!({"app_hint": FOREIGN_APP, "values": {"amount": "1"}}),
+        )
+        .await;
+    assert_eq!(error_code(&nothing), "not_found");
+    let started = Instant::now();
+    let time_off = client
+        .call(&security, mcp::tools::DRAFT_RECORD, json!({"app_hint": "Time off", "values": {"leave_type": "vacation", "start": "2026-11-10", "end": "2026-11-12", "days": 3}}))
+        .await;
+    timings.insert("scope_refusal_ms".into(), json!(ms(started)));
+    assert_eq!(
+        time_off, nothing,
+        "a scope refusal is the uniform tool error"
+    );
+    let run = client
+        .call(
+            &security,
+            mcp::tools::RUN_VIEW,
+            json!({"app_id": TIME_OFF_APP, "work_id": TIME_OFF_WORK}),
+        )
+        .await;
+    assert_eq!(run, nothing);
+    let decide = client
+        .call(
+            &security,
+            mcp::tools::DRAFT_DECISION,
+            json!({"target_hint": "Nobu dinner", "decision": "approve"}),
+        )
+        .await;
+    assert_eq!(decide, nothing);
+    let compose = client
+        .call(
+            &security,
+            mcp::tools::COMPOSE_APP,
+            json!({"description": "time off requests"}),
+        )
+        .await;
+    assert_eq!(compose, nothing);
+    let shared = client
+        .call(
+            &security,
+            mcp::tools::SHARE,
+            json!({"app_id": app_id, "work_id": work_id, "member_name": "Sarah"}),
+        )
+        .await;
+    assert_eq!(shared, nothing);
+    assert_eq!(
+        footprint(&fixture).await,
+        frozen,
+        "no scope refusal wrote anything"
+    );
+    // In scope: an access request drafts; its commit is refused (read and draft only).
+    let drafted = client
+        .call(&security, mcp::tools::DRAFT_RECORD, json!({"app_hint": "Access requests", "values": {"system": "GitHub", "role": "read", "reason": "on-call rotation", "expires_on": "2026-11-30"}}))
+        .await;
+    let drafted = ok(&drafted).clone();
+    assert_eq!(drafted["app_id"], ACCESS_APP);
+    let frozen = footprint(&fixture).await;
+    let commit = client
+        .call(
+            &security,
+            mcp::tools::COMMIT,
+            json!({"draft_id": drafted["draft_id"]}),
+        )
+        .await;
+    assert_eq!(commit, nothing);
+    assert_eq!(
+        footprint(&fixture).await,
+        frozen,
+        "a refused commit writes nothing"
+    );
+    check(
+        &mut checks,
+        &format!("APP-115 scoped tokens: a mint with an unknown space, an empty selection, an unknown action, 31 days or an extra member is 400 malformed_scope; \"Security bot\" (Security, read and draft, 7 days) lists only the in-scope Access requests app; drafting in Time off (People) by its name ({} ms), running its view by id, drafting a decision on the Nobu claim (decide not allowed), composing (narrowed scope) and sharing (share not allowed) are each the uniform not_found, byte-identical to a nonexistent app, and write nothing; an in-scope access request drafts and its commit is refused (commit not allowed) with nothing written", timings["scope_refusal_ms"]),
+    );
+
+    // The access log and the member's timeline.
+    let agents = send(&app, "GET", "/v1/governance/agents", Some(&diego), "", &[]).await;
+    assert_eq!(agents.status, StatusCode::OK, "{}", agents.body);
+    let agents = agents.json();
+    assert_eq!(agents["organization_wide"], false);
+    let bot = agents["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["token_id"] == security_id.as_str())
+        .unwrap()
+        .clone();
+    assert_eq!(
+        (bot["label"].as_str(), bot["status"].as_str()),
+        (Some("Security bot"), Some("live"))
+    );
+    assert_eq!(bot["scope"]["space_titles"], json!(["Security"]));
+    assert_eq!(
+        (bot["calls"].as_i64(), bot["refused"].as_i64()),
+        (Some(9), Some(7))
+    );
+    assert!(
+        !agents.to_string().contains(&security[5..]),
+        "never a token"
+    );
+    let claude_agent = agents["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["label"] == "Claude")
+        .unwrap()
+        .clone();
+    assert!(
+        claude_agent["calls"].as_i64().unwrap() >= 8
+            && claude_agent["refused"].as_i64().unwrap() >= 4,
+        "{claude_agent}"
+    );
+    assert_eq!(claude_agent["scope"]["kind"], "all");
+    let activity = send(
+        &app,
+        "GET",
+        &format!("/v1/governance/agents/{security_id}/activity"),
+        Some(&diego),
+        "",
+        &[],
+    )
+    .await;
+    assert_eq!(activity.status, StatusCode::OK, "{}", activity.body);
+    let activity = activity.json();
+    let entries = activity["entries"].as_array().unwrap();
+    assert_eq!(entries.len(), 9);
+    assert_eq!(entries[0]["tool"], mcp::tools::COMMIT, "newest first");
+    assert_eq!(
+        (
+            entries[0]["reason"].as_str(),
+            entries[0]["reason_title"].as_str()
+        ),
+        (Some("scope_action"), Some("action not allowed"))
+    );
+    let time_off_entry = entries
+        .iter()
+        .find(|e| {
+            e["tool"] == mcp::tools::DRAFT_RECORD
+                && e["outcome"] == "refused"
+                && e["reason"] == "scope_space"
+        })
+        .unwrap();
+    assert_eq!(time_off_entry["space_title"], "People");
+    assert_eq!(time_off_entry["resource_label"], "Time off");
+    assert_eq!(time_off_entry["reason_title"], "outside scope");
+    assert_eq!(time_off_entry["touched"]["apps"], json!([TIME_OFF_APP]));
+    let run_entry = entries
+        .iter()
+        .find(|e| e["tool"] == mcp::tools::RUN_VIEW)
+        .unwrap();
+    assert_eq!(
+        (run_entry["reason"].as_str(), run_entry["space"].as_str()),
+        (Some("scope_space"), Some("people"))
+    );
+    assert_eq!(run_entry["touched"]["works"], json!([TIME_OFF_WORK]));
+    let allowed = entries
+        .iter()
+        .find(|e| e["tool"] == mcp::tools::DRAFT_RECORD && e["outcome"] == "allowed")
+        .unwrap();
+    assert_eq!(
+        (
+            allowed["space"].as_str(),
+            allowed["resource_label"].as_str()
+        ),
+        (Some("security"), Some("Access requests"))
+    );
+    assert!(entries
+        .iter()
+        .all(|e| e["duration_ms"].as_i64().unwrap() >= 0));
+    let foreign = send(
+        &app,
+        "GET",
+        &format!("/v1/governance/agents/{security_id}/activity"),
+        Some(&sarah),
+        "",
+        &[],
+    )
+    .await;
+    assert_eq!(
+        (foreign.status, foreign.body.as_str()),
+        (StatusCode::NOT_FOUND, UNIFORM)
+    );
+    let anonymous = send(&app, "GET", "/v1/governance/agents", None, "", &[]).await;
+    assert_eq!(anonymous.body, UNIFORM);
+    assert_eq!(scalar(&fixture, "SELECT count(*) FROM genui.agent_access_log WHERE resource_label LIKE '%fmat_%' OR agent_label LIKE '%fmat_%'").await, 0);
+    let member = stores
+        .workspace
+        .resolve_agent_token(&security)
+        .await
+        .unwrap()
+        .unwrap()
+        .request;
+    let (verifies, rows) = stores
+        .workspace
+        .agent_access_chain_verifies(&member)
+        .await
+        .unwrap();
+    assert!(verifies && rows >= 20, "{rows}");
+    let edit = |duration: &str| {
+        format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); UPDATE genui.agent_access_log SET duration_ms={duration} WHERE organization_id='{ORG}' AND chain_sequence=3; COMMIT;")
+    };
+    let original = scalar(&fixture, &format!("SELECT duration_ms::bigint FROM genui.agent_access_log WHERE organization_id='{ORG}' AND chain_sequence=3")).await;
+    fixture.sql(&edit(&(original + 1).to_string()), "genui");
+    assert_eq!(
+        stores
+            .workspace
+            .agent_access_chain_verifies(&member)
+            .await
+            .unwrap(),
+        (false, 3)
+    );
+    fixture.sql(&edit(&original.to_string()), "genui");
+    assert!(
+        stores
+            .workspace
+            .agent_access_chain_verifies(&member)
+            .await
+            .unwrap()
+            .0
+    );
+    let workspace_edit = scalar(&fixture, "SELECT count(*) FROM information_schema.role_table_grants WHERE table_schema='genui' AND table_name='agent_access_log' AND grantee='genui_workspace' AND privilege_type IN ('UPDATE','DELETE')").await;
+    assert_eq!(workspace_edit, 0);
+    // Revoke from the governance panel's route: the next call is the uniform 404.
+    let temporary = mint_scoped(
+        &diego,
+        json!({"label": "Temp bot", "scope": {"apps": [ACCESS_APP]}}),
+    )
+    .await
+    .json();
+    let temporary_token = temporary["token"].as_str().unwrap().to_owned();
+    let temporary_id = temporary["token_id"].as_str().unwrap().to_owned();
+    ok(&client
+        .call(&temporary_token, mcp::tools::LIST_APPS, json!({}))
+        .await);
+    let revoked = send(
+        &app,
+        "DELETE",
+        &format!("/v1/agent-tokens/{temporary_id}"),
+        Some(&diego),
+        "",
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(revoked.status, StatusCode::NO_CONTENT);
+    let after = client
+        .raw(
+            &[
+                ("authorization", &format!("Bearer {temporary_token}")),
+                ("content-type", "application/json"),
+            ],
+            &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
+        )
+        .await;
+    assert_eq!(
+        (after.status, after.body.as_str()),
+        (StatusCode::NOT_FOUND, UNIFORM)
+    );
+    let listed = send(&app, "GET", "/v1/governance/agents", Some(&diego), "", &[])
+        .await
+        .json();
+    let temporary = listed["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["token_id"] == temporary_id.as_str())
+        .unwrap()
+        .clone();
+    assert_eq!(
+        (temporary["status"].as_str(), temporary["calls"].as_i64()),
+        (Some("revoked"), Some(1))
+    );
+    check(
+        &mut checks,
+        &format!("APP-115 access log: every tools/call is one row (token, label, member, tool, touched ids, outcome and reason, space, duration); GET /v1/governance/agents lists Diego's agents with scope, status and counts (Security bot: 9 calls, 7 refused); its timeline is newest first and shows \"Draft a record — refused: outside scope (People), Time off\" with the time-off app id, the view refusal with its work id, and the allowed access-request draft; Sarah reading Diego's agent and an anonymous read are the uniform 404; no token in the log; the {rows}-row organization chain verifies, editing row 3's duration as the owner breaks it at row 3 and restoring it verifies again; genui_workspace holds no UPDATE or DELETE; a token revoked through DELETE /v1/agent-tokens answers the uniform 404 on its next call and lists as revoked"),
+    );
+
     // --- The local stand for the browser and the real MCP clients ---
     if let Some(seconds) = stand {
         let file = std::env::var("GENUI_MCP_STAND_FILE").unwrap_or_default();
@@ -1080,6 +1446,7 @@ async fn campaign() {
                 serde_json::to_vec(&json!({
                     "origin": origin, "cookie": cookies::SESSION, "employee": diego, "approver": sarah,
                     "employee_token": diego_token, "approver_token": sarah_token,
+                    "security_token": security,
                     "app": app_id, "work": work_id,
                 }))
                 .unwrap(),

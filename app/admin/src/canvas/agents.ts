@@ -8,6 +8,7 @@
 // token acts as this member, with this member's permissions, receipts and
 // audit, and the server re-judges every call.
 import { when as displayWhen } from './display';
+import { activityButton, scopeFields } from './governance';
 import { el, isUuid } from './render';
 
 export const TOKENS_URL = '/v1/agent-tokens';
@@ -88,11 +89,12 @@ function buildPanel(document_: Document): HTMLDialogElement {
   const snippets = el(document_, 'div', { class: 'cv-agent-snippets' });
   const input = el(document_, 'input', { type: 'text', name: 'label', maxlength: '40', value: 'Claude', 'aria-label': 'Agent name', required: '' });
   const create = el(document_, 'button', { type: 'submit', class: 'cv-agent-create' }, 'Create token');
+  const scope = scopeFields(document_); // APP-115
   const form = el(document_, 'form', { class: 'cv-agent-form' },
-    el(document_, 'label', { class: 'cv-agent-label' }, 'Name this agent', input), create);
+    el(document_, 'label', { class: 'cv-agent-label' }, 'Name this agent', input), scope.element, create);
   const close = el(document_, 'button', { type: 'button', class: 'cv-agent-close', 'aria-label': 'Close' }, '×');
   const dialog = el(document_, 'dialog', { class: 'cv-agent-panel', 'aria-labelledby': 'cv-agent-title' },
-    el(document_, 'header', { class: 'cv-agent-head' }, el(document_, 'h2', { id: 'cv-agent-title' }, 'Connect an agent'), close),
+    el(document_, 'header', { class: 'cv-agent-head' }, el(document_, 'h2', { id: 'cv-agent-title' }, 'Connect an agent'), activityButton(document_), close),
     el(document_, 'p', { class: 'cv-agent-copy-text' },
       'Any MCP client — Claude, OpenAI, Cursor or your own agent — acts through Forma as you: your permissions, receipts on every number, every write an audited command that asks you to confirm.'),
     form, status, minted,
@@ -140,12 +142,17 @@ function buildPanel(document_: Document): HTMLDialogElement {
       status.textContent = 'Use 1 to 40 letters, digits, spaces, dots, dashes or underscores.';
       return;
     }
+    const chosen = scope.read();
+    if (typeof chosen === 'string') {
+      status.textContent = chosen;
+      return;
+    }
     create.disabled = true;
     void (async () => {
       try {
         const response = await fetch(TOKENS_URL, {
           method: 'POST', credentials: 'same-origin', cache: 'no-store',
-          headers: { 'content-type': 'application/json' }, body: JSON.stringify({ label }),
+          headers: { 'content-type': 'application/json' }, body: JSON.stringify({ label, ...chosen }),
         });
         const body = (await response.json().catch(() => null)) as { token?: unknown; label?: unknown } | null;
         if (response.status === 201 && body && typeof body.token === 'string') {
@@ -158,6 +165,7 @@ function buildPanel(document_: Document): HTMLDialogElement {
         } else {
           status.textContent = response.status === 409
             ? 'You have the maximum number of connected agents. Revoke one first.'
+            : response.status === 400 ? 'That scope or expiry is not allowed.'
             : response.status === 429 ? 'Too many tokens created recently. Try again later.' : 'The token could not be created right now.';
         }
       } catch {

@@ -61,6 +61,8 @@ app/src/sharing/**
 app/src/mcp/**
 !app/src/mcp/mod.rs
 !app/src/mcp/drafts.rs
+!app/src/mcp/governance.rs
+!app/src/mcp/scope.rs
 !app/src/mcp/tokens.rs
 !app/src/mcp/tools.rs
 !app/src/slack/
@@ -125,6 +127,7 @@ app/src/storage/**
 !app/src/storage/definitions.rs
 !app/src/storage/queries.rs
 !app/src/storage/agents.rs
+!app/src/storage/governance.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
 !app/src/storage/boxes.rs
@@ -205,6 +208,7 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/records.ts
 !app/admin/src/canvas/slash.ts
 !app/admin/src/canvas/agents.ts
+!app/admin/src/canvas/governance.ts
 # APP-113: the dock's one card host (confirmation and chooser).
 !app/admin/src/canvas/dock-card.ts
 # APP-104: the library pane and the Figma-style canvas controls.
@@ -253,6 +257,7 @@ app/admin/src/styles/**
 !app/admin/src/styles/actions.css
 !app/admin/src/styles/ledger.css
 !app/admin/src/styles/widgets.css
+!app/admin/src/styles/governance.css
 !app/runtime/
 app/runtime/**
 !app/runtime/runtime.py
@@ -272,6 +277,7 @@ app/migrations/**
 !app/migrations/0010_agent_tokens.sql
 !app/migrations/0011_boxes.sql
 !app/migrations/0012_review_fixes.sql
+!app/migrations/0013_agent_governance.sql
 !app/migrations/0009_slack_links.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
@@ -287,6 +293,7 @@ app/migrations/**
 !app/migrations/catalog-v10.json
 !app/migrations/catalog-v11.json
 !app/migrations/catalog-v12.json
+!app/migrations/catalog-v13.json
 !app/certs/
 app/certs/**
 !app/certs/rds-global-bundle.pem

@@ -214,17 +214,24 @@ SESSION_GRANTS = set().union(
 # Migration 0010 (ADR-011 pitch, APP-099): member-minted agent tokens (only a
 # digest) and their display attributions; genui_workspace column SELECT and
 # INSERT, UPDATE(last_used_at, revoked_at) on tokens, no DELETE. 0012
-# (APP-113 review) adds expires_at (SELECT and INSERT).
-AGENT_TABLES = ('agent_attributions','agent_tokens')
+# (APP-113 review) adds expires_at (SELECT and INSERT). 0013 (APP-115 quick
+# wins) adds the token scope columns (SELECT and INSERT) and the append-only,
+# hash-chained agent_access_log (SELECT and INSERT only: no UPDATE, no DELETE).
+AGENT_TABLES = ('agent_access_log','agent_attributions','agent_tokens')
 AGENT_TOKEN_COLUMNS = ('organization_id','token_id','token_digest','principal_id','label','membership_epoch_at_mint',
-                       'registry_sha256','created_at','expires_at')
+                       'registry_sha256','created_at','expires_at','scope_kind','scope_spaces','scope_apps','scope_actions')
 AGENT_ATTRIBUTION_COLUMNS = ('organization_id','attribution_id','token_id','app_id','work_id','record_id','record_version','created_at')
+AGENT_ACCESS_COLUMNS = ('organization_id','entry_id','chain_sequence','token_id','principal_id','agent_label','tool','touched_apps',
+                        'touched_works','touched_records','touched_folders','touched_files','outcome','reason','space',
+                        'resource_label','duration_ms','occurred_at','previous_hash','hash')
 AGENT_GRANTS = set().union(
     _role_columns('genui_workspace','agent_tokens','SELECT',*AGENT_TOKEN_COLUMNS,'last_used_at','revoked_at'),
     _role_columns('genui_workspace','agent_tokens','INSERT',*AGENT_TOKEN_COLUMNS),
     _role_columns('genui_workspace','agent_tokens','UPDATE','last_used_at','revoked_at'),
     _role_columns('genui_workspace','agent_attributions','SELECT',*AGENT_ATTRIBUTION_COLUMNS),
     _role_columns('genui_workspace','agent_attributions','INSERT',*AGENT_ATTRIBUTION_COLUMNS),
+    _role_columns('genui_workspace','agent_access_log','SELECT',*AGENT_ACCESS_COLUMNS),
+    _role_columns('genui_workspace','agent_access_log','INSERT',*AGENT_ACCESS_COLUMNS),
 )
 
 # Migration 0011 (ADR-011 pitch, APP-108): folders. genui_workspace column
@@ -1097,7 +1104,7 @@ def session_checks(pg, passed, denied):
           JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname='agent_tokens' AND a.attnum>0 AND a.attname LIKE 'token%%'
           ORDER BY 1""").fetchall()
         assert digests==[('token_digest','genui.digest'),('token_id','uuid')],digests
-    passed('0009 agent_tokens and agent_attributions are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the token only as genui.digest',
+    passed('0009/0013 agent_tokens, agent_attributions and agent_access_log are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the token only as genui.digest',
            tables=list(AGENT_TABLES))
     # 0011 (APP-108): the folder relations, likewise owner-held under FORCE RLS.
     with pg.connect('postgres') as c:
