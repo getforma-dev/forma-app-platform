@@ -125,3 +125,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 117 | [APP-117: Readable organization addresses: sign-in alias (done), organization in every URL, subdomains](0-backlog/APP-117.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-096 |
 | 118 | [APP-118: Command system: one registry, argument hints, /commands help, /apps opens the Library](0-backlog/APP-118.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-104, APP-112 |
 | 119 | [APP-119: Commands are verbs, apps are addresses: split the registry, derive app hints from definitions](0-backlog/APP-119.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-118 |
+| 120 | [APP-120: One canvas model: apps (with cards), widgets, arrangements; one grammar; Library = Apps + Widgets](0-backlog/APP-120.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-119 |
