@@ -1,10 +1,12 @@
 # Canvas rules: what is on a canvas, how you talk to it, how things are named
 
-This is the single reference for the canvas model and its grammar. The decisions are recorded in APP-120 (model and grammar), APP-121 (naming) and APP-119 (commands versus apps). Where this page and the code disagree, the code is wrong: file a ticket.
+This is the single reference for the canvas model and its grammar. The decisions are recorded in APP-120 (model and grammar), APP-121 (naming), APP-122 (talking to things) and APP-119 (commands versus apps). Where this page and the code disagree, the code is wrong: file a ticket.
 
 ## The one sentence
 
 **Type `/` and a verb to change the canvas, `/` and a name to tell that thing something, or just type a sentence.**
+
+Whatever you tell, the rule is the same: **answers are free, views are cheap and undoable, records only change through the app's own commands.**
 
 ## What a canvas holds
 
@@ -67,18 +69,62 @@ The pane always reflects the canvas.
 | | `/unite <app>` · `/split` | Assembles an app's cards into one frame, and takes them apart again |
 | | `/focus` | Opens the selected card large, in focus mode |
 | Make | `/folder <name> formation <instruction>` | Builds an app from a folder's files |
+| | `/forma <words>` | Asks the AI about, or builds from, your whole canvas (APP-122) |
 | | `/rename …` · `/alias …` | Names things (APP-121) |
 | Help | `/apps [query]` · `/commands` · `/shortcuts` · `/agent` | Library · Commands · Shortcuts · Connect an agent |
 
 Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/clock`, `/note`, `/folder` on its own, and `/help`.
 
-## Talking to things
+## Talking to things: the address is the scope, the words go to the AI
 
-- **`/<app> <words>`** tells an app something. The app's own definition decides what the words may do: `/expenses $86 Nobu, Sarah approves` files a claim, and `/expenses approve the Nobu dinner` decides one. You always see a confirm card that names the command ("Submit claim") before anything is saved.
-- **`/<app>` on its own** puts the app on the canvas, the same as `/app <app>`.
-- **`/<app>.<card> <words>`** reshapes one card: `/expenses.by-category last quarter only`. The AI proposes a typed change, it is checked, and the card is labeled *adapted*. This is planned: the next step after APP-121.
-- **A plain sentence** with no `/` goes to the AI: it picks the right app, or builds one.
+`/<anything> <words>` sends your words to the AI, limited to that thing (APP-122):
+
+| You type | The AI sees | Example |
+| --- | --- | --- |
+| `/forma <words>`, or a plain sentence | Your whole canvas and library | "build me a vendor tracker" |
+| `/<app> <words>` | That app: all its records and cards | `/expenses why did spend jump in March?` |
+| `/<app>.<card> <words>` | That one card and its data | `/expenses.total add the math for me` |
+| `/<folder> <words>` | The folder's files | `/q3-metrics turn this into a metrics app` |
+| `/<widget> <words>` | That widget | `/calculator make it a TI-84` |
+
+- A card question and an app question are the same feature at different widths. "Why is this number high?" fits the card; "who files the most?" fits the app.
+- **`/<name>` on its own** puts the thing on the canvas, the same as `/app` or `/card`.
+- **The selection is the scope.** With something selected, a plain sentence goes to it. The bar shows a removable chip ("to: expenses.total").
 - **`@folder`** in a sentence points at one of your folders: "build a metrics app from @Q3 metrics".
+- The old `/folder <name> formation …` keeps working as an alias of `/<folder> …`.
+
+### Three layers, separated by what changes
+
+| Layer | What it is | What can change it |
+| --- | --- | --- |
+| **Records** | The app's governed data | Only the app's own commands (file, approve), always confirmed. Plus formation, which creates a *new* app with its own records, also confirmed |
+| **Cards** | A view: which records, which math, what shape | The AI, freely. A card stores no data; it reads live from the records, with receipts |
+| **Answers** | An insight or a summary | Nothing. Read-only and temporary unless pinned |
+
+**Answers are free, views are cheap and undoable, records only change through the app's own commands.**
+
+"Make me a new card from this data in the shape of …" is not recording data. It is a new view over the same records, its math is computed live, and every number still traces to its source records.
+
+### Four outcomes, always shown before they take effect
+
+The AI turns your words into exactly one typed outcome. Model output is data, never code (ADR-011 I5).
+
+| Outcome | What happens | Confirmation |
+| --- | --- | --- |
+| **Answer** | An insight with receipts appears beside the item. Nothing changes | None needed. **Make it a card** pins it as a card |
+| **New view** | A preview of a new or changed card | **Add as new card** (default) or **Replace this card**. A replaced card is labeled *adapted* and has **Revert** |
+| **Command** | One of the app's own commands ("Submit claim", "Approve") | The confirm card names the command; it runs only if the app defines it |
+| **Forma** | Something new: a card set, or an app from a folder's files | A confirm card; an app from files is the one AI path that creates records |
+
+- **The AI's guess only has to be visible and one click from right.** Chips on every result switch the outcome: Answer · New card · Change this card · Command.
+- **`?` forces read-only:** `/expenses.total ? why is this high` can only answer.
+- Nothing is forced onto a new canvas item first. New is the default; in place is one click.
+
+### Where things belong
+
+- A card made from an app's data belongs to that app, marked "made by you". Only you see it until the app's owner adds it for everyone.
+- Widgets have no records, so changing one only restyles it.
+- A card that combines two apps (expenses with time off) is a new app: formation, deferred.
 
 ## Adding and removing
 

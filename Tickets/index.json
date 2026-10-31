@@ -271,9 +271,10 @@
         "APP-118",
         "APP-119",
         "APP-120",
-        "APP-121"
+        "APP-121",
+        "APP-122"
       ],
-      "ticket_count": 31,
+      "ticket_count": 32,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -3854,6 +3855,34 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-120"
+      ]
+    },
+    {
+      "id": "APP-122",
+      "title": "Talking to things: every address is an AI scope, with four typed outcomes (answer, new view, command, forma)",
+      "path": "0-backlog/APP-122.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "122",
+      "Size": "L",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md): the November 2 emergency pivot. No dedicated phase existed, so the board's new phase PH08 / sprint S14 (order 8, no phase dependency; added to `plan.json`) holds the pitch tickets. Invariants of ADR-011 \u00a73 that bind this ticket: I3 receipts on every governed number; I4 transactional, idempotent, audited commands; I5 model output is data, never code, SQL, markup or grants (I1\u2013I6 number the six invariants in \u00a73 in order).",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-121",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
+      "Branch / PR": "Not started (`pivot/talk`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-121"
       ]
     }
   ]
