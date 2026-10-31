@@ -162,3 +162,159 @@ test('Ask sends only the question and its scope, and shows only text with receip
   assert.equal(calls.length, 2);
   assert.equal(ask.scopeText({ kind: 'canvas', address: '', works: [scope.works[0]!, { ...scope.works[0]!, work_id: APP }] }), 'Asking about your canvas (2 apps)');
 });
+
+// --- APP-122 review: the merge with APP-121 naming, and the review's findings ---
+const show = (value: unknown) => JSON.stringify(value, (_key, x) => (typeof x === 'bigint' ? String(x) : x));
+
+test('/card:<app>.<card> <words> is exactly the dot’s Shape; /card:<x> alone stays the /card: verb’s (APP-121 × APP-122)', async () => {
+  const { barIntent, splitAddress, firstWord } = await import('../src/canvas/talk-view.ts');
+  assert.deepEqual(barIntent('/card:expenses.ledger only red invoices'), barIntent('/expenses.ledger only red invoices'));
+  assert.deepEqual(barIntent('/card:Expenses.Ledger highlight overdue in red'), { kind: 'dot', target: 'expenses.ledger', words: 'highlight overdue in red' });
+  assert.deepEqual(barIntent('/card:3.2 by month'), barIntent('/3.2 by month'));
+  assert.equal(barIntent('/card:expenses.ledger'), null, 'no words: APP-121’s /card: path places it');
+  assert.equal(barIntent('/app:expenses $86 Nobu'), null, 'an app’s full form is Do');
+  assert.deepEqual(splitAddress('/card:expenses.ledger'), { space: 'card', name: 'expenses.ledger' });
+  assert.deepEqual(splitAddress('App:Notes'), { space: 'app', name: 'notes' });
+  assert.deepEqual(splitAddress('expenses'), { space: null, name: 'expenses' });
+  assert.deepEqual(firstWord('  expenses.ledger which are late? '), ['expenses.ledger', 'which are late?']);
+});
+
+const decimal = (coefficient: string, scale: number) => ({ type: 'decimal', coefficient, scale, unit: 'hours' });
+const hoursListing = (truncated = false) => ({
+  ...LISTING,
+  collections: [{ ...LISTING.collections[0]!, fields: [{ id: 'hours', type: 'decimal', nullable: false, writable: true }, { id: 'units', type: 'integer', nullable: false, writable: true }] }],
+  records: [
+    { ...record(1, 'a', '0', '2026-10-01', 'submitted'), values: [{ field_id: 'hours', value: decimal('12345', 2), display: '123.45' }, { field_id: 'units', value: { type: 'integer', value: '200' }, display: '200' }] },
+    { ...record(2, 'b', '0', '2026-10-02', 'approved'), values: [{ field_id: 'hours', value: decimal('805', 1), display: '80.5' }, { field_id: 'units', value: { type: 'integer', value: '3' }, display: '3' }] },
+  ],
+  truncated,
+});
+
+test('decimals compare and sum at their scale, exactly; integers compare exactly (review finding 1)', async () => {
+  const { tableFromRecords, evaluate, cardView, tableFromQuery } = await import('../src/canvas/talk-view.ts');
+  const table = tableFromRecords(hoursListing() as never, COLLECTION);
+  assert.equal(table.columns.find((c) => c.id === 'hours')?.scale, 2);
+  assert.deepEqual(table.rows.map((row) => row.raw.hours), ['123.45', '80.5']);
+  // 123.45 is not 12345: it is over 100, not over 200.
+  const over = (value: string) => evaluate(table, cardView({ filters: [{ field: 'hours', op: 'gt', value }] })!);
+  const big = over('100');
+  assert.ok(big.kind === 'rows' && big.rows.length === 1 && big.rows[0]!.row.raw.hours === '123.45');
+  const none = over('200');
+  assert.ok(none.kind === 'rows' && none.rows.length === 0, '123.45 does not match gt 200');
+  const sum = evaluate(table, cardView({ presentation: 'number', measure: { op: 'sum', field: 'hours' } })!);
+  assert.ok(sum.kind === 'number' && sum.measured.text === '203.95', show(sum));
+  const avg = evaluate(table, cardView({ presentation: 'number', measure: { op: 'avg', field: 'hours' } })!);
+  assert.ok(avg.kind === 'number' && avg.measured.text === '101.9750' && !avg.measured.rounded, show(avg));
+  const units = evaluate(table, cardView({ filters: [{ field: 'units', op: 'gte', value: '200.5' }] })!);
+  assert.ok(units.kind === 'rows' && units.rows.length === 0, '200 is not ≥ 200.5');
+  const average = evaluate(table, cardView({ presentation: 'number', measure: { op: 'avg', field: 'units' } })!);
+  assert.ok(average.kind === 'number' && average.measured.text === '101.50' && !average.measured.rounded, show(average));
+  // A view's decimal column holds its coefficient: read at the declared scale.
+  const query = tableFromQuery({ view_id: 'v', columns: ['hours'], column_types: [{ type: 'decimal', scale: 2 }], rows: [['12345']], truncated_page: false, receipt: {} } as never);
+  assert.equal(query.rows[0]!.raw.hours, '123.45');
+  const q = evaluate(query, cardView({ filters: [{ field: 'hours', op: 'gt', value: '200' }] })!);
+  assert.ok(q.kind === 'rows' && q.rows.length === 0);
+});
+
+test('a capped listing is never shown as complete: "From X of the newest Y …", and a total says it is partial (review finding 2)', async () => {
+  const { tableFromRecords, evaluate, cardView, metaText } = await import('../src/canvas/talk-view.ts');
+  const whole = tableFromRecords(LISTING as never, COLLECTION);
+  const view = cardView({ presentation: 'number', measure: { op: 'sum', field: 'amount' } })!;
+  const full = evaluate(whole, view);
+  assert.equal(metaText(full, whole), 'From 4 of 4 records');
+  assert.ok(full.kind === 'number' && full.measure === 'Total amount');
+  const capped = tableFromRecords({ ...LISTING, truncated: true } as never, COLLECTION);
+  assert.equal(capped.truncated, true);
+  const partial = evaluate(capped, view);
+  assert.ok(partial.kind === 'number' && partial.partial && partial.measure === 'Total amount (newest 4 only)', show(partial));
+  assert.equal(metaText(partial, capped), 'From 4 of the newest 4 records loaded; older records exist and are not included');
+  const rows = evaluate(capped, cardView({ filters: [{ field: 'status', op: 'eq', value: 'approved' }] })!);
+  assert.equal(metaText(rows, capped), '2 of the newest 4 records loaded; older records exist and are not included shown');
+});
+
+test('money: an average rounds half-even to the minor unit and says so; currencies are never added together (review nits)', async () => {
+  const { tableFromRecords, evaluate, cardView, divideHalfEven } = await import('../src/canvas/talk-view.ts');
+  assert.deepEqual(divideHalfEven(3n, 2n), { quotient: 2n, exact: false });
+  assert.deepEqual(divideHalfEven(5n, 2n), { quotient: 2n, exact: false });
+  assert.deepEqual(divideHalfEven(-5n, 2n), { quotient: -2n, exact: false });
+  assert.deepEqual(divideHalfEven(6n, 3n), { quotient: 2n, exact: true });
+  const cents = (a: string, b: string, c: string) => ({ ...LISTING, records: [record(1, 'x', a, '2026-10-01', 'submitted'), record(2, 'y', b, '2026-10-01', 'submitted'), record(3, 'z', c, '2026-10-01', 'submitted')] });
+  const avg = cardView({ presentation: 'number', measure: { op: 'avg', field: 'amount' } })!;
+  const thirds = evaluate(tableFromRecords(cents('100', '200', '200') as never, COLLECTION), avg);
+  assert.ok(thirds.kind === 'number' && thirds.measured.text === '$1.67 (rounded)' && thirds.measured.rounded, show(thirds));
+  const even = evaluate(tableFromRecords(cents('1', '2', '0') as never, COLLECTION), avg);
+  assert.ok(even.kind === 'number' && even.measured.text === '$0.01', show(even));
+  const half = evaluate(tableFromRecords({ ...LISTING, records: [record(1, 'x', '1', '2026-10-01', 'a'), record(2, 'y', '2', '2026-10-01', 'a')] } as never, COLLECTION), avg);
+  assert.ok(half.kind === 'number' && half.measured.text === '$0.02 (rounded)', 'half a cent rounds to even');
+  // A euro claim beside dollar claims: summed per currency, never across.
+  const euro = { ...record(5, 'Bistro', '1250', '2026-10-05', 'submitted') };
+  euro.values = euro.values.map((v) => (v.field_id === 'amount' ? { ...v, value: { type: 'money', minor_units: '1250', currency: 'EUR', minor_unit_exponent: 2 } } : v)) as typeof euro.values;
+  const mixed = tableFromRecords({ ...LISTING, records: [...LISTING.records, euro] } as never, COLLECTION);
+  const total = evaluate(mixed, cardView({ presentation: 'number', measure: { op: 'sum', field: 'amount' } })!);
+  assert.ok(total.kind === 'number' && total.measured.mixed === true, show(total));
+  if (total.kind === 'number') {
+    assert.equal(total.measured.text, '$536.50 · €12.50 (per currency, not added)');
+    assert.equal(total.receipts.length, 5, 'every record still a receipt');
+  }
+  const big = evaluate(mixed, cardView({ filters: [{ field: 'amount', op: 'gt', value: '10' }] })!);
+  assert.ok(big.kind === 'rows' && big.rows.some(({ row }) => row.text.merchant === 'Bistro'), 'a euro amount compares at its own exponent');
+});
+
+test('a newer preview owns its item: the older preview’s Cancel (its dock replaced) does not undo it (review finding 3)', async () => {
+  (globalThis as { document?: unknown }).document = fakeDocument;
+  const { claimPreview } = await import('../src/canvas/shape.ts');
+  const { showDockCard } = await import('../src/canvas/dock-card.ts');
+  const item = {};
+  const screen: string[] = ['own view'];
+  // Preview 1, its dock, whose Cancel restores the item…
+  const first = claimPreview(item);
+  screen.push('preview 1');
+  const host = Object.assign(new Node_('div'), { replaceChildren() {} });
+  const doc = { ...fakeDocument, getElementById: () => host, activeElement: null } as unknown as Document;
+  const dock = () => Object.assign(new Node_('section'), { contains: () => false }) as unknown as HTMLElement;
+  showDockCard(doc, dock(), () => { if (first()) screen.splice(1); });
+  // …then preview 2 renders and opens its dock, which replaces (cancels) dock 1.
+  const second = claimPreview(item);
+  screen.push('preview 2');
+  showDockCard(doc, dock(), () => { if (second()) screen.splice(1); });
+  assert.deepEqual(screen, ['own view', 'preview 1', 'preview 2'], 'preview 2 is still shown');
+  assert.equal(first(), false);
+  assert.equal(second(), true);
+  // Another item’s preview is independent.
+  const other = claimPreview({});
+  assert.equal(other(), true);
+  assert.equal(second(), true);
+});
+
+test('Ask: a second question while one is answered waits its turn, none is dropped; ? never overwrites half-typed text (review finding 6, nit)', async () => {
+  (globalThis as { document?: unknown }).document = fakeDocument;
+  const bodies: string[] = [];
+  let release: () => void = () => undefined;
+  (globalThis as { fetch?: unknown }).fetch = async (_url: string, init: { body?: string }) => {
+    bodies.push(JSON.parse(init.body ?? '{}').question);
+    if (bodies.length === 1) await new Promise<void>((resolve) => { release = resolve; });
+    return { ok: true, status: 200, json: async () => ({ text: 'ok', receipts: [], references: [] }) };
+  };
+  const ask = await import('../src/canvas/ask.ts');
+  const scope = { kind: 'app' as const, address: 'expenses', works: [{ app_id: APP, work_id: WORK, address: 'expenses' }] };
+  assert.equal(ask.scopeText(scope), 'Asking about /expenses (all its records)');
+  const first = ask.ask('how many claims', scope);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await ask.ask('what is the total', scope);
+  assert.deepEqual(bodies, ['how many claims'], 'the second waits');
+  release();
+  await first;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(bodies, ['how many claims', 'what is the total'], 'then it is asked');
+  // `?` on the canvas: an empty bar gets `? `; half-typed text is only focused.
+  const { primeAsk } = await import('../src/canvas/address-chip.ts');
+  const input = Object.assign(new Node_('input'), { value: '', focus() { focused += 1; }, setSelectionRange() {}, dispatchEvent() { return true; } });
+  let focused = 0;
+  const doc = { ...fakeDocument, getElementById: () => input } as unknown as Document;
+  primeAsk(doc);
+  assert.equal(input.value, '? ');
+  input.value = '/expenses $86 at No';
+  primeAsk(doc);
+  assert.equal(input.value, '/expenses $86 at No', 'never overwritten');
+  assert.equal(focused, 2);
+});

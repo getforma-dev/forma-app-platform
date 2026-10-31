@@ -40,7 +40,7 @@ import { isModalOpen } from './box-viewer';
 import { isNoteItem, newNote, removeNoteItem } from './notes';
 import { toggleTimings } from './timing';
 import { frameCardsOfItem, isUniteItem, splitFromItem, uniteFromItem } from './unite';
-import { fillBar } from './address-chip';
+import { primeAsk } from './address-chip';
 
 /** APP-122: what ⋯ → Ask about this and ⋯ → Shape… do with the chosen item (set by `talk.ts`). */
 type TalkActions = { ask: (item: HTMLElement | null) => boolean; shape: (item: HTMLElement | null) => boolean };
@@ -279,10 +279,10 @@ export function onKey(event: KeyboardEvent): void {
     action(event.code === 'Digit0' ? 'zoom-reset' : event.code === 'Digit1' ? 'fit' : 'selection');
     return;
   }
-  // APP-122: `?` puts `? ` in the bar, ready to ask (`ask.ts`).
+  // APP-122: `?` puts `? ` in an empty bar, ready to ask (`ask.ts`); half-typed text is only focused.
   if (event.key === '?') {
     event.preventDefault();
-    fillBar('? ', documentRef);
+    primeAsk(documentRef ?? document);
     return;
   }
   const key = event.key.toLowerCase();

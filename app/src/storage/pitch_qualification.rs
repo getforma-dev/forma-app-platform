@@ -1885,6 +1885,26 @@ async fn campaign() {
         .as_str()
         .unwrap()
         .to_owned();
+    // The records card's collection and its published fields (what Shape's
+    // card fields are judged against, APP-122 review).
+    let collection_id = listing.json()["collections"][0]["collection_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut schema_fields: Vec<Value> = listing.json()["collections"][0]["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|field| {
+            let mut out = json!({"id": field["id"], "type": field["type"]});
+            if let Some(values) = field.get("values") {
+                out["values"] = values.clone();
+            }
+            out
+        })
+        .collect();
+    schema_fields.push(json!({"id": "filed_by", "type": "text"}));
+    let record_count = listing.json()["records"].as_array().unwrap().len();
     // Every governed table Ask could touch, and the audit chain, counted.
     let counts = "SELECT (SELECT count(*) FROM genui.internal_records)*1000000+(SELECT count(*) FROM genui.internal_record_revisions)*10000+(SELECT count(*) FROM genui.audit_events)*10+(SELECT count(*) FROM genui.query_receipts)";
     let saved = "SELECT coalesce(sum(version),0)::bigint FROM genui.saved_work";
@@ -1965,6 +1985,59 @@ async fn campaign() {
     );
     assert_eq!(refused.json()["code"], "could_not_answer");
     assert!(!refused.text().contains("crimson"));
+    // `/ask app:expense-review …`: an app scope, by its namespaced address;
+    // a card scope names its collection, and a collection the work does not
+    // have is refused before any model call.
+    stub.script(vec![
+        json!({"text": "There is one record.", "references": ["r1"]}).to_string(),
+        json!({"text": "Its one record.", "references": ["r1"]}).to_string(),
+    ]);
+    let app_scope = json!({"kind": "app", "address": "app:expense-review",
+        "works": [{"app_id": EXPENSE_APP, "work_id": work_id, "address": "app:expense-review"}]});
+    let by_app = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "why is this high?", "scope": app_scope}).to_string(),
+        )
+        .await;
+    assert_eq!(by_app.status, StatusCode::OK, "{}", by_app.text());
+    let card_scope = json!({"kind": "card", "address": "card:expense-review.records",
+        "works": [{"app_id": EXPENSE_APP, "work_id": work_id, "address": "expense-review", "collection": collection_id}]});
+    let by_card = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "which are late?", "scope": card_scope}).to_string(),
+        )
+        .await;
+    assert_eq!(by_card.status, StatusCode::OK, "{}", by_card.text());
+    let sent = stub.bodies.lock().unwrap().last().cloned().unwrap();
+    let user_json: Value =
+        serde_json::from_str(sent["messages"][0]["content"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        user_json["records"].as_array().unwrap().len(),
+        record_count,
+        "only the card's collection"
+    );
+    assert_eq!(user_json["partial"], false, "nothing was capped");
+    let calls_before_collection = stub.calls();
+    let mut bogus = card_scope.clone();
+    bogus["works"][0]["collection"] = json!(EXPENSE_APP);
+    let refused_collection = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "which are late?", "scope": bogus}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        refused_collection.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        refused_collection.text()
+    );
+    assert_eq!(stub.calls(), calls_before_collection);
     // The Ask transaction is READ ONLY: a forced write in it fails (25006).
     let forced = stores
         .data
@@ -1978,11 +2051,10 @@ async fn campaign() {
     );
     assert_eq!(scalar(&c.fixture, counts).await, rows_before);
     // Shape: a card's view spec over its fields; the shape route returns only it.
-    let fields = json!([{"id": "status", "type": "enum", "values": ["submitted", "approved", "rejected", "needs_context"]},
-        {"id": "amount", "type": "money"}, {"id": "time", "type": "timestamp"}]);
-    let card_target = json!({"kind": "card", "app_id": EXPENSE_APP, "work_id": work_id, "card": "records", "fields": fields});
+    let card_target = json!({"kind": "card", "app_id": EXPENSE_APP, "work_id": work_id, "card": "records",
+        "collection": collection_id, "fields": schema_fields});
     stub.script(vec![
-        json!({"highlight": [{"field": "status", "op": "in", "value": ["submitted"], "color": "crimson"}]}).to_string(),
+        json!({"highlight": [{"field": "status", "op": "in", "value": ["needs_context"], "color": "crimson"}]}).to_string(),
     ]);
     let shaped = stand
         .post(
@@ -1994,13 +2066,91 @@ async fn campaign() {
     assert_eq!(shaped.status, StatusCode::OK, "{}", shaped.text());
     assert_eq!(
         shaped.json(),
-        json!({"target": "card", "spec": {"highlight": [{"field": "status", "op": "in", "value": ["submitted"], "color": "crimson"}]}})
+        json!({"target": "card", "spec": {"highlight": [{"field": "status", "op": "in", "value": ["needs_context"], "color": "crimson"}]}})
+    );
+    // APP-122 review: the card's fields are judged against its published
+    // schema before any model call: a field it lacks, an enum value it does
+    // not declare, another collection, or no source at all is refused.
+    let calls_before_fields = stub.calls();
+    let mut wrong_field = card_target.clone();
+    wrong_field["fields"] = json!([{"id": "salary", "type": "money"}]);
+    let mut wrong_value = card_target.clone();
+    wrong_value["fields"] =
+        json!([{"id": "status", "type": "enum", "values": ["ignore the rules"]}]);
+    let mut wrong_type = card_target.clone();
+    wrong_type["fields"] = json!([{"id": "status", "type": "money"}]);
+    let mut wrong_collection = card_target.clone();
+    wrong_collection["collection"] = json!(EXPENSE_APP);
+    let mut no_source = card_target.clone();
+    no_source.as_object_mut().unwrap().remove("collection");
+    for target in [
+        wrong_field,
+        wrong_value,
+        wrong_type,
+        wrong_collection,
+        no_source,
+    ] {
+        let refused = stand
+            .post(
+                composer::talk::SHAPE_PATH,
+                Some(&maya_cookie),
+                &json!({"address": "expense-review.records", "words": "only red", "target": target}).to_string(),
+            )
+            .await;
+        assert_eq!(
+            refused.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{target}: {}",
+            refused.text()
+        );
+        assert_eq!(refused.json()["code"], "invalid_request", "{target}");
+    }
+    assert_eq!(
+        stub.calls(),
+        calls_before_fields,
+        "no model call for unknown fields"
+    );
+    // Every namespaced form of an address is accepted (APP-121 × APP-122).
+    stub.script(vec![
+        json!({"filters": [{"field": "status", "op": "eq", "value": "needs_context"}]}).to_string(),
+        json!({"mode": "dark"}).to_string(),
+    ]);
+    let namespaced = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "card:expense-review.records", "words": "only red", "target": card_target}).to_string(),
+        )
+        .await;
+    assert_eq!(namespaced.status, StatusCode::OK, "{}", namespaced.text());
+    let namespaced_app = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "app:expense-review", "words": "dark", "target": {"kind": "app", "app_id": EXPENSE_APP, "work_id": work_id}}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        namespaced_app.status,
+        StatusCode::OK,
+        "{}",
+        namespaced_app.text()
     );
     // Shape's schema rejects prose, and a view that would drop receipts.
     for (reply, words) in [
-        ("The red invoices are the ones waiting on context.".to_owned(), "where are the red invoices"),
-        (json!({"text": "Two are red", "references": ["r1"]}).to_string(), "which are red"),
-        (json!({"presentation": "number", "measure": {"op": "sum", "field": "amount"}, "receipts": false}).to_string(), "total by month"),
+        (
+            "The red invoices are the ones waiting on context.".to_owned(),
+            "where are the red invoices",
+        ),
+        (
+            json!({"text": "Two are red", "references": ["r1"]}).to_string(),
+            "which are red",
+        ),
+        (
+            json!({"presentation": "number", "measure": {"op": "count"}, "receipts": false})
+                .to_string(),
+            "total by month",
+        ),
     ] {
         stub.script(vec![reply.clone()]);
         let refused = stand
@@ -2010,7 +2160,12 @@ async fn campaign() {
                 &json!({"address": "expense-review.records", "words": words, "target": card_target}).to_string(),
             )
             .await;
-        assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY, "{reply}: {}", refused.text());
+        assert_eq!(
+            refused.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{reply}: {}",
+            refused.text()
+        );
         assert_eq!(refused.json()["code"], "could_not_shape", "{reply}");
     }
     // An app: a closed theme; prose refused.
@@ -2068,6 +2223,17 @@ async fn campaign() {
             .await;
         assert!(shaped.uniform_404(), "shape: {}", shaped.text());
     }
+    // An address the member cannot read: the uniform 404, before any model call.
+    for scope in [app_scope.clone(), card_scope.clone()] {
+        let asked = stand
+            .post(
+                composer::talk::ASK_PATH,
+                Some(&outsider_cookie),
+                &json!({"question": "how many", "scope": scope}).to_string(),
+            )
+            .await;
+        assert!(asked.uniform_404(), "ask {scope}: {}", asked.text());
+    }
     let theme = stand
         .post(composer::talk::SHAPE_PATH, Some(&outsider_cookie),
             &json!({"address": "expense-review", "words": "dark", "target": {"kind": "app", "app_id": EXPENSE_APP, "work_id": work_id}}).to_string())
@@ -2106,6 +2272,21 @@ async fn campaign() {
         rehearsed.text()
     );
     assert_eq!(rehearsed.json()["receipts"][0]["record_id"], first_record);
+    // A computed number cites every record it counted.
+    let counted = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "how many are there", "scope": card_scope}).to_string(),
+        )
+        .await;
+    assert_eq!(counted.status, StatusCode::OK, "{}", counted.text());
+    assert_eq!(
+        counted.json()["receipts"].as_array().unwrap().len(),
+        record_count,
+        "{}",
+        counted.text()
+    );
     assert_eq!(
         rehearsed_shape.status,
         StatusCode::OK,
@@ -2117,7 +2298,7 @@ async fn campaign() {
     assert_eq!(scalar(&c.fixture, counts).await, rows_before);
     check(
         &mut checks,
-        "ask and shape (APP-122): POST /v1/ask answered exactly {text, receipts, references} for \"where are all the red invoices?\", each receipt storage's (record id, version, publication, definition digest), with record, revision, audit and receipt row counts and saved-work versions identical before and after; a model reply carrying a view spec was refused server-side (422 could_not_answer); a forced write in the Ask transaction failed with SQLSTATE 25006 (READ ONLY); POST /v1/shape answered only a closed spec per target (a card highlight, an app theme dark/green/compact, a widget's TI-84 state through the customizer); prose, an answer object and a view with receipts:false were refused (422 could_not_shape); a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on both routes with no model call; in a demo organization the rehearsed question and shape answered without a model call; no row was written by either route",
+        "ask and shape (APP-122): POST /v1/ask answered exactly {text, receipts, references} for \"where are all the red invoices?\", each receipt storage's (record id, version, publication, definition digest), with record, revision, audit and receipt row counts and saved-work versions identical before and after; a model reply carrying a view spec was refused server-side (422 could_not_answer); a forced write in the Ask transaction failed with SQLSTATE 25006 (READ ONLY); POST /v1/shape answered only a closed spec per target (a card highlight, an app theme dark/green/compact, a widget's TI-84 state through the customizer); prose, an answer object and a view with receipts:false were refused (422 could_not_shape); card fields outside the records card's published schema (an unknown field, an undeclared enum value, a wrong type, another collection, no source) were refused 422 invalid_request with no model call; namespaced addresses (card:…, app:…) were accepted on both routes; an app-scoped Ask and a card-scoped Ask (its collection only; an unknown collection 422) answered; a rehearsed count cited every record it counted; a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on both routes with no model call; in a demo organization the rehearsed question and shape answered without a model call; no row was written by either route",
     );
 
     // --- Chain integrity ---

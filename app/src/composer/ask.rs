@@ -23,17 +23,26 @@
 //! total, a status) are answered from the same records without a model call;
 //! anything else goes to the model, and without a model the route answers
 //! `composer_unavailable`, as the widget customizer does.
+//!
+//! Listings are capped (`storage::RECORDS_LIMIT` newest records per work).
+//! When a work in scope has more, the read is *partial*: every answer says
+//! so ("among the newest 200 …"), a count reads "at least", and a total is
+//! never presented as the total. Every computed number (a count, a total, a
+//! list) references every record it counted, so its receipts cover all the
+//! rows it used (ADR-011 I3). Money is added per currency, never across.
 use crate::actions::resolve;
-use crate::storage::{RecordRow, RecordsListing};
+use crate::storage::{RecordRow, RecordsListing, RECORDS_LIMIT};
 use serde_json::{json, Map, Value};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A question: 1 to 500 characters, no control characters.
 pub const MAX_QUESTION: usize = 500;
 /// The answer's text: at most this many characters.
 pub const MAX_TEXT: usize = 1500;
-/// At most this many references (and receipts) in one answer.
-pub const MAX_REFERENCES: usize = 50;
+/// At most this many references (and receipts) in a model's answer: as many
+/// as the records it is shown, so a number it states can cite every record
+/// it used. A rehearsed (computed) answer references every record it counted.
+pub const MAX_REFERENCES: usize = MAX_MODEL_RECORDS;
 /// At most this many records go to the model.
 pub const MAX_MODEL_RECORDS: usize = 200;
 /// How many records a rehearsed answer names in its text.
@@ -132,10 +141,23 @@ impl Row {
             .unwrap_or("")
             .to_owned()
     }
-    /// The first money field's minor units, if any.
-    fn money(&self) -> Option<i128> {
+    /// The first money field: its currency, minor-unit exponent and minor units.
+    fn money(&self) -> Option<(String, u32, i128)> {
         let (_, _, _, value) = self.fields.iter().find(|(_, kind, ..)| kind == "money")?;
-        value.get("minor_units")?.as_str()?.parse().ok()
+        let minor = value.get("minor_units")?.as_str()?.parse().ok()?;
+        let currency = value
+            .get("currency")
+            .and_then(Value::as_str)
+            .filter(|c| c.len() == 3 && c.bytes().all(|b| b.is_ascii_uppercase()))
+            .unwrap_or("USD")
+            .to_owned();
+        let exponent = value
+            .get("minor_unit_exponent")
+            .and_then(Value::as_u64)
+            .and_then(|e| u32::try_from(e).ok())
+            .filter(|e| *e <= 6)
+            .unwrap_or(2);
+        Some((currency, exponent, minor))
     }
     /// A short name for the record: its merchant, vendor, title … or its id.
     pub fn label(&self) -> String {
@@ -166,6 +188,47 @@ impl Row {
         }
         parts.join(", ")
     }
+}
+
+/// Minor units as money text at `exponent`: `$513.00`, `€12.50`, `1,200 JPY`.
+pub fn money_text(minor: i128, currency: &str, exponent: u32) -> String {
+    let sign = if minor < 0 { "-" } else { "" };
+    let digits = minor.unsigned_abs().to_string();
+    let exponent = exponent as usize;
+    let padded = format!("{digits:0>width$}", width = exponent + 1);
+    let (whole, fraction) = padded.split_at(padded.len() - exponent);
+    let whole = crate::query::page::display(whole);
+    let number = if exponent == 0 {
+        whole
+    } else {
+        format!("{whole}.{fraction}")
+    };
+    match currency {
+        "USD" => format!("{sign}${number}"),
+        "EUR" => format!("{sign}€{number}"),
+        "GBP" => format!("{sign}£{number}"),
+        "JPY" => format!("{sign}¥{number}"),
+        other => format!("{sign}{number} {other}"),
+    }
+}
+
+/// A stored decimal (`{coefficient, scale}`) as text at its scale: `123.45`.
+fn decimal_text(value: &Value) -> Option<String> {
+    let coefficient = value.get("coefficient")?.as_str()?;
+    let scale = usize::try_from(value.get("scale")?.as_u64()?).ok()?;
+    let (sign, digits) = match coefficient.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", coefficient),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) || scale > 18 {
+        return None;
+    }
+    if scale == 0 {
+        return Some(format!("{sign}{digits}"));
+    }
+    let padded = format!("{digits:0>width$}", width = scale + 1);
+    let (whole, fraction) = padded.split_at(padded.len() - scale);
+    Some(format!("{sign}{whole}.{fraction}"))
 }
 
 fn short_id(id: &str) -> String {
@@ -207,7 +270,13 @@ pub fn rows(listings: &[RecordsListing], addresses: &[String]) -> Vec<Row> {
                         .or_else(|| value.get("type").and_then(Value::as_str))
                         .unwrap_or("")
                         .to_owned();
-                    let display = truncate(&resolve::display(&value), 120);
+                    // A decimal reads at its scale (123.45), never as its bare coefficient.
+                    let shown = if kind == "decimal" {
+                        decimal_text(&value).unwrap_or_else(|| resolve::display(&value))
+                    } else {
+                        resolve::display(&value)
+                    };
+                    let display = truncate(&shown, 120);
                     Some((id, kind, display, value))
                 })
                 .collect();
@@ -347,13 +416,15 @@ pub fn document(answer: &Answer, rows: &[Row]) -> Value {
 pub const SYSTEM: &str = "You answer a member's question about the records of their apps. You can only read: you never change records, cards, colors, charts or anything else.\n\
 You receive JSON: the question, the scope (the card or canvas it was asked on, by its address) and the records in scope, each with a reference (r1, r2 …), its app's address and its fields as displayed.\n\
 Answer with ONLY one JSON object, exactly: {\"text\": \"<your answer in plain sentences, at most 1200 characters, no markdown, no HTML>\", \"references\": [\"r1\", …]}.\n\
-\"references\" lists every record your answer relies on (at most 50), using only the references you were given. Never invent a record, an amount or a reference; if the records do not answer the question, say so.\n\
+\"references\" lists every record your answer relies on (at most 200), using only the references you were given: a count or a total lists every record it counted. Never invent a record, an amount or a reference; if the records do not answer the question, say so.\n\
+If \"partial\" is true, you were shown only some of the records (the newest of each app): say so, write \"at least\" for a count, and never present a sum as the full total. Add money only within one currency.\n\
 \"Red\" records are the ones needing attention: waiting on a decision (submitted, pending, requested, open, overdue, unpaid) or refused, disputed or flagged.\n\
 If the member asks you to change how something looks or what it shows (colors, a chart, a filter, a highlight), do not do it and do not describe a view: answer in text with the command to type, for example \"Ask only reads. To change how it looks, type /shape expenses.ledger highlight overdue in red\". To change records they use the app: /<app> <words>.\n\
 Never return any other key: no view, chart, filter, color, theme or style.";
 
 /// The user message: the question, scope and records as JSON data.
-pub fn user(question: &str, scope: &str, rows: &[Row]) -> String {
+/// `partial`: a work in scope had more records than its listing holds.
+pub fn user(question: &str, scope: &str, rows: &[Row], partial: bool) -> String {
     let records: Vec<Value> = rows
         .iter()
         .take(MAX_MODEL_RECORDS)
@@ -376,7 +447,8 @@ pub fn user(question: &str, scope: &str, rows: &[Row]) -> String {
         "question": question,
         "scope": scope,
         "records": records,
-        "more_records_not_shown": rows.len() > MAX_MODEL_RECORDS,
+        "more_records_not_shown": partial || rows.len() > MAX_MODEL_RECORDS,
+        "partial": partial || rows.len() > MAX_MODEL_RECORDS,
     })
     .to_string()
 }
@@ -435,7 +507,11 @@ pub fn redirect(question: &str, scope: &str, rows: &[Row]) -> Answer {
     } else {
         scope.to_owned()
     };
-    let app = target.split('.').next().unwrap_or(&target).to_owned();
+    // `card:expenses.ledger` → the app `app:expenses`; `expenses.ledger` → `expenses`.
+    let app = match target.split_once(':') {
+        Some((_, name)) => format!("app:{}", name.split('.').next().unwrap_or(name)),
+        None => target.split('.').next().unwrap_or(&target).to_owned(),
+    };
     let words = truncate(question.trim().trim_end_matches(['.', '?', '!']), 120);
     Answer {
         text: format!(
@@ -446,7 +522,8 @@ pub fn redirect(question: &str, scope: &str, rows: &[Row]) -> Answer {
 }
 
 /// A rehearsed answer to `question` over `rows`, or `None` (then the model).
-pub fn rehearsed(question: &str, scope: &str, rows: &[Row]) -> Option<Answer> {
+/// `partial`: a work in scope had more records than were read (module notes).
+pub fn rehearsed(question: &str, scope: &str, rows: &[Row], partial: bool) -> Option<Answer> {
     let words = words(question);
     if words.first().is_some_and(|w| CHANGES.contains(&w.as_str())) {
         return Some(redirect(question, scope, rows));
@@ -518,35 +595,68 @@ pub fn rehearsed(question: &str, scope: &str, rows: &[Row]) -> Option<Answer> {
         .any(|w| has(w));
     let count = (has("how") && has("many")) || has("count") || has("number");
     let noun = |n: usize| if n == 1 { "record" } else { "records" };
+    // Every computed answer cites every record it counted.
+    let all = |chosen: &[&Row]| -> Vec<String> {
+        chosen.iter().map(|row| row.reference.clone()).collect()
+    };
+    let among = if partial {
+        format!(" among the newest {RECORDS_LIMIT} of each app")
+    } else {
+        String::new()
+    };
     if total {
-        let sum: i128 = chosen.iter().filter_map(|row| row.money()).sum();
-        let amount = resolve::display(&json!({"type": "money", "minor_units": sum.to_string()}));
+        // Per currency: amounts in different currencies are never added.
+        let mut sums: BTreeMap<(String, u32), i128> = BTreeMap::new();
+        for (currency, exponent, minor) in chosen.iter().filter_map(|row| row.money()) {
+            *sums.entry((currency, exponent)).or_default() += minor;
+        }
+        if sums.is_empty() {
+            sums.insert(("USD".to_owned(), 2), 0);
+        }
+        let amounts: Vec<String> = sums
+            .iter()
+            .map(|((currency, exponent), minor)| money_text(*minor, currency, *exponent))
+            .collect();
+        let amount = amounts.join(" and ");
+        let mixed = if amounts.len() > 1 {
+            " (each currency added separately; different currencies are never added together)"
+        } else {
+            ""
+        };
         let scope_words = if filtered {
             format!("the {} {} that {what}", chosen.len(), noun(chosen.len()))
         } else {
             format!("{} {}", chosen.len(), noun(chosen.len()))
         };
+        let text = if partial {
+            format!(
+                "Not the full total: only the newest {RECORDS_LIMIT} records of each app were read, and older ones exist. Those add up to {amount}{mixed} across {scope_words}{among} {where_}."
+            )
+        } else {
+            format!("The total is {amount}{mixed} across {scope_words} {where_}.")
+        };
         return Some(Answer {
-            text: format!("The total is {amount} across {scope_words} {where_}."),
-            references: chosen
-                .iter()
-                .take(MAX_REFERENCES)
-                .map(|row| row.reference.clone())
-                .collect(),
+            text,
+            references: all(&chosen),
         });
     }
     if count && !filtered {
-        return Some(Answer {
-            text: format!(
+        let text = if partial {
+            format!(
+                "There are at least {} {} {where_}: only the newest {RECORDS_LIMIT} of each app were read, and older ones exist.",
+                chosen.len(),
+                noun(chosen.len())
+            )
+        } else {
+            format!(
                 "There are {} {} {where_}.",
                 chosen.len(),
                 noun(chosen.len())
-            ),
-            references: chosen
-                .iter()
-                .take(MAX_REFERENCES)
-                .map(|row| row.reference.clone())
-                .collect(),
+            )
+        };
+        return Some(Answer {
+            text,
+            references: all(&chosen),
         });
     }
     if !filtered {
@@ -555,7 +665,7 @@ pub fn rehearsed(question: &str, scope: &str, rows: &[Row]) -> Option<Answer> {
     if chosen.is_empty() {
         return Some(Answer {
             text: format!(
-                "No record {where_} {}.",
+                "No record{among} {where_} {}.",
                 what.replacen("are ", "is ", 1)
                     .replacen("need ", "needs ", 1)
             ),
@@ -569,18 +679,19 @@ pub fn rehearsed(question: &str, scope: &str, rows: &[Row]) -> Option<Answer> {
     } else {
         String::new()
     };
+    let older = if partial {
+        " Older records exist and were not read."
+    } else {
+        ""
+    };
     Some(Answer {
         text: format!(
-            "{} {} {where_} {what}: {}{tail}.",
+            "{} {}{among} {where_} {what}: {}{tail}.{older}",
             chosen.len(),
             noun(chosen.len()),
             named.join("; ")
         ),
-        references: chosen
-            .iter()
-            .take(MAX_REFERENCES)
-            .map(|row| row.reference.clone())
-            .collect(),
+        references: all(&chosen),
     })
 }
 
@@ -705,7 +816,7 @@ mod tests {
     #[test]
     fn rehearsed_questions_read_the_records() {
         let rows = sample();
-        let red = rehearsed("where are all the red invoices?", "", &rows).unwrap();
+        let red = rehearsed("where are all the red invoices?", "", &rows, false).unwrap();
         assert_eq!(red.references, ["r1", "r3"]);
         assert!(
             red.text
@@ -714,23 +825,30 @@ mod tests {
             red.text
         );
         assert!(red.text.contains("Nobu, $86.00, submitted"), "{}", red.text);
-        let total = rehearsed("what's the total spend?", "expenses.ledger", &rows).unwrap();
+        let total = rehearsed("what's the total spend?", "expenses.ledger", &rows, false).unwrap();
         assert_eq!(
             total.text,
             "The total is $513.00 across 3 records in expenses.ledger."
         );
-        let approved = rehearsed("which ones are approved", "", &rows).unwrap();
+        let approved = rehearsed("which ones are approved", "", &rows, false).unwrap();
         assert_eq!(approved.references, ["r2"]);
-        let count = rehearsed("how many claims are there", "expenses", &rows).unwrap();
+        let count = rehearsed("how many claims are there", "expenses", &rows, false).unwrap();
         assert_eq!(count.text, "There are 3 records in expenses.");
-        assert_eq!(rehearsed("why did spend jump in March", "", &rows), None);
-        assert_eq!(rehearsed("summarize the quarter for me", "", &rows), None);
+        assert_eq!(
+            rehearsed("why did spend jump in March", "", &rows, false),
+            None
+        );
+        assert_eq!(
+            rehearsed("summarize the quarter for me", "", &rows, false),
+            None
+        );
     }
 
     #[test]
     fn a_change_request_answers_with_the_address_to_type() {
         let rows = sample();
-        let answer = rehearsed("make the overdue ones red", "expenses.ledger", &rows).unwrap();
+        let answer =
+            rehearsed("make the overdue ones red", "expenses.ledger", &rows, false).unwrap();
         assert!(answer.references.is_empty());
         assert!(
             answer
@@ -753,5 +871,112 @@ mod tests {
         assert_eq!(question("?"), None);
         assert_eq!(question(&"x".repeat(MAX_QUESTION + 1)), None);
         assert_eq!(question("bad\u{7}bell"), None);
+    }
+
+    #[test]
+    fn a_partial_read_never_presents_a_partial_sum_as_the_total() {
+        let rows = sample();
+        let total = rehearsed("what's the total spend?", "expenses", &rows, true).unwrap();
+        assert!(
+            total
+                .text
+                .starts_with("Not the full total: only the newest 200"),
+            "{}",
+            total.text
+        );
+        assert!(!total.text.starts_with("The total is"), "{}", total.text);
+        assert!(total.text.contains("$513.00"), "{}", total.text);
+        let count = rehearsed("how many claims are there", "expenses", &rows, true).unwrap();
+        assert!(
+            count.text.starts_with("There are at least 3 records"),
+            "{}",
+            count.text
+        );
+        let red = rehearsed("where are the red ones", "expenses", &rows, true).unwrap();
+        assert!(
+            red.text
+                .contains("2 records among the newest 200 of each app in expenses"),
+            "{}",
+            red.text
+        );
+        assert!(
+            red.text.ends_with("Older records exist and were not read."),
+            "{}",
+            red.text
+        );
+        // The model is told too.
+        let sent: Value = serde_json::from_str(&user("total?", "expenses", &rows, true)).unwrap();
+        assert_eq!(sent["partial"], true);
+        assert_eq!(sent["more_records_not_shown"], true);
+        let whole: Value = serde_json::from_str(&user("total?", "expenses", &rows, false)).unwrap();
+        assert_eq!(whole["partial"], false);
+    }
+
+    #[test]
+    fn a_computed_number_cites_every_record_it_counted() {
+        let rows: Vec<Row> = (1..=120)
+            .map(|n| {
+                row(
+                    n,
+                    "Vendor",
+                    "100",
+                    if n % 2 == 0 { "approved" } else { "submitted" },
+                )
+            })
+            .collect();
+        let total = rehearsed("what's the total spend?", "", &rows, false).unwrap();
+        assert_eq!(
+            total.references.len(),
+            120,
+            "every summed record is a receipt"
+        );
+        assert!(total.text.contains("$120.00"), "{}", total.text);
+        let count = rehearsed("how many are there", "", &rows, false).unwrap();
+        assert_eq!(count.references.len(), 120);
+        let red = rehearsed("where are the red ones", "", &rows, false).unwrap();
+        assert_eq!(red.references.len(), 60);
+        let document = document(&total, &rows);
+        assert_eq!(document["receipts"].as_array().unwrap().len(), 120);
+    }
+
+    #[test]
+    fn money_is_added_per_currency_and_decimals_read_at_their_scale() {
+        let mut rows = sample();
+        rows[1].fields[0].3 = json!({"type": "money", "minor_units": "1250", "currency": "EUR", "minor_unit_exponent": 2});
+        let total = rehearsed("what's the total spend?", "", &rows, false).unwrap();
+        assert!(total.text.contains("€12.50 and $101.00"), "{}", total.text);
+        assert!(
+            total.text.contains("never added together"),
+            "{}",
+            total.text
+        );
+        assert_eq!(money_text(123_456, "JPY", 0), "¥123,456");
+        assert_eq!(money_text(-5, "USD", 2), "-$0.05");
+        assert_eq!(money_text(1, "CHF", 2), "0.01 CHF");
+        assert_eq!(
+            decimal_text(
+                &json!({"type": "decimal", "coefficient": "12345", "scale": 2, "unit": "hours"})
+            )
+            .as_deref(),
+            Some("123.45")
+        );
+        assert_eq!(
+            decimal_text(&json!({"coefficient": "-5", "scale": 3})).as_deref(),
+            Some("-0.005")
+        );
+    }
+
+    #[test]
+    fn a_namespaced_scope_redirects_to_its_namespaced_forms() {
+        let rows = sample();
+        let answer = rehearsed("make it red", "card:expenses.ledger", &rows, false).unwrap();
+        assert!(
+            answer
+                .text
+                .contains("/shape card:expenses.ledger make it red"),
+            "{}",
+            answer.text
+        );
+        assert!(answer.text.contains("/app:expenses …"), "{}", answer.text);
     }
 }

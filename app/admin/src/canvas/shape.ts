@@ -14,16 +14,27 @@
 // own data in this browser (`talk-view.ts`), never records: a view may
 // filter or hide records, and every number it computes keeps the receipts
 // of the records it came from (ADR-011 I3). Text nodes only.
+//
+// APP-122 review: the address takes every form the canvas accepts, through
+// one resolver (`resolveTarget`, Ask's scope uses it too): `expenses.ledger`,
+// `3.2`, a card shortcut, `expenses`, a personal shortcut (`e`), and APP-121's
+// full forms `card:expenses.ledger`, `app:expenses`, `widget:calculator`
+// (`folder:` is named, not shapeable yet). A bare name reaches a widget kind
+// first (verbs win), so the Notes app is `app:notes`. A preview is owned by
+// a token: an older preview's Cancel (its dock replaced by a newer one)
+// never undoes the newer preview. Applied cards stay live: on a committed
+// record (or a lagged stream) their data is read again and the view
+// re-evaluated.
 import { addressFor, fillBar } from './address-chip';
-import { addCards, focusCard, isOnBoard, placeUtilityCard } from './board';
-import { findCardShortcut, type CanvasCommand } from './command-registry';
+import { addCards, focusCard, isOnBoard, onLiveEvent, placeUtilityCard } from './board';
+import { appForm, findAddress, findAppAddress, findCardShortcut, findVerb, type Address, type CanvasCommand } from './command-registry';
 import { isDismissKey, showDockCard } from './dock-card';
-import { cardAddress, findApps, findCardRow, findCards, type AppRow, type CardRow } from './library';
+import { cardAddress, findApps, findCardRow, findCards, libraryApps, type AppRow, type CardRow } from './library';
 import { recordsJson } from './records';
-import { announce, el, receiptSection, released } from './render';
+import { announce, el, isUuid, receiptSection, released } from './render';
 import { registerCompleter, type Completion } from './slash';
 import {
-  appTheme, cardView, chips, evaluate, fieldsOf, tableFromQuery, tableFromRecords, themeChips,
+  appTheme, cardView, chips, evaluate, fieldsOf, metaText, splitAddress, tableFromQuery, tableFromRecords, themeChips,
   type AppTheme, type CardView, type Group, type RecordReceipt, type Shaped, type Table,
 } from './talk-view';
 import { frameCardsOfItem, isUniteItem } from './unite';
@@ -42,28 +53,60 @@ export type Target =
   | { kind: 'widget'; widget: WidgetCard; address: string }
   | { kind: 'none'; message: string };
 
-const appAddress = (app: AppRow) => app.slug || app.address?.slug || app.number;
+const appAddress = (app: AppRow) => appForm({ slug: app.slug || app.address?.slug || app.number });
+const none = (message: string): Target => ({ kind: 'none', message });
 
-/** What `address` names: a widget kind, a card (`app.card`, `3.2`, a card shortcut), else an app. */
-export function resolveTarget(address: string): Target {
-  const text = address.trim().replace(/^\//, '');
-  if (!text) return { kind: 'none', message: 'Name what to shape: /shape expenses.ledger …, /shape expenses …, /shape calculator …' };
-  const kind = widgetKind(text);
-  if (kind) {
-    if (kind === 'note' || kind === 'folder') return { kind: 'none', message: `A ${kind} keeps its contents; shaping a ${kind} is not available yet.` };
-    const widget = widgetFor(kind);
-    return widget ? { kind: 'widget', widget, address: kind } : { kind: 'none', message: `Place a ${kind} first: /widget ${kind}.` };
+/** The Library row of an app's address (a saved app's own work). */
+function rowOf(address: Address): AppRow | undefined {
+  const rows = libraryApps().filter((row) => row.app === address.app && (!address.work || row.work === address.work));
+  return rows.find((row) => row.slug === address.slug) ?? rows[0];
+}
+
+/** Whether `card` is exactly what `name` says (`3.2`, `expenses.ledger`), not a prefix of it. */
+function exactCard(card: CardRow, name: string): boolean {
+  return card.number === name || (name.includes('.') && card.slug === name.slice(name.indexOf('.') + 1));
+}
+
+/**
+ * What `address` names (module notes): a widget kind, a card (`app.card`,
+ * `3.2`, a card shortcut), else an app, in any of their forms. `strict`
+ * (Ask's `/ask <address> …`) takes only exact names: never a guess from a
+ * title or a prefix, and never a verb or a widget kind for a bare word.
+ */
+export function resolveTarget(address: string, options: { strict?: boolean } = {}): Target {
+  const strict = options.strict === true;
+  const { space, name } = splitAddress(address);
+  if (!name) return none('Name what to shape: /shape expenses.ledger …, /shape expenses …, /shape calculator …');
+  if (space === 'folder') return none('A folder keeps its files; shaping or asking about a folder is not available yet.');
+  if (space === 'widget' || (!space && !strict)) {
+    const kind = widgetKind(name);
+    if (kind) {
+      if (kind === 'note' || kind === 'folder') return none(`A ${kind} keeps its contents; shaping a ${kind} is not available yet.`);
+      const widget = widgetFor(kind);
+      return widget ? { kind: 'widget', widget, address: kind } : none(`Place a ${kind} first: /widget ${kind}.`);
+    }
+    if (space === 'widget') return none(`No widget is called ${name}: weather, calculator or clock.`);
   }
-  const shortcut = findCardShortcut(text);
-  const named = shortcut ? findCards(`${shortcut.address.slug}.${shortcut.card}`) : [];
-  if (named[0]) return cardTarget(named[0]);
-  if (text.includes('.')) {
-    const [card] = findCards(text);
-    return card ? cardTarget(card) : { kind: 'none', message: `No card matches ${text}. Open the Library (L) to see each card’s app.card name.` };
+  if (!space && strict && findVerb(name)) return none(`/${name} is a command, not an app or a card.`);
+  if (space === 'card' || !space) {
+    const shortcut = findCardShortcut(name);
+    const named = shortcut ? findCards(`${shortcut.address.slug}.${shortcut.card}`) : [];
+    if (named[0]) return cardTarget(named[0]);
+    if (space === 'card' || name.includes('.')) {
+      const cards = findCards(name);
+      const card = strict ? cards.find((candidate) => exactCard(candidate, name)) : cards[0];
+      return card ? cardTarget(card) : none(`No card matches ${name}. Open the Library (L) to see each card’s app.card name.`);
+    }
   }
-  const [app] = findApps(text);
-  if (app) return { kind: 'app', app, address: appAddress(app) };
-  return { kind: 'none', message: `Nothing answers to ${text}. Shape a card (app.card), an app or a widget.` };
+  // An app: its address, an alias or the member's own shortcut (`app:` reaches one a verb shadows).
+  const exact = space === 'app' ? findAppAddress(name) : findAddress(name);
+  const row = exact ? rowOf(exact) : undefined;
+  if (row) return { kind: 'app', app: row, address: appAddress(row) };
+  if (!strict) {
+    const [app] = findApps(name);
+    if (app) return { kind: 'app', app, address: appAddress(app) };
+  }
+  return none(`Nothing answers to ${name}. Shape a card (app.card), an app or a widget.`);
 }
 
 function cardTarget(card: CardRow): Target {
@@ -93,16 +136,32 @@ function cardElement(id: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(`.cv-item .cv-card[data-card="${id}"]`) ?? document.querySelector<HTMLElement>(`.cv-card[data-card="${id}"]`);
 }
 
+/** Where a card's data comes from: its records listing (and collection), or its view's query. */
+export type Source = { records?: string; collection?: string; query?: string };
+export function sourceOf(card: HTMLElement): Source {
+  return { records: card.dataset.records, collection: card.dataset.collection, query: card.dataset.query };
+}
+
+/** What `POST /v1/shape` names as the card's data: its collection, or its view (from `/queries/<view>`). */
+export function sourceTarget(source: Source, table: Table): { collection: string } | { view: string } | null {
+  if (table.source === 'records') {
+    const collection = isUuid(table.collection) ? table.collection : isUuid(source.collection) ? source.collection : '';
+    return collection ? { collection } : null;
+  }
+  const view = /\/queries\/([a-z][a-z0-9_-]{0,63})$/.exec(source.query ?? '')?.[1];
+  return view ? { view } : null;
+}
+
 /** The card's own data as a table: its records listing, or its released query result. */
-async function loadTable(card: HTMLElement): Promise<Table | string> {
+async function loadTable(source: Source): Promise<Table | string> {
   try {
-    const records = card.dataset.records;
+    const records = source.records;
     if (records && records.startsWith('/v1/work/')) {
       const response = await fetch(records, { credentials: 'same-origin', cache: 'no-store' });
       const listing = response.ok ? recordsJson(await response.json()) : null;
-      return listing ? tableFromRecords(listing, card.dataset.collection ?? '') : 'This card’s records could not be read.';
+      return listing ? tableFromRecords(listing, source.collection ?? '') : 'This card’s records could not be read.';
     }
-    const query = card.dataset.query;
+    const query = source.query;
     if (query && query.startsWith('/v1/work/')) {
       const response = await fetch(query, {
         method: 'POST', credentials: 'same-origin', cache: 'no-store',
@@ -171,7 +230,8 @@ function receiptsFor(document_: Document, table: Table, receipts: RecordReceipt[
 
 const SVG = 'http://www.w3.org/2000/svg';
 function chart(document_: Document, groups: Group[], line: boolean): Element | null {
-  if (groups.length < 1 || groups.length > 60) return null;
+  // Money in several currencies is never drawn on one axis.
+  if (groups.length < 1 || groups.length > 60 || groups.some((g) => g.measured.mixed)) return null;
   const max = Math.max(...groups.map((g) => g.measured.value), 0);
   if (max <= 0) return null;
   const [width, height, pad] = [520, 160, 18];
@@ -222,7 +282,7 @@ function body(document_: Document, shaped: Shaped, table: Table, view: CardView)
     box.append(
       el(document_, 'p', { class: 'cv-insight-label' }, shaped.measure),
       el(document_, 'p', { class: 'cv-insight-value value' }, shaped.measured.text),
-      el(document_, 'p', { class: 'cv-shaped-meta' }, `From ${shaped.count} of ${shaped.total} ${table.source === 'records' ? 'records' : 'rows'}`),
+      el(document_, 'p', { class: 'cv-shaped-meta' }, metaText(shaped, table)),
       receiptsFor(document_, table, shaped.receipts));
     return box;
   }
@@ -240,7 +300,7 @@ function body(document_: Document, shaped: Shaped, table: Table, view: CardView)
           el(document_, 'th', { scope: 'col' }, shaped.measure),
           el(document_, 'th', { scope: 'col' }, 'Receipts'))),
         el(document_, 'tbody', {}, ...rows))),
-      el(document_, 'p', { class: 'cv-shaped-meta' }, `From ${shaped.matched} of ${shaped.total} ${table.source === 'records' ? 'records' : 'rows'}`));
+      el(document_, 'p', { class: 'cv-shaped-meta' }, metaText(shaped, table)));
     if (table.source === 'query' && table.receipt) box.append(receiptSection(document_, table.receipt));
     return box;
   }
@@ -257,7 +317,7 @@ function body(document_: Document, shaped: Shaped, table: Table, view: CardView)
         ...columns.map((c) => el(document_, 'td', { class: ['money', 'integer', 'decimal'].includes(c.type) ? 'value num' : 'value' }, row.text[c.id] ?? '—'))))))));
   }
   box.append(
-    el(document_, 'p', { class: 'cv-shaped-meta' }, `${shaped.rows.length} of ${shaped.total} ${table.source === 'records' ? 'records' : 'rows'} shown`),
+    el(document_, 'p', { class: 'cv-shaped-meta' }, metaText(shaped, table)),
     receiptsFor(document_, table, receipts));
   return box;
 }
@@ -275,10 +335,37 @@ export function shapedSection(document_: Document, state: 'preview' | 'shaped', 
 
 // --- Applying: preview, Apply, Add as new card, Revert (session only) ---
 
-type Applied = { address: string; view: CardView; table: Table };
+type Applied = { address: string; view: CardView; table: Table; source: Source; work: string };
 const appliedCards = new Map<string, Applied>();
 const appliedThemes = new Map<string, AppTheme>();
 let newCards = 0;
+
+/**
+ * The preview each item shows now: a newer preview takes the token, so an
+ * older one's Cancel (run when its dock is replaced) leaves it alone.
+ */
+const previews = new Map<unknown, number>();
+let previewSequence = 0;
+export function claimPreview(key: unknown): () => boolean {
+  previewSequence += 1;
+  const token = previewSequence;
+  previews.set(key, token);
+  return () => previews.get(key) === token;
+}
+
+/** Shaped views that stay live: re-read and re-evaluated when their work's records change. */
+type LiveView = { work: string; source: Source; epoch: number; render: (table: Table) => boolean };
+const liveViews = new Map<string, LiveView>();
+/** Re-reads the data of every live shaped view of `work` (every one when null) and re-renders it. */
+export async function refreshShaped(work: string | null): Promise<void> {
+  await Promise.all([...liveViews.entries()].filter(([, live]) => work === null || live.work === work).map(async ([key, live]) => {
+    live.epoch += 1;
+    const epoch = live.epoch;
+    const table = await loadTable(live.source);
+    if (typeof table === 'string' || liveViews.get(key) !== live || live.epoch !== epoch) return;
+    if (!live.render(table)) liveViews.delete(key);
+  }));
+}
 
 function head(card: HTMLElement): HTMLElement | null {
   return card.querySelector<HTMLElement>(':scope > .cv-card-head, :scope > header, :scope > h2');
@@ -321,6 +408,7 @@ function unlabel(host: HTMLElement | null): void {
 
 function revertCard(card: HTMLElement, id: string, report: Report = announce): void {
   appliedCards.delete(id);
+  liveViews.delete(`card:${id}`);
   showSection(card, null);
   unlabel(head(card));
   report('Reverted: the card shows its own view again.');
@@ -331,6 +419,17 @@ function applyCard(card: HTMLElement, id: string, applied: Applied): void {
   showSection(card, shapedSection(card.ownerDocument, 'shaped', applied.address, applied.view, applied.table));
   card.dataset.shaped = 'true';
   labelShaped(head(card), () => revertCard(card, id));
+  // Live: the applied view is evaluated again over the card's fresh data.
+  liveViews.set(`card:${id}`, {
+    work: applied.work, source: applied.source, epoch: 0,
+    render: (table) => {
+      if (appliedCards.get(id) !== applied || !card.isConnected) return false;
+      applied.table = table;
+      // A preview open on the card keeps the screen; the applied view updates under it.
+      if (card.dataset.shaped === 'true') showSection(card, shapedSection(card.ownerDocument, 'shaped', applied.address, applied.view, table));
+      return true;
+    },
+  });
 }
 
 /** The dock card that asks Apply / Add as new card / Cancel. */
@@ -377,14 +476,20 @@ async function shapeCard(target: Extract<Target, { kind: 'card' }>, words: strin
     return;
   }
   report(`Shaping /${target.address}…`);
-  const table = await loadTable(card);
+  const source = sourceOf(card);
+  const table = await loadTable(source);
   if (typeof table === 'string') {
     report(table);
     return;
   }
+  const from = sourceTarget(source, table);
+  if (!from) {
+    report('This card’s data has no schema to shape it by. Nothing changed.');
+    return;
+  }
   const answer = await requestShape({
     address: target.address, words,
-    target: { kind: 'card', app_id: row.app.app, work_id: row.app.work, card: row.slug, fields: fieldsOf(table) },
+    target: { kind: 'card', app_id: row.app.app, work_id: row.app.work, card: row.slug, fields: fieldsOf(table), ...from },
   });
   if (typeof answer === 'string') {
     report(answer);
@@ -396,31 +501,52 @@ async function shapeCard(target: Extract<Target, { kind: 'card' }>, words: strin
     return;
   }
   const before = appliedCards.get(row.id) ?? null;
+  const current = claimPreview(card);
   showSection(card, shapedSection(card.ownerDocument, 'preview', target.address, view, table));
   card.dataset.shaped = 'preview';
   focusCard(card);
+  // Only this preview's own Cancel restores: a newer preview on the card keeps its screen.
   const restore = () => {
+    if (!current()) return false;
     if (before) applyCard(card, row.id, before);
     else {
       showSection(card, null);
       unlabel(head(card));
     }
+    return true;
   };
+  const applied: Applied = { address: target.address, view, table, source, work: row.app.work };
   confirmDock(`Shape /${target.address}`, chips(view), [
-    { label: 'Apply', primary: true, run: () => { applyCard(card, row.id, { address: target.address, view, table }); report(`/${target.address} is shaped. Revert is on the card.`); } },
+    { label: 'Apply', primary: true, run: () => { applyCard(card, row.id, applied); report(`/${target.address} is shaped. Revert is on the card.`); } },
     {
       label: 'Add as new card',
       run: () => {
         restore();
         newCards += 1;
+        const id = `shape-${newCards}`;
         const title = view.title ?? `${row.title} (shaped)`;
-        const section = shapedSection(card.ownerDocument, 'shaped', target.address, view, table);
-        section.prepend(el(card.ownerDocument, 'p', { class: 'cv-shaped-from' }, `Made by you from /${target.address} · this session`));
-        placeUtilityCard(`shape-${newCards}`, title, section);
+        const made = (data: Table) => {
+          const section = shapedSection(card.ownerDocument, 'shaped', target.address, view, data);
+          section.prepend(el(card.ownerDocument, 'p', { class: 'cv-shaped-from' }, `Made by you from /${target.address} · this session`));
+          return section;
+        };
+        let section = made(table);
+        placeUtilityCard(id, title, section);
+        // Live too: its numbers follow the records they came from.
+        liveViews.set(`new:${id}`, {
+          work: row.app.work, source, epoch: 0,
+          render: (data) => {
+            if (!section.isConnected) return false;
+            const next = made(data);
+            section.replaceWith(next);
+            section = next;
+            return true;
+          },
+        });
         report(`A new card from /${target.address} is on the canvas. Its numbers keep their receipts.`);
       },
     },
-  ], () => { restore(); report('Nothing changed.'); });
+  ], () => { if (restore()) report('Nothing changed.'); });
 }
 
 function appCards(app: AppRow): HTMLElement[] {
@@ -456,6 +582,7 @@ async function shapeApp(target: Extract<Target, { kind: 'app' }>, words: string,
     return;
   }
   const before = appliedThemes.get(app.work) ?? null;
+  const current = claimPreview(`theme:${app.work}`);
   const cards = appCards(app);
   setTheme(cards, theme);
   for (const card of cards) card.dataset.themePreview = 'true';
@@ -477,7 +604,13 @@ async function shapeApp(target: Extract<Target, { kind: 'app' }>, words: string,
         report(`Every /${target.address} card is shaped; each keeps its own view. Revert is on the app card.`);
       },
     },
-  ], () => { settle(); setTheme(appCards(app), before); report('Nothing changed.'); });
+  ], () => {
+    // A newer theme preview on this app keeps its look.
+    if (!current()) return;
+    settle();
+    setTheme(appCards(app), before);
+    report('Nothing changed.');
+  });
 }
 
 function shapeWidgetLabel(widget: WidgetCard, previous: WidgetState): void {
@@ -493,6 +626,8 @@ function shapeWidgetLabel(widget: WidgetCard, previous: WidgetState): void {
   widget.chips.append(label);
 }
 
+const originals = new WeakMap<HTMLElement, WidgetState>();
+
 async function shapeWidget(target: Extract<Target, { kind: 'widget' }>, words: string, report: Report): Promise<void> {
   const { widget } = target;
   report(`Shaping the ${widget.kind}…`);
@@ -506,14 +641,22 @@ async function shapeWidget(target: Extract<Target, { kind: 'widget' }>, words: s
     report(REFUSALS.could_not_shape ?? '');
     return;
   }
-  const previous = widget.state;
+  // A preview replacing a pending one restores to the look before both.
+  const previous = widget.card.dataset.shapePreview === 'true' ? originals.get(widget.card) ?? widget.state : widget.state;
+  originals.set(widget.card, previous);
+  const current = claimPreview(widget.card);
   widget.apply(next);
   widget.card.dataset.shapePreview = 'true';
   const settle = () => { delete widget.card.dataset.shapePreview; };
   const look = [`${next.skin} skin`, `${next.accent} accent`, `${next.font} font`];
   confirmDock(`Shape /${target.address}`, look, [
     { label: 'Apply', primary: true, run: () => { settle(); shapeWidgetLabel(widget, previous); report(`The ${widget.kind} is shaped. Revert is on it.`); } },
-  ], () => { settle(); widget.apply(previous); report('Nothing changed.'); });
+  ], () => {
+    if (!current()) return;
+    settle();
+    widget.apply(previous);
+    report('Nothing changed.');
+  });
 }
 
 /** `/shape <address> <words>` and the dot shortcut: resolve, ask the server, preview. */
@@ -568,16 +711,19 @@ export const SHAPE_COMMAND: CanvasCommand = {
 /** `/shape <address>`: cards (app.card), apps and the widgets on the canvas, while the address is typed. */
 export function shapeCompletions(rest: string): Completion[] {
   if (/\s/.test(rest.trimStart())) return [];
-  const query = rest.trim();
-  const cards = findCards(query).filter((card) => card.slug !== 'app').slice(0, 6).map((card) => ({
-    badge: card.number, title: cardAddress(card), detail: `${card.title} · its view`, value: `/shape ${cardAddress(card)} `,
+  // APP-121's full forms narrow to their kind and keep the typed prefix.
+  const { space, name: query } = splitAddress(rest);
+  const form = (kind: string, name: string) => (space ? `${kind}:${name}` : name);
+  const cards = space && space !== 'card' ? [] : findCards(query).filter((card) => card.slug !== 'app').slice(0, 6).map((card) => ({
+    badge: card.number, title: form('card', cardAddress(card)), detail: `${card.title} · its view`, value: `/shape ${form('card', cardAddress(card))} `,
   }));
-  const apps = query.includes('.') ? [] : findApps(query).slice(0, 3).map((app) => ({
-    badge: app.number, title: appAddress(app), detail: `${app.title} · a theme on every card`, value: `/shape ${appAddress(app)} `,
-  }));
-  const widgets = (['weather', 'calculator', 'clock'] as const)
+  const apps = (space && space !== 'app') || query.includes('.') ? [] : findApps(query).slice(0, 3).map((app) => {
+    const address = space ? `app:${app.slug || app.number}` : appAddress(app);
+    return { badge: app.number, title: address, detail: `${app.title} · a theme on every card`, value: `/shape ${address} ` };
+  });
+  const widgets = space && space !== 'widget' ? [] : (['weather', 'calculator', 'clock'] as const)
     .filter((kind) => (!query || kind.startsWith(query)) && widgetFor(kind))
-    .map((kind) => ({ badge: '◇', title: kind, detail: 'Its look', value: `/shape ${kind} ` }));
+    .map((kind) => ({ badge: '◇', title: form('widget', kind), detail: 'Its look', value: `/shape ${form('widget', kind)} ` }));
   return [...cards, ...apps, ...widgets].slice(0, 10);
 }
 
@@ -594,6 +740,10 @@ export function addressOfWork(app: string, work: string): string {
 }
 
 export function startShape(): void {
+  onLiveEvent((event) => {
+    if (event.kind === 'stream.lagged') void refreshShaped(null);
+    else if (event.kind === 'record.committed') void refreshShaped(event.work_id);
+  });
   registerCompleter('shape', shapeCompletions);
   registerCompleter('.', dotCompletions, { select: false });
 }

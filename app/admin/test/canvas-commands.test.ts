@@ -83,9 +83,13 @@ test('/ lists the 16 verbs in six groups and no addresses; a first letter adds t
   // The Commands tab: the same four groups; hidden aliases show on their verb's row only.
   assert.deepEqual(slugsOf(sheetGroups('')), VERBS);
   assert.deepEqual(sheetGroups('').map((group) => group.category), ['Place', 'Arrange', 'Make', 'Shape', 'Ask', 'Help']);
-  // APP-122: Ask is listed as it is typed, `? <question>`; Shape names its three targets.
-  assert.equal(registry.signature(registry.findVerb('ask')!), '? <question>');
-  assert.equal(registry.findVerb('ask')?.insert, '? ');
+  // APP-122: Ask is `/ask [app|app.card] <question>` (the address optional, the hint says so), `?` its quick form; Shape names its three targets.
+  const askVerb = registry.findVerb('ask')!;
+  assert.equal(registry.signature(askVerb), '/ask [app|app.card] <question>');
+  assert.equal(askVerb.insert, '/ask ');
+  assert.ok(askVerb.examples.includes('/ask expenses.ledger which claims are overdue?') && askVerb.examples.includes('? where are the red invoices'));
+  assert.equal(registry.argumentHint(askVerb, '').note, 'Optional: app or app.card · Enter runs it as is');
+  assert.deepEqual(registry.argumentHint(askVerb, '').parts.map((part) => part.text), ['/ask', '[app or app.card]', '<question>']);
   assert.equal(registry.signature(registry.findVerb('shape')!), '/shape <app.card|app|widget> <words>');
   assert.deepEqual(slugsOf(sheetGroups('weather')), ['widget'], 'a hidden alias finds its verb');
   assert.deepEqual(slugsOf(sheetGroups('pto')), [], 'searching the Commands tab finds no app');

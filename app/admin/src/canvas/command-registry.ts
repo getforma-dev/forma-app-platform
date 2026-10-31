@@ -46,8 +46,10 @@
 //
 // APP-122: two AI jobs, chosen by where you type. `/shape <address> <words>`
 // (group Shape) changes how a card, an app (its theme) or a widget looks or
-// what it shows; `?` first in the bar (group Ask, listed as `? <question>`;
-// `/ask` is the same) asks a read-only question. `/<app>.<card> <words>` is
+// what it shows; `/ask [address] <question>` (group Ask) asks a read-only
+// question, scoped to the address when its first word is one of the
+// member's app or card names, else to the selection or the canvas; `?`
+// first in the bar is its quick form (selection, else canvas). `/<app>.<card> <words>` is
 // the shortcut for a card's Shape (the dot is the rule; `slash.ts`). Sixteen
 // verbs in six groups.
 
@@ -161,10 +163,10 @@ const KNOWN: Record<string, Meta> = {
   },
   ask: {
     category: 'Ask',
-    args: [arg('question', 'text', true)],
-    examples: ['? where are the red invoices', '? what is the total by category'],
-    usage: '? <question>',
-    insert: '? ',
+    args: [arg('app or app.card', 'card'), arg('question', 'text', true)],
+    examples: ['/ask expenses why did spend jump in March?', '/ask expenses.ledger which claims are overdue?', '? where are the red invoices'],
+    usage: '/ask [app|app.card] <question>',
+    insert: '/ask ',
   },
   apps: { category: 'Help', args: [arg('query', 'app')], examples: ['/apps', '/apps purchase'] },
   commands: { category: 'Help', args: [arg('search', 'text')], examples: ['/commands', '/commands folder'] },

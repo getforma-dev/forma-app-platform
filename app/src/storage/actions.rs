@@ -412,6 +412,39 @@ impl Data {
             .map(|(listings, _)| listings)
     }
 
+    /// APP-122 review (Shape's authorization): the same member checks,
+    /// `record_read` grant and re-admitted pin as [`Data::read_only_listings`],
+    /// in the same `READ ONLY` snapshot, but no record is read. Answers the
+    /// work's collections (their published schema fields) and its outline
+    /// (its views' result column types), so the route can judge the card
+    /// fields the client named. `Denied` exactly where a listing would be.
+    pub async fn read_only_schema(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        work: &str,
+    ) -> Result<(Vec<CollectionSummary>, WorkOutline)> {
+        require(valid_id(app) && valid_id(work))?;
+        let works = [(app, work)];
+        let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
+        let transaction = Transaction::begin_read_only(&self.inner, request, cap).await?;
+        let result = async {
+            let org = request.organization.as_str();
+            let grants = transaction.read_only_grants(&works).await?;
+            require(!grants.is_empty() && grants.iter().all(|grant| grant.record_read))?;
+            let pinned = pinned_many_with(&transaction, org, &works, false).await?;
+            let pin = pinned.first().ok_or(Error::Unavailable)?;
+            let outline = outline_of(pin)?;
+            let collections = collections_many(&transaction, org, &works).await?;
+            let rows = collections.first().map(Vec::as_slice).unwrap_or_default();
+            let listing = listing_of(works[0], false, pin, rows, &[])?;
+            Ok((listing.collections, outline))
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
     /// APP-122 acceptance ("a forced write attempt fails"): the same reads in
     /// the same kind of transaction, then one write; answers the SQLSTATE
     /// PostgreSQL refused it with (none: the write ran). Campaigns only.

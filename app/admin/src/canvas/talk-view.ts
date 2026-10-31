@@ -10,8 +10,12 @@
 // and highlights choose rows, a group and a measure compute numbers, and
 // every computed number keeps the receipts of the records it came from: a
 // view may filter or hide records, never drop receipts (ADR-011 I3). Money
-// is summed exactly in minor units (BigInt). Nothing here writes.
-import { columnTypes, money } from './display';
+// is summed exactly in minor units (BigInt), per currency, never across;
+// decimals and integers exactly at their scale; an average is rounded
+// half-even and says so. A capped listing makes every number partial, and
+// the card says so. Applied views re-evaluate when the card's data changes
+// (`shape.ts`). Nothing here writes.
+import { columnTypes, decimalValue, money } from './display';
 import { formatValue, type QueryResponse } from './render';
 import type { RecordJson, RecordsJson } from './records';
 
@@ -124,10 +128,17 @@ export function appTheme(value: unknown): AppTheme | null {
 
 // --- The card's data as one table ---
 
-export type Column = { id: string; type: string; values?: string[]; currency?: string; exponent?: number };
+/**
+ * A column. Numbers are kept exact: money as minor units (each row's own
+ * currency and exponent, `Row.money`, else the column's), a decimal as text
+ * at its scale (`123.45`; `scale` is the column's largest), an integer as
+ * its digits. Comparisons and sums run in BigInt at a common scale.
+ */
+export type Column = { id: string; type: string; values?: string[]; currency?: string; exponent?: number; scale?: number };
 /** A record's receipt: its identity at the version shown (ADR-011 I3). */
 export type RecordReceipt = { record_id: string; collection_id: string; version: number; commit_sequence: number; committed_at: string };
-export type Row = { raw: Record<string, unknown>; text: Record<string, string>; receipt?: RecordReceipt };
+export type Money = { currency: string; exponent: number };
+export type Row = { raw: Record<string, unknown>; text: Record<string, string>; receipt?: RecordReceipt; money?: Record<string, Money> };
 export type Table = {
   source: 'records' | 'query';
   columns: Column[];
@@ -136,16 +147,31 @@ export type Table = {
   receipt: Record<string, unknown> | null;
   /** A records card's provenance: the work's publication and definition. */
   provenance: { app_id: string; work_id: string; publication_id: string; definition_digest: string; work_version: number } | null;
+  /** The listing (or the result page) is capped and more exist: every number over it is partial. */
+  truncated: boolean;
+  /** A records card's collection (what `POST /v1/shape` checks its fields against). */
+  collection?: string;
 };
 
-/** A stored value's comparable text (enum, text, date, boolean) or money minor units. */
+/** A coefficient at `scale` as decimal text: (`12345`, 2) → `123.45`. */
+export function decimalText(coefficient: string, scale: number): string | null {
+  const match = /^(-?)(\d{1,36})$/.exec(coefficient);
+  if (!match || !Number.isInteger(scale) || scale < 0 || scale > 18) return null;
+  if (scale === 0) return `${match[1]}${match[2]}`;
+  const digits = (match[2] ?? '').padStart(scale + 1, '0');
+  return `${match[1]}${digits.slice(0, -scale)}.${digits.slice(-scale)}`;
+}
+
+/** A stored value's comparable form: enum, text, date or boolean text; money minor units; a decimal at its scale. */
 function rawOf(value: unknown): unknown {
   if (!isObject(value)) return value;
   if (value.type === 'null') return null;
   if (typeof value.minor_units === 'string') return value.minor_units;
-  if (typeof value.coefficient === 'string') return value.coefficient;
+  if (typeof value.coefficient === 'string') return decimalText(value.coefficient, Number(value.scale ?? 0)) ?? null;
   return value.value ?? null;
 }
+
+const fractionDigits = (text: string) => (/\.(\d+)$/.exec(text)?.[1]?.length ?? 0);
 
 /** A records listing (one collection when named) as a table: its fields, and who filed each record. */
 export function tableFromRecords(listing: RecordsJson, collection = '', labels: (record: RecordJson) => string = (r) => r.creator.label): Table {
@@ -159,25 +185,35 @@ export function tableFromRecords(listing: RecordsJson, collection = '', labels: 
     .map((record) => {
       const raw: Record<string, unknown> = {};
       const text: Record<string, string> = {};
+      const money: Record<string, Money> = {};
       for (const value of record.values) {
         raw[value.field_id] = rawOf(value.value);
         text[value.field_id] = value.display;
         const column = columns.find((c) => c.id === value.field_id);
         if (column?.type === 'money' && isObject(value.value)) {
-          column.currency ??= typeof value.value.currency === 'string' ? value.value.currency : 'USD';
-          column.exponent ??= Number.isInteger(value.value.minor_unit_exponent) ? Number(value.value.minor_unit_exponent) : 2;
+          const currency = typeof value.value.currency === 'string' && /^[A-Z]{3}$/.test(value.value.currency) ? value.value.currency : 'USD';
+          const exponent = Number.isInteger(value.value.minor_unit_exponent) ? Number(value.value.minor_unit_exponent) : 2;
+          money[value.field_id] = { currency, exponent };
+          column.currency ??= currency;
+          column.exponent ??= exponent;
         }
+        const shown = raw[value.field_id];
+        if (column?.type === 'decimal' && typeof shown === 'string') column.scale = Math.max(column.scale ?? 0, fractionDigits(shown));
       }
       raw.filed_by = labels(record);
       text.filed_by = labels(record);
       return {
-        raw, text,
+        raw, text, money,
         receipt: { record_id: record.record_id, collection_id: record.collection_id, version: record.version, commit_sequence: record.commit_sequence, committed_at: record.committed_at },
       };
     });
-  for (const column of columns) if (column.type === 'money') { column.currency ??= 'USD'; column.exponent ??= 2; }
+  for (const column of columns) {
+    if (column.type === 'money') { column.currency ??= 'USD'; column.exponent ??= 2; }
+    if (column.type === 'decimal') column.scale ??= 0;
+  }
   return {
-    source: 'records', columns, rows, receipt: null,
+    source: 'records', columns, rows, receipt: null, truncated: listing.truncated === true,
+    ...(chosen ? { collection: chosen.collection_id } : {}),
     provenance: { app_id: listing.app_id, work_id: listing.work_id, publication_id: listing.publication_id, definition_digest: listing.definition_digest, work_version: listing.work_version },
   };
 }
@@ -189,6 +225,7 @@ export function tableFromQuery(result: QueryResponse): Table {
     const type = types[index];
     const safe = FIELD.test(id) ? id : `c${index}`;
     if (type?.type === 'money') return { id: safe, type: 'money', currency: type.currency, exponent: type.minor_unit_exponent };
+    if (type?.type === 'decimal') return { id: safe, type: 'decimal', scale: type.scale };
     return { id: safe, type: type?.type ?? 'text' };
   });
   const rows = result.rows.map((cells) => {
@@ -197,12 +234,15 @@ export function tableFromQuery(result: QueryResponse): Table {
     cells.forEach((cell, index) => {
       const column = columns[index];
       if (!column) return;
-      raw[column.id] = rawOf(cell);
+      const value = rawOf(cell);
+      // A view's decimal column holds its coefficient: read it at the column's scale.
+      raw[column.id] = column.type === 'decimal' && typeof value === 'string' && !value.includes('.')
+        ? decimalText(value, column.scale ?? 0) : value;
       text[column.id] = formatValue(cell, types[index], result.columns[index] ?? '').text;
     });
     return { raw, text };
   });
-  return { source: 'query', columns, rows, receipt: result.receipt, provenance: null };
+  return { source: 'query', columns, rows, receipt: result.receipt, provenance: null, truncated: result.truncated_page === true };
 }
 
 /** What `POST /v1/shape` is told about a card: its fields (ids, types, enum values). */
@@ -216,13 +256,25 @@ export function fieldsOf(table: Table): { id: string; type: string; values?: str
 
 // --- Evaluation ---
 
-/** "200", "200.5" in major units, as minor units at `exponent`; null when it is not a decimal. */
-export function minorOf(text: string, exponent: number): bigint | null {
-  const match = /^(-?)(\d{1,15})(?:\.(\d{1,6}))?$/.exec(text.trim());
+/** "200", "200.5" as an integer at `scale` ("200" at 2 → 20000n); null when it is not a plain decimal. Digits past the scale are cut. */
+export function minorOf(text: string, scale: number): bigint | null {
+  const match = /^(-?)(\d{1,36})(?:\.(\d{1,18}))?$/.exec(text.trim());
   if (!match) return null;
-  const fraction = (match[3] ?? '').padEnd(exponent, '0').slice(0, exponent);
+  const fraction = (match[3] ?? '').padEnd(scale, '0').slice(0, scale);
   const value = BigInt(`${match[2]}${fraction}`);
   return match[1] ? -value : value;
+}
+
+const NUMERIC = ['money', 'integer', 'decimal'];
+const moneyOf = (row: Row, column: Column): Money => row.money?.[column.id] ?? { currency: column.currency ?? 'USD', exponent: column.exponent ?? 2 };
+/** The scale a column's stored text is read at: money its exponent (the text is minor units, scale 0), a decimal its scale. */
+const scaleOf = (column: Column): number => (column.type === 'decimal' ? column.scale ?? 0 : 0);
+
+/** A numeric cell as an exact integer at `scale` (money: minor units, read at scale 0 and rescaled). */
+function exactOf(row: Row, column: Column, scale: number): bigint | null {
+  const raw = row.raw[column.id];
+  if (raw === null || raw === undefined) return null;
+  return minorOf(String(raw), scale);
 }
 
 function numberOf(row: Row, column: Column): number | null {
@@ -230,7 +282,7 @@ function numberOf(row: Row, column: Column): number | null {
   if (raw === null || raw === undefined) return null;
   const text = String(raw);
   if (!/^-?\d+(\.\d+)?$/.test(text)) return null;
-  return column.type === 'money' ? Number(text) / 10 ** (column.exponent ?? 2) : Number(text);
+  return column.type === 'money' ? Number(text) / 10 ** moneyOf(row, column).exponent : Number(text);
 }
 
 function matches(row: Row, column: Column | undefined, condition: Condition): boolean {
@@ -240,15 +292,18 @@ function matches(row: Row, column: Column | undefined, condition: Condition): bo
   const list = Array.isArray(condition.value) ? condition.value.map(String) : [String(condition.value)];
   if (condition.op === 'in') return list.includes(String(raw));
   let order: number;
-  if (column.type === 'money') {
-    const left = /^-?\d+$/.test(String(raw)) ? BigInt(String(raw)) : null;
-    const right = minorOf(list[0] ?? '', column.exponent ?? 2);
+  if (NUMERIC.includes(column.type)) {
+    // Exact, in BigInt at a common scale: a money filter is in major units
+    // ("200" is $200.00), a decimal's at its scale, an integer's as written.
+    const target = list[0] ?? '';
+    const base = column.type === 'money' ? moneyOf(row, column).exponent : scaleOf(column);
+    const scale = Math.min(36, Math.max(base, fractionDigits(target)));
+    const left = column.type === 'money'
+      ? (/^-?\d+$/.test(String(raw)) ? BigInt(String(raw)) * 10n ** BigInt(scale - base) : null)
+      : exactOf(row, column, scale);
+    const right = minorOf(target, scale);
     if (left === null || right === null) return false;
     order = left < right ? -1 : left > right ? 1 : 0;
-  } else if (column.type === 'integer' || column.type === 'decimal') {
-    const [left, right] = [Number(raw), Number(list[0])];
-    if (!Number.isFinite(left) || !Number.isFinite(right)) return false;
-    order = Math.sign(left - right);
   } else {
     const [left, right] = [String(raw), list[0] ?? ''];
     order = left < right ? -1 : left > right ? 1 : 0;
@@ -284,24 +339,80 @@ export function bucketOf(text: string, bucket: string): [string, string] | null 
   }
 }
 
-export type Measured = { text: string; value: number; minor?: bigint };
+/**
+ * A computed number: `text` as shown, `value` for charts and sorting.
+ * `rounded`: an average that did not divide exactly (rounded half-even to the
+ * shown unit, and the text says so). `mixed`: money in more than one
+ * currency, measured per currency and never added across (no chart).
+ */
+export type Measured = { text: string; value: number; minor?: bigint; rounded?: boolean; mixed?: boolean };
 export type Group = { key: string; label: string; measured: Measured; count: number; receipts: RecordReceipt[] };
 export type Shaped =
-  | { kind: 'rows'; columns: Column[]; rows: { row: Row; color: string | null }[]; total: number }
-  | { kind: 'groups'; by: string; measure: string; groups: Group[]; total: number; matched: number }
-  | { kind: 'number'; measure: string; measured: Measured; count: number; receipts: RecordReceipt[]; total: number };
+  | { kind: 'rows'; columns: Column[]; rows: { row: Row; color: string | null }[]; total: number; partial: boolean }
+  | { kind: 'groups'; by: string; measure: string; groups: Group[]; total: number; matched: number; partial: boolean }
+  | { kind: 'number'; measure: string; measured: Measured; count: number; receipts: RecordReceipt[]; total: number; partial: boolean };
+
+/** `n / d` rounded half-even (banker's rounding), and whether it was exact. */
+export function divideHalfEven(n: bigint, d: bigint): { quotient: bigint; exact: boolean } {
+  const negative = (n < 0n) !== (d < 0n);
+  const [a, b] = [n < 0n ? -n : n, d < 0n ? -d : d];
+  let quotient = a / b;
+  const remainder = a % b;
+  if (remainder * 2n > b || (remainder * 2n === b && quotient % 2n === 1n)) quotient += 1n;
+  return { quotient: negative ? -quotient : quotient, exact: remainder === 0n };
+}
+
+/** One op over exact integers; avg rounds half-even (to `extra` more digits). */
+function reduce(values: bigint[], op: string, extra = 0): { result: bigint; rounded: boolean } | null {
+  if (!values.length) return op === 'sum' ? { result: 0n, rounded: false } : null;
+  if (op === 'sum') return { result: values.reduce((a, b) => a + b, 0n), rounded: false };
+  if (op === 'min') return { result: values.reduce((a, b) => (b < a ? b : a)), rounded: false };
+  if (op === 'max') return { result: values.reduce((a, b) => (b > a ? b : a)), rounded: false };
+  const total = values.reduce((a, b) => a + b, 0n) * 10n ** BigInt(extra);
+  const { quotient, exact } = divideHalfEven(total, BigInt(values.length));
+  return { result: quotient, rounded: !exact };
+}
+
+const roundedText = (text: string, rounded: boolean) => (rounded ? `${text} (rounded)` : text);
 
 function measure(rows: Row[], op: string, column: Column | undefined): Measured {
   if (op === 'count' || !column) return { text: String(rows.length), value: rows.length };
   if (column.type === 'money') {
-    const values = rows.map((row) => row.raw[column.id]).filter((v) => typeof v === 'string' && /^-?\d+$/.test(v)).map((v) => BigInt(v as string));
-    let minor = 0n;
-    if (op === 'sum') minor = values.reduce((a, b) => a + b, 0n);
-    else if (op === 'avg') minor = values.length ? values.reduce((a, b) => a + b, 0n) / BigInt(values.length) : 0n;
-    else if (op === 'min') minor = values.reduce((a, b) => (b < a ? b : a), values[0] ?? 0n);
-    else minor = values.reduce((a, b) => (b > a ? b : a), values[0] ?? 0n);
-    const exponent = column.exponent ?? 2;
-    return { text: money(minor < 0n, minor < 0n ? -minor : minor, column.currency ?? 'USD', exponent)[1], value: Number(minor) / 10 ** exponent, minor };
+    // Per currency (and exponent): never added across currencies.
+    const byCurrency = new Map<string, { money: Money; values: bigint[] }>();
+    for (const row of rows) {
+      const raw = row.raw[column.id];
+      if (typeof raw !== 'string' || !/^-?\d+$/.test(raw)) continue;
+      const money = moneyOf(row, column);
+      const key = `${money.currency}:${money.exponent}`;
+      const entry = byCurrency.get(key) ?? { money, values: [] };
+      entry.values.push(BigInt(raw));
+      byCurrency.set(key, entry);
+    }
+    if (!byCurrency.size) byCurrency.set('none', { money: { currency: column.currency ?? 'USD', exponent: column.exponent ?? 2 }, values: [] });
+    const parts = [...byCurrency.values()].map(({ money: unit, values }) => {
+      const reduced = reduce(values, op);
+      if (!reduced) return { text: '—', value: 0, minor: 0n, rounded: false };
+      const { result, rounded } = reduced;
+      return {
+        text: roundedText(money(result < 0n, result < 0n ? -result : result, unit.currency, unit.exponent)[1], rounded),
+        value: Number(result) / 10 ** unit.exponent, minor: result, rounded,
+      };
+    });
+    if (parts.length === 1) return parts[0]!;
+    return { text: `${parts.map((p) => p.text).join(' · ')} (per currency, not added)`, value: 0, mixed: true, rounded: parts.some((p) => p.rounded) };
+  }
+  if (column.type === 'integer' || column.type === 'decimal') {
+    const scale = scaleOf(column);
+    const values = rows.map((row) => exactOf(row, column, scale)).filter((v): v is bigint => v !== null);
+    // An average keeps two more digits than its column, rounded half-even.
+    const extra = op === 'avg' ? Math.min(2, 18 - scale) : 0;
+    const reduced = reduce(values, op, extra);
+    if (!reduced) return { text: '—', value: 0 };
+    const at = scale + extra;
+    const { result, rounded } = reduced;
+    const text = decimalValue(result < 0n, result < 0n ? -result : result, at)[1];
+    return { text: roundedText(text, rounded), value: Number(decimalText(result.toString(), at) ?? 0), rounded };
   }
   const values = rows.map((row) => numberOf(row, column)).filter((v): v is number => v !== null);
   let value = 0;
@@ -325,6 +436,9 @@ export function measureLabel(view: CardView): string {
 export function evaluate(table: Table, view: CardView): Shaped {
   const column = (id: string | undefined) => table.columns.find((c) => c.id === id);
   const kept = table.rows.filter((row) => (view.filters ?? []).every((f) => matches(row, column(f.field), f)));
+  const partial = table.truncated;
+  // A number over a capped listing is never presented as the whole: its label says so.
+  const label = partial ? `${measureLabel(view)} (newest ${table.rows.length} only)` : measureLabel(view);
   if (view.group_by) {
     const by = column(view.group_by);
     const groups = new Map<string, { label: string; rows: Row[] }>();
@@ -345,11 +459,11 @@ export function evaluate(table: Table, view: CardView): Shaped {
     if (view.sort?.field === 'value') list.sort((a, b) => (view.sort?.direction === 'asc' ? a.measured.value - b.measured.value : b.measured.value - a.measured.value));
     else list.sort((a, b) => (dated ? a.key.localeCompare(b.key) : b.measured.value - a.measured.value));
     if (view.limit) list = list.slice(0, view.limit);
-    return { kind: 'groups', by: view.group_by, measure: measureLabel(view), groups: list, total: table.rows.length, matched: kept.length };
+    return { kind: 'groups', by: view.group_by, measure: label, groups: list, total: table.rows.length, matched: kept.length, partial };
   }
   if (view.presentation === 'number' || (view.measure && !view.group_by)) {
     const op = view.measure?.op ?? 'count';
-    return { kind: 'number', measure: measureLabel(view), measured: measure(kept, op, column(view.measure?.field)), count: kept.length, receipts: receiptsOf(kept), total: table.rows.length };
+    return { kind: 'number', measure: label, measured: measure(kept, op, column(view.measure?.field)), count: kept.length, receipts: receiptsOf(kept), total: table.rows.length, partial };
   }
   let rows = [...kept];
   if (view.sort) {
@@ -372,7 +486,22 @@ export function evaluate(table: Table, view: CardView): Shaped {
     columns,
     rows: rows.map((row) => ({ row, color: (view.highlight ?? []).find((h) => matches(row, column(h.field), h))?.color ?? null })),
     total: table.rows.length,
+    partial,
   };
+}
+
+/**
+ * The line under a shaped card: "From 3 of 4 records", "2 of 4 records
+ * shown". Over a capped listing it names it: "of the newest 200 records
+ * loaded; older records exist and are not included".
+ */
+export function metaText(shaped: Shaped, table: Table): string {
+  const noun = table.source === 'records' ? 'records' : 'rows';
+  const of = shaped.partial
+    ? `the newest ${shaped.total} ${noun} loaded; older ${noun} exist and are not included`
+    : `${shaped.total} ${noun}`;
+  if (shaped.kind === 'rows') return `${shaped.rows.length} of ${of} shown`;
+  return `From ${shaped.kind === 'number' ? shaped.count : shaped.matched} of ${of}`;
 }
 
 const opWords: Record<string, string> = { eq: 'is', ne: 'is not', lt: '<', lte: '≤', gt: '>', gte: '≥', in: 'is' };
@@ -405,12 +534,30 @@ export type BarIntent = { kind: 'ask'; question: string } | { kind: 'dot'; targe
 /**
  * What the bar's text asks for, before the slash lane: `?` first is Ask;
  * `/<app>.<card> words` is the card's Shape (the dot is the rule; a bare
- * `/<app>.<card>` places the card, as `/card` does).
+ * `/<app>.<card>` places the card, as `/card` does). APP-121's full form
+ * `/card:<app>.<card> words` is exactly the same Shape (the target is the
+ * same short form); `/card:<x>` with no words stays the `/card:` verb's.
  */
 export function barIntent(text: string): BarIntent {
   const trimmed = text.trim();
   if (trimmed.startsWith('?')) return { kind: 'ask', question: trimmed.slice(1).trim() };
-  const dot = /^\/([a-z0-9][a-z0-9-]{0,47}\.[a-z0-9][a-z0-9-]{0,47})(?:\s+([\s\S]*))?$/i.exec(trimmed);
-  if (dot) return { kind: 'dot', target: (dot[1] ?? '').toLowerCase(), words: (dot[2] ?? '').trim() };
-  return null;
+  const dot = /^\/(card:)?([a-z0-9][a-z0-9-]{0,47}\.[a-z0-9][a-z0-9-]{0,47})(?:\s+([\s\S]*))?$/i.exec(trimmed);
+  if (!dot) return null;
+  const words = (dot[3] ?? '').trim();
+  if (dot[1] && !words) return null;
+  return { kind: 'dot', target: (dot[2] ?? '').toLowerCase(), words };
+}
+
+export type Space = 'app' | 'card' | 'widget' | 'folder';
+/** An address split into its namespace (APP-121's full form) and name: `card:expenses.ledger` → card, `expenses.ledger`. */
+export function splitAddress(address: string): { space: Space | null; name: string } {
+  const text = address.trim().replace(/^\//, '').toLowerCase();
+  const match = /^(app|card|widget|folder):(\S+)$/.exec(text);
+  return match ? { space: match[1] as Space, name: match[2] ?? '' } : { space: null, name: text };
+}
+
+/** `/ask` and `/shape`'s first word and the rest: `expenses.ledger which are late?` → [`expenses.ledger`, `which are late?`]. */
+export function firstWord(text: string): [string, string] {
+  const match = /^\s*(\S+)\s*([\s\S]*)$/.exec(text);
+  return match ? [match[1] ?? '', (match[2] ?? '').trim()] : ['', ''];
 }
