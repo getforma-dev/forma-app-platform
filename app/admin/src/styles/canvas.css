@@ -1055,6 +1055,7 @@
 }
 .cv-canvas [data-forma-canvas] .widget-instance.is-fanned { animation: cv-fan 360ms var(--cv-ease) var(--fan-delay, 0ms) both; }
 .cv-canvas [data-forma-canvas] .widget-instance.is-fanned > .cv-card { box-shadow: var(--cv-shadow-lift), 0 0 0 1px color-mix(in srgb, var(--cv-accent) 40%, transparent); }
+.cv-canvas [data-forma-canvas] .widget-instance.is-fanned.is-folding { animation: cv-fold 180ms var(--cv-ease) both; pointer-events: none; }
 .cv-canvas [data-forma-canvas] .widget-instance.is-stack-target > :is(.cv-card, .cv-stack) {
   outline: 3px solid var(--cv-accent);
   outline-offset: 6px;
@@ -1092,6 +1093,7 @@
   100% { transform: none; opacity: 1; }
 }
 @keyframes cv-fan { from { opacity: 0; transform: translate(-60px, 10px) scale(0.92) rotate(-2deg); } }
+@keyframes cv-fold { to { opacity: 0; transform: translate(-60px, 10px) scale(0.92) rotate(-2deg); } }
 @keyframes cv-target { from { outline-color: var(--cv-accent); } to { outline-color: color-mix(in srgb, var(--cv-accent) 35%, transparent); } }
 
 /* --- APP-104: the library pane --- */
