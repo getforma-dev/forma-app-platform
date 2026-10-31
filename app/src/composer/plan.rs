@@ -9,6 +9,14 @@
 //! `app_definition` envelope under the trusted organization and authoring
 //! app, digested and judged by `admit_definition`. A refusal is a stable
 //! code; the retry loop in [`super::Composer`] feeds back the code alone.
+//!
+//! APP-132: a generated definition is new content, so after admission it
+//! also meets the authoring verdict of contract edition impl-2026-10-31.4
+//! (`contracts/validate.py`, `new_content=True`: no duplicate transition, a
+//! governed enum field written by a filing create declares its `initial`;
+//! Rust admission keeps the stored-document verdict, APP-129 gap 1), and an
+//! app with no data view (a records-only app, the clean workspace's first
+//! app) offers a form for a create command, so its records can be entered.
 use super::Origin;
 use crate::{
     admission::{self, digest, AdmissionError, AdmittedDefinition},
@@ -85,7 +93,8 @@ pub struct Planned {
 }
 
 /// Why one generation attempt was refused: admission's code or one of the
-/// composer's own (`not_json`, `unknown_source_input`, `not_runnable`).
+/// composer's own (`not_json`, `unknown_source_input`, `not_runnable`,
+/// `authoring_rule`, `no_create_form`).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Refusal {
     pub code: &'static str,
@@ -134,6 +143,8 @@ pub fn plan_generated(
     // then the engine's subset over what admission accepted.
     let admitted = admit(&content, organization, app)?;
     require_runnable(&content)?;
+    require_authored(&content)?;
+    require_entry(&content)?;
     Ok(Planned {
         title: title(&content),
         admitted,
@@ -214,6 +225,100 @@ pub(crate) fn require_runnable(content: &Value) -> Result<(), Refusal> {
             code: "not_runnable",
         })
     }
+}
+
+/// The authoring verdict's two definition rules for new content (contract
+/// edition impl-2026-10-31.4, `contracts/validate.py` `_definition` with
+/// `new_content`), over content admission already accepted: every
+/// `(field, from, to)` transition of a command is declared once, and a create
+/// with no transitions that may write an enum field another command of the
+/// same record schema moves by transitions declares that field's `initial`
+/// (storage would otherwise refuse every filing at command time).
+pub(crate) fn require_authored(content: &Value) -> Result<(), Refusal> {
+    let refused = Err(Refusal {
+        code: "authoring_rule",
+    });
+    let commands = list(content, "commands");
+    let moves = |command: &Value| -> Vec<(String, String, String)> {
+        list(command, "transitions")
+            .iter()
+            .map(|transition| {
+                let part = |key: &str| {
+                    transition
+                        .get(key)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned()
+                };
+                (part("field_id"), part("from"), part("to"))
+            })
+            .collect()
+    };
+    for (slot, command) in commands.iter().enumerate() {
+        let declared = moves(command);
+        let unique: std::collections::BTreeSet<_> = declared.iter().collect();
+        if unique.len() != declared.len() {
+            return refused;
+        }
+        let create = command.get("operation").and_then(Value::as_str) == Some("create");
+        if !create || !declared.is_empty() {
+            continue;
+        }
+        let schema = command.get("record_schema_id");
+        let governed: std::collections::BTreeSet<String> = commands
+            .iter()
+            .enumerate()
+            .filter(|(other, item)| *other != slot && item.get("record_schema_id") == schema)
+            .flat_map(|(_, item)| moves(item).into_iter().map(|(field, _, _)| field))
+            .collect();
+        let initial: Vec<&str> = list(command, "initial")
+            .iter()
+            .filter_map(|rule| rule.get("field_id").and_then(Value::as_str))
+            .collect();
+        if list(command, "writable_fields")
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|field| governed.contains(field) && !initial.contains(&field))
+        {
+            return refused;
+        }
+    }
+    Ok(())
+}
+
+/// An app with no data view offers a form for a create command: otherwise
+/// nothing on it can be read or entered.
+pub(crate) fn require_entry(content: &Value) -> Result<(), Refusal> {
+    let views = list(content, "views");
+    let data = views.iter().any(|view| view.get("query").is_some());
+    let creates = |id: &str| {
+        list(content, "commands").iter().any(|command| {
+            command.get("id").and_then(Value::as_str) == Some(id)
+                && command.get("operation").and_then(Value::as_str) == Some("create")
+        })
+    };
+    let entry = views.iter().any(|view| {
+        view.get("kind").and_then(Value::as_str) == Some("form")
+            && view
+                .get("command_id")
+                .and_then(Value::as_str)
+                .is_some_and(creates)
+    });
+    if data || entry {
+        Ok(())
+    } else {
+        Err(Refusal {
+            code: "no_create_form",
+        })
+    }
+}
+
+fn list<'a>(value: &'a Value, key: &str) -> &'a [Value] {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default()
 }
 
 /// The envelope under the trusted scope (organization and authoring app from

@@ -877,7 +877,7 @@ fn elapsed_ms(started: Instant) -> u64 {
 
 /// The admitted content's inputs as published inputs (id, kind, contract
 /// digest, fields), for binding.
-fn published_inputs(content: &Value) -> Vec<PublishedInput> {
+pub(super) fn published_inputs(content: &Value) -> Vec<PublishedInput> {
     content
         .get("inputs")
         .and_then(Value::as_array)
@@ -897,7 +897,7 @@ fn published_inputs(content: &Value) -> Vec<PublishedInput> {
         })
         .collect()
 }
-fn record_schemas(content: &Value) -> Vec<(String, Value)> {
+pub(super) fn record_schemas(content: &Value) -> Vec<(String, Value)> {
     content
         .get("record_schemas")
         .and_then(Value::as_array)

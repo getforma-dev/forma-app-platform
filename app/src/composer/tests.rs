@@ -364,6 +364,143 @@ fn a_view_over_a_records_input_is_not_runnable() {
     assert_eq!(refusal.code, "not_runnable");
 }
 
+/// APP-132: what a good model returns for a sentence on a clean workspace
+/// (no library, no sources): a records-only app, entered through its form.
+fn book_club() -> Value {
+    let fields = json!([
+        {"id": "title", "value_type": {"type": "text"}, "nullable": false},
+        {"id": "author", "value_type": {"type": "text"}, "nullable": false},
+        {"id": "suggested_by", "value_type": {"type": "text"}, "nullable": true},
+        {"id": "status", "value_type": {"type": "enum", "values": ["to_read", "reading", "read"]}, "nullable": false}
+    ]);
+    json!({
+        "title": "Book club reading list",
+        "description": "The team's reading list: each book, who suggested it and whether we have read it.",
+        "inputs": [{"id": "books", "contract_id": "book_v1", "contract_version": 1, "kind": "records", "fields": fields}],
+        "views": [
+            {"id": "add", "kind": "form", "renderer_version": 1, "title": "Suggest a book", "command_id": "add"},
+            {"id": "how", "kind": "note", "renderer_version": 1, "title": "How it works", "text": "Add a book; mark it reading, then read."}
+        ],
+        "record_schemas": [{"id": "book", "version": 1, "fields": fields}],
+        "commands": [
+            {"id": "add", "record_schema_id": "book", "operation": "create",
+             "writable_fields": ["title", "author", "suggested_by", "status"], "transitions": [],
+             "initial": [{"field_id": "status", "value": "to_read"}]},
+            {"id": "mark", "record_schema_id": "book", "operation": "update",
+             "writable_fields": ["status"],
+             "transitions": [{"field_id": "status", "from": "to_read", "to": "reading"},
+                             {"field_id": "status", "from": "reading", "to": "read"}]}
+        ],
+        "links": [],
+        "default_layout": [
+            {"view_id": "add", "column": 0, "row": 0, "width": 12},
+            {"view_id": "how", "column": 0, "row": 1, "width": 12}
+        ]
+    })
+}
+
+/// APP-132 (the gap APP-128's log recorded): on a clean workspace the model
+/// first answers a table over its own records input, which no query can
+/// run; the retry's hint says so, and the records-only answer is admitted,
+/// labeled generated, and binds its records input to its record schema with
+/// no source at all.
+#[test]
+fn a_clean_workspace_generates_a_records_app_from_a_sentence() {
+    let mut first = book_club();
+    first["views"].as_array_mut().unwrap().push(json!({
+        "id": "list", "kind": "table", "renderer_version": 1, "title": "Books",
+        "query": {"operator_version": 1, "inputs": ["books"], "null_policy": "unknown",
+            "operations": [{"type": "project", "fields": [{"input_id": "books", "field_id": "title"}]}]}
+    }));
+    first["default_layout"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"view_id": "list", "column": 0, "row": 2, "width": 12}));
+    let script = Script::new(vec![Ok(first.to_string()), Ok(book_club().to_string())]);
+    let intent = "Track my team's book club reading list: title, author, who suggested it and whether we've read it";
+    let generated = runtime()
+        .block_on(composer(&script).generate(intent, &[], ORG, APP, far()))
+        .unwrap();
+    assert_eq!(generated.refused, ["not_runnable"]);
+    assert_eq!(generated.planned.origin, Origin::Generated);
+    assert_eq!(generated.planned.title, "Book club reading list");
+    let requests = script.requests();
+    assert_eq!(requests.len(), 2);
+    let first_user: Value = serde_json::from_str(&requests[0].user).unwrap();
+    assert_eq!(first_user["sources"], json!([]));
+    assert!(first_user["refusal"].is_null());
+    let retry: Value = serde_json::from_str(&requests[1].user).unwrap();
+    assert_eq!(retry["refusal"]["code"], "not_runnable");
+    let fix = retry["refusal"]["fix"].as_str().unwrap();
+    assert!(fix.contains("never a `records` input") && fix.contains("With no sources"));
+    assert!(
+        !requests[1].user.contains("\"list\""),
+        "the hint carries no value of the refused draft"
+    );
+    // The system prompt steers a source-less request to this shape.
+    assert!(requests[0].system.contains("When `sources` is EMPTY"));
+    // Saved as the route saves it: one records binding, no source.
+    let content = admission::decode(&generated.planned.admitted.canonical).unwrap();
+    let inputs = routes::published_inputs(&content);
+    let schemas = routes::record_schemas(&content);
+    let bindings = crate::storage::composer_bindings(&inputs, &schemas, &[]).unwrap();
+    assert_eq!(bindings.len(), 1);
+    assert!(matches!(
+        &bindings[0],
+        crate::storage::WorkBinding::Records { input, schema } if input == "books" && schema == "book"
+    ));
+}
+
+/// APP-132: generated content is new content: the authoring verdict of
+/// edition impl-2026-10-31.4 (`validate.py` `new_content=True`) and an entry
+/// form when nothing else shows; admission alone admits all three.
+#[test]
+fn generated_content_meets_the_authoring_verdict_and_offers_an_entry_form() {
+    let accepted = plan::plan_generated(&book_club().to_string(), &[], ORG, APP).unwrap();
+    assert_eq!(accepted.title, "Book club reading list");
+    // A filing create writing the governed status without `initial`: storage
+    // would refuse every filing at command time.
+    let mut no_initial = book_club();
+    no_initial["commands"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("initial");
+    assert!(
+        plan::admit(&no_initial, ORG, APP).is_ok(),
+        "admission's stored verdict admits it"
+    );
+    let refusal = plan::plan_generated(&no_initial.to_string(), &[], ORG, APP).unwrap_err();
+    assert_eq!(refusal.code, "authoring_rule");
+    // The same transition declared twice.
+    let mut duplicate = book_club();
+    let again = duplicate["commands"][1]["transitions"][0].clone();
+    duplicate["commands"][1]["transitions"]
+        .as_array_mut()
+        .unwrap()
+        .push(again);
+    assert!(plan::admit(&duplicate, ORG, APP).is_ok());
+    let refusal = plan::plan_generated(&duplicate.to_string(), &[], ORG, APP).unwrap_err();
+    assert_eq!(refusal.code, "authoring_rule");
+    // A note alone: nothing to read and nothing to enter.
+    let mut note_only = book_club();
+    note_only["views"].as_array_mut().unwrap().remove(0);
+    note_only["default_layout"]
+        .as_array_mut()
+        .unwrap()
+        .remove(0);
+    assert!(plan::admit(&note_only, ORG, APP).is_ok());
+    let refusal = plan::plan_generated(&note_only.to_string(), &[], ORG, APP).unwrap_err();
+    assert_eq!(refusal.code, "no_create_form");
+    // A form for the update command only is no entry either.
+    let mut update_form = book_club();
+    update_form["views"][0]["command_id"] = json!("mark");
+    let refusal = plan::plan_generated(&update_form.to_string(), &[], ORG, APP).unwrap_err();
+    assert_eq!(refusal.code, "no_create_form");
+    for code in ["authoring_rule", "no_create_form"] {
+        assert_ne!(prompt::hint(code), prompt::hint("unknown"), "{code}");
+    }
+}
+
 #[test]
 fn a_model_failure_ends_generation_and_an_absent_key_disables_it() {
     let script = Script::new(vec![Err(ModelError::Timeout)]);
