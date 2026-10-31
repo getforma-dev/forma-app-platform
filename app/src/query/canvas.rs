@@ -1037,9 +1037,16 @@ pub struct Canvas {
     pub demo_organizations: std::collections::BTreeSet<String>,
 }
 
+/// The canvas page reads every work the member may open (APP-104's library
+/// pane is built from those reads), so it runs under the long deadline: on
+/// the deployed database a member with the whole library exceeded the 5 s
+/// handler deadline (2026-10-30, a bare 503). Batching the reads is APP-113's
+/// deferred `open_listed` work.
+pub const PATH: &str = "/canvas";
+
 pub fn router(canvas: Arc<Canvas>) -> Router {
     Router::new()
-        .route("/canvas", get(canvas_page))
+        .route(PATH, get(canvas_page))
         .route("/v1/canvas/works/{app}/{work}", get(group_json))
         .with_state(canvas)
 }
@@ -1330,15 +1337,43 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         return http::not_found();
     }
     let member = Arc::new(member);
+    let started = std::time::Instant::now();
     let mut groups = Vec::new();
     let mut sources = Vec::new();
-    for listed in listing(&canvas, &member).await {
-        let read = match read_work(&canvas, &member, &listed).await {
+    let listed_works = listing(&canvas, &member).await;
+    let listed_ms = started.elapsed().as_millis();
+    // Two works at a time: the data pool holds two connections.
+    let mut reads = Vec::with_capacity(listed_works.len());
+    for pair in listed_works.chunks(2) {
+        match pair {
+            [one, two] => {
+                let (first, second) = tokio::join!(
+                    read_work(&canvas, &member, one),
+                    read_work(&canvas, &member, two)
+                );
+                reads.push(first);
+                reads.push(second);
+            }
+            [one] => reads.push(read_work(&canvas, &member, one).await),
+            _ => {}
+        }
+    }
+    for (listed, read) in listed_works.iter().zip(reads) {
+        let read = match read {
             Ok(Some(read)) => read,
             Ok(None) => continue,
-            Err(refusal) => return refusal,
+            Err(refusal) => {
+                tracing::warn!(
+                    event = "canvas.read_refused",
+                    organization_id = member.organization(),
+                    works = listed_works.len(),
+                    duration_ms = started.elapsed().as_millis() as u64,
+                    "canvas work read refused"
+                );
+                return refusal;
+            }
         };
-        sources.push(library_source(&listed, &read));
+        sources.push(library_source(listed, &read));
         let verdict = routes::restore(auth, &parts.headers, &listed.app, &listed.work, &cookie);
         let restored = matches!(verdict, Restore::Parameters(_));
         let pending = read.listing.as_ref().is_some_and(|listing| {
@@ -1349,7 +1384,7 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         if !(restored || pending) {
             continue;
         }
-        match assemble(&canvas, &cookie, &member, &listed, read, verdict).await {
+        match assemble(&canvas, &cookie, &member, listed, read, verdict).await {
             Ok(mut group) => {
                 group.auto = if restored { "restored" } else { "pending" }.to_owned();
                 groups.push(group);
@@ -1357,6 +1392,15 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
             Err(refusal) => return refusal,
         }
     }
+    tracing::info!(
+        event = "canvas.page_built",
+        organization_id = member.organization(),
+        works = listed_works.len(),
+        groups = groups.len(),
+        listing_ms = listed_ms as u64,
+        duration_ms = started.elapsed().as_millis() as u64,
+        "canvas page built"
+    );
     let library = library(sources);
     let organization = organization_name(&canvas, &member).await;
     let principal = member.principal();

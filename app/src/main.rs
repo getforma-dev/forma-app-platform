@@ -658,7 +658,7 @@ async fn main() {
                 // list; the session-gated event stream re-authorized at delivery.
                 .merge(genui::sharing::router(auth.clone()))
                 .merge(genui::events::routes::router(auth.clone()))
-                .merge(canvas_routes)
+                .merge(canvas_routes.clone())
                 .merge(records_routes)
                 // APP-099: the canvas's "Connect an agent" token routes.
                 .merge(genui::mcp::tokens::router(auth.clone()))
@@ -667,6 +667,8 @@ async fn main() {
                 .merge(genui::composer::commands::router(auth.clone()))
                 .merge(box_routes),
             vec![
+                // The canvas page reads every openable work (library pane).
+                (genui::query::canvas::PATH, canvas_routes),
                 (genui::composer::routes::PATH, compose_routes),
                 (genui::actions::PATH, act_routes),
                 (genui::mcp::PATH, mcp_routes),
