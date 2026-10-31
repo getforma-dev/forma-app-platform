@@ -53,6 +53,64 @@ impl RecordPage for NoRecordPage {
 
 const CANVAS_WORK: &str = "00000000-0000-4000-8000-0000000000f7";
 
+/// APP-113's deferred batching: the canvas page's batched reads equal the
+/// one-work-at-a-time reads they replaced, for `request`: the listing
+/// (`openable_works` against the verbatim serial `openable_works_serial`),
+/// the library catalog (the same), and per listed work, plus an unknown work
+/// and a malformed identifier, `work_reads` against `work_outline` and then
+/// `list_records` (asked for when the work has collections, as the page
+/// asks). Returns the number of works compared.
+pub(super) async fn equivalent_reads(stores: &Stores, request: &TrustedRequest) -> usize {
+    let listed = stores.data.openable_works(request).await;
+    assert_eq!(
+        listed,
+        stores.data.openable_works_serial(request).await,
+        "the batched listing equals the serial listing"
+    );
+    assert_eq!(
+        stores.data.library_catalog(request).await,
+        stores.data.library_catalog_serial(request).await,
+        "the batched library catalog equals the serial one"
+    );
+    let listed = listed.unwrap_or_default();
+    let unknown = "00000000-0000-4000-8000-00000000dead";
+    let mut works: Vec<(&str, &str, bool)> = listed
+        .iter()
+        .map(|w| (w.app.as_str(), w.work.as_str(), !w.collections.is_empty()))
+        .collect();
+    if let Some(first) = listed.first() {
+        works.push((first.app.as_str(), unknown, true));
+    }
+    works.push(("not-a-uuid", unknown, true));
+    let reads = stores.data.work_reads(request, &works).await.unwrap();
+    assert_eq!(reads.len(), works.len());
+    for (&(app, work, records), read) in works.iter().zip(&reads) {
+        let outline = stores.data.work_outline(request, app, work).await;
+        assert_eq!(read.outline, outline, "{app}/{work}: outline");
+        let listing = if records && outline.is_ok() {
+            Some(stores.data.list_records(request, app, work).await)
+        } else {
+            None
+        };
+        assert_eq!(read.records, listing, "{app}/{work}: records listing");
+    }
+    works.len()
+}
+
+/// The member as storage sees her (the identity the loopback issuer signed
+/// in).
+fn maya_request(c: &Campaign, subject: &str, principal: &str) -> TrustedRequest {
+    TrustedRequest {
+        organization: ORG.into(),
+        principal: principal.into(),
+        epoch: 1,
+        issuer: GATEWASM.into(),
+        provider_tenant: harness::NORTHSTAR_TENANT.into(),
+        provider_subject: subject.into(),
+        registry_sha256: c.stores.registry_identity().sha256.clone(),
+    }
+}
+
 /// `GENUI_CANVAS_STAND_SECONDS`: serve the local pitch stand that long.
 fn stand_seconds() -> Option<u64> {
     std::env::var("GENUI_CANVAS_STAND_SECONDS")
@@ -266,6 +324,7 @@ async fn campaign() {
     assert!(body.contains(&format!("data-card=\"c-{CANVAS_WORK}-timeline\"")));
     assert!(!body.contains("class=\"value\""), "nothing ran on GET");
     assert_eq!(counting.calls(), 0);
+    equivalent_reads(&stores, &maya_request(&c, &maya_subject, &member)).await;
     let group = maya.get(&routes, &group_path).await;
     assert_eq!(group.status, StatusCode::OK, "{}", group.body);
     let group: Value = serde_json::from_str(&group.body).unwrap();
@@ -385,6 +444,11 @@ async fn campaign() {
             "/v1/work/{SPEND_APP}/{}/commands/record_decision",
             spend.work
         )
+    );
+    let compared = equivalent_reads(&stores, &maya_request(&c, &maya_subject, &member)).await;
+    check(
+        &mut checks,
+        &format!("batched reads (APP-113): for the member, after the share, the batched listing and library catalog equal the serial ones, and the canvas page's batched outline and records reads equal work_outline and list_records for each of {compared} works (an unknown work and a malformed id included, refused alike)"),
     );
     check(
         &mut checks,

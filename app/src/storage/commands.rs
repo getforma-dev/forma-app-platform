@@ -424,7 +424,20 @@ pub(super) async fn published(
 ) -> Result<Published> {
     let rows = transaction.query("SELECT p.definition_revision_id::text,p.definition_digest::text,d.canonical_content FROM genui.publications p JOIN genui.definition_revisions d ON d.organization_id=p.organization_id AND d.app_id=p.app_id AND d.revision_id=p.definition_revision_id WHERE p.organization_id=$1::text::uuid AND p.app_id=$2::text::uuid AND p.publication_id=$3::text::uuid", &[&organization,&app,&publication]).await?;
     let row = rows.first().ok_or(Error::Denied)?;
-    let content = decode_stored(row, 2)?;
+    let content: Vec<u8> = row.try_get(2).map_err(|_| Error::Unavailable)?;
+    published_content(&content, text(row, 1)?, schema, version)
+}
+
+/// [`published`] over the publication's stored definition bytes and digest
+/// already read (the canvas batch reads them once per work).
+pub(super) fn published_content(
+    content: &[u8],
+    definition_digest: String,
+    schema: &str,
+    version: i64,
+) -> Result<Published> {
+    require_stored(content.len() <= MAX_CANONICAL_BYTES)?;
+    let content = admission::decode(content).map_err(|_| Error::Unavailable)?;
     let schemas = content
         .get("record_schemas")
         .and_then(Value::as_array)
@@ -483,7 +496,7 @@ pub(super) async fn published(
     }
     fence_starts(&mut commands);
     Ok(Published {
-        definition_digest: text(row, 1)?,
+        definition_digest,
         fields,
         commands,
     })

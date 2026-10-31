@@ -255,6 +255,12 @@ impl<'a> Transaction<'a> {
             serialization: AtomicBool::new(false),
             lock_wait: AtomicBool::new(false),
         };
+        #[cfg(test)]
+        transaction
+            .lease
+            .hooks()
+            .transactions
+            .fetch_add(1, Ordering::SeqCst);
         transaction.batch(isolation).await?;
         #[cfg(test)]
         transaction.lease.checkpoint("begin").await;
@@ -288,7 +294,14 @@ impl<'a> Transaction<'a> {
     pub fn lock_timed_out(&self) -> bool {
         self.lock_wait.load(Ordering::Relaxed)
     }
+    #[cfg(test)]
+    fn counted(&self) {
+        self.lease.hooks().statements.fetch_add(1, Ordering::SeqCst);
+    }
+    #[cfg(not(test))]
+    fn counted(&self) {}
     pub async fn batch(&self, sql: &str) -> Result<()> {
+        self.counted();
         timeout_at(self.deadline, self.lease.client().batch_execute(sql))
             .await
             .map_err(|_| Error::Deadline)?
@@ -298,6 +311,7 @@ impl<'a> Transaction<'a> {
             })
     }
     pub async fn query(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
+        self.counted();
         timeout_at(self.deadline, self.lease.client().query(sql, params))
             .await
             .map_err(|_| Error::Deadline)?
@@ -313,6 +327,7 @@ impl<'a> Transaction<'a> {
         sql: &str,
         params: &[&(dyn ToSql + Sync)],
     ) -> Result<std::result::Result<Vec<Row>, SqlState>> {
+        self.counted();
         match timeout_at(self.deadline, self.lease.client().query(sql, params))
             .await
             .map_err(|_| Error::Deadline)?
@@ -365,6 +380,94 @@ impl<'a> Transaction<'a> {
                 resource: Resource::Organization,
             },
         })
+    }
+    /// The batch form of `precheck` and `fence` for `record_read` on many
+    /// saved works at once (the canvas page: the work page's and the record
+    /// page's authorization, per work, in one transaction): current
+    /// membership, epoch and entitlement, every work's [`Grants`] (the
+    /// `permissions` clauses), the `lock_member_authority` fence, the
+    /// entitlement again and every work's grants re-read after it. A member
+    /// refusal is `Denied` for the whole batch, as it is for each work's own
+    /// precheck. Per work, `record_read` holds only when it held before and
+    /// after the fence (`precheck` then `fence`); `discover` and
+    /// `record_write` are the after-fence re-reads (`Permit::also`). The
+    /// permit names the organization with `Discover`, like `fence_member`'s,
+    /// so it authorizes nothing by itself.
+    pub(super) async fn fence_works<'t>(
+        &'t mut self,
+        works: &[(&str, &str)],
+    ) -> Result<(Permit<'t, 'a>, Vec<Grants>)> {
+        let request = self.member()?;
+        require(self.lease.role() != Role::Worker)?;
+        self.current_member(request).await?;
+        self.entitlement(request).await?;
+        let before = self.grants(request, works).await?;
+        self.lock_member(request).await?;
+        self.entitlement(request).await?;
+        let after = self.grants(request, works).await?;
+        let grants = before
+            .iter()
+            .zip(after)
+            .map(|(before, after)| Grants {
+                record_read: before.record_read && after.record_read,
+                ..after
+            })
+            .collect();
+        Ok((
+            Permit {
+                transaction: self,
+                request,
+                precheck: Precheck {
+                    action: Action::Discover,
+                    resource: Resource::Organization,
+                },
+            },
+            grants,
+        ))
+    }
+    /// For each `(app, work)`, in one statement, exactly the `permissions`
+    /// clauses for `discover` on the app and `record_read`/`record_write` on
+    /// the work (an identifier that is not a canonical UUID is refused, as
+    /// `permissions` refuses it).
+    async fn grants(
+        &self,
+        request: &TrustedRequest,
+        works: &[(&str, &str)],
+    ) -> Result<Vec<Grants>> {
+        let mut grants = vec![Grants::default(); works.len()];
+        let sent: Vec<usize> = (0..works.len())
+            .filter(|&i| valid_id(works[i].0) && valid_id(works[i].1))
+            .collect();
+        if sent.is_empty() {
+            return Ok(grants);
+        }
+        let apps: Vec<&str> = sent.iter().map(|&i| works[i].0).collect();
+        let ids: Vec<&str> = sent.iter().map(|&i| works[i].1).collect();
+        let principal = "$2::text::uuid";
+        let sql = format!(
+            "SELECT c.n::bigint,EXISTS(SELECT 1 FROM genui.app_permissions p JOIN genui.apps a USING(organization_id,app_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.app_id=c.app::uuid AND p.permission='discover'),EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=c.app::uuid AND w.work_id=c.work::uuid AND {}),EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=c.app::uuid AND w.work_id=c.work::uuid AND {}) FROM unnest($3::text[],$4::text[]) WITH ORDINALITY AS c(app,work,n)",
+            work_clause(principal, "record_read"),
+            work_clause(principal, "record_write"),
+        );
+        let rows = self
+            .query(
+                &sql,
+                &[&request.organization, &request.principal, &apps, &ids],
+            )
+            .await?;
+        for row in &rows {
+            let n = usize::try_from(integer(row, 0)?).map_err(|_| Error::Unavailable)?;
+            let index = *n
+                .checked_sub(1)
+                .and_then(|n| sent.get(n))
+                .ok_or(Error::Unavailable)?;
+            grants[index] = Grants {
+                discover: boolean(row, 1)?,
+                record_read: boolean(row, 2)?,
+                record_write: boolean(row, 3)?,
+            };
+        }
+        Ok(grants)
     }
     async fn lock_member(&self, request: &TrustedRequest) -> Result<()> {
         let rows = self.query("SELECT organization_active,member_active,membership_epoch FROM genui_private.lock_member_authority($1::text::uuid,$2::text::uuid,$3)", &[&request.organization,&request.principal,&request.epoch]).await?;
@@ -440,7 +543,16 @@ impl<'a> Transaction<'a> {
 /// before their `LIMIT`, and a box file grant counts only while it holds for
 /// the grant's work; the authoritative judgment stays `precheck`/`also`.
 pub(super) fn record_read_clause(principal: &str) -> String {
-    format!("(EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id={principal} AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission='record_read') OR (w.created_by={principal} AND w.creator_revoked_at IS NULL)) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id={principal} AND a.app_id=w.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id={principal} AND s.source_id=d.source_id AND s.permission='source_read')))")
+    work_clause(principal, "record_read")
+}
+
+/// The `permissions` clause for `record_read` or `record_write` (the two
+/// permissions the unrevoked creator also holds) on a `genui.saved_work`
+/// row `w`, for `principal` (an SQL expression); `permission` is one of
+/// those two literals, never request data.
+fn work_clause(principal: &str, permission: &'static str) -> String {
+    debug_assert!(matches!(permission, "record_read" | "record_write"));
+    format!("(EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id={principal} AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission='{permission}') OR (w.created_by={principal} AND w.creator_revoked_at IS NULL)) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id={principal} AND a.app_id=w.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id={principal} AND s.source_id=d.source_id AND s.permission='source_read')))")
 }
 
 fn text(row: &Row, index: usize) -> Result<String> {
@@ -464,6 +576,14 @@ pub struct Record {
     pub version: i64,
 }
 
+/// One work's grants in a batch (`Transaction::grants`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct Grants {
+    pub discover: bool,
+    pub record_read: bool,
+    pub record_write: bool,
+}
+
 impl<'r> Permit<'_, 'r> {
     /// The fenced transaction, for the storage operation that obtained this
     /// permit; nothing outside `storage` ever sees it.
@@ -476,6 +596,12 @@ impl<'r> Permit<'_, 'r> {
         self.transaction
             .permissions(self.request, &Precheck { action, resource })
             .await
+    }
+    /// [`Permit::also`] for `discover`, `record_read` and `record_write` on
+    /// many works in one statement (the same clauses, re-read after the
+    /// fence).
+    pub(super) async fn grants(&self, works: &[(&str, &str)]) -> Result<Vec<Grants>> {
+        self.transaction.grants(self.request, works).await
     }
     async fn publication(&self, publication: &str) -> Result<Publication> {
         require(valid_id(publication))?;

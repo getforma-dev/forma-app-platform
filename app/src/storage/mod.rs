@@ -23,7 +23,7 @@ pub mod rules;
 mod sessions;
 mod sharing;
 
-pub use actions::{CollectionSummary, DryRun, RecordRow, RecordsListing, RECORDS_LIMIT};
+pub use actions::{CollectionSummary, DryRun, RecordRow, RecordsListing, WorkReads, RECORDS_LIMIT};
 pub use admission::{
     code_digest, handle_digest, Admission, PendingAdmission, PendingReason, Reservation, SignOut,
     VerifiedNonmember,

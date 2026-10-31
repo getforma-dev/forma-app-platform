@@ -19,11 +19,13 @@
 use super::{
     authorization::{Action, Resource, Transaction},
     commands::{
-        collection, compose, current_state, decode_stored, published, state_map, work_fence,
-        work_pin, CommandRequest, RecordCommand, RecordField,
+        collection, compose, current_state, decode_stored, published, published_content, state_map,
+        work_fence, work_pin, CommandRequest, Published, RecordCommand, RecordField,
     },
     pool::Data,
-    require, valid_id, Error, Result, TrustedRequest, COMMAND_HANDLER_DEADLINE,
+    queries::{collections_many, ordinal, outline_of, pinned_many, Pinned},
+    require, valid_id, Error, Result, TrustedRequest, WorkOutline, COMMAND_HANDLER_DEADLINE,
+    QUERY_HANDLER_DEADLINE,
 };
 use crate::commands::payload;
 use serde_json::{json, Value};
@@ -100,7 +102,221 @@ pub enum DryRun {
     Conflict { current_version: i64 },
 }
 
+/// The records listing's columns over `genui.internal_records r` joined with
+/// each record's current revision `v`.
+const RECORD_COLUMNS: &str = "r.record_id::text,r.collection_id::text,r.current_version::bigint,v.commit_sequence::bigint,to_char(v.committed_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),v.creator_id::text,v.updater_id::text,v.canonical_values";
+const RECORDS_FROM: &str = "FROM genui.internal_records r JOIN genui.internal_record_revisions v ON v.organization_id=r.organization_id AND v.app_id=r.app_id AND v.work_id=r.work_id AND v.collection_id=r.collection_id AND v.record_id=r.record_id AND v.version=r.current_version";
+
+/// One collection of the listing from its published schema and commands.
+fn collection_summary(
+    collection: String,
+    schema: String,
+    schema_version: i32,
+    published: &Published,
+) -> CollectionSummary {
+    let writable: std::collections::BTreeSet<&str> = published
+        .commands
+        .values()
+        .flat_map(|d| d.writable.iter().map(String::as_str))
+        .collect();
+    CollectionSummary {
+        collection,
+        schema,
+        schema_version,
+        fields: published
+            .fields
+            .iter()
+            .map(|field| RecordField {
+                id: field.id.clone(),
+                value_type: field.value_type.clone(),
+                nullable: field.nullable,
+                value: json!({"type": "null"}),
+                writable: writable.contains(field.id.as_str()),
+            })
+            .collect(),
+        commands: published
+            .commands
+            .iter()
+            .map(|(id, declaration)| RecordCommand {
+                id: id.clone(),
+                operation: declaration.operation.clone(),
+                writable_fields: declaration.writable.clone(),
+                transitions: declaration.transitions(),
+                rules: declaration.rules.clone(),
+            })
+            .collect(),
+    }
+}
+
+/// One current record from [`RECORD_COLUMNS`] starting at column `at`.
+fn record_row(row: &Row, at: usize, collections: &[CollectionSummary]) -> Result<RecordRow> {
+    let collection = text(row, at + 1)?;
+    let schema = collections
+        .iter()
+        .find(|c| c.collection == collection)
+        .map(|c| c.schema.clone())
+        .ok_or(Error::Unavailable)?;
+    let values = decode_stored(row, at + 7)?;
+    // Stored state must be a `{field_id, value}` array.
+    state_map(Some(&values))?;
+    Ok(RecordRow {
+        record_id: text(row, at)?,
+        collection,
+        schema,
+        version: integer(row, at + 2)?,
+        commit_sequence: integer(row, at + 3)?,
+        committed_at: text(row, at + 4)?,
+        creator: text(row, at + 5)?,
+        updater: text(row, at + 6)?,
+        values,
+    })
+}
+
+/// For each `(app, work)`, its newest `RECORDS_LIMIT + 1` current records
+/// (newest commit first, as `list_records` reads them), in one statement.
+async fn records_many(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    works: &[(&str, &str)],
+) -> Result<Vec<Vec<Row>>> {
+    let mut records: Vec<Vec<Row>> = (0..works.len()).map(|_| Vec::new()).collect();
+    let sent: Vec<usize> = (0..works.len())
+        .filter(|&i| valid_id(works[i].0) && valid_id(works[i].1))
+        .collect();
+    if sent.is_empty() {
+        return Ok(records);
+    }
+    let apps: Vec<&str> = sent.iter().map(|&i| works[i].0).collect();
+    let ids: Vec<&str> = sent.iter().map(|&i| works[i].1).collect();
+    let limit = RECORDS_LIMIT + 1;
+    for row in transaction.query(&format!("SELECT c.n::bigint,x.* FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,work,n) CROSS JOIN LATERAL (SELECT {RECORD_COLUMNS},row_number() OVER (ORDER BY v.commit_sequence DESC,r.record_id) AS k {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=c.app::uuid AND r.work_id=c.work::uuid ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4) x ORDER BY c.n,x.k"), &[&organization,&apps,&ids,&limit]).await? {
+        let i = ordinal(&row, &sent)?;
+        records[i].push(row);
+    }
+    Ok(records)
+}
+
+/// `list_records`' listing of one batched work whose outline answered: its
+/// premise is the work's pin under the lock the batch holds, and its
+/// publication's content is the one the outline re-admitted.
+fn listing_of(
+    (app, work): (&str, &str),
+    can_write: bool,
+    pinned: &Pinned,
+    collection_rows: &[Row],
+    record_rows: &[Row],
+) -> Result<RecordsListing> {
+    let (premise, content) = pinned.as_ref().map_err(|error| *error)?;
+    let (_, content) = content.as_ref().map_err(|error| *error)?;
+    let mut collections = Vec::with_capacity(collection_rows.len());
+    let mut definition_digest = String::new();
+    for row in collection_rows {
+        let (collection, schema, schema_version) = (text(row, 1)?, text(row, 2)?, small(row, 3)?);
+        let published = published_content(
+            content,
+            premise.definition_digest.clone(),
+            &schema,
+            i64::from(schema_version),
+        )?;
+        definition_digest = published.definition_digest.clone();
+        collections.push(collection_summary(
+            collection,
+            schema,
+            schema_version,
+            &published,
+        ));
+    }
+    let truncated = record_rows.len() as i64 > RECORDS_LIMIT;
+    let mut records = Vec::with_capacity(record_rows.len());
+    for row in record_rows.iter().take(RECORDS_LIMIT as usize) {
+        records.push(record_row(row, 1, &collections)?);
+    }
+    Ok(RecordsListing {
+        app: app.to_owned(),
+        work: work.to_owned(),
+        publication: premise.publication.clone(),
+        definition_digest,
+        work_version: premise.work_version,
+        can_write,
+        collections,
+        records,
+        truncated,
+    })
+}
+
+/// What the canvas page reads for one work of a batch ([`Data::work_reads`]).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkReads {
+    /// What `Data::work_outline` answers for the work.
+    pub outline: std::result::Result<WorkOutline, Error>,
+    /// What `Data::list_records` answers, for a work the caller asked it for
+    /// whose outline answered.
+    pub records: Option<std::result::Result<RecordsListing, Error>>,
+}
+
 impl Data {
+    /// The canvas page's reads of many works (APP-113's deferred batching)
+    /// in one READ COMMITTED data-role transaction of a fixed number of
+    /// statements: per work `(app, work, records)`, the outline
+    /// `work_outline` answers and, when `records`, the listing `list_records`
+    /// answers, under the same authorization (`Transaction::fence_works`:
+    /// the member precheck, `record_read` on the work before and after the
+    /// member fence, `record_write` after it), the work's pinned publication
+    /// under `lock_work_revision` and its stored definition re-admitted.
+    /// Nothing is written. A member refusal is `Denied` for the batch (each
+    /// work's own read would be `Denied`); a store failure ends it.
+    pub async fn work_reads(
+        &self,
+        request: &TrustedRequest,
+        works: &[(&str, &str, bool)],
+    ) -> Result<Vec<WorkReads>> {
+        let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
+        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
+        let result = async {
+            let org = request.organization.as_str();
+            let keys: Vec<(&str, &str)> =
+                works.iter().map(|(app, work, _)| (*app, *work)).collect();
+            let (permit, grants) = transaction.fence_works(&keys).await?;
+            let transaction = permit.transaction();
+            let readable: Vec<usize> = (0..keys.len())
+                .filter(|&i| valid_id(keys[i].0) && valid_id(keys[i].1) && grants[i].record_read)
+                .collect();
+            let readable_keys: Vec<(&str, &str)> = readable.iter().map(|&i| keys[i]).collect();
+            let pinned = pinned_many(transaction, org, &readable_keys).await?;
+            let mut reads: Vec<WorkReads> = (0..keys.len())
+                .map(|_| WorkReads {
+                    outline: Err(Error::Denied),
+                    records: None,
+                })
+                .collect();
+            let mut listed = Vec::new();
+            for (&i, pinned) in readable.iter().zip(pinned) {
+                reads[i].outline = outline_of(&pinned);
+                if reads[i].outline.is_ok() && works[i].2 {
+                    listed.push((i, pinned));
+                }
+            }
+            let listed_keys: Vec<(&str, &str)> = listed.iter().map(|(i, _)| keys[*i]).collect();
+            let collections = collections_many(transaction, org, &listed_keys).await?;
+            let records = records_many(transaction, org, &listed_keys).await?;
+            for (((i, pinned), collections), records) in
+                listed.into_iter().zip(collections).zip(records)
+            {
+                reads[i].records = Some(listing_of(
+                    keys[i],
+                    grants[i].record_write,
+                    &pinned,
+                    &collections,
+                    &records,
+                ));
+            }
+            Ok(reads)
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
     /// The records of `work` (module notes).
     pub async fn list_records(
         &self,
@@ -144,64 +360,19 @@ impl Data {
                 )
                 .await?;
                 definition_digest = published.definition_digest.clone();
-                let writable: std::collections::BTreeSet<&str> = published
-                    .commands
-                    .values()
-                    .flat_map(|d| d.writable.iter().map(String::as_str))
-                    .collect();
-                collections.push(CollectionSummary {
+                collections.push(collection_summary(
                     collection,
-                    schema: schema.clone(),
+                    schema,
                     schema_version,
-                    fields: published
-                        .fields
-                        .iter()
-                        .map(|field| RecordField {
-                            id: field.id.clone(),
-                            value_type: field.value_type.clone(),
-                            nullable: field.nullable,
-                            value: json!({"type": "null"}),
-                            writable: writable.contains(field.id.as_str()),
-                        })
-                        .collect(),
-                    commands: published
-                        .commands
-                        .iter()
-                        .map(|(id, declaration)| RecordCommand {
-                            id: id.clone(),
-                            operation: declaration.operation.clone(),
-                            writable_fields: declaration.writable.clone(),
-                            transitions: declaration.transitions(),
-                            rules: declaration.rules.clone(),
-                        })
-                        .collect(),
-                });
+                    &published,
+                ));
             }
             let limit = RECORDS_LIMIT + 1;
-            let rows = transaction.query("SELECT r.record_id::text,r.collection_id::text,r.current_version::bigint,v.commit_sequence::bigint,to_char(v.committed_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),v.creator_id::text,v.updater_id::text,v.canonical_values FROM genui.internal_records r JOIN genui.internal_record_revisions v ON v.organization_id=r.organization_id AND v.app_id=r.app_id AND v.work_id=r.work_id AND v.collection_id=r.collection_id AND v.record_id=r.record_id AND v.version=r.current_version WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4", &[org,&app,&work,&limit]).await?;
+            let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4"), &[org,&app,&work,&limit]).await?;
             let truncated = rows.len() as i64 > RECORDS_LIMIT;
             let mut records = Vec::with_capacity(rows.len());
             for row in rows.iter().take(RECORDS_LIMIT as usize) {
-                let collection = text(row, 1)?;
-                let schema = collections
-                    .iter()
-                    .find(|c| c.collection == collection)
-                    .map(|c| c.schema.clone())
-                    .ok_or(Error::Unavailable)?;
-                let values = decode_stored(row, 7)?;
-                // Stored state must be a `{field_id, value}` array.
-                state_map(Some(&values))?;
-                records.push(RecordRow {
-                    record_id: text(row, 0)?,
-                    collection,
-                    schema,
-                    version: integer(row, 2)?,
-                    commit_sequence: integer(row, 3)?,
-                    committed_at: text(row, 4)?,
-                    creator: text(row, 5)?,
-                    updater: text(row, 6)?,
-                    values,
-                });
+                records.push(record_row(row, 0, &collections)?);
             }
             Ok(RecordsListing {
                 app: app.to_owned(),

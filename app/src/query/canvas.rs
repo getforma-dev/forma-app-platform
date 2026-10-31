@@ -9,8 +9,10 @@
 //!   query string. The listing is `Data::openable_works` (the workspace's
 //!   clause: `discover` on the app and `record_read` on the work, re-read
 //!   after the member fence); each group's views are `Data::work_outline`, the
-//!   work page's own authorization. A store failure on the listing renders
-//!   the empty canvas, as `GET /workspace` does, so sign-out stays reachable.
+//!   work page's own authorization (the page reads every listed work at once
+//!   through `Data::work_reads`, the same reads and authorization batched). A
+//!   store failure on the listing renders the empty canvas, as
+//!   `GET /workspace` does, so sign-out stays reachable.
 //!   Cards are idle on the server, except the work whose run cookie this
 //!   session set through the work page's run form (`routes::restore`): its
 //!   views run again under a fresh authorization and release, exactly as the
@@ -43,7 +45,7 @@ use crate::{
     auth::{capability, csrf},
     commands,
     http::{self, UniformPath},
-    storage::{Error, OpenableWork, RecordsListing, TrustedRequest, WorkOutline},
+    storage::{Error, OpenableWork, RecordsListing, TrustedRequest, WorkOutline, WorkReads},
 };
 use axum::{
     extract::{Request, State},
@@ -1040,8 +1042,9 @@ pub struct Canvas {
 /// The canvas page reads every work the member may open (APP-104's library
 /// pane is built from those reads), so it runs under the long deadline: on
 /// the deployed database a member with the whole library exceeded the 5 s
-/// handler deadline (2026-10-30, a bare 503). Batching the reads is APP-113's
-/// deferred `open_listed` work.
+/// handler deadline (2026-10-30, a bare 503). The listing and the reads are
+/// now batched (two transactions of a fixed number of statements, APP-113's
+/// deferred `open_listed` work); the long deadline stays as headroom.
 pub const PATH: &str = "/canvas";
 
 pub fn router(canvas: Arc<Canvas>) -> Router {
@@ -1091,6 +1094,50 @@ async fn read_work(
         }
     };
     Ok(Some(WorkRead { outline, listing }))
+}
+
+/// [`read_work`]'s answer from one work of the page's batch
+/// (`Data::work_reads`: the same two reads under the same authorization).
+fn batched_read(read: WorkReads) -> Result<Option<WorkRead>, Error> {
+    let outline = match read.outline {
+        Ok(outline) => outline,
+        Err(Error::Denied) => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let listing = match read.records {
+        None | Some(Err(Error::Denied)) => None,
+        Some(Ok(listing)) => Some(listing),
+        Some(Err(error)) => return Err(error),
+    };
+    Ok(Some(WorkRead { outline, listing }))
+}
+
+/// Every listed work's reads in one batch (APP-113's deferred batching: a
+/// fixed number of statements however many works the member may open). A
+/// member refusal is every work's `Denied`, as each work's own read is.
+async fn read_works(
+    canvas: &Canvas,
+    member: &TrustedRequest,
+    listed: &[OpenableWork],
+) -> Result<Vec<Result<Option<WorkRead>, Response>>, Response> {
+    let Some(stores) = &canvas.work.auth().stores else {
+        return Err(http::not_found());
+    };
+    if listed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let works: Vec<(&str, &str, bool)> = listed
+        .iter()
+        .map(|w| (w.app.as_str(), w.work.as_str(), !w.collections.is_empty()))
+        .collect();
+    match stores.data.work_reads(member, &works).await {
+        Ok(reads) => Ok(reads
+            .into_iter()
+            .map(|read| batched_read(read).map_err(|error| routes::storage_refusal(&error)))
+            .collect()),
+        Err(Error::Denied) => Ok(listed.iter().map(|_| Ok(None)).collect()),
+        Err(error) => Err(routes::storage_refusal(&error)),
+    }
 }
 
 /// The pane's card rows of one work, in canvas order (APP-104), from the
@@ -1342,22 +1389,20 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
     let mut sources = Vec::new();
     let listed_works = listing(&canvas, &member).await;
     let listed_ms = started.elapsed().as_millis();
-    // Two works at a time: the data pool holds two connections.
-    let mut reads = Vec::with_capacity(listed_works.len());
-    for pair in listed_works.chunks(2) {
-        match pair {
-            [one, two] => {
-                let (first, second) = tokio::join!(
-                    read_work(&canvas, &member, one),
-                    read_work(&canvas, &member, two)
-                );
-                reads.push(first);
-                reads.push(second);
-            }
-            [one] => reads.push(read_work(&canvas, &member, one).await),
-            _ => {}
+    let reads = match read_works(&canvas, &member, &listed_works).await {
+        Ok(reads) => reads,
+        Err(refusal) => {
+            tracing::warn!(
+                event = "canvas.read_refused",
+                organization_id = member.organization(),
+                works = listed_works.len(),
+                duration_ms = started.elapsed().as_millis() as u64,
+                "canvas work reads refused"
+            );
+            return refusal;
         }
-    }
+    };
+    let read_ms = started.elapsed().as_millis();
     for (listed, read) in listed_works.iter().zip(reads) {
         let read = match read {
             Ok(Some(read)) => read,
@@ -1398,6 +1443,7 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         works = listed_works.len(),
         groups = groups.len(),
         listing_ms = listed_ms as u64,
+        read_ms = read_ms as u64,
         duration_ms = started.elapsed().as_millis() as u64,
         "canvas page built"
     );

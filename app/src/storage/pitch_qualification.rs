@@ -1374,6 +1374,102 @@ async fn campaign() {
         }
     }
 
+    // --- APP-113: the canvas page's reads, batched ---
+    // Maya now holds the whole library, her authoring app and her
+    // compositions; the teammate holds what was shared with her.
+    let mate_request = TrustedRequest {
+        organization: ORG.into(),
+        principal: mate_id.clone(),
+        epoch: 1,
+        issuer: GATEWASM.into(),
+        provider_tenant: harness::NORTHSTAR_TENANT.into(),
+        provider_subject: mate_subject.clone(),
+        registry_sha256: stores.registry_identity().sha256.clone(),
+    };
+    let compared = super::canvas_campaign::equivalent_reads(&stores, &maya_request).await;
+    let mate_compared = super::canvas_campaign::equivalent_reads(&stores, &mate_request).await;
+    let hooks = stores.hooks();
+    let delta = |before: (usize, usize)| {
+        let after = hooks.counts();
+        (after.0 - before.0, after.1 - before.1)
+    };
+    // Before: the listing judged one work at a time, then each work's
+    // outline and records listing in their own transactions.
+    let (before, started) = (hooks.counts(), Instant::now());
+    let listed = stores
+        .data
+        .openable_works_serial(&maya_request)
+        .await
+        .unwrap();
+    for work in &listed {
+        stores
+            .data
+            .work_outline(&maya_request, &work.app, &work.work)
+            .await
+            .unwrap();
+        if !work.collections.is_empty() {
+            let _ = stores
+                .data
+                .list_records(&maya_request, &work.app, &work.work)
+                .await;
+        }
+    }
+    let (serial_ms, (serial_transactions, serial_statements)) =
+        (ms(started.elapsed()), delta(before));
+    // After: the batched listing and the batched reads.
+    let (before, started) = (hooks.counts(), Instant::now());
+    let batched = stores.data.openable_works(&maya_request).await.unwrap();
+    let works: Vec<(&str, &str, bool)> = batched
+        .iter()
+        .map(|w| (w.app.as_str(), w.work.as_str(), !w.collections.is_empty()))
+        .collect();
+    let reads = stores.data.work_reads(&maya_request, &works).await.unwrap();
+    let (batched_ms, (batched_transactions, batched_statements)) =
+        (ms(started.elapsed()), delta(before));
+    assert_eq!(batched, listed);
+    assert!(reads.iter().all(|read| read.outline.is_ok()));
+    assert!(
+        listed.len() >= 24,
+        "the whole library and her own works: {}",
+        listed.len()
+    );
+    assert_eq!(
+        batched_transactions, 2,
+        "one listing and one read transaction"
+    );
+    assert!(
+        batched_statements <= 40,
+        "a fixed number of statements: {batched_statements}"
+    );
+    // The page itself, end to end over the stand.
+    let mut page_samples = Vec::new();
+    let before = hooks.counts();
+    const PAGES: usize = 5;
+    for _ in 0..PAGES {
+        let started = Instant::now();
+        let page = stand.get("/canvas", Some(&maya_cookie)).await;
+        page_samples.push(ms(started.elapsed()));
+        assert_eq!(page.status, StatusCode::OK);
+        assert!(page.text().contains(&format!("id=\"lib-{work_id}\"")));
+    }
+    let (page_transactions, page_statements) = delta(before);
+    let page_ms = p50(&mut page_samples);
+    timings.insert("canvas_serial_reads_ms".into(), json!(serial_ms));
+    timings.insert("canvas_batched_reads_ms".into(), json!(batched_ms));
+    timings.insert("canvas_page_p50_ms".into(), json!(page_ms));
+    println!(
+        "CANVAS_READS works={} serial: {serial_transactions} transactions, {serial_statements} statements, {serial_ms} ms; batched: {batched_transactions} transactions, {batched_statements} statements, {batched_ms} ms; GET /canvas per page: {} transactions, {} statements, p50 {page_ms} ms",
+        listed.len(),
+        page_transactions / PAGES,
+        page_statements / PAGES,
+    );
+    assert!(page_ms < 1000, "GET /canvas p50 {page_ms} ms");
+    check(
+        &mut checks,
+        &format!("batched canvas reads (APP-113): for Maya ({compared} works compared) and the teammate ({mate_compared}), the batched listing and library catalog equal the serial ones, and the batched outline and records reads equal work_outline and list_records per work (an unknown work and a malformed id refused alike); for Maya's {} works the listing and reads took {batched_transactions} transactions and {batched_statements} statements in {batched_ms} ms (one work at a time: {serial_transactions} transactions, {serial_statements} statements, {serial_ms} ms); GET /canvas took {} transactions and {} statements per page, p50 {page_ms} ms over {PAGES}",
+            listed.len(), page_transactions / PAGES, page_statements / PAGES),
+    );
+
     // --- Chain integrity ---
     let verified = operator(&c.fixture, &["verify", "--organization", ORG]);
     assert_eq!(verified["verified"], true);
