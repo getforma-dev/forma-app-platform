@@ -473,6 +473,33 @@ impl Workspace {
         result
     }
 
+    /// Which of `slugs` an organization label's address or kept address
+    /// holds, organization-wide (whoever can open that app), as "Save as
+    /// /name" judges it in `create_work` (APP-124 review: Make a card picks
+    /// a free `/name` before it publishes, so a held name never leaves an
+    /// orphan publication). Read only; the names themselves never leave the
+    /// server.
+    pub async fn labels_holding(
+        &self,
+        request: &TrustedRequest,
+        slugs: &[String],
+    ) -> Result<BTreeSet<String>> {
+        let slugs = slugs.to_vec();
+        self.labels_transaction(request, |transaction| {
+            Box::pin(async move {
+                confirm_identity(transaction, request).await?;
+                let permit = transaction.fence_member().await?;
+                let t = permit.transaction();
+                let mut held = BTreeSet::new();
+                for row in t.query("SELECT s FROM unnest($2::text[]) AS s WHERE EXISTS (SELECT 1 FROM genui.app_labels l WHERE l.organization_id=$1::text::uuid AND l.card='' AND (l.address=s OR s=ANY(l.kept)))", &[&request.organization,&slugs]).await? {
+                    held.insert(text(&row, 0)?);
+                }
+                Ok(held)
+            })
+        })
+        .await
+    }
+
     /// The labels this member sees (module notes): organization labels of
     /// the apps they can open, their own labels on those apps, and the apps
     /// they may label for everyone.

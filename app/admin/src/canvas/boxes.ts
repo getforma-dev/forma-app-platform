@@ -29,8 +29,18 @@
 // Nothing from the server is markup: names are text nodes, ids checked UUIDs.
 // Open box cards are remembered in this browser only (`forma.boxes.v1`, not
 // in demo mode), like the widgets.
+//
+// APP-124 (start from your data): a folder with files offers three buttons,
+// one visible path from data to a card to an app: **Ask** (the Ask tab
+// scoped to the folder: a read-only question about its tables), **Make a
+// card** (formation constrained to one card: a minimal app with exactly one
+// card, the most useful view of its data, `POST /v1/boxes/{box}/apps
+// {"one_card": true}`) and **✨ Make an app** (the full formation). Both
+// Make actions open the folder's confirm first; nothing is created before
+// its button. The empty canvas offers "Drop files or upload" (a file picker
+// and a drop target), which makes a new folder holding the files.
 import {
-  ACCEPT, createBox, FOLDER_ALIASES, FOLDER_COMMAND, FORMATION_PROMPT, NOUN, noun, NOUN_PLURAL, nouns, renameBox, wantsBrief, defaultColumns, fetchPreview, formatBytes, getBox, isDataFile, lineage, listBoxes, makeApp, makeData,
+  ACCEPT, createBox, FOLDER_ALIASES, FOLDER_COMMAND, FORMATION_PROMPT, NOUN, noun, NOUN_PLURAL, nouns, renameBox, wantsBrief, defaultColumns, fetchPreview, formatBytes, getBox, isDataFile, lineage, idempotencyKey, listBoxes, makeApp, makeCard, makeData,
   MAX_BOX_FILES, MAX_FILE_BYTES, refusalText, uploadFile, uploadsBox,
   type Box, type BoxContents, type BoxFile, type Preview,
 } from './box-api';
@@ -47,11 +57,18 @@ import {
 import { setFileRouter } from './receipt';
 import { formationChip } from './timing';
 import { announce, el, isUuid } from './render';
-import { registerCommands, registerCompleter, type Completion } from './slash';
+import { decorateAppCards } from './address-chip';
+import { refreshCommands, registerCommands, registerCompleter, type Completion } from './slash';
 import { setFolderResolver, type Runnable } from './command-registry';
 
 type Report = (message: string) => void;
-type OpenBox = { boxId: string; item: HTMLElement; card: HTMLElement; refresh(): Promise<void>; upload(list: File[], auto?: boolean): Promise<void>; rename(): void; name(): string; close(): void };
+/**
+ * How files land: `sheet` (dropped on a folder or "Add files": the first table
+ * opens its column sheet), or `land` (APP-124, a new folder from the empty
+ * canvas: the files land and the folder offers Ask, Make a card and Make an app).
+ */
+type Landing = 'sheet' | 'land';
+type OpenBox = { boxId: string; item: HTMLElement; card: HTMLElement; refresh(): Promise<void>; upload(list: File[], landing?: Landing): Promise<void>; rename(): void; name(): string; close(): void };
 
 const STORAGE_KEY = 'forma.boxes.v1';
 const CMD = `/${FOLDER_COMMAND}`;
@@ -60,6 +77,11 @@ let boxes: Box[] = [];
 let started = false;
 /** The folder card opened (or brought forward) last. */
 let lastOpened: string | null = null;
+/** APP-124: the folder's **Ask** (set by the Ask wiring, `talk.ts`, so this module never imports the Ask tab). */
+let folderAsk: ((boxId: string, name: string) => void) | null = null;
+export function setFolderAsk(handler: ((boxId: string, name: string) => void) | null): void {
+  folderAsk = handler;
+}
 
 // --- The notice (non-blocking status with actions) ---
 
@@ -259,7 +281,8 @@ export async function openBox(boxId: string, at?: { x: number; y: number }): Pro
   return `${boxLabel(contents.box)} is on your canvas.`;
 }
 
-function buildBoxCard(initial: BoxContents) {
+/** A folder's card (exported for the canvas tests: its buttons and their requests). */
+export function buildBoxCard(initial: BoxContents) {
   const document_ = document;
   let contents = initial;
   const boxId = initial.box.box_id;
@@ -268,7 +291,10 @@ function buildBoxCard(initial: BoxContents) {
   const eyebrow = el(document_, 'p', { class: 'bx-eyebrow' }, '');
   const status = el(document_, 'p', { class: 'bx-card-status', role: 'status' });
   const briefButton = el(document_, 'button', { type: 'button', class: 'bx-brief', title: `An AI brief of this ${noun}, cited from its files` }, 'Brief me');
-  const formationButton = el(document_, 'button', { type: 'button', class: 'bx-brief bx-formation', title: `Build an app from this ${noun} in words` }, '✨ Formation');
+  // APP-124: data → card → app, one visible path.
+  const askButton = el(document_, 'button', { type: 'button', class: 'bx-brief bx-ask', 'data-folder-action': 'ask', title: `Ask a question about this ${noun}’s tables; it changes nothing` }, 'Ask');
+  const cardButton = el(document_, 'button', { type: 'button', class: 'bx-brief bx-make-card', 'data-folder-action': 'card', title: `Make one card from this ${noun}: the most useful view of its data` }, 'Make a card');
+  const formationButton = el(document_, 'button', { type: 'button', class: 'bx-brief bx-formation', 'data-folder-action': 'app', title: `Formation: build an app from this ${noun} in words` }, '✨ Make an app');
   briefButton.addEventListener('click', () => {
     const item = open.get(boxId)?.item ?? null;
     void openBrief(boxId, boxLabel(contents.box), false, item).then(announce);
@@ -285,17 +311,20 @@ function buildBoxCard(initial: BoxContents) {
   const appsSection = el(document_, 'section', { class: 'bx-apps-section', 'aria-label': `Apps built from this ${noun}` },
     el(document_, 'h3', { class: 'bx-h' }, `Apps built from this ${noun}`), appsList);
   const purpose = el(document_, 'input', { type: 'text', maxlength: '200', value: FORMATION_PROMPT, 'aria-label': `What app should be built from this ${noun}` });
+  // APP-124 **Make a card**: the same confirm, saying what one card will be made.
+  const cardPreview = el(document_, 'span', { class: 'bx-card-preview', hidden: '' }, '');
   const build = el(document_, 'button', { type: 'submit' }, 'Build');
   const cancelFormation = el(document_, 'button', { type: 'button', class: 'bx-quiet' }, 'Cancel');
   const form = el(document_, 'form', { class: 'bx-create', autocomplete: 'off', hidden: '' },
-    el(document_, 'span', { class: 'bx-formation-mark', 'aria-hidden': 'true' }, '✨'), purpose, build, cancelFormation);
+    el(document_, 'span', { class: 'bx-formation-mark', 'aria-hidden': 'true' }, '✨'), purpose, cardPreview, build, cancelFormation);
+  let making: 'app' | 'card' = 'app';
   const head = el(document_, 'header', { class: 'bx-head' },
     el(document_, 'span', { class: 'bx-mark', 'aria-hidden': 'true' }),
     el(document_, 'div', { class: 'bx-id' }, eyebrow, title),
     close);
   const card = el(document_, 'article', { class: 'cv-card bx-card', 'data-kind': 'box', 'data-box': boxId, 'data-card': `bx-${boxId}`, 'aria-label': `${NOUN} ${boxLabel(initial.box)}` },
     head,
-    el(document_, 'div', { class: 'bx-actions' }, formationButton, briefButton),
+    el(document_, 'div', { class: 'bx-actions' }, askButton, cardButton, formationButton, briefButton),
     el(document_, 'div', { class: 'bx-body' }, drop, progress, tiles, appsSection),
     form,
     status);
@@ -307,7 +336,10 @@ function buildBoxCard(initial: BoxContents) {
     title.textContent = boxLabel(box);
     eyebrow.textContent = `${box.kind === 'uploads' ? 'Uploads' : box.kind === 'app' ? `App ${noun}` : NOUN} ${box.number} · ${files.length} ${files.length === 1 ? 'file' : 'files'}${box.owner ? '' : ' · shared with you'}`;
     drop.hidden = !box.owner;
-    formationButton.hidden = !box.owner;
+    // APP-124: a folder with files offers Ask (any reader), Make a card and Make an app (its owner).
+    askButton.hidden = files.length === 0;
+    cardButton.hidden = !box.owner || files.length === 0;
+    formationButton.hidden = !box.owner || files.length === 0;
     if (!box.owner) form.hidden = true;
     title.title = box.owner && box.kind !== 'uploads' ? 'Click to rename' : '';
     tiles.replaceChildren(...files.map((file) => {
@@ -346,8 +378,9 @@ function buildBoxCard(initial: BoxContents) {
     }
   };
 
-  const upload = async (list: File[], auto = false) => {
+  const upload = async (list: File[], landing: Landing = 'sheet') => {
     let opened = false;
+    let landed = 0;
     for (const file of list) {
       if (file.size > MAX_FILE_BYTES) {
         say(`${file.name} is over 20 MB. Nothing was stored.`);
@@ -365,11 +398,12 @@ function buildBoxCard(initial: BoxContents) {
         row.remove();
         contents = { ...contents, files: [...contents.files, uploaded.file] };
         render();
+        landed += 1;
         say(`${file.name} added.`);
         const found = uploaded.preview;
-        if (found && !('refused' in found) && auto) {
-          // Dropped on empty canvas: registered with the inferred types, its data card placed.
-          void autoData(boxId, uploaded.file, found, () => void refresh());
+        if (landing === 'land') {
+          // APP-124: nothing more happens until the member picks Ask, Make a card or Make an app.
+          if (found && 'refused' in found) say(`${file.name} was stored, but it could not be read as a table.`);
         } else if (found && !('refused' in found) && !opened) {
           opened = true;
           openDataSheet(boxId, uploaded.file, found, () => void refresh());
@@ -383,6 +417,9 @@ function buildBoxCard(initial: BoxContents) {
     }
     await refresh();
     void refreshBoxes();
+    if (landing === 'land' && landed) {
+      say(`${landed} ${landed === 1 ? 'file' : 'files'} in this ${noun}. Ask about ${landed === 1 ? 'it' : 'them'}, Make a card, or ✨ Make an app.`);
+    }
   };
 
   pick.addEventListener('click', () => picker.click());
@@ -409,23 +446,62 @@ function buildBoxCard(initial: BoxContents) {
     const list = Array.from((event as DragEvent).dataTransfer?.files ?? []);
     if (list.length) void upload(list);
   });
-  formationButton.addEventListener('click', () => {
-    form.hidden = !form.hidden;
-    if (!form.hidden) {
-      if (!purpose.value.trim()) purpose.value = FORMATION_PROMPT;
-      purpose.focus();
-      purpose.select();
+  // The confirm: Make an app edits the formation prompt; Make a card says what it will make.
+  const confirm = (mode: 'app' | 'card') => {
+    const again = !form.hidden && making === mode;
+    making = mode;
+    form.hidden = again;
+    form.dataset.making = mode;
+    purpose.hidden = mode === 'card';
+    cardPreview.hidden = mode !== 'card';
+    build.textContent = mode === 'card' ? 'Make card' : 'Build';
+    if (form.hidden) return;
+    if (mode === 'card') {
+      cardPreview.textContent = cardSummary(contents);
+      build.focus?.();
+      return;
     }
+    if (!purpose.value.trim()) purpose.value = FORMATION_PROMPT;
+    purpose.focus();
+    purpose.select?.();
+  };
+  formationButton.addEventListener('click', () => confirm('app'));
+  cardButton.addEventListener('click', () => confirm('card'));
+  askButton.addEventListener('click', () => {
+    if (folderAsk) folderAsk(boxId, boxLabel(contents.box));
+    else say('Ask is not available on this page.');
   });
   cancelFormation.addEventListener('click', () => { form.hidden = true; });
+  // ADR-011 I4: one idempotency key per confirm, reused when the same confirm is sent again after a failure
+  // (the server answers the first result); a new one once it succeeded or what it makes changed.
+  let pending: { what: string; key: string } | null = null;
+  const keyFor = (what: string): string => {
+    if (pending?.what !== what) pending = { what, key: idempotencyKey() };
+    return pending.key;
+  };
   form.addEventListener('submit', (event) => {
     event.preventDefault();
+    if (build.disabled) return;
+    if (making === 'card') {
+      build.disabled = true;
+      say(`Making one card from this ${noun}…`);
+      void buildCard(boxId, keyFor('card')).then(({ text, made }) => {
+        say(text);
+        if (!made) return;
+        pending = null;
+        form.hidden = true;
+        return refresh();
+      }).finally(() => { build.disabled = false; });
+      return;
+    }
     const words = purposeOf(purpose.value) || purpose.value.trim();
-    if (!words || build.disabled) return;
+    if (!words) return;
     build.disabled = true;
     say(`Generating an app from this ${noun} (file names, confirmed columns and a few sample rows only)…`);
-    void buildApp(boxId, words).then((message) => {
-      say(message);
+    void buildAppOnce(boxId, words, keyFor(`app:${words}`)).then(({ text, made }) => {
+      say(text);
+      if (!made) return;
+      pending = null;
       form.hidden = true;
       purpose.value = FORMATION_PROMPT;
       return refresh();
@@ -495,18 +571,60 @@ async function sheetFor(boxId: string, file: BoxFile, done: () => void): Promise
   }
 }
 
+/** APP-124: what **Make a card** will make, said in its confirm (nothing is made before its button). */
+export function cardSummary(contents: BoxContents): string {
+  const data = [...contents.files].filter((file) => file.kind === 'csv' || file.kind === 'xlsx')
+    .sort((a, b) => Number(Boolean(b.data)) - Number(Boolean(a.data)) || b.created_at.localeCompare(a.created_at));
+  const [first] = data;
+  if (!first) return `This ${noun} has no table (CSV or XLSX) to make a card from yet.`;
+  const named = contents.box.kind === 'uploads' || /^untitled/i.test(contents.box.name) ? first.name.replace(/\.[^.]+$/, '') : boxLabel(contents.box);
+  return `Forma makes a small app, “${named}”, with one card: the most useful view of ${first.name}. It links back to this ${noun}.`;
+}
+
+/** APP-124 **Make a card**: one card from the folder's data, placed with its app's address; says so (`made`: it was made). */
+async function buildCard(boxId: string, key: string): Promise<{ text: string; made: boolean }> {
+  let made: Awaited<ReturnType<typeof makeCard>>;
+  try {
+    made = await makeCard(boxId, key);
+  } catch (error) {
+    return { text: refusalText(error), made: false };
+  }
+  try {
+    // The new app's `/name` joins the member's addresses before it is placed, so its card shows the chip.
+    if (made.address) await refreshCommands();
+    const placing = performance.now();
+    const placed = await placeWork(made.app_id, made.work_id, []);
+    if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') decorateAppCards(document);
+    void formationChip(made.timings, performance.now() - placing, made.work_id, workCard(made.work_id, 'app'));
+    void open.get(boxId)?.refresh();
+    return { text: `${made.title}: one card from this ${noun}${made.address ? `, at /${made.address}` : ''}. ${placed}`, made: true };
+  } catch (error) {
+    return { text: `${made.title} was made, but could not be placed: ${refusalText(error)}`, made: true };
+  }
+}
+
 /** Builds an app from a box (capped context on the server), places it, and says so. */
 async function buildApp(boxId: string, purpose: string, report?: Report): Promise<string> {
   report?.(`Generating an app from the ${noun}…`);
+  return (await buildAppOnce(boxId, purpose)).text;
+}
+
+/** As `buildApp`, with the confirm's idempotency key; `made`: the server made the app. */
+async function buildAppOnce(boxId: string, purpose: string, key?: string): Promise<{ text: string; made: boolean }> {
+  let built: Awaited<ReturnType<typeof makeApp>>;
   try {
-    const built = await makeApp(boxId, purpose);
+    built = await makeApp(boxId, purpose, undefined, key);
+  } catch (error) {
+    return { text: refusalText(error), made: false };
+  }
+  try {
     const placing = performance.now();
     const placed = await placeWork(built.app_id, built.work_id, []);
     void formationChip(built.timings, performance.now() - placing, built.work_id, workCard(built.work_id, 'app'));
     void open.get(boxId)?.refresh();
-    return `${built.title}: generated from ${built.files} ${built.files === 1 ? 'file' : 'files'} of the ${noun}. ${placed}`;
+    return { text: `${built.title}: generated from ${built.files} ${built.files === 1 ? 'file' : 'files'} of the ${noun}. ${placed}`, made: true };
   } catch (error) {
-    return refusalText(error);
+    return { text: `${built.title} was made, but could not be placed: ${refusalText(error)}`, made: true };
   }
 }
 
@@ -591,7 +709,7 @@ export async function newUntitled(files: File[] = []): Promise<string> {
   const entry = open.get(made.box_id);
   if (!entry) return message;
   entry.rename();
-  if (files.length) void entry.upload(files, true);
+  if (files.length) void entry.upload(files, 'land');
   return files.length ? `A new ${noun} holds your ${files.length === 1 ? 'file' : 'files'}; name it.` : `A new ${noun} is on your canvas; name it.`;
 }
 
@@ -752,9 +870,13 @@ const FOLDER = {
   },
 };
 
-/** A folder's name as an address: lowercase, runs of other characters a hyphen (`Q3 board pack` → `q3-board-pack`). */
+/**
+ * A folder's name as an address (`Q3 board pack` → `q3-board-pack`, `Ventas año` → `ventas-ano`):
+ * NFKD, lowercase, combining marks dropped, runs of other characters a hyphen, at most 64 characters.
+ * The server judges a one-card app's `/name` against these with the same function (`derive::address_slug`).
+ */
 export function folderSlug(label: string): string {
-  return label.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+  return label.normalize('NFKD').toLowerCase().replace(/\p{M}+/gu, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 64).replace(/-+$/, '');
 }
 
 /**
@@ -791,6 +913,32 @@ export function folderRunnable(name: string, list: Box[] = boxes): Runnable | un
   };
 }
 
+/**
+ * APP-124: the empty canvas's choices. "Drop files or upload" opens a file
+ * picker whose files land in a new folder (a drop on the empty canvas does
+ * the same, below); "Describe what you need" puts the caret in the bar.
+ */
+export function startEmptyChoices(document_: Document): void {
+  const input = document_.querySelector<HTMLInputElement>('[data-empty-upload]');
+  const pick = document_.querySelector<HTMLElement>('[data-empty-upload-pick]');
+  if (pick && input && !pick.dataset.wired) {
+    pick.dataset.wired = 'true';
+    // The input is reached through its button, not by Tab.
+    input.tabIndex = -1;
+    pick.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => {
+      const list = Array.from(input.files ?? []).slice(0, MAX_BOX_FILES);
+      input.value = '';
+      if (list.length) void newUntitled(list).then(announce);
+    });
+  }
+  const describe = document_.querySelector<HTMLElement>('[data-empty-describe]');
+  if (describe && !describe.dataset.wired) {
+    describe.dataset.wired = 'true';
+    describe.addEventListener('click', () => document_.getElementById('intent-input')?.focus());
+  }
+}
+
 /** Wires boxes onto the started canvas: commands, pane, drops, provenance links, restored cards. */
 export function startBoxes(document_: Document): void {
   if (started) return;
@@ -818,6 +966,7 @@ export function startBoxes(document_: Document): void {
     tools.append(el(document_, 'span', { class: 'cv-tools-sep', 'aria-hidden': 'true' }), button);
   }
   for (const slug of [FOLDER_COMMAND, ...FOLDER_ALIASES]) registerCompleter(slug, completions);
+  startEmptyChoices(document_);
   // The intent bar routes spreadsheets here; images stay receipts.
   setFileRouter((file) => {
     if (!isDataFile(file)) return false;

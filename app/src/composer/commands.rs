@@ -361,7 +361,7 @@ fn bindings(document: &Value) -> Option<Vec<WorkBinding>> {
 /// cannot both pass the check (review: check-then-create race). Slugs are
 /// organization-wide. Across tasks a storage constraint is the full fix
 /// (APP-113 carries it; the pitch runs one task).
-fn naming_lock(organization: &str) -> Arc<tokio::sync::Mutex<()>> {
+pub(crate) fn naming_lock(organization: &str) -> Arc<tokio::sync::Mutex<()>> {
     static LOCKS: std::sync::OnceLock<
         std::sync::Mutex<std::collections::HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     > = std::sync::OnceLock::new();

@@ -363,6 +363,11 @@ test('/q3 <words> and /folder:q3 <words> run formation; verbs and apps answer fi
   const list = [box('Q3', 1), box('Focus', 2, '00000000-0000-4000-8000-0000000b0c02'), box('Expenses', 3, '00000000-0000-4000-8000-0000000b0c03'), box('Q3 board pack', 4, '00000000-0000-4000-8000-0000000b0c04')];
   registry.setFolderResolver((name) => boxes.folderRunnable(name, list));
   assert.equal(boxes.folderSlug('Q3 board pack'), 'q3-board-pack');
+  // APP-124 review: the same vectors as the server's `derive::address_slug` (NFKD, marks dropped, 64 characters).
+  for (const [label, slug] of [
+    ['Ventas año', 'ventas-ano'], ['Ventas ano', 'ventas-ano'], ['Ünïcode only', 'unicode-only'], ['  Spend: 2026!  ', 'spend-2026'],
+    ['ﬁnance Ⅳ', 'finance-iv'], ['long name '.repeat(8), 'long-name-long-name-long-name-long-name-long-name-long-name-long'],
+  ]) assert.equal(boxes.folderSlug(label as string), slug, label);
   assert.equal(registry.findCommand('q3')?.title, 'Formation from Q3');
   assert.equal(registry.findCommand('folder:q3')?.title, 'Formation from Q3');
   assert.equal(registry.findCommand('q3-board-pack')?.title, 'Formation from Q3 board pack');

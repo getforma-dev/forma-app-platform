@@ -1,6 +1,6 @@
 # Canvas rules: what is on a canvas, how you talk to it, how things are named
 
-This is the single reference for the canvas model and its grammar. The decisions are recorded in APP-120 (model and grammar), APP-121 (naming), APP-122 (Ask and Shape), APP-123 (cards made by you, `@` mentions, `/forma`, `/<folder>`, pinned answers) and APP-119 (commands versus apps). Where this page and the code disagree, the code is wrong: file a ticket.
+This is the single reference for the canvas model and its grammar. The decisions are recorded in APP-120 (model and grammar), APP-121 (naming), APP-122 (Ask and Shape), APP-123 (cards made by you, `@` mentions, `/forma`, `/<folder>`, pinned answers), APP-124 (start from your data) and APP-119 (commands versus apps). Where this page and the code disagree, the code is wrong: file a ticket.
 
 ## The one sentence
 
@@ -10,10 +10,10 @@ Four jobs, and where you type picks the job, never the AI:
 
 | Job | What it does | Typed as |
 | --- | --- | --- |
-| **Ask** | Finds out: answers questions about your data. Changes nothing | `/ask [app or app.card] <question>`, or `? <question>`; `@app` or `@app.card` anywhere scopes it |
+| **Ask** | Finds out: answers questions about your data. Changes nothing | `/ask [app or app.card] <question>`, or `? <question>`; `@app` or `@app.card` anywhere scopes it; a folder's **Ask** asks about its files |
 | **Shape** | Changes how something looks or what it shows. Never answers, never touches records | `/shape <address> <words>`, or `/<app>.<card> <words>` |
 | **Do** | Runs one of an app's own commands: the only way records change | `/<app> <words>` |
-| **Forma** | Makes something new: picks or builds an app | A plain sentence, `/forma <words>`, or a folder's formation: `/<folder> <words>` |
+| **Forma** | Makes something new: picks or builds an app | A plain sentence, `/forma <words>`, or a folder's formation: `/<folder> <words>`, **Make a card**, **✨ Make an app** |
 
 **Why "Forma" is not the reshape verb.** *Forma* is Latin for "shape" and "form", but the word is kept for making things: "describe it and Forma builds it". Using it for restyling too would blur two jobs into one word, and a verb should explain itself without a tour. So Forma makes things, and Shape changes their form afterwards.
 
@@ -27,9 +27,33 @@ Four jobs, and where you type picks the job, never the AI:
 | **Arrangement** | How things sit; layout only | Cards | No | Stack, Unite frame, Focus |
 
 - A card always belongs to exactly one app. Remove the app and its cards go with it.
-- A **folder** is a widget that holds files. Its one power, **formation**, *creates an app* from them, and that app links back to the folder.
+- A **folder** is a widget that holds files. Its one power, **formation**, *creates an app* from them (**✨ Make an app**), or a minimal app with one card (**Make a card**), and that app links back to the folder. Its **Ask** reads its files and changes nothing (APP-124).
 - A **note** is a widget. It is saved privately for you. Shaping a note changes only its look; you edit its text in place.
 - Arrangements are never listed in the Library; they only change how things sit.
+
+## Start from your data (APP-124)
+
+Data → card → app is one visible path, with no new concepts: a folder holds the files, Ask reads them, formation makes a card or an app.
+
+1. **Bring the files.** On an empty canvas, **Drop files or upload** (beside **Describe what you need** and **Browse your library**) opens a file picker; dropping files anywhere on the empty canvas does the same. A new folder holds them, its name ready to type. "+ Folder" and dropping onto a folder work as before.
+2. **The folder offers three buttons** as soon as it holds files (Ask for anyone who can read it; the two Make buttons for its owner):
+
+   | Button | What it does | Changes |
+   | --- | --- | --- |
+   | **Ask** | Opens the Ask tab scoped to the folder ("Asking about 📁 Q3 board pack (its tables)"): a question about its CSV and XLSX files | Nothing |
+   | **Make a card** | Formation constrained to one card: a minimal app named after the folder (or the file, for Uploads or an untitled folder) with exactly one card, the most useful view of its data, linked back to the folder ("Built from folder"); it gets an address when one is free | A new app, after the confirm |
+   | **✨ Make an app** | The full formation (unchanged): an app from the folder's files, from your words | A new app, after the confirm |
+
+   Both Make buttons open the folder's confirm first (Make a card says what it will make; Make an app shows its editable prompt). Nothing is created before **Make card** or **Build**. **Brief me** stays beside them.
+3. **The card leads to the app.** A card made from a folder is a small app like any other: it shows its address chip (`/q3-board-pack-card`), you can Ask about it, Shape it, and make the full app from the same folder later.
+
+**As built (APP-124), where the details were open:**
+
+- **Ask on a folder** reads the folder's tables (its CSV and XLSX files: confirmed ones first, then the newest; at most 3 it can read, a file that cannot be read passed over and, with none left, an answer that says so; the first 200 rows of each) under the folder's own authorization, in one read-only snapshot, and writes nothing (not even an audit row). The answer is text plus every row it used, each with its provenance from the server: the file (name and the SHA-256 of its bytes), the sheet (XLSX) and the row (the n-th row under the header); **Open file** shows it. A table longer than 200 rows makes the answer partial, and it says so ("at least", "not the full total"); a total skips a cell that is not a number and says how many it skipped. PDFs and images are not tables: **Brief me** reads PDFs. A folder answer has no **Pin to canvas** or **Make it a card** (those keep record receipts); **Make a card** on the folder is the way to a card. Someone who cannot read the folder gets the same "not found" as for a folder that does not exist, and no AI call is made.
+- **Without the AI model** Ask on a folder answers only the demo organization's rehearsed questions, computed from the rows ("how many", "what's the total", "what's in it"; a change request is told that Ask only reads); anything else says the model is not configured.
+- **Make a card** picks its one card by rule, not by the model, so it works in every organization: a chart of the first number over the first date (else text) column when the table has both, else its totals, else its rows. It reads the folder's first table it can read (confirmed first, then the newest; a file that cannot be read is passed over). Its address is the app's name as a folder's address is made (accents dropped, lowercase, hyphens: `Ventas año` → `/ventas-ano`); when a folder, a verb, a library app, one of your names or an organization label already answers to it, `-card` is added, then `-2` … `-9`, else the app stays unnamed. The name is chosen before anything is made. Sent again after a failure, the same confirm (Make a card or ✨ Make an app) answers the first result instead of making a second app.
+- **The empty-canvas upload** lands the files and stops: no data card is placed and no column sheet opens; the folder's buttons are the next step. Files dropped on a folder, or on a card (they go to Uploads), behave as before.
+- **Deferred:** merging cards from different apps into one app (cross-app merge) is not built; a card belongs to exactly one app, and combining two apps is a new app (Forma).
 
 ## The right pane
 
@@ -112,6 +136,7 @@ Ask is a conversation about your data, like talking to an analyst. Every way in 
 | `? where are the red invoices` | The quick form: the selected card, else the canvas |
 | `? @expenses.total why is it high?` · `? why so many @app:expenses` · `@card:expenses.ledger …` · `@q3 …` (your shortcut) | The app or card the `@` mentions, anywhere in the question (APP-123). One mention per question |
 | `?` on the canvas | Puts `? ` in an empty bar (it only focuses the bar when you have half-typed something) |
+| A folder's **Ask** button, or `?` with a folder card selected | The folder's tables (APP-124): each row it used, with its file and row |
 | ⋯ → **Ask about this** on a card | That card |
 | The Ask tab's own input | The scope its chip shows |
 
@@ -195,7 +220,7 @@ An app has no look of its own; its look is its cards, so shaping an app themes t
 
 - "Make me a new card from this data in the shape of …" is Shape, not recording data. It's a new view over the same records, and every number still traces to its source records.
 - A card made from an app's data belongs to that app. It is yours ("made by you") and persists until you remove it; the app's owner or an admin can add their own for everyone who can open the app (APP-123). It stores only its view, never the records: every number is read live, with its receipts.
-- A card that combines two apps (expenses with time off) is a new app: Forma, deferred.
+- A card that combines two apps (expenses with time off) is a new app: Forma, deferred (cross-app merge, APP-124).
 
 **As built (APP-123), where the details were open:**
 

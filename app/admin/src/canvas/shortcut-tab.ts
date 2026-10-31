@@ -27,7 +27,7 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
     ['A card', 'Library → expand an app → Add', '/card expenses.ledger · /card 3.2'],
     ['A widget', 'Library → Widgets → Add, or say “show the weather in Austin”', '/widget weather Austin · /weather'],
     ['A note', '⋯ → New note, or Library → Widgets → Note', '/widget note text · /note'],
-    ['A folder', '+ Folder in the toolbar, Library → Widgets → Folder, or drop files on the canvas', '/folder'],
+    ['A folder', '+ Folder in the toolbar, Library → Widgets → Folder, drop files on the canvas, or Drop files or upload on an empty canvas', '/folder'],
     ['Take it off the canvas', 'The × on it, Library → Remove, or ⋯ → Take off the canvas', 'Delete'],
   ]],
   ['Tell an app', [
@@ -37,6 +37,7 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
   ]],
   ['Ask and Shape', [
     ['Ask about your data', 'The Ask tab, or ⋯ → Ask about this on a card', '? where are the red invoices'],
+    ['Ask about a folder’s files', 'Folder → Ask (its tables; read-only)', '—'],
     ['Shape a card', '⋯ → Shape… on the card', '/expenses.ledger only red invoices · /shape expenses.ledger …'],
     ['Theme an app', '⋯ → Shape… on its app card or frame', '/shape expenses dark green, compact'],
     ['Shape a widget', 'Its Shape field, or ⋯ → Shape… on it', '/shape calculator make it a TI-84'],
@@ -56,7 +57,8 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
     ['Rename a stack', 'Double-click its name', '—'],
   ]],
   ['Make', [
-    ['An app from a folder', 'Folder → ✨ Formation, or click the folder and type', '/folder 1 formation …'],
+    ['One card from a folder', 'Folder → Make a card (confirm first)', '—'],
+    ['An app from a folder', 'Folder → ✨ Make an app (formation), or click the folder and type', '/q3 build a metrics app · /folder:q3 …'],
     ['A brief of a folder', 'Folder → Brief me', '/folder 1 formation brief me'],
   ]],
   ['Move around', [

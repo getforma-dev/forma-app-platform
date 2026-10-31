@@ -345,11 +345,20 @@ function Canvas(props: CanvasProps) {
             <button type="button" data-intent="Review expenses over $200">Review expenses over $200</button>
             <button type="button" data-intent="/widget weather"><code>/widget weather</code></button>
           </div>
-          {createShow(() => props.hasLibrary, () => (
-            <button type="button" class="cv-empty-library" data-lib-open>
-              Browse your library <span class="cv-empty-library-count">{props.librarySummary}</span>
+          <div class="cv-empty-choices" aria-label="Ways to start">
+            <button type="button" class="cv-empty-choice cv-empty-describe" data-empty-describe>
+              Describe what you need
             </button>
-          ))}
+            {createShow(() => props.hasLibrary, () => (
+              <button type="button" class="cv-empty-choice cv-empty-library" data-lib-open>
+                Browse your library <span class="cv-empty-library-count">{props.librarySummary}</span>
+              </button>
+            ))}
+            <button type="button" class="cv-empty-choice cv-empty-upload" data-empty-upload-pick title="A new folder holds your files: CSV, XLSX, PDF, images or text">
+              Drop files or upload <span class="cv-empty-upload-hint">a new folder holds them</span>
+            </button>
+            <input type="file" class="sr-only" data-empty-upload multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.txt,.md" aria-label="Upload files into a new folder" />
+          </div>
         </section>
         <div id="cv-board" class="cv-board">
           {createList(() => props.groups, group => group.id, group => (
