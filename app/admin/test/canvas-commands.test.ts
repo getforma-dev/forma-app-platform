@@ -1,11 +1,12 @@
 // APP-118: the command registry is the one source. The autocomplete and
 // the Commands tab list the same commands, and the argument parsing and hints read each command's typed arguments.
-// APP-119: commands are verbs, apps are addresses: `/` and `/commands` list
-// verbs only; apps come from the server with a derived hint and examples,
-// show in their own section from the first letter (on the canvas, saved, or
-// an exact slug), and `/slug …` still runs them. The right pane has three
-// tabs, Library, Commands and Shortcuts, and each entry point opens the
-// right one: `?` (canvas and empty bar) is Shortcuts, as on GitHub or Linear.
+// APP-119: commands are verbs, apps are addresses, from the server with a
+// derived hint and examples; `/slug …` still runs them. The right pane has
+// three tabs, Library, Commands and Shortcuts: `?` is Shortcuts.
+// APP-120: one grammar. `/` lists the twelve verbs in four groups (Place,
+// Arrange, Make, Help) and no address; the first letter adds the Apps
+// section; the old widget verbs and `/help` are hidden aliases; a bare
+// `/<address>` places the app and `/<address> words` tells it something.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -17,36 +18,46 @@ const SPEND_APP = '00000000-0000-4000-8000-000000001011';
 const SAVED_APP = '00000000-0000-4000-8000-0000000000a1';
 const SAVED_WORK = '00000000-0000-4000-8000-0000000000a2';
 
-/** `GET /v1/commands` as the server answers it (APP-119: with `hint` and `examples`). */
+/** `GET /v1/commands` as the server answers it (APP-120: the address rule; old names are aliases). */
 const SERVER = {
   commands: [
-    { slug: 'expense-review', aliases: ['review-expenses'], title: 'Expense review queue', purpose: 'Review submitted expense claims', kind: 'library', app_id: REVIEW_APP, record: true,
+    { slug: 'expense-review', aliases: ['review-expenses'], title: 'Expense review (demo data)', purpose: 'Review submitted expense claims', kind: 'library', app_id: REVIEW_APP, record: true,
       hint: 'what to show … or review', examples: ['/expense-review expense review queue', '/expense-review approve expenses'] },
-    { slug: 'expense', aliases: ['expenses', 'claim'], title: 'Expense claims', purpose: 'File and decide expenses', kind: 'library', app_id: EXPENSE_APP, record: true,
-      hint: 'what you spent', examples: ['/expense $86 at Nobu, client dinner, Sarah approves', '/expense'] },
-    { slug: 'pto', aliases: ['time-off', 'leave', 'vacation'], title: 'Time off', purpose: 'Book time off', kind: 'library', app_id: PTO_APP, record: true,
-      hint: 'dates and reason', examples: ['/pto Nov 24–26 for Thanksgiving, Sarah approves'] },
-    { slug: 'vendor-spend', aliases: ['spend', 'vendors'], title: 'Vendor spend', purpose: 'Spend by vendor', kind: 'library', app_id: SPEND_APP, record: true,
-      hint: 'what to show … or review', examples: ['/vendor-spend vendor spend breakdown'] },
-    // An older server: no hint, no examples.
-    { slug: 'note', aliases: ['notes'], title: 'Notes app', purpose: 'Library notes', kind: 'library', app_id: '00000000-0000-4000-8000-000000001f01', record: true },
+    { slug: 'expenses', aliases: ['expense', 'claim'], title: 'Expenses', purpose: 'File and decide expenses', kind: 'library', app_id: EXPENSE_APP, record: true,
+      hint: 'file a claim or approve one', examples: ['/expenses $86 at Nobu, client dinner, Sarah approves', '/expenses'] },
+    { slug: 'time-off', aliases: ['pto', 'leave', 'vacation'], title: 'Time off', purpose: 'Book time off', kind: 'library', app_id: PTO_APP, record: true,
+      hint: 'dates and reason', examples: ['/time-off Nov 24–26 for Thanksgiving, Sarah approves'] },
+    { slug: 'vendor-spend-breakdown', aliases: ['vendor-spend', 'spend', 'vendors'], title: 'Vendor spend breakdown', purpose: 'Spend by vendor', kind: 'library', app_id: SPEND_APP, record: true,
+      hint: 'what to show … or review', examples: ['/vendor-spend-breakdown vendor spend breakdown'] },
+    // An older server: no hint, no examples. The Notes app is the Note widget's (`/note`, `/notes` are its verb).
+    { slug: 'notes', aliases: ['note'], title: 'Notes', purpose: 'Library notes', kind: 'library', app_id: '00000000-0000-4000-8000-000000001f01', record: true },
     { slug: 'big-claims', aliases: [], title: 'Big claims', purpose: 'Saved app: Big claims', kind: 'saved', app_id: SAVED_APP, work_id: SAVED_WORK, record: true,
       hint: 'what to show, or what to file or decide', examples: ['/big-claims'] },
   ],
 };
 
+/** What the hidden widget aliases ran with (the spies stand in for the board). */
+const ran: string[] = [];
+const spy = (slug: string) => ({ slug, aliasOf: 'widget', title: slug, purpose: `A ${slug}`, run: (text: string) => { ran.push(`${slug}:${text}`); } });
+
 async function seeded() {
   const registry = await import('../src/canvas/command-registry.ts');
   const slash = await import('../src/canvas/slash.ts');
-  // Canvas commands (verbs) as the modules register them (some describe themselves, some rely on KNOWN).
+  const library = await import('../src/canvas/library.ts');
+  const widgets = await import('../src/canvas/widgets/index.ts');
+  // The twelve verbs as the modules register them (some describe themselves,
+  // some rely on KNOWN), and the hidden aliases.
   registry.registerCommands([
-    { slug: 'apps', title: 'Library', purpose: 'Open the Library', run: noop },
-    { slug: 'card', title: 'Bring a card', purpose: 'Place one card', run: noop },
-    { slug: 'folder', aliases: ['storage', 'box'], title: 'Folders', purpose: 'Your folders', run: noop },
-    { slug: 'weather', title: 'Weather', purpose: 'Weather for a place', run: noop },
+    library.APPS_COMMAND, library.CARD_COMMAND, library.APP_COMMAND, library.FOCUS_COMMAND,
+    widgets.WIDGET_VERB,
+    spy('weather'), spy('calculator'), spy('clock'),
+    { ...spy('note'), aliases: ['notes'] },
+    { slug: 'folder', aliases: ['storage', 'box'], title: 'Make an app from a folder', purpose: 'Formation builds an app from a folder', run: (text: string) => { ran.push(`folder:${text}`); } },
     { slug: 'arrange', title: 'Arrange by app', purpose: 'Lay the canvas out', run: noop },
-    { slug: 'note', aliases: ['notes'], title: 'Note', purpose: 'A quick note', run: noop },
-    { slug: 'custom', title: 'Custom', purpose: 'Described by itself', category: 'Agents', args: [{ name: 'who', kind: 'text', required: true }], examples: ['/custom me'], run: noop },
+    { slug: 'unite', title: 'Unite an app', purpose: 'One frame', run: noop },
+    { slug: 'split', aliases: ['break'], title: 'Break an app apart', purpose: 'Back to cards', run: noop },
+    { slug: 'shortcuts', aliases: ['keys'], title: 'Shortcuts', purpose: 'Every action', run: noop },
+    { slug: 'agent', aliases: ['agents', 'mcp'], title: 'Connect an agent', purpose: 'Mint a token', run: noop },
     slash.COMMANDS,
   ]);
   registry.setAddresses(slash.parseCommands(SERVER).map(slash.serverAddress));
@@ -54,101 +65,123 @@ async function seeded() {
 }
 
 const slugsOf = (groups: { commands: { slug: string }[] }[]) => groups.flatMap((group) => group.commands.map((command) => command.slug));
-const VERBS = ['apps', 'card', 'arrange', 'note', 'folder', 'weather', 'custom', 'commands'];
+const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'apps', 'commands', 'shortcuts', 'agent'];
 
-test('/ alone lists verbs only; the Commands tab lists the same verbs (APP-119)', async () => {
+test('/ lists the 12 verbs in four groups and no addresses; a first letter adds the Apps section (APP-120)', async () => {
   const { registry, slash } = await seeded();
   const { sheetGroups } = await import('../src/canvas/command-sheet.ts');
-  const all = registry.commandList().map((command) => command.slug);
-  assert.deepEqual(all, VERBS);
-  assert.deepEqual(slugsOf(slash.slashGroups('')), all);
+  const groups = slash.slashGroups('');
+  assert.deepEqual(slugsOf(groups), VERBS);
+  assert.deepEqual(groups.map((group) => [group.category, group.commands.length]), [['Place', 3], ['Arrange', 4], ['Make', 1], ['Help', 4]]);
   assert.deepEqual(slash.slashAddresses('', () => true), [], 'no app under / alone, even on the canvas');
-  assert.deepEqual(slugsOf(sheetGroups('')), all);
-  // No app section anywhere in the verb lists: the Apps and Records categories are gone.
-  const categories = slash.slashGroups('').map((group) => group.category);
-  assert.deepEqual(categories, ['Library', 'Canvas', 'Folders', 'Widgets', 'Agents', 'Help']);
-  assert.ok(!categories.some((category) => (category as string) === 'Apps' || (category as string) === 'Records'));
-  assert.deepEqual(sheetGroups('').map((group) => group.category), categories);
-  assert.deepEqual(slugsOf(sheetGroups('expense')), [], 'searching the Commands tab finds no app');
-  // The footer points to /apps.
-  assert.equal(registry.ADDRESS_FOOTER, 'Your apps answer to /name — see /apps');
-  // A verb shadows the app of the same name (`/note`); each verb once.
-  assert.equal(registry.findCommand('note')?.title, 'Note');
-  assert.ok(!registry.addressList().some((address) => address.slug === 'note'));
+  assert.deepEqual(slash.slashAddressSection('', () => true).addresses, []);
+  // The Commands tab: the same four groups; hidden aliases show on their verb's row only.
+  assert.deepEqual(slugsOf(sheetGroups('')), VERBS);
+  assert.deepEqual(sheetGroups('').map((group) => group.category), ['Place', 'Arrange', 'Make', 'Help']);
+  assert.deepEqual(slugsOf(sheetGroups('weather')), ['widget'], 'a hidden alias finds its verb');
+  assert.deepEqual(slugsOf(sheetGroups('pto')), [], 'searching the Commands tab finds no app');
+  assert.ok(slugsOf(sheetGroups('expenses')).every((slug) => VERBS.includes(slug)), 'only verbs (their examples)');
+  assert.deepEqual(registry.hiddenAliases('widget').map((command) => command.slug), ['weather', 'calculator', 'clock', 'note']);
+  // Signatures: the Make verb reads as one sentence.
+  assert.equal(registry.signature(registry.findVerb('folder')!), '/folder <name> formation <instruction>');
+  assert.equal(registry.signature(registry.findVerb('widget')!), '/widget <weather|calculator|clock|note|folder> [args]');
+  assert.equal(registry.signature(registry.findVerb('card')!), '/card <app.card or number>');
+  // No /remove.
+  assert.equal(registry.findCommand('remove'), undefined);
+  // From the first letter: matching verbs (hidden aliases too), then the Apps section.
+  assert.deepEqual(slugsOf(slash.slashGroups('w')), ['widget', 'weather']);
+  assert.deepEqual(slugsOf(slash.slashGroups('n')), ['note']);
+  assert.deepEqual(slugsOf(slash.slashGroups('hel')), ['commands'], '/help autocompletes to /commands');
+  const works = [{ app: EXPENSE_APP, work: 'w1', title: '', cards: [] }, { app: REVIEW_APP, work: 'w2', title: '', cards: [] }];
+  const onCanvas = (address: Parameters<typeof slash.listedAddress>[0]) => slash.listedAddress(address, works);
+  const section = slash.slashAddressSection('e', onCanvas);
+  assert.equal(section.title, registry.APPS_SECTION);
+  assert.deepEqual(section.addresses.map((address) => address.slug), ['expenses', 'expense-review']);
+  assert.deepEqual(section.addresses.map((address) => address.hint), ['file a claim or approve one', 'what to show … or review']);
+  // Decision 4: on a clean canvas the section falls back to the library; an exact name or old alias is always offered.
+  const clean = (address: Parameters<typeof slash.listedAddress>[0]) => slash.listedAddress(address, []);
+  assert.equal(slash.slashAddressSection('ex', clean).title, slash.LIBRARY_SECTION);
+  assert.deepEqual(slash.slashAddresses('pto', clean).map((address) => address.slug), ['time-off']);
+  assert.deepEqual(slash.slashAddresses('expense', clean).map((address) => address.slug), ['expenses']);
+  assert.deepEqual(slash.slashAddresses('b', clean).map((address) => address.slug), ['big-claims']);
+  // The grammar's one sentence.
+  assert.equal(registry.GRAMMAR, 'Type / and a verb to change the canvas, / and an app’s name to tell that app something, or just a sentence.');
+  // The Notes app is the Note widget's: `/note` and `/notes` are the verb.
+  assert.equal(registry.findCommand('notes')?.slug, 'note');
+  assert.ok(!registry.addressList().some((address) => address.slug === 'notes'));
   for (const command of registry.commandList()) assert.ok(command.purpose && command.examples.length, command.slug);
 });
 
-test('/ex shows the matching verbs, then an Apps section with derived hints (APP-119)', async () => {
+test('aliases resolve: /weather and /widget weather, /note, /help, /expense bare and with words (APP-120)', async () => {
   const { registry, slash } = await seeded();
-  // Both expense apps on the canvas.
-  const works = [{ app: EXPENSE_APP, work: 'w1', title: '', cards: [] }, { app: REVIEW_APP, work: 'w2', title: '', cards: [] }];
-  const onCanvas = (address: Parameters<typeof slash.listedAddress>[0]) => slash.listedAddress(address, works);
-  assert.deepEqual(slugsOf(slash.slashGroups('ex')), [], 'no verb starts with ex');
-  const apps = slash.slashAddresses('ex', onCanvas);
-  assert.deepEqual(apps.map((address) => address.slug), ['expense', 'expense-review'], 'shorter own-name match first');
-  assert.deepEqual(apps.map((address) => address.hint), ['what you spent', 'what to show … or review']);
-  assert.equal(registry.APPS_SECTION, 'Apps — type /name and what you want');
-  // Verbs first, then apps: `/a` lists `/apps` and `/arrange`, apps only by their own names.
-  assert.deepEqual(slugsOf(slash.slashGroups('a')), ['apps', 'arrange']);
-  // Decision 4: on a clean canvas the section lists only saved apps …
-  const clean = (address: Parameters<typeof slash.listedAddress>[0]) => slash.listedAddress(address, []);
-  assert.deepEqual(slash.slashAddresses('ex', clean), []);
-  const fallback = slash.slashAddressSection('ex', clean);
-  assert.equal(fallback.title, slash.LIBRARY_SECTION, 'a clean canvas falls back to the library');
-  assert.equal(fallback.addresses[0]?.slug, 'expense', '/e ranks the app whose own name starts with e, shortest first');
-  assert.ok(fallback.addresses.length <= 5);
-  assert.deepEqual(slash.slashAddressSection('', clean).addresses, [], 'nothing under / alone');
-  assert.deepEqual(slash.slashAddresses('b', clean).map((address) => address.slug), ['big-claims']);
-  // … but an exact slug or alias of any app the member can open is offered (`/pto` in the demo).
-  assert.deepEqual(slash.slashAddresses('pto', clean).map((address) => address.slug), ['pto']);
-  assert.deepEqual(slash.slashAddresses('leave', clean).map((address) => address.slug), ['pto']);
-  assert.deepEqual(slash.slashAddresses('expense', clean).map((address) => address.slug), ['expense']);
-});
-
-test('/expense, /pto and a saved /big-claims still resolve and run as before (APP-119)', async () => {
-  const { registry } = await seeded();
-  const expense = registry.findCommand('expense');
-  assert.equal(expense?.title, 'Expense claims', 'findCommand falls back to the address');
-  assert.equal(registry.findCommand('expenses')?.slug, 'expense');
-  assert.equal(registry.findCommand('leave')?.slug, 'pto');
-  assert.equal(registry.findCommand('big-claims')?.slug, 'big-claims');
+  ran.length = 0;
+  const messages: string[] = [];
+  const report = (message: string) => { messages.push(message); };
+  // `/widget weather` and `/weather` run the same widget verb.
+  assert.equal(registry.findCommand('weather')?.aliasOf, 'widget');
+  await slash.runSlash('/widget weather Austin', report);
+  await slash.runSlash('/weather Austin', report);
+  await slash.runSlash('/widget note Call the auditor', report);
+  await slash.runSlash('/note Call the auditor', report);
+  await slash.runSlash('/notes', report);
+  await slash.runSlash('/widget folder', report);
+  assert.deepEqual(ran, ['weather:Austin', 'weather:Austin', 'note:Call the auditor', 'note:Call the auditor', 'note:', 'folder:']);
+  await slash.runSlash('/widget teapot', report);
+  assert.match(messages.at(-1) ?? '', /There is no teapot widget/);
+  // `/help` is `/commands`.
+  assert.equal(registry.findCommand('help')?.slug, 'commands');
   assert.equal(registry.findCommand('HELP')?.slug, 'commands');
-  // Signatures and hints read the server's hint (the catalog override keeps the demo copy).
-  assert.equal(registry.signature(expense!), '/expense [what you spent]');
-  assert.equal(registry.signature(registry.findCommand('pto')!), '/pto [dates and reason]');
-  assert.equal(registry.signature(registry.findCommand('vendor-spend')!), '/vendor-spend [what to show … or review]');
-  const hint = registry.argumentHint(expense!, '');
-  assert.deepEqual(hint.parts.filter((part) => part.current).map((part) => part.text), ['[what you spent]']);
-  assert.match(hint.example, /^\/expense \$86/);
-  // An older server's entry (no hint, no examples) still reads.
-  const parsed = (await import('../src/canvas/slash.ts')).parseCommands(SERVER);
-  assert.equal(parsed.find((entry) => entry.slug === 'note')?.hint, '');
-  // The run paths are the APP-101/102 ones: a saved app opens its work, `/expense` alone the ledger.
+  // A bare address places the app (`/expense` = `/expenses` = `/app expenses`).
+  const placed: string[] = [];
+  slash.setAppPlacer(async (address) => { placed.push(address.slug); return true; });
+  await slash.runSlash('/expense', report);
+  await slash.runSlash('/expenses', report);
+  await slash.runSlash('/pto', report);
+  assert.deepEqual(placed, ['expenses', 'expenses', 'time-off']);
+  // `/expense <words>` files through the action path pinned to the app, as before.
+  const posted: unknown[] = [];
+  (globalThis as { fetch?: unknown }).fetch = async (url: string, init?: { body?: string }) => {
+    if (url === '/v1/commands') return { ok: true, json: async () => SERVER };
+    posted.push([url, JSON.parse(init?.body ?? 'null')]);
+    return { ok: false, status: 422, json: async () => ({ code: 'could_not_parse' }) };
+  };
+  await slash.runSlash('/expense $86 at Nobu, client dinner, Sarah approves', report);
+  await slash.runSlash('/expenses $86 at Nobu, client dinner, Sarah approves', report);
+  assert.deepEqual(posted, [
+    ['/v1/act', { utterance: '$86 at Nobu, client dinner, Sarah approves', app_id: EXPENSE_APP }],
+    ['/v1/act', { utterance: '$86 at Nobu, client dinner, Sarah approves', app_id: EXPENSE_APP }],
+  ]);
+  assert.equal(placed.length, 3, 'words never place the bare app');
+  // The bar's hint for an address reads its canonical name, title and hint.
+  const expenses = registry.findCommand('expense')!;
+  assert.equal(expenses.slug, 'expenses');
+  assert.equal(registry.signature(expenses), '/expenses [file a claim or approve one]');
+  assert.match(registry.argumentHint(expenses, '').example, /^\/expenses \$86/);
+  // A saved app still opens its work.
   const saved = registry.findAddress('big-claims');
   assert.equal(saved?.kind, 'saved');
   assert.equal(saved?.work, SAVED_WORK);
-  assert.equal(typeof saved?.run, 'function');
+  // An older server's entry (no hint, no examples) still reads.
+  assert.equal(slash.parseCommands(SERVER).find((entry) => entry.slug === 'notes')?.hint, '');
 });
 
-test('the Library shows each app\'s address, hint and example; /apps searches slug, alias and hint (APP-119)', async () => {
+test('the Library row shows the address, its aliases, hint and example; /apps searches slug, alias and hint (APP-119)', async () => {
   const { registry } = await seeded();
   const { rowAddress, firstExample } = await import('../src/canvas/library.ts');
   const list = registry.addressList();
-  // A library row by its slug, a saved app's row by its work (it had no slug).
-  const expense = rowAddress({ slug: 'expense', work: 'seeded' }, list);
-  assert.equal(expense?.hint, 'what you spent');
-  assert.equal(firstExample(expense!), '/expense $86 at Nobu, client dinner, Sarah approves');
+  // A library row by its slug (or an old one), a saved app's row by its work.
+  const expenses = rowAddress({ slug: 'expenses', work: 'seeded' }, list);
+  assert.equal(expenses?.hint, 'file a claim or approve one');
+  assert.equal(rowAddress({ slug: 'expense', work: 'seeded' }, list)?.slug, 'expenses', 'a page rendered before the rename');
+  assert.equal(firstExample(expenses!), '/expenses $86 at Nobu, client dinner, Sarah approves');
   assert.equal(rowAddress({ slug: '', work: SAVED_WORK }, list)?.slug, 'big-claims');
   assert.equal(rowAddress({ slug: '', work: 'other' }, list), undefined);
   assert.equal(rowAddress({ slug: 'weather', work: '', widget: 'weather' }, list), undefined);
-  // `/apps expense` filters by slug, alias and hint.
   const search = (query: string) => registry.searchAddresses(query).map((address) => address.slug);
-  assert.deepEqual(search('expense'), ['expense-review', 'expense']);
-  assert.deepEqual(search('/time-off'), ['pto'], 'by alias');
-  assert.deepEqual(search('vacation'), ['pto']);
-  assert.deepEqual(search('spent'), ['expense']);
-  assert.deepEqual(search('review'), ['expense-review', 'vendor-spend']);
-  // A saved app appears once it is named (the server lists it after "Save as /name").
+  assert.deepEqual(search('expense'), ['expense-review', 'expenses']);
+  assert.deepEqual(search('/pto'), ['time-off'], 'by alias');
+  assert.deepEqual(search('vacation'), ['time-off']);
+  assert.deepEqual(search('approve'), ['expenses'], 'by hint');
   assert.ok(search('').includes('big-claims'));
 });
 

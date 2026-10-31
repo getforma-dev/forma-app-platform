@@ -364,6 +364,18 @@ pub fn command(app: &LibraryApp) -> Option<(String, Vec<String>)> {
     ))
 }
 
+/// APP-120: the title a library app is shown under (the Library, `GET
+/// /v1/commands`) when the sidecar's `command.title` differs from the
+/// definition's: stored definitions never change, so the display does.
+pub fn display_title(digest: &str) -> Option<String> {
+    sidecar()
+        .get(digest)?
+        .get("command")?
+        .get("title")?
+        .as_str()
+        .map(str::to_owned)
+}
+
 /// APP-119: a library app's address copy from the sidecar: the optional
 /// `command.hint` and `command.examples` overrides (demo-quality copy) and
 /// the routing `intent_examples` the derived examples are made from.

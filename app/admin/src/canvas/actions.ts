@@ -11,6 +11,7 @@
 // `place` falls back to the composer (`compose.ts`). The utterance travels
 // only in a JSON body, never in a URL; the card shows typed values the
 // server composed, never the model's text.
+import { addressChip, addressFor } from './address-chip';
 import { focusCard, placeWork, refreshGroupRecords, workCard } from './board';
 import { showTiming, type Step } from './timing';
 import { routeSentence } from './sentences';
@@ -175,6 +176,30 @@ async function shareWith(draft: Draft): Promise<string> {
   return notes.join(' ');
 }
 
+/** The verb a decision's target status names (`approved` → "Approve"). */
+const DECISION_VERBS: Record<string, string> = {
+  approved: 'Approve', rejected: 'Reject', granted: 'Grant', denied: 'Deny', declined: 'Decline',
+  accepted: 'Accept', paid: 'Pay', disputed: 'Dispute', reviewed: 'Review', closed: 'Close', resolved: 'Resolve',
+};
+
+/**
+ * APP-120: the governed command the draft carries, by name: "Submit claim"
+ * (the create command's id and the record's noun, the last word of its
+ * schema: `expense_claim` → claim), "Approve claim" (a decision names the
+ * status it moves to).
+ */
+export function commandName(draft: Pick<Draft, 'action' | 'command_id' | 'schema_id' | 'values'>): string {
+  const noun = (draft.schema_id.split('_').pop() ?? '').toLowerCase();
+  let verb = label(draft.command_id);
+  if (draft.action === 'decide') {
+    const status = draft.values.find((value) => value.field_id === 'status');
+    const raw = typeof status?.value === 'object' && status?.value !== null ? String((status.value as { value?: unknown }).value ?? '') : String(status?.value ?? '');
+    const key = (raw || status?.display || '').trim().toLowerCase();
+    verb = DECISION_VERBS[key] ?? DECISION_VERBS[key.split(/[\s_]+/).pop() ?? ''] ?? verb;
+  }
+  return noun ? `${verb} ${noun}` : verb;
+}
+
 /**
  * Shows the confirmation card; resolves with the member's choice, or
  * `replaced` when another dock card (the chooser) took its place.
@@ -197,8 +222,11 @@ function confirmCard(document_: Document, draft: Draft, utterance: string, recei
     } else if (draft.target) {
       chips.append(el(document_, 'span', { class: 'cv-approver-chip', title: draft.target.record_id }, `Record: ${draft.target.summary} (v${draft.target.version})`));
     }
-    const heading = draft.action === 'create' ? `File this ${label(draft.schema_id).toLowerCase()}?` : `${label(draft.command_id)} this record?`;
-    const confirm = el(document_, 'button', { type: 'button', class: 'cv-confirm-yes' }, draft.action === 'create' ? 'Confirm and file' : 'Confirm');
+    // APP-120: the card names the governed command ("Submit claim", "Approve claim").
+    const name = commandName(draft);
+    const heading = draft.action === 'decide' && draft.target ? `${name}: ${draft.target.summary}?` : `${name}?`;
+    const confirm = el(document_, 'button', { type: 'button', class: 'cv-confirm-yes' }, name);
+    const address = addressFor(draft.app_id, draft.work_id);
     const edit = el(document_, 'button', { type: 'button', class: 'cv-secondary' }, 'Edit');
     const cancel = el(document_, 'button', { type: 'button', class: 'cv-secondary' }, 'Cancel');
     const card = el(document_, 'section', { class: 'cv-card cv-confirm', role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'cv-confirm-title' },
@@ -216,6 +244,8 @@ function confirmCard(document_: Document, draft: Draft, utterance: string, recei
       draft.rule ? el(document_, 'p', { class: 'cv-confirm-rule' }, draft.rule) : null,
       ...(draft.flags ?? []).map((flag) => el(document_, 'p', { class: 'cv-flag', 'data-state': flag.state }, flag.label)),
       el(document_, 'p', { class: 'cv-confirm-note' }, `${understoodMs !== null ? `Understood in ${understoodMs} ms. ` : ''}Nothing is written until you confirm. The command is committed through the audited path with a server-minted key.`),
+      // APP-120: which app this goes to, by its address ("via /expenses").
+      address ? el(document_, 'p', { class: 'cv-confirm-via' }, 'via ', addressChip(document_, address.slug, { interactive: false })) : null,
       el(document_, 'div', { class: 'cv-confirm-actions' }, confirm, edit, cancel));
     let close = () => undefined as void;
     const done = (choice: 'confirm' | 'edit' | 'cancel') => {

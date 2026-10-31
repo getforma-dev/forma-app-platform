@@ -15,6 +15,12 @@
 // (apps, cards, folders, cities, zones; each module registers its own with
 // `registerCompleter`). `?` in the empty bar opens the right pane on its
 // Shortcuts tab, as `?` on the canvas does; `/commands` opens Commands.
+// APP-120: `/` alone lists the twelve verbs in four groups (Place, Arrange,
+// Make, Help); from the first letter the hidden aliases (`/weather`, `/note`)
+// match too and the Apps section joins. A bare `/<address>` places the app
+// (the same as `/app <address>`, through `setAppPlacer`); `/<address> words`
+// tells that app something, exactly as before. While an address is typed
+// the hint reads "/expenses — Expenses · file a claim or approve one".
 //
 // `/name rest` runs that command: a library app opens at once through the
 // pinned compose (`{"intent", "app_id"}`, no routing, no model call) and
@@ -27,6 +33,7 @@
 // Nothing from the server is rendered as markup: titles and purposes are
 // text nodes; ids are checked UUIDs.
 import { submitAction } from './actions';
+import { addressLine } from './address-chip';
 import { boardWorks, placeWork } from './board';
 import { openCommandSheet } from './command-sheet';
 import {
@@ -60,11 +67,37 @@ export function registerCompleter(slug: string, complete: (rest: string) => Comp
   completers.set(slug, { complete, select: options.select ?? true });
 }
 
+/** The Expenses app's addresses (canonical and the kept alias): its words always go to the action path. */
+const EXPENSES = ['expenses', 'expense'];
+
+/**
+ * The suggestions for `/name rest`: the name's own completer, else its verb's;
+ * APP-120: after `/widget <kind> ` the kind's own (`/widget weather Au` lists
+ * cities as `/weather Au` does).
+ */
+function completerFor(name: string, slug: string, rest: string): { completer: Completer | undefined; rest: string } {
+  if (slug === 'widget') {
+    const kind = rest.match(/^(\S+)\s+([\s\S]*)$/);
+    const own = kind ? completers.get((kind[1] ?? '').toLowerCase()) : undefined;
+    if (own) return { completer: own, rest: kind?.[2] ?? '' };
+  }
+  return { completer: completers.get(name) ?? completers.get(slug), rest };
+}
+
 /** Text that reads like a record entry or a decision (the action path's lane). */
 const ENTRY = /\b(approve|approved|reject|rejected|decline|deny|accept|file|submit|spent|paid|log|record|add|sign off)\b|\$\s?\d/i;
 
-/** The slug whose bare form opens the ledger (`actions::ledger::bare_command`). */
-const LEDGER = ['expense'];
+/**
+ * APP-120: a bare `/<address>` places the app, as `/app <address>` does. The
+ * Library registers the placer (it knows the app's rows and cards); it
+ * answers false when it has no row for the app, and the pinned compose
+ * places it instead.
+ */
+type Placer = (address: Address, report: Report) => Promise<boolean>;
+let placeApp: Placer | null = null;
+export function setAppPlacer(placer: Placer): void {
+  placeApp = placer;
+}
 
 export type ServerCommand = {
   slug: string; aliases: string[]; title: string; purpose: string;
@@ -97,10 +130,12 @@ export function serverAddress(entry: ServerCommand): Address {
         if (rest && entry.record && ENTRY.test(rest)) await submitAction(rest, report, entry.app_id);
         return;
       }
-      // `/expense` alone opens the expense ledger; `/expense <words>` is
-      // always the action path for that app (APP-102 with APP-101).
-      if (LEDGER.includes(entry.slug)) {
-        await (rest ? submitAction(rest, report, entry.app_id) : submitAction('/expense', report));
+      // APP-120: a bare address places the app (`/expenses` = `/app expenses`).
+      if (!rest && placeApp && (await placeApp(serverAddress(entry), report))) return;
+      // `/expenses <words>` (and `/expense <words>`) is always the action path
+      // for that app (APP-102 with APP-101).
+      if (rest && EXPENSES.includes(entry.slug)) {
+        await submitAction(rest, report, entry.app_id);
         return;
       }
       if (rest && entry.record && ENTRY.test(rest)) {
@@ -357,8 +392,15 @@ export function startSlash(document_: Document): void {
   };
   const showHint = (command: Runnable, rest: string) => {
     const shown = argumentHint(command, rest);
-    const key = JSON.stringify(shown);
-    if (key !== hintKey) {
+    const address = 'hint' in command && 'kind' in command ? command as Address : null;
+    const key = JSON.stringify({ shown, address: address?.slug });
+    if (key !== hintKey && address) {
+      // APP-120: an address reads "/expenses — Expenses · file a claim or approve one".
+      hintKey = key;
+      hint.replaceChildren(
+        addressLine(document_, address),
+        ...(shown.example ? [el(document_, 'span', { class: 'cv-slash-example' }, 'e.g. ', el(document_, 'code', {}, shown.example))] : []));
+    } else if (key !== hintKey) {
       hintKey = key;
       hint.replaceChildren(
         el(document_, 'code', { class: 'cv-slash-sig' }, ...shown.parts.flatMap((part, at) => [
@@ -391,8 +433,8 @@ export function startSlash(document_: Document): void {
         return;
       }
       showHint(command, rest);
-      const completer = completers.get((argument[1] ?? '').toLowerCase()) ?? completers.get(command.slug);
-      if (completer) renderCompletions(completer.complete(rest), completer.select);
+      const { completer, rest: tail } = completerFor((argument[1] ?? '').toLowerCase(), command.slug, rest);
+      if (completer) renderCompletions(completer.complete(tail), completer.select);
       else {
         entries = [];
         list.hidden = true;

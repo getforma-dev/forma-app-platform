@@ -30,44 +30,54 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 
 ## Using the canvas
 
-The full rules (what is on a canvas, names and aliases, verbs, adding and removing, shortcuts) are in [CANVAS-RULES.md](CANVAS-RULES.md).
+The full rules (what is on a canvas, names and aliases, verbs, the Ask and Shape jobs, adding and removing, shortcuts) are in [CANVAS-RULES.md](CANVAS-RULES.md).
 
-**Intent bar (bottom).** Type a sentence, `/` for commands, or `/name` to address one of your apps.
+**Intent bar (bottom).** One sentence to learn: **Type `/` and a verb to change the canvas, `/` and an app's name to tell that app something, or just a sentence.**
 
-**Commands are verbs; apps are addresses (APP-119).** Commands are things you *do*. They come from one registry (`canvas/command-registry.ts`). Typing `/` alone lists only them, by category, each with its argument signature (`<required>`, `[optional]`). From the first letter (`/e…`), the list shows the matching commands first, then a separate section, "Apps — type /name and what you want". That section lists the matching apps on your canvas and your saved apps. An app's exact name or alias is always offered, even on a clean canvas (`/pto`). After `/name `, a hint row marks the argument being typed and shows an example. Live suggestions appear for apps, cards, folders, cities and zones. Tab fills a suggestion, Enter runs it, and ↑/↓ move through the list.
+**The model (APP-120).** The canvas holds things; apps are the only governed thing.
 
-Each app answers to its address: the catalog's slug and aliases for a library app, or the name you gave a saved app ("Save as /name"). The hint after the address comes from the app's definition, not from copy in the page: the server derives it from the create command's fields (status and initial fields left out), plus "… or approve/reject" when the app has decisions. An app that keeps no records answers to "what to show". The examples come from the catalog's intent examples. The six demo workflow apps keep their hand-written hint and example (the catalog's `command.hint` override).
+- **Apps** (governed) contain **cards**, their views. A card never exists without its app. It is addressed `app.card` (`expenses.ledger`) or by its pane number (`3.2`).
+- **Widgets** (one-off, yours, no governed data): Weather, Calculator, Clock, Note and Folder. A folder holds files; its one power, formation, makes an app that links back to it. A note keeps its private storage but is a widget to you.
+- **Arrangements** (layout only): stacks, unite frames and focus. They are never listed in the Library.
 
-| Category | Command | Does |
+**Verbs: twelve, in four groups.** They come from one registry (`canvas/command-registry.ts`). `/` alone lists exactly these, each with its signature (`<required>`, `[optional]`). From the first letter (`/e…`), the matching verbs come first, then a separate section, "Apps — type /name and what you want": the matching apps on your canvas and your saved apps (an app's exact name or alias is always offered, even on a clean canvas). After `/name `, a hint row marks the argument being typed and shows an example. Tab fills a suggestion, Enter runs it, ↑/↓ move.
+
+| Group | Verb | Does |
 | --- | --- | --- |
-| Library | `/apps [app name]` | Opens the right pane on its Library tab, filtered by the name, slug, alias or hint. Its suggestions list the matching apps, and Enter on one places it, as the pane's Add does. It never places a canvas card. |
-| Library | `/app <app name or number>` | Brings all of an app's cards (`/app expense`, `/app 3`). |
-| Library | `/card <card name or number>` | Brings one card (`/card 6.2`, `/card spend by category`). |
-| Canvas | `/note [text]` | Keeps a quick note as a card (your own record; edit in place, saved when you leave it). |
-| Canvas | `/unite <app>`, `/split <united app>` | Assembles an app's cards into one frame; breaks it apart again. |
-| Canvas | `/arrange` | Lays the board out by app. |
-| Folders | `/folder [folder, new or formation] [name or instruction]` | Opens the folder picker, a folder, `new <name>`, `formation <instruction>` or `uploads`. Aliases `/storage`, `/box`. |
-| Widgets | `/weather [city or style]`, `/calculator [expression or style]`, `/clock [city or time zone]` | Utility widgets; restyle them in words. Every utility card has ×. |
-| Agents | `/agent` | Opens "Connect an agent". |
-| Help | `/commands [search]` (`/help`), `/shortcuts` | The pane's Commands tab (its footer: "Your apps answer to /name — see /apps"); the pane's Shortcuts tab (`/shortcuts`, `?`). |
+| Place | `/app <app name or number>` | Places every card of an app (`/app expenses`, `/app 3`). A bare `/<address>` does the same (`/expenses`). |
+| Place | `/card <app.card or number>` | Places one card (`/card expenses.ledger` and `/card 3.2` are the same card). |
+| Place | `/widget <weather\|calculator\|clock\|note\|folder> [args]` | Places a widget (`/widget weather Austin`, `/widget note Call the auditor`). Restyle a widget in words (`/widget calculator make it a TI-84`). `/widget folder` opens the folder picker. |
+| Arrange | `/arrange` | Lays the board out by app. |
+| Arrange | `/unite <app>`, `/split <united app>` | Assembles an app's cards into one frame; breaks it apart again. |
+| Arrange | `/focus [app.card or number]` | Opens the selected card (or the one named) in focus. |
+| Make | `/folder <name> formation <instruction>` | Builds an app from a folder's files (`/folder Q3 formation build a metrics app`). `/folder` alone opens the picker; `/folder new <name>` makes one. |
+| Help | `/apps [query]` | Opens the Library, filtered. It never places a canvas card. |
+| Help | `/commands [search]`, `/shortcuts`, `/agent` | The pane's Commands tab, its Shortcuts tab (`?`), and "Connect an agent". |
 | — | Any other sentence | The instant pick and live reshape; a short chooser when two apps fit equally; "Build something new" generates one. |
 
-**Addressing an app.** `/<address> [hint]` opens that app, tailored by the words. With words that file or decide, it files or decides in that app. `/expense` alone opens the expense ledger. `/expense $86 at Nobu, client dinner, Sarah approves` files the expense. A saved `/big-claims …` opens its saved work.
+**Aliases: nothing breaks.** These are accepted and autocompleted from their first letter but not listed under `/` alone: `/weather`, `/calculator`, `/clock` and `/note` (= `/widget <kind>`), `/help` (= `/commands`), `/folder` alone (the picker), and every app's old name (`/expense`, `/pto`, `/purchase`, …). There is no `/remove`: the card's ×, Delete on a selection, or the Library's Remove take things off (as in Figma and Miro).
 
-**Workflow apps (APP-107).** Each address opens its app; with text after it, files or decides in that app.
+**Addressing an app.** `/<address> [words]` tells that app something: the words tailor it or, when they file or decide, file or decide in that app. `/expenses $86 at Nobu, client dinner, Sarah approves` files the claim; `/expense …` still does exactly the same. A saved `/big-claims …` opens its saved work. The confirm card names the governed command ("Submit claim", "Approve claim: …") and says which app it goes to ("via /expenses").
+
+**The address rule.** An app's address is its title, lowercased and hyphenated: Expenses is `/expenses`, Time off `/time-off`, Purchase requests `/purchase-requests`. Every name an app answered to before stays as a hidden alias forever (`/expense`, `/pto`, `/purchase`). The address shows wherever the app does, as a small grey chip: on its Library row (with "also /expense"), on its app card on the canvas, in the bar's hint ("/expenses — Expenses · file a claim or approve one") and on the confirm card. Click a chip to put `/name ` in the bar. Expense claims is shown as "Expenses" and the review queue as "Expense review (demo data)" (the catalog's display title; the stored definitions are unchanged).
+
+The hint after an address comes from the app's definition: the server derives it from the create command's fields (status and initial fields left out), plus "… or approve/reject" when the app has decisions. An app that keeps no records answers to "what to show". The examples come from the catalog's intent examples. The six demo workflow apps keep their hand-written hint and example (the catalog's `command.hint` override).
+
+**Workflow apps (APP-107).** Each address places its app; with text after it, files or decides in that app.
 
 | Address | Does |
 | --- | --- |
-| `/pto` (`/time-off`, `/leave`, `/vacation`) | Time off: "Nov 24–26 for Thanksgiving, Sarah approves". |
-| `/purchase` (`/purchases`, `/po`) | Purchase requests; over $5,000 the manager approves, then finance. |
-| `/invoice` (`/invoices`, `/payables`) | Vendor invoices; a PO that does not match its purchase request is flagged. |
-| `/access` (`/access-request`) | Access requests; the system owner grants or denies. The access review tracker is now `/access-review`. |
-| `/discount` (`/deal-desk`, `/discounts`) | Deal desk; 10% or less approves itself by the app's rule. |
+| `/expenses` (`/expense`, `/claim`) | Expense claims: "$86 at Nobu, client dinner, Sarah approves". |
+| `/time-off` (`/pto`, `/leave`, `/vacation`) | Time off: "Nov 24–26 for Thanksgiving, Sarah approves". |
+| `/purchase-requests` (`/purchase`, `/purchases`, `/po`) | Purchase requests; over $5,000 the manager approves, then finance. |
+| `/vendor-invoices` (`/invoice`, `/invoices`, `/payables`) | Vendor invoices; a PO that does not match its purchase request is flagged. |
+| `/access-requests` (`/access`, `/access-request`) | Access requests; the system owner grants or denies. The access review tracker is `/access-review-tracker` (`/access-review`). |
+| `/deal-desk` (`/discount`, `/discounts`) | Deal desk; 10% or less approves itself by the app's rule. |
 
-**The right pane: Library | Commands | Shortcuts (APP-119).** One pane, three tabs. `L` and `/apps` open it on Library. `/commands` and `/help` open it on Commands. `?` (on the canvas and in the empty bar), `/shortcuts` and ⋯ → Shortcuts and commands open it on Shortcuts: one convention, as on GitHub, Gmail and Linear, `?` means the keyboard shortcuts. `L` on another tab switches to Library; `L` on Library closes the pane. The × and Esc close it (Esc clears a search first), and focus returns to what opened it. The tabs are ARIA tabs (←/→, Home, End). At phone width the pane is the bottom sheet, with the tabs on top.
-- Library: organized as Category → App → numbered cards. Each app row shows its address (`/expense`), its hint and an example; a click on the example puts it in the bar.
-- Click to add or remove a card. "Add all" brings a whole app, "Stack" brings it as a stack, and search finds by name, number, address, alias or hint.
-- Commands: the commands only, by category, with arguments, aliases, examples and a search.
+**The right pane: Library | Commands | Shortcuts.** One pane, three tabs. `L` and `/apps` open it on Library. `/commands` and `/help` open it on Commands. `?` (on the canvas and in the empty bar), `/shortcuts` and ⋯ → Shortcuts and commands open it on Shortcuts: one convention, as on GitHub, Gmail and Linear, `?` means the keyboard shortcuts. `L` on another tab switches to Library; `L` on Library closes the pane. The × and Esc close it (Esc clears a search first), and focus returns to what opened it. The tabs are ARIA tabs (←/→, Home, End). At phone width the pane is the bottom sheet, with the tabs on top.
+- Library: two sections. **Apps** (Category → App → numbered cards) and **Widgets** (Weather, Calculator, Clock, Note, Folder; the Note and Folder rows expand to your notes and folders). Every row shows an on-canvas dot (filled when it is on the canvas), its name in grey (an app's `/address` chip with "also /…", a card's `app.card`, a widget's `/weather`) and an Add/Remove toggle; app rows read "n of m cards". The pane is a pure projection of the board: it re-renders from one `canvas:changed` event after every add and remove.
+- An app row also shows its hint and an example; a click on the example puts it in the bar. "Stack" brings an app as a stack; search finds by name, number, address, alias, hint or `app.card`.
+- Commands: the twelve verbs in their four groups, with arguments, aliases, examples and a search; the footer reads "Your apps answer to /name — see /apps".
 
 **Stacks.**
 - Making one: drag a card onto another and hold, or select several cards and press Cmd/Ctrl+G.
@@ -87,12 +97,12 @@ Each app answers to its address: the catalog's slug and aliases for a library ap
 
 **Folders (APP-108).** Lead with click → type:
 
-1. **Click** "+ Folder" (toolbar or the library pane's Folders group), or drop files on empty canvas: a folder opens with its name ready to edit (click the title any time to rename).
+1. **Click** "+ Folder" (toolbar or the Library's Widgets → Folder row), or drop files on empty canvas: a folder opens with its name ready to edit (click the title any time to rename).
 2. **Drop** PDFs, images, CSV, XLSX or text onto it, or use "Add files" (up to 20 files, 20 MB each). A CSV or XLSX is read at once and shows its column types and first rows; adjust any type, or keep the defaults ("Keep as card" places a data card with receipts).
 3. **Click the folder** to make it active: its chip appears in the bar ("📁 Q3 board pack ×") and plain sentences now act on it: "build a metrics app and explain it", "brief me". × or Esc clears it.
 4. **Buttons**: "✨ Formation" (an editable prompt, prefilled "Build an app that shows the key metrics and explain them") and "Brief me" (an overview, a paragraph per file and key points; PDF statements cited "file, p. N").
 5. **@-mention** a folder in any sentence: "build a metrics app from @Q3 metrics".
-6. **Commands last**, for power users: `/folder` (picker), `/folder new <name>`, `/folder <name|number>`, `/folder uploads`, `/folder <name|number> formation <instruction>`; aliases `/storage`, `/box`.
+6. **Commands last**, for power users: `/folder <name|number> formation <instruction>` (the Make verb), `/folder` (picker), `/folder new <name>`, `/folder <name|number>`, `/folder uploads`; aliases `/storage`, `/box`, and `/widget folder`.
 
 A CSV dropped on the canvas or the bar outside a folder goes to your "Uploads" folder and becomes a data card. Apps built from a folder show "Built from folder: <name> · N files" (click it to open the folder) and a Summary card ("AI summary · numbers from receipts"); a receipt lists the source files. Sharing such an app gives the teammate exactly the files it was built from.
 

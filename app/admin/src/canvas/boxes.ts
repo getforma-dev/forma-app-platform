@@ -23,7 +23,7 @@
 // or the selected / last opened / only one: a brief request mounts the
 // Brief card (`brief.ts`), anything else builds an app from the folder
 // (`/folder <folder> create me an app for <purpose>` still works). The
-// library pane gains a "Folders" section. With a folder card selected, the
+// Library lists them under Widgets → Folder (APP-120). With a folder card selected, the
 // intent bar's free text carries its id to the action path (`actions.ts`).
 //
 // Nothing from the server is markup: names are text nodes, ids checked UUIDs.
@@ -41,7 +41,7 @@ import { openDataSheet } from './data-sheet';
 import { startExplain } from './explain';
 import { registerFocusCard, unregisterFocusCard } from './focus';
 import {
-  boardWorks, canvasApi, canvasHost, isDemoCanvas, mountWidget, onBoardChange, onLayoutSaved,
+  boardWorks, canvasApi, canvasHost, emitCanvasChanged, isDemoCanvas, mountWidget, onBoardChange, onLayoutSaved,
   placeWork, unmountWidget, widgetSpot, workCard,
 } from './board';
 import { setFileRouter } from './receipt';
@@ -50,7 +50,7 @@ import { announce, el, isUuid } from './render';
 import { registerCommands, registerCompleter, type Completion } from './slash';
 
 type Report = (message: string) => void;
-type OpenBox = { boxId: string; item: HTMLElement; card: HTMLElement; refresh(): Promise<void>; upload(list: File[], auto?: boolean): Promise<void>; rename(): void; name(): string };
+type OpenBox = { boxId: string; item: HTMLElement; card: HTMLElement; refresh(): Promise<void>; upload(list: File[], auto?: boolean): Promise<void>; rename(): void; name(): string; close(): void };
 
 const STORAGE_KEY = 'forma.boxes.v1';
 const CMD = `/${FOLDER_COMMAND}`;
@@ -126,7 +126,8 @@ export async function refreshBoxes(): Promise<Box[]> {
   } catch {
     // keep the last list
   }
-  renderPane();
+  // APP-120: the Library's Widgets → Folder row lists the member's folders.
+  emitCanvasChanged();
   return boxes;
 }
 
@@ -134,32 +135,35 @@ function boxLabel(box: Box): string {
   return box.kind === 'uploads' ? 'Uploads' : box.name;
 }
 
-function renderPane(): void {
-  const document_ = document;
-  const list = document_.querySelector<HTMLElement>('#cv-library [data-lib-list]');
-  if (!list) return;
-  let section = list.querySelector<HTMLElement>('.cv-lib-cat[data-category="boxes"]');
-  if (!section) {
-    section = el(document_, 'section', { class: 'cv-lib-cat bx-lib', 'data-category': 'boxes', 'data-external': 'true', 'aria-label': NOUN_PLURAL },
-      el(document_, 'h3', { class: 'cv-lib-cat-title' }, el(document_, 'span', {}, NOUN_PLURAL), el(document_, 'span', { class: 'cv-lib-count' }, '')),
-      el(document_, 'ul', { class: 'cv-lib-apps' }));
-    const utilities = list.querySelector('.cv-lib-cat[data-category="utilities"]');
-    if (utilities) list.insertBefore(section, utilities);
-    else list.append(section);
-  }
-  const rows = boxes.map((box) => {
-    const button = el(document_, 'button', { type: 'button', class: 'cv-lib-expand bx-lib-open', title: `Open the ${noun} on the canvas` },
-      el(document_, 'span', { class: 'cv-lib-num' }, String(box.number)),
-      el(document_, 'span', { class: 'cv-lib-app-title' }, boxLabel(box)),
-      el(document_, 'span', { class: 'cv-lib-on' }, `${box.file_count} ${box.file_count === 1 ? 'file' : 'files'}${box.owner ? '' : ' · shared'}`));
-    button.addEventListener('click', () => void openBox(box.box_id).then(announce));
-    return el(document_, 'li', { class: 'bx-lib-row', 'data-box': box.box_id }, el(document_, 'div', { class: 'cv-lib-app-head' }, button));
-  });
-  const create = el(document_, 'button', { type: 'button', class: 'cv-lib-all bx-lib-new' }, `+ New ${noun}`);
-  create.addEventListener('click', () => void newUntitled().then(announce));
-  section.querySelector('.cv-lib-apps')?.replaceChildren(...rows, el(document_, 'li', { class: 'bx-lib-row' }, create));
-  const count = section.querySelector('.cv-lib-count');
-  if (count) count.textContent = `${boxes.length} ${boxes.length === 1 ? noun : nouns}`;
+/** APP-120: the Library's Widgets → Folder row: every folder, and whether it is on the canvas. */
+export function folderEntries(): { id: string; number: number; title: string; detail: string; on: boolean }[] {
+  return boxes.map((box) => ({
+    id: box.box_id,
+    number: box.number,
+    title: boxLabel(box),
+    detail: `${box.file_count} ${box.file_count === 1 ? 'file' : 'files'}${box.owner ? '' : ' · shared'}`,
+    on: open.has(box.box_id),
+  }));
+}
+
+/** APP-120: the Library's Add/Remove on one folder: opens it on the canvas, or takes it off (nothing is deleted). */
+export async function toggleFolder(boxId: string): Promise<string> {
+  const entry = open.get(boxId);
+  if (!entry) return openBox(boxId);
+  entry.close();
+  return `${entry.name()} is back in the library.`;
+}
+
+/** APP-120: takes every folder off the canvas (the Folder row's Remove; nothing is deleted). */
+export function closeFolders(): number {
+  const all = [...open.values()];
+  for (const entry of all) entry.close();
+  return all.length;
+}
+
+/** APP-120: a new, untitled folder (the Folder row's Add). */
+export function newFolder(): Promise<string> {
+  return newUntitled();
 }
 
 /** A box by number ("1") or name (case-insensitive; the longest name the text starts with). */
@@ -237,7 +241,7 @@ export async function openBox(boxId: string, at?: { x: number; y: number }): Pro
   const item = mountWidget(card.card, { id: `box-${boxId}`, title: boxLabel(contents.box), width: 520, minHeight: 360, at, focus: !at });
   if (!item) return `The ${noun} could not be placed.`;
   item.classList.add('cv-item-box');
-  const entry: OpenBox = { boxId, item, card: card.card, refresh: card.refresh, upload: card.upload, rename: card.rename, name: card.name };
+  const entry: OpenBox = { boxId, item, card: card.card, refresh: card.refresh, upload: card.upload, rename: card.rename, name: card.name, close: card.close };
   open.set(boxId, entry);
   lastOpened = boxId;
   // Opening a folder makes it the bar's active folder (a restored card does not).
@@ -471,9 +475,10 @@ function buildBoxCard(initial: BoxContents) {
     field.addEventListener('blur', () => void finish(true));
   };
   title.addEventListener('click', rename);
-  close.addEventListener('click', () => { for (const listener of closeListeners) listener(); });
+  const closeNow = () => { for (const listener of closeListeners) listener(); };
+  close.addEventListener('click', closeNow);
   render();
-  return { card, refresh, upload, rename, name: () => boxLabel(contents.box), onClose: (listener: () => void) => closeListeners.push(listener) };
+  return { card, refresh, upload, rename, name: () => boxLabel(contents.box), close: closeNow, onClose: (listener: () => void) => closeListeners.push(listener) };
 }
 
 async function sheetFor(boxId: string, file: BoxFile, done: () => void): Promise<void> {
@@ -683,8 +688,8 @@ function clearBar(): void {
 const FOLDER = {
   slug: FOLDER_COMMAND,
   aliases: FOLDER_ALIASES,
-  title: NOUN_PLURAL,
-  purpose: `Your ${nouns} of files: open one, make a new one, or build an app from one (formation)`,
+  title: `Make an app from a ${noun}`,
+  purpose: `Formation builds an app from a ${noun}’s files; /${FOLDER_COMMAND} alone picks a ${noun}, /${FOLDER_COMMAND} new <name> makes one`,
   run: async (text: string, report: Report = announce) => {
     const words = text.trim();
     await refreshBoxes();

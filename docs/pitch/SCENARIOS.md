@@ -12,21 +12,28 @@ Demo organization: Northstar (`00000000-0000-4000-8000-000000000001`), listed in
 4. Pre-existing claims so the canvas never starts empty: the library seeds one claim (Blue Bottle Coffee, $42.50) on Priya's work — `submitted` in the current fixture (APP-113: a create can no longer start approved); on beta, seeded before that fix, it stays approved; before the pitch, file two more as Diego through the canvas and decide them as Sarah (the campaign does exactly this: one approved Nobu dinner, one rejected Figma seat). Keep one pending for the live scenario or file it on stage.
 5. Two browser windows, side by side: **left** Diego signed in at `/canvas`, **right** Sarah signed in at `/canvas`. Both show "Live" in the top bar (the event stream is open).
 
+## The one sentence (APP-120)
+
+Teach this first: **Type `/` and a verb to change the canvas, `/` and an app's name to tell that app something, or just a sentence.** The canvas holds things; apps are the only governed thing. Apps contain cards (`expenses.ledger`, or `3.2`); widgets (Weather, Calculator, Clock, Note, Folder) are yours and one-off; stacks, unite frames and focus only arrange. `/` alone shows the twelve verbs (Place `/app` `/card` `/widget`; Arrange `/arrange` `/unite` `/split` `/focus`; Make `/folder <name> formation <instruction>`; Help `/apps` `/commands` `/shortcuts` `/agent`); every app answers to its `/name`, shown as a grey chip wherever the app appears. Every older command still works as a hidden alias (`/expense`, `/pto`, `/weather`, `/note`, `/help`).
+
 ## Scenario 1: employee expense → manager approval, live
 
 **Left window (Diego).** Type in the intent bar, exactly:
 
 > I spent $86 on a client dinner at Nobu last night, Sarah approves my expenses
 
+(Or address the app: `/expenses $86 at Nobu, client dinner, Sarah approves`; `/expense …` does exactly the same.)
+
 What happens (measured in the campaign, synthetic data): the status line reads "Understood in ~600 ms"; a **confirmation card** rises above the intent bar:
 
 - Amount **$86.00** · Merchant **Nobu** · Category **meals** · Spent on **yesterday's date** · Note **a client dinner** · Status **submitted**
+- the heading names the governed command: **Submit claim?**
 - chips: *Expense claims* (the library app; the first time it is also "placed on your canvas"), **Approver: Sarah Chen**
-- the note "Nothing is written until you confirm. The command is committed through the audited path with a server-minted key." and the buttons **Confirm and file** / Edit / Cancel.
+- the note "Nothing is written until you confirm. The command is committed through the audited path with a server-minted key.", the footer "via `/expenses`" and the buttons **Submit claim** / Edit / Cancel.
 
 Say: "Diego just said it. Forma turned it into a typed record under the app's schema, found Sarah by name in his organization and minted the command. Nothing has been written yet."
 
-Click **Confirm and file**. The status line reads "Filed: record v1, commit N, audit <8 hex>. Shared with Sarah Chen for approval." The **Expense claims** group appears (or pulses) on the canvas with its **Expense claims** records card: the Nobu claim at the top, status chip **submitted**, "Filed by Diego Ramos", and the card's provenance line (publication, definition digest, commit sequence, work version).
+Click **Submit claim**. The status line reads "Filed: record v1, commit N, audit <8 hex>. Shared with Sarah Chen for approval." The **Expense claims** group appears (or pulses) on the canvas with its **Expense claims** records card: the Nobu claim at the top, status chip **submitted**, "Filed by Diego Ramos", and the card's provenance line (publication, definition digest, commit sequence, work version).
 
 **Right window (Sarah).** Within a second, without a reload: the Expense claims group is placed on her canvas (`app.shared` on her stream, the group fetched under her own grants). Her records card reads **"1 waiting for your approval · N records"**; the Nobu row carries **Approve** and **Reject**.
 
@@ -36,7 +43,7 @@ Either click **Approve** on the row, or type in her intent bar:
 
 > approve the Nobu dinner
 
-A confirmation card: *Decide this record?* — Status **approved**, the record chip "Record: $86.00 · Nobu · a client dinner (v1)", **Confirm**. Click Confirm. Her card refreshes: status chip **approved**, "0 waiting for your approval".
+A confirmation card: *Approve claim: $86.00 · Nobu · a client dinner?* — Status **approved**, the record chip "Record: $86.00 · Nobu · a client dinner (v1)", **Approve claim**, "via `/expenses`". Click Approve claim. Her card refreshes: status chip **approved**, "0 waiting for your approval".
 
 **Left window.** The Nobu row turns **approved** live (`record.committed` on Diego's stream re-read his records list), with a brief glow. Say: "That decision is an audited command: version 2 of the record, one `command.committed` event on the organization's hash chain, and the chain verifies."
 
@@ -163,7 +170,7 @@ The fixture is `docs/pitch/folder-fixture/` (synthetic: `q3_metrics.csv`, `q3_pi
 
 ## The canvas: library pane and controls (APP-104)
 
-The canvas starts empty except for what the member brought onto it and any record waiting for their decision (Sarah's pending expense always shows). **Library** in the top bar (or `L`) opens the pane: Category → App → Card, every card numbered (`3.2`), Add/Remove per card, "Add all" per app, search by name or number. In the bar, `/card 3.2` places one card and `/app expense` an app's cards, with autocomplete. `/apps [name]` opens this pane filtered by the name (it no longer places a canvas card), and its suggestions place an app as Add does. Every command, with its arguments and examples, is in one registry that drives the `/` list, the `/commands` sheet (also `/help`, or `?` in the empty bar) and the `?` sheet (APP-118). The placed set is kept in this browser (DS-67).
+The canvas starts empty except for what the member brought onto it and any record waiting for their decision (Sarah's pending expense always shows). **Library** in the top bar (or `L`) opens the pane. APP-120: it has two sections, **Apps** (Category → App → Card, every card numbered `3.2` and named `expenses.ledger`) and **Widgets** (Weather, Calculator, Clock, Note, Folder; Note and Folder expand to your notes and folders). Every row has an on-canvas dot, its name in grey and Add/Remove; app rows read "n of m cards", and everything updates on each add and remove. In the bar, `/card expenses.ledger` (or `/card 3.2`) places one card and `/expenses` (or `/app expenses`) the whole app, with autocomplete. `/apps [name]` opens this pane filtered by the name, and its suggestions place an app as Add does. Every verb, with its arguments and examples, is in one registry that drives the `/` list and the pane's Commands tab (`/commands`, `/help`); `?` opens the Shortcuts tab. The placed set is kept in this browser (DS-67).
 
 Controls follow Figma: scroll or two-finger swipe pans (Shift: sideways); Cmd/Ctrl + scroll and pinch zoom at the cursor; Space + drag or middle-drag pans; `V` move, `H` hand (toolbar bottom center, with the zoom menu); Cmd/Ctrl + `=`/`-` zoom, Shift + 0 / 1 / 2 zoom to 100% / fit / selection; click a card's header to select, Shift + click to add, drag the header to move, arrows nudge 1 px (Shift 10 px), Delete puts the selection back in the library (no data changes), Esc clears; `?` shows the sheet. Touch: one finger pans the empty canvas, two fingers pinch. No shortcut fires while typing.
 
@@ -206,13 +213,13 @@ Five more record apps join the library, each the same governed pattern as Expens
 
 | App (slash) | Category | Request | Decisions | Declared rule (server-enforced) |
 | --- | --- | --- | --- | --- |
-| Time off (`/pto`) | People | leave type, start, end, days, note | submitted → approved / rejected | — |
-| Purchase requests (`/purchase`) | Finance | item, vendor, amount, cost center, justification | submitted → approved (≤ $5,000) or → manager_approved → approved (> $5,000); any step → rejected | guards on `amount`; finance cannot approve before the manager |
-| Vendor invoices (`/invoice`) | Finance | vendor, invoice number, amount, PO, due date | received → approved → paid, or → disputed | PO match flag (display only, DS-72) |
-| Access requests (`/access`) | Security | system, role, reason, expires on | requested → granted / denied | — |
-| Deal desk (`/discount`) | Sales | account, deal amount, discount %, reason | submitted → approved / rejected | ≤ 10% approves on create (one audited command) |
+| Time off (`/time-off`, alias `/pto`) | People | leave type, start, end, days, note | submitted → approved / rejected | — |
+| Purchase requests (`/purchase-requests`, alias `/purchase`) | Finance | item, vendor, amount, cost center, justification | submitted → approved (≤ $5,000) or → manager_approved → approved (> $5,000); any step → rejected | guards on `amount`; finance cannot approve before the manager |
+| Vendor invoices (`/vendor-invoices`, alias `/invoice`) | Finance | vendor, invoice number, amount, PO, due date | received → approved → paid, or → disputed | PO match flag (display only, DS-72) |
+| Access requests (`/access-requests`, alias `/access`) | Security | system, role, reason, expires on | requested → granted / denied | — |
+| Deal desk (`/deal-desk`, alias `/discount`) | Sales | account, deal amount, discount %, reason | submitted → approved / rejected | ≤ 10% approves on create (one audited command) |
 
-`/access` now opens Access requests; the Access review tracker keeps `/access-review` (alias `/access-audit`).
+`/access` (alias) and `/access-requests` open Access requests; the Access review tracker is `/access-review-tracker` (aliases `/access-review`, `/access-audit`). APP-120: every app's address is its title, lowercased and hyphenated; the earlier short names stay as aliases.
 
 **Personas.** Diego Ramos files; Sarah Chen is the manager; Priya Natarajan decides the purchase's finance step on the local stand. On beta, until a third account exists, Sarah decides both purchase steps (say so: "on stage Sarah plays both roles"; DS-71).
 

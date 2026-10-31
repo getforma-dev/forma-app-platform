@@ -24,7 +24,7 @@ const REFRESH_MS = 4000;
 
 const SPACES: [string, string][] = [
   ['finance', 'Finance'], ['security', 'Security'], ['operations', 'Operations'], ['sales', 'Sales'],
-  ['support', 'Support'], ['people', 'People'], ['utilities', 'Utilities'], ['mine', 'My apps'], ['folders', 'Folders'],
+  ['support', 'Support'], ['people', 'People'], ['utilities', 'Widgets'], ['mine', 'My apps'], ['folders', 'Folders'],
 ];
 const ACTIONS: [string, string][] = [
   ['read', 'Read'], ['draft', 'Draft'], ['commit', 'Commit'], ['decide', 'Decide'], ['share', 'Share'], ['build', 'Build apps'],

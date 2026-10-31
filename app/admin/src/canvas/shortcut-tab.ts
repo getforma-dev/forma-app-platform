@@ -9,6 +9,7 @@
 // markup.
 import { openCommandSheet } from './command-sheet';
 import { onPaneTab, openPane } from './pane';
+import { GRAMMAR } from './command-registry';
 import { el } from './render';
 
 const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -20,44 +21,47 @@ const MOD = mac ? '⌘' : 'Ctrl';
  * path; not every click has a command.
  */
 export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][] = [
-  ['Bring things in', [
+  ['Place', [
     ['An app for a request', 'Type it in plain words in the bar', 'Enter'],
-    ['A card', 'Library → click the card', '/card 3.2'],
-    ['A whole app', 'Library → Add all', '/app expense'],
-    ['Every app you can open', 'Library', '/apps'],
-    ['Weather, calculator, clock', 'Library → Utilities, or say “show the weather in Austin”', '/weather Austin'],
-    ['Restyle a widget', 'The widget’s Restyle field', '/calculator make it a TI-84'],
-    ['A note', '⋯ → New note, or Library → Notes', '/note text'],
-    ['A folder', '+ Folder in the toolbar, or drop files on the canvas', '/folder new Q3'],
-    ['An app from a folder', 'Folder → ✨ Formation, or click the folder and type', '/folder 1 formation …'],
-    ['A brief of a folder', 'Folder → Brief me', '/folder 1 formation brief me'],
-    ['File an expense', 'Say it: “I spent $86 at Nobu, Sarah approves”', '/expense …'],
-    ['Approve or reject', 'Records card → Approve · Reject, or say “approve the Nobu dinner”', '—'],
+    ['A whole app', 'Library → Apps → Add', '/app expenses · /expenses'],
+    ['A card', 'Library → expand an app → Add', '/card expenses.ledger · /card 3.2'],
+    ['A widget', 'Library → Widgets → Add, or say “show the weather in Austin”', '/widget weather Austin · /weather'],
+    ['Restyle a widget', 'The widget’s Restyle field', '/widget calculator make it a TI-84'],
+    ['A note', '⋯ → New note, or Library → Widgets → Note', '/widget note text · /note'],
+    ['A folder', '+ Folder in the toolbar, Library → Widgets → Folder, or drop files on the canvas', '/folder'],
+    ['Take it off the canvas', 'The × on it, Library → Remove, or ⋯ → Take off the canvas', 'Delete'],
   ]],
-  ['Cards', [
+  ['Tell an app', [
+    ['File an expense', 'Say it: “I spent $86 at Nobu, Sarah approves”', '/expenses …'],
+    ['Approve or reject', 'Records card → Approve · Reject, or say “approve the Nobu dinner”', '/expenses approve …'],
+    ['Any app', 'Click its /name chip (Library or the app card) to put it in the bar', '/name …'],
+  ]],
+  ['Arrange', [
     ['Select', 'Click a header · Shift + click to add', '—'],
     ['Move', 'Drag the header', 'Arrow keys · Shift: 10 px'],
-    ['Focus', 'The [ ] button on a card, or ⋯ → Focus', 'F'],
-    ['Unite an app', 'App card → Unite, Library → Unite, or ⋯ → Unite app', 'U · /unite expense'],
-    ['Break it apart', 'Frame → Break apart, or ⋯ → Break app apart', 'Shift + U · /split expense'],
-    ['Take off the canvas', 'The × on a card, or ⋯ → Take off the canvas', 'Delete'],
+    ['Arrange by app', '⋯ → Arrange by app', '/arrange'],
+    ['Unite an app', 'App card → Unite, Library → Unite, or ⋯ → Unite app', 'U · /unite expenses'],
+    ['Break it apart', 'Frame → Break apart, or ⋯ → Break app apart', 'Shift + U · /split expenses'],
+    ['Focus', 'The [ ] button on a card, or ⋯ → Focus', 'F · /focus'],
     ['Stack', 'Drag onto a card and hold, Library → Stack, or ⋯ → Stack them', `${MOD} + G`],
     ['Leaf through a stack', 'The ‹ › on the stack', '← · →'],
     ['Fan a stack out', 'The +N on the stack', 'Enter · Esc folds'],
     ['Spread a stack', 'Spread on the stack, or ⋯ → Spread a stack', `${MOD} + Shift + G`],
     ['Rename a stack', 'Double-click its name', '—'],
   ]],
+  ['Make', [
+    ['An app from a folder', 'Folder → ✨ Formation, or click the folder and type', '/folder 1 formation …'],
+    ['A brief of a folder', 'Folder → Brief me', '/folder 1 formation brief me'],
+  ]],
   ['Move around', [
     ['Pan', 'Scroll, or drag with the hand tool', 'Space + drag'],
     ['Zoom', 'The zoom menu (100% ▾), or pinch', `${MOD} + = · ${MOD} + −`],
     ['100% · fit · selection', 'The zoom menu', 'Shift + 0 · 1 · 2'],
     ['Move tool · hand tool', 'The arrow · hand in the toolbar', 'V · H'],
-    ['Arrange by app', '⋯ → Arrange by app', '/arrange'],
   ]],
-  ['Canvas', [
+  ['Help', [
     ['Library', 'Library at the top, or the pane’s Library tab', 'L · /apps'],
     ['Every command', 'The pane’s Commands tab, or the link at the top of this tab', '/commands · /help'],
-    ['Address an app', 'Library: each app shows its /address and an example', '/expense …'],
     ['Show timings', '⋯ → Show timings, or say “show timings”', '#timing=1'],
     ['Shortcuts tab', '⋯ → Shortcuts and commands, or the pane’s Shortcuts tab', '? · /shortcuts'],
   ]],
@@ -81,6 +85,7 @@ function build(document_: Document): boolean {
   commands.addEventListener('click', () => openCommandSheet(''));
   body.replaceChildren(
     el(document_, 'p', { class: 'cv-shortcuts-sub' }, 'Everything works by clicking. Keys and / commands are shortcuts. ', commands),
+    el(document_, 'p', { class: 'cv-commands-grammar' }, GRAMMAR),
     el(document_, 'div', { class: 'cv-shortcuts-grid' },
       ...SHORTCUTS.map(([title, rows]) => el(document_, 'section', { 'aria-label': title },
         el(document_, 'h3', {}, title),

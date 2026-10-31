@@ -106,6 +106,33 @@ const HINT_CHARS: usize = 120;
 const EXAMPLES: usize = 3;
 const EXAMPLE_CHARS: usize = 160;
 
+/// APP-120, the address rule: an app's canonical `/name` is its (display)
+/// title, lowercased and hyphenated; a parenthetical note is not part of
+/// it ("Expense review (demo data)" → `expense-review`). The library's
+/// sidecar carries the result (`contracts/make_library.py` `address`), and
+/// every name an app answered to before stays as a hidden alias.
+pub fn address_of(title: &str) -> String {
+    let mut plain = String::new();
+    let mut depth = 0usize;
+    for c in title.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => plain.push(c),
+            _ => {}
+        }
+    }
+    let mut address = String::new();
+    for c in plain.to_lowercase().chars() {
+        if c.is_ascii_lowercase() || c.is_ascii_digit() {
+            address.push(c);
+        } else if !address.is_empty() && !address.ends_with('-') {
+            address.push('-');
+        }
+    }
+    address.trim_end_matches('-').to_owned()
+}
+
 /// A field id as a member reads it (`spent_on` → "spent on").
 fn label(field: &str) -> String {
     field.replace('_', " ")
@@ -217,10 +244,13 @@ async fn commands(stores: &storage::Stores, member: &TrustedRequest) -> Result<V
                 && (entry.create_command().is_some() || entry.decide_command().is_some())
         });
         let (hint, examples) = library_copy(app, &slug, entry);
+        // APP-120: the catalog's display title, else the definition's.
+        let title = super::matcher::display_title(&app.definition_digest)
+            .unwrap_or_else(|| app.title.clone());
         listed.push(json!({
             "slug": slug,
             "aliases": aliases,
-            "title": app.title,
+            "title": title,
             "purpose": super::matcher::purpose(app),
             "kind": "library",
             "app_id": app.app,
@@ -502,10 +532,10 @@ mod tests {
             "amount, merchant, category, spent on, note … or approve/reject"
         );
         // The demo copy overrides it (sidecar `command.hint`/`examples`).
-        assert_eq!(hint, "what you spent");
+        assert_eq!(hint, "file a claim or approve one");
         assert_eq!(
             examples[0],
-            "/expense $86 at Nobu, client dinner, Sarah approves"
+            "/expenses $86 at Nobu, client dinner, Sarah approves"
         );
         // Purchase requests: the two-step approval reads approve/reject once.
         let (derived, _, _) = copy("purchase-requests.json");
@@ -529,6 +559,97 @@ mod tests {
         );
         // An app that keeps no records answers to "what to show".
         assert_eq!(address_hint(None), SHOW_HINT);
+    }
+
+    /// APP-120: every library app's canonical address is its display title,
+    /// lowercased and hyphenated, and every name it answered to before
+    /// (APP-101) stays as a hidden alias.
+    #[test]
+    fn library_addresses_follow_the_title_rule() {
+        assert_eq!(address_of("Expenses"), "expenses");
+        assert_eq!(address_of("Expense review (demo data)"), "expense-review");
+        assert_eq!(address_of("Cash-flow statement"), "cash-flow-statement");
+        assert_eq!(address_of("Budget vs actual"), "budget-vs-actual");
+        assert_eq!(address_of("  Time off  "), "time-off");
+        // The names each app shipped with in APP-101 (library id → slug).
+        let before = [
+            ("expense-review", "expense-review"),
+            ("vendor-spend", "vendor-spend"),
+            ("outbound-traffic", "traffic"),
+            ("incident-timeline", "incidents"),
+            ("access-review", "access-review"),
+            ("sales-pipeline", "pipeline"),
+            ("inventory-comparison", "inventory"),
+            ("support-queue", "support"),
+            ("budget-vs-actual", "budget"),
+            ("audit-trail", "audit"),
+            ("cash-flow", "cash"),
+            ("hiring-funnel", "hiring"),
+            ("subscription-revenue", "mrr"),
+            ("expense-claims", "expense"),
+            ("time-off", "pto"),
+            ("purchase-requests", "purchase"),
+            ("vendor-invoices", "invoice"),
+            ("access-requests", "access"),
+            ("deal-desk", "discount"),
+            ("notes", "note"),
+        ];
+        let sidecar = storage::library_sidecar().unwrap();
+        assert_eq!(sidecar.len(), before.len(), "all 20 library apps audited");
+        let mut every = std::collections::BTreeSet::new();
+        for entry in &sidecar {
+            let id = entry["library_id"].as_str().unwrap();
+            let command = &entry["command"];
+            let title = command["title"]
+                .as_str()
+                .or_else(|| entry["title"].as_str())
+                .unwrap();
+            let slug = command["slug"].as_str().unwrap();
+            assert_eq!(slug, address_of(title), "{id}: /name is the title");
+            assert!(valid_slug(slug), "{id}: {slug}");
+            let aliases: Vec<&str> = command["aliases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|alias| alias.as_str().unwrap())
+                .collect();
+            let (_, old) = before.iter().find(|(library, _)| *library == id).unwrap();
+            assert!(
+                *old == slug || aliases.contains(old),
+                "{id}: the old /{old} stays an alias"
+            );
+            for name in std::iter::once(slug).chain(aliases.iter().copied()) {
+                assert!(every.insert(name.to_owned()), "{name} names one app");
+            }
+        }
+        // Fable's pick: Expense claims is addressed /expenses, /expense forever.
+        let expenses = sidecar
+            .iter()
+            .find(|entry| entry["library_id"] == "expense-claims")
+            .unwrap();
+        assert_eq!(expenses["command"]["slug"], "expenses");
+        assert_eq!(expenses["command"]["title"], "Expenses");
+        assert!(expenses["command"]["aliases"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("expense")));
+        // The review queue's display title says it runs on demo data; its
+        // definition (and digest) are unchanged.
+        let review = sidecar
+            .iter()
+            .find(|entry| entry["library_id"] == "expense-review")
+            .unwrap();
+        assert_eq!(review["command"]["title"], "Expense review (demo data)");
+        assert_eq!(review["title"], "Expense review queue");
+        let app = library("expense-claims.json");
+        assert_eq!(
+            crate::composer::matcher::display_title(&app.definition_digest).as_deref(),
+            Some("Expenses")
+        );
+        assert_eq!(
+            app.title, "Expense claims",
+            "the stored definition keeps its title"
+        );
     }
 
     #[tokio::test]

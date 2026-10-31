@@ -1236,7 +1236,7 @@
 }
 .cv-lib-num:empty { display: none; }
 .cv-lib-app-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cv-lib-slug { flex: 0 100 auto; min-width: 0; overflow: hidden; color: var(--cv-accent); font: 500 0.72rem var(--cv-mono); text-overflow: ellipsis; white-space: nowrap; }
+.cv-lib-slug { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cv-lib-on { flex: none; margin-left: auto; color: var(--cv-seal); font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
 .cv-lib-on:empty { display: none; }
 .cv-lib-all {
@@ -2295,4 +2295,46 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
 .cv-commands-none { color: var(--cv-muted); font-size: 0.85rem; }
 @media (max-width: 760px) {
   .cv-slash-option:not(.cv-slash-completion) .cv-slash-title { display: none; }
+}
+
+/* APP-120: one canvas model. The address chip (`/expenses`) is one component
+   everywhere an app appears: the Library row, the app card's header, the
+   bar's hint and the confirm card's footer. Subtle: grey, monospace. */
+.cv-addr-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  max-width: 100%;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 6px;
+  background: var(--cv-sunken);
+  color: var(--cv-faint);
+  font: 500 0.72rem/1.5 var(--cv-mono);
+  white-space: nowrap;
+}
+.cv-addr-chip code { font: inherit; color: inherit; }
+button.cv-addr-chip { cursor: pointer; }
+button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var(--cv-accent); color: var(--cv-accent); outline: none; }
+.cv-addr-also { color: var(--cv-faint); font: 500 0.68rem var(--cv-mono); }
+.cv-addr-line { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem; }
+.cv-addr-what { color: var(--cv-muted); }
+.cv-app-addr { margin: 0.1rem 0 0.35rem; }
+.cv-confirm-via { margin: 0.2rem 0 0; color: var(--cv-faint); font-size: 0.75rem; }
+.cv-commands-grammar { margin: 0 1.15rem 0.5rem; color: var(--cv-text); font-size: 0.82rem; font-weight: 550; }
+
+/* The Library's two sections and the on-canvas dot (filled: on the canvas). */
+.cv-lib-group[hidden] { display: none; }
+.cv-lib-group + .cv-lib-group { margin-top: 1rem; }
+.cv-lib-group-title { margin: 0.6rem 0.45rem 0.1rem; font-family: var(--cv-display); font-size: 0.95rem; font-weight: 650; letter-spacing: -0.01em; }
+.cv-lib-widgets { margin-top: 0.2rem; }
+.cv-lib-dot { flex: none; width: 8px; height: 8px; border: 1.5px solid var(--cv-faint); border-radius: 50%; }
+.cv-lib-dot[data-on="true"] { border-color: var(--cv-seal); background: var(--cv-seal); }
+.cv-lib-toggle { display: flex; }
+.cv-lib-toggle .cv-lib-card-title { flex: 1; min-width: 0; }
+.cv-lib-cardname { flex: 0 100 auto; min-width: 0; overflow: hidden; color: var(--cv-faint); font: 500 0.68rem var(--cv-mono); text-overflow: ellipsis; white-space: nowrap; }
+.cv-lib-card.is-on .cv-lib-action::before { content: none; }
+.cv-lib-new .cv-lib-card-title { color: var(--cv-accent); font-weight: 600; }
+@media (max-width: 760px) {
+  .cv-lib-cardname, .cv-addr-also { display: none; }
 }

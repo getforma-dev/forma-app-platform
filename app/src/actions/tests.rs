@@ -408,7 +408,10 @@ fn the_notes_library_entry_creates_and_edits_plain_text_notes() {
         .iter()
         .find(|entry| entry["library_id"] == super::routes::NOTES_LIBRARY_ID)
         .expect("the notes library entry");
-    assert_eq!(notes["command"]["slug"], "note");
+    // APP-120: the address rule (`/notes`); `/note` stays an alias (the
+    // canvas's Note widget verb answers to both).
+    assert_eq!(notes["command"]["slug"], "notes");
+    assert_eq!(notes["command"]["aliases"][0], "note");
     let commands = notes["commands"].as_array().unwrap();
     let command = |id: &str| commands.iter().find(|c| c["id"] == id).unwrap();
     assert_eq!(command("add")["operation"], "create");

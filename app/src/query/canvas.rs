@@ -1170,13 +1170,18 @@ fn library_source(listed: &OpenableWork, read: &WorkRead) -> LibrarySource {
             cards.push((card.id, card.title, "ledger".to_owned()));
         }
     }
+    // The library's own seeded work stands for the library app; a work the
+    // member composed from it (retrieved, adapted) is theirs.
+    let library = crate::composer::matcher::seeded_work(work);
     LibrarySource {
         app: app.to_owned(),
         work: work.to_owned(),
-        title: read.outline.title.clone(),
-        // The library's own seeded work stands for the library app; a work
-        // the member composed from it (retrieved, adapted) is theirs.
-        grouping: if crate::composer::matcher::seeded_work(work) {
+        // APP-120: a library app shows its catalog display title, if any.
+        title: library
+            .then(|| crate::composer::matcher::display_title(&read.outline.definition_digest))
+            .flatten()
+            .unwrap_or_else(|| read.outline.title.clone()),
+        grouping: if library {
             crate::composer::matcher::library_grouping(&read.outline.definition_digest)
         } else {
             None

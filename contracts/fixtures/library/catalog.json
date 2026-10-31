@@ -39,7 +39,8 @@
         "slug": "expense-review",
         "aliases": [
           "review-expenses"
-        ]
+        ],
+        "title": "Expense review (demo data)"
       },
       "app_id": "00000000-0000-4000-8000-000000001001",
       "definition_revision_id": "00000000-0000-4000-8000-000000001002",
@@ -351,8 +352,9 @@
         ]
       },
       "command": {
-        "slug": "vendor-spend",
+        "slug": "vendor-spend-breakdown",
         "aliases": [
+          "vendor-spend",
           "spend",
           "vendors"
         ]
@@ -649,8 +651,9 @@
         ]
       },
       "command": {
-        "slug": "traffic",
+        "slug": "outbound-traffic-investigation",
         "aliases": [
+          "traffic",
           "egress",
           "network"
         ]
@@ -926,8 +929,9 @@
         ]
       },
       "command": {
-        "slug": "incidents",
+        "slug": "incident-timeline",
         "aliases": [
+          "incidents",
           "incident"
         ]
       },
@@ -1217,8 +1221,9 @@
         ]
       },
       "command": {
-        "slug": "access-review",
+        "slug": "access-review-tracker",
         "aliases": [
+          "access-review",
           "access-audit"
         ]
       },
@@ -1516,8 +1521,9 @@
         ]
       },
       "command": {
-        "slug": "pipeline",
+        "slug": "sales-pipeline-by-stage",
         "aliases": [
+          "pipeline",
           "sales",
           "deals"
         ]
@@ -1814,8 +1820,9 @@
         ]
       },
       "command": {
-        "slug": "inventory",
+        "slug": "inventory-comparison",
         "aliases": [
+          "inventory",
           "stock"
         ]
       },
@@ -2089,8 +2096,9 @@
         ]
       },
       "command": {
-        "slug": "support",
+        "slug": "support-ticket-queue",
         "aliases": [
+          "support",
           "tickets"
         ]
       },
@@ -2402,8 +2410,9 @@
         ]
       },
       "command": {
-        "slug": "budget",
+        "slug": "budget-vs-actual",
         "aliases": [
+          "budget",
           "variance"
         ]
       },
@@ -2659,8 +2668,9 @@
         ]
       },
       "command": {
-        "slug": "audit",
+        "slug": "audit-trail-viewer",
         "aliases": [
+          "audit",
           "audit-log"
         ]
       },
@@ -2938,8 +2948,9 @@
         ]
       },
       "command": {
-        "slug": "cash",
+        "slug": "cash-flow-statement",
         "aliases": [
+          "cash",
           "cash-flow"
         ]
       },
@@ -3233,8 +3244,9 @@
         ]
       },
       "command": {
-        "slug": "hiring",
+        "slug": "hiring-funnel",
         "aliases": [
+          "hiring",
           "candidates"
         ]
       },
@@ -3512,8 +3524,9 @@
         ]
       },
       "command": {
-        "slug": "mrr",
+        "slug": "subscription-revenue",
         "aliases": [
+          "mrr",
           "subscriptions",
           "revenue"
         ]
@@ -3796,15 +3809,16 @@
         ]
       },
       "command": {
-        "slug": "expense",
+        "slug": "expenses",
         "aliases": [
-          "expenses",
+          "expense",
           "claim"
         ],
-        "hint": "what you spent",
+        "title": "Expenses",
+        "hint": "file a claim or approve one",
         "examples": [
-          "/expense $86 at Nobu, client dinner, Sarah approves",
-          "/expense"
+          "/expenses $86 at Nobu, client dinner, Sarah approves",
+          "/expenses"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001681",
@@ -4188,15 +4202,15 @@
         ]
       },
       "command": {
-        "slug": "pto",
+        "slug": "time-off",
         "aliases": [
-          "time-off",
+          "pto",
           "leave",
           "vacation"
         ],
         "hint": "dates and reason",
         "examples": [
-          "/pto Nov 24–26 for Thanksgiving, Sarah approves"
+          "/time-off Nov 24–26 for Thanksgiving, Sarah approves"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001701",
@@ -4580,14 +4594,15 @@
         ]
       },
       "command": {
-        "slug": "purchase",
+        "slug": "purchase-requests",
         "aliases": [
+          "purchase",
           "purchases",
           "po"
         ],
         "hint": "what to buy",
         "examples": [
-          "/purchase 3 monitors for $1,200 from Dell"
+          "/purchase-requests 3 monitors for $1,200 from Dell"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001781",
@@ -5046,14 +5061,15 @@
         ]
       },
       "command": {
-        "slug": "invoice",
+        "slug": "vendor-invoices",
         "aliases": [
+          "invoice",
           "invoices",
           "payables"
         ],
         "hint": "vendor, amount and PO",
         "examples": [
-          "/invoice Acme $4,800 against PO-1042"
+          "/vendor-invoices Acme $4,800 against PO-1042"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001801",
@@ -5460,13 +5476,14 @@
         ]
       },
       "command": {
-        "slug": "access",
+        "slug": "access-requests",
         "aliases": [
+          "access",
           "access-request"
         ],
         "hint": "system and why",
         "examples": [
-          "/access Snowflake read access for the Q3 audit"
+          "/access-requests Snowflake read access for the Q3 audit"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001881",
@@ -5821,14 +5838,14 @@
         ]
       },
       "command": {
-        "slug": "discount",
+        "slug": "deal-desk",
         "aliases": [
-          "deal-desk",
+          "discount",
           "discounts"
         ],
         "hint": "deal and discount",
         "examples": [
-          "/discount 8% on the Globex renewal"
+          "/deal-desk 8% on the Globex renewal"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001901",
@@ -6195,9 +6212,9 @@
         ]
       },
       "command": {
-        "slug": "note",
+        "slug": "notes",
         "aliases": [
-          "notes"
+          "note"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001981",

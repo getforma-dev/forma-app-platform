@@ -10,6 +10,7 @@ import {
   createCanvasSurface,
   type WidgetCanvasItemState,
 } from '../canvas-vendor/index';
+import { decorateAppCard } from './address-chip';
 import { submitCommand } from './commands';
 import { clearLayouts, loadCamera, loadLayout, loadPlaced, saveCamera, saveLayout, savePlaced, type ItemLayout, type PlacedWork } from './layout';
 import { subscribeLive, type LiveEvent } from './live';
@@ -290,6 +291,21 @@ function updateSummary(): void {
   }
   updateEmpty();
   for (const listener of changeListeners) listener();
+  emitCanvasChanged();
+}
+
+/** APP-120: the one event the Library re-renders from. */
+export const CANVAS_CHANGED = 'canvas:changed';
+
+/**
+ * APP-120: tells the page the canvas changed: after every card, widget, note
+ * or folder that arrives or leaves (`updateSummary`), and when the member's
+ * notes or folders change. The Library is a pure projection of it: it keeps
+ * no canvas state of its own and re-renders from this event.
+ */
+export function emitCanvasChanged(document_: Document | null = host?.ownerDocument ?? (typeof document === 'undefined' ? null : document)): void {
+  if (!document_ || typeof document_.dispatchEvent !== 'function') return;
+  document_.dispatchEvent(new CustomEvent(CANVAS_CHANGED));
 }
 
 /** The empty state shows exactly when nothing is on the board. */
@@ -1051,6 +1067,10 @@ function decorate(group: Group): void {
   const card = appCard(group);
   if (!card) return;
   const document_ = card.ownerDocument;
+  // APP-120: the app card's header shows the app's address chip (`/expenses`).
+  card.dataset.app = group.app;
+  card.dataset.work = group.work;
+  decorateAppCard(card);
   card.querySelector('.cv-tailor-controls')?.remove();
   const controls = el(document_, 'div', { class: 'cv-tailor-controls' });
   const pair = pairs.get(group.work);

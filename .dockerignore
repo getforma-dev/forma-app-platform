@@ -240,6 +240,8 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/command-sheet.ts
 !app/admin/src/canvas/pane.ts
 !app/admin/src/canvas/shortcut-tab.ts
+# APP-120: the address chip (`/expenses`), one component wherever an app appears.
+!app/admin/src/canvas/address-chip.ts
 !app/admin/src/canvas/widgets/
 app/admin/src/canvas/widgets/**
 !app/admin/src/canvas/widgets/index.ts

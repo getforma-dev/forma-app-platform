@@ -6,9 +6,12 @@
 // a search box; its footer says where apps are: "Your apps answer to /name
 // — see /apps". Clicking a command (or one of its examples) puts it in the
 // bar and closes the pane; Esc clears the search, then closes the pane, and
-// focus returns to what opened it (the APP-113 pattern). Built with `el()`
+// focus returns to what opened it (the APP-113 pattern). APP-120: the
+// twelve verbs in four groups (Place, Arrange, Make, Help) under the one
+// sentence of the grammar; a verb's hidden aliases show on its row ("also
+// /weather, /calculator, /clock, /note" under `/widget`). Built with `el()`
 // only: text nodes, no markup.
-import { ADDRESS_FOOTER, argLabel, groupCommands, searchCommands, type Command, type CommandGroup } from './command-registry';
+import { ADDRESS_FOOTER, GRAMMAR, argLabel, groupCommands, hiddenAliases, searchCommands, type Command, type CommandGroup } from './command-registry';
 import { closePane, isPaneOpen, onPaneTab, openPane, paneTab } from './pane';
 import { el } from './render';
 
@@ -40,13 +43,16 @@ function commandRow(document_: Document, command: Command): HTMLElement {
   const name = el(document_, 'button', { type: 'button', class: 'cv-commands-item', title: `Put /${command.slug} in the bar` },
     el(document_, 'code', { class: 'cv-commands-sig' },
       el(document_, 'strong', {}, `/${command.slug}`),
-      ...command.args.map((argument) => el(document_, 'span', { class: argument.required ? 'cv-commands-arg is-required' : 'cv-commands-arg' }, ` ${argLabel(argument)}`))),
+      ...(command.usage
+        ? [el(document_, 'span', { class: 'cv-commands-arg is-required' }, command.usage.slice(command.slug.length + 1))]
+        : command.args.map((argument) => el(document_, 'span', { class: argument.required ? 'cv-commands-arg is-required' : 'cv-commands-arg' }, ` ${argLabel(argument)}`)))),
     el(document_, 'span', { class: 'cv-commands-title' }, command.title),
     el(document_, 'span', { class: 'cv-commands-purpose' }, command.purpose));
   name.addEventListener('click', () => insertCommand(command.args.length ? `/${command.slug} ` : `/${command.slug}`));
   const examples = command.examples.filter((example) => example !== `/${command.slug}` || command.args.length === 0).slice(0, 2);
+  const also = [...hiddenAliases(command.slug).map((alias) => alias.slug), ...command.aliases];
   const meta = el(document_, 'div', { class: 'cv-commands-meta' },
-    ...(command.aliases.length ? [el(document_, 'span', { class: 'cv-commands-aliases' }, `also ${command.aliases.map((alias) => `/${alias}`).join(', ')}`)] : []),
+    ...(also.length ? [el(document_, 'span', { class: 'cv-commands-aliases' }, `also ${also.map((alias) => `/${alias}`).join(', ')}`)] : []),
     ...examples.map((example) => {
       const button = el(document_, 'button', { type: 'button', class: 'cv-commands-example', title: 'Put this example in the bar' }, el(document_, 'code', {}, example));
       button.addEventListener('click', () => insertCommand(example));
@@ -81,7 +87,8 @@ function build(document_: Document): boolean {
   apps.addEventListener('click', () => openPane('library'));
   const [lead] = ADDRESS_FOOTER.split(' — ');
   body.replaceChildren(
-    el(document_, 'p', { class: 'cv-commands-sub' }, 'Type / in the bar, or click one to put it there. <required> and [optional] arguments.'),
+    el(document_, 'p', { class: 'cv-commands-grammar', 'data-commands-grammar': '' }, GRAMMAR),
+    el(document_, 'p', { class: 'cv-commands-sub' }, 'Click one to put it in the bar. <required> and [optional] arguments.'),
     search,
     list,
     el(document_, 'p', { class: 'cv-commands-footer', 'data-commands-footer': '' }, el(document_, 'span', {}, `${lead} — `), apps));
