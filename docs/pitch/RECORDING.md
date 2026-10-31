@@ -6,7 +6,7 @@ How to film the demo in short, retakeable shots. The words to say are in [PITCH-
 
 | Item | Setting |
 | --- | --- |
-| Laptop | Chrome, 1440×900 window, zoom 100%, Diego signed in. Turn on **Show timings** (toolbar menu, or `?timing=1`, APP-116) for the scenes marked ⏱. |
+| Laptop | Chrome, 1440×900 window, zoom 100%, Diego signed in. Turn on **Show timings** (toolbar menu, or `#timing=1` (the canvas URL takes no query string), APP-116) for the scenes marked ⏱. |
 | Phone | Sarah signed in, mirrored or filmed. Slack open as Sarah in a second tab or app. |
 | Canvas | Starts clean (Library → Remove all, or a fresh browser profile). Lay out the scene's cards first with `/arrange`. |
 | Claude Code | `.mcp.json` from "Connect an agent". `FORMA_AGENT_TOKEN` exported with `read -rs`, so the token never appears on screen. |
