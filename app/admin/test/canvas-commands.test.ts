@@ -521,3 +521,20 @@ test('/app:expenses is /expenses; /app:notes reaches the app a verb shadows; /ap
   assert.equal(registry.addressRowName({ ...expensesAddress, mine: ['zz'] }, 'z'), '/zz → app:expenses (your shortcut)');
   assert.equal(registry.addressRowName(registry.allAddresses().find((address) => address.slug === 'notes')!, 'no'), '/app:notes');
 });
+
+// APP-135: `/app words` goes to the action path only for an entry or a
+// decision. A sentence that reads or asks never does, and an amount alone
+// counts only when it is not a threshold ("over $200" is a filter).
+test('a read sentence or a threshold is never an entry', async () => {
+  const { isEntry } = await import('../src/canvas/slash.ts');
+  for (const text of [
+    '$86 at Nobu, client dinner, Sarah approves', '$86 Nobu', '$ 42 Sweetgreen', 'file $86 Nobu',
+    'I spent $42 at Sweetgreen, Sarah approves', 'approve the Nobu dinner', 'can you approve the $86 dinner?',
+    'reject Victor\'s hotel', 'Paid 42.50 dollars for Figma',
+  ]) assert.equal(isEntry(text), true, text);
+  for (const text of [
+    'Review expenses over $200', 'review claims over $200', 'show claims above $1,000', 'list the $86 claims',
+    'please show expenses over $200', 'can you list claims over $50', 'which claims are over $200?',
+    'did Sarah approve the $86 dinner?', 'claims over $200', 'expenses > $1,000', 'over $200?', 'show the log',
+  ]) assert.equal(isEntry(text), false, text);
+});

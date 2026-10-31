@@ -211,6 +211,10 @@ fn stub_reply(utterance: &str) -> String {
         json!({"action": "decide", "app_hint": "", "values": {"status": "<script>alert(1)</script>"}, "approver_name": null, "target_record_hint": "<img src=x onerror=alert(1)>"}).to_string()
     } else if utterance.contains("HOSTILE-ORG") {
         json!({"action": "open", "app_hint": FOREIGN_APP, "values": {}, "approver_name": null, "target_record_hint": null}).to_string()
+    } else if utterance.contains("Nobu claim") || utterance.contains("over $") {
+        // APP-135: the model reads a question or a filter as a filing (the
+        // 2026-10-31 "Submit claim?" for "Review expenses over $200").
+        json!({"action": "create", "app_hint": EXPENSE_APP, "values": {"amount": "200", "merchant": "Unknown merchant", "category": "other", "spent_on": "2026-10-29"}, "approver_name": "Sarah", "target_record_hint": null}).to_string()
     } else if utterance.contains("Figma") {
         json!({"action": "create", "app_hint": EXPENSE_APP, "values": {"amount": "42.50", "merchant": "Figma", "category": "software", "spent_on": "2026-10-29", "note": "Figma seat for the design team"}, "approver_name": "Sarah", "target_record_hint": null}).to_string()
     } else {
@@ -1427,6 +1431,30 @@ async fn campaign() {
     check(
         &mut checks,
         "scenario 4 handoff: an utterance that is not a record action answers `place`, so the canvas composes it through POST /v1/compose (library-first router, admitted definitions)",
+    );
+
+    // --- APP-135: a sentence that reads or asks is never a command draft ---
+    let calls = stub.calls.load(Ordering::SeqCst);
+    let review = act(&diego, utterance("Review expenses over $200")).await;
+    assert_eq!(review.status, StatusCode::OK, "{}", review.body);
+    assert_eq!(review.json()["action"], "place", "{}", review.body);
+    assert_eq!(
+        stub.calls.load(Ordering::SeqCst),
+        calls,
+        "a read sentence with a threshold spends no model call"
+    );
+    let question = act(&diego, utterance("did Sarah approve my Nobu claim?")).await;
+    assert_eq!(question.status, StatusCode::OK, "{}", question.body);
+    assert_eq!(
+        question.json()["action"],
+        "place",
+        "the model's create for a question is not drafted: {}",
+        question.body
+    );
+    assert_eq!(stub.calls.load(Ordering::SeqCst), calls + 1);
+    check(
+        &mut checks,
+        "APP-135 read guard: \"Review expenses over $200\" answers `place` with no model call (the composer picks and filters the app), and a question the model (stubbed) answered as a create (\"did Sarah approve my Nobu claim?\") answers `place`, not a confirmation card",
     );
 
     // --- The local stand for the two-window screenshots ---

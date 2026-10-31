@@ -489,3 +489,148 @@ async fn act_checks_the_session_before_reading_the_body() {
         axum::http::StatusCode::NOT_FOUND
     );
 }
+
+/// APP-135: a text model stub answering one fixed parse; counts calls.
+struct Answers {
+    reply: &'static str,
+    calls: std::sync::atomic::AtomicUsize,
+}
+impl crate::composer::model::Model for Answers {
+    fn complete<'a>(
+        &'a self,
+        _: &'a crate::composer::model::ModelRequest,
+    ) -> crate::composer::model::Completion<'a> {
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let text = self.reply.to_owned();
+        Box::pin(async move {
+            Ok(crate::composer::model::ModelReply {
+                text,
+                ..Default::default()
+            })
+        })
+    }
+}
+
+/// APP-135 (reproduced 2026-10-31, demo organization): the empty canvas's
+/// chip "Review expenses over $200" came back as a "Submit claim?" draft
+/// ($200.00, Unknown merchant). A sentence that reads or asks is `place`
+/// (the composer picks and filters the app), in the rehearsed parser and
+/// whatever the model answers; filings and decisions said as commands are
+/// unchanged.
+#[tokio::test]
+async fn a_sentence_that_reads_or_asks_is_never_a_command_draft() {
+    use std::sync::{atomic::Ordering, Arc};
+    let catalog = vec![expense_app()];
+    let today = "2026-10-30";
+    // The model, stubbed, answers a create for everything.
+    let model = Arc::new(Answers {
+        reply: r#"{"action":"create","app_hint":"00000000-0000-4000-8000-000000001681","values":{"amount":"200","merchant":"Unknown merchant","category":"other","status":"submitted"},"approver_name":null,"target_record_hint":null}"#,
+        calls: Default::default(),
+    });
+    let parser = super::Parser::new(
+        Some(model.clone() as Arc<dyn crate::composer::model::Model>),
+        "stub",
+    );
+    for demo in [true, false] {
+        for utterance in [
+            "Review expenses over $200",
+            "show my expenses over $200",
+            "list claims above $1,000",
+            "which expenses are over $200?",
+            "expenses over $200",
+            "find the $86 Nobu claim",
+            "how much did I spend at Nobu last night?",
+            "did Sarah approve my $86 Nobu dinner?",
+            "can you show the claims over 50 dollars",
+        ] {
+            let parse = parser
+                .parse(utterance, &catalog, demo, today)
+                .await
+                .unwrap();
+            assert_eq!(parse.parsed.kind, Kind::Place, "{utterance} (demo {demo})");
+            assert!(parse.parsed.values.is_empty());
+        }
+    }
+    // A read sentence with a threshold spends no model call at all.
+    let before = model.calls.load(Ordering::SeqCst);
+    parser
+        .parse("Review expenses over $200", &catalog, false, today)
+        .await
+        .unwrap();
+    assert_eq!(model.calls.load(Ordering::SeqCst), before);
+    // The model's create for a real filing stands.
+    for utterance in [
+        "I spent $42 at Sweetgreen, Sarah approves",
+        "$86 Nobu",
+        "I spent over $200 at Nobu last night",
+    ] {
+        let parse = parser
+            .parse(utterance, &catalog, false, today)
+            .await
+            .unwrap();
+        assert_eq!(parse.parsed.kind, Kind::Create, "{utterance}");
+    }
+    // The rehearsed demo sentences parse as before (no model call).
+    let calls = model.calls.load(Ordering::SeqCst);
+    let create = parser
+        .parse(
+            "I spent $86 on a client dinner at Nobu last night, Sarah approves my expenses",
+            &catalog,
+            true,
+            today,
+        )
+        .await
+        .unwrap();
+    assert!(create.rehearsed);
+    assert_eq!(create.parsed.kind, Kind::Create);
+    assert_eq!(create.parsed.values["amount"], "86");
+    assert_eq!(create.parsed.values["merchant"], "Nobu");
+    assert_eq!(create.parsed.approver_name.as_deref(), Some("Sarah"));
+    let sweetgreen = parser
+        .parse(
+            "I spent $42 at Sweetgreen, Sarah approves",
+            &catalog,
+            true,
+            today,
+        )
+        .await
+        .unwrap();
+    assert!(sweetgreen.rehearsed);
+    assert_eq!(sweetgreen.parsed.kind, Kind::Create);
+    assert_eq!(sweetgreen.parsed.values["merchant"], "Sweetgreen");
+    let decide = parser
+        .parse("approve the Nobu dinner", &catalog, true, today)
+        .await
+        .unwrap();
+    assert_eq!(decide.parsed.kind, Kind::Decide);
+    let open = parser
+        .parse("what's waiting for my approval?", &catalog, true, today)
+        .await
+        .unwrap();
+    assert_eq!(open.parsed.kind, Kind::Open);
+    let show = parser
+        .parse("show my expenses", &catalog, true, today)
+        .await
+        .unwrap();
+    assert_eq!(show.parsed.kind, Kind::Open);
+    let paid = parser
+        .parse(
+            "Paid 42.50 dollars for a Figma subscription yesterday; send it to Sarah Chen",
+            &catalog,
+            true,
+            today,
+        )
+        .await
+        .unwrap();
+    assert_eq!(paid.parsed.kind, Kind::Create);
+    assert_eq!(model.calls.load(Ordering::SeqCst), calls);
+    // The rehearsed parser itself no longer reads the noun "expenses" as a
+    // spending verb.
+    assert!(rehearsed::parse("Review expenses over $200", &catalog, today).is_none());
+    assert_eq!(
+        rehearsed::parse("expense $40 for lunch at Chipotle", &catalog, today)
+            .unwrap()
+            .kind,
+        Kind::Create
+    );
+}

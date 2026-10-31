@@ -341,12 +341,15 @@ pub fn parse(utterance: &str, catalog: &[CatalogApp], today: &str) -> Option<Par
             target_record_hint: None,
         });
     }
-    // Create: an amount with a spending verb.
+    // Create: an amount with a spending verb. APP-135: the noun "expense(s)"
+    // is no verb ("Review expenses over $200" filed a $200 claim); "expense"
+    // counts only as the sentence's first word ("expense $40 for lunch").
     let spent = lower.contains("spent")
         || lower.contains("paid")
-        || lower.contains("expense")
         || lower.contains("bought")
-        || lower.contains("reimburse");
+        || lower.contains("reimburse")
+        || lower.contains("expensed")
+        || words.first().is_some_and(|w| w == "expense");
     if let (Some(amount), true, Some(app)) = (amount(utterance), spent, expense_app) {
         let mut values = Map::new();
         values.insert("amount".into(), Value::String(amount));
