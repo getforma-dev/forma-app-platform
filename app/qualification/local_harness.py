@@ -100,7 +100,7 @@ def entry_table(name):
 
 def source_names():
     """The ordered SOURCES list of the entry, read from its source."""
-    return re.findall(r'"((?:app|contracts|spikes)/[^"]+)"', entry_table("SOURCES"))
+    return re.findall(r'"((?:app|contracts|spikes)/[^"]+|Cargo\.(?:lock|toml))"', entry_table("SOURCES"))
 
 
 def seed_inputs():

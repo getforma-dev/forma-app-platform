@@ -2,11 +2,13 @@
 # evidence, caches, generated assets, dependencies or operator state.
 **
 !.dockerignore
+# ADR-013 D13.3: the root workspace manifest and its one lockfile.
+!Cargo.toml
+!Cargo.lock
 !app/
 app/**
 !app/Dockerfile
 !app/Cargo.toml
-!app/Cargo.lock
 !app/src/
 app/src/**
 !app/src/lib.rs

@@ -62,14 +62,3 @@ required-features = ["dev-stand"]
 [lib]
 name = "genui"
 path = "src/lib.rs"
-
-# ADR-012 D12.4: dev builds keep line tables (backtraces keep line numbers)
-# and pack debug info, instead of macOS's default of leaving it in every
-# codegen unit's object file across build hashes (inventory §B.7).
-# Dependencies carry no debug info. Release profiles and images are unaffected.
-[profile.dev]
-debug = "line-tables-only"
-split-debuginfo = "packed"
-
-[profile.dev.package."*"]
-debug = false

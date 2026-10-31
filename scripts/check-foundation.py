@@ -11,8 +11,8 @@ commands = [
  ('.', [venv,'-m','pip','install','--require-hashes','--only-binary=:all:','-r','app/runtime/requirements.lock']),
  ('.', [venv,'-m','unittest','discover','-s','app/runtime','-v']),
  ('app/admin', ['npm','ci']), ('app/admin',['npm','run','typecheck']), ('app/admin',['npm','run','build']),
- ('app',['cargo','fmt','--check']), ('app',['cargo','test','--locked']), ('app',['cargo','build','--locked']),
- ('.',[venv,'app/runtime/smoke_http.py','--binary',str(root/'app/target/debug/forma-app-platform')]),
+ ('.',['cargo','fmt','--check','-p','forma-app-platform']), ('.',['cargo','test','--locked','-p','forma-app-platform']), ('.',['cargo','build','--locked','-p','forma-app-platform']),
+ ('.',[venv,'app/runtime/smoke_http.py','--binary',str(root/'target/debug/forma-app-platform')]),
  ('infra',['npm','ci']), ('infra',['npm','run','typecheck']), ('infra',['npm','test']), ('infra',['npm','run','synth','--','--quiet']),
 ]
 evidence.mkdir(parents=True,exist_ok=True)

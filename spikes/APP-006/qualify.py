@@ -36,15 +36,19 @@ record = {'started_utc': start, 'scope': 'local 247 and 248 access-only consumer
           'source_sha256': identity, 'platform': platform.platform(),
           'rustc': subprocess.check_output(['rustc', '-vV'], cwd=ROOT, text=True).strip(),
           'source_contract': verify(args.upstream_checkout), 'checks': []}
-lock = tomllib.loads((ROOT / 'Cargo.lock').read_text())
-checksums = {(p['name'],p['version']): p.get('checksum') for p in lock['package']}
 metadata = json.loads(subprocess.check_output(['cargo','metadata','--locked','--format-version','1'], cwd=ROOT, env=env))
+# ADR-013 D13.3: in the repository this crate is a member of the root Cargo
+# workspace, so cargo resolves it from the workspace lockfile and builds into
+# the workspace target/; standalone (its own image) both are this directory's.
+lock = tomllib.loads((Path(metadata['workspace_root']) / 'Cargo.lock').read_text())
+checksums = {(p['name'],p['version']): p.get('checksum') for p in lock['package']}
+target = Path(metadata['target_directory'])
 record['registry_dependencies'] = [{'name':p['name'],'version':p['version'],'license':p['license'],'repository':p['repository'],'checksum':checksums.get((p['name'],p['version']))} for p in metadata['packages'] if p['source'] is not None]
 commands = [('fmt', ['cargo','fmt','--all','--check']),
             ('clippy', ['cargo','clippy','--locked','--all-targets','--','-D','warnings']),
             ('test', ['cargo','test','--locked','--all-targets','--','--test-threads=2','--nocapture']),
             ('build', ['cargo','build','--locked','--example','hosted_key_qualification']),
-            ('private-pipe', ['python3','qualify_hosted_key_boundary.py','--executable','target/debug/examples/hosted_key_qualification'])]
+            ('private-pipe', ['python3','qualify_hosted_key_boundary.py','--executable',str(target / 'debug/examples/hosted_key_qualification')])]
 for index, (name, command) in enumerate(commands, 1):
     started = time.monotonic()
     result = subprocess.run(command, cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

@@ -1,4 +1,0 @@
-# ADR-012 D12.4: the forma-stack cap of three build jobs for every cargo call in
-# app/ (CARGO_BUILD_JOBS still overrides it, as CI and the Dockerfile do).
-[build]
-jobs = 3

@@ -917,7 +917,8 @@ fn source_bundle_covers_every_compiled_source() {
         }
     }
     for extra in [
-        "app/Cargo.lock",
+        "Cargo.lock",
+        "Cargo.toml",
         "app/Cargo.toml",
         "spikes/APP-006/Cargo.toml",
         "spikes/APP-006/src/lib.rs",

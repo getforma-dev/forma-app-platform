@@ -1,0 +1,6 @@
+# ADR-012 D12.4: the forma-stack cap of three build jobs for every cargo call in
+# this checkout (moved to the root by ADR-013 D13.3; Cargo finds it walking up
+# from the working directory, so `cd app && cargo ...` still reads it).
+# CARGO_BUILD_JOBS still overrides it, as CI and the Dockerfiles do.
+[build]
+jobs = 3

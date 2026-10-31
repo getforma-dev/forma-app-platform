@@ -4,7 +4,7 @@
 #
 #   campaigns.sh list [--ci|--all]  the catalog (default: campaigns and probes)
 #   campaigns.sh run <name> [args]  one test, exactly as CI runs it:
-#                                   cargo test --locked --lib <path> -- --ignored --exact --nocapture [args]
+#                                   cargo test --locked -p forma-app-platform --lib <path> -- --ignored --exact --nocapture [args]
 #                                   with its report at .cache/reports/<name>.json
 #   campaigns.sh run-ci             every campaign CI runs, in order (just ci)
 #   campaigns.sh verify             the catalog equals cargo's list of ignored tests
@@ -54,9 +54,9 @@ run() {
   fi
   echo "campaign $name ($kind; needs: $needs)"
   [[ $report == - ]] || echo "report: $reports/$name.json"
-  cd "$root/app"
+  cd "$root"
   set -x
-  env ${vars[@]+"${vars[@]}"} cargo test --locked --lib "$path" -- --ignored --exact --nocapture "$@"
+  env ${vars[@]+"${vars[@]}"} cargo test --locked -p forma-app-platform --lib "$path" -- --ignored --exact --nocapture "$@"
 }
 
 run_ci() {
@@ -71,7 +71,7 @@ run_ci() {
 verify() {
   local want have
   want=$(rows | cut -f2 | sort)
-  have=$(cd "$root/app" && cargo test --locked --lib -q -- --list --ignored 2>/dev/null | sed -n 's/: test$//p' | sort)
+  have=$(cd "$root" && cargo test --locked -p forma-app-platform --lib -q -- --list --ignored 2>/dev/null | sed -n 's/: test$//p' | sort)
   if [[ -z "$have" ]]; then echo "could not list the ignored tests (does 'cargo test --lib' build?)" >&2; exit 1; fi
   if [[ "$want" == "$have" ]]; then
     echo "campaign catalog matches cargo: $(echo "$have" | wc -l | tr -d ' ') ignored tests"

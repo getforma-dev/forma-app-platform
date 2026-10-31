@@ -14,7 +14,10 @@ FROM rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac
 WORKDIR /source/app
 ENV CARGO_BUILD_JOBS=2
 ARG TARGETARCH
-COPY app/Cargo.toml app/Cargo.lock ./
+# ADR-013 D13.3: the root workspace manifest and lockfile at /source, the
+# members at their repository paths; cargo finds the root walking up.
+COPY Cargo.toml Cargo.lock /source/
+COPY app/Cargo.toml ./Cargo.toml
 COPY app/src ./src
 COPY app/migrations ./migrations
 COPY app/certs/rds-global-bundle.pem ./certs/rds-global-bundle.pem
@@ -30,10 +33,10 @@ COPY spikes/APP-006/src /source/spikes/APP-006/src
 # refuses a missing folder at compile time; this image builds no browser
 # bundle and never runs that campaign, so the folder exists empty here.
 RUN --mount=type=cache,id=genui-qualification-cargo-registry,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=genui-qualification-target-${TARGETARCH},target=/source/app/target \
+    --mount=type=cache,id=genui-qualification-target-${TARGETARCH},target=/source/target \
     set -eu; \
     mkdir -p /source/app/admin/dist; \
-    cargo test --no-run --locked --lib --message-format=json > /source/cargo-artifacts.jsonl; \
+    cargo test --no-run --locked --lib -p forma-app-platform --message-format=json > /source/cargo-artifacts.jsonl; \
     grep '"reason":"compiler-artifact"' /source/cargo-artifacts.jsonl \
       | grep '"name":"genui"' | grep '"kind":\["lib"\]' | grep '"test":true' \
       | grep -o '"executable":"[^"]*"' | cut -d'"' -f4 > /source/executable-path; \

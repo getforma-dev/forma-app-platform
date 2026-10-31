@@ -105,9 +105,11 @@ def service_native_copies():
 
 def compiled_rust_sources():
     """Every .rs file under app/src that a release build compiles: the module tree from lib.rs
-    and main.rs minus every `#[cfg(test)]` module declaration (and its `#[path]`)."""
+    and main.rs minus every `#[cfg(test)]` module declaration (and its `#[path]`), every module
+    behind the dev binary's feature (`#[cfg(feature = "dev-stand")]`, ADR-012 D12.1), and every
+    binary that declares required-features (never built by the release `cargo build`)."""
     root = harness.APP / "src"
-    declaration = re.compile(r'(#\[cfg\(test\)\]\s*)?(?:#\[path = "([^"]+)"\]\s*)?(?:pub(?:\(crate\))? )?mod (\w+);')
+    declaration = re.compile(r'(#\[cfg\((?:test|feature = "dev-stand")\)\]\s*)?(?:#\[path = "([^"]+)"\]\s*)?(?:pub(?:\(crate\))? )?mod (\w+);')
 
     def declared(path, text, tests_only):
         module_dir = path.parent if path.name in ("mod.rs", "lib.rs", "main.rs") else path.parent / path.stem
@@ -121,6 +123,10 @@ def compiled_rust_sources():
                     yield (module_dir / name).resolve()
 
     test_only = set()
+    import tomllib
+    for target in tomllib.loads((harness.APP / "Cargo.toml").read_text()).get("bin", []):
+        if target.get("required-features"):
+            test_only.add((harness.APP / target["path"]).resolve())
     for path in sorted(root.rglob("*.rs")):
         test_only.update(declared(path, path.read_text(), False))
     # A module declared inside a test-only file (any gate) is test-only too, transitively.

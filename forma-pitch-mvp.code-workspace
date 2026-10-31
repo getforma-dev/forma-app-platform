@@ -39,7 +39,7 @@
   ],
   "settings": {
     "rust-analyzer.linkedProjects": [
-      "app/Cargo.toml",
+      "Cargo.toml",
       "parser/Cargo.toml"
     ],
     "rust-analyzer.check.command": "clippy",

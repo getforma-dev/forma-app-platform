@@ -12,12 +12,12 @@
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 : "${GENUI_DEV_STATE:?run through scripts/dev/dev.sh}"
-cd "$root/app"
-if ! cargo build --locked --features dev-stand --bin genui-dev; then
+cd "$root"
+if ! cargo build --locked -p forma-app-platform --features dev-stand --bin genui-dev; then
   echo "genui-dev: the build failed; fix it, then run 'just restart'" >&2
   exit 0
 fi
-target=${CARGO_TARGET_DIR:-$root/app/target}
+target=${CARGO_TARGET_DIR:-$root/target}
 
 env_file() {
   if [[ -n "${GENUI_ENV_FILE:-}" ]]; then echo "$GENUI_ENV_FILE"; return; fi

@@ -20,10 +20,11 @@ reports="$root/.cache/reports"
 
 # name|CI source|command (run with bash -c from the repository root)
 steps=(
-  "fmt|tenant-foundation.yml|cd app && cargo fmt --check"
-  "clippy|tenant-foundation.yml|cd app && cargo clippy --locked --all-targets -- -D warnings"
-  "test|tenant-foundation.yml (storage::), DEPLOY-RUNBOOK 0.2|cd app && cargo test --locked --lib"
-  "msrv|tenant-foundation.yml|cd app && cargo +1.85.0 check --locked --lib --tests"
+  "fmt|tenant-foundation.yml|cargo fmt --check -p forma-app-platform"
+  "clippy|tenant-foundation.yml|cargo clippy --locked -p forma-app-platform --all-targets -- -D warnings"
+  "clippy-dev|ADR-012 D12.1 (the dev binary)|cargo clippy --locked -p forma-app-platform --all-targets --features dev-stand -- -D warnings"
+  "test|tenant-foundation.yml (storage::), DEPLOY-RUNBOOK 0.2|cargo test --locked -p forma-app-platform --lib"
+  "msrv|tenant-foundation.yml|cargo +1.85.0 check --locked -p forma-app-platform --lib --tests"
   "catalog|ADR-012 campaign catalog|scripts/dev/campaigns.sh verify"
   "admin|tenant-foundation.yml|npm --prefix app/admin run typecheck && npm --prefix app/admin run build"
   "infra|DEPLOY-RUNBOOK 0.2|cd infra && npm run typecheck && npm test"
@@ -31,6 +32,7 @@ steps=(
   "py-runtime|tenant-foundation.yml, foundation.yml|$py -m unittest discover -s app/runtime"
   "py-qualification|tenant-foundation.yml|$py -m unittest discover -s app/qualification"
   "py-app-scripts|DEPLOY-RUNBOOK 0.2|$py -m unittest discover -s app/scripts -p 'test_*.py'"
+  "py-ops|ADR-013 D13.5 (release record, fake AWS)|python3 -m unittest discover -s ops/beta -p 'test_*.py'"
   "py-infra|DEPLOY-RUNBOOK 0.2|cd infra/test && ../../$py -m unittest preflight_test window_requests_test"
   "schema-pins|tenant-foundation.yml|python3 scripts/check-schema-pins.py"
   "contracts|contracts.yml|contracts/.venv/bin/python -m unittest discover -s contracts -p 'test_*.py' && node contracts/verify_vectors.mjs && contracts/.venv/bin/python contracts/lock.py check"

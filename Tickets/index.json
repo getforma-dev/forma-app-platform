@@ -280,10 +280,12 @@
         "APP-127",
         "APP-128",
         "APP-129",
+        "APP-130",
         "APP-132",
+        "APP-133",
         "APP-135"
       ],
-      "ticket_count": 41,
+      "ticket_count": 43,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -4095,6 +4097,37 @@
       ]
     },
     {
+      "id": "APP-130",
+      "title": "Repository and delivery step C/D: one root Cargo workspace, the builder-cache sweep",
+      "path": "0-backlog/APP-130.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "130",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-013](../../docs/architecture/ADR-013-REPOSITORY-AND-DELIVERY.md) D13.3 and migration steps C and D (accepted by Victor, 2026-10-31: \"Accept, approve all\"); [ADR-012](../../docs/architecture/ADR-012-DEVELOPER-WORKFLOW.md) D12.4 (the dev profile and the jobs cap, moved to the root). No AWS call of any kind.",
+      "Requirements": "C15",
+      "Depends on": "APP-125, APP-126, APP-127, APP-128",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
+      "Branch / PR": "`pivot/ladder` (built; not merged into `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-125",
+        "APP-126",
+        "APP-127",
+        "APP-128"
+      ]
+    },
+    {
       "id": "APP-132",
       "title": "Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)",
       "path": "0-backlog/APP-132.md",
@@ -4120,6 +4153,35 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-128"
+      ]
+    },
+    {
+      "id": "APP-133",
+      "title": "Repository and delivery: the release record (release.json, RELEASES.md, beta tags) and the module map",
+      "path": "0-backlog/APP-133.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "133",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-013](../../docs/architecture/ADR-013-REPOSITORY-AND-DELIVERY.md) D13.2 (tags), D13.4 (module map), D13.5 (release record), the code parts of migration steps B and H (accepted by Victor, 2026-10-31: \"Accept, approve all\"). Every [MUTATION] still needs Victor's word per action; no AWS call was made building this.",
+      "Requirements": "C15, SR9",
+      "Depends on": "APP-127, APP-130",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
+      "Branch / PR": "`pivot/ladder` (built; not merged into `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-127",
+        "APP-130"
       ]
     },
     {
