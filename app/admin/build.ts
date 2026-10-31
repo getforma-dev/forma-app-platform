@@ -27,6 +27,8 @@ await build({
     { input: 'src/styles/ledger.css', outfile: 'ledger.css' },
     // APP-103: the utility widgets and their closed set of skins.
     { input: 'src/styles/widgets.css', outfile: 'widgets.css' },
+    // APP-115: agent token scopes and the "Agents" activity panel.
+    { input: 'src/styles/governance.css', outfile: 'governance.css' },
   ],
   // APP-009 (ADR-006): the sign-in page also serves /signin/{handle}; the
   // denial page is rendered by the callback and the pending route. APP-074:
@@ -45,7 +47,7 @@ await build({
     '/w/{app}/{work}': { js: ['work'], css: ['app'] },
     // ADR-011 (APP-092): the pitch canvas, one island; a declared canvas
     // route (365 KiB JavaScript ceiling; Forma's own code stays at N2's).
-    '/canvas': { js: ['canvas'], css: ['app', 'canvas-vendor', 'canvas', 'actions', 'ledger', 'widgets'], canvas: true },
+    '/canvas': { js: ['canvas'], css: ['app', 'canvas-vendor', 'canvas', 'actions', 'ledger', 'widgets', 'governance'], canvas: true },
   },
   outputDir: 'dist',
   ssr: isSsr,

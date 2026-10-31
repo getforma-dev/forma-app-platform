@@ -326,6 +326,9 @@ pub struct AgentCaller {
     pub request: TrustedRequest,
     pub token_id: String,
     pub label: String,
+    /// APP-115 (0013): the scope the member chose at minting; it only ever
+    /// narrows what the member may do through this token (`mcp::scope`).
+    pub scope: super::governance::AgentScope,
 }
 impl AgentCaller {
     /// Test executable only: a caller for unit tests that never reach
@@ -345,6 +348,7 @@ impl AgentCaller {
             },
             token_id: token_id.into(),
             label: "Claude".into(),
+            scope: super::governance::AgentScope::default(),
         }
     }
 }
@@ -1038,7 +1042,7 @@ impl Workspace {
         let registry = &self.inner.registry;
         let transaction = Transaction::begin_nonmember(&self.inner, Some(&organization)).await?;
         let result = async {
-            let rows = transaction.query("SELECT t.token_id::text,t.principal_id::text,t.label,t.registry_sha256,t.membership_epoch_at_mint,(t.revoked_at IS NULL AND t.expires_at>clock_timestamp()),(t.last_used_at IS NULL OR t.last_used_at<=now()-interval '60 seconds'),p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=t.organization_id AND e.principal_id=t.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active) FROM genui.agent_tokens t JOIN genui.principals p ON p.organization_id=t.organization_id AND p.principal_id=t.principal_id JOIN genui.memberships m ON m.organization_id=t.organization_id AND m.principal_id=t.principal_id WHERE t.organization_id=$1::text::uuid AND t.token_digest=$2", &[&organization,&agent_token_digest(token)]).await?;
+            let rows = transaction.query(&format!("SELECT t.token_id::text,t.principal_id::text,t.label,t.registry_sha256,t.membership_epoch_at_mint,(t.revoked_at IS NULL AND t.expires_at>clock_timestamp()),(t.last_used_at IS NULL OR t.last_used_at<=now()-interval '60 seconds'),p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=t.organization_id AND e.principal_id=t.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active),{} FROM genui.agent_tokens t JOIN genui.principals p ON p.organization_id=t.organization_id AND p.principal_id=t.principal_id JOIN genui.memberships m ON m.organization_id=t.organization_id AND m.principal_id=t.principal_id WHERE t.organization_id=$1::text::uuid AND t.token_digest=$2", super::governance::SCOPE_COLUMNS), &[&organization,&agent_token_digest(token)]).await?;
             let Some(row) = rows.first() else {
                 return Ok(None);
             };
@@ -1074,6 +1078,7 @@ impl Workspace {
                 },
                 token_id,
                 label: text(row, 2)?,
+                scope: super::governance::AgentScope::from_row(row, 13)?,
             }))
         }
         .await;

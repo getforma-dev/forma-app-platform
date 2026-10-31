@@ -69,6 +69,29 @@ class HaikuAgent(unittest.TestCase):
         self.assertFalse(report["committed"])
         self.assertNotIn(TOKEN, out.getvalue())
 
+    def test_scope_demo_passes_only_when_time_off_is_hidden_and_refused(self):
+        def run(listed, drafted):
+            replies = iter([{"jsonrpc": "2.0", "id": 1, "result": listed}, {"jsonrpc": "2.0", "id": 2, "result": drafted}])
+            with tempfile.TemporaryDirectory() as directory:
+                stand = Path(directory) / "stand.json"
+                stand.write_text(json.dumps({"security_token": TOKEN, "origin": "http://127.0.0.1:3000"}))
+                out = io.StringIO()
+                with mock.patch.object(haiku, "post", side_effect=lambda *a, **k: next(replies)), \
+                        mock.patch.dict(os.environ, {"FORMA_SCOPED_AGENT_TOKEN": ""}), \
+                        mock.patch("sys.argv", ["mcp_haiku_agent.py", "--scope-demo", "--stand-file", str(stand)]), \
+                        contextlib.redirect_stdout(out):
+                    code = haiku.main()
+            self.assertNotIn(TOKEN, out.getvalue())
+            return code, json.loads(out.getvalue())
+        refused = {"isError": True, "content": [{"type": "text", "text": "Not found."}]}
+        security = {"isError": False, "structuredContent": {"library": [{"title": "Access requests"}]}}
+        code, report = run(security, refused)
+        self.assertEqual((code, report["passed"], report["time_off_refused"]), (0, True, True))
+        code, report = run({"isError": False, "structuredContent": {"library": [{"title": "Time off"}]}}, refused)
+        self.assertEqual((code, report["time_off_listed"]), (1, True))
+        code, report = run(security, {"isError": False, "content": [{"type": "text", "text": "Draft d1"}]})
+        self.assertEqual((code, report["time_off_refused"]), (1, False))
+
     def test_origin_must_be_https_unless_loopback(self):
         for origin, allowed in (("https://beta.getforma.dev", True), ("http://127.0.0.1:3000", True), ("http://127.8.9.10:3000", True),
                                 ("http://localhost:3000", True), ("http://[::1]:3000", True), ("http://app.localhost", True),

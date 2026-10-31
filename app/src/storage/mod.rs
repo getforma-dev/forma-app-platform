@@ -15,6 +15,7 @@ mod catalog;
 mod commands;
 mod composer;
 mod definitions;
+mod governance;
 mod pool;
 mod queries;
 mod registry;
@@ -28,7 +29,8 @@ pub use admission::{
     VerifiedNonmember,
 };
 pub use agents::{
-    agent_label_shaped, AgentAttribution, AgentToken, MintedAgentToken, MAX_LIVE_AGENT_TOKENS,
+    agent_label_shaped, AgentAttribution, AgentToken, MintedAgentToken, AGENT_TOKEN_DAYS,
+    MAX_LIVE_AGENT_TOKENS,
 };
 pub use authorization::{Action, Publication, Record, TrustedRequest};
 pub use boxes::{
@@ -47,6 +49,10 @@ pub use composer::{
 pub use definitions::{
     CurrentRevision, DefinitionDetail, DefinitionRevision, InputContract, PublicationDetail,
     PublishResult, RecordSchema, SavedWork, SavedWorkDetail, WorkBinding, MAX_CANONICAL_BYTES,
+};
+pub use governance::{
+    AccessEntry, AccessRow, AgentScope, AgentSummary, ACTIVITY_LIMIT, MAX_SCOPE_APPS, MAX_TOUCHED,
+    SCOPE_ACTIONS, SCOPE_SPACES,
 };
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use queries::{

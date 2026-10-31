@@ -135,6 +135,21 @@ Say: "Two vendors' agents just acted on one governed record. Neither got a right
 Tools (closed set, typed JSON Schemas, annotations): `forma_list_apps`, `forma_run_view` (rows ≤ 50 with the receipt id, the canvas's query path), `forma_compose_app` (the composer; the app is placed live), `forma_draft_record`, `forma_draft_decision`, `forma_commit` (held drafts: 10 minutes, the member's and token's own, one record each; a repeated commit replays the same outcome), `forma_list_pending`, `forma_share`. Refusals: a missing, malformed, unknown, revoked, foreign or epoch-stale token and a cookie without a bearer are all the byte-identical 404; a foreign `Origin` is 403; inside a tool, every denial is the same `not_found` result.
 
 Measured on the local stand (`storage::mcp_campaign`, Docker PostgreSQL, stub engine; debug build): draft ~0.8 s (the expense app placed on first use), commit + share ~0.24 s, `app.shared` on Sarah's stream ~45 ms later, Sarah's draft + commit ~0.5 s, `record.committed` on Diego's stream immediately.
+## Scenario 6b: an agent scoped to Security cannot touch People (APP-115)
+
+Agents get their own identity and a scope the member chooses; every call is logged and the refusals show up live.
+
+**Before the pitch.** On Diego's canvas, open **Connect an agent**, name it "Security bot", choose **Only selected spaces → Security**, allowed actions **Read** and **Draft**, expiry **7 days**, and **Create token**. Diego needs the Time off app (People) and the Access requests app (Security) granted, as in the workflows setup.
+
+**The act.**
+1. Run the rehearsed probe with that token: `FORMA_SCOPED_AGENT_TOKEN` exported in the shell (the `read -rs` way, never on the command line) and `FORMA_ORIGIN=https://<host>`, then `app/scripts/mcp_haiku_agent.py --scope-demo`. Or, from Claude Code with that token: *"File a vacation request in Time off for Nov 10–12."* The agent lists only the Security apps (Time off is not offered), then tries `forma_draft_record` on Time off and gets "Not found.": the same answer as an app that does not exist.
+2. On Diego's canvas: **Connect an agent → Activity**. The Security bot's timeline shows, newest first, **Draft a record · Time off · refused: outside scope (People)** next to the allowed calls, with the scope ("Security · read, draft"), call and refusal counts. The panel re-reads every 4 seconds, so the row appears while you watch.
+3. Click **Revoke**: the next call from that agent is the uniform 404.
+
+Say: "This agent was given Security, read and draft. It tried an HR app, and Forma refused it before touching any data. The refusal is on the agent's timeline, hash-chained, with who it acted for."
+
+Rehearsed on the local stand: `storage::mcp_campaign` (`GENUI_MCP_STAND_SECONDS`) mints the same token and writes it to the stand file as `security_token`, so `--scope-demo --stand-file <scratch>/mcp-stand.json` runs the probe.
+
 ## Scenario 7: a folder of files becomes an app with receipts (APP-108)
 
 The fixture is `docs/pitch/folder-fixture/` (synthetic: `q3_metrics.csv`, `q3_pipeline.csv`, `q3_metrics_brief.pdf`; every figure invented).
@@ -177,6 +192,7 @@ Stacks (after macOS Stacks and BumpTop's piles): drag a card onto another and ho
 - `POST /v1/act` `{"utterance"}` or `{"decide": {app_id, work_id, record_id, status, note?}}` → a confirmation card payload (`command_request` with a server-minted `Idempotency-Key`, typed `values`, `approver`, `target`, `confirm_token`), `{"action":"open"}` or `{"action":"place"}`. Rate-limited 60/member/hour; uniform 404 for strangers; 422 `could_not_parse` / `could_not_draft`; 503 `composer_unavailable` without a key outside the demo organization.
 - `GET /v1/work/{app}/{work}/records` → the work's current records, newest first, at most 200, with schema, commands and display labels; uniform 404 otherwise.
 - `POST /v1/mcp` (APP-099: MCP Streamable HTTP, bearer agent token, 120/token/hour, long deadline; `GET` 405), `POST|GET /v1/agent-tokens`, `DELETE /v1/agent-tokens/{id}` (canvas session, same-origin).
+- APP-115: `POST /v1/agent-tokens` also takes `scope` (`"all"` or `{"spaces": [...], "apps": [...]}`), `actions` and `expires_in_days` (1–30); `GET /v1/governance/agents` (the member's agents with scope, status and counts) and `GET /v1/governance/agents/{id}/activity` (that agent's access log, newest first). Member-scoped only.
 - Folders (APP-108): `GET|POST /v1/boxes`, `POST /v1/boxes/uploads`, `GET /v1/boxes/{box}`, `POST /v1/boxes/{box}/name|share`, `POST /v1/boxes/{box}/files` (multipart, one `file` part), `GET /v1/boxes/{box}/files/{file}/content|preview`, `POST /v1/boxes/{box}/files/{file}/data|attach`, `POST /v1/boxes/{box}/apps`, `GET|POST /v1/boxes/{box}/brief`, `GET /v1/boxes/lineage/{app}/{work}`, `GET|POST /v1/boxes/explain/{app}/{work}`; `POST /v1/act` also takes `box_id`.
 - `POST /v1/work/{app}/{work}/commands/{command}` (existing, audited), `POST /v1/work/{app}/{work}/share` (existing), `GET /v1/events` (existing), `POST /v1/compose` (existing).
 

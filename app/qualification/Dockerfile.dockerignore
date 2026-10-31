@@ -51,6 +51,8 @@
 !app/src/sharing/mod.rs
 !app/src/mcp/mod.rs
 !app/src/mcp/drafts.rs
+!app/src/mcp/governance.rs
+!app/src/mcp/scope.rs
 !app/src/mcp/tests.rs
 !app/src/mcp/tokens.rs
 !app/src/mcp/tools.rs
@@ -112,6 +114,7 @@
 !app/src/storage/mod.rs
 !app/src/storage/admission.rs
 !app/src/storage/agents.rs
+!app/src/storage/governance.rs
 !app/src/storage/admission_qualification.rs
 !app/src/storage/authorization.rs
 !app/src/storage/catalog.rs
@@ -148,6 +151,7 @@
 !app/migrations/catalog-query.json
 !app/migrations/catalog-v11.json
 !app/migrations/catalog-v12.json
+!app/migrations/catalog-v13.json
 !app/certs/rds-global-bundle.pem
 !app/runtime/runtime.py
 !app/runtime/qualification_supervisor.py

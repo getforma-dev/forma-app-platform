@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 12,
+  "database_version": 13,
   "migrations": [
     {
       "version": 1,
@@ -61,6 +61,11 @@
       "version": 12,
       "file": "0012_review_fixes.sql",
       "sha256": "1fcc8d42449ff8b51963e6a32171ff4b8dc2fffd472180e73135eb6672703779"
+    },
+    {
+      "version": 13,
+      "file": "0013_agent_governance.sql",
+      "sha256": "685ac9f5d17e1abc4352e35d4c18f008aea57262e4b2d001c21dab94c89a421e"
     }
   ],
   "catalog": [
@@ -115,6 +120,10 @@
     {
       "file": "catalog-v12.json",
       "sha256": "c74cce74cbbe87bf9f93a82cb34863dd1e50ca5b7f9e9446bcb210c125ffbdbd"
+    },
+    {
+      "file": "catalog-v13.json",
+      "sha256": "c0ff63054768d65b37873d267f4a7218a6fcc58d0bfb028854e3fb6b94083dee"
     }
   ]
 }

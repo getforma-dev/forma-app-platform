@@ -138,7 +138,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v12.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v13.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 158] = [
+const SOURCES: [(&str, &[u8]); 161] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -396,7 +396,12 @@ const SOURCES: [(&str, &[u8]); 158] = [
     ),
     ("app/src/lib.rs", include_bytes!("../lib.rs")),
     ("app/src/mcp/drafts.rs", include_bytes!("../mcp/drafts.rs")),
+    (
+        "app/src/mcp/governance.rs",
+        include_bytes!("../mcp/governance.rs"),
+    ),
     ("app/src/mcp/mod.rs", include_bytes!("../mcp/mod.rs")),
+    ("app/src/mcp/scope.rs", include_bytes!("../mcp/scope.rs")),
     ("app/src/mcp/tests.rs", include_bytes!("../mcp/tests.rs")),
     ("app/src/mcp/tokens.rs", include_bytes!("../mcp/tokens.rs")),
     ("app/src/mcp/tools.rs", include_bytes!("../mcp/tools.rs")),
@@ -510,6 +515,10 @@ const SOURCES: [(&str, &[u8]); 158] = [
     (
         "app/src/storage/definitions.rs",
         include_bytes!("definitions.rs"),
+    ),
+    (
+        "app/src/storage/governance.rs",
+        include_bytes!("governance.rs"),
     ),
     (
         "app/src/storage/managed_qualification.rs",

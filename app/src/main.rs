@@ -662,6 +662,7 @@ async fn main() {
                 .merge(records_routes)
                 // APP-099: the canvas's "Connect an agent" token routes.
                 .merge(genui::mcp::tokens::router(auth.clone()))
+                .merge(genui::mcp::governance::router(auth.clone()))
                 .merge(slack_routes)
                 // APP-101: the slash-command list and "save as /name".
                 .merge(genui::composer::commands::router(auth.clone()))

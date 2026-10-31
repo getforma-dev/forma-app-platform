@@ -30,7 +30,7 @@
 //! organization's app id, another member's work and a nonexistent id are
 //! indistinguishable. Arguments outside a tool's schema are refused before
 //! any storage call (`invalid_arguments`).
-use super::{drafts, Mcp};
+use super::{drafts, scope, Mcp};
 use crate::{
     actions::{
         prompt::{self, CatalogApp},
@@ -215,6 +215,16 @@ pub struct Output {
     pub text: String,
     pub structured: Value,
     pub is_error: bool,
+    /// APP-115: for the access log only, never the agent.
+    pub note: Option<Box<LogNote>>,
+}
+/// What the access log records of a judged resource: its space, its
+/// display label, and an app the answer does not name (a refused one).
+#[derive(Debug, Default)]
+pub struct LogNote {
+    pub space: Option<&'static str>,
+    pub resource: Option<String>,
+    pub app: Option<String>,
 }
 impl Output {
     fn ok(code: &'static str, summary: String, structured: Value) -> Self {
@@ -223,6 +233,7 @@ impl Output {
             text: summary,
             structured,
             is_error: false,
+            note: None,
         }
     }
     fn error(code: &'static str, message: &str) -> Self {
@@ -231,7 +242,35 @@ impl Output {
             text: message.to_owned(),
             structured: json!({"error": code, "message": message}),
             is_error: true,
+            note: None,
         }
+    }
+    /// APP-115: a scope refusal. The agent sees exactly the uniform denial;
+    /// the code (`scope_action`, `scope_space`), the space and the resource
+    /// go to the access log.
+    pub(crate) fn out_of_scope(
+        code: &'static str,
+        space: Option<&'static str>,
+        app: Option<&str>,
+        resource: Option<String>,
+    ) -> Self {
+        let mut output = Self::not_found();
+        output.code = code;
+        output.note = Some(Box::new(LogNote {
+            space,
+            app: app.map(str::to_owned),
+            resource: resource.or_else(|| app.and_then(scope::library_title).map(str::to_owned)),
+        }));
+        output
+    }
+    /// The scope refusal of an app (`scope_space`).
+    fn outside(app: &str, resource: Option<String>) -> Self {
+        Self::out_of_scope(
+            "scope_space",
+            Some(scope::space_of(app)),
+            Some(app),
+            resource,
+        )
     }
     /// The uniform denial.
     fn not_found() -> Self {
@@ -323,6 +362,9 @@ pub async fn call(state: &Mcp, caller: &AgentCaller, name: &str, arguments: &Val
     let Some(stores) = state.auth().stores.clone() else {
         return Output::not_found();
     };
+    if let Err(refused) = in_scope(caller, name, arguments) {
+        return refused;
+    }
     let result = match name {
         LIST_APPS => list_apps(state, &stores, caller, arguments).await,
         RUN_VIEW => run_view(state, &stores, caller, arguments).await,
@@ -341,6 +383,47 @@ pub async fn call(state: &Mcp, caller: &AgentCaller, name: &str, arguments: &Val
 }
 
 type ToolResult = Result<Output, Output>;
+
+/// APP-115: the scope judgment made before any storage call: the tool's
+/// action, then the app or folder its arguments name. A composition's app
+/// is known only after it is written, so a token with a narrowed scope may
+/// not compose (carried to APP-115 full: judge the matcher's choice first).
+fn in_scope(caller: &AgentCaller, name: &str, arguments: &Value) -> Result<(), Output> {
+    let action = scope::action_of(name);
+    if !scope::allows_action(caller, name) {
+        return Err(Output::out_of_scope(
+            "scope_action",
+            None,
+            None,
+            Some(format!("action: {action}")),
+        ));
+    }
+    let named_app = arguments
+        .get("app_id")
+        .and_then(Value::as_str)
+        .filter(|id| storage::valid_identifier(id));
+    match name {
+        RUN_VIEW | SHARE => match named_app {
+            Some(app) if !scope::allows_app(&caller.scope, app) => Err(Output::outside(app, None)),
+            _ => Ok(()),
+        },
+        COMPOSE_APP if !caller.scope.all => Err(Output::out_of_scope(
+            "scope_space",
+            Some(scope::MINE),
+            None,
+            Some("a new app".into()),
+        )),
+        LIST_FOLDERS | FOLDER_FORMATION | FOLDER_BRIEF if !scope::allows_folders(&caller.scope) => {
+            Err(Output::out_of_scope(
+                "scope_space",
+                Some(scope::FOLDERS),
+                None,
+                Some("Folders".into()),
+            ))
+        }
+        _ => Ok(()),
+    }
+}
 
 // --- forma_list_apps ---
 
@@ -387,9 +470,12 @@ async fn list_apps(
         .await
         .map_err(storage_output)?;
     let catalog = prompt::catalog(&context.library);
+    // APP-115: the listing narrowed to the token's scope.
+    let in_scope = |app: &str| scope::allows_app(&caller.scope, app);
     let library: Vec<Value> = context
         .library
         .iter()
+        .filter(|app| in_scope(&app.app))
         .map(|app| {
             let record = catalog.iter().find(|c| c.app == app.app);
             json!({
@@ -404,6 +490,7 @@ async fn list_apps(
     let library_apps: Vec<&str> = context.library.iter().map(|a| a.app.as_str()).collect();
     let works: Vec<Value> = works
         .iter()
+        .filter(|w| in_scope(&w.app))
         .map(|w| {
             json!({
                 "app_id": w.app, "work_id": w.work, "title": w.title,
@@ -784,6 +871,10 @@ async fn hold(
         return Err(could_not_draft("not_a_record_action"));
     };
     let draft: Draft = *draft;
+    // APP-115: judged again where the record or app is resolved.
+    if !scope::allows_app(&caller.scope, &draft.app) {
+        return Err(Output::outside(&draft.app, Some(draft.title.clone())));
+    }
     if draft.placed {
         attribute(stores, caller, &draft.app, &draft.work, None).await;
     }
@@ -869,6 +960,10 @@ async fn draft_record(
         .ok_or_else(|| Output::invalid("`values` is required."))?;
     let (library, catalog) = catalog_of(stores, caller).await?;
     let app = app_for_hint(&catalog, &hint).ok_or_else(Output::not_found)?;
+    // APP-115: the hint resolved to an app; judged before anything is placed.
+    if !scope::allows_app(&caller.scope, &app.app) {
+        return Err(Output::outside(&app.app, Some(app.title.clone())));
+    }
     let hints = create_hints(app, values)?;
     let parsed = Parsed {
         kind: Kind::Create,
@@ -940,6 +1035,19 @@ async fn commit(
     };
     let held = state.drafts.get(caller, id).ok_or_else(refused)?;
     let draft = held.draft;
+    // APP-115: the held draft's app and, for a decision, the decide action,
+    // judged again at the write.
+    if !scope::allows_app(&caller.scope, &draft.app) {
+        return Err(Output::outside(&draft.app, Some(draft.title.clone())));
+    }
+    if draft.kind == Kind::Decide && !caller.scope.allows_action("decide") {
+        return Err(Output::out_of_scope(
+            "scope_action",
+            Some(scope::space_of(&draft.app)),
+            Some(&draft.app),
+            Some(draft.title.clone()),
+        ));
+    }
     let result = crate::commands::routes::commit(stores, &caller.request, &draft.request).await;
     let outcome = match result {
         Ok(CommandResult::Committed(outcome)) | Ok(CommandResult::Replayed(outcome)) => outcome,
@@ -1050,7 +1158,11 @@ async fn list_pending(
         .await
         .map_err(storage_output)?;
     let mut pending = Vec::new();
-    for work in works.iter().filter(|w| w.can_write).take(MAX_PENDING_WORKS) {
+    for work in works
+        .iter()
+        .filter(|w| w.can_write && scope::allows_app(&caller.scope, &w.app))
+        .take(MAX_PENDING_WORKS)
+    {
         let listing = match stores
             .data
             .list_records(member, &work.app, &work.work)
