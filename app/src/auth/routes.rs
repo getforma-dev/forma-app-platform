@@ -95,17 +95,37 @@ pub(crate) fn neutral_failure(auth: &Auth) -> Response {
     signin(auth, None, true)
 }
 
+/// The issuer whose closed-registry binding `registered` requires. A
+/// configured sign-in provider names its own. The dev binary has none
+/// (ADR-012): personas are minted locally, and the fixture issuer in that
+/// binary's registry is the binding that is checked instead. A release build
+/// with no provider registers nothing, so a missing provider cannot skip the
+/// check.
+pub(crate) fn registration_issuer(auth: &Auth) -> Option<&str> {
+    if let Some(provider) = &auth.provider {
+        return Some(provider.config.issuer.as_str());
+    }
+    #[cfg(feature = "dev-stand")]
+    {
+        Some(crate::dev::DEV_ISSUER)
+    }
+    #[cfg(not(feature = "dev-stand"))]
+    {
+        None
+    }
+}
+
 /// APP-074 review M2: a cookie capability names an organization (its first
 /// 16 bytes, not a secret) that the closed registry binds for the configured
 /// issuer; anything else is refused before any database transaction.
 pub(crate) fn registered(auth: &Auth, cookie: &str) -> bool {
-    let (Some(provider), Some(stores)) = (&auth.provider, &auth.stores) else {
+    let (Some(issuer), Some(stores)) = (registration_issuer(auth), &auth.stores) else {
         return false;
     };
     crate::storage::capability_organization(cookie).is_some_and(|organization| {
         stores
             .workspace
-            .provider_tenant(&organization, &provider.config.issuer)
+            .provider_tenant(&organization, issuer)
             .is_some()
     })
 }
@@ -674,5 +694,22 @@ async fn signout_all(State(auth): State<Arc<Auth>>, request: Request) -> Respons
             response
         }
         Err(_) => http::unavailable(),
+    }
+}
+
+#[cfg(test)]
+mod registration_tests {
+    use super::registration_issuer;
+    use crate::auth::tests::TestPages;
+    use crate::auth::Auth;
+    use std::sync::Arc;
+
+    #[test]
+    fn a_release_build_without_a_provider_names_no_issuer() {
+        let auth = Auth::new(None, None, Arc::new(TestPages)).unwrap();
+        #[cfg(not(feature = "dev-stand"))]
+        assert!(registration_issuer(&auth).is_none());
+        #[cfg(feature = "dev-stand")]
+        assert_eq!(registration_issuer(&auth), Some(crate::dev::DEV_ISSUER));
     }
 }

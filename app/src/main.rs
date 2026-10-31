@@ -907,6 +907,8 @@ mod tests {
             description: String::new(),
             views: vec![],
             definition_digest: String::new(),
+            collections: vec![("collection".into(), "Claim".into())],
+            can_write: true,
         };
         let form = work::FormValues {
             window_start: "2026-10-22T10:00".into(),
@@ -920,6 +922,10 @@ mod tests {
             &form,
             false,
             cards,
+            work::WorkChrome {
+                records: Vec::new(),
+                canvas: "/canvas#g-w".into(),
+            },
         );
         let (status, headers, body) = html(ssr.work(&props)).await;
         // Evidence: the rendered page of every state (synthetic props).
@@ -981,6 +987,29 @@ mod tests {
         assert!(loading.contains("<span class=\"badge\">busy</span>"));
         assert!(!loading.contains("<span class=\"badge\">loading</span>"));
         assert!(section("idle").contains("<span class=\"badge\">idle</span>"));
+        // A records-only work has no source-query form. It offers the canvas
+        // and a new-record link (APP-135).
+        let only = work::props(
+            &outline,
+            "/w/a/w".into(),
+            "Q".repeat(43),
+            &work::FormValues::default(),
+            false,
+            Vec::new(),
+            work::WorkChrome {
+                records: work::record_links(&outline, "app", "work"),
+                canvas: work::canvas_href("work"),
+            },
+        );
+        assert!(only.records_only && only.has_records && !only.has_query);
+        let (_, _, records_body) = html(ssr.work(&only)).await;
+        assert!(!records_body.contains("Window start"));
+        assert!(!records_body.contains("Run views"));
+        assert!(records_body.contains("This work keeps records."));
+        assert!(records_body.contains("Open on the canvas"));
+        assert!(records_body.contains("/canvas#g-work"));
+        assert!(records_body.contains("New Claim record"));
+        assert!(records_body.contains("/work/app/work/records/collection/"));
         // A refused window echoes the form, says nothing ran, and runs nothing.
         let mut refused = props.clone();
         refused.form_error = true;
