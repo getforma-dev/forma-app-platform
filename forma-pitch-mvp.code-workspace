@@ -1,0 +1,222 @@
+{
+  "folders": [
+    {
+      "name": "forma-pitch-mvp",
+      "path": "."
+    },
+    {
+      "name": "app — Rust server",
+      "path": "app"
+    },
+    {
+      "name": "admin — canvas",
+      "path": "app/admin"
+    },
+    {
+      "name": "infra — AWS CDK",
+      "path": "infra"
+    },
+    {
+      "name": "parser — sealed parser",
+      "path": "parser"
+    },
+    {
+      "name": "Tickets",
+      "path": "Tickets"
+    },
+    {
+      "name": "docs",
+      "path": "docs"
+    },
+    {
+      "name": "forma-app-platform (sibling clone, optional)",
+      "path": "../forma-app-platform"
+    },
+    {
+      "name": "Forma framework (optional)",
+      "path": "../../Forma"
+    },
+    {
+      "name": "FormaDeploy (optional)",
+      "path": "../../FormaDeploy"
+    }
+  ],
+  "settings": {
+    "rust-analyzer.linkedProjects": [
+      "app/Cargo.toml",
+      "parser/Cargo.toml"
+    ],
+    "rust-analyzer.check.command": "clippy",
+    "files.exclude": {
+      "**/.DS_Store": true,
+      "**/target": true,
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/.cache": true,
+      "**/cdk.out": true,
+      "**/.venv": true
+    },
+    "search.exclude": {
+      "**/target": true,
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/.cache": true,
+      "**/cdk.out": true,
+      "**/.venv": true,
+      "**/design/**/deliverables/**/html/**": true
+    },
+    "files.watcherExclude": {
+      "**/target/**": true,
+      "**/node_modules/**": true,
+      "**/.cache/**": true,
+      "**/.venv/**": true
+    },
+    "python.defaultInterpreterPath": "${workspaceFolder:forma-pitch-mvp}/app/runtime/.venv/bin/python",
+    "typescript.tsdk": "app/admin/node_modules/typescript/lib"
+  },
+  "extensions": {
+    "recommendations": [
+      "rust-lang.rust-analyzer",
+      "tamasfe.even-better-toml",
+      "ms-azuretools.vscode-docker",
+      "ms-playwright.playwright"
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "dev",
+        "type": "shell",
+        "command": "just dev",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "dev: clean",
+        "type": "shell",
+        "command": "just dev clean",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "dev: status",
+        "type": "shell",
+        "command": "just status",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "dev: stop",
+        "type": "shell",
+        "command": "just dev stop",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "restart",
+        "type": "shell",
+        "command": "just restart",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "check",
+        "type": "shell",
+        "command": "just check",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": [],
+        "group": {
+          "kind": "test",
+          "isDefault": true
+        }
+      },
+      {
+        "label": "ci",
+        "type": "shell",
+        "command": "just ci",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "campaigns",
+        "type": "shell",
+        "command": "just campaigns --all",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "campaign…",
+        "type": "shell",
+        "command": "just campaign ${input:campaign}",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "doctor",
+        "type": "shell",
+        "command": "just doctor",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "setup",
+        "type": "shell",
+        "command": "just setup",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "clean",
+        "type": "shell",
+        "command": "just clean ${input:cleanWhat}",
+        "options": {
+          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+        },
+        "problemMatcher": []
+      }
+    ],
+    "inputs": [
+      {
+        "id": "campaign",
+        "type": "promptString",
+        "description": "Campaign short name (`just campaigns --all` lists them)",
+        "default": "pitch"
+      },
+      {
+        "id": "cleanWhat",
+        "type": "pickString",
+        "description": "What to clean",
+        "options": [
+          "--dry-run",
+          "docker",
+          "target",
+          "all"
+        ],
+        "default": "--dry-run"
+      }
+    ]
+  }
+}

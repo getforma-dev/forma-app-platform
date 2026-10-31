@@ -1,0 +1,42 @@
+# The catalog of every #[ignore] test in app/ (ADR-012 D12.3; inventory §B.4).
+# `scripts/dev/campaigns.sh verify` (part of `just check`) compares the paths
+# with `cargo test --lib -- --list --ignored`, so a new ignored test must be
+# added here. Columns are tab-separated:
+#   name  path  kind  ci  report  env  needs
+# kind: campaign (Docker fixture), probe, smoke (calls a real external
+# endpoint), stand (the dev stand; run by `just dev`), helper (not run alone).
+# ci: the workflow that runs it, or "-". report: the GENUI_*_REPORT variable
+# `just campaign` points at .cache/reports/<name>.json. env: extra variables
+# set by the runner (@VENV@ = app/runtime/.venv/bin/python).
+name	path	kind	ci	report	env	needs
+postgres	storage::qualification::native_postgres_campaign	campaign	tenant-foundation	GENUI_NATIVE_REPORT	-	Docker, OpenSSL, runtime venv
+admission	storage::admission_qualification::native_admission_campaign	campaign	tenant-foundation	GENUI_ADMISSION_REPORT	-	Docker, OpenSSL, runtime venv
+managed	storage::managed_qualification::tests::managed_cleanup_with_real_transports	campaign	tenant-foundation	-	-	Docker, OpenSSL, runtime venv
+definition	storage::definition_qualification::native_definition_campaign	campaign	tenant-foundation	GENUI_DEFINITION_REPORT	-	Docker, OpenSSL, runtime venv
+session	auth::tests::native_session_campaign	campaign	tenant-foundation	GENUI_SESSION_REPORT	-	Docker, OpenSSL, runtime venv
+invite	auth::invite_tests::native_invite_campaign	campaign	tenant-foundation	GENUI_INVITE_REPORT	-	Docker, OpenSSL, runtime venv
+command	storage::command_qualification::native_command_campaign	campaign	tenant-foundation	GENUI_COMMAND_REPORT	-	Docker, OpenSSL, runtime venv
+race	storage::race_qualification::native_race_campaign	campaign	tenant-foundation	GENUI_RACE_REPORT	-	Docker, OpenSSL, runtime venv
+engine-child	query::tests::engine_child_campaign	campaign	tenant-foundation	GENUI_QUERY_LATENCY_REPORT	GENUI_QUERY_PYTHON=@VENV@	runtime venv (DuckDB 2.0.0)
+query	storage::query_qualification::native_query_campaign	campaign	tenant-foundation	GENUI_QUERY_REPORT	GENUI_QUERY_PYTHON=@VENV@	Docker, OpenSSL, runtime venv
+actions	storage::actions_campaign::native_actions_campaign	campaign	-	GENUI_ACTIONS_CAMPAIGN_REPORT	-	Docker, runtime venv
+box	storage::box_campaign::native_box_campaign	campaign	-	-	-	Docker, runtime venv, sealed parser (just parser)
+canvas	storage::query_qualification::canvas_campaign::native_canvas_campaign	campaign	-	GENUI_CANVAS_CAMPAIGN_REPORT	-	Docker, runtime venv
+composer	storage::composer_qualification::native_composer_campaign	campaign	-	GENUI_COMPOSER_REPORT	-	Docker, OpenSSL, runtime venv
+mcp	storage::mcp_campaign::native_mcp_campaign	campaign	-	GENUI_MCP_CAMPAIGN_REPORT	-	Docker, runtime venv
+pitch	storage::query_qualification::pitch_campaign::native_pitch_campaign	campaign	-	GENUI_PITCH_CAMPAIGN_REPORT	-	Docker, runtime venv
+sharing	storage::sharing_qualification::native_sharing_campaign	campaign	-	GENUI_SHARING_REPORT	-	Docker, OpenSSL, runtime venv
+slack	storage::slack_campaign::native_slack_campaign	campaign	-	GENUI_SLACK_CAMPAIGN_REPORT	-	Docker, runtime venv
+workflows	storage::workflows_campaign::native_workflows_campaign	campaign	-	GENUI_WORKFLOWS_CAMPAIGN_REPORT	-	Docker, runtime venv
+parser-sandbox	imports::sandbox::tests::actual_parser_host_parses_refuses_and_lists_sheets	probe	-	-	-	GENUI_TEST_PARSER_MANIFEST naming a built parser
+smoke-composer	composer::tests::real_model_smoke	smoke	-	-	-	the real model; run through app/scripts/composer_smoke.sh
+smoke-transform	composer::transform::smoke::real_haiku_transform_smoke	smoke	-	-	-	the real model; run through app/scripts/composer_smoke.sh transform
+smoke-parse	actions::tests::real_haiku_parse_smoke	smoke	-	-	-	the real model; GENUI_ACT_SMOKE_KEY_FILE
+smoke-vision	actions::receipt_tests::real_haiku_vision_smoke	smoke	-	-	-	the real model; GENUI_ACT_SMOKE_KEY_FILE
+smoke-workflow	actions::workflows::tests::real_haiku_workflow_smoke	smoke	-	-	-	the real model; GENUI_ACT_SMOKE_KEY_FILE
+smoke-customize	widgets::tests::real_haiku_customize_smoke	smoke	-	-	-	the real model; GENUI_ACT_SMOKE_KEY_FILE
+smoke-folder	boxes::tests::real_haiku_folder_smoke	smoke	-	-	-	the real model; GENUI_BOX_SMOKE_KEY_FILE
+smoke-open-meteo	widgets::tests::real_open_meteo_smoke	smoke	-	-	-	the public Open-Meteo endpoint
+dev-stand	storage::dev_stand::native_dev_stand	stand	-	-	-	run by just dev
+managed-readonly-entry	storage::managed_qualification::managed_readonly_entry	helper	-	-	-	operator-only exact selector (APP-075)
+managed-child-entry	storage::managed_qualification::tests::child_entry	helper	-	-	-	child process of the managed campaign (APP-075)

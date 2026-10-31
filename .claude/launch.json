@@ -15,6 +15,23 @@
       "name": "forma-priya",
       "url": "http://127.0.0.1:4003",
       "port": 4003
+    },
+    {
+      "name": "forma-alex",
+      "url": "http://127.0.0.1:4010",
+      "port": 4010
+    },
+    {
+      "name": "genui-dev",
+      "runtimeExecutable": "just",
+      "runtimeArgs": ["dev"],
+      "port": 4001
+    },
+    {
+      "name": "genui-dev-clean",
+      "runtimeExecutable": "just",
+      "runtimeArgs": ["dev", "clean"],
+      "port": 4010
     }
   ]
 }

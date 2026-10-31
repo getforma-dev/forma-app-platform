@@ -1,0 +1,53 @@
+# The front door (ADR-012 D12.3). Every recipe is a thin call into a script in
+# Git (scripts/dev/, ops/beta/), so the editor tasks, the terminal and CI-like
+# runs do the same thing. `just` with no arguments lists the recipes.
+#
+# .env is deliberately NOT loaded: it holds secrets, and only the scripts that
+# need one value read it through app/scripts/read_env.py.
+
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set positional-arguments
+
+# List the recipes
+default:
+    @just --list --unsorted
+
+# Toolchains, per-checkout venvs from the hashed locks, npm ci, Docker check (idempotent)
+setup *args:
+    @scripts/dev/setup.sh "$@"
+
+# Compare installed tools with tools.versions and the pin files
+doctor:
+    @scripts/dev/doctor.sh
+
+# Local stand: `just dev [start|stop|reset|status]`, `just dev clean [...]` for the clean instance (:4010)
+dev *args:
+    @scripts/dev/dev.sh "$@"
+
+# Rebuild and restart the stand's server (`just restart clean` for the clean instance)
+restart *args:
+    @scripts/dev/dev.sh "$@" restart-server
+
+# What is running, and the URLs
+status *args:
+    @scripts/dev/dev.sh "$@" status
+
+# The CI-fast set in one command; `just check <step>...` runs only those steps (`just check --list`)
+check *steps:
+    @scripts/dev/check.sh "$@"
+
+# `check` plus the CI campaigns, the schema qualifier and the MSRV floor: a local green branch
+ci:
+    @scripts/dev/check.sh --ci
+
+# The ignored-test catalog: short name, test path, report variable, CI status
+campaigns *args:
+    @scripts/dev/campaigns.sh list "$@"
+
+# Run one ignored campaign by short name; its report goes to .cache/reports/<name>.json
+campaign name *args:
+    @scripts/dev/campaigns.sh run "$@"
+
+# Remove local build output and stray containers: `just clean [docker|target|all] [--dry-run]`
+clean *args:
+    @scripts/dev/clean.sh "$@"
