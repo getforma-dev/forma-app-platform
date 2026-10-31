@@ -1533,13 +1533,13 @@ async fn campaign() {
     let group = stand.get(expenses_group, Some(&mate_cookie)).await;
     assert_eq!(group.status, StatusCode::OK, "{}", group.text());
     assert_eq!(group.json()["title"], "Expenses");
-    // The owner renames Expenses "Team spend" at /spend; a repeat writes nothing.
-    let body =
-        json!({"scope": "organization", "name": "Team spend", "address": "/Spend"}).to_string();
+    // The owner renames Expenses "Team spend" at /team-spend; a repeat writes nothing.
+    let body = json!({"scope": "organization", "name": "Team spend", "address": "/Team-Spend"})
+        .to_string();
     let renamed = stand.post(&labels_path, Some(&maya_cookie), &body).await;
     assert_eq!(renamed.status, StatusCode::OK, "{}", renamed.text());
     assert_eq!(renamed.json()["saved"], true);
-    assert_eq!(renamed.json()["label"]["address"], "spend");
+    assert_eq!(renamed.json()["label"]["address"], "team-spend");
     let again = stand.post(&labels_path, Some(&maya_cookie), &body).await;
     assert_eq!(again.json()["saved"], false, "idempotent");
     assert_eq!(
@@ -1553,7 +1553,8 @@ async fn campaign() {
             .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
             .await,
     );
-    assert_eq!(seen["slug"], "spend");
+    assert_eq!(seen["slug"], "team-spend");
+    assert_eq!(seen["namespaced"], "app:team-spend");
     assert_eq!(seen["title"], "Team spend");
     assert_eq!(seen["can_label"], false);
     for alias in ["expenses", "expense"] {
@@ -1579,11 +1580,11 @@ async fn campaign() {
         .cloned()
         .unwrap();
     assert!(
-        !vendor["aliases"]
+        vendor["aliases"]
             .as_array()
             .unwrap()
             .contains(&json!("spend")),
-        "an address beats another app's hidden alias"
+        "catalog names always stay with their app"
     );
     assert_eq!(
         entry(
@@ -1593,11 +1594,22 @@ async fn campaign() {
         )["can_label"],
         true
     );
-    // Names already taken or naming a verb are refused.
+    // Names already taken or naming a verb are refused: never a name another
+    // app answers to (its address or any alias, hidden or not; a saved
+    // work's /name), never a verb or verb alias, and a display name is never
+    // another app's name or display title (APP-121 review findings 1, 2, 4, 5).
     for (change, code) in [
         (json!({"address": "time-off"}), "name_taken"),
+        (json!({"address": "spend"}), "name_taken"),
+        (json!({"address": "vendors"}), "name_taken"),
+        (json!({"address": "big-claims"}), "name_taken"),
+        // No editable organization aliases (2026-10-31 decision).
+        (json!({"aliases": ["team"]}), "invalid_label"),
+        (json!({"name": "Time off"}), "name_taken"),
+        (json!({"name": "Vendor-Spend"}), "name_taken"),
         (json!({"address": "card"}), "verb_name"),
-        (json!({"aliases": ["weather"]}), "verb_name"),
+        (json!({"address": "weather"}), "verb_name"),
+        (json!({"address": "agents"}), "verb_name"),
         (json!({"address": "Team Spend"}), "invalid_name"),
     ] {
         let mut body = change.clone();
@@ -1608,6 +1620,28 @@ async fn campaign() {
         assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY, "{change}");
         assert_eq!(refused.json()["code"], code, "{change}");
     }
+    // Renaming the address again keeps /team-spend automatically (the only
+    // organization alias there is).
+    let again = stand
+        .post(
+            &labels_path,
+            Some(&maya_cookie),
+            &json!({"scope": "organization", "address": "spend-team"}).to_string(),
+        )
+        .await;
+    assert_eq!(again.status, StatusCode::OK, "{}", again.text());
+    assert_eq!(again.json()["label"]["kept"], json!(["team-spend"]));
+    let seen = entry(
+        &stand
+            .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+            .await,
+    );
+    assert_eq!(seen["slug"], "spend-team");
+    assert_eq!(seen["kept"], json!(["team-spend"]));
+    assert!(seen["aliases"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("team-spend")));
     // A personal shortcut works for its member only.
     let mine = stand
         .post(
@@ -1638,9 +1672,12 @@ async fn campaign() {
         .contains(&json!("exp")));
     for (alias, code) in [
         ("spend", "name_taken"),
+        ("team-spend", "name_taken"),
         ("expense", "name_taken"),
         ("pto", "name_taken"),
+        ("big-claims", "name_taken"),
         ("card", "verb_name"),
+        ("keys", "verb_name"),
     ] {
         let refused = stand
             .post(
@@ -1652,13 +1689,30 @@ async fn campaign() {
         assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY, "{alias}");
         assert_eq!(refused.json()["code"], code, "{alias}");
     }
+    // A personal shortcut may be one letter (`/e`); `/app:e` names the same app.
+    let short = stand
+        .post(
+            &labels_path,
+            Some(&mate_cookie),
+            &json!({"scope": "personal", "aliases": ["exp", "/E"]}).to_string(),
+        )
+        .await;
+    assert_eq!(short.status, StatusCode::OK, "{}", short.text());
+    assert_eq!(
+        entry(
+            &stand
+                .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+                .await
+        )["mine"],
+        json!(["exp", "e"])
+    );
     // The owner names a card; the teammate sees it; the governed rows and
     // receipts are untouched by every label.
     let card = stand
         .post(
             &labels_path,
             Some(&maya_cookie),
-            &json!({"scope": "organization", "card": "total", "name": "Q3 spend"}).to_string(),
+            &json!({"scope": "organization", "card": "totals", "name": "Q3 spend"}).to_string(),
         )
         .await;
     assert_eq!(card.status, StatusCode::OK, "{}", card.text());
@@ -1668,7 +1722,7 @@ async fn campaign() {
             .await,
     )["cards"]
         .clone();
-    assert_eq!(cards[0]["card"], "total");
+    assert_eq!(cards[0]["card"], "totals");
     assert_eq!(cards[0]["name"], "Q3 spend");
     assert_eq!(scalar(&c.fixture, &governed(EXPENSES_APP)).await, before);
     // The outsider's list never carries the labels; storage under RLS shows
@@ -1677,19 +1731,135 @@ async fn campaign() {
         .get(composer::commands::COMMANDS_PATH, Some(&outsider_cookie))
         .await;
     assert!(!outside.text().contains("Team spend"));
-    let scoped = |org: &str| {
-        format!("SET ROLE genui_workspace; SELECT set_config('genui.organization_id','{org}',false); SELECT (SELECT count(organization_id) FROM genui.app_labels)*10+(SELECT count(organization_id) FROM genui.member_labels);")
+    let scoped = |org: &str, principal: &str| {
+        format!("SET ROLE genui_workspace; SELECT set_config('genui.organization_id','{org}',false); SELECT set_config('genui.principal_id','{principal}',false); SELECT (SELECT count(organization_id) FROM genui.app_labels)*10+(SELECT count(organization_id) FROM genui.member_labels);")
     };
     let last = |out: String| out.trim().lines().last().unwrap_or("").trim().to_owned();
-    assert_eq!(last(c.fixture.sql(&scoped(OTHER), "genui")), "0");
-    assert_eq!(last(c.fixture.sql(&scoped(ORG), "genui")), "21");
+    assert_eq!(last(c.fixture.sql(&scoped(OTHER, &mate_id), "genui")), "0");
+    assert_eq!(last(c.fixture.sql(&scoped(ORG, &mate_id), "genui")), "21");
+    // The workspace reads only the scoped principal's own personal labels
+    // (the RESTRICTIVE member_labels_principal policy).
+    assert_eq!(last(c.fixture.sql(&scoped(ORG, &maya_id), "genui")), "20");
+    assert_eq!(last(c.fixture.sql(&scoped(ORG, ""), "genui")), "20");
     assert_eq!(
         c.fixture.sql("SELECT string_agg(relname||':'||relrowsecurity||relforcerowsecurity,',' ORDER BY relname) FROM pg_class WHERE relnamespace='genui'::regnamespace AND relname IN ('app_labels','member_labels')", "genui").trim(),
         "app_labels:truetrue,member_labels:truetrue"
     );
+    // "Save as /name" never takes a label's address or alias (judged under
+    // the naming lock in create_work; review finding 5).
+    let squat = stand
+        .post(
+            &format!("/v1/work/{AUTHORING_APP}/{adapted_work}/name"),
+            Some(&maya_cookie),
+            &json!({"slug": "team-spend"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        squat.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        squat.text()
+    );
+    assert_eq!(squat.json()["code"], "name_taken");
+    // A private app gets no address; its display name it may (review
+    // finding 3). Maya's authoring app was shared with the teammate above:
+    // its other grants are set aside to make it private, then restored, when
+    // the same address is accepted.
+    let private_path = format!("/v1/apps/{AUTHORING_APP}/labels");
+    c.fixture.sql(&format!("CREATE TABLE public.app121_grants AS SELECT * FROM genui.app_permissions WHERE organization_id='{ORG}' AND app_id='{AUTHORING_APP}' AND principal_id<>'{maya_id}'; DELETE FROM genui.app_permissions WHERE organization_id='{ORG}' AND app_id='{AUTHORING_APP}' AND principal_id<>'{maya_id}';"), "genui");
+    let private = stand
+        .post(
+            &private_path,
+            Some(&maya_cookie),
+            &json!({"scope": "organization", "address": "my-drafts"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        private.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        private.text()
+    );
+    assert_eq!(private.json()["code"], "not_shared");
+    let private_name = stand
+        .post(
+            &private_path,
+            Some(&maya_cookie),
+            &json!({"scope": "organization", "name": "My drafts"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        private_name.status,
+        StatusCode::OK,
+        "{}",
+        private_name.text()
+    );
+    c.fixture.sql("INSERT INTO genui.app_permissions SELECT * FROM public.app121_grants; DROP TABLE public.app121_grants;", "genui");
+    let shared = stand
+        .post(
+            &private_path,
+            Some(&maya_cookie),
+            &json!({"scope": "organization", "address": "my-drafts"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        shared.status,
+        StatusCode::OK,
+        "shared again: {}",
+        shared.text()
+    );
+    // A label names only a card the app has, and a member keeps at most 100
+    // personal labels (review finding 6).
+    for (card, status) in [
+        ("nope", StatusCode::UNPROCESSABLE_ENTITY),
+        ("total", StatusCode::UNPROCESSABLE_ENTITY),
+        ("by-status", StatusCode::OK),
+    ] {
+        let answer = stand
+            .post(
+                &labels_path,
+                Some(&mate_cookie),
+                &json!({"scope": "personal", "card": card, "name": "Mine"}).to_string(),
+            )
+            .await;
+        assert_eq!(answer.status, status, "{card}: {}", answer.text());
+        if status != StatusCode::OK {
+            assert_eq!(answer.json()["code"], "invalid_label", "{card}");
+        }
+    }
+    let filler = format!("INSERT INTO genui.member_labels(organization_id,principal_id,app_id,card,name,aliases,updated_at) SELECT '{ORG}','{mate_id}','{EXPENSES_APP}','x'||g,NULL,'{{}}',now() FROM generate_series(1,98) g");
+    c.fixture.sql(&filler, "genui");
+    let capped = stand
+        .post(
+            &labels_path,
+            Some(&mate_cookie),
+            &json!({"scope": "personal", "card": "recent", "name": "Mine"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        capped.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        capped.text()
+    );
+    assert_eq!(capped.json()["code"], "too_many_labels");
+    let kept = stand
+        .post(
+            &labels_path,
+            Some(&mate_cookie),
+            &json!({"scope": "personal", "card": "by-status", "name": "Still mine"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        kept.status,
+        StatusCode::OK,
+        "an existing label still changes: {}",
+        kept.text()
+    );
+    c.fixture.sql(&format!("DELETE FROM genui.member_labels WHERE organization_id='{ORG}' AND principal_id='{mate_id}' AND card LIKE 'x%'"), "genui");
     check(
         &mut checks,
-        "naming (APP-121): the group JSON (app card header, placement messages) reads \"Expenses\", then the label; the owner renamed Expenses \"Team spend\" at /spend (one app.labeled event; a repeat writes nothing; /spend was Vendor spend's hidden alias and moved: an address beats an alias); the teammate sees the name and address while /expenses and /expense stay aliases and Vendor spend no longer answers to /spend; a teammate (non-owner) and a foreign organization's member get the uniform 404 on the label route; a taken address, a verb and a malformed name are refused (422); the teammate's personal /exp is listed for them only, and a personal alias taking /spend, /expense, /pto or /card is refused; the card label \"Q3 spend\" reaches every member while definitions, publications and receipts are unchanged; app_labels and member_labels are ENABLE+FORCE RLS and another organization's scope reads none",
+        "naming (APP-121): the group JSON (app card header, placement messages) reads \"Expenses\", then the label; the owner renamed Expenses \"Team spend\" at /team-spend (one app.labeled event; a repeat writes nothing); the teammate sees the name and address while /expenses and /expense stay aliases and Vendor spend keeps /spend (catalog names stay with their app); a teammate (non-owner) and a foreign organization's member get the uniform 404 on the label route; an organization address or alias taking another app's address or hidden alias (/time-off, /spend, /vendors) or a saved work's /big-claims, a display name equal to another app's title or address (Time off, Vendor-Spend), a verb or verb alias (/card, /weather, /agents) and a malformed name are refused (422); the teammate's personal /exp is listed for them only, and a personal alias taking /spend, /team-spend, /expense, /pto, /big-claims, /card or /keys is refused while a one-letter /e is kept; \"Save as /team-spend\" is refused; a private app gets no address (not_shared) but a name, and the same app shared again gets it; a label of a card the app does not have (nope, total) is refused and the 100th personal label is the last; the card label \"Q3 spend\" reaches every member while definitions, publications and receipts are unchanged; app_labels and member_labels are ENABLE+FORCE RLS, another organization's scope reads none and the workspace reads only the scoped principal's personal labels; organization labels take no aliases (the old address is kept automatically on a rename) and GET /v1/commands names each app's full form app:<address>",
     );
 
     // --- Chain integrity ---

@@ -56,8 +56,8 @@ pub use governance::{
     SCOPE_ACTIONS, SCOPE_SPACES,
 };
 pub use labels::{
-    address_shaped, card_shaped, label_description, label_name, merge_label, Label, LabelChange,
-    Labeled, Labels, MemberLabel, NameRules, MAX_LABEL_ALIASES,
+    address_shaped, card_shaped, label_description, label_name, merge_label, shortcut_shaped,
+    Label, LabelChange, Labeled, Labels, MemberLabel, NameRules, MAX_LABEL_ALIASES,
 };
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use queries::{

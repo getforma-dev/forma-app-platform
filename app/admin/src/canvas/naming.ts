@@ -2,8 +2,10 @@
 // (`POST /v1/apps/{app}/labels`, `composer::labels`):
 //
 // - the organization's labels, by the app's owner or an admin: the app's
-//   name, address (`/spend`), kept aliases and description, and each card's
-//   name and description; everyone who can open the app sees them;
+//   name, address (`/team-spend`) and description, and each card's name and
+//   description; everyone who can open the app sees them. There are no
+//   editable organization aliases: an address the owner renames away from
+//   is kept automatically, and the catalog's own aliases are fixed;
 // - the member's own: shortcuts (`/exp` → an app, `/q3` → a card) and, for
 //   someone who may not rename a card for everyone, their own card name.
 //
@@ -27,14 +29,17 @@ export type LabelBody = {
   name?: string | null;
   description?: string | null;
   address?: string | null;
+  /** The member's own shortcuts (personal scope only). */
   aliases?: string[];
 };
 
 const PROBLEMS: Record<string, string> = {
-  name_taken: 'is already taken: another app, or someone’s address, answers to it',
+  name_taken: 'is already taken: another app, a saved app or someone’s address answers to it',
   verb_name: 'is a command’s name (like /card or /app)',
-  invalid_name: 'is not a name: use 2–32 lowercase letters, digits or hyphens',
-  invalid_label: 'could not be saved: names are at most 60 characters',
+  invalid_name: 'is not a name: use lowercase letters, digits or hyphens (an address 2–32, your shortcut 1–32)',
+  invalid_label: 'could not be saved: names are at most 60 characters, and only an app’s own cards can be named',
+  not_shared: 'needs a shared app: share it with your team before giving it an address',
+  too_many_labels: 'could not be saved: you have 100 names and shortcuts already; remove one first',
 };
 
 /** What the server's answer means to the member (exported for the tests). */
@@ -155,7 +160,7 @@ export const RENAME_COMMAND: CanvasCommand = {
     const parsed = parseRename(text);
     const target = findTarget(parsed.target);
     if (!target || (!parsed.name && !parsed.address)) {
-      report(target ? 'Type the new name after it: /rename expenses Team spend /spend' : 'Type /rename and an app or card, then its new name: /rename expenses.total Q3 spend');
+      report(target ? 'Type the new name after it: /rename expenses Team spend /team-spend' : 'Type /rename and an app or card, then its new name: /rename expenses.total Q3 spend');
       return;
     }
     fillBar('');
@@ -181,6 +186,39 @@ export const ALIAS_COMMAND: CanvasCommand = {
 // --- The ✎ editor (the Library) ---
 
 const list = (value: string): string[] => value.split(/[\s,]+/).map((name) => name.replace(/^\//, '').toLowerCase()).filter(Boolean);
+const same = (a: string[], b: string[]) => a.length === b.length && a.every((name, at) => name === b[at]);
+
+/** What the ✎ editor shows, as text: before editing, and as saved. */
+export type EditorValues = { name: string; address: string; description: string; myName: string; mine: string };
+
+/**
+ * The requests a save makes (exported for the tests): only the fields the
+ * member changed, so saving an untouched editor (whose name is prefilled
+ * from the app's title) writes no label and no audit event; nothing
+ * changed is no request at all. `card` is the card's name, or null for the
+ * app; `owner` says whether the organization's fields are theirs to change.
+ */
+export function editorRequests(before: EditorValues, after: EditorValues, card: string | null, owner: boolean): LabelBody[] {
+  const requests: LabelBody[] = [];
+  const text = (key: 'name' | 'description' | 'myName') => after[key].trim();
+  const changed = (key: 'name' | 'description' | 'myName') => text(key) !== before[key].trim();
+  if (owner) {
+    const body: LabelBody = { scope: 'organization', ...(card === null ? {} : { card }) };
+    if (changed('name')) body.name = text('name') || null;
+    if (changed('description')) body.description = text('description') || null;
+    if (card === null) {
+      const typed = list(after.address)[0] ?? '';
+      if (typed !== (list(before.address)[0] ?? '')) body.address = typed || null;
+    }
+    if (Object.keys(body).some((key) => key !== 'scope' && key !== 'card')) requests.push(body);
+  }
+  const personal: LabelBody = { scope: 'personal', card: card ?? '' };
+  if (card !== null && !owner && changed('myName')) personal.name = text('myName') || null;
+  const mine = list(after.mine);
+  if (!same(mine, list(before.mine))) personal.aliases = mine;
+  if ('name' in personal || 'aliases' in personal) requests.push(personal);
+  return requests;
+}
 
 function field(document_: Document, label: string, value: string, options: { disabled?: boolean; hint?: string; name: string; long?: boolean }): HTMLElement {
   const input = el(document_, options.long ? 'textarea' : 'input', {
@@ -201,15 +239,24 @@ export function openEditor(app: AppRow, card: CardRow | null, document_: Documen
   const label = card ? address.cards?.find((entry) => entry.card === card.slug) : undefined;
   const owner = address.canLabel === true;
   const what = card ? cardAddress(card) : `/${address.slug}`;
+  const before: EditorValues = {
+    name: card ? label?.name ?? '' : address.title,
+    address: `/${address.slug}`,
+    description: card ? label?.description ?? '' : address.description ?? '',
+    myName: label?.myName ?? '',
+    mine: (card ? label?.mine ?? [] : address.mine ?? []).map((name) => `/${name}`).join(', '),
+  };
   const fields = el(document_, 'div', { class: 'cv-naming-fields' },
-    field(document_, 'Name', card ? label?.name ?? '' : address.title, { name: 'name', disabled: !owner, hint: card ? card.base ?? card.title : '' }),
+    field(document_, 'Name', before.name, { name: 'name', disabled: !owner, hint: card ? card.base ?? card.title : '' }),
     ...(card ? [] : [
-      field(document_, 'Address', `/${address.slug}`, { name: 'address', disabled: !owner, hint: 'Renaming keeps the old one working' }),
-      field(document_, 'Also answers to', (address.orgAliases ?? []).map((name) => `/${name}`).join(', '), { name: 'aliases', disabled: !owner }),
+      field(document_, 'Address', before.address, {
+        name: 'address', disabled: !owner,
+        hint: `Renaming keeps the old one working${address.kept?.length ? `; still answers to ${address.kept.map((name) => `/${name}`).join(', ')}` : ''}`,
+      }),
     ]),
-    field(document_, 'Description', card ? label?.description ?? '' : address.description ?? '', { name: 'description', disabled: !owner, long: true }),
-    ...(card && !owner ? [field(document_, 'My name for it', label?.myName ?? '', { name: 'my_name' })] : []),
-    field(document_, 'My shortcuts', (card ? label?.mine ?? [] : address.mine ?? []).map((name) => `/${name}`).join(', '), { name: 'mine', hint: 'Only you see these' }));
+    field(document_, 'Description', before.description, { name: 'description', disabled: !owner, long: true }),
+    ...(card && !owner ? [field(document_, 'My name for it', before.myName, { name: 'my_name' })] : []),
+    field(document_, 'My shortcuts', before.mine, { name: 'mine', hint: 'Only you see these' }));
   const status = el(document_, 'p', { class: 'cv-naming-status', role: 'status' }, owner ? '' : 'Only the app’s owner or an admin changes these for everyone.');
   const save = el(document_, 'button', { type: 'submit', class: 'cv-primary' }, 'Save');
   const cancel = el(document_, 'button', { type: 'button', class: 'cv-secondary' }, 'Cancel');
@@ -217,21 +264,25 @@ export function openEditor(app: AppRow, card: CardRow | null, document_: Documen
     el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', { id: 'cv-naming-title' }, `Name ${card ? card.title : address.title}`), el(document_, 'code', { class: 'cv-addr-chip' }, what)),
     fields, status, el(document_, 'div', { class: 'cv-confirm-actions' }, cancel, save)) as HTMLFormElement;
   let close = () => undefined as void;
-  const value = (name: string) => (form.querySelector<HTMLInputElement>(`[name="${name}"]`)?.value ?? '').trim();
+  const value = (name: string, fallback: string) => form.querySelector<HTMLInputElement>(`[name="${name}"]`)?.value ?? fallback;
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     void (async () => {
-      save.setAttribute('disabled', '');
-      const target = card?.slug ?? '';
-      let failed: string | null = null;
-      if (owner) {
-        const typed = list(value('address'))[0] ?? '';
-        failed = await saveLabel(app.app, card
-          ? { scope: 'organization', card: target, name: value('name') || null, description: value('description') || null }
-          : { scope: 'organization', name: value('name') || null, description: value('description') || null, ...(typed ? { address: typed } : {}), aliases: list(value('aliases')) }, what);
+      const after: EditorValues = {
+        name: value('name', before.name), address: value('address', before.address),
+        description: value('description', before.description), myName: value('my_name', before.myName), mine: value('mine', before.mine),
+      };
+      const requests = editorRequests(before, after, card?.slug ?? null, owner);
+      if (!requests.length) {
+        close();
+        announce('Nothing changed.');
+        return;
       }
-      if (!failed) {
-        failed = await saveLabel(app.app, { scope: 'personal', card: target, ...(card && !owner ? { name: value('my_name') || null } : {}), aliases: list(value('mine')) }, 'Your shortcuts');
+      save.setAttribute('disabled', '');
+      let failed: string | null = null;
+      for (const body of requests) {
+        failed = await saveLabel(app.app, body, body.scope === 'organization' ? what : 'Your shortcuts');
+        if (failed) break;
       }
       save.removeAttribute('disabled');
       if (failed) {

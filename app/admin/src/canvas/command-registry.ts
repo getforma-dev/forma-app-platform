@@ -32,6 +32,17 @@
 // member only); `/q3` → a card is a card shortcut (`findCardShortcut`), and
 // `findCommand` runs it as `/card <app>.<card>`. The server already drops a
 // shortcut an organization name took (the organization's address wins).
+//
+// APP-121 (2026-10-31): namespaced addresses, like `/plugin:skill`. The full
+// form always works and is never ambiguous: `/app:<name>` (an app's address,
+// alias or the member's own shortcut; never a verb), `/card:<app>.<card>` or
+// `/card:<number>`, `/widget:<kind>`, `/folder:<name>`, with words after as
+// usual (`/app:expenses $86 Nobu` is `/expenses $86 Nobu`; `/card:x words`
+// is `/card x words`). The short form works when unambiguous: a bare name
+// reaches a verb (or verb alias) first, then the member's names, so an app
+// whose address a verb takes (`/notes`) is reached as `/app:notes`, and
+// chips, hints and menu rows show it that way (`appForm`). Typing `/app:`
+// lists apps, `/card:` cards, `/widget:` widgets, `/folder:` folders.
 
 export type Category = 'Place' | 'Arrange' | 'Make' | 'Help';
 /** The order the surfaces list groups in. */
@@ -83,8 +94,8 @@ export type Address = Runnable & {
   record: boolean;
   /** APP-121: the organization's description of the app (empty: none). */
   description?: string;
-  /** APP-121: the aliases the organization kept (beyond the catalog's). */
-  orgAliases?: string[];
+  /** APP-121: the addresses kept when the app's address was renamed (system-managed; no editable organization aliases). */
+  kept?: string[];
   /** APP-121: the member's own shortcuts to the app (already among `aliases`). */
   mine?: string[];
   /** APP-121: whether the member may change the organization's labels (owner or admin). */
@@ -124,7 +135,7 @@ const KNOWN: Record<string, Meta> = {
   rename: {
     category: 'Make',
     args: [arg('app or app.card', 'card', true), arg('new name [/address]', 'text', true)],
-    examples: ['/rename expenses Team spend /spend', '/rename expenses.total Q3 spend'],
+    examples: ['/rename expenses Team spend /team-spend', '/rename expenses.total Q3 spend'],
     usage: '/rename <app|app.card> <new name> [/address]',
   },
   alias: {
@@ -211,10 +222,83 @@ export function hiddenAliases(slug: string): Command[] {
   return commandList().filter((command) => command.aliasOf === slug);
 }
 
-/** Every address the member has, except those a verb of the same name shadows. */
+/** Every verb name and verb alias the canvas registers. */
+function verbNames(): Set<string> {
+  return new Set(registered.flatMap((command) => [command.slug, ...(command.aliases ?? [])]));
+}
+
+/** Every address the member has, except those a verb of the same name shadows (their short form is the verb's). */
 export function addressList(): Address[] {
-  const verbs = new Set(registered.flatMap((command) => [command.slug, ...(command.aliases ?? [])]));
+  const verbs = verbNames();
   return addresses.filter((address) => !verbs.has(address.slug));
+}
+
+/** APP-121: every address the member has, those a verb shadows included (reachable as `/app:<name>`). */
+export function allAddresses(): Address[] {
+  return addresses;
+}
+
+/** APP-121: the namespaces of the full form (`/app:expenses`, `/card:expenses.ledger`, `/widget:weather`, `/folder:q3`). */
+export const NAMESPACES = ['app', 'card', 'widget', 'folder'] as const;
+export type Namespace = typeof NAMESPACES[number];
+
+/**
+ * APP-121: the form an app is shown and typed with for this member: its
+ * short address (`expenses`) when that is unambiguous, else the namespaced
+ * one (`app:notes`, when a verb takes the bare name).
+ */
+export function appForm(address: Pick<Address, 'slug'>): string {
+  return verbNames().has(address.slug) ? `app:${address.slug}` : address.slug;
+}
+
+/** APP-121: the app `/app:<name>` names: an address, else an alias (a personal shortcut among them), verbs never in the way. */
+export function findAppAddress(name: string): Address | undefined {
+  const key = name.toLowerCase();
+  return addresses.find((address) => address.slug === key) ?? addresses.find((address) => address.aliases.includes(key));
+}
+
+/**
+ * APP-121: what a namespaced name (`app:expenses`, `card:expenses.ledger`,
+ * `widget:weather`, `folder:q3`) runs. `app:` is the app itself (its run is
+ * the bare address's), the others run their verb with the name first, so
+ * `/card:x words` is `/card x words`.
+ */
+export function findNamespaced(token: string): Runnable | undefined {
+  const match = token.toLowerCase().match(/^(app|card|widget|folder):([a-z0-9][a-z0-9.-]*)$/);
+  if (!match) return undefined;
+  const [, space = '', name = ''] = match;
+  if (space === 'app') return findAppAddress(name);
+  const verb = findVerb(space);
+  if (!verb) return undefined;
+  return {
+    ...verb,
+    slug: `${space}:${name}`,
+    aliases: [],
+    args: [{ name: 'words', kind: 'text', required: false }],
+    examples: [`/${space}:${name}`],
+    run: (text: string, report?: Report) => verb.run(`${name} ${text}`.trim(), report),
+  };
+}
+
+/**
+ * APP-121: an Apps-section row's name for what was typed: a member's own
+ * shortcut reads "/e → app:expenses (your shortcut)", every other app its
+ * form (`/expenses`, `/app:notes`).
+ */
+export function addressRowName(address: Address, prefix: string): string {
+  const key = prefix.toLowerCase();
+  const mine = key ? (address.mine ?? []).find((name) => name.startsWith(key)) : undefined;
+  if (mine && !address.slug.startsWith(key)) return `/${mine} → app:${address.slug} (your shortcut)`;
+  return `/${appForm(address)}`;
+}
+
+/** APP-121: the `/app:` list: every app whose address, alias or title matches `prefix` (verb-shadowed ones included). */
+export function matchAppNamespace(prefix: string): Address[] {
+  const key = prefix.toLowerCase();
+  return addresses
+    .filter((address) => !key || address.slug.startsWith(key) || address.aliases.some((alias) => alias.startsWith(key))
+      || (key.length > 1 && address.title.toLowerCase().includes(key)))
+    .sort((a, b) => Number(!a.slug.startsWith(key)) - Number(!b.slug.startsWith(key)) || a.slug.localeCompare(b.slug));
 }
 
 /** The verb `name` names (its slug, else an alias). */
@@ -247,8 +331,13 @@ export function cardLabel(address: Address | undefined, card: string, fallback: 
   return label?.myName || label?.name || fallback;
 }
 
-/** What `/name` runs: a verb, else an app's address (every `/expense …` path is unchanged), else a card shortcut. */
+/**
+ * What `/name` runs: a namespaced name (`app:notes`) exactly; else a verb,
+ * then an app's address (every `/expense …` path is unchanged), then a card
+ * shortcut: verbs first, then the member's names.
+ */
 export function findCommand(name: string): Runnable | undefined {
+  if (name.includes(':')) return findNamespaced(name);
   const found = findVerb(name) ?? findAddress(name);
   if (found) return found;
   const shortcut = findCardShortcut(name);

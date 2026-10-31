@@ -409,3 +409,97 @@ test('the right pane opens on the right tab from each entry point (APP-119)', as
   assert.equal(pane.dataset.open, 'false');
   assert.equal(toggle.getAttribute('aria-expanded'), 'false');
 });
+
+// APP-121 review (finding 4): the server refuses every verb and verb alias
+// as an address, alias or shortcut (`composer::labels::VERBS`). That list
+// and the canvas's registrations are one set: every literal `slug:` and
+// `aliases: [...]` a canvas module registers, the registry's verbs and
+// widget kinds, and `/folder`'s aliases are in the server's list, and the
+// server reserves nothing else but `new` (the name route's reserved word).
+test('the server\'s reserved verbs are exactly the canvas verbs and their aliases (APP-121)', async () => {
+  const { readFileSync, readdirSync, statSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const here = new URL('.', import.meta.url).pathname;
+  const rust = readFileSync(join(here, '../../src/composer/labels.rs'), 'utf8');
+  const block = rust.match(/pub const VERBS: &\[&str\] = &\[([\s\S]*?)\];/);
+  assert.ok(block, 'VERBS in composer/labels.rs');
+  const server = new Set([...block[1]!.matchAll(/"([a-z-]+)"/g)].map((m) => m[1]!));
+  const registry = await import('../src/canvas/command-registry.ts');
+  const boxApi = await import('../src/canvas/box-api.ts');
+  const canvas = new Set<string>([...registry.VERBS, ...registry.WIDGET_KINDS, boxApi.FOLDER_COMMAND, ...boxApi.FOLDER_ALIASES]);
+  const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? files(path) : path.endsWith('.ts') ? [path] : [];
+  });
+  for (const file of files(join(here, '../src/canvas'))) {
+    const source = readFileSync(file, 'utf8');
+    for (const m of source.matchAll(/\bslug: '([a-z][a-z0-9-]*)'/g)) canvas.add(m[1]!);
+    for (const m of source.matchAll(/\baliases: \[([^\]]*)\]/g)) {
+      for (const alias of m[1]!.matchAll(/'([a-z][a-z0-9-]*)'/g)) canvas.add(alias[1]!);
+    }
+  }
+  for (const name of ['agents', 'mcp', 'keys', 'notes', 'break', 'storage', 'box', 'boxes', 'folders', 'help']) {
+    assert.ok(canvas.has(name), `the scan finds ${name}`);
+  }
+  assert.deepEqual([...canvas].filter((name) => !server.has(name)).sort(), [], 'canvas names the server does not reserve');
+  assert.deepEqual([...server].filter((name) => !canvas.has(name)).sort(), ['new'], 'server names the canvas does not register');
+});
+
+// APP-121 (2026-10-31): namespaced addresses, like `/plugin:skill`. The full
+// form always works; the short form when unambiguous; verbs come first.
+test('/app:expenses is /expenses; /app:notes reaches the app a verb shadows; /app:e and /e reach a shortcut; /app: lists apps (APP-121)', async () => {
+  const { registry, slash } = await seeded();
+  // A member's own shortcut `/e` to Expenses (the server lists it among the aliases and in `mine`).
+  const withShortcut = {
+    commands: SERVER.commands.map((entry) => (entry.slug === 'expenses' ? { ...entry, aliases: [...entry.aliases, 'e'], mine: ['e'] } : entry)),
+  };
+  registry.setAddresses(slash.parseCommands(withShortcut).map(slash.serverAddress));
+  const expenses = registry.findCommand('expenses');
+  assert.ok(expenses);
+  for (const name of ['app:expenses', 'APP:Expenses', 'app:expense', 'app:e', 'e']) assert.equal(registry.findCommand(name), expenses, name);
+  // Same run: bare, with words, short and full.
+  const placed: string[] = [];
+  slash.setAppPlacer(async (address) => { placed.push(address.slug); return true; });
+  const messages: string[] = [];
+  const report = (message: string) => { messages.push(message); };
+  await slash.runSlash('/app:expenses', report);
+  await slash.runSlash('/expenses', report);
+  await slash.runSlash('/app:e', report);
+  await slash.runSlash('/e', report);
+  assert.deepEqual(placed, ['expenses', 'expenses', 'expenses', 'expenses']);
+  // A bare name that a verb takes reaches the verb; the app is `/app:notes`, shown that way.
+  assert.equal(registry.findCommand('notes')?.slug, 'note');
+  const notes = registry.findCommand('app:notes');
+  assert.equal(notes?.slug, 'notes');
+  assert.equal(registry.appForm(notes as never), 'app:notes');
+  assert.equal(registry.appForm(expenses as never), 'expenses');
+  ran.length = 0;
+  await slash.runSlash('/notes', report);
+  await slash.runSlash('/app:notes', report);
+  assert.deepEqual(ran, ['note:'], 'only the bare form reached the Note verb');
+  assert.deepEqual(placed.at(-1), 'notes', '/app:notes placed the Notes app');
+  // A verb is never an app: `/app:card` names nothing; an unknown space is no command.
+  assert.equal(registry.findCommand('app:card'), undefined);
+  assert.equal(registry.findCommand('teapot:x'), undefined);
+  // `/card:`, `/widget:`, `/folder:` run their verb with the name first (the space form is an alias).
+  ran.length = 0;
+  await slash.runSlash('/widget:weather Austin', report);
+  await slash.runSlash('/folder:q3 formation brief me', report);
+  assert.deepEqual(ran, ['weather:Austin', 'folder:q3 formation brief me']);
+  assert.equal(registry.findCommand('card:expenses.ledger')?.slug, 'card:expenses.ledger');
+  // Typing `/app:` lists every app (the verb-shadowed Notes too) as `/app:<address>`.
+  assert.deepEqual(slash.namespacePrefix('/app:ex'), { space: 'app', prefix: 'ex' });
+  assert.equal(slash.namespacePrefix('/apps'), null);
+  const listed = slash.slashAppNamespace('').map((address) => address.slug);
+  for (const slug of ['expenses', 'notes', 'time-off', 'big-claims']) assert.ok(listed.includes(slug), slug);
+  assert.deepEqual(slash.slashAppNamespace('no').map((address) => address.slug), ['notes']);
+  assert.deepEqual(slash.slashAppNamespace('e').map((address) => address.slug).slice(0, 2), ['expense-review', 'expenses']);
+  // `/card:` suggestions keep the full form; a fill-only suggestion stays as it is.
+  assert.equal(slash.namespaced('card', { badge: '3.2', title: 'Ledger', detail: '', value: '/card 3.2' }).value, '/card:3.2');
+  assert.equal(slash.namespaced('folder', { badge: '+', title: 'New', detail: '', value: '/folder new ' }).value, '/folder new ');
+  // Menu rows: a shortcut reads as one; an app the verbs shadow reads namespaced.
+  const expensesAddress = registry.allAddresses().find((address) => address.slug === 'expenses')!;
+  assert.equal(registry.addressRowName(expensesAddress, 'e'), '/expenses');
+  assert.equal(registry.addressRowName({ ...expensesAddress, mine: ['zz'] }, 'z'), '/zz → app:expenses (your shortcut)');
+  assert.equal(registry.addressRowName(registry.allAddresses().find((address) => address.slug === 'notes')!, 'no'), '/app:notes');
+});

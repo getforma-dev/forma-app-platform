@@ -32,7 +32,7 @@
 // chip show without opening the pane.
 import { addressChip, aliasNote, decorateAppCard, decorateAppCards } from './address-chip';
 import { activeCanvasItem, addCards, boardWorks, CANVAS_CHANGED, isOnBoard, removeCards } from './board';
-import { addressList, addressText, cardLabel, onAddressesChange, WIDGET_KINDS, type Address, type WidgetName } from './command-registry';
+import { addressList, addressText, allAddresses, appForm, cardLabel, onAddressesChange, WIDGET_KINDS, type Address, type WidgetName } from './command-registry';
 import { insertCommand, startCommandSheet } from './command-sheet';
 import { startShortcutTab } from './shortcut-tab';
 import { closePane, isPaneOpen, onPaneTab, openPane, startPane, togglePane } from './pane';
@@ -164,7 +164,7 @@ export function indexRow(row: HTMLElement): AppRow | null {
     work,
     number: row.dataset.number ?? '',
     title: row.querySelector('.cv-lib-app-title')?.textContent ?? '',
-    slug: (row.querySelector('.cv-lib-slug')?.textContent ?? '').replace(/^\//, ''),
+    slug: (row.querySelector('.cv-lib-slug')?.textContent ?? '').replace(/^\/(app:)?/, ''),
     row,
     cards: [],
   };
@@ -284,7 +284,7 @@ function adoptNewWorks(): void {
     section.querySelector('.cv-lib-apps')?.append(row);
     recount(section);
     const indexed = indexRow(row);
-    if (indexed) decorate(indexed, rowAddress(indexed, addressList()));
+    if (indexed) decorate(indexed, rowAddress(indexed, allAddresses()));
   }
 }
 
@@ -765,7 +765,8 @@ export function decorate(app: AppRow, address: Address | undefined): void {
   // The plain `/slug` the server rendered becomes the address chip (one component everywhere).
   const head = app.row.querySelector('.cv-lib-app-head');
   const plain = app.row.querySelector<HTMLElement>('.cv-lib-slug');
-  const chip = addressChip(document_, address.slug);
+  // APP-121: the short form when unambiguous, else `/app:notes`.
+  const chip = addressChip(document_, appForm(address));
   chip.classList.add('cv-lib-slug');
   if (plain) plain.replaceWith(chip);
   else app.row.querySelector('[data-lib-expand]')?.after(chip);
@@ -786,7 +787,7 @@ export function decorate(app: AppRow, address: Address | undefined): void {
 
 /** Decorates every row from the member's addresses (they load after the page). */
 function applyAddresses(): void {
-  const list = addressList();
+  const list = allAddresses();
   for (const app of apps) {
     const address = rowAddress(app, list);
     // A new labels list is a new address object: decorate again.
@@ -811,7 +812,7 @@ function retitle(node: HTMLElement | null, name: string, description = ''): void
 }
 
 /** APP-121: the app's and cards' labels on the Library rows (exported for the tests). */
-export function applyLabels(list: Address[] = addressList()): void {
+export function applyLabels(list: Address[] = allAddresses()): void {
   for (const app of apps) {
     const address = app.address ?? rowAddress(app, list);
     if (!address) continue;
@@ -828,7 +829,7 @@ export function applyLabels(list: Address[] = addressList()): void {
 }
 
 /** APP-121: the cards on the canvas show their labels: the app card the app's display name, a card its label. */
-export function labelCanvasCards(document_: Document, list: Address[] = addressList()): void {
+export function labelCanvasCards(document_: Document, list: Address[] = allAddresses()): void {
   const placed = new Map<string, HTMLElement>();
   for (const node of document_.querySelectorAll<HTMLElement>('[data-card]')) {
     if (node.classList.contains('cv-card') && node.dataset.card) placed.set(node.dataset.card, node);

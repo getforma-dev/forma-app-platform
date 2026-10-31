@@ -314,9 +314,9 @@ test('the app card on the canvas gets its /expenses chip and its display name ev
 
 const LABELED = {
   commands: [
-    { slug: 'spend', aliases: ['expenses', 'expense', 'claim', 'exp'], title: 'Team spend', purpose: 'Our team spend', kind: 'library', app_id: EXPENSE_APP, record: true,
-      hint: 'file a claim or approve one', examples: ['/spend $86 at Nobu', '/spend'],
-      description: 'Our team spend', org_aliases: [], mine: ['exp'], can_label: true,
+    { slug: 'team-spend', aliases: ['expenses', 'expense', 'claim', 'exp'], title: 'Team spend', purpose: 'Our team spend', kind: 'library', app_id: EXPENSE_APP, record: true,
+      hint: 'file a claim or approve one', examples: ['/team-spend $86 at Nobu', '/team-spend'],
+      description: 'Our team spend', kept: [], mine: ['exp'], can_label: true,
       cards: [{ card: 'ledger', name: 'Q3 spend', description: 'The Q3 ledger', my_name: null, mine: ['q3'] }] },
     { slug: 'time-off', aliases: ['pto', 'leave', 'vacation'], title: 'Time off', purpose: 'Book time off', kind: 'library', app_id: PTO_APP, record: true,
       hint: 'dates and reason', examples: ['/time-off Nov 24–26'], can_label: false, cards: [] },
@@ -335,22 +335,22 @@ async function labeled() {
   return context;
 }
 
-test('labels: the renamed app answers to /spend and its old names, a member\'s /exp and /q3 resolve, and names show on rows and canvas cards (APP-121)', async () => {
+test('labels: the renamed app answers to /team-spend and its old names, a member\'s /exp and /q3 resolve, and names show on rows and canvas cards (APP-121)', async () => {
   const { doc, document_, registry, library, expenses, expensesRow } = await labeled();
-  for (const name of ['spend', 'expenses', 'expense', 'exp']) assert.equal(registry.findCommand(name)?.slug, 'spend', name);
+  for (const name of ['team-spend', 'expenses', 'expense', 'exp']) assert.equal(registry.findCommand(name)?.slug, 'team-spend', name);
   // Library: the app's and the card's labels; the card's address follows the app's.
   assert.equal(expensesRow.querySelector('.cv-lib-app-title')?.textContent, 'Team spend');
   const ledger = expenses.cards.find((card) => card.slug === 'ledger')!;
   assert.equal(ledger.title, 'Q3 spend');
   assert.equal(ledger.base, 'Expense ledger');
   assert.equal(ledger.row.querySelector('.cv-lib-card-title')?.textContent, 'Q3 spend');
-  assert.equal(library.cardAddress(ledger), 'spend.ledger');
+  assert.equal(library.cardAddress(ledger), 'team-spend.ledger');
   assert.equal(library.findCards('expenses.ledger')[0]?.id, ledger.id, 'the old address still finds the card');
   assert.ok(expensesRow.querySelector('[data-lib-edit]'), 'a ✎ on the row');
-  // `/q3`: the member's own card shortcut runs `/card spend.ledger`.
+  // `/q3`: the member's own card shortcut runs `/card team-spend.ledger`.
   const q3 = registry.findCommand('q3')!;
   assert.equal(q3.title, 'Q3 spend');
-  assert.match(q3.purpose, /spend\.ledger/);
+  assert.match(q3.purpose, /team-spend\.ledger/);
   // Canvas cards: the ledger card's header reads its label, the app card the app's name.
   const board = document_.createElement('div');
   board.setAttribute('id', 'cv-board-2');
@@ -374,7 +374,7 @@ test('/rename and /alias post the right label; a non-owner renames a card for th
   const naming = await import('../src/canvas/naming.ts');
   const library = await import('../src/canvas/library.ts');
   registry.registerCommands([library.CARD_COMMAND, naming.RENAME_COMMAND, naming.ALIAS_COMMAND]);
-  assert.deepEqual(naming.parseRename('expenses Team spend /Spend'), { target: 'expenses', name: 'Team spend', address: 'spend' });
+  assert.deepEqual(naming.parseRename('expenses Team spend /Team-Spend'), { target: 'expenses', name: 'Team spend', address: 'team-spend' });
   assert.deepEqual(naming.parseRename('expenses.total Q3 spend'), { target: 'expenses.total', name: 'Q3 spend', address: null });
   assert.equal(naming.findTarget('expenses')?.card, null);
   assert.equal(naming.findTarget('expenses.ledger')?.card?.slug, 'ledger');
@@ -389,18 +389,18 @@ test('/rename and /alias post the right label; a non-owner renames a card for th
   const reports: string[] = [];
   const report = (message: string) => reports.push(message);
   // The owner: the app for everyone, with a new address; a card for everyone.
-  await registry.findCommand('rename')!.run('expenses Team spend /spend', report);
+  await registry.findCommand('rename')!.run('expenses Team spend /team-spend', report);
   await registry.findCommand('rename')!.run('expenses.ledger Q3 spend', report);
   // A shortcut of their own, then taken back.
   await registry.findCommand('alias')!.run('mine expenses', report);
   await registry.findCommand('alias')!.run('exp', report);
   assert.deepEqual(posted, [
-    { url: `/v1/apps/${EXPENSE_APP}/labels`, body: { scope: 'organization', name: 'Team spend', address: 'spend' } },
+    { url: `/v1/apps/${EXPENSE_APP}/labels`, body: { scope: 'organization', name: 'Team spend', address: 'team-spend' } },
     { url: `/v1/apps/${EXPENSE_APP}/labels`, body: { scope: 'organization', card: 'ledger', name: 'Q3 spend' } },
     { url: `/v1/apps/${EXPENSE_APP}/labels`, body: { scope: 'personal', card: '', aliases: ['exp', 'mine'] } },
     { url: `/v1/apps/${EXPENSE_APP}/labels`, body: { scope: 'personal', card: '', aliases: [] } },
   ]);
-  assert.match(reports[0]!, /Team spend at \/spend/);
+  assert.match(reports[0]!, /Team spend at \/team-spend/);
   assert.match(reports[1]!, /for everyone\. Its data and receipts are unchanged/);
   // Time off: this member is no owner. The app is refused without a request; a card becomes their own name.
   posted.length = 0;
@@ -412,6 +412,30 @@ test('/rename and /alias post the right label; a non-owner renames a card for th
   assert.match(reports.at(-1)!, /for you/);
   // What a refusal says.
   assert.match(naming.labelMessage(422, 'verb_name', '/card'), /^\/card is a command’s name/);
-  assert.match(naming.labelMessage(422, 'name_taken', '/spend'), /already taken/);
-  assert.match(naming.labelMessage(404, '', '/spend'), /Only its owner or an admin/);
+  assert.match(naming.labelMessage(422, 'name_taken', '/team-spend'), /already taken/);
+  assert.match(naming.labelMessage(404, '', '/team-spend'), /Only its owner or an admin/);
+  assert.match(naming.labelMessage(422, 'not_shared', '/my-tool'), /share it/);
+  assert.match(naming.labelMessage(422, 'too_many_labels', '/q4'), /100 names/);
+});
+
+test('the ✎ editor sends only what the member changed; an untouched save sends nothing (APP-121 review)', async () => {
+  const naming = await import('../src/canvas/naming.ts');
+  const before = { name: 'Expenses', address: '/expenses', description: '', myName: '', mine: '/exp' };
+  // Saved as opened: no request, so no label and no audit event.
+  assert.deepEqual(naming.editorRequests(before, { ...before }, null, true), []);
+  assert.deepEqual(naming.editorRequests(before, { ...before, name: ' Expenses ' }, null, true), []);
+  // Only the changed fields, organization first, then the member's own.
+  assert.deepEqual(naming.editorRequests(before, { ...before, address: '/Team-Spend' }, null, true),
+    [{ scope: 'organization', address: 'team-spend' }]);
+  assert.deepEqual(naming.editorRequests(before, { ...before, name: 'Team spend', mine: '/exp, /ts' }, null, true),
+    [{ scope: 'organization', name: 'Team spend' }, { scope: 'personal', card: '', aliases: ['exp', 'ts'] }]);
+  assert.deepEqual(naming.editorRequests(before, { ...before, description: 'Our spend' }, null, true),
+    [{ scope: 'organization', description: 'Our spend' }]);
+  // A card: no address; a non-owner's own name for it.
+  const card = { ...before, name: '', mine: '' };
+  assert.deepEqual(naming.editorRequests(card, { ...card, name: 'Q3 spend' }, 'totals', true),
+    [{ scope: 'organization', card: 'totals', name: 'Q3 spend' }]);
+  assert.deepEqual(naming.editorRequests(card, { ...card, myName: 'Mine' }, 'totals', false),
+    [{ scope: 'personal', card: 'totals', name: 'Mine' }]);
+  assert.deepEqual(naming.editorRequests(card, { ...card, name: 'ignored' }, 'totals', false), [], 'not the owner: the organization fields are not sent');
 });
