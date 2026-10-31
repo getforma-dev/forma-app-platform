@@ -549,10 +549,13 @@ DEAL_DESK_RECORDS = workflow(
      v("reason", text_value("Multi-year renewal; synthetic only")), v("status", lit_enum("approved"))])
 
 
-# APP-101 slash commands: per library app its command slug and a short alias
-# list (`/slug rest-of-text` opens the app instantly in the canvas intent bar;
-# `apps` is reserved for the list). Lowercase, [a-z][a-z0-9-]{1,31}, unique
-# across the library.
+# APP-101 slash commands: per library app the command slug and alias list it
+# shipped with (`/slug rest-of-text` opens the app instantly in the canvas
+# intent bar; `apps` is reserved for the list). Lowercase,
+# [a-z][a-z0-9-]{1,31}, unique across the library. APP-120 (the address
+# rule): an app's canonical address is its display title, lowercased and
+# hyphenated (`address`); these names stay as hidden aliases forever, so
+# nothing typed before breaks.
 COMMANDS = {
     "expense-review": ("expense-review", ["review-expenses"]),
     "vendor-spend": ("vendor-spend", ["spend", "vendors"]),
@@ -580,13 +583,35 @@ COMMANDS = {
 # their hand-written copy as the optional override (`command.hint`,
 # `command.examples`).
 COMMAND_COPY = {
-    "expense-claims": ("what you spent", ["/expense $86 at Nobu, client dinner, Sarah approves", "/expense"]),
-    "time-off": ("dates and reason", ["/pto Nov 24\u201326 for Thanksgiving, Sarah approves"]),
-    "purchase-requests": ("what to buy", ["/purchase 3 monitors for $1,200 from Dell"]),
-    "vendor-invoices": ("vendor, amount and PO", ["/invoice Acme $4,800 against PO-1042"]),
-    "access-requests": ("system and why", ["/access Snowflake read access for the Q3 audit"]),
-    "deal-desk": ("deal and discount", ["/discount 8% on the Globex renewal"]),
+    "expense-claims": ("file a claim or approve one", ["/expenses $86 at Nobu, client dinner, Sarah approves", "/expenses"]),
+    "time-off": ("dates and reason", ["/time-off Nov 24\u201326 for Thanksgiving, Sarah approves"]),
+    "purchase-requests": ("what to buy", ["/purchase-requests 3 monitors for $1,200 from Dell"]),
+    "vendor-invoices": ("vendor, amount and PO", ["/vendor-invoices Acme $4,800 against PO-1042"]),
+    "access-requests": ("system and why", ["/access-requests Snowflake read access for the Q3 audit"]),
+    "deal-desk": ("deal and discount", ["/deal-desk 8% on the Globex renewal"]),
 }
+# APP-120: the title the Library and `GET /v1/commands` show when it differs
+# from the definition's (`command.title`; stored definitions never change, so
+# the seeded beta keeps its digests). Expense claims is shown as Expenses
+# (Fable, 2026-10-31: the one Expenses app it becomes after APP-097), and the
+# review queue says that it runs on demo data.
+DISPLAY_TITLES = {
+    "expense-claims": "Expenses",
+    "expense-review": "Expense review (demo data)",
+}
+
+
+def address(title):
+    """APP-120: an app's address is its title, lowercased and hyphenated (a parenthetical note is not part of it)."""
+    words = re.sub(r"\s*\([^)]*\)", "", title).lower()
+    return re.sub(r"[^a-z0-9]+", "-", words).strip("-")
+
+
+def command_names(library_id, title):
+    """The canonical address (from the display title) and the hidden aliases (every name the app answered to before)."""
+    slug = address(DISPLAY_TITLES.get(library_id, title))
+    old, aliases = COMMANDS[library_id]
+    return slug, [name for name in [old, *aliases] if name != slug]
 
 
 def routing(description, intents, negatives, capabilities):
@@ -952,8 +977,10 @@ def catalog_entry(library_id, title, purpose, route, b, csv_name):
             if "command_id" in v:
                 entry["command_id"] = v["command_id"]
         views.append(entry)
-    slug, aliases = COMMANDS[library_id]
+    slug, aliases = command_names(library_id, title)
     command = {"slug": slug, "aliases": aliases}
+    if library_id in DISPLAY_TITLES:
+        command["title"] = DISPLAY_TITLES[library_id]
     if library_id in COMMAND_COPY:
         command["hint"], command["examples"] = COMMAND_COPY[library_id]
     return {"library_id": library_id, "fixture": library_id + ".json", "title": title, "purpose": purpose, "routing": route,
@@ -984,7 +1011,7 @@ def build():
             # Source identities: one pair per source, past every app's identity block.
             source_id, revision_id = uid(BASE + STRIDE * 64 + 2 * n), uid(BASE + STRIDE * 64 + 2 * n + 1)
             revisions[name] = source_revision(contract, data, normalized, count, source_id, revision_id, semantics)
-    names = [name for slug, aliases in COMMANDS.values() for name in [slug, *aliases]]
+    names = [name for entry in apps() for name in (lambda slug, aliases: [slug, *aliases])(*command_names(entry[0], entry[1]))]
     assert len(names) == len(set(names)) and "apps" not in names, "command slugs are unique"
     assert all(re.fullmatch(r"[a-z][a-z0-9-]{1,31}", name) for name in names), "command slug shape"
     entries = []

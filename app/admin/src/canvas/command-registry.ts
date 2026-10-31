@@ -1,30 +1,41 @@
 // APP-118: the one command registry. Every command of the intent bar, with
-// its name and aliases, its category, a one-line description, its typed
+// its name and aliases, its group, a one-line description, its typed
 // arguments and an example or two, lives here, and the surfaces read only
 // this list: the `/` autocomplete (`slash.ts`) and the Commands tab of the
 // right pane (`command-sheet.ts`).
 //
-// APP-119: commands are verbs, apps are addresses. The verbs are what the
-// canvas modules register (`registerCommands`: `/card`, `/unite`,
-// `/folder`, the widgets, `/note`, …); `/` alone and `/commands` list only
-// them. The member's apps are addresses (`setAddresses`, from the server's
-// `GET /v1/commands`): each has its slug and aliases from the catalog (or
-// the name a saved app was given), and a hint and examples the server
-// derived from the definition. They are listed in the Library (`/apps`) and
-// in the `/x…` list's own "Apps" section, and `/slug words` still addresses
-// one: `findCommand` falls back to `findAddress`. This module holds data
-// only: no DOM, no fetch.
+// APP-119: commands are verbs, apps are addresses. The member's apps are
+// addresses (`setAddresses`, from the server's `GET /v1/commands`): each has
+// its slug and aliases from the catalog (or the name a saved app was given),
+// and a hint and examples the server derived from the definition. They are
+// listed in the Library (`/apps`) and in the `/x…` list's own "Apps"
+// section, and `/slug words` still addresses one: `findCommand` falls back
+// to `findAddress`.
+//
+// APP-120: one grammar. "Type / and a verb to change the canvas, / and an
+// app's name to tell that app something, or just a sentence." There are
+// twelve verbs in four groups: Place (`/app`, `/card`, `/widget`), Arrange
+// (`/arrange`, `/unite`, `/split`, `/focus`), Make (`/folder <name>
+// formation <instruction>`) and Help (`/apps`, `/commands`, `/shortcuts`,
+// `/agent`). The old widget verbs (`/weather`, `/calculator`, `/clock`,
+// `/note`) stay as hidden aliases of `/widget <kind>` (`aliasOf`): accepted
+// and autocompleted from their first letter, never listed under `/` alone or
+// in the Commands tab's groups. There is no `/remove`: the card's ×, Delete
+// or the Library's Remove take things off. This module holds data only: no
+// DOM, no fetch.
 
-export type Category = 'Library' | 'Canvas' | 'Folders' | 'Widgets' | 'Agents' | 'Help';
-/** The order the surfaces list categories in. */
-export const CATEGORIES: readonly Category[] = ['Library', 'Canvas', 'Folders', 'Widgets', 'Agents', 'Help'];
+export type Category = 'Place' | 'Arrange' | 'Make' | 'Help';
+/** The order the surfaces list groups in. */
+export const CATEGORIES: readonly Category[] = ['Place', 'Arrange', 'Make', 'Help'];
+/** APP-120: the one sentence the grammar teaches. */
+export const GRAMMAR = 'Type / and a verb to change the canvas, / and an app’s name to tell that app something, or just a sentence.';
 /** The heading of the addresses' section in the `/x…` list. */
 export const APPS_SECTION = 'Apps — type /name and what you want';
 /** The Commands tab's footer: addresses live in the Library. */
 export const ADDRESS_FOOTER = 'Your apps answer to /name — see /apps';
 
 /** What an argument names; the kinds with values get live suggestions under the bar. */
-export type ArgKind = 'text' | 'app' | 'card' | 'folder' | 'city' | 'zone';
+export type ArgKind = 'text' | 'app' | 'card' | 'folder' | 'city' | 'zone' | 'widget';
 export type CommandArg = { name: string; kind: ArgKind; required: boolean };
 export type Report = (message: string) => void;
 
@@ -37,6 +48,10 @@ export interface CanvasCommand {
   category?: Category;
   args?: CommandArg[];
   examples?: string[];
+  /** APP-120: how the surfaces print it when the arguments alone cannot (`/folder <name> formation <instruction>`). */
+  usage?: string;
+  /** APP-120: a hidden alias of this verb (`/weather` of `/widget`): runs and autocompletes, never listed under `/` alone. */
+  aliasOf?: string;
   run(text: string, report?: Report): void | Promise<void>;
 }
 
@@ -57,28 +72,42 @@ export type Address = Runnable & {
 };
 
 const arg = (name: string, kind: ArgKind, required = false): CommandArg => ({ name, kind, required });
-type Meta = Pick<Command, 'category' | 'args' | 'examples'>;
+type Meta = Pick<Command, 'category' | 'args' | 'examples'> & { usage?: string };
 
-/** What the registry knows about each verb it may meet. Apps are never here (APP-119). */
+/** The twelve verbs in their order; what the registry knows about each (apps are never here, APP-119). */
+export const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'apps', 'commands', 'shortcuts', 'agent'] as const;
+/** APP-120: the widget kinds `/widget` places; the first four are also hidden verbs of their own. */
+export const WIDGET_KINDS = ['weather', 'calculator', 'clock', 'note', 'folder'] as const;
+export type WidgetName = typeof WIDGET_KINDS[number];
+
 const KNOWN: Record<string, Meta> = {
-  apps: { category: 'Library', args: [arg('app name', 'app')], examples: ['/apps', '/apps purchase'] },
-  app: { category: 'Library', args: [arg('app name or number', 'app', true)], examples: ['/app expense', '/app 3'] },
-  card: { category: 'Library', args: [arg('card name or number', 'card', true)], examples: ['/card 3.2', '/card spend by category'] },
-  note: { category: 'Canvas', args: [arg('text', 'text')], examples: ['/note Call the auditor Friday'] },
-  folder: {
-    category: 'Folders',
-    args: [arg('folder, new or formation', 'folder'), arg('name or instruction', 'text')],
-    examples: ['/folder new Q3 board pack', '/folder 1 formation build a metrics app'],
+  app: { category: 'Place', args: [arg('app name or number', 'app', true)], examples: ['/app expenses', '/app 3'] },
+  card: { category: 'Place', args: [arg('app.card or number', 'card', true)], examples: ['/card expenses.ledger', '/card 3.2'] },
+  widget: {
+    category: 'Place',
+    args: [arg('weather|calculator|clock|note|folder', 'widget', true), arg('args', 'text')],
+    examples: ['/widget weather Austin', '/widget note Call the auditor Friday'],
+    usage: '/widget <weather|calculator|clock|note|folder> [args]',
   },
-  unite: { category: 'Canvas', args: [arg('app', 'app', true)], examples: ['/unite expense'] },
-  split: { category: 'Canvas', args: [arg('united app', 'app', true)], examples: ['/split expense'] },
-  arrange: { category: 'Canvas', args: [], examples: ['/arrange'] },
-  weather: { category: 'Widgets', args: [arg('city or style', 'city')], examples: ['/weather Austin', '/weather make it dark'] },
-  calculator: { category: 'Widgets', args: [arg('expression or style', 'text')], examples: ['/calculator 12*(3+4)', '/calculator make it a TI-84'] },
-  clock: { category: 'Widgets', args: [arg('city or time zone', 'zone')], examples: ['/clock Tokyo'] },
-  agent: { category: 'Agents', args: [], examples: ['/agent'] },
+  arrange: { category: 'Arrange', args: [], examples: ['/arrange'] },
+  unite: { category: 'Arrange', args: [arg('app', 'app', true)], examples: ['/unite expenses'] },
+  split: { category: 'Arrange', args: [arg('united app', 'app', true)], examples: ['/split expenses'] },
+  focus: { category: 'Arrange', args: [arg('app.card or number', 'card')], examples: ['/focus', '/focus expenses.ledger'] },
+  folder: {
+    category: 'Make',
+    args: [arg('name', 'folder', true), arg('formation <instruction>', 'text')],
+    examples: ['/folder Q3 board pack formation build a metrics app', '/folder 1 formation brief me'],
+    usage: '/folder <name> formation <instruction>',
+  },
+  apps: { category: 'Help', args: [arg('query', 'app')], examples: ['/apps', '/apps purchase'] },
   commands: { category: 'Help', args: [arg('search', 'text')], examples: ['/commands', '/commands folder'] },
   shortcuts: { category: 'Help', args: [], examples: ['/shortcuts'] },
+  agent: { category: 'Help', args: [], examples: ['/agent'] },
+  // Hidden aliases of `/widget <kind>` (APP-120).
+  note: { category: 'Place', args: [arg('text', 'text')], examples: ['/note Call the auditor Friday'] },
+  weather: { category: 'Place', args: [arg('city or style', 'city')], examples: ['/weather Austin', '/weather make it dark'] },
+  calculator: { category: 'Place', args: [arg('expression or style', 'text')], examples: ['/calculator 12*(3+4)', '/calculator make it a TI-84'] },
+  clock: { category: 'Place', args: [arg('city or time zone', 'zone')], examples: ['/clock Tokyo'] },
 };
 
 function complete(command: CanvasCommand): Command {
@@ -86,9 +115,10 @@ function complete(command: CanvasCommand): Command {
   return {
     ...command,
     aliases: command.aliases ?? [],
-    category: command.category ?? known?.category ?? 'Canvas',
+    category: command.category ?? known?.category ?? 'Place',
     args: command.args ?? known?.args ?? [],
     examples: command.examples ?? known?.examples ?? [`/${command.slug}`],
+    ...(command.usage ?? known?.usage ? { usage: command.usage ?? known?.usage } : {}),
   };
 }
 
@@ -118,7 +148,7 @@ export function onAddressesChange(listener: () => void): () => void {
   return () => addressListeners.delete(listener);
 }
 
-/** Every verb, once each, in category order. */
+/** Every verb and hidden alias, once each, in group order (the twelve in their order, then any other). */
 export function commandList(): Command[] {
   const seen = new Set<string>();
   const out: Command[] = [];
@@ -128,9 +158,23 @@ export function commandList(): Command[] {
     out.push(complete(command));
   }
   const rank = (command: Command) => CATEGORIES.indexOf(command.category);
+  const order = (command: Command) => {
+    const at = (VERBS as readonly string[]).indexOf(command.slug);
+    return at < 0 ? VERBS.length : at;
+  };
   return out.map((command, at) => ({ command, at }))
-    .sort((a, b) => rank(a.command) - rank(b.command) || a.at - b.at)
+    .sort((a, b) => rank(a.command) - rank(b.command) || order(a.command) - order(b.command) || a.at - b.at)
     .map((entry) => entry.command);
+}
+
+/** APP-120: the verbs the surfaces list (`/` alone, the Commands tab): every verb that is not a hidden alias. */
+export function visibleCommands(): Command[] {
+  return commandList().filter((command) => !command.aliasOf);
+}
+
+/** APP-120: the hidden aliases of `slug` (`/widget` → `/weather`, `/calculator`, `/clock`, `/note`). */
+export function hiddenAliases(slug: string): Command[] {
+  return commandList().filter((command) => command.aliasOf === slug);
 }
 
 /** Every address the member has, except those a verb of the same name shadows. */
@@ -165,9 +209,14 @@ export function groupCommands(commands: Command[]): CommandGroup[] {
     .filter((group) => group.commands.length > 0);
 }
 
-/** The `/` list's verbs for what follows the slash: slug or alias prefix, or the title for two letters or more. */
+/**
+ * The `/` list's verbs for what follows the slash: slug or alias prefix, or
+ * the title for two letters or more. `/` alone lists the visible verbs only;
+ * from the first letter the hidden aliases match too (`/we` → `/weather`).
+ */
 export function matchCommands(prefix: string): Command[] {
   const key = prefix.toLowerCase();
+  if (!key) return visibleCommands();
   return commandList().filter((command) => command.slug.startsWith(key)
     || command.aliases.some((alias) => alias.startsWith(key))
     || (key.length > 1 && command.title.toLowerCase().includes(key)));
@@ -216,9 +265,11 @@ export function addressText(address: Address): string {
 /** The Commands tab's search: any word of the name, aliases, title, description or examples. */
 export function searchCommands(query: string): Command[] {
   const words = query.toLowerCase().replace(/^\//, '').split(/\s+/).filter(Boolean);
-  if (!words.length) return commandList();
-  return commandList().filter((command) => {
-    const text = [command.slug, ...command.aliases, command.title, command.purpose, command.category, ...command.examples].join(' ').toLowerCase();
+  if (!words.length) return visibleCommands();
+  // A verb is found by its hidden aliases too (`weather` finds `/widget`).
+  return visibleCommands().filter((command) => {
+    const hidden = hiddenAliases(command.slug).flatMap((alias) => [alias.slug, ...alias.aliases, alias.title]);
+    const text = [command.slug, ...command.aliases, ...hidden, command.title, command.purpose, command.category, ...command.examples].join(' ').toLowerCase();
     return words.every((word) => text.includes(word));
   });
 }
@@ -230,6 +281,7 @@ export function argLabel(argument: CommandArg): string {
 
 /** `/expense [what you spent]`, `/card <card name or number>`. */
 export function signature(command: Runnable): string {
+  if (command.usage) return command.usage;
   return [`/${command.slug}`, ...command.args.map(argLabel)].join(' ');
 }
 /**

@@ -13,12 +13,12 @@
 // markup.
 //
 // On the canvas a note is edited in place and saved when it loses focus.
-// Delete takes it off this canvas (back to the library pane's Utilities →
+// Delete takes it off this canvas (back to the library pane's Widgets →
 // Notes, from where it returns); no data changes. Which notes are off the
 // canvas, and where each note sits, is kept per member in this browser
 // (DS-67); a browser that has not seen a note shows it. A note written in
 // another browser arrives live (`record.committed`).
-import { canvasHost, isDemoCanvas, mountWidget, onBoardSettled, onLayoutSaved, onLiveEvent, stackBoard, unmountWidget, widgetSpot } from './board';
+import { canvasHost, emitCanvasChanged, isDemoCanvas, mountWidget, onBoardSettled, onLayoutSaved, onLiveEvent, stackBoard, unmountWidget, widgetSpot } from './board';
 import { postCommand } from './commands';
 import { announce, el, isUuid } from './render';
 import type { LiveEvent } from './live';
@@ -78,6 +78,8 @@ function saveView(): void {
 
 function changed(): void {
   for (const listener of listeners) listener();
+  // APP-120: the Library's Widgets → Note row re-renders from the one event.
+  emitCanvasChanged();
 }
 
 /** Calls `listener` when notes arrive, change or leave the canvas (the library pane's Notes row). */
@@ -258,7 +260,7 @@ function buildCard(document_: Document, id: string): HTMLElement {
       el(document_, 'span', { class: 'cv-note-mark', 'aria-hidden': 'true' }),
       el(document_, 'span', { class: 'cv-note-label' }, 'Note'),
       el(document_, 'span', { class: 'badge', title: 'Only you can read this note unless you share its work' }, 'private'),
-      // APP-118: every utility card has ×. The note stays in the library (Utilities → Notes).
+      // APP-118: every utility card has ×. The note stays in the library (Widgets → Note).
       el(document_, 'span', { class: 'cv-card-tools' },
         el(document_, 'button', { type: 'button', class: 'cv-card-focus cv-card-remove', 'data-note-close': '', 'aria-label': 'Take the note off the canvas', title: 'Take off the canvas (the note is kept)' }, '×'))),
     title,
@@ -407,11 +409,13 @@ export async function newNote(text: string): Promise<string> {
   return words ? 'Note saved on your canvas.' : 'A new note is on your canvas. Give it a title.';
 }
 
+/** `/note [text]`: APP-120 makes it a hidden alias of `/widget note [text]`. */
 export const NOTE_COMMAND = {
   slug: 'note',
   title: 'Note',
   purpose: 'Keep a quick note as a card; saved as your own record.',
   aliases: ['notes'],
+  aliasOf: 'widget',
   run: async (text: string, report: Report = () => undefined) => {
     report(await newNote(text));
     const input = documentRef?.getElementById('intent-input') as HTMLInputElement | null;
@@ -444,7 +448,7 @@ export function startNotes(document_: Document): void {
     if (!button || !entry) return;
     event.stopPropagation();
     removeNoteItem(entry.item);
-    announce(`${entry.note.title || 'The note'} is back in the library (Utilities → Notes). Nothing was deleted.`);
+    announce(`${entry.note.title || 'The note'} is back in the library (Widgets → Note). Nothing was deleted.`);
   });
   onBoardSettled(() => {
     loadView();

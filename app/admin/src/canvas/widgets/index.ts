@@ -15,6 +15,7 @@
 // registry (`slash.ts` `registerCommands`, from `app.tsx`), so the widgets show
 // in the `/` list and `/apps` and run through `runSlash`.
 import { announce } from '../render';
+import { findVerb, WIDGET_KINDS, type WidgetName } from '../command-registry';
 import { activeCanvasItem, canvasHost, isDemoCanvas, mountWidget, onLayoutSaved, unmountWidget, widgetSpot } from '../board';
 import { mountCalculator, looksLikeExpression } from './calculator';
 import { buildCard, customize, widgetTitle, type WidgetCard } from './card';
@@ -22,7 +23,7 @@ import { mountClock } from './clock';
 import { defaultState, KINDS, placeOf, validState, ZONES, zoneOf, type ClockState, type WeatherState, type WidgetKind, type WidgetState } from './state';
 import { mountWeather } from './weather';
 
-export type WidgetCommand = { slug: string; title: string; purpose: string; run(text: string): void | Promise<void> };
+export type WidgetCommand = { slug: string; title: string; purpose: string; aliasOf?: string; run(text: string): void | Promise<void> };
 
 const STORAGE_KEY = 'forma.widgets.v1';
 const MAX_WIDGETS = 24;
@@ -175,23 +176,78 @@ export async function runWidget(kind: WidgetKind, text: string): Promise<string>
 export const WIDGET_COMMANDS: WidgetCommand[] = [
   {
     slug: 'weather',
+    aliasOf: 'widget',
     title: 'Weather',
     purpose: 'Current weather for a place; restyle it in words.',
     run: (text) => runWidget('weather', text).then(announce),
   },
   {
     slug: 'calculator',
+    aliasOf: 'widget',
     title: 'Calculator',
     purpose: 'A calculator; type an expression, or restyle it in words.',
     run: (text) => runWidget('calculator', text).then(announce),
   },
   {
     slug: 'clock',
+    aliasOf: 'widget',
     title: 'Clock',
     purpose: 'A clock for a time zone; 12 or 24 hour.',
     run: (text) => runWidget('clock', text).then(announce),
   },
 ];
+
+// --- APP-120: `/widget <weather|calculator|clock|note|folder> [args]` ---
+
+const WIDGET_TITLES: Record<WidgetName, [title: string, detail: string]> = {
+  weather: ['Weather', 'Current weather for a place'],
+  calculator: ['Calculator', 'Type an expression, or restyle it'],
+  clock: ['Clock', 'A time zone; 12 or 24 hour'],
+  note: ['Note', 'A quick note, saved as your own record'],
+  folder: ['Folder', 'Your files; formation builds an app from them'],
+};
+
+/** The kind `word` names (`weather`, `notes` → `note`, `folders` → `folder`), if any. */
+export function widgetKind(word: string): WidgetName | undefined {
+  const key = word.trim().toLowerCase();
+  return WIDGET_KINDS.find((kind) => kind === key || `${kind}s` === key);
+}
+
+/**
+ * `/widget <kind> [args]`: the one Place verb for widgets. It runs the kind's
+ * own verb (`/weather`, `/calculator`, `/clock`, `/note`, `/folder`, now its
+ * hidden aliases), so `/widget weather Austin` and `/weather Austin` do the
+ * same thing, and `/widget folder` opens the folder picker.
+ */
+export const WIDGET_VERB = {
+  slug: 'widget',
+  title: 'Place a widget',
+  purpose: 'Weather, calculator, clock, note or folder: yours alone, no governed data',
+  run: async (text: string, report: (message: string) => void = announce) => {
+    const match = text.trim().match(/^(\S+)\s*([\s\S]*)$/);
+    const kind = match ? widgetKind(match[1] ?? '') : undefined;
+    if (!kind) {
+      report(match
+        ? `There is no ${match[1]} widget. Try /widget weather, calculator, clock, note or folder.`
+        : 'Name the widget: /widget weather, calculator, clock, note or folder.');
+      return;
+    }
+    const verb = findVerb(kind);
+    if (!verb) {
+      report(`The ${kind} widget is not available here.`);
+      return;
+    }
+    await verb.run(match?.[2] ?? '', report);
+  },
+};
+
+/** `/widget <kind>`: the five kinds while the kind is typed (the kind's own suggestions follow, `slash.ts`). */
+export function widgetCompletions(rest: string): Suggestion[] {
+  const query = rest.trim().toLowerCase();
+  return WIDGET_KINDS
+    .filter((kind) => !query || kind.startsWith(query))
+    .map((kind) => ({ badge: '◇', title: WIDGET_TITLES[kind][0], detail: `${WIDGET_TITLES[kind][1]} · also /${kind}`, value: `/widget ${kind} ` }));
+}
 
 // --- APP-118: live suggestions for `/weather <city>` and `/clock <zone>` ---
 

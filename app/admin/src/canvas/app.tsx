@@ -11,10 +11,11 @@ import { NOTE_COMMAND, startNotes } from './notes';
 import { registerCommands, registerCompleter, startSlash } from './slash';
 import { startBoxes } from './boxes';
 import { startTimings } from './timing';
-// APP-103 utility widgets, registered as canvas slash commands (APP-101):
-// `/weather`, `/calculator`, `/clock` in the `/` list and `/apps`; a command
-// with words restyles the selected widget of that kind (`runWidget`).
-import { citySuggestions, restoreWidgets, runWidget, WIDGET_COMMANDS, zoneSuggestions } from './widgets/index';
+// APP-103 widgets, registered as canvas slash commands (APP-101). APP-120:
+// `/widget <kind> [args]` is the one Place verb; `/weather`, `/calculator`
+// and `/clock` stay as its hidden aliases; a command with words restyles the
+// selected widget of that kind (`runWidget`).
+import { citySuggestions, restoreWidgets, runWidget, WIDGET_COMMANDS, WIDGET_VERB, widgetCompletions, zoneSuggestions } from './widgets/index';
 
 // ADR-011 pitch canvas (APP-092, APP-094): the signed-in workspace as one
 // canvas. Every group, card, value and receipt row below is resolved by the
@@ -336,11 +337,11 @@ function Canvas(props: CanvasProps) {
       >
         <section id="cv-empty" class="cv-empty" aria-labelledby="cv-empty-title">
           <h1 id="cv-empty-title">What do you need?</h1>
-          <p class="cv-empty-copy">Ask in your own words, type / for a command, or bring cards from your library.</p>
+          <p class="cv-empty-copy">Type / and a verb to change the canvas, / and an app’s name to tell that app something, or just a sentence.</p>
           <div class="cv-suggestions" aria-label="Suggestions">
-            <button type="button" data-intent="/expense"><code>/expense</code></button>
+            <button type="button" data-intent="/expenses"><code>/expenses</code></button>
             <button type="button" data-intent="Review expenses over $200">Review expenses over $200</button>
-            <button type="button" data-intent="/weather"><code>/weather</code></button>
+            <button type="button" data-intent="/widget weather"><code>/widget weather</code></button>
           </div>
           {createShow(() => props.hasLibrary, () => (
             <button type="button" class="cv-empty-library" data-lib-open>
@@ -691,7 +692,7 @@ function Canvas(props: CanvasProps) {
           <div class="cv-lib-search">
             <input id="cv-lib-search" type="search" placeholder="Search by name, /address or number, e.g. 3.2" aria-label="Search the library" autocomplete="off" />
           </div>
-          <p class="cv-lib-hint">Click a card to bring it onto the canvas, or type <code>/card 3.2</code> or <code>/app expense</code>. Each app answers to its <code>/address</code>.</p>
+          <p class="cv-lib-hint">Add brings an app, a card or a widget onto the canvas; Remove takes it off. Type <code>/</code> and an app’s name to tell that app something, e.g. <code>/expenses</code>.</p>
           <div class="cv-lib-list" data-lib-list>
             {createList(() => props.library, category => category.id, category => (
               <section class="cv-lib-cat" data-category={category.id} aria-label={category.title}>
@@ -705,21 +706,23 @@ function Canvas(props: CanvasProps) {
                       <div class="cv-lib-app-head">
                         <button type="button" class="cv-lib-expand" aria-expanded="false" data-lib-expand>
                           <span class="cv-lib-chevron" aria-hidden="true"></span>
+                          <span class="cv-lib-dot" data-lib-dot aria-hidden="true"></span>
                           <span class="cv-lib-num">{app.number}</span>
                           <span class="cv-lib-app-title">{app.title}</span>
-                          {createShow(() => app.hasSlug, () => (
-                            <code class="cv-lib-slug">{app.slug}</code>
-                          ))}
                           <span class="cv-lib-on" data-lib-on></span>
                         </button>
+                        {createShow(() => app.hasSlug, () => (
+                          <code class="cv-lib-slug cv-addr-chip">{app.slug}</code>
+                        ))}
                         <button type="button" class="cv-lib-stack" data-lib-stack title="Add the app as one stack">Stack</button>
                         <button type="button" class="cv-lib-stack cv-lib-unite" data-lib-unite title="Unite: assemble the app's cards into one frame">Unite</button>
-                        <button type="button" class="cv-lib-all" data-lib-all>Add all</button>
+                        <button type="button" class="cv-lib-all" data-lib-all>Add</button>
                       </div>
                       <ul class="cv-lib-cards">
                         {createList(() => app.cards, card => card.id, card => (
                           <li class="cv-lib-card" data-card={card.id} data-number={card.number} data-search={card.search}>
                             <button type="button" class="cv-lib-toggle" aria-pressed="false" data-lib-toggle>
+                              <span class="cv-lib-dot" data-lib-dot aria-hidden="true"></span>
                               <span class="cv-lib-num">{card.number}</span>
                               <span class="cv-lib-card-title">{card.title}</span>
                               <span class="cv-lib-kind" data-kind={card.kind}>{card.kind}</span>
@@ -771,7 +774,7 @@ function Canvas(props: CanvasProps) {
             <div id="cv-more-menu" class="cv-zoom-menu cv-more-menu" role="menu" aria-label="More actions" hidden>
               <p class="cv-menu-label" aria-hidden="true">Canvas</p>
               <button type="button" role="menuitem" data-tool="library"><span>Library</span><span class="cv-kbd-group">L</span></button>
-              <button type="button" role="menuitem" data-tool="new-note"><span>New note</span><span class="cv-kbd-group">/note</span></button>
+              <button type="button" role="menuitem" data-tool="new-note"><span>New note</span><span class="cv-kbd-group">/widget note</span></button>
               <button type="button" role="menuitem" data-tool="reset-layout" title="View layout only: saved in this browser"><span>Arrange by app</span><span class="cv-kbd-group">/arrange</span></button>
               <button type="button" role="menuitemcheckbox" aria-checked="false" data-tool="timings"><span>Show timings</span><span class="cv-menu-check" aria-hidden="true"></span></button>
               <span class="cv-zoom-sep" aria-hidden="true"></span>
@@ -799,11 +802,12 @@ startBoard(document);
 // APP-116: timing chips (off by default; the More menu or ?timing=1).
 startTimings(document);
 startSlash(document);
-registerCommands(WIDGET_COMMANDS.map((command) => ({
+registerCommands([WIDGET_VERB, ...WIDGET_COMMANDS.map((command) => ({
   ...command,
   run: (text: string, report?: (message: string) => void) =>
     runWidget(command.slug as 'weather' | 'calculator' | 'clock', text).then((message) => report?.(message)),
-})));
+}))]);
+registerCompleter('widget', widgetCompletions);
 // APP-118: recent cities and the clock's zones under the bar (Enter still runs what was typed).
 registerCompleter('weather', citySuggestions, { select: false });
 registerCompleter('clock', zoneSuggestions, { select: false });

@@ -94,7 +94,7 @@ pub fn space_title(space: &str) -> &'static str {
         "sales" => "Sales",
         "support" => "Support",
         "people" => "People",
-        "utilities" => "Utilities",
+        "utilities" => "Widgets",
         MINE => "My apps",
         FOLDERS => "Folders",
         _ => "Other",
