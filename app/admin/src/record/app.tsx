@@ -49,7 +49,7 @@ function Record(props: RecordProps) {
     <main class="page">
       <h1>Record</h1>
       <p class="lede">
-        Seeded definition, retrieved from the library. Schema <span>{props.schema}</span> version{' '}
+        Saved app. Schema <span>{props.schema}</span> version{' '}
         <span>{props.schemaVersion}</span>; record <span>{props.recordId}</span>.
       </p>
       {props.committed ? (

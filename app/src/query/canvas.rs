@@ -59,8 +59,7 @@ use forma_server::{PageHandle, RenderCtx};
 use serde::Serialize;
 use std::sync::Arc;
 
-/// The honest provenance label of every Phase 1 work (design brief §2.6,
-/// keep): the definitions and sources are seeded, nothing is generated.
+/// The provenance label for definitions identified in the seeded catalog.
 pub const SEEDED_LABEL: &str =
     "Seeded definition, retrieved from the library. Sources seeded by the operator.";
 
@@ -345,6 +344,39 @@ pub fn adapted_origins(description: &str) -> Option<Vec<OriginProps>> {
                 text,
             })
             .collect(),
+    )
+}
+
+/// APP-135: origin comes from persisted definition metadata, never from the
+/// absence of folder lineage. Old/custom definitions without that metadata
+/// remain neutral rather than being guessed to be seeded or AI-generated.
+pub(crate) fn definition_provenance(description: &str, digest: &str) -> (String, Vec<OriginProps>) {
+    if let Some(adapted) = adapted_origins(description) {
+        return (
+            "Adapted to your request from a library app (typed transform, admitted).".to_owned(),
+            adapted,
+        );
+    }
+    if description.starts_with(crate::composer::plan::GENERATED_PREFIX) {
+        return (
+            "Generated for your request (typed definition, admitted).".to_owned(),
+            vec![OriginProps {
+                id: "o0".into(),
+                kind: "generated".into(),
+                text: "Generated".into(),
+            }],
+        );
+    }
+    if crate::composer::matcher::seeded_definition(digest) {
+        return (SEEDED_LABEL.to_owned(), seeded_origins());
+    }
+    (
+        "Saved definition; its original creation method was not recorded.".to_owned(),
+        vec![OriginProps {
+            id: "o0".into(),
+            kind: "saved".into(),
+            text: "Saved definition".into(),
+        }],
     )
 }
 
@@ -1294,7 +1326,6 @@ async fn assemble(
         ),
         None => (Vec::new(), Vec::new()),
     };
-    let adapted = adapted_origins(&outline.description);
     // APP-108: a work built from a folder (or a file's data card) names it.
     let folder = match stores.workspace.box_lineage(member, app, work).await {
         Ok(lineage) => lineage,
@@ -1303,8 +1334,8 @@ async fn assemble(
             None
         }
     };
-    let (label, origins) = match (&folder, adapted) {
-        (Some(lineage), _) => (
+    let (label, origins) = match &folder {
+        Some(lineage) => (
             if lineage.kind == "data" {
                 format!("Data from a file in your {} (types you confirmed; receipts name the file's revision).", crate::boxes::NOUN_LOWER)
             } else {
@@ -1315,11 +1346,7 @@ async fn assemble(
             },
             folder_origins(lineage),
         ),
-        (None, Some(adapted)) => (
-            "Adapted to your request from a library app (typed transform, admitted).".to_owned(),
-            adapted,
-        ),
-        (None, None) => (SEEDED_LABEL.to_owned(), seeded_origins()),
+        None => definition_provenance(&outline.description, &outline.definition_digest),
     };
     Ok(GroupProps {
         id: format!("g-{work}"),

@@ -50,7 +50,7 @@ function Work(props: WorkProps) {
     <main class="page work">
       <h1>{props.title}</h1>
       <p class="lede">
-        Seeded definition, retrieved from the library. Sources seeded by the operator.
+        Saved work.
       </p>
       <form method="post" action={props.action} class="run">
         <input type="hidden" name="csrf" value={props.csrf} />

@@ -64,7 +64,7 @@ export type Posted = CommandOutcome;
 const MESSAGES: Record<string, string> = {
   not_connected: 'The action path is not connected on this server yet.',
   invalid_utterance: 'Say it in a sentence between 3 and 500 characters.',
-  could_not_parse: 'That could not be understood as an action. Try "I spent $86 on a client dinner at Nobu".',
+  could_not_parse: 'That could not be understood as an action. Describe the record you want to add or the decision you want to make.',
   could_not_draft: 'That could not be turned into a record: a value is not one the app accepts, or there is nothing to decide. Nothing was changed.',
   composer_unavailable: 'The model is not configured on this server. Nothing was changed.',
   too_many_requests: 'Too many requests in a short time. Try again in a moment.',

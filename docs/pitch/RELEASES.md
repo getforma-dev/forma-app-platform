@@ -20,7 +20,7 @@ Rebuilt on 2026-10-31 from the tracked record only: the APP-078 window record (`
 | 2026-10-31 | `ab19994` | not recorded in Git | TD:11 | 13 *(inferred)* | not recorded in Git | not recorded in Git | not recorded in Git | Batched canvas reads, the `/signin/northstar` alias (APP-117), polish. Found live: an existence leak on unknown aliases. |
 | 2026-10-31 | `3901992` | not recorded in Git | TD:12 | 13 *(inferred)* | not recorded in Git | not recorded in Git | not recorded in Git | APP-117 alias-leak fix. The last deploy in the record. |
 
-Each window superseded the one in the row above it (the runbook's chain `88d1b19d` → `10e6ecc5` → `3b63b1f9` → `5742ecc3` → `34e746fa`, then `65d9cebd` and `b0c6ebda` per APP-105). Two things are stale and are not repeated here: the "State at the last deploy" section of DEPLOY-RUNBOOK.md (TD:8) and its count of "five redeploys". Through 2026-10-31 there were eight pitch activations, TD:5 to TD:12.
+Each window superseded the one in the row above it (the recorded chain `88d1b19d` → `10e6ecc5` → `3b63b1f9` → `5742ecc3` → `34e746fa`, then `65d9cebd` and `b0c6ebda` per APP-105). Through 2026-10-31 there were eight pitch activations, TD:5 to TD:12. The runbook's recorded-state summary now points here; its observe step must establish the live state before another deployment.
 
 ## Releases through `just deploy`
 

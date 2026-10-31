@@ -117,7 +117,7 @@ export function mentionScope(mention: string): Scope | string {
   const scope = scopeOfTarget(target);
   if (scope) return scope;
   if (target.kind === 'widget' || splitAddress(mention).space === 'widget') return `@${mention} is a widget: it has no records to ask about. Mention an app or a card.`;
-  return target.kind === 'none' ? `@${mention}: ${target.message}` : `Mention an app or a card: @expenses, @expenses.ledger.`;
+  return target.kind === 'none' ? `@${mention}: ${target.message}` : 'Use @ followed by an app or card address to mention it.';
 }
 
 /**
@@ -137,8 +137,8 @@ export function askLine(text: string): { scope: Scope | null; question: string; 
   if (scope) return { scope, question: rest };
   if (splitAddress(word).space) {
     const message = target.kind === 'widget' || splitAddress(word).space === 'widget'
-      ? 'A widget has no records to ask about. Ask about an app or a card: /ask expenses …'
-      : target.kind === 'none' ? target.message : 'Ask about an app or a card: /ask expenses …';
+      ? 'A widget has no records to ask about. Choose an app or a card from the Library to ask about.'
+      : target.kind === 'none' ? target.message : 'Choose an app or a card from the Library to ask about.';
     return { scope: null, question: '', message };
   }
   return { scope: null, question: text.trim() };
@@ -276,7 +276,7 @@ export async function ask(question: string, explicit: Scope | null = null): Prom
     return;
   }
   if (!current.works.length) {
-    entry(document_, 'note', 'Put an app on the canvas first (the Library, L), then ask about it.');
+    entry(document_, 'note', 'Create an app from the bar or place one from the Library (L), then ask about it.');
     return;
   }
   busy = true;
@@ -410,7 +410,7 @@ export function recordSet(answer: Answer): { app: string; work: string; collecti
   const receipts = answer.receipts.filter((r) => typeof r.record_id === 'string');
   if (!receipts.length) return 'This answer used no records, so there is nothing to make a card from.';
   const works = new Set(receipts.map((r) => `${String(r.app_id)}/${String(r.work_id)}/${String(r.collection_id)}`));
-  if (works.size > 1) return 'This answer’s records come from more than one list. Ask about one card (/ask expenses.ledger …), then make it a card.';
+  if (works.size > 1) return 'This answer’s records come from more than one list. Ask about one card using its address, then make it a card.';
   if (receipts.length > MAX_RECORD_SET) return `A card holds at most ${MAX_RECORD_SET} records of an answer.`;
   const [first] = receipts;
   const [app, work, collection] = [String(first?.app_id ?? ''), String(first?.work_id ?? ''), String(first?.collection_id ?? '')];
@@ -504,7 +504,7 @@ export function startAsk(document_: Document): void {
   });
   chip = el(document_, 'p', { class: 'cv-ask-chip', role: 'status' }, chipText, chipRemove);
   thread = el(document_, 'ol', { class: 'cv-ask-thread', 'aria-live': 'polite', 'aria-label': 'Questions and answers' });
-  input = el(document_, 'input', { type: 'text', class: 'cv-ask-input', maxlength: '500', autocomplete: 'off', placeholder: 'Ask about your data: where are the red invoices? (@expenses to scope it)', 'aria-label': 'Your question' });
+  input = el(document_, 'input', { type: 'text', class: 'cv-ask-input', maxlength: '500', autocomplete: 'off', placeholder: 'Ask about your data (use @ followed by an app or card address)', 'aria-label': 'Your question' });
   const form = el(document_, 'form', { class: 'cv-ask-form', autocomplete: 'off' }, input, el(document_, 'button', { type: 'submit' }, 'Ask'));
   form.addEventListener('submit', (event) => {
     event.preventDefault();

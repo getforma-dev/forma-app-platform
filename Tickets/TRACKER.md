@@ -140,3 +140,5 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 132 | [APP-132: Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)](0-backlog/APP-132.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-128 |
 | 133 | [APP-133: Repository and delivery: the release record (release.json, RELEASES.md, beta tags) and the module map](0-backlog/APP-133.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127, APP-130 |
 | 135 | [APP-135: MVP overbuild and hard-code audit: everything that only works because of the seeded library, the demo organization or fixed data](0-backlog/APP-135.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-132 |
+| 136 | [APP-136: Developer guide from setup through beta delivery](0-backlog/APP-136.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126, APP-127, APP-128, APP-130, APP-131, APP-133 |
+| 137 | [APP-137: One private beta ledger across repository worktrees](0-backlog/APP-137.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127 |

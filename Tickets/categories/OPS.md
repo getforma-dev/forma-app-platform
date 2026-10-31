@@ -27,3 +27,5 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 130 | [APP-130: Repository and delivery step C/D: one root Cargo workspace, the builder-cache sweep](../0-backlog/APP-130.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126, APP-127, APP-128 |
 | 131 | [APP-131: Developer workflow step 5: CI green or quarantined (Foundation, Tenant foundation, the APP-013 campaign)](../0-backlog/APP-131.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126 |
 | 133 | [APP-133: Repository and delivery: the release record (release.json, RELEASES.md, beta tags) and the module map](../0-backlog/APP-133.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127, APP-130 |
+| 136 | [APP-136: Developer guide from setup through beta delivery](../0-backlog/APP-136.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126, APP-127, APP-128, APP-130, APP-131, APP-133 |
+| 137 | [APP-137: One private beta ledger across repository worktrees](../0-backlog/APP-137.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127 |

@@ -161,5 +161,5 @@ Strategy: first the small items that harden the live beta or unblock Phase 2 (po
 ## Consequences
 
 - PH01 can reach its gate on November 2 with twenty tickets Done and the deferrals named (APP-079, APP-080, APP-082, APP-083), per QUALITY-GATES.
-- The board grows to 88 tickets, 7 phases and 13 sprints. `docs/planning/MVP-NOV-2-PLAN.md` holds the day-by-day order; `CLAUDE-HANDOFF.md` carries the dated summary.
+- The board grows to 88 tickets, 7 phases and 13 sprints. `docs/planning/MVP-NOV-2-PLAN.md` holds the day-by-day order; [the historical Claude handoff](https://github.com/getforma-dev/forma-app-platform/blob/93df32175794e856f4aa02055dc5d75b0750c7aa/CLAUDE-HANDOFF.md) carries the dated summary.
 - Nothing is weakened in the controlling ADRs. A sentence moved by this record is verbatim in its new owner; a residual deferred by this record is in a ticket with the review file and finding ids; after November 2, the pick-up order in §6 is the plan until the Phase 2 plan supersedes it.

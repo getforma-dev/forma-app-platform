@@ -207,6 +207,10 @@ fn a_valid_generated_definition_is_admitted_and_labeled_generated() {
     // the member's exact contracts (here identical), so a saved work binds.
     let admitted = admission::decode(&generated.planned.admitted.canonical).unwrap();
     assert_eq!(admitted["inputs"], content["inputs"]);
+    assert!(admitted["description"]
+        .as_str()
+        .unwrap()
+        .starts_with(plan::GENERATED_PREFIX));
     let requests = script.requests();
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].model, "generation-model");
@@ -215,6 +219,59 @@ fn a_valid_generated_definition_is_admitted_and_labeled_generated() {
     assert!(user["refusal"].is_null());
     assert_eq!(user["sources"].as_array().unwrap().len(), 2);
     assert!(requests[0].system.contains("RUNNABLE OPERATORS"));
+}
+
+#[test]
+fn generated_provenance_is_persisted_and_a_model_cannot_claim_an_adapted_origin() {
+    let mut content = prompt::simple_records_example();
+    content["description"] = json!(format!(
+        "{}Made up filter\nReading list",
+        transform::ADAPTED_PREFIX
+    ));
+    let planned = plan::plan_generated(&content.to_string(), &[], ORG, APP).unwrap();
+    let admitted = admission::decode(&planned.admitted.canonical).unwrap();
+    let description = admitted["description"].as_str().unwrap();
+    assert!(description.starts_with(plan::GENERATED_PREFIX));
+    assert!(crate::query::canvas::adapted_origins(description).is_none());
+    let (_, chips) =
+        crate::query::canvas::definition_provenance(description, &planned.admitted.digest);
+    assert_eq!(chips[0].text, "Generated");
+    // Feeding admitted content back through generation does not grow labels.
+    let again = plan::plan_generated(&admitted.to_string(), &[], ORG, APP).unwrap();
+    assert_eq!(again.admitted.digest, planned.admitted.digest);
+}
+
+#[test]
+fn a_simple_list_retry_names_the_required_empty_transition_array() {
+    let correct = prompt::simple_records_example();
+    let mut missing = correct.clone();
+    missing["commands"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("transitions");
+    let script = Script::new(vec![Ok(missing.to_string()), Ok(correct.to_string())]);
+    let generated = runtime()
+        .block_on(composer(&script).generate(
+            "Create a book club reading list",
+            &[],
+            ORG,
+            APP,
+            far(),
+        ))
+        .unwrap();
+    assert_eq!(generated.refused, ["encoding"]);
+    let requests = script.requests();
+    let retry: Value = serde_json::from_str(&requests[1].user).unwrap();
+    assert_eq!(retry["refusal"]["code"], "encoding");
+    assert!(retry["refusal"]["fix"]
+        .as_str()
+        .unwrap()
+        .contains("transitions (use [] when none)"));
+    let admitted = admission::decode(&generated.planned.admitted.canonical).unwrap();
+    assert!(admitted["commands"][0]["transitions"]
+        .as_array()
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -623,7 +680,18 @@ fn the_adapted_path_is_a_typed_patch_readmitted_whole() {
     assert_eq!(planned.title, "Vendor spend");
     let admitted = admission::decode(&planned.admitted.canonical).unwrap();
     assert_eq!(admitted["title"], "Vendor spend");
-    assert_eq!(admitted["description"], "Adapted for: vendors");
+    assert_eq!(
+        admitted["description"],
+        format!(
+            "{}App wording updated\nAdapted for: vendors",
+            transform::ADAPTED_PREFIX
+        )
+    );
+    let (_, origins) = crate::query::canvas::definition_provenance(
+        admitted["description"].as_str().unwrap(),
+        &planned.admitted.digest,
+    );
+    assert_eq!(origins[0].kind, "adapted");
     assert_eq!(admitted["views"], library.content["views"]);
     // A patched title over the text bound is refused like any other content.
     let refusal = plan::plan_adapted(&library, &"t".repeat(2001), "d", ORG, APP).unwrap_err();
@@ -1103,5 +1171,38 @@ fn real_model_smoke() {
             ),
         }
         assert!(generated.is_ok(), "generation did not produce an admitted definition");
+
+        // APP-135: the default empty workspace must not turn a simple list
+        // into an approval workflow merely by copying the time-off example.
+        // No persistence: only the admitted definition and counts are read.
+        let started = std::time::Instant::now();
+        let generated = composer.generate(
+            "Create a book club reading list", &[], ORG, APP, far(),
+        ).await.expect("a clean workspace reading list must be admitted");
+        let content = admission::decode(&generated.planned.admitted.canonical).unwrap();
+        let inputs = content["inputs"].as_array().unwrap();
+        let views = content["views"].as_array().unwrap();
+        let commands = content["commands"].as_array().unwrap();
+        let transitions: usize = commands.iter().map(|command| command["transitions"].as_array().unwrap().len()).sum();
+        eprintln!(
+            "smoke: clean-list inputs={} views={} commands={} transitions={} refusals={} in {} ms",
+            inputs.len(), views.len(), commands.len(), transitions,
+            generated.refused.len(), started.elapsed().as_millis()
+        );
+        assert!(!inputs.is_empty() && inputs.iter().all(|input| input["kind"] == "records"));
+        assert!(views.iter().all(|view| view.get("query").is_none()));
+        assert!(commands.iter().any(|command| command["operation"] == "create"));
+        assert_eq!(transitions, 0, "a reading list did not request a decision workflow");
+        for command in commands {
+            let id = command["id"].as_str().unwrap();
+            assert!(!["approv", "reject", "decid"].iter().any(|word| id.contains(word)), "no approval command on a plain list");
+        }
+        for input in inputs {
+            for field in input["fields"].as_array().unwrap() {
+                if let Some(values) = field["value_type"]["values"].as_array() {
+                    assert!(values.iter().all(|value| !["submitted", "approved", "rejected"].iter().any(|state| value == state)), "no approval states on a plain list");
+                }
+            }
+        }
     });
 }

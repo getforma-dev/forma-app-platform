@@ -27,7 +27,7 @@ Run from the main checkout, in this order:
 7. Diego's and Alex's windows: empty canvases (the "What do you need?" page). If Diego's is not empty, Library → Remove on each app.
 8. Finder: `docs/pitch/folder-fixture/` open, `q3_pipeline.csv` ready to drag.
 9. Optional, for the ⏱ shots: ⋯ → **Show timings**, or `/canvas#timing=1` *(not re-run today)*.
-10. Optional fallback for beat 1: in a fourth window on :4010, type the beat 1 sentence once during setup and leave that tab open. **Never reload it** (pitfall 2).
+10. Optional fallback for beat 1: keep a clearly labeled recording of an earlier clean-instance rehearsal ready to play. Capture it **before** the reset in step 2; do not prebuild in another :4010 window, since all those windows share Alex's organization and database and the app would appear on the live canvas. If no recording is ready, skip the fallback and continue to beat 2 when the model is slow.
 11. Optional beat 6 (MCP): **Connect an agent** in Diego's window, create a token, and set up Claude Code as in SCENARIOS.md scenario 6 (`read -rs` so the token never shows) *(not re-run today)*.
 12. Turn on Do Not Disturb, hide the bookmarks bar.
 
@@ -60,7 +60,7 @@ Core shots 1–14: about 3 min 45 s before editing.
 
 | If | Then |
 | --- | --- |
-| Shot 1 takes over 20 s | Switch to the fallback tab from checklist step 10 ("here's one I built before we started"). If generation is refused ("could not be composed"), say so; it is the real model, and nothing is placed on a refusal |
+| Shot 1 takes over 20 s | Play the labeled earlier-rehearsal recording from checklist step 10 ("the model is busy; this recording shows an earlier rehearsal"); if none is ready, continue to beat 2. If generation is refused ("could not be composed"), say so; it is the real model, and nothing is placed on a refusal |
 | Shot 7 takes over 5 s | **Cancel**, and type the rehearsed sentence: *I spent $86 on a client dinner at Nobu last night, Sarah approves my expenses* (confirm card in 945 ms, category meals, note "a client dinner"; rehearsed, APP-098) |
 | Shot 12 is slow | Skip it: shot 10 already showed Ask with receipts |
 | ✨ Make an app wanted | It takes about 20 s plus a 3–4 s summary (measured once). Build it during setup, or show it in the edited video at 2× with the real time on screen |

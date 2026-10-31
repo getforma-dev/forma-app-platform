@@ -15,4 +15,4 @@ Categories describe ownership; sprints describe execution order. A ticket lives 
 | [AI: AI and retrieval](categories/AI.md) | Authorized discovery, bounded generation, explanation and evaluation. | 14 |
 | [SHR: Sharing and handoff](categories/SHR.md) | Separate grants, derived information, revocation and exports. | 5 |
 | [VAL: Validation and demonstrations](categories/VAL.md) | Synthetic fixtures, both app journeys and reproducible release evidence. | 14 |
-| [OPS: Operations and security](categories/OPS.md) | Jobs, release controls, recovery, retention, support and pilot operations. | 23 |
+| [OPS: Operations and security](categories/OPS.md) | Jobs, release controls, recovery, retention, support and pilot operations. | 25 |

@@ -444,6 +444,25 @@ pub fn seeded_work(work: &str) -> bool {
         .contains(work)
 }
 
+/// Known seeded definition bytes: the current catalog and the two original
+/// Phase 1 fixtures. A work id or an organization alone proves no provenance.
+pub fn seeded_definition(digest: &str) -> bool {
+    static BASELINE: OnceLock<BTreeSet<String>> = OnceLock::new();
+    sidecar().contains_key(digest)
+        || BASELINE
+            .get_or_init(|| {
+                [
+                    include_str!("../../../contracts/fixtures/impl-2026-10-28.1/northstar.json"),
+                    include_str!("../../../contracts/fixtures/impl-2026-10-28.1/spend-review.json"),
+                ]
+                .iter()
+                .filter_map(|text| serde_json::from_str::<Value>(text).ok())
+                .filter_map(|bundle| bundle["definition"]["digest"].as_str().map(str::to_owned))
+                .collect()
+            })
+            .contains(digest)
+}
+
 /// Every library slug and alias (reserved: a saved work cannot take one).
 pub fn library_slugs() -> std::collections::BTreeSet<String> {
     sidecar()

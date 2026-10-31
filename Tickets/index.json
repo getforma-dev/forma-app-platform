@@ -284,9 +284,11 @@
         "APP-131",
         "APP-132",
         "APP-133",
-        "APP-135"
+        "APP-135",
+        "APP-136",
+        "APP-137"
       ],
-      "ticket_count": 44,
+      "ticket_count": 46,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -4233,13 +4235,75 @@
       "Requirements": "C01, C11",
       "Depends on": "APP-132",
       "External dependencies": "None",
-      "Assignee": "Claude \u2014 GenUI owner",
-      "Branch / PR": "Not started",
+      "Assignee": "Codex \u2014 GenUI owner (continuing Claude's handoff)",
+      "Branch / PR": "`pivot/pitch-mvp`; audit remains open pending the full clean-profile walk and founder disposition",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-132"
+      ]
+    },
+    {
+      "id": "APP-136",
+      "title": "Developer guide from setup through beta delivery",
+      "path": "0-backlog/APP-136.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "136",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-012](../../docs/architecture/ADR-012-DEVELOPER-WORKFLOW.md) step 6 and [ADR-013](../../docs/architecture/ADR-013-REPOSITORY-AND-DELIVERY.md) step F; continuation of the developer-document request",
+      "Requirements": "C15, SR9",
+      "Depends on": "APP-125, APP-126, APP-127, APP-128, APP-130, APP-131, APP-133",
+      "External dependencies": "None",
+      "Assignee": "Codex \u2014 developer guide lane",
+      "Branch / PR": "`pivot/pitch-mvp` continuation; documentation prepared for integration",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 implementation recorded below; status follows unfinished predecessor acceptance",
+      "Unblock evidence": "Not applicable; predecessor acceptance and integration remain separate from the documentation checks.",
+      "dependencies": [
+        "APP-125",
+        "APP-126",
+        "APP-127",
+        "APP-128",
+        "APP-130",
+        "APP-131",
+        "APP-133"
+      ]
+    },
+    {
+      "id": "APP-137",
+      "title": "One private beta ledger across repository worktrees",
+      "path": "0-backlog/APP-137.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "137",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-013](../../docs/architecture/ADR-013-REPOSITORY-AND-DELIVERY.md) D13.6 and the remaining local implementation of migration step B.",
+      "Requirements": "C15, SR9",
+      "Depends on": "APP-127",
+      "External dependencies": "None",
+      "Assignee": "Codex \u2014 GenUI continuation",
+      "Branch / PR": "`pivot/pitch-mvp`",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-127"
       ]
     }
   ]

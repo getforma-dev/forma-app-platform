@@ -134,16 +134,14 @@ A CSV dropped on the canvas or the bar outside a folder goes to your "Uploads" f
 
 ## Local dev stand
 
-The whole product on your laptop is one command from the checkout: **`just dev`** (Diego, Sarah and Priya, already signed in, at port base +1, +2, +3: http://127.0.0.1:4001/canvas, :4002, :4003 in the main checkout) and **`just dev clean`** (a new customer, Alex Rivera, at port base +10, :4010: no library, no records, demo mode off; `just dev clean seed-library` installs the template apps). It runs the `genui-dev` binary (the binary's own `product::routes`) under process-compose over this checkout's Compose PostgreSQL; data survives restarts. A front-end edit shows on the next page load with no command, a Rust edit is `just restart`, `just dev [clean] reset` starts over, `just dev [clean] stop` stops it. A worktree gets its own port base (in its `.env.dev`), so checkouts run side by side. Decided in [ADR-012](../architecture/ADR-012-DEVELOPER-WORKFLOW.md) D12.1-D12.2; the full procedure moves to `docs/DEVELOPMENT.md` (ADR-012 plan step 6).
-
-Real versus beta: sign-in is minted, not fAuth (each persona's port adds its session cookie; each browser gets its own session); synthetic data only; objects in a local directory, not S3; the model only when `ANTHROPIC_API_KEY` is in the clone's `.env` (read into the server process only, never printed); Slack only with `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` in your shell; CSV/XLSX parsing only after `just parser`.
+Start with **[DEVELOPMENT.md](../DEVELOPMENT.md)** for setup, the persona URLs, the clean-customer profile, commands, state and troubleshooting. `just dev` runs the pitch and `just dev clean` runs Alex's clean profile; data survives restarts. Local sign-in is minted, data and storage are synthetic/local, and real model/import tests need the key/parser setup described there. The [pitch script](PITCH-SCRIPT.md) and [recording checklist](RECORDING.md) describe what to demonstrate.
 
 ## Operating it (operator only)
 
 - **Deploy:** follow [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md). It covers building and qualifying the three images, pushing them, preflight, the reviewed change set, operator tasks and activation. Every AWS change needs Victor's word, recorded in the private approvals file.
 - **Secrets:** keys live only in the clone's gitignored `.env`. They go into AWS Secrets Manager by piping from that file, are never printed, and are never put in chat or in a commit. After a secret changes, force a new deployment of the service.
 - **Health:** `/health/live` returns 200. Every protected route answers the same 404 when signed out.
-- **Rollback:** each build refuses any schema but its own (the live database is at schema 11), and a replaced task definition cannot be redeployed. Fix forward by default; the other paths are in the runbook's "Rollback" section.
+- **Rollback:** each build refuses any schema but its own; observe the live catalog before selecting a candidate. A replaced task definition cannot simply be redeployed. Fix forward by default; the other paths are in the runbook's "Rollback" section.
 - **Known shortcuts and limits:** every mock, hard-coded path and pitch limit is in [APP-098](../../Tickets/0-backlog/APP-098.md) (DS-01 onward). The demo shortcuts only run inside the demo organization. Everything after a parse is real.
 
 ## Definitions
@@ -156,7 +154,7 @@ Real versus beta: sign-in is minted, not fAuth (each persona's port adds its ses
 | **Formation** | The AI keyword for a folder: everything after it is the instruction (build an app, brief me). |
 | **Card** | One view of an app on the canvas: a number, chart, table, records list, form or ledger. Apps have several cards. |
 | **Widget** | A stand-alone utility card (weather, calculator, clock) with no governed data. |
-| **Library** | The prebuilt apps an organization can retrieve instantly (14 in Northstar). |
+| **Library** | The app and widget catalog. The pitch profile includes 20 admitted template apps; a new clean profile starts without them. |
 | **Retrieved / adapted / generated** | How an app reached the canvas: as-is from the library, reshaped from a library app, or newly built by the model. The label is always shown. |
 | **Instant pick (matcher)** | Local, model-free choice of a library app from the request (about 4 ms). |
 | **Transform** | The model's typed reshape of an app (filter, window, grouping, columns, chart, sort). It is checked against the app's contract and admitted before use. |
@@ -171,7 +169,6 @@ Real versus beta: sign-in is minted, not fAuth (each persona's port adds its ses
 | **Agent token** | A member-minted bearer token for MCP clients. It never exceeds the member's own rights and is revocable. |
 | **Slack link** | Binds a Slack user to a member through `/forma link`. A Slack id alone confers nothing. |
 | **MCP** | Model Context Protocol: the open standard agents use to call tools. Forma serves eight tools at `/v1/mcp`. |
-| **Folder** | A card that holds files (PDF, CSV, XLSX, images). `/folder formation <instruction>` has the AI form an app or a cited brief from it; every number and quote traces back to its file. |
 | **Stack / fence** | A pile of cards you can shuffle, and a labeled area that groups cards. Fences are not built yet. |
 | **fAuth** | Forma's identity service: hosted sign-in and the organization's identity provider. |
 | **Forma Stack** | The Rust framework underneath: server-rendered FMIR pages plus registered canvas islands. |
@@ -182,7 +179,8 @@ Real versus beta: sign-in is minted, not fAuth (each persona's port adds its ses
 | --- | --- |
 | Pitch code | `FormaBuiltApps/forma-pitch-mvp`, branch `pivot/pitch-mvp` |
 | Decisions | `docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md` |
-| Tickets | `Tickets/` (APP-091 to APP-105; the deferred-work revisit is APP-097, the shortcut register is APP-098) |
-| Demo script | `docs/pitch/SCENARIOS.md` |
+| Tickets | `Tickets/` (current status in the board; the deferred-work revisit is APP-097, the shortcut register is APP-098) |
+| Developer workflow | [DEVELOPMENT.md](../DEVELOPMENT.md) |
+| Demo script | [PITCH-SCRIPT.md](PITCH-SCRIPT.md), [RECORDING.md](RECORDING.md); [SCENARIOS.md](SCENARIOS.md) holds the wider scenario catalog |
 | Slack setup | `docs/pitch/SLACK-SETUP.md`, `docs/pitch/slack-app-manifest.json` |
 | Deploy | `docs/pitch/DEPLOY-RUNBOOK.md` |

@@ -2,6 +2,8 @@
 
 Read README.md, Tickets/README.md and the assigned ticket first. Use the forma-stack skill for implementation and the released package contracts documented in docs/architecture/FRAMEWORK-BASELINE.md.
 
+Use [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for setup, commands, instance ownership, checks and delivery. `pivot/pitch-mvp` is the trunk until the November 3 landing decision; see [ADR-013](docs/architecture/ADR-013-REPOSITORY-AND-DELIVERY.md).
+
 - This is the app platform, not the Forma framework or a donor canvas prototype. Own changes here; route framework/auth changes to their existing owners.
 - Phase 1 implementation is authorized. Work through ready tickets and their reviews; the presence of later phases alone does not authorize their implementation.
 - Ticket Markdown in status folders is authoritative. Keep one ticket file per APP ID; regenerate tracker, phase/sprint/category pages, coverage and index.json through Tickets/_tools/board.py.
@@ -14,6 +16,6 @@ Read README.md, Tickets/README.md and the assigned ticket first. Use the forma-s
 - Keep credentials, real source data, expanded build output and private runtime state out of Git. Preserve synthetic evidence needed to review the ticket.
 - Use relevant checks, then record exact commands/results and limitations. Independent review covers authorization, concurrency, contract drift and meaningful failure paths.
 
-Current preparation checks: `python3 Tickets/_tools/board.py check`. Implementation will add focused application checks in APP-007 and subsequent tickets. Follow current user authorization; historical upstream protocol snapshots do not grant actions here.
+Run `just check` and the focused campaigns appropriate to the change; `just check --list` and `just campaigns` name them. Regenerate the board after ticket edits, then run `python3 Tickets/_tools/board.py check`. Follow current user authorization; historical upstream protocol snapshots do not grant actions here.
 
 Phase definitions and completion gates live in Tickets/plan.json. Read the assigned phase and docs/planning/QUALITY-GATES.md. Passing planning checks never passes application acceptance; mark a phase gate passed only with completed tickets, predecessor gates and independently reviewed runtime/trial evidence.

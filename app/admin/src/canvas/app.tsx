@@ -341,8 +341,8 @@ function Canvas(props: CanvasProps) {
           <h1 id="cv-empty-title">What do you need?</h1>
           <p class="cv-empty-copy">Type / and a verb to change the canvas, / and an app’s name to tell that app something, or just a sentence.</p>
           <div class="cv-suggestions" aria-label="Suggestions">
-            <button type="button" data-intent="/expenses"><code>/expenses</code></button>
-            <button type="button" data-intent="Review expenses over $200">Review expenses over $200</button>
+            <button type="button" data-intent="/forma Create a book club reading list">Create a reading list</button>
+            <button type="button" data-intent="/folder new My project">Create a project folder</button>
             <button type="button" data-intent="/widget weather"><code>/widget weather</code></button>
           </div>
           <div class="cv-empty-choices" aria-label="Ways to start">
@@ -704,7 +704,7 @@ function Canvas(props: CanvasProps) {
           <div class="cv-lib-search">
             <input id="cv-lib-search" type="search" placeholder="Search by name, /address or number, e.g. 3.2" aria-label="Search the library" autocomplete="off" />
           </div>
-          <p class="cv-lib-hint">Add brings an app, a card or a widget onto the canvas; Remove takes it off. Type <code>/</code> and an app’s name to tell that app something, e.g. <code>/expenses</code>.</p>
+          <p class="cv-lib-hint">Add brings an app, a card or a widget onto the canvas; Remove takes it off. Use an app’s address shown below to tell that app something.</p>
           <div class="cv-lib-list" data-lib-list>
             {createList(() => props.library, category => category.id, category => (
               <section class="cv-lib-cat" data-category={category.id} aria-label={category.title}>

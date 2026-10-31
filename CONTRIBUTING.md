@@ -1,6 +1,6 @@
 # Contributing
 
-This repository prepares the Forma company app platform from its delivered design. Phase 1 implementation has started with APP-001’s isolated baseline harness. **No integrated application runtime is claimed yet.** Select work from the current board after its dependencies have completed; keep upstream integration gates explicit.
+This repository implements the Forma company app platform from its delivered design. The current pitch trunk is `pivot/pitch-mvp`; [DEVELOPMENT.md](docs/DEVELOPMENT.md) is the entry point for setup, running, checks and delivery. The November 2 pivot and November 3 landing decision are recorded in ADR-011 and ADR-013. Select work from the current board and current user direction; keep unfinished acceptance and upstream integration gates explicit.
 
 Read [Tickets](Tickets/README.md), the [source guide](docs/planning/SOURCE-GUIDE.md) and [existing work](docs/planning/EXISTING-WORK.md) before choosing work. The platform's architecture is typed `AppDefinition` interpreted by trusted first-party renderers, immutable Parquet/DuckDB source revisions, and PostgreSQL for work, records, publication and audit. Northstar and Spend Review prove the same platform, not separate product codebases.
 
@@ -18,7 +18,7 @@ Use the requested published Forma 3.2 baseline when the foundation ticket create
 
 ## Verify what changed
 
-The available preparation checks are:
+Run `just check` and the focused campaigns for the changed behavior; `just check --list` and `just campaigns` name them. The developer guide explains the separate local, CI and deployment checks. For ticket and planning changes:
 
 ```sh
 python3 Tickets/_tools/board.py render
@@ -26,7 +26,7 @@ python3 Tickets/_tools/board.py check
 python3 Tickets/_tools/board.py next
 ```
 
-These validate the board, local links and frozen design hashes; they do not build or test an application. The foundation work will establish runtime build, test and development commands. Until then, do not invent successful app checks.
+These board commands validate the board, local links and frozen design hashes; they do not build or test an application. Do not report a runtime or deployment check as passing unless it actually ran against the stated source.
 
 For implementation, run checks appropriate to the changed behavior and all ticket-required gates. Add focused regression coverage for defects and meaningful acceptance checks for new behavior. Record failures and limitations honestly. Independent review must assess the actual change before completion. Keep secrets, credentials, personal data, dependency folders and disposable build artifacts out of commits; retain sanitized evidence needed to understand results.
 

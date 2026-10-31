@@ -1,6 +1,6 @@
 # ADR-005 — Phase 1 finish-line sequencing
 
-Date: 2026-10-29. Owner: GenUI (Claude session succeeding Codex per [CLAUDE-HANDOFF](../../CLAUDE-HANDOFF.md)). Status: accepted implementation direction, recorded for Victor's veto; no ticket acceptance, hosted result or phase pass is claimed by this record. [ADR-003](ADR-003-PUBLIC-BETA-ACCESS.md) and [ADR-004](ADR-004-TENANT-TRANSACTIONS.md) remain controlling for behavior; this decision changes only how the remaining PH01 work is cut and ordered.
+Date: 2026-10-29. Owner: GenUI (Claude session succeeding Codex per [CLAUDE-HANDOFF](https://github.com/getforma-dev/forma-app-platform/blob/93df32175794e856f4aa02055dc5d75b0750c7aa/CLAUDE-HANDOFF.md)). Status: accepted implementation direction, recorded for Victor's veto; no ticket acceptance, hosted result or phase pass is claimed by this record. [ADR-003](ADR-003-PUBLIC-BETA-ACCESS.md) and [ADR-004](ADR-004-TENANT-TRANSACTIONS.md) remain controlling for behavior; this decision changes only how the remaining PH01 work is cut and ordered.
 
 ## Problem, with evidence
 

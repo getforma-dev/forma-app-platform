@@ -442,6 +442,14 @@ async fn campaign() {
         .await
         .unwrap();
     assert_eq!(outline.title, "Traffic review");
+    let (_, origins) = crate::query::canvas::definition_provenance(
+        &outline.description,
+        &outline.definition_digest,
+    );
+    assert_eq!(
+        origins[0].kind, "adapted",
+        "the stored title-only adaptation keeps its origin on reload"
+    );
     assert_eq!(
         outline.views.len(),
         2,
@@ -449,7 +457,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "a medium-confidence router choice becomes an adapted definition (title and description patched, re-admitted whole), owner-published on the member's app and saved, labeled adapted",
+        "a medium-confidence router choice becomes an adapted definition (title and description patched, re-admitted whole), owner-published on the member's app and saved, still labeled adapted from the persisted definition on reload",
     );
 
     // --- APP-132: a records-only app (no source input) is generated and saved ---
@@ -497,9 +505,19 @@ async fn campaign() {
         outline.views.is_empty(),
         "no data view: its records card shows the records"
     );
+    // APP-135: reconstruct the canvas provenance from a fresh database
+    // read, not the transient composition response. This also guards the
+    // admitted-description marker surviving draft/publish/save/reload.
+    let (label, origins) = crate::query::canvas::definition_provenance(
+        &outline.description,
+        &outline.definition_digest,
+    );
+    assert_eq!(origins[0].kind, "generated");
+    assert!(label.starts_with("Generated"));
+    assert!(origins.iter().all(|origin| origin.kind != "seeded"));
     check(
         &mut checks,
-        "APP-132: a generated records-only definition (records input, filing create with initial, decision command, form and note; no source input and no data view) is admitted, drafted, owner-published and saved with one records binding and its record collection, labeled generated, with no source dependency, app, permission or grant row",
+        "APP-132/APP-135: a generated records-only definition (records input, filing create with initial, decision command, form and note; no source input and no data view) is admitted, drafted, owner-published and saved with one records binding and its record collection, still labeled generated from the persisted definition on reload, with no source dependency, app, permission or grant row",
     );
 
     // --- A model failure writes nothing ---

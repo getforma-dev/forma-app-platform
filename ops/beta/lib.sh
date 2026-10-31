@@ -1,9 +1,10 @@
 # shellcheck shell=bash
 # Shared by ops/beta/*.sh (ADR-012 D12.6). Sourced, never run.
 #
-# Paths come from this checkout, never from another clone or a scratchpad:
+# Code and environments come from this checkout; operator state is shared by
+# its worktrees (ADR-013 D13.6), never borrowed from another clone:
 #   REPO    the checkout these scripts live in
-#   PRIV    private operator state, default <checkout>/.cache/ops/beta (0700,
+#   PRIV    private operator state, default <main checkout>/.cache/ops/beta (0700,
 #           gitignored); GENUI_OPS_PRIV overrides it
 #   OPVENV  the operator venv `just setup` makes (app/operator/.venv)
 # The stack's identifiers (region, stack, registry, cluster, ...) are read from
@@ -12,7 +13,18 @@
 
 _OPS_REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 REPO=$_OPS_REPO
-PRIV=${GENUI_OPS_PRIV:-$REPO/.cache/ops/beta}
+if [[ -n "${GENUI_OPS_PRIV:-}" ]]; then
+  _OPS_PRIV=$GENUI_OPS_PRIV
+else
+  # Resolve through the common Git directory. The first worktree is the main
+  # checkout; --porcelain retains spaces in its path and is not locale-dependent.
+  _OPS_COMMON_DIR=$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir) || return 1
+  _OPS_MAIN=$(git --git-dir="$_OPS_COMMON_DIR" worktree list --porcelain | sed -n '1s/^worktree //p') || return 1
+  [[ -n "$_OPS_MAIN" && -d "$_OPS_MAIN" ]] || { echo "error: cannot resolve the main checkout for operator state" >&2; return 1; }
+  [[ -e "$_OPS_MAIN/.git" ]] || { echo "error: main checkout unavailable; set GENUI_OPS_PRIV explicitly" >&2; return 1; }
+  _OPS_PRIV=$_OPS_MAIN/.cache/ops/beta
+fi
+PRIV=$_OPS_PRIV
 OPVENV=$REPO/app/operator/.venv
 PY=$REPO/app/runtime/.venv/bin/python
 DRY_RUN=${DRY_RUN:-0}
@@ -33,10 +45,14 @@ load_env() {
   [[ -f "$PRIV/env.sh" ]] || die "missing $PRIV/env.sh (copy ops/beta/env.example.sh and fill it in privately)"
   # shellcheck disable=SC1091
   source "$PRIV/env.sh"
-  # Never let a private env file point the scripts at another checkout.
+  # Keep the caller's chosen shared state and this checkout's code/venvs.
   REPO=$_OPS_REPO
-  PRIV=${GENUI_OPS_PRIV:-$REPO/.cache/ops/beta}
+  PRIV=$_OPS_PRIV
+  # Nested helpers source lib.sh again; stale private config must not redirect
+  # their inherited override to another ledger.
+  export GENUI_OPS_PRIV=$_OPS_PRIV
   OPVENV=$REPO/app/operator/.venv
+  PY=$REPO/app/runtime/.venv/bin/python
   unset CAND CANDIDATE WINDOW WINDOW2
   export AWS_REGION
 }

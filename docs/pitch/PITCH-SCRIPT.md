@@ -99,7 +99,7 @@ This is a company that signed up a minute ago. No apps, no templates, no data. A
 
 *Click* **Make a card**, *then* **Make card** *in the folder's confirm.* A chart, "Amount by close date", with a **Verified** receipt, plus an AI summary whose numbers come from receipts. It says "Built from folder: Q3 pipeline". Data, then a card, then an app: no new concepts.
 
-*Fallback if the model is slow:* keep talking over "Composing your app…" up to 20 s. Past that, say "the model is busy; here's one I built before we started" and switch to a fourth window where you built the same sentence during setup (never reloaded: pitfall 2). Make a card itself takes under half a second; only its summary waits on the model (about 4 s). **✨ Make an app** is the full build from the file (about 20 s plus the summary, measured once): show it only if you have time, or build it during setup.
+*Fallback if the model is slow:* keep talking over "Composing your app…" up to 20 s. Past that, say "the model is busy; this recording shows an earlier rehearsal" and play the clearly labeled clip prepared before the clean reset (RECORDING.md, checklist step 10). If no clip is ready, acknowledge the wait and continue to beat 2. A second :4010 window is the same customer and database: prebuilding there would populate the supposedly empty workspace. Make a card itself takes under half a second; only its summary waits on the model (about 4 s). **✨ Make an app** is the full build from the file (about 20 s plus the summary, measured once): show it only if you have time, or include it in the earlier rehearsal recording.
 
 ### Beat 2: Forma picks from the library (20 s, Diego on :4001)
 
@@ -245,7 +245,7 @@ Small team software is about to be written by AI whether we like it or not. Form
 Retool apps are code that someone trusts. In Forma, the AI produces typed definitions that our platform checks and renders with its own components. Nothing generated ever runs as code. That's the difference between "AI helped write it" and "AI can't break it."
 
 **"What stops Anthropic or OpenAI from building this?"**
-They build the agents, and we're where the agents' work becomes governed. Forma works with every vendor through MCP: Claude and OpenAI agents act on the same audited records, under the member's own permissions (built and tested in APP-099).
+They build the agents, and we're where the agents' work becomes governed. Forma exposes the same audited records through MCP under the member's own permissions. APP-099 includes a successful Claude Code rehearsal; the OpenAI client is prepared, but its live rehearsal still needs an API key. Cross-vendor verification remains open.
 
 **"Why build your own framework?"**
 It started as a security need for fAuth's sign-in pages. It gives us server rendering with no JavaScript runtime, no `eval`, and a strict security policy by default. That foundation is what makes "AI output is data" enforceable end to end. We don't claim it's the fastest framework.

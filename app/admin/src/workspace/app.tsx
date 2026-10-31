@@ -29,7 +29,7 @@ function Workspace(props: WorkspaceProps) {
             <li>
               <a href={item.href}>{item.title}</a>
               <a class="canvas-link" href={item.canvas}>Open on canvas</a>
-              <p class="label">Seeded definition, retrieved from the library. Sources seeded by the operator.</p>
+              <p class="label">Saved work.</p>
               {createShow(() => item.hasRecords, () => (
                 <ul>
                   {createList(() => item.records, record => record.id, record => (

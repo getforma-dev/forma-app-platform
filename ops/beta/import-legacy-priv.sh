@@ -5,7 +5,7 @@
 #
 #   import-legacy-priv.sh <old private dir> [--dry-run]
 #
-# Result, all under $PRIV (<checkout>/.cache/ops/beta, gitignored), directories
+# Result, all under $PRIV (<main checkout>/.cache/ops/beta, gitignored), directories
 # 0700 and files 0600:
 #   env.sh                    the old env.sh without REPO, CAND, PRIV, OPVENV
 #                             (lib.sh derives those from the checkout)
@@ -44,7 +44,7 @@ if (( dry )); then echo "dry run: nothing copied"; exit 0; fi
 
 umask 077
 mkdir -p "$history"
-chmod 700 "$(dirname "$REPO/.cache/ops")" "$REPO/.cache/ops" "$PRIV" "$PRIV/windows" 2>/dev/null || true
+chmod 700 "$PRIV" "$PRIV/windows"
 rsync -a --exclude '/opvenv/' --exclude '/budget-ledger.json.lock' "$old/" "$history/"
 for f in approvals.md budget-ledger.json display-names.json signin-aliases.json; do cp "$old/$f" "$PRIV/$f"; done
 grep -vE '^[[:space:]]*(export[[:space:]]+)?(REPO|CAND|PRIV|OPVENV)=' "$old/env.sh" > "$PRIV/env.sh" || true

@@ -341,6 +341,44 @@ fn the_receipt_line_and_the_top_bar_identity() {
 }
 
 #[test]
+fn saved_definitions_keep_known_origins_without_guessing_seeded_provenance() {
+    let catalog = crate::storage::library_sidecar().unwrap();
+    let digest = catalog[0]["definition_digest"].as_str().unwrap();
+    assert_eq!(
+        definition_provenance("A library app", digest),
+        (SEEDED_LABEL.into(), seeded_origins())
+    );
+    for baseline in [
+        include_str!("../../../contracts/fixtures/impl-2026-10-28.1/northstar.json"),
+        include_str!("../../../contracts/fixtures/impl-2026-10-28.1/spend-review.json"),
+    ] {
+        let definition: serde_json::Value = serde_json::from_str(baseline).unwrap();
+        let digest = definition["definition"]["digest"].as_str().unwrap();
+        assert_eq!(
+            definition_provenance("Phase 1 fixture", digest).1,
+            seeded_origins()
+        );
+    }
+    let (_, generated) = definition_provenance(
+        &format!("{}A reading list", crate::composer::plan::GENERATED_PREFIX),
+        "sha256:new-definition",
+    );
+    assert_eq!(generated[0].kind, "generated");
+    let (_, adapted) = definition_provenance(
+        &format!(
+            "{}Amount > $200",
+            crate::composer::transform::ADAPTED_PREFIX
+        ),
+        "sha256:adapted-definition",
+    );
+    assert_eq!(adapted[0].kind, "adapted");
+    let (label, old) =
+        definition_provenance("An old generated or team-authored app", "sha256:unknown");
+    assert_eq!(old[0].text, "Saved definition");
+    assert!(label.contains("not recorded"));
+}
+
+#[test]
 fn the_summary_counts_apps_and_cards() {
     let group = |cards: usize, forms: usize| GroupProps {
         cards: vec![CanvasCardProps::default(); cards],

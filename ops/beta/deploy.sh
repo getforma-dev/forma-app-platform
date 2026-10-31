@@ -49,6 +49,7 @@
 set -euo pipefail
 # shellcheck source=ops/beta/lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+printf 'Operator state: %s\n' "$PRIV" >&2
 
 usage() { sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'; }
 
