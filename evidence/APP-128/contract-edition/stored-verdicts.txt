@@ -1,0 +1,8 @@
+Stored bundle: contracts/fixtures/stored/expense-claims-d70710d3.json (446e5485a97b1a261b4c5ca6ee6836aee99f43e14140e61f3b41a3dfc97bd059), definition sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de
+validate.py of edition impl-2026-10-29.3 (46ab8e9):
+  default: valid
+validate.py of be9c04a (pitch head before this edition):
+  default: REFUSED: create writing a governed enum field requires initial
+validate.py of edition impl-2026-10-31.4 (this branch):
+  default: valid
+  new_content=True: REFUSED: create writing a governed enum field requires initial

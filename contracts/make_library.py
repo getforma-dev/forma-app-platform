@@ -1020,7 +1020,7 @@ def build():
         records_spec = entry[6] if len(entry) > 6 else None
         contract = sources[source][0]
         b = bundle(index, library_id, title, purpose, contract, views, revisions[source], records_spec)
-        validate_bundle(b)
+        validate_bundle(b, new_content=True)  # new content: edition impl-2026-10-31.4's authoring rules apply
         text = json.dumps(b, ensure_ascii=False, indent=2) + "\n"
         files[library_id + ".json"] = text.encode("utf-8")
         entry = catalog_entry(library_id, title, purpose, route, b, source + ".csv")

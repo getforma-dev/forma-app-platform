@@ -276,9 +276,10 @@
         "APP-123",
         "APP-125",
         "APP-126",
-        "APP-127"
+        "APP-127",
+        "APP-128"
       ],
-      "ticket_count": 36,
+      "ticket_count": 37,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -3999,6 +4000,35 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-126"
+      ]
+    },
+    {
+      "id": "APP-128",
+      "title": "Contract edition impl-2026-10-31.4: lock what the pitch ships (APP-107 amendment, authoring rules for new content, library)",
+      "path": "0-backlog/APP-128.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "FND",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "128",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-002](../../docs/architecture/ADR-002-CONTRACT-EDITION.md): future changes create a new edition. Victor, 2026-10-31: \"Approve new edition\", then \"Ok option A note the trade off and document gaps to revisit if needed\". Contract section \"Edition impl-2026-10-31.4\" in [contracts/README.md](../../contracts/README.md); evidence in [evidence/APP-128/contract-edition](../../evidence/APP-128/contract-edition/README.md).",
+      "Requirements": "C16",
+      "Depends on": "APP-107, APP-113",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
+      "Branch / PR": "`pivot/contract-edition` (built; not merged into `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-107",
+        "APP-113"
       ]
     }
   ]

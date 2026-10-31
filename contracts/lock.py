@@ -9,10 +9,20 @@ LOCK = ROOT / "contracts/implementation-lock.json"
 SOURCE = "design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md"
 DEMO_LOCK = "design/forma-northstar-demo/platform-contract-lock.json"
 SOURCE_SHA = "f209ccb05aa895080c6fd424fe979d65f276959536ee7d57b371428e1d049fd5"
-EDITION = "impl-2026-10-29.3"
+EDITION = "impl-2026-10-31.4"
 # Each prior edition's lock file and the fixture identities it locked. Its fixtures are retained
 # byte-identically under contracts/fixtures/<edition>/ and must keep these identities (ADR-002).
 RETAINED = {
+    "impl-2026-10-29.3": {
+        "lock_sha256": "0e3024b1054b4e065e75e1308aa583f2ab6aec28ec95d536cc379061fc989a50",
+        "artifacts": {
+            "contracts/fixtures/impl-2026-10-29.3/canonical-vectors.json": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
+            "contracts/fixtures/impl-2026-10-29.3/command-recovery.json": "b2539b15b32c7086576bd42aed824d823e5fa4c8ed2f40ed57637cdf79d14ecf",
+            "contracts/fixtures/impl-2026-10-29.3/negative-vectors.json": "315a9d32e91dbeaf21c0ad3ec6f8e882315e46ef23b7db4c3c47f4b161ae1cbc",
+            "contracts/fixtures/impl-2026-10-29.3/northstar.json": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
+            "contracts/fixtures/impl-2026-10-29.3/spend-review.json": "186162da87532f368ed3c74faafc46c04780cc7331c095dc92f729bead0f0851",
+        },
+    },
     "impl-2026-10-29.2": {
         "lock_sha256": "c1c1c80d7e327c53e2558da37befb97c9dbf6900bed56225e17518f79d952923",
         "artifacts": {
@@ -64,4 +74,4 @@ if __name__ == "__main__":
     else:
         assert json.loads(LOCK.read_text()) == value, "Contract lock stale or artifact drifted; review changes before regenerating"
         print(f"Contract edition {EDITION} lock matches {len(value['artifacts'])} artifacts, "
-              f"{sum(len(e['artifacts']) for e in RETAINED.values())} retained edition-one artifacts and both frozen source identities")
+              f"{sum(len(e['artifacts']) for e in RETAINED.values())} artifacts of {len(RETAINED)} retained editions and both frozen source identities")

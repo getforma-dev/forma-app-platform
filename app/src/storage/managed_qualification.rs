@@ -118,7 +118,7 @@ const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "seed_validator_sha256",
         "contracts/validate.py",
-        "2b2181f371b525db84f14369863e363ae59ecb02699beba9d2c22453dd2f4ad3",
+        "666f9d3626f2cb7d8998e0287631895785b85c007f99a33059a758ec42aacfaf",
     ),
     // ADR-011 library (APP-094): the catalog pins every library fixture the
     // `seed-library` command places (each entry's `fixture_sha256`).
@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 172] = [
+const SOURCES: [(&str, &[u8]); 178] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -670,6 +670,26 @@ const SOURCES: [(&str, &[u8]); 172] = [
         include_bytes!("../../../contracts/fixtures/impl-2026-10-29.2/spend-review.json"),
     ),
     (
+        "contracts/fixtures/impl-2026-10-29.3/canonical-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/command-recovery.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/command-recovery.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/negative-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/northstar.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/spend-review.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/spend-review.json"),
+    ),
+    (
         "contracts/fixtures/library/catalog.json",
         include_bytes!("../../../contracts/fixtures/library/catalog.json"),
     ),
@@ -684,6 +704,10 @@ const SOURCES: [(&str, &[u8]); 172] = [
     (
         "contracts/fixtures/spend-review.json",
         include_bytes!("../../../contracts/fixtures/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/stored/expense-claims-d70710d3.json",
+        include_bytes!("../../../contracts/fixtures/stored/expense-claims-d70710d3.json"),
     ),
     (
         "contracts/implementation-lock.json",
