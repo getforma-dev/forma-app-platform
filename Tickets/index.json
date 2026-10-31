@@ -4114,7 +4114,7 @@
       "Depends on": "APP-128",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
-      "Branch / PR": "`pivot/clean-generate` (in progress)",
+      "Branch / PR": "`pivot/clean-generate` (built and pushed; not merged into `pivot/pitch-mvp`)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

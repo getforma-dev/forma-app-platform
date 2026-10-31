@@ -371,54 +371,6 @@ async fn campaign() {
         "a generated definition passes admission, is drafted on the member's owned app, owner-published (author and approver the member) and saved bound to the registered source revisions, labeled generated, with definition.drafted, publication.published, work.saved and work.bound events and no new app, permission or grant row",
     );
 
-    // --- APP-132: a records-only app (no source input) is generated and saved ---
-    let before = after;
-    let time_off: Value = serde_json::from_str(include_str!(
-        "../../../contracts/fixtures/library/time-off.json"
-    ))
-    .unwrap();
-    let records_only = prompt::records_example(time_off["definition"]["content"].clone());
-    let (script, composer) = Script::composer(vec![
-        Ok(router_reply("none", "low", "")),
-        Ok(records_only.to_string()),
-    ]);
-    let kept = compose_for(
-        &stores,
-        &composer,
-        &member,
-        "Track the team's time-off requests",
-    )
-    .await
-    .unwrap();
-    assert_eq!(script.calls(), 2);
-    assert_eq!(kept.origin, Origin::Generated);
-    assert_eq!(kept.title, "Time off");
-    let after = footprint(&fixture).await;
-    let mut expected = before.clone();
-    // One revision, input, schema, publication, its input and schema, work,
-    // collection and binding.
-    for count in &mut expected[..=8] {
-        *count += 1;
-    }
-    expected[10] += 4; // definition.drafted, publication.published, work.saved, work.bound
-    assert_eq!(
-        after, expected,
-        "no source dependency, app, permission or grant row"
-    );
-    let outline = stores
-        .data
-        .work_outline(&member, APP, &kept.work)
-        .await
-        .unwrap();
-    assert!(
-        outline.views.is_empty(),
-        "no data view: its records card shows the records"
-    );
-    check(
-        &mut checks,
-        "APP-132: a generated records-only definition (records input, filing create with initial, decision command, form and note; no source input and no data view) is admitted, drafted, owner-published and saved with one records binding and its record collection, labeled generated, with no source dependency, app, permission or grant row",
-    );
-
     // --- Hostile outputs: refused by admission on every attempt, no row ---
     let before = after;
     let content = runnable_northstar();
@@ -498,6 +450,56 @@ async fn campaign() {
     check(
         &mut checks,
         "a medium-confidence router choice becomes an adapted definition (title and description patched, re-admitted whole), owner-published on the member's app and saved, labeled adapted",
+    );
+
+    // --- APP-132: a records-only app (no source input) is generated and saved ---
+    // Last of the publishing steps: it becomes the app's newest publication,
+    // which the library context offers from here on.
+    let before = after;
+    let time_off: Value = serde_json::from_str(include_str!(
+        "../../../contracts/fixtures/library/time-off.json"
+    ))
+    .unwrap();
+    let records_only = prompt::records_example(time_off["definition"]["content"].clone());
+    let (script, composer) = Script::composer(vec![
+        Ok(router_reply("none", "low", "")),
+        Ok(records_only.to_string()),
+    ]);
+    let kept = compose_for(
+        &stores,
+        &composer,
+        &member,
+        "Track the team's time-off requests",
+    )
+    .await
+    .unwrap();
+    assert_eq!(script.calls(), 2);
+    assert_eq!(kept.origin, Origin::Generated);
+    assert_eq!(kept.title, "Time off");
+    let after = footprint(&fixture).await;
+    let mut expected = before.clone();
+    // One revision, input, schema, publication, its input and schema, work,
+    // collection and binding.
+    for count in &mut expected[..=8] {
+        *count += 1;
+    }
+    expected[10] += 4; // definition.drafted, publication.published, work.saved, work.bound
+    assert_eq!(
+        after, expected,
+        "no source dependency, app, permission or grant row"
+    );
+    let outline = stores
+        .data
+        .work_outline(&member, APP, &kept.work)
+        .await
+        .unwrap();
+    assert!(
+        outline.views.is_empty(),
+        "no data view: its records card shows the records"
+    );
+    check(
+        &mut checks,
+        "APP-132: a generated records-only definition (records input, filing create with initial, decision command, form and note; no source input and no data view) is admitted, drafted, owner-published and saved with one records binding and its record collection, labeled generated, with no source dependency, app, permission or grant row",
     );
 
     // --- A model failure writes nothing ---
