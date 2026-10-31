@@ -10,7 +10,8 @@
 #         containers are never touched. Unlabeled genui-native-* containers
 #         (campaign fixtures, stands from before ADR-012 step 4) are listed,
 #         not removed (a running one may be another checkout's).
-# target  app/target, app/admin/dist and .cache/dev of this checkout.
+# target  target/ (the root workspace's, ADR-013 D13.3), a leftover app/target
+#         from before it, app/admin/dist and .cache/dev of this checkout.
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -46,7 +47,7 @@ clean_docker() {
 
 clean_target() {
   local p
-  for p in app/target app/admin/dist .cache/dev; do
+  for p in target app/target app/admin/dist .cache/dev; do
     if [[ -e "$root/$p" ]]; then
       echo "$p: $(du -sh "$root/$p" 2>/dev/null | cut -f1)"
       do_ rm -rf "${root:?}/$p"

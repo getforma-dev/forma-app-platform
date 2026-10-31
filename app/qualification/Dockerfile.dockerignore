@@ -8,8 +8,9 @@
 **
 !app/qualification/Dockerfile
 !app/qualification/Dockerfile.dockerignore
+!Cargo.toml
+!Cargo.lock
 !app/Cargo.toml
-!app/Cargo.lock
 !app/src/lib.rs
 !app/src/config.rs
 !app/src/readiness.rs
@@ -19,7 +20,14 @@
 # ADR-012 D12.1: the dev binary's sources (feature dev-stand, never compiled
 # here) are bound by the managed qualification's source inventory.
 !app/src/dev/
+app/src/dev/**
+!app/src/dev/db.rs
+!app/src/dev/mod.rs
+!app/src/dev/personas.rs
+!app/src/dev/seed.rs
 !app/src/bin/
+app/src/bin/**
+!app/src/bin/genui-dev.rs
 !app/src/origins.rs
 !app/src/pages.rs
 !app/src/product.rs

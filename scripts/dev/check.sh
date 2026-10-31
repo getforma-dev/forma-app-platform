@@ -20,10 +20,11 @@ reports="$root/.cache/reports"
 
 # name|CI source|command (run with bash -c from the repository root)
 steps=(
-  "fmt|tenant-foundation.yml|cd app && cargo fmt --check"
-  "clippy|tenant-foundation.yml|cd app && cargo clippy --locked --all-targets -- -D warnings"
-  "test|tenant-foundation.yml (storage::), DEPLOY-RUNBOOK 0.2|cd app && cargo test --locked --lib"
-  "msrv|tenant-foundation.yml|cd app && cargo +1.85.0 check --locked --lib --tests"
+  "fmt|tenant-foundation.yml|cargo fmt --check -p forma-app-platform"
+  "clippy|tenant-foundation.yml|cargo clippy --locked -p forma-app-platform --all-targets -- -D warnings"
+  "clippy-dev|ADR-012 D12.1 (the dev binary)|cargo clippy --locked -p forma-app-platform --all-targets --features dev-stand -- -D warnings"
+  "test|tenant-foundation.yml (storage::), DEPLOY-RUNBOOK 0.2|cargo test --locked -p forma-app-platform --lib"
+  "msrv|tenant-foundation.yml|cargo +1.85.0 check --locked -p forma-app-platform --lib --tests"
   "catalog|ADR-012 campaign catalog|scripts/dev/campaigns.sh verify"
   "admin|tenant-foundation.yml|npm --prefix app/admin run typecheck && npm --prefix app/admin run build"
   "infra|DEPLOY-RUNBOOK 0.2|cd infra && npm run typecheck && npm test"

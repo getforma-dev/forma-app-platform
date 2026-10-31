@@ -69,7 +69,7 @@ aws ecs wait services-stable --cluster $CLUSTER --services $SERVICE
 
 - [ ] 0.1 `CANDIDATE=$(git -C forma-pitch-mvp rev-parse HEAD)`. The working tree is clean and the commit is pushed. (`just images` and `just deploy new` refuse another commit; `new` warns when it is not pushed.)
 - [ ] 0.2 Checks at the tip: **`just check`** runs all of these (and the MSRV floor, the contracts and `bash -n`); `qualify_tenant_schema.py` is in `just ci`. The toolchain comes from `rust-toolchain.toml`, so no `+1.93.1`:
-  - `cd app && cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked`
+  - `cargo fmt --check -p forma-app-platform && cargo clippy --locked -p forma-app-platform --all-targets -- -D warnings && cargo test --locked -p forma-app-platform` (from the repository root: the root Cargo workspace, ADR-013 D13.3)
   - `cd infra && npm ci && npm run typecheck && npm test`
   - `cd infra/test && python3 -m unittest preflight_test window_requests_test`
   - `python3 -m unittest discover -s app/scripts -p 'test_*.py'`

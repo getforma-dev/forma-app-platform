@@ -11,7 +11,10 @@ FROM rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac
 WORKDIR /source/app
 ENV CARGO_BUILD_JOBS=2
 ARG TARGETARCH
-COPY app/Cargo.toml app/Cargo.lock ./
+# ADR-013 D13.3: the root workspace manifest and lockfile at /source, the
+# members at their repository paths; cargo finds the root walking up.
+COPY Cargo.toml Cargo.lock /source/
+COPY app/Cargo.toml ./Cargo.toml
 COPY app/src ./src
 COPY app/migrations ./migrations
 COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml
@@ -23,7 +26,7 @@ COPY spikes/APP-006/src /source/spikes/APP-006/src
 COPY contracts/fixtures/impl-2026-10-28.1/northstar.json contracts/fixtures/impl-2026-10-28.1/spend-review.json /source/contracts/fixtures/impl-2026-10-28.1/
 COPY contracts/fixtures/library/catalog.json /source/contracts/fixtures/library/catalog.json
 COPY --from=browser /source/admin/dist ./admin/dist
-RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=genui-cargo-target-${TARGETARCH},target=/source/app/target cargo build --release --locked && cp /source/app/target/release/forma-app-platform /source/genui
+RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,id=genui-cargo-target-${TARGETARCH},target=/source/target cargo build --release --locked -p forma-app-platform && cp /source/target/release/forma-app-platform /source/genui
 
 # parser-host and its WASM guest: their own workspace, lockfile and pinned
 # toolchain, never in the app's Cargo graph (ADR-009 D9.1). Paths are fixed so

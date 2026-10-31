@@ -161,7 +161,7 @@ case $cmd in
     ;;
   seed-library)
     running || { echo "not running: start it first (just dev$suffix -d)" >&2; exit 1; }
-    (cd "$root/app" && cargo build --locked --features dev-stand --bin genui-dev)
-    "${CARGO_TARGET_DIR:-$root/app/target}/debug/genui-dev" seed-library
+    (cd "$root" && cargo build --locked -p forma-app-platform --features dev-stand --bin genui-dev)
+    "${CARGO_TARGET_DIR:-$root/target}/debug/genui-dev" seed-library
     ;;
 esac

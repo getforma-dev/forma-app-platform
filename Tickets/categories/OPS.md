@@ -24,3 +24,4 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 126 | [APP-126: Developer workflow step 2: the front door (justfile, campaign catalog, VS Code workspace)](../0-backlog/APP-126.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125 |
 | 127 | [APP-127: Developer workflow step 3: the beta deploy in Git (ops/beta, $PRIV per checkout, --approved gate)](../0-backlog/APP-127.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | M | Backlog | APP-126 |
 | 128 | [APP-128: Developer workflow step 4: the genui-dev binary under process-compose (Compose PostgreSQL, in-process personas, clean profile)](../0-backlog/APP-128.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | M | Backlog | APP-125, APP-126 |
+| 130 | [APP-130: Repository and delivery step C/D: one root Cargo workspace, the builder-cache sweep](../0-backlog/APP-130.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126, APP-127, APP-128 |
