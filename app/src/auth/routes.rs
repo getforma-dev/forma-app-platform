@@ -76,8 +76,10 @@ pub(crate) fn clear_all(response: &mut Response) {
 
 /// A well-formed sign-in handle (no lookup: shape only).
 fn handle_action(handle: &str) -> Option<String> {
-    (handle.len() <= 64 && handle_digest(&super::aliases::canonical(handle)).is_some())
-        .then(|| format!("/signin/{handle}"))
+    (handle.len() <= 64
+        && (handle_digest(&super::aliases::canonical(handle)).is_some()
+            || super::aliases::alias_shaped(handle)))
+    .then(|| format!("/signin/{handle}"))
 }
 
 fn signin(auth: &Auth, action: Option<String>, failed: bool) -> Response {

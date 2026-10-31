@@ -68,6 +68,14 @@ fn aliases() -> &'static HashMap<String, String> {
     })
 }
 
+/// Whether `segment` has an alias's shape. Every alias-shaped segment gets
+/// the sign-in form, mapped or not, exactly as every handle-shaped segment
+/// does (existence is checked only when the form is posted), so a GET never
+/// tells which names exist.
+pub fn alias_shaped(segment: &str) -> bool {
+    usable_name(segment)
+}
+
 /// The handle a `/signin/{segment}` path names: the alias's handle, or the
 /// segment itself.
 pub fn canonical(segment: &str) -> String {
@@ -91,6 +99,8 @@ mod tests {
         assert_eq!(map.len(), 1);
         assert_eq!(map.get("northstar").map(String::as_str), Some(HANDLE));
         assert!(parse("not json").is_empty());
+        assert!(alias_shaped("acme-corp") && alias_shaped("northstar"));
+        assert!(!alias_shaped("Acme") && !alias_shaped(HANDLE) && !alias_shaped("a"));
         assert!(parse(&"x".repeat(MAX_BYTES + 1)).is_empty());
     }
 }
