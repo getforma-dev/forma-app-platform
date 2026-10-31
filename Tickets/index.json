@@ -279,9 +279,10 @@
         "APP-126",
         "APP-127",
         "APP-128",
-        "APP-129"
+        "APP-129",
+        "APP-131"
       ],
-      "ticket_count": 39,
+      "ticket_count": 40,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -4090,6 +4091,35 @@
       "dependencies": [
         "APP-107",
         "APP-113"
+      ]
+    },
+    {
+      "id": "APP-131",
+      "title": "Developer workflow step 5: CI green or quarantined (Foundation, Tenant foundation, the APP-013 campaign)",
+      "path": "0-backlog/APP-131.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "131",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-012](../../docs/architecture/ADR-012-DEVELOPER-WORKFLOW.md) D12.6 (CI policy: a workflow on `pivot/pitch-mvp` is green or quarantined, never red-and-ignored) and implementation-plan step 5; [ADR-013](../../docs/architecture/ADR-013-REPOSITORY-AND-DELIVERY.md) D13.5 and D13.9 row E (`concurrency` groups). The command-campaign expectation follows [APP-113](APP-113.md) review finding storage 1 (the filer never decides). Evidence: [DEV-WORKFLOW-INVENTORY.md](../../docs/planning/DEV-WORKFLOW-INVENTORY.md) \u00a7B.4, \u00a7B.6.",
+      "Requirements": "C15",
+      "Depends on": "APP-125, APP-126",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
+      "Branch / PR": "`pivot/ci-green` (from `pivot/pitch-mvp` f99deec; not merged)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-125",
+        "APP-126"
       ]
     }
   ]
