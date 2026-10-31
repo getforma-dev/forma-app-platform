@@ -12,9 +12,11 @@
 #
 # Steps ([read] calls only read APIs; [local] calls no AWS API):
 #   new        [local]    --candidate <sha> --supersedes <live window id> [--input-from <file>]
-#                         makes the window id and directory and release.json (0.1, 0.4)
+#                         makes the window id and directory and release.json (0.1, 0.4),
+#                         with the local image record of `just images` (build.json)
 #   observe    [read]     caller identity, read-only snapshot, stack-before.json, template-before.json (1.1-1.3)
-#   push       [MUTATION] tag and push the three images, record their digests (2.1-2.2)
+#   push       [MUTATION] tag and push the three images, record their digests (2.1-2.2);
+#                         refuses local images that are not the ones `just images` qualified
 #   preflight  [local]    deployment-input.json from the superseded window, preflight.py at count 0 (3.1)
 #   abandon    [local]    preflight.py --abandon this window (Rollback, before 3.6)
 #   synth      [local]    cdk synth with the private names files; template.json + sha256 (3.2)
@@ -27,10 +29,21 @@
 #   seed       [MUTATION] operator task seed-library; extra args after -- (5.3)
 #   library    [MUTATION] [--organization <id>] build and plan the sources, put the objects, If-None-Match (5.4)
 #   grants     [MUTATION] operator task grant-library-access; extra args after -- (5.5)
-#   activate   [MUTATION] preflight.py --activate at count 1 (6.1)
-#   verify     [read]     the four HTTPS checks of 6.2 (no AWS API)
+#   activate   [MUTATION] preflight.py --activate at count 1 (6.1); then waits for
+#                         /health/live, records the activation in release.json, appends
+#                         the docs/pitch/RELEASES.md row and creates and pushes the tag
+#                         beta/<yyyymmdd>-<sha7> (ADR-013 D13.2, D13.5). --record-only
+#                         redoes only that part (activation.json already there)
+#   verify     [read]     [<window id>] the four HTTPS checks of 6.2 (no AWS API) against
+#                         the window's release (default: the newest activated one);
+#                         the results go into its release.json
 #   rollback-deny [MUTATION] the service onto the deny-all revision; --restore puts it back (Rollback)
 #   help       this text
+#
+# The release record (ADR-013 D13.5, schema in ops/beta/release.py):
+# $PRIV/windows/<id>/release.json, written by new, push, synth, execute,
+# snapshot, the operator tasks, activate and verify; every approval it ran
+# under is referenced by its line in $PRIV/approvals.md.
 #
 # Secrets (runbook section 4) stay Victor's own commands; no step reads .env.
 set -euo pipefail
@@ -42,8 +55,10 @@ usage() { sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'
 step=${1:-help}; shift || true
 case $step in help|-h|--help) usage; exit 0 ;; esac
 
-WINDOW_ID="" organization="" candidate="" supersedes="" input_from="" snap_name="" restore=0 extra=()
-if [[ $step != verify && $step != new ]]; then
+WINDOW_ID="" organization="" candidate="" supersedes="" input_from="" snap_name="" restore=0 record_only=0 origin=$BETA_ORIGIN extra=()
+if [[ $step == verify ]]; then
+  if [[ $# -gt 0 && $1 != --* ]]; then WINDOW_ID=$1; shift; fi
+elif [[ $step != new ]]; then
   [[ $# -gt 0 && $1 != --* ]] || die "usage: just deploy $step <window-id> [options] (just deploy help)"
   WINDOW_ID=$1; shift
 fi
@@ -57,6 +72,8 @@ while (( $# )); do
     --input-from) input_from=$2; shift 2 ;;
     --name) snap_name=$2; shift 2 ;;
     --restore) restore=1; shift ;;
+    --record-only) record_only=1; shift ;;
+    --origin) origin=${2:?}; shift 2 ;;
     --organization) organization=$2; shift 2 ;;
     --) shift; extra=("$@"); break ;;
     *) die "unknown option $1 (just deploy help)" ;;
@@ -75,9 +92,20 @@ case $step in
     [[ -n "$supersedes" ]] || die "--supersedes <live window id> is required (the head of the chain)"
     full=$(git -C "$REPO" rev-parse --verify "$candidate^{commit}") || die "unknown commit $candidate"
     git -C "$REPO" merge-base --is-ancestor "$full" "@{upstream}" 2>/dev/null || echo "note: $candidate is not on this branch's upstream (runbook 0.1: pushed)" >&2
+    [[ "$supersedes" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] || die "--supersedes must be the live window's full id (a lowercase UUIDv4)"
+    build="$REPO/.cache/images/${full:0:7}/build.json"
+    build_args=()
+    if [[ -f "$build" ]]; then
+      jq -e '.passed == true' "$build" >/dev/null || die "$build records a build whose checks did not pass (just images ${full:0:7})"
+      build_args=(--build "$build")
+    else
+      echo "note: no $build yet; run 'just images ${full:0:7}' before 'just deploy push' (push refuses without it)" >&2
+    fi
+    schema=$(git -C "$REPO" show "$full:app/migrations/manifest.json" | jq -er .database_version) || die "no app/migrations/manifest.json at $candidate"
+    branch=$(git -C "$REPO" rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null || git -C "$REPO" rev-parse --abbrev-ref HEAD)
     WINDOW_ID=$(uuidgen | tr 'A-Z' 'a-z')
     window_dir "$WINDOW_ID"
-    if (( DRY_RUN )); then echo "would create $W and release.json for candidate ${full:0:12}"; exit 0; fi
+    if (( DRY_RUN )); then echo "would create $W and release.json for candidate ${full:0:12} (schema $schema, $branch)"; exit 0; fi
     mkdir -m 700 -p "$W"
     if [[ -n "$input_from" ]]; then
       [[ -f "$input_from" ]] || die "no file $input_from"
@@ -87,9 +115,8 @@ case $step in
     else
       die "no input for window $supersedes under $PRIV/windows; pass --input-from <its deployment input> (for example under windows/_pre-adr-012/)"
     fi
-    jq -n --arg w "$WINDOW_ID" --arg c "$full" --arg s "$supersedes" \
-      '{window_id:$w, candidate:$c, tag:("pitch-" + $c[0:7] + "-arm64"), supersedes_window_id:$s,
-        digests:{}, created_at:(now|todate), updated_at:(now|todate)}' > "$W/release.json"
+    release_py init --window "$WINDOW_ID" --supersedes "$supersedes" --candidate "$full" --branch "$branch" \
+      --database-version "$schema" ${build_args[@]+"${build_args[@]}"} > "$W/release.json"
     echo "window $WINDOW_ID"
     echo "directory $W"
     ;;
@@ -106,8 +133,20 @@ aws cloudformation get-template --stack-name "$STACK" --template-stage Original 
 
   push)
     load_env; window_dir "$WINDOW_ID"; need_window_dir
-    C=$(release_get .candidate); C7=${C:0:7}; T=$(release_get .tag)
-    for p in $IMAGES; do docker image inspect "genui-${p%%:*}:pitch-$C7" >/dev/null 2>&1 || (( DRY_RUN )) || die "local image genui-${p%%:*}:pitch-$C7 missing (just images $C7)"; done
+    C=$(release_get .candidate_sha); C7=${C:0:7}; T=$(release_get .tag)
+    # Push only what `just images` qualified (ADR-013 D13.5): the local image
+    # ids must be the ones build.json recorded.
+    build="$REPO/.cache/images/$C7/build.json"
+    if (( ! DRY_RUN )); then
+      [[ -f "$build" ]] || die "no $build: run 'just images $C7' (build and qualify) first"
+      jq -e '.passed == true' "$build" >/dev/null || die "$build: the image checks did not pass"
+      [[ "$(release_get '.images.service.local_id // empty')" ]] || release_py import-build "$W/release.json" "$build"
+    fi
+    for p in $IMAGES; do
+      n=${p%%:*}
+      id=$(docker image inspect --format '{{.Id}}' "genui-$n:pitch-$C7" 2>/dev/null) || { (( DRY_RUN )) && continue; die "local image genui-$n:pitch-$C7 missing (just images $C7)"; }
+      (( DRY_RUN )) || [[ "$id" == "$(jq -r ".images.$n.id" "$build")" ]] || die "genui-$n:pitch-$C7 is not the image 'just images' qualified ($id); rebuild with 'just images $C7'"
+    done
     mutate push '
 aws ecr get-login-password | docker login --username AWS --password-stdin "$REG" >/dev/null
 for p in $IMAGES; do
@@ -117,22 +156,24 @@ for p in $IMAGES; do
   [ $ok = 1 ] || { echo "push failed: $r (see $W/push-$r.log)" >&2; exit 2; }
   aws ecr describe-images --repository-name "$r" --image-ids imageTag="$T" > "$W/ecr-$r.json"
   d=$(jq -r ".imageDetails[0].imageDigest" "$W/ecr-$r.json")
-  release_set ".digests[\$r] = \$d" --arg r "$r" --arg d "$d"
+  z=$(jq -r ".imageDetails[0].imageSizeInBytes" "$W/ecr-$r.json")
+  release_set ".images[\$n].digest = \$d | .images[\$n].size_bytes = (\$z | tonumber)" --arg n "$n" --arg d "$d" --arg z "$z"
   echo "pushed $r $d"
-done'
+done
+release_set ".pushed_at_utc = (now | floor | todate)"'
     echo "next: read the scan findings from each arm64 child digest (runbook 2.3); a CRITICAL is Victor's call"
     ;;
 
   preflight)
     load_env; window_dir "$WINDOW_ID"; need_window_dir
-    for r in genui-synthetic genui-qualification genui-operator; do
-      [[ -n "$(release_get ".digests[\"$r\"] // empty")" ]] || (( DRY_RUN )) || die "no digest for $r in release.json (just deploy push)"
+    for n in service qualification operator; do
+      [[ -n "$(release_get ".images.$n.digest // empty")" ]] || (( DRY_RUN )) || die "no $n digest in release.json (just deploy push)"
     done
     if (( ! DRY_RUN )); then
       jq --arg w "$WINDOW_ID" --arg sup "$(release_get .supersedes_window_id)" \
-         --arg s "$REG/genui-synthetic@$(release_get '.digests["genui-synthetic"]')" \
-         --arg q "$REG/genui-qualification@$(release_get '.digests["genui-qualification"]')" \
-         --arg o "$REG/genui-operator@$(release_get '.digests["genui-operator"]')" \
+         --arg s "$REG/genui-synthetic@$(release_get .images.service.digest)" \
+         --arg q "$REG/genui-qualification@$(release_get .images.qualification.digest)" \
+         --arg o "$REG/genui-operator@$(release_get .images.operator.digest)" \
          '.window_id=$w | .supersedes_window_id=$sup | .image_digest=$s | .qualification_image_digest=$q | .operator_image_digest=$o | .service_desired_count=0' \
          "$W/base-input.json" > "$W/deployment-input.json"
       echo "deployment-input.json written; deployment_expires_at_utc kept from the base input: $(jq -r .deployment_expires_at_utc "$W/deployment-input.json") (renew it if it is less than a day away, runbook 3.1)"
@@ -154,7 +195,7 @@ jq -c "{status, window_id, superseded_window_id}" "$W/receipt.json"'
 (cd "$REPO/infra" && npm run synth -- --quiet -c displayNamesFile="$PRIV/display-names.json" -c signinAliasesFile="$PRIV/signin-aliases.json") > "$W/synth.log" 2>&1
 cp "$REPO/infra/cdk.out/GenuiSyntheticFoundation.template.json" "$W/template.json"
 shasum -a 256 "$W/template.json" | cut -d" " -f1 > "$W/template.sha256"
-release_set ".template_sha256 = \$t" --arg t "$(cat "$W/template.sha256")"'
+release_set ".stack.template_sha256 = \$t" --arg t "$(cat "$W/template.sha256")"'
     ;;
 
   diff)
@@ -193,7 +234,15 @@ aws cloudformation execute-change-set --stack-name "$STACK" --change-set-name "g
 aws cloudformation wait stack-update-complete --stack-name "$STACK"
 aws cloudformation describe-stacks --stack-name "$STACK" > "$W/stack-after.json"
 aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query "services[0].{desired:desiredCount,running:runningCount,pending:pendingCount,taskDefinition:taskDefinition}"'
-    (( DRY_RUN )) || release_set '.executed_at = (now|todate)'
+    if (( ! DRY_RUN )); then
+      # The stack's task definitions from its outputs (release.json is private;
+      # RELEASES.md shows only the revision number).
+      out() { jq -r --arg k "$1" '.Stacks[0].Outputs[] | select(.OutputKey==$k) | .OutputValue' "$W/stack-after.json"; }
+      td=$(out TaskDefinition); rb=$(out RollbackTaskDefinition)
+      release_set '.executed_at_utc = (now | floor | todate) | .stack.name = $s | .stack.task_definition = $t
+                   | .stack.task_definition_revision = ($t | capture(":(?<n>[0-9]+)$").n | tonumber)
+                   | .stack.rollback_task_definition = $r' --arg s "$STACK" --arg t "$td" --arg r "$rb"
+    fi
     (( DRY_RUN )) || echo "the outage has started; a desired count other than 0 is a stop (runbook 'Downtime')"
     ;;
 
@@ -204,7 +253,7 @@ aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query "se
     mutate snapshot '
 aws rds create-db-snapshot --db-instance-identifier "$DB" --db-snapshot-identifier "$SNAP_NAME" > "$W/snapshot-create.json"
 aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAP_NAME"'
-    (( DRY_RUN )) || release_set '.snapshot = $s' --arg s "$snap_name"
+    (( DRY_RUN )) || release_set '.migrations.snapshot = $s' --arg s "$snap_name"
     ;;
 
   migrate|seed|grants)
@@ -244,16 +293,97 @@ jq -c "[.objects[].state] | group_by(.) | map({(.[0]): length}) | add" "$W/libra
 
   activate)
     load_env; window_dir "$WINDOW_ID"; need_window_dir
-    prepare 'jq ".service_desired_count = 1" "$W/deployment-input.json" > "$W/deployment-input-activate.json"'
-    mutate activate '
+    if (( record_only )); then
+      # The activation already ran (activation.json); only the release record,
+      # the RELEASES.md row and the tag are redone. Still Victor's word: it
+      # pushes a tag to origin.
+      [[ -f "$W/activation.json" ]] || (( DRY_RUN )) || die "--record-only: no $W/activation.json (run the activation first)"
+      mutate "activate --record-only" 'true'
+    else
+      prepare 'jq ".service_desired_count = 1" "$W/deployment-input.json" > "$W/deployment-input-activate.json"'
+      mutate activate '
 python3 "$REPO/infra/scripts/preflight.py" --input "$W/deployment-input-activate.json" --ledger "$PRIV/budget-ledger.json" --activate > "$W/activation.json"
 jq -c "{status, window_id}" "$W/activation.json"'
-    (( DRY_RUN )) || release_set '.activated_at = (now|todate)'
-    echo "wait for one healthy target; then 'just deploy verify' (runbook 6.1-6.2)"
+    fi
+    if (( DRY_RUN )); then
+      echo "(dry run: would wait for $origin/health/live, record the activation in release.json, append docs/pitch/RELEASES.md, git tag -a beta/<yyyymmdd>-<sha7> and git push origin <tag>)"
+      exit 0
+    fi
+    [[ "$(jq -r .status "$W/activation.json")" == activation_requested_not_healthy ]] || die "activation.json does not record a requested activation; no release record, no tag"
+    release_set '.activation_requested_at_utc = $o | .stack.task_definition = $t
+                 | .stack.task_definition_revision = ($t | capture(":(?<n>[0-9]+)$").n | tonumber)' \
+      --arg o "$(jq -r .observed_at_utc "$W/activation.json")" --arg t "$(jq -r .task_definition "$W/activation.json")"
+    # 6.1: one healthy target. The public health route only (no AWS API).
+    wait_s=${GENUI_HEALTH_WAIT_SECONDS:-600} waited=0
+    echo "waiting up to ${wait_s}s for $origin/health/live ..."
+    until code=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code}' "$origin/health/live" 2>/dev/null); [[ "${code%% *}" == 200 ]]; do
+      if (( waited >= wait_s )); then
+        echo "not healthy after ${wait_s}s: no RELEASES.md row and no tag. Check the target (runbook 6.1);" >&2
+        echo "once healthy: just deploy activate $WINDOW_ID --record-only --approved \"<Victor's words>\"" >&2
+        exit 4
+      fi
+      sleep 10; waited=$((waited + 10))
+    done
+    # The first healthy observation is the activation time (a --record-only
+    # rerun keeps it, so the row and the tag name stay the same).
+    release_set '.activated_at_utc //= (now | floor | todate)'
+    release_py check "$W/release.json" --activated >/dev/null
+    tag=$(release_py tag "$W/release.json")
+    release_py append "$W/release.json" "$REPO/docs/pitch/RELEASES.md"
+    release_set '.releases_row = $r' --arg r "$(release_py row "$W/release.json")"
+    # D13.2: an annotated tag on the candidate, pushed to origin (a Git
+    # mutation, inside this approved step). The digests are the identity; the
+    # tag is the human handle.
+    C=$(release_get .candidate_sha)
+    if git -C "$REPO" rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+      [[ "$(git -C "$REPO" rev-parse "$tag^{commit}")" == "$C" ]] || die "tag $tag exists on another commit"
+      echo "tag $tag exists"
+    else
+      git -C "$REPO" tag -a "$tag" "$C" -m "beta release $tag
+
+window $(release_get .window_id) (supersedes $(release_get .supersedes_window_id | cut -c1-8))
+TD:$(release_get .stack.task_definition_revision), schema $(release_get .database_version)
+service $(release_get .images.service.digest)
+qualification $(release_get .images.qualification.digest)
+operator $(release_get .images.operator.digest)"
+      echo "tagged $tag"
+    fi
+    if git -C "$REPO" push origin "refs/tags/$tag"; then
+      release_set '.git_tag = {name: $n, pushed: true}' --arg n "$tag"
+    else
+      release_set '.git_tag = {name: $n, pushed: false}' --arg n "$tag"
+      echo "the tag push failed; retry: git push origin refs/tags/$tag" >&2
+    fi
+    echo "release recorded: $W/release.json; docs/pitch/RELEASES.md has the row. Commit it on pivot/pitch-mvp:"
+    echo "  git -C \"$REPO\" commit -m \"RELEASES: $tag\" -- docs/pitch/RELEASES.md && git -C \"$REPO\" push"
+    echo "then 'just deploy verify $WINDOW_ID' (runbook 6.2)"
     ;;
 
   verify)
-    exec "$REPO/ops/beta/verify.sh" ${extra[@]+"${extra[@]}"}
+    # 6.2 against a window's release: the given one, else the newest activated
+    # window that has a release.json. Without any, the checks run alone.
+    if [[ -z "$WINDOW_ID" && -d "$PRIV/windows" ]]; then
+      WINDOW_ID=$(for f in "$PRIV"/windows/*/release.json; do
+                    if [[ -f "$f" ]]; then jq -r 'select(.activated_at_utc != null) | "\(.activated_at_utc) \(.window_id)"' "$f" || true; fi
+                  done | sort | tail -1 | cut -d' ' -f2)
+    fi
+    vargs=(--origin "$origin"); (( DRY_RUN )) && vargs+=(--dry-run)
+    if [[ -z "$WINDOW_ID" ]]; then
+      echo "no activated window with a release.json under $PRIV/windows; checking $origin only"
+      exec "$REPO/ops/beta/verify.sh" "${vargs[@]}"
+    fi
+    priv_ready; window_dir "$WINDOW_ID"; need_window_dir
+    release_py check "$W/release.json" >/dev/null || die "$W/release.json does not match the schema (ops/beta/release.py)"
+    jq -r '"release: \(.candidate_sha[0:7]) \(.git_tag.name // "(no tag yet)") window \(.window_id[0:8]) TD:\(.stack.task_definition_revision // "?") schema \(.database_version)",
+           (.images | to_entries[] | "  \(.key) \(.value.digest // "(not pushed)")")' "$W/release.json"
+    (( DRY_RUN )) || vargs+=(--json "$W/verify.json")
+    status=0
+    "$REPO/ops/beta/verify.sh" "${vargs[@]}" || status=$?
+    if (( ! DRY_RUN )) && [[ -f "$W/verify.json" ]]; then
+      release_set '.verified = ($v + {at_utc: (now | floor | todate), origin: $o})' --argjson v "$(cat "$W/verify.json")" --arg o "$origin"
+      echo "recorded in $W/release.json (.verified)"
+    fi
+    exit $status
     ;;
 
   rollback-deny)

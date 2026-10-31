@@ -47,13 +47,17 @@ window_dir() {
   [[ "$id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] || die "window id must be a lowercase UUIDv4: $id"
   W=$PRIV/windows/$id
 }
-need_window_dir() { [[ -d "$W" ]] || die "no window directory $W (just deploy new ...)"; }
+need_window_dir() {
+  [[ -d "$W" ]] || die "no window directory $W (just deploy new ...)"
+  [[ -f "$W/release.json" ]] || die "no $W/release.json (windows are made by 'just deploy new')"
+}
 
-# release_set <jq filter> [jq args...]: update $W/release.json in place.
+# release_set <jq filter> [jq args...]: update $W/release.json in place
+# (schema: ops/beta/release.py; the file stays 0600 under umask 077).
 release_set() {
   local filter=$1; shift
   local tmp="$W/release.json.new"
-  jq "$@" "$filter | .updated_at = (now | todate)" "$W/release.json" > "$tmp" && mv "$tmp" "$W/release.json"
+  jq "$@" "$filter | .updated_at_utc = (now | floor | todate)" "$W/release.json" > "$tmp" && mv "$tmp" "$W/release.json"
 }
 release_get() { jq -r "$1" "$W/release.json"; }
 
@@ -99,6 +103,21 @@ record_approval() {
   priv_ready
   [[ -f "$PRIV/approvals.md" ]] || printf "# Victor's approvals (private window record)\n\n" > "$PRIV/approvals.md"
   chmod 600 "$PRIV/approvals.md"
+  local at
+  at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   printf -- '- %s UTC, `just deploy %s`, window %s: "%s"\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%S)" "$step" "${WINDOW_ID:--}" "$APPROVED" >> "$PRIV/approvals.md"
+    "${at%Z}" "$step" "${WINDOW_ID:--}" "$APPROVED" >> "$PRIV/approvals.md"
+  # ADR-013 D13.5: the window's release record points at the approval (its
+  # line in approvals.md), so each mutation in release.json has its word.
+  if [[ -n "${W:-}" && -f "$W/release.json" ]]; then
+    release_set '.approvals += [{step: $s, at_utc: $a, approvals_md_line: ($l | tonumber)}]' \
+      --arg s "$step" --arg a "$at" --arg l "$(wc -l < "$PRIV/approvals.md" | tr -d ' ')"
+  fi
 }
+
+# ADR-013 D13.5: the public origin the beta answers on (verify, the health
+# wait of activate). Never an AWS endpoint.
+BETA_ORIGIN=${GENUI_BETA_ORIGIN:-https://beta.getforma.dev}
+
+# release_py <args>: ops/beta/release.py (stdlib only, isolated).
+release_py() { python3 -I "$REPO/ops/beta/release.py" "$@"; }

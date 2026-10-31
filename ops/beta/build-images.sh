@@ -12,7 +12,9 @@
 #
 # Images: genui-service, genui-qualification, genui-operator, each tagged
 # pitch-<sha7>; checks: app/runtime/qualify_image.py,
-# app/qualification/check_image.py, app/operator/check_image.py.
+# app/qualification/check_image.py, app/operator/check_image.py, then
+# ops/beta/image_record.py writes <out>/build.json (ids, sizes, the parser
+# manifests compared).
 set -euo pipefail
 
 self=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -23,7 +25,7 @@ while (( $# )); do
     --out) out=${2:?}; shift 2 ;;
     --allow-dirty) dirty=1; shift ;;
     --dry-run) dry=1; shift ;;
-    -h|--help) sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "unknown option $1" >&2; exit 2 ;;
     *) candidate=$1; shift ;;
   esac
@@ -70,7 +72,11 @@ if (( ! dry )) && [[ $failed == 1 && -f "$out/operator-image-check.json" ]]; the
   jq -r '.expectations[]? | select(.met == false) | " unmet: \(.expectation) \(.detail | tostring | .[0:400])"' "$out/operator-image-check.json" || true
 fi
 
+# The local image record (ADR-013 D13.5): ids, sizes, times and the parser
+# identity, which must be equal in the service and operator images (runbook
+# 0.3). `just deploy new` copies it into the window's release.json and
+# `just deploy push` refuses images whose ids differ from it.
+printf '+ python3 -I ops/beta/image_record.py --candidate %s --out %s\n' "$head" "$out"
 (( dry )) && exit 0
-for n in service qualification operator; do docker image inspect --format "$n {{.Id}}" "genui-$n:pitch-$C"; done | tee "$out/image-ids.txt"
-echo "the parser identity must agree between the images (runbook 0.3): compare the service and operator parser manifests in $out"
+python3 -I "$self/ops/beta/image_record.py" --candidate "$head" --out "$out" --checks-passed "$( (( failed )) && echo no || echo yes)" || failed=1
 exit $failed

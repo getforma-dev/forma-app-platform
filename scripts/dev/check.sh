@@ -32,6 +32,7 @@ steps=(
   "py-runtime|tenant-foundation.yml, foundation.yml|$py -m unittest discover -s app/runtime"
   "py-qualification|tenant-foundation.yml|$py -m unittest discover -s app/qualification"
   "py-app-scripts|DEPLOY-RUNBOOK 0.2|$py -m unittest discover -s app/scripts -p 'test_*.py'"
+  "py-ops|ADR-013 D13.5 (release record, fake AWS)|python3 -m unittest discover -s ops/beta -p 'test_*.py'"
   "py-infra|DEPLOY-RUNBOOK 0.2|cd infra/test && ../../$py -m unittest preflight_test window_requests_test"
   "schema-pins|tenant-foundation.yml|python3 scripts/check-schema-pins.py"
   "contracts|contracts.yml|contracts/.venv/bin/python -m unittest discover -s contracts -p 'test_*.py' && node contracts/verify_vectors.mjs && contracts/.venv/bin/python contracts/lock.py check"

@@ -23,7 +23,7 @@ Every step marked **[MUTATION]** needs Victor's word, recorded verbatim in `$PRI
 | `env.sh` | the stack's identifiers, named in `ops/beta/env.example.sh`; `REPO`, `PRIV` and the operator venv are derived from the checkout |
 | `approvals.md`, `budget-ledger.json` | Victor's words per action; the preflight ledger |
 | `display-names.json`, `signin-aliases.json` | the private names files (0.5) |
-| `windows/<window-id>/` | one deploy: `release.json` (candidate, tag, supersedes, digests, template sha256, times), `base-input.json`, `deployment-input.json`, `receipt.json`, `stack-before.json`, `template-before.json`, `template.json`, `cdk-diff.txt`, `change-set-*.json`, `stack-after.json`, `run-<label>-<n>.*`, `activation.json` |
+| `windows/<window-id>/` | one deploy: `release.json` (the release record, ADR-013 D13.5, schema in `ops/beta/release.py`: candidate and branch, the three images' local ids and ECR digests, parser manifest, stack and task definition, database version, migration and operator-task runs, references to each approval's line in `approvals.md`, times, verify results), `base-input.json`, `deployment-input.json`, `receipt.json`, `stack-before.json`, `template-before.json`, `template.json`, `cdk-diff.txt`, `change-set-*.json`, `stack-after.json`, `run-<label>-<n>.*`, `activation.json` |
 | `windows/_pre-adr-012/` | the APP-078 window's flat directory as of 2026-10-31, copied once as history (`ops/beta/import-legacy-priv.sh`) |
 
 The operator venv is `app/operator/.venv` (`just setup`), not `opvenv`.
@@ -100,7 +100,7 @@ Steps 1.1–1.3: **`just deploy observe <W>`** [read].
 
 ## 2. Registry [MUTATION]
 
-Steps 2.1–2.2: **`just deploy push <W> --approved "…"`** (digests into `release.json`).
+Steps 2.1–2.2: **`just deploy push <W> --approved "…"`** (digests into `release.json`). It refuses local images whose ids are not the ones `just images` qualified (`.cache/images/<sha7>/build.json`).
 
 - [ ] 2.1 Push to the existing repositories with the tag `pitch-${CANDIDATE:0:7}-arm64`: `genui-synthetic` (the service), `genui-qualification` and `genui-operator`.
 - [ ] 2.2 Record each digest.
@@ -225,7 +225,9 @@ Skip 5.1–5.2 if 0.6 found no schema change.
   - the deny-all rollback revision.
 
   It refuses the Anthropic key, the Slack token or the Slack signing secret as a plain environment variable. Wait until the service is stable with one healthy target. **The outage ends here.**
-- [ ] 6.2 → **`just deploy verify`**. HTTPS surface from the operator machine, checked with plain `curl` (no `-k`):
+
+  `just deploy activate` then waits (up to 10 minutes) for `/health/live` to answer 200, records the activation in `release.json`, appends the window's row to [RELEASES.md](RELEASES.md) and creates the annotated tag `beta/<yyyymmdd>-<sha7>` on the candidate and pushes it to `origin` (ADR-013 D13.2, D13.5; a Git mutation inside this approved step). Commit the RELEASES.md row on `pivot/pitch-mvp` with the command it prints. If the target is not healthy in time, no row and no tag are written; once it is, `just deploy activate <W> --record-only --approved "…"` does only that part.
+- [ ] 6.2 → **`just deploy verify [<W>]`** (default: the newest activated window; the results go into its `release.json`). HTTPS surface from the operator machine, checked with plain `curl` (no `-k`):
   - `/health/live` gives 200;
   - `/canvas` signed out gives the sign-in page;
   - `/v1/mcp` without a bearer gives the uniform 404;
