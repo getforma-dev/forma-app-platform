@@ -273,9 +273,10 @@
         "APP-120",
         "APP-121",
         "APP-122",
-        "APP-123"
+        "APP-123",
+        "APP-124"
       ],
-      "ticket_count": 33,
+      "ticket_count": 34,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -3913,6 +3914,36 @@
       "dependencies": [
         "APP-122",
         "APP-097"
+      ]
+    },
+    {
+      "id": "APP-124",
+      "title": "Start from your data: drop files, Ask the folder, Make a card, Make an app",
+      "path": "0-backlog/APP-124.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P2",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "124",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-011](../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md): the November 2 emergency pivot (phase PH08 / sprint S14 hold the pitch tickets). Invariants of ADR-011 \u00a73 that bind this ticket: I3 receipts on every governed number; I4 transactional, idempotent, audited commands; I5 model output is data, never code, SQL, markup or grants. Victor approved the path on 2026-10-31: data \u2192 card \u2192 app as one visible path, no new concepts.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-108, APP-122, APP-123",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
+      "Branch / PR": "`pivot/from-data` (built; not merged into `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-108",
+        "APP-122",
+        "APP-123"
       ]
     }
   ]

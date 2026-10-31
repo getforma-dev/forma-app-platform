@@ -148,6 +148,8 @@ fn kind_of(body: &Value) -> &'static str {
         "explain"
     } else if system.starts_with("You write the overview") {
         "summary"
+    } else if system.starts_with("You answer a member's question about the tables") {
+        "folder_ask"
     } else {
         "other"
     }
@@ -953,6 +955,244 @@ async fn campaign() {
     assert_eq!(kept["state"], "ready", "the accepted summary stays");
     check(&mut checks, "explanation: the fast model sees only the computed results; every placeholder is filled with the governed value of a receipt-carrying run (total revenue equals the KPI view's exact value); a hostile reply with an invented number (\"40%\") is refused as \"No summary\" and the accepted summary stays");
 
+    // --- APP-124: Ask on a folder (read-only, file and row references) ---
+    let audit_sql =
+        format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{ORG}'");
+    let audit = || scalar(&c.fixture, &audit_sql);
+    let audit_before = audit().await;
+    let ask_path = format!("/v1/boxes/{box_id}/ask");
+    stub.script(
+        "folder_ask",
+        json!({"text": "South led July with the highest revenue.", "references": ["f1r2"]})
+            .to_string(),
+    );
+    let asked = stand
+        .post(
+            &ask_path,
+            Some(&maya_cookie),
+            &json!({"question": "which region led July?"}).to_string(),
+        )
+        .await;
+    assert_eq!(asked.status, StatusCode::OK, "{}", asked.text());
+    let answer = asked.json();
+    assert_eq!(
+        answer.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["references", "text"]
+    );
+    // The reference is the server's: the folder's own file (id, name and the
+    // SHA-256 the folder lists for it) and the row under the header.
+    let reference = &answer["references"][0];
+    let listed = stand
+        .get(&format!("/v1/boxes/{box_id}"), Some(&maya_cookie))
+        .await
+        .json();
+    let file = listed["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["file_id"] == reference["file_id"])
+        .unwrap_or_else(|| panic!("{reference}"))
+        .clone();
+    assert!(
+        matches!(file["kind"].as_str(), Some("csv" | "xlsx")),
+        "{file}"
+    );
+    assert_eq!(reference["file"], file["name"]);
+    assert_eq!(reference["sha256"], file["sha256"]);
+    assert_eq!(reference["row"], 2);
+    assert!(!reference["label"].as_str().unwrap().is_empty());
+    let asks = stub.calls("folder_ask");
+    assert_eq!(asks.len(), 1);
+    let sent = asks[0]["messages"][0]["content"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        sent.contains("which region led July?")
+            && sent.contains("\"f1r2\"")
+            && sent.contains("South")
+    );
+    assert!(!sent.contains("strongest month"), "the PDF is not a table");
+    // A reply citing a row it was not shown, or carrying a view, is refused.
+    for hostile in [
+        json!({"text": "Row nine.", "references": ["f1r99"]}),
+        json!({"text": "A chart.", "chart": "bar"}),
+    ] {
+        stub.script("folder_ask", hostile.to_string());
+        let refused = stand
+            .post(
+                &ask_path,
+                Some(&maya_cookie),
+                &json!({"question": "anything?"}).to_string(),
+            )
+            .await;
+        assert_eq!(
+            (refused.status, refused.json()["code"].clone()),
+            (StatusCode::UNPROCESSABLE_ENTITY, json!("could_not_answer")),
+            "{hostile}"
+        );
+    }
+    // Closed body; the teammate (not shared), the outsider, no session and a
+    // malformed id get the uniform 404, before any model call.
+    let closed = stand
+        .post(
+            &ask_path,
+            Some(&maya_cookie),
+            &json!({"question": "x", "scope": "all"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        (closed.status, closed.json()["code"].clone()),
+        (StatusCode::UNPROCESSABLE_ENTITY, json!("invalid_request"))
+    );
+    let calls_before = stub.calls("folder_ask").len();
+    for (cookie, path) in [
+        (Some(mate_cookie.as_str()), ask_path.clone()),
+        (Some(outsider_cookie.as_str()), ask_path.clone()),
+        (None, ask_path.clone()),
+        (
+            Some(maya_cookie.as_str()),
+            "/v1/boxes/not-a-folder/ask".to_owned(),
+        ),
+        (
+            Some(maya_cookie.as_str()),
+            format!("/v1/boxes/{}/ask", "00000000-0000-4000-8000-00000000dead"),
+        ),
+    ] {
+        let denied = stand
+            .post(
+                &path,
+                cookie,
+                &json!({"question": "how many rows?"}).to_string(),
+            )
+            .await;
+        assert!(
+            denied.uniform_404(),
+            "{path}: {} {}",
+            denied.status,
+            denied.text()
+        );
+    }
+    assert_eq!(
+        stub.calls("folder_ask").len(),
+        calls_before,
+        "no model call for a refused caller"
+    );
+    assert_eq!(
+        audit().await,
+        audit_before,
+        "Ask on a folder writes no audit row"
+    );
+    check(&mut checks, "Ask on a folder (APP-124): POST /v1/boxes/{box}/ask reads the folder's tables in a READ ONLY snapshot under the folder's own authorization and answers exactly {text, references}, each reference the file (id, name, SHA-256 of its bytes) and the row the answer used; the model sees the rows by reference (the PDF is not a table) and a reply citing a row it was not shown, or carrying a chart, is refused (422 could_not_answer); an open body is 422; the teammate the folder was not shared with, a foreign member, no session, a malformed and an unknown id get the uniform 404 with no model call; no audit row is written");
+
+    // --- APP-124: Make a card (formation constrained to one card) ---
+    let generations = stub.calls("generation").len();
+    let made = stand
+        .post(
+            &format!("/v1/boxes/{box_id}/apps"),
+            Some(&maya_cookie),
+            &json!({"one_card": true}).to_string(),
+        )
+        .await;
+    assert_eq!(made.status, StatusCode::CREATED, "{}", made.text());
+    let made = made.json();
+    assert_eq!(
+        (made["cards"].clone(), made["source"].clone()),
+        (json!(1), json!("rule"))
+    );
+    assert_eq!(made["title"], "Q3 board pack");
+    assert_eq!(
+        made["address"], "q3-board-pack-card",
+        "the folder keeps /q3-board-pack"
+    );
+    assert!(made["label"]
+        .as_str()
+        .unwrap()
+        .starts_with("Built from folder: Q3 board pack"));
+    let (card_app_id, one_card) = (
+        made["app_id"].as_str().unwrap().to_owned(),
+        made["work_id"].as_str().unwrap().to_owned(),
+    );
+    assert_eq!(
+        stub.calls("generation").len(),
+        generations,
+        "Make a card calls no model"
+    );
+    let card_group = stand
+        .get(
+            &format!("/v1/canvas/works/{card_app_id}/{one_card}"),
+            Some(&maya_cookie),
+        )
+        .await;
+    assert_eq!(card_group.status, StatusCode::OK, "{}", card_group.text());
+    let card_group = card_group.json();
+    assert_eq!(
+        card_group["cards"].as_array().map(Vec::len),
+        Some(1),
+        "exactly one card: {card_group}"
+    );
+    assert!(card_group
+        .to_string()
+        .contains("Built from folder: Q3 board pack"));
+    let commands = stand.get("/v1/commands", Some(&maya_cookie)).await.json();
+    assert!(commands["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["slug"] == "q3-board-pack-card"
+            && c["kind"] == "saved"
+            && c["work_id"] == one_card.as_str()));
+    let card_lineage = stand
+        .get(
+            &format!("/v1/boxes/lineage/{card_app_id}/{one_card}"),
+            Some(&maya_cookie),
+        )
+        .await
+        .json();
+    assert_eq!(card_lineage["box_id"], box_id.as_str());
+    assert_eq!(card_lineage["files"].as_array().unwrap().len(), 1);
+    let again = stand
+        .post(
+            &format!("/v1/boxes/{box_id}/apps"),
+            Some(&maya_cookie),
+            &json!({"one_card": true}).to_string(),
+        )
+        .await
+        .json();
+    assert_eq!(
+        again["address"], "q3-board-pack-2",
+        "a second card takes the next free name"
+    );
+    for (body, code) in [
+        (json!({"one_card": "yes"}), "invalid_intent"),
+        (json!({"one_card": false}), "invalid_intent"),
+        (json!({"one_card": true, "views": 2}), "invalid_intent"),
+    ] {
+        let refused = stand
+            .post(
+                &format!("/v1/boxes/{box_id}/apps"),
+                Some(&maya_cookie),
+                &body.to_string(),
+            )
+            .await;
+        assert_eq!(
+            (refused.status, refused.json()["code"].clone()),
+            (StatusCode::UNPROCESSABLE_ENTITY, json!(code)),
+            "{body}"
+        );
+    }
+    for cookie in [&mate_cookie, &outsider_cookie] {
+        let denied = stand
+            .post(
+                &format!("/v1/boxes/{box_id}/apps"),
+                Some(cookie),
+                &json!({"one_card": true}).to_string(),
+            )
+            .await;
+        assert!(denied.uniform_404());
+    }
+    check(&mut checks, "Make a card (APP-124): POST /v1/boxes/{box}/apps {\"one_card\": true} makes, with no model call, a minimal app named after the folder with exactly one card (the most useful view of its confirmed table), admitted, published on Maya's authoring app, \"Built from folder: Q3 board pack\" with its one source file in the lineage, and saved under a free /name (q3-board-pack-card, since the folder holds /q3-board-pack; the next one q3-board-pack-2) that /v1/commands lists; a non-boolean, a false or an open body is 422; the teammate and the outsider get the uniform 404");
+
     // --- Share the derived app: the teammate reads exactly the files used ---
     let shared = stand
         .post(
@@ -1154,12 +1394,51 @@ async fn campaign() {
         .any(|f| f["paragraph"]
             .as_array()
             .is_some_and(|p| p.iter().any(|x| x["cite"]["page"] == 1))));
+    // APP-124: the folder's rehearsed questions (computed from its rows).
+    let counted = stand
+        .post(
+            &format!("/v1/boxes/{demo_box}/ask"),
+            Some(&maya_cookie),
+            &json!({"question": "how many rows?"}).to_string(),
+        )
+        .await;
+    assert_eq!(counted.status, StatusCode::OK, "{}", counted.text());
+    let counted = counted.json();
+    assert!(
+        counted["text"]
+            .as_str()
+            .unwrap()
+            .contains("q3_metrics.csv has 12 rows"),
+        "{counted}"
+    );
+    let metrics_rows = counted["references"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["file"] == "q3_metrics.csv")
+        .count();
+    assert_eq!(metrics_rows, 12, "a count references every row it counted");
+    let total = stand
+        .post(
+            &format!("/v1/boxes/{demo_box}/ask"),
+            Some(&maya_cookie),
+            &json!({"question": "what's the total revenue?"}).to_string(),
+        )
+        .await
+        .json();
+    assert!(
+        total["text"]
+            .as_str()
+            .unwrap()
+            .contains("revenue in q3_metrics.csv adds up to $3,799,872.03 (12 rows)"),
+        "{total}"
+    );
     assert_eq!(
         stub.bodies.lock().unwrap().len(),
         calls,
         "the demo's rehearsed paths call no model"
     );
-    check(&mut checks, "demo (DS-73..DS-75): in the demo organization the rehearsed sentence builds the metrics app over the folder's data files by rule, admitted and labeled generated; its explanation and the folder's brief (the fixture PDF cited by page) answer with no model call");
+    check(&mut checks, "demo (DS-73..DS-75, APP-124): in the demo organization the rehearsed sentence builds the metrics app over the folder's data files by rule, admitted and labeled generated; its explanation, the folder's brief (the fixture PDF cited by page) and Ask on the folder (a row count referencing all 12 rows, the exact revenue total) answer with no model call");
     crate::demo::configure_for_tests(false, &[]);
 
     // The local stand for a browser walk (scratch only, synthetic sessions).

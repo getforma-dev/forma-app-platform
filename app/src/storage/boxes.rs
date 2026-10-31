@@ -479,6 +479,39 @@ impl Workspace {
         .await
     }
 
+    /// APP-124 (Ask on a folder): the box and the files this member may read,
+    /// exactly as [`Workspace::read_box`] judges them (the uniform `Denied`
+    /// otherwise), in one `REPEATABLE READ READ ONLY` snapshot: no row lock,
+    /// no write, no audit row (PostgreSQL refuses any of them). The derived
+    /// apps are not read.
+    pub async fn read_box_read_only(
+        &self,
+        request: &TrustedRequest,
+        box_id: &str,
+    ) -> Result<BoxView> {
+        require(valid_id(box_id))?;
+        let cap = Instant::now() + BOX_DEADLINE;
+        let transaction = Transaction::begin_read_only(&self.inner, request, cap).await?;
+        let result = async {
+            confirm_identity(&transaction, request).await?;
+            transaction.read_only_member().await?;
+            let row = box_rows(&transaction, request, Some(box_id))
+                .await?
+                .into_iter()
+                .next()
+                .ok_or(Error::Denied)?;
+            let files = file_rows(&transaction, request, box_id, None).await?;
+            Ok(BoxView {
+                row,
+                files,
+                apps: Vec::new(),
+            })
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
     /// One file this member may read.
     pub async fn read_box_file(
         &self,

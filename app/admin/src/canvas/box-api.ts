@@ -68,6 +68,7 @@ const REFUSALS: Record<string, string> = {
   data_refused: 'Those column types do not fit the file’s values. Nothing was registered.',
   not_a_folder_request: `That did not read as a request about this ${noun}.`,
   could_not_compose: `An app could not be built from this ${noun} right now. Nothing was placed.`,
+  no_data_files: `This ${noun} has no table (CSV or XLSX) to build from yet. Nothing was placed.`,
   composer_unavailable: 'Building apps is not available on this server right now.',
   cross_site: 'That request was refused.',
   unavailable: 'The service is unavailable right now. Try again in a moment.',
@@ -280,6 +281,40 @@ export async function makeApp(boxId: string, purpose: string, fileIds?: string[]
   const json = await call('POST', `/v1/boxes/${boxId}/apps`, fileIds ? { purpose, file_ids: fileIds.filter(isUuid) } : { purpose });
   if (!isUuid(json.app_id) || !isUuid(json.work_id)) throw new BoxError('unavailable', 500);
   return { app_id: json.app_id, work_id: json.work_id, title: str(json.title) ? json.title : 'Generated app', files: num(json.files) ? json.files : 0, timings: json.timings };
+}
+
+/**
+ * APP-124 **Make a card**: formation constrained to one card. The server
+ * makes a minimal app named after the folder (or the file) with exactly one
+ * card, the most useful view of its data, linked back to the folder, and
+ * names it (`address`, the app's `/name`) when a name is free.
+ */
+export async function makeCard(boxId: string): Promise<{ app_id: string; work_id: string; title: string; address: string | null; timings: unknown }> {
+  if (!isUuid(boxId)) throw new BoxError('not_found', 404);
+  const json = await call('POST', `/v1/boxes/${boxId}/apps`, { one_card: true });
+  if (!isUuid(json.app_id) || !isUuid(json.work_id)) throw new BoxError('unavailable', 500);
+  const address = str(json.address) && /^[a-z][a-z0-9-]{1,31}$/.test(json.address) ? json.address : null;
+  return { app_id: json.app_id, work_id: json.work_id, title: str(json.title) ? json.title.slice(0, 120) : 'Card', address, timings: json.timings };
+}
+
+/** APP-124: a row an answer about a folder used: the file (and its SHA-256), the sheet, the n-th row under the header. */
+export type RowReference = { ref: string; file_id: string; file: string; sha256: string; sheet: string | null; row: number; label: string };
+
+/** APP-124: one answer about a folder's tables, exactly `{text, references}`; null when the shape is anything else. */
+export function folderAnswer(value: unknown): { text: string; references: RowReference[] } | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const v = value as Record<string, unknown>;
+  if (Object.keys(v).some((key) => key !== 'text' && key !== 'references') || !str(v.text) || !Array.isArray(v.references)) return null;
+  const references = v.references.flatMap((item): RowReference[] => {
+    if (typeof item !== 'object' || item === null) return [];
+    const r = item as Record<string, unknown>;
+    if (!str(r.ref) || !isUuid(r.file_id) || !str(r.file) || !num(r.row) || r.row < 1) return [];
+    return [{
+      ref: r.ref, file_id: r.file_id, file: r.file.slice(0, 200), sha256: str(r.sha256) ? r.sha256 : '',
+      sheet: str(r.sheet) ? r.sheet.slice(0, 120) : null, row: Math.floor(r.row), label: str(r.label) ? r.label.slice(0, 200) : '',
+    }];
+  });
+  return { text: v.text, references };
 }
 
 export async function attachFile(boxId: string, fileId: string, appId: string, workId: string): Promise<{ box: Box | null; card: Card | null }> {

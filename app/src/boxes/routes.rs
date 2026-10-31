@@ -23,7 +23,12 @@
 //! - `POST /v1/boxes/{box}/files/{file}/attach {"app_id","work_id"}`: the file
 //!   into the member's box attached to that app, plus its data card.
 //! - `POST /v1/boxes/{box}/apps {"purpose","file_ids"?}`: an app built from
-//!   the box (long deadline: it may wait on the model).
+//!   the box (long deadline: it may wait on the model). APP-124: with
+//!   `"one_card": true` (`purpose` optional) it is **Make a card**: a
+//!   minimal app with exactly one card, by rule ([`card_from_box`]).
+//! - `POST /v1/boxes/{box}/ask {"question"}`: APP-124, Ask on a folder
+//!   (`super::ask`): a read-only answer over its parsed tables, with the
+//!   file and row of every row it used.
 //! - `POST /v1/boxes/{box}/share {"grantee_principal_id"}`.
 //! - `GET /v1/boxes/lineage/{app}/{work}`: a work's provenance.
 //! - `GET|POST /v1/boxes/explain/{app}/{work}`: the explanation card.
@@ -94,6 +99,7 @@ pub fn router(state: Arc<Boxes>) -> Router {
             BRIEF_PATH,
             get(super::brief::brief_get).post(super::brief::brief_post),
         )
+        .route(super::ask::ASK_PATH, post(super::ask::ask_post))
         .with_state(state)
 }
 /// Whether `path` is a route that runs the parser, the normalizer or a
@@ -107,7 +113,7 @@ pub fn long_path(path: &str) -> bool {
     let parts: Vec<&str> = rest.split('/').collect();
     matches!(
         parts.as_slice(),
-        [_, "files" | "apps" | "brief"]
+        [_, "files" | "apps" | "brief" | "ask"]
             | [_, "files", _, "preview" | "data" | "attach"]
             | ["explain", _, _]
     )
@@ -166,7 +172,7 @@ fn json_body(headers: &HeaderMap) -> bool {
         .is_some_and(|v| v.trim().eq_ignore_ascii_case("application/json"))
 }
 /// A JSON object body (`malformed_request` for anything else).
-async fn json_of(
+pub(crate) async fn json_of(
     body: axum::body::Body,
     headers: &HeaderMap,
 ) -> Result<serde_json::Map<String, Value>, Response> {
@@ -188,7 +194,7 @@ fn admit_write(state: &Boxes, member: &TrustedRequest) -> Result<(), u64> {
         .limits
         .admit_member_write(member.organization(), member.principal())
 }
-fn valid(id: &str) -> bool {
+pub(crate) fn valid(id: &str) -> bool {
     storage::valid_identifier(id)
 }
 
@@ -1078,6 +1084,10 @@ pub struct Built {
     pub box_name: String,
     pub files: usize,
     pub timings: Vec<(&'static str, u64)>,
+    /// APP-124 **Make a card**: an app with exactly one card.
+    pub one_card: bool,
+    /// APP-124: the `/name` a one-card app was given (none: unnamed).
+    pub address: Option<String>,
 }
 
 /// Why building from a box stopped.
@@ -1160,12 +1170,36 @@ pub async fn build_from_box(
 ) -> Result<Built, BuildRefusal> {
     let started = Instant::now();
     let mut timings = Vec::new();
-    let stores = state.auth.stores.as_ref().ok_or(BuildRefusal::NotFound)?;
+    if state.auth.stores.is_none() {
+        return Err(BuildRefusal::NotFound);
+    }
     if !state.composer.available_for(member.organization())
         && !crate::demo::is_demo_org(member.organization())
     {
         return Err(BuildRefusal::ComposerUnavailable);
     }
+    let step = Instant::now();
+    let (view, data) = box_data(state, member, box_id, only, super::MAX_CONTEXT_DATA_FILES).await?;
+    let data = derive::distinct(data);
+    timings.push(("parse_ms", ms(step)));
+    if data.is_empty() {
+        return Err(BuildRefusal::NoData);
+    }
+    build_with(state, member, box_id, purpose, view, data, started, timings).await
+}
+
+/// The folder (its owner only, else the uniform 404) and up to `at_most`
+/// of its data files, registered (inferred defaults for any not yet
+/// confirmed), each with its first rows: confirmed files first (the member
+/// chose their types), then the newest others.
+async fn box_data(
+    state: &Boxes,
+    member: &TrustedRequest,
+    box_id: &str,
+    only: Option<&[String]>,
+    at_most: usize,
+) -> Result<(storage::BoxView, Vec<DataFile>), BuildRefusal> {
+    let stores = state.auth.stores.as_ref().ok_or(BuildRefusal::NotFound)?;
     let view = stores
         .workspace
         .read_box(member, box_id)
@@ -1177,10 +1211,7 @@ pub async fn build_from_box(
     if !view.row.owner {
         return Err(BuildRefusal::NotFound);
     }
-    let step = Instant::now();
     let mut data: Vec<DataFile> = Vec::new();
-    // Confirmed files first (the member chose their types), then the newest
-    // others; at most three (the context cap).
     let mut candidates: Vec<&BoxFile> = view
         .files
         .iter()
@@ -1188,7 +1219,7 @@ pub async fn build_from_box(
         .filter(|f| only.is_none_or(|ids| ids.contains(&f.file_id)))
         .collect();
     candidates.sort_by_key(|f| (f.data.is_none(), std::cmp::Reverse(f.created_at.clone())));
-    for file in candidates.into_iter().take(super::MAX_CONTEXT_DATA_FILES) {
+    for file in candidates.into_iter().take(at_most) {
         let (registered, table) = match &file.data {
             Some(registered) => match inspect_file(state, member, file).await {
                 Ok((_, table, _)) => (registered.clone(), table),
@@ -1210,11 +1241,22 @@ pub async fn build_from_box(
                 .collect(),
         });
     }
-    let data = derive::distinct(data);
-    timings.push(("parse_ms", ms(step)));
-    if data.is_empty() {
-        return Err(BuildRefusal::NoData);
-    }
+    Ok((view, data))
+}
+
+/// The model (or rehearsed) half of [`build_from_box`].
+#[allow(clippy::too_many_arguments)]
+async fn build_with(
+    state: &Boxes,
+    member: &TrustedRequest,
+    box_id: &str,
+    purpose: &str,
+    view: storage::BoxView,
+    data: Vec<DataFile>,
+    started: Instant,
+    mut timings: Vec<(&'static str, u64)>,
+) -> Result<Built, BuildRefusal> {
+    let stores = state.auth.stores.as_ref().ok_or(BuildRefusal::NotFound)?;
     let step = Instant::now();
     let refs: Vec<&FileData> = data.iter().map(|d| &d.data).collect();
     let context = context_with(state, member, &refs)
@@ -1330,8 +1372,135 @@ pub async fn build_from_box(
         box_name: view.row.name,
         files: used.len(),
         timings,
+        one_card: false,
+        address: None,
     })
 }
+/// APP-124 **Make a card**: formation constrained to one card. A minimal app
+/// named after the folder (or, for Uploads or an untitled folder, the file)
+/// with exactly one card, the most useful view of the folder's first data
+/// file (`derive::card_definition`, by rule: no model call, so it works in
+/// every organization), published on the member's authoring app, linked
+/// back to the folder (`derived` provenance, the "Built from folder" chip)
+/// and saved under a `/name` when one is free (`derive::card_slug`, then
+/// `-card`, then `-2` … `-9`; never a verb, a reserved word, a library
+/// address or alias, a name the member already sees or one of their
+/// folders' names). The name is judged under the organization's naming lock,
+/// as `POST /v1/work/{app}/{work}/name` judges it; an organization label
+/// that holds it (judged in storage) leaves the app unnamed.
+pub async fn card_from_box(
+    state: &Boxes,
+    member: &TrustedRequest,
+    box_id: &str,
+    only: Option<&[String]>,
+) -> Result<Built, BuildRefusal> {
+    let started = Instant::now();
+    let mut timings = Vec::new();
+    let stores = state.auth.stores.as_ref().ok_or(BuildRefusal::NotFound)?;
+    let step = Instant::now();
+    let (view, data) = box_data(state, member, box_id, only, 1).await?;
+    timings.push(("parse_ms", ms(step)));
+    let Some(first) = data.into_iter().next() else {
+        return Err(BuildRefusal::NoData);
+    };
+    let step = Instant::now();
+    let context = context_with(state, member, &[&first.data])
+        .await
+        .map_err(|_| BuildRefusal::Unavailable)?;
+    let title = derive::card_title(&view.row.name, &view.row.kind, &first.file.name);
+    let content = derive::card_definition(&title, &first);
+    let intent = format!(
+        "One card from the {} {}: {}",
+        super::NOUN_LOWER,
+        view.row.name,
+        first.file.name
+    );
+    let lock = composer::commands::naming_lock(member.organization());
+    let naming = lock.lock().await;
+    let mut address = free_address(state, member, &derive::card_slug(&title)).await;
+    let named = |slug: &str| format!("{}{slug}\n{intent}", storage::COMMAND_MARKER);
+    let placed = match &address {
+        Some(slug) => {
+            match publish_rule_built(state, member, &context, &content, &named(slug)).await {
+                Ok(placed) => placed,
+                // An organization label holds the name (storage's judgment):
+                // the card is made unnamed.
+                Err(Refused::NotFound) => {
+                    address = None;
+                    publish_rule_built(state, member, &context, &content, &intent)
+                        .await
+                        .map_err(build_refusal)?
+                }
+                Err(refused) => return Err(build_refusal(refused)),
+            }
+        }
+        None => publish_rule_built(state, member, &context, &content, &intent)
+            .await
+            .map_err(build_refusal)?,
+    };
+    drop(naming);
+    timings.push(("generation_ms", 0));
+    timings.push(("admission_publish_ms", ms(step)));
+    let used = [(
+        first.file.file_id.clone(),
+        first.file.content_digest.clone(),
+    )];
+    stores
+        .workspace
+        .record_box_derivation(member, box_id, &placed.app, &placed.work, "derived", &used)
+        .await
+        .map_err(|_| BuildRefusal::Unavailable)?;
+    timings.push(("total_ms", ms(started)));
+    tracing::info!(
+        event = "box.card_derived",
+        organization_id = member.organization(),
+        box_id,
+        app_id = placed.app,
+        work_id = placed.work,
+        named = address.is_some(),
+        total_ms = ms(started),
+        "one-card app built from box"
+    );
+    Ok(Built {
+        placed,
+        origin: "generated",
+        source: "rule",
+        box_id: box_id.to_owned(),
+        box_name: view.row.name,
+        files: 1,
+        timings,
+        one_card: true,
+        address,
+    })
+}
+
+/// The first free `/name` for a one-card app (see [`card_from_box`]), or
+/// none. The caller holds the organization's naming lock.
+async fn free_address(state: &Boxes, member: &TrustedRequest, base: &str) -> Option<String> {
+    let stores = state.auth.stores.as_ref()?;
+    let named = stores.data.named_works(member).await.ok()?;
+    let folders: Vec<String> = stores
+        .workspace
+        .list_boxes(member)
+        .await
+        .ok()?
+        .iter()
+        .map(|b| derive::card_slug(&b.name))
+        .collect();
+    let library = composer::matcher::library_slugs();
+    let taken = |slug: &str| {
+        composer::commands::RESERVED.contains(&slug)
+            || composer::labels::VERBS.contains(&slug)
+            || library.contains(slug)
+            || named.iter().any(|n| n.slug == slug)
+            || folders.iter().any(|f| f == slug)
+    };
+    std::iter::once(base.to_owned())
+        .chain(std::iter::once(format!("{base}-card")))
+        .chain((2..=9).map(|n| format!("{base}-{n}")))
+        .find(|slug| composer::commands::valid_slug(slug) && !taken(slug))
+}
+
 fn build_refusal(refused: Refused) -> BuildRefusal {
     match refused {
         Refused::NotFound => BuildRefusal::NotFound,
@@ -1346,10 +1515,15 @@ pub fn built_json(built: &Built) -> Value {
     for (name, value) in &built.timings {
         timings.insert((*name).into(), json!(value));
     }
-    json!({"app_id": built.placed.app, "work_id": built.placed.work, "title": built.placed.title,
+    let mut value = json!({"app_id": built.placed.app, "work_id": built.placed.work, "title": built.placed.title,
         "origin": built.origin, "source": built.source, "box_id": built.box_id, "box_name": built.box_name,
         "files": built.files, "label": format!("Built from {}: {} · {} {}", super::NOUN_LOWER, built.box_name, built.files, if built.files == 1 { "file" } else { "files" }),
-        "timings": timings})
+        "timings": timings});
+    if let (true, Some(object)) = (built.one_card, value.as_object_mut()) {
+        object.insert("cards".into(), json!(1));
+        object.insert("address".into(), json!(built.address));
+    }
+    value
 }
 
 async fn apps(
@@ -1391,10 +1565,23 @@ async fn apps(
         },
         Some(_) => return http::problem(StatusCode::BAD_REQUEST, "malformed_request"),
     };
-    let (Some(purpose), true) = (
-        purpose,
-        value.keys().all(|k| k == "purpose" || k == "file_ids"),
-    ) else {
+    // APP-124: `"one_card": true` is **Make a card** (formation constrained
+    // to one card, no purpose needed); anything but a boolean is refused.
+    let one_card = match value.get("one_card") {
+        None => false,
+        Some(Value::Bool(flag)) => *flag,
+        Some(_) => return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_intent"),
+    };
+    let closed = value
+        .keys()
+        .all(|k| k == "purpose" || k == "file_ids" || k == "one_card");
+    if one_card && closed && (value.get("purpose").is_none() || purpose.is_some()) {
+        return match card_from_box(&state, &member, &box_id, only.as_deref()).await {
+            Ok(built) => document(StatusCode::CREATED, &built_json(&built)),
+            Err(refused) => refused.response(),
+        };
+    }
+    let (Some(purpose), true, false) = (purpose, closed, one_card) else {
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_intent");
     };
     match build_from_box(&state, &member, &box_id, &purpose, only.as_deref()).await {

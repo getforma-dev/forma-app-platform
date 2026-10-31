@@ -173,6 +173,69 @@ pub fn metrics_definition(box_name: &str, purpose: &str, data: &[DataFile]) -> V
     )
 }
 
+/// APP-124 **Make a card**: a minimal app with exactly one card, the most
+/// useful view of one data file, chosen by rule (no model): a chart of the
+/// first numeric field by the first date (else text) field when the file has
+/// both, else its totals, else its rows. Ordinary definition content,
+/// admitted whole like every other (ADR-011 I5).
+pub fn card_definition(title: &str, data: &DataFile) -> Value {
+    let contract = &data.data.contract;
+    let views = source_views(contract, &data.file.name, true);
+    let id = |suffix: &str| {
+        view_id(
+            contract.get("id").and_then(Value::as_str).unwrap_or("data"),
+            suffix,
+        )
+    };
+    let chosen = ["trend", "kpis", "rows"]
+        .iter()
+        .find_map(|suffix| views.iter().find(|view| view["id"] == id(suffix)))
+        .cloned();
+    content(
+        title,
+        &format!(
+            "One card from the file {}: the most useful view of its {} rows.",
+            data.file.name, data.data.row_count
+        ),
+        std::slice::from_ref(contract),
+        chosen.into_iter().collect(),
+    )
+}
+
+/// The name a one-card app is given: the folder's, unless the folder has no
+/// name of its own (Uploads, an untitled folder), then the file's stem.
+pub fn card_title(box_name: &str, box_kind: &str, file_name: &str) -> String {
+    let untitled = box_kind == "uploads" || box_name.to_lowercase().starts_with("untitled");
+    if untitled {
+        let stem = file_name
+            .rsplit_once('.')
+            .map_or(file_name, |(stem, _)| stem);
+        plain(stem, 80)
+    } else {
+        plain(box_name, 80)
+    }
+}
+
+/// The address a one-card app is offered under: its title lowercased, runs
+/// of other characters one hyphen, at most 27 characters (room for `-card`), starting with a
+/// letter (`Q3 board pack` → `q3-board-pack`, `2026 sales` → `data-2026-sales`).
+pub fn card_slug(title: &str) -> String {
+    let mut slug = String::new();
+    for c in title.to_lowercase().chars() {
+        if c.is_ascii_lowercase() || c.is_ascii_digit() {
+            slug.push(c);
+        } else if !slug.ends_with('-') && !slug.is_empty() {
+            slug.push('-');
+        }
+    }
+    let mut slug = slug.trim_end_matches('-').to_owned();
+    if !slug.starts_with(|c: char| c.is_ascii_lowercase()) {
+        slug = format!("data-{slug}");
+    }
+    slug.truncate(27);
+    slug.trim_end_matches('-').to_owned()
+}
+
 /// The demo's rehearsed sentence (DS-73): a metrics / KPI / dashboard ask.
 pub fn rehearsed(purpose: &str) -> bool {
     let lower = purpose.to_lowercase();

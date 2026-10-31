@@ -8,8 +8,11 @@
 // APP-123: `/forma <words>` is a plain sentence typed as a verb (Forma picks
 // or builds an app), and the member's cards made by Shape and pinned
 // answers are placed again on every load (`cards.ts`).
+//
+// APP-124: a folder's **Ask** button opens the Ask tab scoped to the folder.
 import { setTalkRouter, submitSentence } from './actions';
-import { askAboutItem, askCompletions, askLine, openAsk, placePinnedAnswer, startAsk } from './ask';
+import { askAboutItem, askCompletions, askLine, folderScope, openAsk, placePinnedAnswer, startAsk } from './ask';
+import { setFolderAsk } from './boxes';
 import { listCards } from './cards';
 import { fillBar } from './address-chip';
 import { registerCommands, type CanvasCommand } from './command-registry';
@@ -92,6 +95,11 @@ export function startTalk(document_: Document): void {
   registerCommands([SHAPE_COMMAND, ASK_COMMAND, FORMA_COMMAND]);
   registerCompleter('ask', askCompletions, { select: false });
   setTalkRouter(routeTalk);
+  // APP-124: a folder's **Ask** opens the Ask tab scoped to the folder's tables.
+  setFolderAsk((boxId, name) => {
+    const scope = folderScope(boxId, name);
+    if (scope) openAsk('', scope);
+  });
   void placeMemberCards();
   setTalkActions({
     ask: (item) => askAboutItem(item),
