@@ -142,4 +142,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 135 | [APP-135: MVP overbuild and hard-code audit: everything that only works because of the seeded library, the demo organization or fixed data](0-backlog/APP-135.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-132 |
 | 136 | [APP-136: Developer guide from setup through beta delivery](0-backlog/APP-136.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126, APP-127, APP-128, APP-130, APP-131, APP-133 |
 | 137 | [APP-137: One private beta ledger across repository worktrees](0-backlog/APP-137.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127 |
-| 138 | [APP-138: Forma Canvas — shared Forma brand and application design](3-in-review/APP-138.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | In review | None |
+| 138 | [APP-138: Forma Canvas — shared Forma brand and application design](4-done/APP-138.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Done | None |

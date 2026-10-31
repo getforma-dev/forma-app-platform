@@ -84,6 +84,7 @@
   position: fixed;
   inset: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--cv-header-height) minmax(0, 1fr) auto;
   background: var(--cv-shell);
   color: var(--cv-text);
@@ -99,6 +100,7 @@
 
 .cv-top {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -2590,6 +2592,11 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
   .cv-dock-brand { display: none; }
   .cv-dock { grid-template-columns: minmax(0, 1fr) minmax(320px, 720px) minmax(0, 1fr); gap: 10px; }
   .cv-layout-note { display: none; }
+}
+@media (max-width: 1024px) { .cv-org { display: none; } }
+@media (min-width: 761px) and (max-width: 1024px) {
+  .cv-top { padding-inline: 12px; gap: 8px; }
+  .cv-top-status { gap: 4px; }
 }
 @media (max-width: 760px) {
   :root { --cv-header-height: 60px; }

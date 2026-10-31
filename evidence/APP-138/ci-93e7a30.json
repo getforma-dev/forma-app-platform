@@ -1,0 +1,98 @@
+[
+  {
+    "conclusion": "success",
+    "databaseId": 41229229954,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Released baseline",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229229954"
+  },
+  {
+    "conclusion": "success",
+    "databaseId": 41229229966,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Contract qualification",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229229966"
+  },
+  {
+    "conclusion": "success",
+    "databaseId": 41229230024,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Bounded query qualification",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229230024"
+  },
+  {
+    "conclusion": "success",
+    "databaseId": 41229229976,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Parser qualification",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229229976"
+  },
+  {
+    "conclusion": "success",
+    "databaseId": 41229229967,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Auth consumer qualification",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229229967"
+  },
+  {
+    "conclusion": "success",
+    "databaseId": 41229229959,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Published canvas consumer",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229229959"
+  },
+  {
+    "conclusion": "success",
+    "databaseId": 41229229999,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Synthetic fixture qualification",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229229999"
+  },
+  {
+    "conclusion": "success",
+    "databaseId": 41229229993,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Pitch campaigns",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229229993"
+  },
+  {
+    "conclusion": "success",
+    "databaseId": 41229229956,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Planning integrity",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229229956"
+  },
+  {
+    "conclusion": "success",
+    "databaseId": 41229229957,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Tenant foundation qualification",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229229957"
+  },
+  {
+    "conclusion": "success",
+    "databaseId": 41229229975,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Parser release qualification",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229229975"
+  },
+  {
+    "conclusion": "success",
+    "databaseId": 41229230006,
+    "headSha": "93e7a30edc17c8ebea720700e0b0f6c0bb7d6f4d",
+    "name": "Foundation preparation",
+    "status": "completed",
+    "url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41229230006"
+  }
+]
