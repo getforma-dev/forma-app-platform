@@ -1359,7 +1359,7 @@ impl Data {
 /// The listing clause in SQL over a `genui.saved_work` row `w` for
 /// `principal`: `discover` on the app and `record_read` on the work (the
 /// prefilter before a listing's cap; `open_listed` stays the judgment).
-fn listable(principal: &str) -> String {
+pub(super) fn listable(principal: &str) -> String {
     format!(
         "EXISTS(SELECT 1 FROM genui.app_permissions x WHERE x.organization_id=w.organization_id AND x.principal_id={principal} AND x.app_id=w.app_id AND x.permission='discover') AND {}",
         super::authorization::record_read_clause(principal)

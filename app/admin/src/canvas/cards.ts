@@ -11,7 +11,11 @@
 // receipts (checked by the server against the record revisions); it never
 // runs again. Both are the member's own ("made by you") and persist across
 // sessions; the app's owner or an admin can add a made card for everyone
-// who can open the app. Removing is a soft delete on the server.
+// who can read the app's work, and take another member's card added for
+// everyone back to its maker or remove it (`can_manage`). Removing is a soft
+// delete on the server. A pinned answer's text is not derived again: it is
+// labeled "As answered on <date>" (`answeredLine`) so it never passes as a
+// live answer.
 //
 // Every stored card the server sends is judged again here (`storedCard`,
 // `madeView`, `pinnedAnswer`) before any use, as Shape's specs are.
@@ -23,7 +27,7 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
 
 export type StoredCard = {
   card_id: string; kind: 'card' | 'answer'; app_id: string | null; work_id: string | null; source: string; address: string; title: string;
-  spec: unknown; everyone: boolean; mine: boolean; can_share: boolean; created_at: string;
+  spec: unknown; everyone: boolean; mine: boolean; can_share: boolean; can_manage: boolean; created_at: string;
 };
 /** Where a made card reads its data: its records card's collection, or its view card's view. */
 export type From = { collection: string } | { view: string };
@@ -34,15 +38,15 @@ export type Answer = { question: string; text: string; scope: { kind: 'card' | '
 /** A card from `GET /v1/cards`, judged again; null drops it. */
 export function storedCard(value: unknown): StoredCard | null {
   if (!isObject(value)) return null;
-  const { card_id: id, kind, app_id: app, work_id: work, source, address, title, everyone, mine, can_share: share, created_at: created } = value;
+  const { card_id: id, kind, app_id: app, work_id: work, source, address, title, everyone, mine, can_share: share, can_manage: manage = false, created_at: created } = value;
   const optionalId = (v: unknown) => v === null || (typeof v === 'string' && UUID.test(v));
   if (typeof id !== 'string' || !UUID.test(id) || (kind !== 'card' && kind !== 'answer') || !optionalId(app) || !optionalId(work)
     || typeof source !== 'string' || typeof address !== 'string' || !/^[a-z0-9:.-]{0,88}$/.test(address)
     || typeof title !== 'string' || !title || title.length > 120 || typeof everyone !== 'boolean' || typeof mine !== 'boolean'
-    || typeof share !== 'boolean' || typeof created !== 'string') return null;
+    || typeof share !== 'boolean' || typeof manage !== 'boolean' || typeof created !== 'string') return null;
   return {
     card_id: id, kind, app_id: app as string | null, work_id: work as string | null, source, address, title, spec: value.spec,
-    everyone, mine, can_share: share, created_at: created,
+    everyone, mine, can_share: share, can_manage: manage && !mine && everyone, created_at: created,
   };
 }
 
@@ -148,6 +152,17 @@ export async function removeCard(id: string): Promise<true | string> {
   if (!UUID.test(id)) return 'That card cannot be removed.';
   const answer = await send('POST', `${CARDS_URL}/${id}/remove`, {});
   return typeof answer === 'string' ? answer : true;
+}
+
+/**
+ * The line a pinned answer shows: when it was answered, about what, and that
+ * it does not run again. Its text is what Ask said then, never derived
+ * again, so it is never presented as a live answer.
+ */
+export function answeredLine(card: Pick<StoredCard, 'created_at'>, origin: string): string {
+  const when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(card.created_at)
+    ? `${card.created_at.slice(0, 10)} ${card.created_at.slice(11, 16)} UTC` : 'an earlier date';
+  return `As answered on ${when} · asked about ${origin} · it does not run again`;
 }
 
 /** The line a made card shows: who made it and whether everyone sees it. */

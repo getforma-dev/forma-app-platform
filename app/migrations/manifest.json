@@ -75,7 +75,7 @@
     {
       "version": 15,
       "file": "0015_member_cards.sql",
-      "sha256": "648c210b3052095527db8c52fe283a2ffaafa5bf9b2d4ddc0d4597c24d122ab2"
+      "sha256": "e23c520d085a5e738b89eb90e300526a151bfb943055b9e3e4cdf4782fbb21c0"
     }
   ],
   "catalog": [
@@ -141,7 +141,7 @@
     },
     {
       "file": "catalog-v15.json",
-      "sha256": "fe56dd6fe9985eaf3ed2e19a728971302a9f20f48e2c8eee27e8339d465a9a5d"
+      "sha256": "7926c0784d02af31bc3743ffdf2cc8bfef16d151af5dd55b36ad96148110860a"
     }
   ]
 }

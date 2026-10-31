@@ -48,6 +48,12 @@ ADMIT_FUNCTIONS = {
     'register_box_source': ('p_org uuid, p_principal uuid, p_box uuid, p_file uuid, p_source uuid, p_revision uuid, p_content_digest text, '
                             'p_normalized_digest text, p_contract_digest text, p_envelope bytea, p_row_count bigint',
                             'TABLE(source_id uuid, revision_id uuid, created_at timestamp with time zone)'),
+    # Migration 0015 (ADR-011 pitch, APP-123 review): the ninth definer; the
+    # app's owner or an admin takes another member's card added for everyone
+    # back to its maker or removes it (the workspace's own writes stay
+    # limited to the principal's rows by member_cards_principal).
+    'steward_card': ('p_org uuid, p_actor uuid, p_card uuid, p_remove boolean',
+                     'TABLE(app_id uuid, work_id uuid, changed boolean)'),
 }
 # Relations migration 0003 adds to genui (D7.3: each states RLS, FORCE and tenant_scope).
 ADMISSION_TABLES = ('access_codes','audit_events','audit_heads','code_grant_templates','code_redemptions',
@@ -122,6 +128,11 @@ ADMIT_GRANTS = set().union(
              'row_count','registered_by','created_at'),
     # 0012 (APP-113 review): the idempotency lookup of register_box_source.
     _columns('box_file_sources','SELECT','organization_id','box_id','file_id','normalized_digest','source_id','revision_id','created_at'),
+    # 0015 (APP-123 review): steward_card's reads and its two column writes.
+    _columns('member_cards','SELECT','organization_id','card_id','kind','app_id','work_id','everyone','removed_at'),
+    _columns('member_cards','UPDATE','everyone','updated_at','removed_at'),
+    _columns('apps','SELECT','organization_id','app_id','owner_principal_id'),
+    _columns('organization_permissions','SELECT','organization_id','principal_id','permission'),
 )
 
 
@@ -273,13 +284,15 @@ LABEL_GRANTS = set().union(
 )
 
 # Migration 0015 (ADR-011 pitch, APP-123): cards made by you and pinned
-# answers. genui_workspace column SELECT and INSERT and the UPDATE of the
-# sharing and removal columns; no DELETE (removing is a soft delete).
+# answers. genui_workspace column SELECT, INSERT without the sharing and
+# removal columns (a card starts private: only the audited share UPDATE sets
+# `everyone`) and the UPDATE of the sharing and removal columns; no DELETE
+# (removing is a soft delete).
 CARD_COLUMNS = ('organization_id','card_id','principal_id','kind','app_id','work_id','source','address','title','spec',
-                'everyone','created_at','updated_at','removed_at')
+                'everyone','read_apps','read_works','created_at','updated_at','removed_at')
 CARD_GRANTS = set().union(
     _role_columns('genui_workspace','member_cards','SELECT',*CARD_COLUMNS),
-    _role_columns('genui_workspace','member_cards','INSERT',*CARD_COLUMNS[:-1]),
+    _role_columns('genui_workspace','member_cards','INSERT',*(c for c in CARD_COLUMNS if c not in ('everyone','removed_at'))),
     _role_columns('genui_workspace','member_cards','UPDATE','everyone','updated_at','removed_at'),
 )
 
@@ -486,7 +499,7 @@ def admission_checks(pg, passed, denied):
         writes=[r[0] for r in functions if re.search(r'\b(update|insert\s+into|delete\s+from)\s+genui\.organizations\b',r[7],re.I)]
         assert writes==[] and all(re.search(r'genui\.organizations\s+o\s+where\s+o\.organization_id\s*=\s*p_org\s+for\s+share',r[7],re.I)
                                   for r in functions if r[0] not in ('resolve_code','resolve_handle')),writes
-    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; eight exact STRICT VOLATILE definers (six of D7.1, the 0008 share_work and the 0011 register_box_source) with fixed search_path and no organizations write',
+    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; nine exact STRICT VOLATILE definers (six of D7.1, the 0008 share_work, the 0011 register_box_source and the 0015 steward_card) with fixed search_path and no organizations write',
            incoming=[list(r) for r in incoming])
 
     # --- RESTRICTIVE audit bindings: INSERT holders equal policy targets (D7.8) ---

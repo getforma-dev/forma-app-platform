@@ -26,7 +26,7 @@
 // a card** (a Shape preview of a new card over the answer's records;
 // nothing is added without a click).
 import { activeCanvasItem, boardWorks, focusCard, placeUtilityCard, workCard } from './board';
-import { newCardId, pinnedAnswer, pinRequest, storeCard, type Answer, type StoredCard } from './cards';
+import { answeredLine, newCardId, pinnedAnswer, pinRequest, storeCard, type Answer, type StoredCard } from './cards';
 import { selectedCanvasItem } from './controls';
 import { cardAddress, findCardRow, findCards, findApps, type CardRow } from './library';
 import { onPaneTab, openPane } from './pane';
@@ -363,9 +363,10 @@ function answerActions(document_: Document, answer: Answer): HTMLElement {
 }
 
 /**
- * APP-123: a pinned answer on the canvas: the question, when it was pinned,
- * the text and every record it used with its receipt. Read-only: it never
- * runs again. Its maker's **Remove** deletes it (audited).
+ * APP-123: a pinned answer on the canvas: "As answered on <date>", the
+ * question, the text and every record it used with its receipt. Read-only:
+ * it never runs again, and its text is what Ask said then (never derived
+ * again). Its maker's **Remove** deletes it (audited).
  */
 export function placePinnedAnswer(card: StoredCard): boolean {
   const answer = pinnedAnswer(card);
@@ -374,7 +375,7 @@ export function placePinnedAnswer(card: StoredCard): boolean {
   const placed = `pin-${card.card_id}`;
   const references = answer.references.filter((r) => typeof r.record_id === 'string').slice(0, MAX_WORKS * 200) as Reference[];
   const body = el(document_, 'section', { class: 'cv-pinned-answer', 'aria-label': 'Pinned answer' },
-    el(document_, 'p', { class: 'cv-shaped-from' }, `Asked about ${answerOrigin(answer)} · pinned ${card.created_at.replace('T', ' ').replace('Z', ' UTC')} · it does not run again`),
+    el(document_, 'p', { class: 'cv-shaped-from' }, answeredLine(card, answerOrigin(answer))),
     el(document_, 'p', { class: 'cv-pinned-question' }, `“${answer.question}”`),
     el(document_, 'p', { class: 'cv-pinned-text' }, answer.text),
     ...(references.length ? [referenceList(document_, references, answer.receipts)] : []));

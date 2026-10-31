@@ -595,7 +595,9 @@ export function removeButton(document_: Document, card: Pick<StoredCard, 'card_i
  * APP-123: a card made by you (or added for everyone by the app's owner) on
  * the canvas: its stored view over its records, live, with receipts; the
  * maker's **Remove**, and the owner's **Add for everyone** / **Keep for me
- * only**. False when the stored spec does not judge (it is not shown).
+ * only**; on another member's card added for everyone, the app's owner or
+ * an admin gets **Keep for its maker only** and **Remove**. False when the
+ * stored spec does not judge (it is not shown).
  */
 export async function placeMadeCard(card: StoredCard, report: Report = announce): Promise<boolean> {
   const made = madeView(card);
@@ -635,7 +637,27 @@ export async function placeMadeCard(card: StoredCard, report: Report = announce)
       });
       actions.append(share);
     }
-    if (current.mine) actions.append(removeButton(document_, current, placed, report, () => liveViews.delete(`made:${card.card_id}`)));
+    if (current.can_manage) {
+      // The app's owner or an admin, on another member's card added for
+      // everyone: take it back to its maker (audited), or remove it.
+      const back = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-made-share' }, 'Keep for its maker only');
+      back.addEventListener('click', (event) => {
+        event.stopPropagation();
+        back.setAttribute('disabled', '');
+        void shareCard(current.card_id, false).then((shared) => {
+          if (typeof shared === 'string') {
+            back.removeAttribute('disabled');
+            report(shared);
+            return;
+          }
+          liveViews.delete(`made:${card.card_id}`);
+          removePlaced(placed);
+          report('Only its maker sees it now.');
+        });
+      });
+      actions.append(back);
+    }
+    if (current.mine || current.can_manage) actions.append(removeButton(document_, current, placed, report, () => liveViews.delete(`made:${card.card_id}`)));
     if (actions.childElementCount) section.append(actions);
     return section;
   };

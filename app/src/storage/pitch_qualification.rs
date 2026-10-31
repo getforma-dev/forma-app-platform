@@ -2566,6 +2566,30 @@ async fn campaign() {
         "{}",
         refused.text()
     );
+    // Review finding 7: the receipt's publication must be the one its
+    // revision was read under (the work's own), not merely a publication of
+    // the app with that definition digest.
+    let read_under = answer["receipts"][0]["publication_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let other_publication = "00000000-0000-4000-8000-0000000c4ab7";
+    c.fixture.sql(&format!("INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope,publication_sequence) SELECT organization_id,app_id,'{other_publication}',definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope,(SELECT max(publication_sequence)+1 FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}') FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND publication_id='{read_under}'"), "genui");
+    let mut elsewhere = pin.clone();
+    elsewhere["card_id"] = json!("00000000-0000-4000-8000-0000000c4a0a");
+    for receipt in elsewhere["receipts"].as_array_mut().unwrap() {
+        receipt["publication_id"] = json!(other_publication);
+    }
+    let refused = stand
+        .post(cards, Some(&maya_cookie), &elsewhere.to_string())
+        .await;
+    assert_eq!(
+        refused.json()["code"],
+        "unknown_receipt",
+        "another publication of the app: {}",
+        refused.text()
+    );
+    c.fixture.sql(&format!("DELETE FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND publication_id='{other_publication}'"), "genui");
     let mut outsider_pin = pin.clone();
     outsider_pin["card_id"] = json!("00000000-0000-4000-8000-0000000c4a06");
     assert!(stand
@@ -2596,6 +2620,33 @@ async fn campaign() {
         !has(&listed(&stand.get(cards, Some(&mate_cookie)).await), pin_id),
         "it is Maya's alone"
     );
+    // Review findings 1 and 2: revoking Maya's record_read on the work the
+    // answer's receipts cite hides the pinned answer, and her own made card
+    // over that work, until it is granted again.
+    assert_eq!(
+        scalar(&c.fixture, &format!("SELECT cardinality(read_apps)::bigint FROM genui.member_cards WHERE card_id='{pin_id}'")).await,
+        1,
+        "the pinned answer stores the work it read"
+    );
+    // The work Ask read (Maya's own adapted work: she holds record_read as
+    // its unrevoked creator and through any grant): both are revoked.
+    let read_work = answer["receipts"][0]["work_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(made["work_id"], read_work.as_str());
+    c.fixture.sql(&format!("CREATE TABLE public.app123_reads AS SELECT * FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{maya_id}' AND app_id='{EXPENSE_APP}' AND work_id='{read_work}' AND permission='record_read'; DELETE FROM genui.work_permissions p USING public.app123_reads r WHERE p.organization_id=r.organization_id AND p.principal_id=r.principal_id AND p.app_id=r.app_id AND p.work_id=r.work_id AND p.permission=r.permission; CREATE TABLE public.app123_creator AS SELECT organization_id,app_id,work_id FROM genui.saved_work WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND work_id='{read_work}' AND created_by='{maya_id}' AND creator_revoked_at IS NULL; UPDATE genui.saved_work w SET creator_revoked_at=now() FROM public.app123_creator k WHERE w.organization_id=k.organization_id AND w.app_id=k.app_id AND w.work_id=k.work_id;"), "genui");
+    assert!(
+        scalar(&c.fixture, "SELECT (SELECT count(*) FROM public.app123_reads)+(SELECT count(*) FROM public.app123_creator)").await >= 1,
+        "Maya held record_read on the work"
+    );
+    let revoked = listed(&stand.get(cards, Some(&maya_cookie)).await);
+    assert!(!has(&revoked, pin_id), "{revoked:?}");
+    assert!(!has(&revoked, made_id), "{revoked:?}");
+    assert!(has(&revoked, shared_id), "another work's card stays");
+    c.fixture.sql("INSERT INTO genui.work_permissions SELECT * FROM public.app123_reads; DROP TABLE public.app123_reads; UPDATE genui.saved_work w SET creator_revoked_at=NULL FROM public.app123_creator k WHERE w.organization_id=k.organization_id AND w.app_id=k.app_id AND w.work_id=k.work_id; DROP TABLE public.app123_creator;", "genui");
+    let restored = listed(&stand.get(cards, Some(&maya_cookie)).await);
+    assert!(has(&restored, pin_id) && has(&restored, made_id));
     // Remove: a soft delete by its maker, audited, idempotent; one added for
     // everyone goes for everyone.
     for id in [pin_id, shared_id] {
@@ -2625,9 +2676,225 @@ async fn campaign() {
         calls_before_cards,
         "no model call for any card route"
     );
+    // --- APP-123 review: listing authority, the steward path, the cap lock ---
+    let shared_before = scalar(&c.fixture, &made_events("card.shared")).await;
+    let removed_before = scalar(&c.fixture, &made_events("card.removed")).await;
+    // An admin (here the teammate, for this part) adds their own card for everyone.
+    c.fixture.sql(&format!("INSERT INTO genui.organization_permissions VALUES ('{ORG}','{mate_id}','admin_policy')"), "genui");
+    let mates_everyone = format!("/v1/cards/{mates_id}/everyone");
+    let mate_shared = stand
+        .post(&mates_everyone, Some(&mate_cookie), r#"{"everyone":true}"#)
+        .await;
+    assert_eq!(mate_shared.status, StatusCode::OK, "{}", mate_shared.text());
+    let seen = listed(&stand.get(cards, Some(&maya_cookie)).await)
+        .into_iter()
+        .find(|card| card["card_id"] == mates_id)
+        .unwrap_or_default();
+    assert_eq!(seen["mine"], false, "Maya reads the teammate's card");
+    assert_eq!(seen["can_manage"], true, "Maya owns Expenses");
+    assert_eq!(seen["can_share"], false);
+    // Finding 1: a member with only `discover` on the app never lists it,
+    // and cannot take it back or remove it.
+    let (dee_subject, dee) = c.member("00000000e004").await;
+    let dee_id = c.principal(&dee_subject).await;
+    let dee_cookie = dee.cookie(cookies::SESSION).unwrap();
+    c.fixture.sql(&format!("INSERT INTO genui.app_permissions VALUES ('{ORG}','{dee_id}','{EXPENSES_APP}','discover')"), "genui");
+    let dee_list = stand.get(cards, Some(&dee_cookie)).await;
+    assert_eq!(dee_list.status, StatusCode::OK, "{}", dee_list.text());
+    assert!(!has(&listed(&dee_list), mates_id), "discover only");
+    assert!(stand
+        .post(&mates_everyone, Some(&dee_cookie), r#"{"everyone":false}"#)
+        .await
+        .uniform_404());
+    assert!(stand
+        .post(
+            &format!("/v1/cards/{mates_id}/remove"),
+            Some(&dee_cookie),
+            "{}"
+        )
+        .await
+        .uniform_404());
+    // Finding 1: revoking the reader's source_read on a source the work
+    // depends on hides the card; granting it again shows it.
+    c.fixture.sql(&format!("CREATE TABLE public.app123_sources AS SELECT * FROM genui.source_permissions WHERE organization_id='{ORG}' AND principal_id='{maya_id}' AND source_id IN (SELECT source_id FROM genui.work_source_dependencies WHERE organization_id='{ORG}' AND app_id='{EXPENSES_APP}' AND work_id='{EXPENSES_WORK}'); DELETE FROM genui.source_permissions p USING public.app123_sources s WHERE p.organization_id=s.organization_id AND p.principal_id=s.principal_id AND p.source_id=s.source_id AND p.permission=s.permission;"), "genui");
+    assert!(scalar(&c.fixture, "SELECT count(*) FROM public.app123_sources").await >= 1);
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&maya_cookie)).await),
+            mates_id
+        ),
+        "source_read revoked"
+    );
+    c.fixture.sql("INSERT INTO genui.source_permissions SELECT * FROM public.app123_sources; DROP TABLE public.app123_sources;", "genui");
+    assert!(has(
+        &listed(&stand.get(cards, Some(&maya_cookie)).await),
+        mates_id
+    ));
+    // Finding 6: the app's owner takes another member's card back to its
+    // maker (audited; it cannot add it for everyone), then removes it.
+    assert!(stand
+        .post(&mates_everyone, Some(&maya_cookie), r#"{"everyone":true}"#)
+        .await
+        .uniform_404());
+    let taken_back = stand
+        .post(&mates_everyone, Some(&maya_cookie), r#"{"everyone":false}"#)
+        .await;
+    assert_eq!(taken_back.status, StatusCode::OK, "{}", taken_back.text());
+    assert_eq!(taken_back.json()["saved"], true);
+    assert_eq!(taken_back.json()["card"]["everyone"], false);
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE kind='card.shared' AND actor_principal_id='{maya_id}'")).await, 2, "Maya's own share and her take-back");
+    assert!(!has(
+        &listed(&stand.get(cards, Some(&maya_cookie)).await),
+        mates_id
+    ));
+    let mates_own = listed(&stand.get(cards, Some(&mate_cookie)).await)
+        .into_iter()
+        .find(|card| card["card_id"] == mates_id)
+        .unwrap_or_default();
+    assert_eq!(mates_own["everyone"], false, "back with its maker");
+    assert_eq!(mates_own["mine"], true);
+    // Once private again it is the maker's alone: no steward reaches it.
+    assert!(stand
+        .post(
+            &format!("/v1/cards/{mates_id}/remove"),
+            Some(&maya_cookie),
+            "{}"
+        )
+        .await
+        .uniform_404());
+    let again = stand
+        .post(&mates_everyone, Some(&mate_cookie), r#"{"everyone":true}"#)
+        .await;
+    assert_eq!(again.json()["saved"], true, "{}", again.text());
+    let steward_removed = stand
+        .post(
+            &format!("/v1/cards/{mates_id}/remove"),
+            Some(&maya_cookie),
+            "{}",
+        )
+        .await;
+    assert_eq!(
+        steward_removed.json()["saved"],
+        true,
+        "{}",
+        steward_removed.text()
+    );
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&mate_cookie)).await),
+            mates_id
+        ),
+        "removed for everyone"
+    );
+    // A maker who left the organization: their card added for everyone
+    // stops listing, and the app's owner can still remove it.
+    let left_id = "00000000-0000-4000-8000-0000000c4a08";
+    let mut left = team.clone();
+    left["card_id"] = json!(left_id);
+    left["title"] = json!("Left behind");
+    assert_eq!(
+        stand
+            .post(cards, Some(&mate_cookie), &left.to_string())
+            .await
+            .status,
+        StatusCode::OK
+    );
+    let left_shared = stand
+        .post(
+            &format!("/v1/cards/{left_id}/everyone"),
+            Some(&mate_cookie),
+            r#"{"everyone":true}"#,
+        )
+        .await;
+    assert_eq!(left_shared.json()["saved"], true, "{}", left_shared.text());
+    assert!(has(
+        &listed(&stand.get(cards, Some(&maya_cookie)).await),
+        left_id
+    ));
+    c.fixture.sql(&format!("UPDATE genui.memberships SET status='revoked' WHERE organization_id='{ORG}' AND principal_id='{mate_id}'"), "genui");
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&maya_cookie)).await),
+            left_id
+        ),
+        "its maker left"
+    );
+    let left_removed = stand
+        .post(
+            &format!("/v1/cards/{left_id}/remove"),
+            Some(&maya_cookie),
+            "{}",
+        )
+        .await;
+    assert_eq!(
+        left_removed.json()["saved"],
+        true,
+        "{}",
+        left_removed.text()
+    );
+    c.fixture.sql(&format!("UPDATE genui.memberships SET status='active' WHERE organization_id='{ORG}' AND principal_id='{mate_id}'; DELETE FROM genui.organization_permissions WHERE organization_id='{ORG}' AND principal_id='{mate_id}' AND permission='admin_policy'"), "genui");
+    assert_eq!(
+        scalar(&c.fixture, &made_events("card.shared")).await,
+        shared_before + 4
+    );
+    assert_eq!(
+        scalar(&c.fixture, &made_events("card.removed")).await,
+        removed_before + 2
+    );
+    // Finding 3: a card write takes the member's cards lock before counting:
+    // while another session holds it, Maya's write waits, then stores.
+    let holder = c.fixture.operator().await;
+    let key = format!("genui:cards:{ORG}:{maya_id}");
+    holder
+        .client
+        .query_one(
+            "SELECT pg_advisory_lock(hashtextextended($1::text,0))::text",
+            &[&key],
+        )
+        .await
+        .unwrap();
+    let mut queued = made.clone();
+    queued["card_id"] = json!("00000000-0000-4000-8000-0000000c4a09");
+    queued["title"] = json!("Queued");
+    let body = queued.to_string();
+    let pending = stand.post(cards, Some(&maya_cookie), &body);
+    tokio::pin!(pending);
+    // Poll the request while watching for its wait (`lock_timeout` is one
+    // second, so the lock is released as soon as the waiter shows).
+    let mut waiting = 0_i64;
+    for _ in 0..40 {
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut pending)
+                .await
+                .is_err(),
+            "the write waits for the member's cards lock"
+        );
+        waiting = holder
+            .client
+            .query_one("SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted AND database=(SELECT oid FROM pg_database WHERE datname='genui')", &[])
+            .await
+            .unwrap()
+            .get(0);
+        if waiting > 0 {
+            break;
+        }
+    }
+    assert_eq!(waiting, 1, "one waiter on the advisory lock");
+    holder
+        .client
+        .query_one(
+            "SELECT pg_advisory_unlock(hashtextextended($1::text,0))::text",
+            &[&key],
+        )
+        .await
+        .unwrap();
+    let stored = pending.await;
+    assert_eq!(stored.status, StatusCode::OK, "{}", stored.text());
+    assert_eq!(stored.json()["saved"], true);
+    drop(holder);
     check(
         &mut checks,
-        "cards made by you (APP-123): POST /v1/cards stored a made card over the records card (its spec judged against the published schema, its record values never stored), idempotently (a repeat wrote nothing; the same id with other contents was card_exists), audited card.made; stored specs with an unknown field, receipts:false, an undeclared enum value, an unknown key, a client field list or a foreign collection were refused 422 and stored nothing; the card persisted into a new session, was invisible to the teammate, and a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on every card route (the teammate too on another member's remove and share); the app's owner added a card for everyone (one audited card.shared; a repeat wrote nothing), every reader of the app then listed it (not theirs, not shareable), a non-owner could not add theirs for everyone (404); a pinned answer stored exactly Ask's text and storage receipts (audited answer.pinned, no model call), a forged receipt version was refused 422 unknown_receipt, the outsider's pin was the uniform 404, an answer cannot be added for everyone, and it stayed Maya's alone; removing is a soft delete by the maker (two audited card.removed, idempotent), a card added for everyone left everyone's list",
+        "cards made by you (APP-123): POST /v1/cards stored a made card over the records card (its spec judged against the published schema, its record values never stored), idempotently (a repeat wrote nothing; the same id with other contents was card_exists), audited card.made; stored specs with an unknown field, receipts:false, an undeclared enum value, an unknown key, a client field list or a foreign collection were refused 422 and stored nothing; the card persisted into a new session, was invisible to the teammate, and a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on every card route (the teammate too on another member's remove and share); the app's owner added a card for everyone (one audited card.shared; a repeat wrote nothing), every reader of the app then listed it (not theirs, not shareable), a non-owner could not add theirs for everyone (404); a pinned answer stored exactly Ask's text and storage receipts (audited answer.pinned, no model call), a forged receipt version was refused 422 unknown_receipt, the outsider's pin was the uniform 404, an answer cannot be added for everyone, and it stayed Maya's alone; removing is a soft delete by the maker (two audited card.removed, idempotent), a card added for everyone left everyone's list; review fixes: a listing requires record_read on the card's work (a discover-only member never lists a card added for everyone; revoking the reader's source_read on a dependency hides it, granting it again shows it; revoking Maya's work grant hides her pinned answer and her own made card over that work), a pinned answer stores the works it read, a receipt citing another publication of the same app (same definition digest) is 422 unknown_receipt, the app's owner took an admin's card added for everyone back to its maker (audited card.shared, never to everyone) and removed it (audited card.removed), a discover-only member got the uniform 404 on both, a private card stays its maker's alone, a card added for everyone by a maker who left stops listing and the owner removed it; a card write waits on the member's cards advisory lock (one waiter while another session holds it) and stores once it is released",
     );
 
     // --- Chain integrity ---

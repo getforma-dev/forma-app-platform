@@ -265,6 +265,28 @@ test('a pinned answer is read-only: its text and receipts, labeled with the ques
   assert.equal(ask.placePinnedAnswer(pin), true);
   assert.equal(calls.length, 0, 'a pinned answer never asks again');
   assert.equal(document_.ids.size, 1);
+  // Review finding 7: its text is what Ask said then, labeled so it never
+  // passes as a live answer.
+  assert.equal(cards.answeredLine(pin, '/expenses.ledger'), 'As answered on 2026-10-31 12:00 UTC · asked about /expenses.ledger · it does not run again');
+  assert.match(cards.answeredLine({ created_at: 'later' }, 'the canvas'), /^As answered on an earlier date · /);
+});
+
+test('the app’s owner or an admin manages another member’s card added for everyone; nobody else does (APP-123 review)', async () => {
+  const cards = await import('../src/canvas/cards.ts');
+  const base = {
+    card_id: '00000000-0000-4000-8000-0000000c4a08', kind: 'card', app_id: APP, work_id: WORK, source: 'ledger', address: 'expenses.ledger', title: 'Spend',
+    spec: { from: { collection: COLLECTION }, view: { presentation: 'number', measure: { op: 'count' } } }, everyone: true, mine: false, can_share: false, created_at: '2026-10-31T12:00:00Z',
+  };
+  assert.equal(cards.storedCard({ ...base, can_manage: true })?.can_manage, true);
+  assert.equal(cards.storedCard(base)?.can_manage, false, 'absent is false');
+  assert.equal(cards.storedCard({ ...base, can_manage: 'yes' }), null);
+  assert.equal(cards.storedCard({ ...base, can_manage: true, mine: true })?.can_manage, false, 'never on one’s own card');
+  assert.equal(cards.storedCard({ ...base, can_manage: true, everyone: false })?.can_manage, false, 'never on a private card');
+  const calls = fakeFetch(() => ({ status: 200, body: { saved: true, card: { ...base, everyone: false, can_manage: false } } }));
+  const shared = await cards.shareCard(base.card_id, false);
+  assert.equal(typeof shared === 'string' ? shared : shared.everyone, false);
+  assert.equal(calls[0]?.url, `/v1/cards/${base.card_id}/everyone`);
+  assert.deepEqual(calls[0]?.body, { everyone: false });
 });
 
 /** The Library's Expenses rows (its ledger is `expenses.ledger`, 3.2), as the canvas indexes them. */

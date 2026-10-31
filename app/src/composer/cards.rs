@@ -20,16 +20,23 @@
 //!     revision of a record of its work and a publication of its app,
 //!     `Data::receipts_known`, under `record_read`): one storage never issued
 //!     is 422 `unknown_receipt`. It never runs again.
+//! - `GET /v1/cards` lists a card only while the member holds `record_read`
+//!   on its work and on every work a pinned answer's receipts cite, and a
+//!   card added for everyone only while its maker is a member.
 //! - `POST /v1/cards/{card}/everyone` `{"everyone": true|false}`: the maker
-//!   adds their card for every member who can open its app (the app's owner
-//!   or an admin only), or keeps it for themselves; audited `card.shared`.
+//!   adds their card for every member who can read its app's work (the
+//!   app's owner or an admin only), or keeps it for themselves; the app's
+//!   owner or an admin may take another member's card added for everyone
+//!   back to its maker (`false` only, `can_manage`); audited `card.shared`.
 //! - `POST /v1/cards/{card}/remove` `{}`: the maker removes it (a soft
-//!   delete; for everyone when it was added for everyone); audited
+//!   delete; for everyone when it was added for everyone), or the app's
+//!   owner or an admin removes a card added for everyone; audited
 //!   `card.removed`.
 //!
 //! Refusals: the uniform 404 for no session, a card, app or work of another
-//! organization, one the member cannot open or did not make, and (sharing)
-//! a member who is neither the app's owner nor an admin; 403 `cross_site`;
+//! organization, one the member cannot open or did not make (unless they
+//! steward a card added for everyone), and (sharing) a member who is
+//! neither the app's owner nor an admin; 403 `cross_site`;
 //! 413; 422 `invalid_request`, a judge's code, `unknown_receipt`,
 //! `card_exists`, `too_many_cards`, `not_shareable`; 429; 503. Logs carry
 //! identities, kinds and codes, never a question, an answer or a spec.
@@ -98,6 +105,7 @@ pub fn card_json(card: &MemberCard) -> Value {
         "everyone": card.everyone,
         "mine": card.mine,
         "can_share": card.can_share,
+        "can_manage": card.can_manage,
         "created_at": card.created_at,
     })
 }
@@ -459,6 +467,7 @@ async fn make(State(auth): State<Arc<Auth>>, request: Request) -> Response {
                 address: body.address,
                 title: body.title,
                 spec,
+                reads: Vec::new(),
             }
         }
         Some("answer") => {
@@ -504,6 +513,10 @@ async fn make(State(auth): State<Arc<Auth>>, request: Request) -> Response {
                 address: body.address,
                 title: body.title,
                 spec,
+                reads: works
+                    .iter()
+                    .map(|(app, work)| ((*app).to_owned(), (*work).to_owned()))
+                    .collect(),
             }
         }
         _ => return invalid(),
