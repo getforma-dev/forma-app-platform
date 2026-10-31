@@ -1221,6 +1221,17 @@ async fn assemble(
     };
     let (app, work) = (listed.app.as_str(), listed.work.as_str());
     let WorkRead { outline, listing } = read;
+    // APP-121 (and the APP-120 gap): the app card's header and every
+    // placement message show the app's display name: the organization's
+    // label, else the catalog's display title for the library's own work,
+    // else the definition's title.
+    let stored = if crate::composer::matcher::seeded_work(work) {
+        crate::composer::matcher::display_title(&outline.definition_digest)
+            .unwrap_or_else(|| outline.title.clone())
+    } else {
+        outline.title.clone()
+    };
+    let title = crate::composer::labels::title_of(stores, member.as_ref(), app, stored).await;
     let mut echo = FormValues::default();
     let mut restored = false;
     let cards = match restore {
@@ -1315,7 +1326,7 @@ async fn assemble(
         app: app.to_owned(),
         work: work.to_owned(),
         app_card: format!("a-{work}"),
-        title: outline.title,
+        title,
         label,
         origins,
         href: format!("/w/{app}/{work}"),

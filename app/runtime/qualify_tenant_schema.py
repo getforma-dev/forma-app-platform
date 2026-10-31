@@ -176,10 +176,11 @@ DEFINITION_WORK_GRANTS = set().union(
 # D7.8 closed chains and kinds of the application roles 0005 and 0007 bind.
 APPLICATION_CHAIN_KINDS = {
     # 0011 (APP-108) widens the workspace list in place with the folder commands;
-    # 0012 (APP-113 review) adds the summary and brief saves.
+    # 0012 (APP-113 review) adds the summary and brief saves; 0014 (APP-121)
+    # the organization label and personal alias writes.
     'genui_workspace': ('workspace', ('session.signed_in','app.created','definition.drafted','work.saved','work.bound','box.created',
                                       'box.renamed','box.file_added','box.data_registered','box.app_derived','box.shared',
-                                      'box.explained','box.briefed')),
+                                      'box.explained','box.briefed','app.labeled','app.aliased')),
     'genui_control': ('control', ('publication.published','policy.changed')),
     'genui_data': ('data', ('command.committed',)),
 }
@@ -253,6 +254,20 @@ BOX_GRANTS = set().union(
     _role_columns('genui_workspace','box_file_sources','SELECT','organization_id','box_id','file_id','content_digest','source_id','revision_id',
                   'normalized_digest','row_count','registered_by','created_at'),
     _role_columns('genui_workspace','boxes','UPDATE','name'),
+)
+
+# Migration 0014 (ADR-011 pitch, APP-121): naming. genui_workspace column
+# SELECT and INSERT and the UPDATE of the label columns; no DELETE.
+LABEL_TABLES = ('app_labels','member_labels')
+LABEL_COLUMNS = {
+    'app_labels': ('organization_id','app_id','card','name','description','address','kept','updated_by','updated_at'),
+    'member_labels': ('organization_id','principal_id','app_id','card','name','aliases','updated_at'),
+}
+LABEL_GRANTS = set().union(
+    *(_role_columns('genui_workspace',table,'SELECT',*columns) for table,columns in LABEL_COLUMNS.items()),
+    *(_role_columns('genui_workspace',table,'INSERT',*columns) for table,columns in LABEL_COLUMNS.items()),
+    _role_columns('genui_workspace','app_labels','UPDATE','name','description','address','kept','updated_by','updated_at'),
+    _role_columns('genui_workspace','member_labels','UPDATE','name','aliases','updated_at'),
 )
 
 # Migration 0007 (ADR-007 D7.3/D7.7/D7.8/D7.9, ADR-009 D9.8; APP-013): the record
@@ -418,7 +433,7 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS|LABEL_GRANTS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
         # Application roles reach 0003's relations only through 0004's entitlement
         # reads, 0005's and 0007's own-chain audit append (D7.8) and 0006's narrow
@@ -1117,6 +1132,20 @@ def session_checks(pg, passed, denied):
         assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in sorted(BOX_TABLES)],rows
     passed('0011 folder relations (boxes, files, registrations, derivations, shares, file grants, explanations, briefs) are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy',
            tables=list(BOX_TABLES))
+    # 0014 (APP-121): the naming relations, likewise owner-held under FORCE RLS.
+    with pg.connect('postgres') as c:
+        rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",
+                       (list(LABEL_TABLES),)).fetchall()
+        assert rows==[(t,True,True,'genui_owner') for t in sorted(LABEL_TABLES)],rows
+        rows=c.execute("""SELECT tablename,policyname,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
+          AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(LABEL_TABLES),)).fetchall()
+        principal="(principal_id = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid)"
+        assert rows==[('app_labels','tenant_scope','PERMISSIVE',['public'],'ALL',policy,policy),
+                      ('member_labels','member_labels_principal','RESTRICTIVE',['genui_workspace'],'ALL',principal,principal),
+                      ('member_labels','tenant_scope','PERMISSIVE',['public'],'ALL',policy,policy)],rows
+    passed('0014 naming relations (organization labels, personal labels) are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the workspace reads and writes only the scoped principal\'s personal labels (RESTRICTIVE member_labels_principal)',
+           tables=list(LABEL_TABLES))
     flow=("""INSERT INTO genui.prelogin_flows(organization_id,flow_id,cookie_digest,state_digest,kind,code_verifier_ciphertext,client_address_class,
       created_at,expires_at) VALUES (%s,%s,%s,%s,'signin',%s,'v4:192.0.2.1',now(),now()+interval '10 minutes')""",
           (org0,str(uuid.uuid4()),sha('cookie-'+uuid.uuid4().hex),sha('state'),b'\x01'*40))
@@ -1763,6 +1792,7 @@ def qualify():
                 assert c.execute("""SELECT count(*) FROM pg_policies WHERE schemaname='genui' AND policyname<>'tenant_scope'
                   AND NOT (permissive='RESTRICTIVE' AND tablename IN ('audit_events','audit_heads'))
                   AND NOT (permissive='RESTRICTIVE' AND tablename='saved_work' AND policyname='saved_work_creator')
+                  AND NOT (permissive='RESTRICTIVE' AND tablename='member_labels' AND policyname='member_labels_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename IN ('command_claims','command_outcomes','internal_record_revisions'))""").fetchone()==(0,)
                 # 0007's RESTRICTIVE principal bindings, exactly (checked in detail by command_checks).
                 assert set(c.execute("""SELECT tablename,policyname,cmd FROM pg_policies WHERE schemaname='genui' AND permissive='RESTRICTIVE'

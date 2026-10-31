@@ -90,6 +90,7 @@
 !app/src/commands/tests.rs
 !app/src/composer/mod.rs
 !app/src/composer/commands.rs
+!app/src/composer/labels.rs
 !app/src/composer/lineage.rs
 !app/src/composer/matcher.rs
 !app/src/composer/model.rs
@@ -118,6 +119,7 @@
 !app/src/storage/admission.rs
 !app/src/storage/agents.rs
 !app/src/storage/governance.rs
+!app/src/storage/labels.rs
 !app/src/storage/admission_qualification.rs
 !app/src/storage/authorization.rs
 !app/src/storage/catalog.rs
@@ -156,6 +158,7 @@
 !app/migrations/catalog-v11.json
 !app/migrations/catalog-v12.json
 !app/migrations/catalog-v13.json
+!app/migrations/catalog-v14.json
 !app/certs/rds-global-bundle.pem
 !app/runtime/runtime.py
 !app/runtime/qualification_supervisor.py

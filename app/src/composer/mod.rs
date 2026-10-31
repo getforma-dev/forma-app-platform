@@ -40,6 +40,7 @@
 //! and `run` can retrieve but not generate. Logs carry identities, codes,
 //! counts and durations; never the intent, a definition or the key.
 pub mod commands;
+pub mod labels;
 pub mod lineage;
 pub mod matcher;
 pub mod model;

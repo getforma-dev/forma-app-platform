@@ -51,40 +51,48 @@ The pane always reflects the canvas.
 ## Names and addresses
 
 - Every app and card has a **name** (what you read) and an **address** (what you type). An app's address is its name in lowercase with hyphens: Expenses → `/expenses`. A card's address is `app.card`: `/expenses.ledger`. Every card also has a number in the Library: `3.2`.
-- The address is shown wherever the thing appears: the Library row, the card header (a `/expenses` chip; click it to put it in the bar), the hint while you type, and the confirm card ("via /expenses").
-- **Aliases** are extra addresses that also work. `/expense` is an alias of `/expenses`, kept forever.
+- **Two forms, like `/plugin:skill`** (APP-121, 2026-10-31). The **full form** always works and is never ambiguous: `/app:<name>` (an app, by its address, an alias or your own shortcut), `/card:<app>.<card>` or `/card:<number>`, `/widget:<kind>`, `/folder:<name>`. Words after work the same: `/app:expenses $86 Nobu` is `/expenses $86 Nobu`, and `/card:expenses.ledger <words>` is `/expenses.ledger <words>`. The **short form** (`/expenses`, `/expenses.ledger`, `/weather`, `/q3`, `/e`) works when it is unambiguous.
+- **A bare name reaches a verb first**, then your names. An app whose address equals a verb or a verb's alias is reached by its full form: `/notes` is the Note widget, `/app:notes` is the Notes app.
+- Typing `/app:` lists your apps, `/card:` your cards, `/widget:` the widgets, `/folder:` your folders.
+- The address is shown wherever the thing appears: the Library row, the card header (a `/expenses` chip; click it to put it in the bar), the hint while you type, and the confirm card ("via /expenses"). It shows the short form when that is unambiguous for you, else the full one (`/app:notes`); your own shortcut reads "/e → app:expenses (your shortcut)" in the `/` list.
+- **Aliases** are extra addresses that also work, and only the system makes them: the catalog's own (`/expense` of `/expenses`, kept forever) and the old address an owner renames away from (kept automatically). Nobody edits an organization alias; your own shortcuts are yours alone.
+- **Where you name things** (APP-121): the ✎ on a Library app or card row (name, address, description, and your own shortcuts); double-click a card's title on the canvas; `/rename` and `/alias`. Someone who may not rename a card for everyone gets their own name for it; the app itself is renamed only by its owner or an admin.
 - **Who can rename** (APP-121):
 
   | What | Who | Seen by |
   | --- | --- | --- |
-  | App name, address, aliases, description; card names and descriptions | The app's owner or an admin | Everyone who can open the app |
-  | Personal aliases (`/exp` → Expenses, `/q3` → a card) | You | Only you |
+  | App name, address, description; card names and descriptions | The app's owner or an admin | Everyone who can open the app |
+  | Personal shortcuts (`/exp` or `/e` → Expenses, `/q3` → a card) | You | Only you |
 
 - **Naming rules:**
   - Addresses are unique in an organization, regardless of letter case.
-  - Nothing may take a verb's name (`/card`, `/app` …).
-  - A personal alias never overrides an organization address.
-  - Renaming keeps the old address as an alias, so nothing breaks.
-  - Renaming a card changes only its label, never its data or receipts.
+  - Nothing may take a verb's name or a verb's alias (`/card`, `/app`, `/agents`, `/keys` …).
+  - **An app's address never takes a name another app answers to**: another app's address or any of its aliases (hidden or not), another app's current or kept address, a saved app's `/name`. Catalog names always stay with their app: `/spend` stays Vendor spend's, so Expenses is renamed to `/team-spend`.
+  - An app's display name is never another app's name or display title.
+  - Only a library app or an app shared beyond its owner gets an address: a private app cannot hold a name.
+  - A personal shortcut may be a single letter, never an app's address or alias, a saved app's name or a verb, and one the organization later takes stops working.
+  - Renaming keeps the old address working, so nothing breaks. The catalog's own names (`/expenses`, `/expense`) always stay.
+  - Renaming a card changes only its label, never its data or receipts; only a card the app has can be named, and you keep at most 100 names and shortcuts of your own.
   - Every change is audited.
 
 ## Verbs (the Commands tab)
 
 | Group | Verb | Does |
 | --- | --- | --- |
-| Place | `/app <name or number>` | Puts an app and its cards on the canvas |
-| | `/card <address, number or words>` | Puts one card on the canvas: `/card expenses.ledger`, `/card 3.2`, `/card spend by category` |
-| | `/widget <weather, calculator, clock, note or folder> [details]` | Puts a widget on the canvas: `/widget weather Austin` |
+| Place | `/app <name or number>` | Puts an app and its cards on the canvas; also `/app:<name>` (the full form) |
+| | `/card <address, number or words>` | Puts one card on the canvas: `/card expenses.ledger`, `/card 3.2`, `/card spend by category`; also `/card:expenses.ledger` |
+| | `/widget <weather, calculator, clock, note or folder> [details]` | Puts a widget on the canvas: `/widget weather Austin`, `/widget:weather Austin` |
 | Arrange | `/arrange` | Lays the canvas out, one row per app |
 | | `/unite <app>` · `/split` | Assembles an app's cards into one frame, and takes them apart again |
 | | `/focus` | Opens the selected card large, in focus mode |
 | Make | `/folder <name> formation <instruction>` | Builds an app from a folder's files |
-| | `/rename …` · `/alias …` | Names things (APP-121) |
+| | `/rename <app or app.card> <new name> [/address]` | Names an app (and gives it a new address) or a card: `/rename expenses Team spend /team-spend`, `/rename expenses.total Q3 spend` (APP-121) |
+| | `/alias <shortcut> <app or app.card>` | Your own shortcut: `/alias exp expenses`, `/alias e expenses`, `/alias q3 expenses.total`; `/alias exp` alone removes it (APP-121) |
 | Shape | `/shape <address> <words>` | Changes how a card, an app (its theme) or a widget looks or what it shows (APP-122) |
 | Ask | `? <question>` | Opens the Ask tab with your question; read-only (APP-122) |
 | Help | `/apps [query]` · `/commands` · `/shortcuts` · `/agent` | Library · Commands · Shortcuts · Connect an agent |
 
-Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/clock`, `/note`, `/folder` on its own, and `/help`.
+Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/clock`, `/note`, `/folder` on its own, and `/help`. Verbs are always bare; the space forms `/app <name>`, `/card <x>`, `/widget <kind>` are the same as the full forms `/app:<name>`, `/card:<x>`, `/widget:<kind>`.
 
 ## Ask and Shape (APP-122)
 
@@ -109,7 +117,7 @@ Ask and Shape are the two AI jobs that work on things already on your canvas. **
 
 An app has no look of its own; its look is its cards, so shaping an app themes them all. A widget is a one-off of yours with no records, so shaping it only restyles it. A note keeps its text; only its look changes.
 
-**The dot is a shortcut for cards.** `/<app> <words>` (no dot) talks to the app: Do. `/<app>.<card> <words>` (a dot) shapes that card. `/<widget> <details>` places a widget (`/weather Austin`); to restyle it, use `/shape <widget>`.
+**The dot is a shortcut for cards.** `/<app> <words>` (no dot) talks to the app: Do. `/<app>.<card> <words>` (a dot) shapes that card. `/<widget> <details>` places a widget (`/weather Austin`); to restyle it, use `/shape <widget>`. These are the short forms; the full forms say the same thing and are never ambiguous: `/app:<app> <words>`, `/card:<app>.<card> <words>`, `/widget:<kind> <details>`.
 
 **The overlap is only buttons you click:** ⋯ → **Ask about this** on a card opens a scoped Ask, and nothing changes. **Make it a card** on an answer is planned (APP-123); until then, ask first, then shape: `? where are the red invoices`, then `/expenses.ledger only red invoices` → **Add as new card**.
 
@@ -155,5 +163,6 @@ Planned (APP-123): **Make it a card** on answers, persistent personal cards, `@`
 | Enter · Esc on a stack | Fan it out, fold it back |
 | Arrow keys · Shift + arrow | Move the selection 1 px · 10 px |
 | Double-click a stack's name | Rename the stack |
+| Double-click a card's title | Rename the card (for everyone if you own the app, else for you); Enter saves, Esc cancels |
 
 No shortcut fires while you are typing.

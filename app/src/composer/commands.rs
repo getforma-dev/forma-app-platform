@@ -27,8 +27,10 @@
 //! `storage::COMMAND_MARKER` and the slug. No migration: the slug lives on
 //! the saved work's existing `context`. A teammate the named work is shared
 //! with sees it in their list (the listing clause). The slug is
-//! `[a-z][a-z0-9-]{1,31}`, never `apps`, a library slug or alias, or a name
-//! the member already sees (422 `name_taken`).
+//! `[a-z][a-z0-9-]{1,31}`, never `apps`, a verb, a library slug or alias,
+//! an organization label's address or alias (APP-121, whoever can open that
+//! app; judged under the naming lock in `create_work`) or a name the member
+//! already sees (422 `name_taken`).
 //!
 //! Refusals: the uniform 404 for no session, a work the member may not open
 //! and a member storage denies; 403 `cross_site`; 413; 422 `invalid_name`;
@@ -234,6 +236,8 @@ fn library_copy(
 async fn commands(stores: &storage::Stores, member: &TrustedRequest) -> Result<Vec<Value>, Error> {
     let context = stores.workspace.composer_context(member).await?;
     let catalog = crate::actions::prompt::catalog(&context.library);
+    // APP-121: the organization's labels and the member's own.
+    let labels = stores.workspace.labels(member).await?;
     let mut listed = Vec::new();
     for app in &context.library {
         let Some((slug, aliases)) = super::matcher::command(app) else {
@@ -244,24 +248,46 @@ async fn commands(stores: &storage::Stores, member: &TrustedRequest) -> Result<V
                 && (entry.create_command().is_some() || entry.decide_command().is_some())
         });
         let (hint, examples) = library_copy(app, &slug, entry);
-        // APP-120: the catalog's display title, else the definition's.
+        // APP-120: the catalog's display title, else the definition's;
+        // APP-121: the organization's label first, and its address,
+        // kept aliases and the member's own shortcuts.
         let title = super::matcher::display_title(&app.definition_digest)
             .unwrap_or_else(|| app.title.clone());
-        listed.push(json!({
-            "slug": slug,
+        let naming = super::labels::naming(&labels, &app.app);
+        let (address, aliases, title) = super::labels::effective(&naming, &slug, &aliases, &title);
+        let examples: Vec<String> = if address == slug {
+            examples
+        } else {
+            examples
+                .into_iter()
+                .map(|example| match example.strip_prefix(&format!("/{slug}")) {
+                    Some(rest) => format!("/{address}{rest}"),
+                    None => example,
+                })
+                .collect()
+        };
+        let mut entry_json = json!({
+            // APP-121: the full form `app:<address>` always names this app.
+            "namespaced": format!("app:{address}"),
+            "slug": address,
             "aliases": aliases,
             "title": title,
-            "purpose": super::matcher::purpose(app),
+            "purpose": naming.description.clone().unwrap_or_else(|| super::matcher::purpose(app)),
             "kind": "library",
             "app_id": app.app,
             "record": entry.is_some(),
             "hint": hint,
             "examples": examples,
-        }));
+        });
+        if let Some(object) = entry_json.as_object_mut() {
+            object.extend(super::labels::naming_json(&naming));
+        }
+        listed.push(entry_json);
     }
     for named in stores.data.named_works(member).await? {
         let record = !named.work.collections.is_empty();
         listed.push(json!({
+            "namespaced": format!("app:{}", named.slug),
             "slug": named.slug,
             "aliases": [],
             "title": named.work.title,
@@ -382,9 +408,16 @@ async fn name(
         Ok(detail) => detail,
         Err(error) => return refusal(&error),
     };
-    if RESERVED.contains(&slug.as_str()) || super::matcher::library_slugs().contains(&slug) {
+    if RESERVED.contains(&slug.as_str())
+        || super::labels::VERBS.contains(&slug.as_str())
+        || super::matcher::library_slugs().contains(&slug)
+    {
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "name_taken");
     }
+    // APP-121: nor an address or alias the organization gave any app
+    // (whoever can open it): `create_work` judges that under the
+    // organization's naming lock, which the label writes take too, and
+    // refuses it as below (Denied: `name_taken`).
     let lock = naming_lock(member.organization());
     let _naming = lock.lock().await;
     match stores.data.named_works(&member).await {

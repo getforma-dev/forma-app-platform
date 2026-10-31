@@ -138,7 +138,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v13.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v14.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 165] = [
+const SOURCES: [(&str, &[u8]); 167] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -335,6 +335,10 @@ const SOURCES: [(&str, &[u8]); 165] = [
     (
         "app/src/composer/commands.rs",
         include_bytes!("../composer/commands.rs"),
+    ),
+    (
+        "app/src/composer/labels.rs",
+        include_bytes!("../composer/labels.rs"),
     ),
     (
         "app/src/composer/lineage.rs",
@@ -530,6 +534,7 @@ const SOURCES: [(&str, &[u8]); 165] = [
         "app/src/storage/governance.rs",
         include_bytes!("governance.rs"),
     ),
+    ("app/src/storage/labels.rs", include_bytes!("labels.rs")),
     (
         "app/src/storage/managed_qualification.rs",
         include_bytes!("managed_qualification.rs"),

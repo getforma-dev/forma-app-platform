@@ -23,9 +23,16 @@
 // query route; nothing here reads data.
 //
 // Titles are text nodes; ids are the server's card ids.
-import { addressChip, aliasNote, decorateAppCards } from './address-chip';
+//
+// APP-121: names people give. App and card rows (and the cards on the
+// canvas) show the organization's labels and the member's own card names
+// (`applyLabels`, from the addresses); a ✎ on a library app's row and on its
+// card rows opens the naming editor (`naming.ts`, through `setLabelEditor`).
+// The commands are loaded at start, so labels and the app card's address
+// chip show without opening the pane.
+import { addressChip, aliasNote, decorateAppCard, decorateAppCards } from './address-chip';
 import { activeCanvasItem, addCards, boardWorks, CANVAS_CHANGED, isOnBoard, removeCards } from './board';
-import { addressList, addressText, onAddressesChange, WIDGET_KINDS, type Address, type WidgetName } from './command-registry';
+import { addressList, addressText, allAddresses, appForm, cardLabel, onAddressesChange, WIDGET_KINDS, type Address, type WidgetName } from './command-registry';
 import { insertCommand, startCommandSheet } from './command-sheet';
 import { startShortcutTab } from './shortcut-tab';
 import { closePane, isPaneOpen, onPaneTab, openPane, startPane, togglePane } from './pane';
@@ -38,7 +45,11 @@ import { closeFolders, folderEntries, newFolder, toggleFolder } from './boxes';
 import { focusFromItem, openFocus } from './focus';
 
 type Report = (message: string) => void;
-export type CardRow = { id: string; number: string; title: string; kind: string; slug: string; row: HTMLElement; button: HTMLButtonElement; app: AppRow };
+export type CardRow = {
+  id: string; number: string; title: string; kind: string; slug: string; row: HTMLElement; button: HTMLButtonElement; app: AppRow;
+  /** APP-121: the title the server rendered (`title` is the label shown now). */
+  base?: string;
+};
 export type AppRow = {
   app: string; work: string; number: string; title: string; slug: string;
   row: HTMLElement; cards: CardRow[];
@@ -47,6 +58,24 @@ export type AppRow = {
 };
 
 let documentRef: Document | null = null;
+/** APP-121: opens the naming editor for an app row (and one of its cards). */
+type LabelEditor = (app: AppRow, card: CardRow | null) => void;
+let labelEditor: LabelEditor | null = null;
+export function setLabelEditor(editor: LabelEditor): void {
+  labelEditor = editor;
+}
+/** APP-121: the indexed app rows (the naming commands find their targets here). */
+export function libraryApps(): readonly AppRow[] {
+  return apps;
+}
+/** APP-121: the library card row of a canvas card id. */
+export function findCardRow(id: string): CardRow | undefined {
+  for (const app of apps) {
+    const card = app.cards.find((candidate) => candidate.id === id);
+    if (card) return card;
+  }
+  return undefined;
+}
 let pane: HTMLElement | null = null;
 let search: HTMLInputElement | null = null;
 const apps: AppRow[] = [];
@@ -135,7 +164,7 @@ export function indexRow(row: HTMLElement): AppRow | null {
     work,
     number: row.dataset.number ?? '',
     title: row.querySelector('.cv-lib-app-title')?.textContent ?? '',
-    slug: (row.querySelector('.cv-lib-slug')?.textContent ?? '').replace(/^\//, ''),
+    slug: (row.querySelector('.cv-lib-slug')?.textContent ?? '').replace(/^\/(app:)?/, ''),
     row,
     cards: [],
   };
@@ -175,6 +204,10 @@ function nameCards(app: AppRow): void {
     }
     label.textContent = name;
     card.row.dataset.search = `${card.number} ${card.title.toLowerCase()} ${card.kind} ${name}`;
+    // APP-121: a library app's cards can be named (✎).
+    if (app.address?.kind === 'library' && !card.row.querySelector('[data-lib-edit]')) {
+      card.row.append(el(document_, 'button', { type: 'button', class: 'cv-lib-edit', 'data-lib-edit': card.id, title: `Name ${card.title}`, 'aria-label': `Name ${card.title}` }, '✎'));
+    }
   }
 }
 
@@ -251,7 +284,7 @@ function adoptNewWorks(): void {
     section.querySelector('.cv-lib-apps')?.append(row);
     recount(section);
     const indexed = indexRow(row);
-    if (indexed) decorate(indexed, rowAddress(indexed, addressList()));
+    if (indexed) decorate(indexed, rowAddress(indexed, allAddresses()));
   }
 }
 
@@ -450,6 +483,7 @@ export function watchCanvas(document_: Document, render: () => void = () => sync
       queued = false;
       render();
       decorateAppCards(document_);
+      labelCanvasCards(document_);
     });
   });
 }
@@ -725,10 +759,14 @@ export function decorate(app: AppRow, address: Address | undefined): void {
     return;
   }
   app.slug = address.slug;
+  if (address.kind === 'library' && !app.row.querySelector('[data-lib-edit=""]')) {
+    app.row.querySelector('[data-lib-expand]')?.after(el(document_, 'button', { type: 'button', class: 'cv-lib-edit', 'data-lib-edit': '', title: `Name ${address.title}`, 'aria-label': `Name ${address.title}` }, '✎'));
+  }
   // The plain `/slug` the server rendered becomes the address chip (one component everywhere).
   const head = app.row.querySelector('.cv-lib-app-head');
   const plain = app.row.querySelector<HTMLElement>('.cv-lib-slug');
-  const chip = addressChip(document_, address.slug);
+  // APP-121: the short form when unambiguous, else `/app:notes`.
+  const chip = addressChip(document_, appForm(address));
   chip.classList.add('cv-lib-slug');
   if (plain) plain.replaceWith(chip);
   else app.row.querySelector('[data-lib-expand]')?.after(chip);
@@ -749,10 +787,75 @@ export function decorate(app: AppRow, address: Address | undefined): void {
 
 /** Decorates every row from the member's addresses (they load after the page). */
 function applyAddresses(): void {
-  const list = addressList();
-  for (const app of apps) decorate(app, rowAddress(app, list));
-  if (documentRef) decorateAppCards(documentRef);
+  const list = allAddresses();
+  for (const app of apps) {
+    const address = rowAddress(app, list);
+    // A new labels list is a new address object: decorate again.
+    if (app.address && address && app.address !== address) app.address = undefined;
+    decorate(app, address);
+  }
+  applyLabels(list);
+  if (documentRef) {
+    decorateAppCards(documentRef);
+    labelCanvasCards(documentRef);
+  }
   if (search?.value) filter(search.value);
+}
+
+/** APP-121: one title element shows `name`, remembering the server's own the first time. */
+function retitle(node: HTMLElement | null, name: string, description = ''): void {
+  if (!node) return;
+  node.dataset.baseTitle ??= node.textContent ?? '';
+  const shown = name || node.dataset.baseTitle || '';
+  if (node.textContent !== shown) node.textContent = shown;
+  node.setAttribute('title', description || shown);
+}
+
+/** APP-121: the app's and cards' labels on the Library rows (exported for the tests). */
+export function applyLabels(list: Address[] = allAddresses()): void {
+  for (const app of apps) {
+    const address = app.address ?? rowAddress(app, list);
+    if (!address) continue;
+    retitle(app.row.querySelector<HTMLElement>('.cv-lib-app-title'), address.title, address.description);
+    app.title = address.title;
+    for (const card of app.cards) {
+      card.base ??= card.title;
+      const label = (address.cards ?? []).find((entry) => entry.card === card.slug);
+      card.title = cardLabel(address, card.slug, card.base);
+      retitle(card.row.querySelector<HTMLElement>('.cv-lib-card-title'), card.title, label?.description);
+      card.row.dataset.search = `${card.number} ${card.title.toLowerCase()} ${card.kind} ${cardAddress(card)}`;
+    }
+  }
+}
+
+/** APP-121: the cards on the canvas show their labels: the app card the app's display name, a card its label. */
+export function labelCanvasCards(document_: Document, list: Address[] = allAddresses()): void {
+  const placed = new Map<string, HTMLElement>();
+  for (const node of document_.querySelectorAll<HTMLElement>('[data-card]')) {
+    if (node.classList.contains('cv-card') && node.dataset.card) placed.set(node.dataset.card, node);
+  }
+  if (!placed.size) return;
+  for (const app of apps) {
+    const address = app.address ?? rowAddress(app, list);
+    if (!address) continue;
+    for (const card of app.cards) {
+      const node = placed.get(card.id);
+      if (!node) continue;
+      const appCard = card.id.startsWith('a-');
+      // The APP-120 gap: whichever path placed it, the app card knows its
+      // app and shows its address chip.
+      if (!node.dataset.app) {
+        node.dataset.app = app.app;
+        node.dataset.work = app.work;
+      }
+      if (appCard) decorateAppCard(node, list);
+      const heading = appCard ? node.querySelector<HTMLElement>('h2') : node.querySelector<HTMLElement>('h3');
+      const label = (address.cards ?? []).find((entry) => entry.card === card.slug);
+      const name = appCard ? address.title : cardLabel(address, card.slug, '');
+      retitle(heading, name, appCard ? address.description : label?.description);
+      if (name) node.setAttribute('aria-label', name);
+    }
+  }
 }
 
 /** Groups the server's categories under "Apps" and adds the "Widgets" section. */
@@ -815,6 +918,11 @@ export function startLibrary(document_: Document): void {
     const row = target?.closest<HTMLElement>('.cv-lib-app');
     const app = row && apps.find((candidate) => candidate.row === row);
     if (!app || target?.closest('.cv-addr-chip')) return;
+    const edit = target?.closest<HTMLElement>('[data-lib-edit]');
+    if (edit) {
+      labelEditor?.(app, app.cards.find((card) => card.id === edit.dataset.libEdit) ?? null);
+      return;
+    }
     if (target?.closest('[data-lib-expand]')) {
       const open = !app.row.classList.contains('is-expanded');
       expand(app.row, open);
@@ -848,6 +956,8 @@ export function startLibrary(document_: Document): void {
   watchCanvas(document_);
   onAddressesChange(applyAddresses);
   applyAddresses();
+  // APP-121 (and the APP-120 gap): labels and the app card's chip without opening the pane.
+  void ensureCommands();
   registerCommands([APPS_COMMAND, CARD_COMMAND, APP_COMMAND, FOCUS_COMMAND]);
   registerCompleter('apps', appsCompletions);
   registerCompleter('card', (rest) => cardCompletions(rest));

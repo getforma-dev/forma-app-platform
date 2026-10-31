@@ -2338,3 +2338,39 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
 @media (max-width: 760px) {
   .cv-lib-cardname, .cv-addr-also { display: none; }
 }
+
+/* APP-121: naming. The ✎ on Library rows, the naming editor, the in-place title input. */
+.cv-lib-edit {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cv-muted);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.cv-lib-app:hover > .cv-lib-app-head .cv-lib-edit, .cv-lib-card:hover > .cv-lib-edit, .cv-lib-edit:focus-visible { opacity: 1; }
+.cv-lib-edit:hover { border-color: var(--cv-line); color: var(--cv-accent); }
+.cv-lib-card { position: relative; }
+.cv-lib-card > .cv-lib-edit { position: absolute; right: 3.6rem; top: 50%; transform: translateY(-50%); background: var(--cv-surface); }
+.cv-naming-fields { display: grid; gap: 0.6rem; margin: 0.5rem 0; }
+.cv-naming-field { display: grid; gap: 0.2rem; }
+.cv-naming-label { font-size: 0.75rem; font-weight: 600; color: var(--cv-muted); }
+.cv-naming-input {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 7px;
+  background: var(--cv-surface);
+  color: inherit;
+}
+.cv-naming-input:disabled { opacity: 0.6; }
+.cv-naming-hint { font-size: 0.72rem; color: var(--cv-muted); }
+.cv-naming-status { font-size: 0.8rem; color: var(--cv-muted); min-height: 1em; }
+.cv-title-input { font: inherit; width: 100%; padding: 0 0.25rem; border: 1px solid var(--cv-accent); border-radius: 5px; background: var(--cv-surface); color: inherit; }

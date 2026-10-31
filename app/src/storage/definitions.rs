@@ -869,6 +869,15 @@ impl Workspace {
                 .zip(&ids[1..])
                 .map(|((schema, (version, _)), id)| (schema.as_str(), (id.as_str(), *version)))
                 .collect();
+            // APP-121: a "Save as /name" takes the organization's naming
+            // lock (the label writes take it too) and never a name an
+            // organization label's address or alias holds (Denied: the name
+            // route's `name_taken`).
+            if let Some(slug) = super::command_slug(context) {
+                if super::labels::label_holds(transaction, request, slug).await? {
+                    return Err(Error::Denied);
+                }
+            }
             // APP-113 (0012): a member's slash-command name is unique; a
             // concurrent naming's committed row refuses this one (Denied).
             match transaction.query_classified("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,1,$5,$6::text::uuid)", &[org,&app,&work,&publication,&context,&request.principal]).await? {

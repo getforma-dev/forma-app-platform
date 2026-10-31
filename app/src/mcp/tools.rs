@@ -470,6 +470,13 @@ async fn list_apps(
         .await
         .map_err(storage_output)?;
     let catalog = prompt::catalog(&context.library);
+    // APP-121: the names the member sees (organization labels, then the
+    // catalog's display title and address).
+    let labels = stores
+        .workspace
+        .labels(member)
+        .await
+        .map_err(storage_output)?;
     // APP-115: the listing narrowed to the token's scope.
     let in_scope = |app: &str| scope::allows_app(&caller.scope, app);
     let library: Vec<Value> = context
@@ -478,10 +485,22 @@ async fn list_apps(
         .filter(|app| in_scope(&app.app))
         .map(|app| {
             let record = catalog.iter().find(|c| c.app == app.app);
+            let naming = crate::composer::labels::naming(&labels, &app.app);
+            let display = crate::composer::matcher::display_title(&app.definition_digest)
+                .unwrap_or_else(|| app.title.clone());
+            let (address, aliases) = crate::composer::matcher::command(app)
+                .map(|(slug, aliases)| {
+                    let (address, aliases, _) =
+                        crate::composer::labels::effective(&naming, &slug, &aliases, "");
+                    (Some(address), aliases)
+                })
+                .unwrap_or((None, Vec::new()));
             json!({
                 "app_id": app.app,
-                "title": app.title,
-                "description": app.description,
+                "title": naming.name.clone().unwrap_or(display),
+                "address": address.map(|a| format!("/{a}")),
+                "aliases": aliases.iter().map(|a| format!("/{a}")).collect::<Vec<_>>(),
+                "description": naming.description.clone().unwrap_or_else(|| app.description.clone()),
                 "files_records": record.is_some_and(|c| c.create_command().is_some()),
                 "record_fields": record.map(record_fields).unwrap_or(json!([])),
             })
@@ -733,6 +752,48 @@ async fn catalog_of(
     Ok((context.library, catalog))
 }
 
+/// APP-121: the app id a listed name or address names (`Team spend`,
+/// `/team-spend`, `Expenses`, `/expense`), as `forma_list_apps` shows them:
+/// an exact address first, then an alias, then a display name only when one
+/// app has it (`composer::labels::pick_listed`), so another app's label
+/// never takes a name from the app that answers to it.
+fn listed_hint(
+    library: &[crate::storage::LibraryApp],
+    labels: &crate::storage::Labels,
+    hint: &str,
+) -> Option<String> {
+    let named: Vec<(String, String, Vec<String>, String)> = library
+        .iter()
+        .map(|app| {
+            let naming = crate::composer::labels::naming(labels, &app.app);
+            let display = crate::composer::matcher::display_title(&app.definition_digest)
+                .unwrap_or_else(|| app.title.clone());
+            let (address, aliases, title) = crate::composer::matcher::command(app)
+                .map(|(slug, aliases)| {
+                    crate::composer::labels::effective(&naming, &slug, &aliases, &display)
+                })
+                .unwrap_or((
+                    String::new(),
+                    Vec::new(),
+                    naming.name.clone().unwrap_or(display),
+                ));
+            (app.app.clone(), address, aliases, title)
+        })
+        .collect();
+    let listed: Vec<crate::composer::labels::Listed<'_>> = named
+        .iter()
+        .map(
+            |(app, address, aliases, title)| crate::composer::labels::Listed {
+                app,
+                address,
+                aliases,
+                title,
+            },
+        )
+        .collect();
+    crate::composer::labels::pick_listed(&listed, hint)
+}
+
 /// The catalog app an agent's hint names: its id, its title or its schema
 /// (case-insensitive), else the one app whose title contains the hint.
 /// Anything else (a foreign organization's app id among them) is nothing.
@@ -959,6 +1020,11 @@ async fn draft_record(
         .get("values")
         .ok_or_else(|| Output::invalid("`values` is required."))?;
     let (library, catalog) = catalog_of(stores, caller).await?;
+    // APP-121: the name and address `forma_list_apps` shows also name the app.
+    let hint = match stores.workspace.labels(&caller.request).await {
+        Ok(labels) => listed_hint(&library, &labels, &hint).unwrap_or(hint),
+        Err(_) => hint,
+    };
     let app = app_for_hint(&catalog, &hint).ok_or_else(Output::not_found)?;
     // APP-115: the hint resolved to an app; judged before anything is placed.
     if !scope::allows_app(&caller.scope, &app.app) {
