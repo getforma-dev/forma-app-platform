@@ -6,7 +6,9 @@
 // Esc), search by name or number, Add/Remove per card, "Add all" per app,
 // the on-canvas indicators, the "Utilities" (widgets), new works the board
 // places this session under "My apps", and the `/card` and `/app` commands
-// with their autocomplete. Placing goes through the board (`addCards`),
+// with their autocomplete. APP-118: the pane is the app directory: `/apps
+// [query]` opens it (filtered), and its suggestions place an app the way
+// the pane's Add does. Placing goes through the board (`addCards`),
 // which fetches a work through the group route (re-authorized) and runs its
 // views through the governed query route; nothing here reads data.
 //
@@ -47,6 +49,14 @@ export function openLibrary(focusSearch = true): void {
   toggle?.setAttribute('aria-expanded', 'true');
   sync();
   if (focusSearch && matchMedia('(pointer: fine)').matches) search?.focus({ preventScroll: true });
+}
+
+/** APP-118: opens the pane filtered by `query` (every app when empty). */
+export function showLibrary(query = ''): void {
+  if (!pane) return;
+  openLibrary();
+  if (search) search.value = query;
+  filter(query);
 }
 
 export function closeLibrary(): void {
@@ -398,10 +408,23 @@ function clearBar(): void {
   if (input) input.value = '';
 }
 
+/** APP-118: `/apps [query]` opens the Library (filtered); it never places a canvas card. */
+const APPS_COMMAND = {
+  slug: 'apps',
+  title: 'Library',
+  purpose: 'Open the Library, filtered by a name or number; every app you can bring in',
+  run: (text: string, report: Report = () => undefined) => {
+    const query = text.trim();
+    showLibrary(query);
+    clearBar();
+    report(query ? `The Library shows what matches “${query.slice(0, 40)}”. Click Add to place it.` : 'Every app you can open is in the Library (L). Click Add to place one.');
+  },
+};
+
 const CARD_COMMAND = {
   slug: 'card',
   title: 'Bring a card',
-  purpose: 'Place one card by name or number (“/card 3.2”, “/card spend by category”)',
+  purpose: 'Place one card by its name or number',
   run: async (text: string, report: Report = () => undefined) => {
     const [card] = findCards(text);
     if (!text.trim()) {
@@ -421,7 +444,7 @@ const CARD_COMMAND = {
 const APP_COMMAND = {
   slug: 'app',
   title: 'Bring an app',
-  purpose: 'Place every card of one app (“/app expense”, “/app 3”)',
+  purpose: 'Place every card of one app by its name or number',
   run: async (text: string, report: Report = () => undefined) => {
     if (!text.trim()) {
       openLibrary();
@@ -445,6 +468,22 @@ function cardCompletions(rest: string): Completion[] {
     detail: `${card.app.title} · ${card.kind}${isOnBoard(card.id) ? ' · on canvas' : ''}`,
     value: `/card ${card.number}`,
   }));
+}
+/** `/apps <query>`: open the Library filtered (first), then the matching apps; Enter on one places it. */
+function appsCompletions(rest: string): Completion[] {
+  const query = rest.trim();
+  return [
+    {
+      badge: 'L', title: query ? `Open the Library filtered by “${query.slice(0, 40)}”` : 'Open the Library',
+      detail: 'Every app and card you can bring in', value: query ? `/apps ${query}` : '/apps',
+    },
+    ...findApps(query).slice(0, 9).map((app) => ({
+      badge: app.number,
+      title: app.title,
+      detail: `Place it · ${app.cards.length} cards${app.slug ? ` · /${app.slug}` : ''}${app.cards.length && app.cards.every(onBoard) ? ' · on canvas' : ''}`,
+      value: `/app ${app.slug || app.number}`,
+    })),
+  ];
 }
 function appCompletions(rest: string): Completion[] {
   return findApps(rest).slice(0, 10).map((app) => ({
@@ -532,7 +571,8 @@ export function startLibrary(document_: Document): void {
   });
   onBoardChange(sync);
   onNotesChange(syncNotes);
-  registerCommands([CARD_COMMAND, APP_COMMAND]);
+  registerCommands([APPS_COMMAND, CARD_COMMAND, APP_COMMAND]);
+  registerCompleter('apps', appsCompletions);
   registerCompleter('card', cardCompletions);
   registerCompleter('app', appCompletions);
   sync();

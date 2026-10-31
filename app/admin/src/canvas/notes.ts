@@ -20,7 +20,7 @@
 // another browser arrives live (`record.committed`).
 import { canvasHost, isDemoCanvas, mountWidget, onBoardSettled, onLayoutSaved, onLiveEvent, stackBoard, unmountWidget, widgetSpot } from './board';
 import { postCommand } from './commands';
-import { el, isUuid } from './render';
+import { announce, el, isUuid } from './render';
 import type { LiveEvent } from './live';
 
 type Report = (message: string) => void;
@@ -257,7 +257,10 @@ function buildCard(document_: Document, id: string): HTMLElement {
     el(document_, 'header', { class: 'cv-card-head cv-note-head', 'data-canvas-drag-handle': '' },
       el(document_, 'span', { class: 'cv-note-mark', 'aria-hidden': 'true' }),
       el(document_, 'span', { class: 'cv-note-label' }, 'Note'),
-      el(document_, 'span', { class: 'badge', title: 'Only you can read this note unless you share its work' }, 'private')),
+      el(document_, 'span', { class: 'badge', title: 'Only you can read this note unless you share its work' }, 'private'),
+      // APP-118: every utility card has ×. The note stays in the library (Utilities → Notes).
+      el(document_, 'span', { class: 'cv-card-tools' },
+        el(document_, 'button', { type: 'button', class: 'cv-card-focus cv-card-remove', 'data-note-close': '', 'aria-label': 'Take the note off the canvas', title: 'Take off the canvas (the note is kept)' }, '×'))),
     title,
     body,
     el(document_, 'p', { class: 'cv-note-status', 'data-note-status': '', role: 'status' }));
@@ -407,7 +410,7 @@ export async function newNote(text: string): Promise<string> {
 export const NOTE_COMMAND = {
   slug: 'note',
   title: 'Note',
-  purpose: 'Keep a quick note as a card (“/note Call the auditor Friday”); saved as your own record.',
+  purpose: 'Keep a quick note as a card; saved as your own record.',
   aliases: ['notes'],
   run: async (text: string, report: Report = () => undefined) => {
     report(await newNote(text));
@@ -434,6 +437,15 @@ export function startNotes(document_: Document): void {
   documentRef = document_;
   onLiveEvent(onLive);
   onLayoutSaved(saveView);
+  document_.addEventListener('click', (event) => {
+    const button = (event.target as Element | null)?.closest<HTMLElement>('[data-note-close]');
+    const id = button?.closest<HTMLElement>('[data-note]')?.dataset.note ?? '';
+    const entry = shown.get(id);
+    if (!button || !entry) return;
+    event.stopPropagation();
+    removeNoteItem(entry.item);
+    announce(`${entry.note.title || 'The note'} is back in the library (Utilities → Notes). Nothing was deleted.`);
+  });
   onBoardSettled(() => {
     loadView();
     void findWork(false).then(async (found) => {

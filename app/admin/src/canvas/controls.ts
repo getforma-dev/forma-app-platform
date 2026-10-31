@@ -13,7 +13,8 @@
 //   toolbar with the zoom menu (zoom in/out, 100%, fit, selection);
 // - zoom keys: Cmd/Ctrl + `=`/`+` and `-` (the browser's page zoom is held
 //   back), Shift + 0 (100%), Shift + 1 (fit all), Shift + 2 (selection);
-// - L opens the library, `?` this sheet of shortcuts;
+// - L opens the library, `?` this sheet of shortcuts (APP-118: its command
+//   list is the registry's, and it links to the `/commands` sheet);
 // - APP-106: F focuses the selected card (`focus.ts`), U unites its app and
 //   Shift + U breaks it apart (`unite.ts`); the toolbar menu has both;
 // - a selected stack: ← / → leaf through it, Enter fans it out;
@@ -27,7 +28,8 @@ import { eventOriginatesInInteractiveControl, eventOriginatesInTextEntry } from 
 import { canvasApi, itemKind, nudgeItems, refreshZoomLabel, removeCards, removeUtilityItem, resetLayout } from './board';
 import { closeLibrary, isLibraryOpen, toggleLibrary } from './library';
 import { announce, el } from './render';
-import { registerCommands } from './slash';
+import { commandList, groupCommands, registerCommands, type CommandGroup } from './command-registry';
+import { insertCommand, openCommandSheet } from './command-sheet';
 import { removeWidgets } from './widgets/index';
 import { collapseAll, dissolve, expand, isStackItem, shuffle, stackOfItem, stackSelection } from './stacks';
 import { focusFromItem, isFocusOpen, trapTab } from './focus';
@@ -246,6 +248,7 @@ const ACTIONS: [string, [what: string, click: string, keys: string][]][] = [
   ]],
   ['Canvas', [
     ['Library', 'Library at the top', 'L'],
+    ['Every command', 'This sheet → All commands', '/commands · /help'],
     ['Show timings', '⋯ → Show timings, or say “show timings”', '#timing=1'],
     ['This sheet', '⋯ → Shortcuts and commands', '?'],
   ]],
@@ -256,6 +259,36 @@ function keys(document_: Document, text: string): Node[] {
   return text.split(/(\s·\s|\s\+\s)/).map((part) => (/^(\s·\s|\s\+\s)$/.test(part)
     ? document_.createTextNode(part)
     : el(document_, part.startsWith('/') || part.startsWith('#timing') ? 'code' : 'kbd', {}, part)));
+}
+
+/** APP-118: the sheet's command list: the registry's, grouped (exported for the tests). */
+export function shortcutCommandGroups(): CommandGroup[] {
+  return groupCommands(commandList());
+}
+
+/** Rebuilds the sheet's "Commands" section from the registry (commands load after the page). */
+function renderSheetCommands(document_: Document, section: HTMLElement): void {
+  const all = el(document_, 'button', { type: 'button', class: 'cv-shortcuts-all', 'data-open-commands': '' }, 'All commands with their arguments and examples →');
+  all.addEventListener('click', () => {
+    const from = sheetOpener;
+    hideSheet();
+    openCommandSheet('', from);
+  });
+  section.replaceChildren(
+    el(document_, 'h3', {}, 'Commands'),
+    el(document_, 'p', { class: 'cv-shortcuts-sub' }, 'Type / in the bar, or ? in the empty bar. Click one to put it there.'),
+    all,
+    el(document_, 'dl', { class: 'cv-shortcuts-cmds' }, ...shortcutCommandGroups().flatMap((group) => [
+      el(document_, 'dt', {}, group.category),
+      el(document_, 'dd', {}, ...group.commands.map((command) => {
+        const button = el(document_, 'button', { type: 'button', class: 'cv-shortcuts-cmd', 'data-command': command.slug, title: command.title }, el(document_, 'code', {}, `/${command.slug}`));
+        button.addEventListener('click', () => {
+          hideSheet();
+          insertCommand(command.args.length ? `/${command.slug} ` : `/${command.slug}`);
+        });
+        return button;
+      })),
+    ])));
 }
 
 export function showSheet(): void {
@@ -279,7 +312,8 @@ export function showSheet(): void {
               el(document_, 'tbody', {}, ...rows.map(([what, click, shortcut]) => el(document_, 'tr', {},
                 el(document_, 'th', { scope: 'row' }, what),
                 el(document_, 'td', { class: 'cv-shortcuts-click' }, click),
-                el(document_, 'td', { class: 'cv-shortcuts-keys' }, ...keys(document_, shortcut)))))))))));
+                el(document_, 'td', { class: 'cv-shortcuts-keys' }, ...keys(document_, shortcut))))))))),
+        el(document_, 'section', { class: 'cv-shortcuts-commands', 'data-sheet-commands': '' })));
     close.addEventListener('click', hideSheet);
     sheet.addEventListener('click', (event) => {
       if (event.target === sheet) hideSheet();
@@ -287,6 +321,8 @@ export function showSheet(): void {
     (document_.getElementById('cv-shell') ?? document_.body).append(sheet);
   }
   if (sheet.hidden) sheetOpener = documentRef.activeElement as HTMLElement | null;
+  const commands = sheet.querySelector<HTMLElement>('[data-sheet-commands]');
+  if (commands) renderSheetCommands(documentRef, commands);
   sheet.hidden = false;
   sheet.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
 }
@@ -504,6 +540,17 @@ export function startControls(document_: Document): void {
       const input = document_.getElementById('intent-input') as HTMLInputElement | null;
       if (input) input.value = '';
       report?.('Arranged by app: one row per app.');
+    },
+  }, {
+    slug: 'shortcuts',
+    aliases: ['keys'],
+    title: 'Shortcuts',
+    purpose: 'Every action with its click path and its keys (the ? sheet)',
+    run: (_text: string, report?: (message: string) => void) => {
+      const input = document_.getElementById('intent-input') as HTMLInputElement | null;
+      if (input) input.value = '';
+      showSheet();
+      report?.('Shortcuts are open. Esc closes them.');
     },
   }]);
   // A page-zoom pinch over the dock or the pane zooms nothing.

@@ -1259,9 +1259,10 @@ async function onAdapted(event: { app_id: string; work_id: string; from_app_id: 
 }
 
 /**
- * APP-101 utility cards (the `/apps` list, and the widgets other branches
- * register through `commands.ts`): mounted on the canvas at the next free
- * row and brought into view; an existing card of the same id is replaced.
+ * APP-101 utility cards (no data; APP-118 moved the `/apps` list into the
+ * Library pane, so none places one today): mounted on the canvas at the next
+ * free row and brought into view, with a × that removes it; an existing card
+ * of the same id is replaced. None is kept in a saved layout.
  */
 export function placeUtilityCard(id: string, title: string, body: HTMLElement): void {
   if (!canvas || !host) return;
@@ -1272,8 +1273,10 @@ export function placeUtilityCard(id: string, title: string, body: HTMLElement): 
     canvas.removeItem(existing, { selectFallback: false });
     utilityItems.delete(existing);
   }
+  // APP-118: every utility card has × (it holds no data).
+  const close = el(document_, 'button', { type: 'button', class: 'cv-card-focus cv-card-remove', 'data-utility-close': '', 'aria-label': `Remove ${title} from the canvas`, title: 'Remove' }, '×');
   const card = el(document_, 'article', { class: 'cv-card cv-utility', 'data-card': instance, 'aria-label': title },
-    el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, title)),
+    el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, title), el(document_, 'span', { class: 'cv-card-tools' }, close)),
     body);
   const item = createCanvasItem({ instanceId: instance, displayName: title, preferredWidth: 520, minHeight: 200, content: card });
   item.classList.add('cv-item', 'cv-item-utility', 'is-placing');
@@ -1281,6 +1284,10 @@ export function placeUtilityCard(id: string, title: string, body: HTMLElement): 
   canvas.mountItem(item, { x: ORIGIN, y: nextRow() }, { focus: false });
   canvas.centerItem(item);
   utilityItems.add(item);
+  close.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (removeUtilityItem(item)) announce(`${title} removed.`);
+  });
   updateSummary();
 }
 
