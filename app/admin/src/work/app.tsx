@@ -34,6 +34,7 @@ type Card = {
   receipt: Pair[];
   receiptJson: string;
 };
+type RecordLink = { id: string; label: string; href: string };
 type WorkProps = {
   title: string;
   action: string;
@@ -43,6 +44,11 @@ type WorkProps = {
   destination: string;
   formError: boolean;
   views: Card[];
+  hasQuery: boolean;
+  recordsOnly: boolean;
+  hasRecords: boolean;
+  records: RecordLink[];
+  canvas: string;
 };
 
 function Work(props: WorkProps) {
@@ -53,27 +59,43 @@ function Work(props: WorkProps) {
       <p class="lede">
         Saved work.
       </p>
-      <form method="post" action={props.action} class="run">
-        <input type="hidden" name="csrf" value={props.csrf} />
-        <div>
-          <label for="window_start">Window start (UTC)</label>
-          <input id="window_start" name="window_start" type="datetime-local" step="1" required value={props.windowStart} />
-        </div>
-        <div>
-          <label for="window_end">Window end (UTC, excluded)</label>
-          <input id="window_end" name="window_end" type="datetime-local" step="1" required value={props.windowEnd} />
-        </div>
-        <div>
-          <label for="destination">Destination (optional)</label>
-          <input id="destination" name="destination" type="text" value={props.destination} />
-        </div>
-        <button type="submit">Run views</button>
-      </form>
-      {props.formError ? (
-        <p class="notice" role="alert">
-          The window was not accepted. Give a start before the end, as UTC date and time. Nothing ran.
-        </p>
-      ) : null}
+      <p><a href={props.canvas}>Open on the canvas</a></p>
+      {createShow(() => props.recordsOnly, () => (
+        <p>This work keeps records. Open them on the canvas.</p>
+      ))}
+      {createShow(() => props.hasRecords, () => (
+        <section aria-label="Records">
+          <h2>Records</h2>
+          <ul>
+            {createList(() => props.records, record => record.id, record => (
+              <li><a href={record.href}>{record.label}</a></li>
+            ))}
+          </ul>
+        </section>
+      ))}
+      {createShow(() => props.hasQuery, () => (
+        <form method="post" action={props.action} class="run">
+          <input type="hidden" name="csrf" value={props.csrf} />
+          <div>
+            <label for="window_start">Window start (UTC)</label>
+            <input id="window_start" name="window_start" type="datetime-local" step="1" required value={props.windowStart} />
+          </div>
+          <div>
+            <label for="window_end">Window end (UTC, excluded)</label>
+            <input id="window_end" name="window_end" type="datetime-local" step="1" required value={props.windowEnd} />
+          </div>
+          <div>
+            <label for="destination">Destination (optional)</label>
+            <input id="destination" name="destination" type="text" value={props.destination} />
+          </div>
+          <button type="submit">Run views</button>
+          {createShow(() => props.formError, () => (
+            <p class="notice" role="alert">
+              The window was not accepted. Give a start before the end, as UTC date and time. Nothing ran.
+            </p>
+          ))}
+        </form>
+      ))}
       {createList(() => props.views, card => card.id, card => (
         <section class="view" data-view={card.id} data-state={card.state} aria-label={card.title}>
           <h2>{card.title}</h2>
@@ -140,6 +162,11 @@ mount(
       destination: '',
       formError: false,
       views: [],
+      hasQuery: false,
+      recordsOnly: true,
+      hasRecords: false,
+      records: [],
+      canvas: '/canvas',
     }),
   '#app',
 );

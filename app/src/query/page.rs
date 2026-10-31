@@ -45,6 +45,21 @@ pub struct WorkProps {
     /// The submitted parameters were refused (422); nothing ran.
     pub form_error: bool,
     pub views: Vec<CardProps>,
+    /// The work has runnable source views, so the page shows the run form.
+    pub has_query: bool,
+    /// The work has no runnable source views. Records are the page's controls.
+    pub records_only: bool,
+    pub has_records: bool,
+    pub records: Vec<RecordLinkProps>,
+    /// `/canvas#g-{work}` for this work.
+    pub canvas: String,
+}
+
+#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+pub struct RecordLinkProps {
+    pub id: String,
+    pub label: String,
+    pub href: String,
 }
 
 #[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
@@ -501,6 +516,37 @@ pub struct FormValues {
     pub destination: String,
 }
 
+/// New-record links for a member who can write. Each href is a fresh record
+/// id, the same shape as the workspace listing.
+pub fn record_links(outline: &WorkOutline, app: &str, work: &str) -> Vec<RecordLinkProps> {
+    if !outline.can_write {
+        return Vec::new();
+    }
+    outline
+        .collections
+        .iter()
+        .filter_map(|(collection, schema)| {
+            let id = crate::auth::capability::random_uuid()?;
+            Some(RecordLinkProps {
+                id: id.clone(),
+                label: format!("New {schema} record"),
+                href: format!("/work/{app}/{work}/records/{collection}/{id}"),
+            })
+        })
+        .collect()
+}
+
+/// The canvas group for this work.
+pub fn canvas_href(work: &str) -> String {
+    format!("/canvas#g-{work}")
+}
+
+/// Record links and the canvas address for one work page.
+pub struct WorkChrome {
+    pub records: Vec<RecordLinkProps>,
+    pub canvas: String,
+}
+
 /// The whole page.
 pub fn props(
     outline: &WorkOutline,
@@ -509,7 +555,9 @@ pub fn props(
     form: &FormValues,
     form_error: bool,
     views: Vec<CardProps>,
+    chrome: WorkChrome,
 ) -> WorkProps {
+    let has_query = !views.is_empty();
     WorkProps {
         title: outline.title.clone(),
         action,
@@ -519,6 +567,11 @@ pub fn props(
         destination: form.destination.clone(),
         form_error,
         views,
+        has_query,
+        records_only: !has_query,
+        has_records: !chrome.records.is_empty(),
+        records: chrome.records,
+        canvas: chrome.canvas,
     }
 }
 

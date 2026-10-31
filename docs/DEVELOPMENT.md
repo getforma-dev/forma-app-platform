@@ -44,7 +44,7 @@ The main checkout's defaults are:
 
 `just dev` without `-d` runs in the foreground (a TUI in a terminal). The first build can take minutes. Pitch starts with the synthetic Northstar scenario and 20 library apps. A newly reset clean instance has no apps or records and demo mode is off; its data persists after you start using it. Each browser gets its own persona session. These loopback listeners mint sign-in locally; they do not test the hosted fAuth flow.
 
-Known local limitation (APP-135): the header's Workspace link currently returns 404 because that legacy route requires a configured hosted provider. Use the canvas for the dev workflow; do not bypass the route's authentication check. The legacy full-page work view also retains source-query controls for records-only apps; the canvas is their form/records surface.
+The local dev binary has no sign-in provider. `GET /workspace` still requires the cookie's organization to be bound in the closed registry (the fixture issuer) before it looks up the minted session. A records-only work page offers its record links and the canvas instead of the source-query form.
 
 ### Configuration and state
 

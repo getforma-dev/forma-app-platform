@@ -868,6 +868,11 @@ pub struct WorkOutline {
     /// The pinned definition's admitted digest (APP-104: the canvas library
     /// pane names a library app's category from the sidecar by it).
     pub definition_digest: String,
+    /// Record collections this work serves, `(collection_id, schema_id)`.
+    /// Empty when the work has none. Filled by [`Data::work_outline`].
+    pub collections: Vec<(String, String)>,
+    /// Whether the member holds `record_write` on the work now.
+    pub can_write: bool,
 }
 
 /// The runnable views of re-admitted definition content.
@@ -926,6 +931,8 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
         description,
         views,
         definition_digest: String::new(),
+        collections: Vec::new(),
+        can_write: false,
     })
 }
 
@@ -950,16 +957,36 @@ impl Data {
                 .precheck(Action::RecordRead, Resource::Work { app, work })
                 .await?;
             let permit = transaction.fence(precheck).await?;
-            let transaction = permit.transaction();
             let org = &request.organization;
-            let premise = premise(transaction, org, app, work).await?;
-            let (admitted, content) =
-                stored_content(transaction, org, app, &premise.definition_revision).await?;
-            if admitted != premise.definition_digest {
-                return Err(Error::Unavailable);
-            }
+            let (admitted, content) = {
+                let transaction = permit.transaction();
+                let premise = premise(transaction, org, app, work).await?;
+                let (admitted, content) =
+                    stored_content(transaction, org, app, &premise.definition_revision).await?;
+                if admitted != premise.definition_digest {
+                    return Err(Error::Unavailable);
+                }
+                (admitted, content)
+            };
+            let can_write = match permit
+                .also(Action::RecordWrite, Resource::Work { app, work })
+                .await
+            {
+                Ok(()) => true,
+                Err(Error::Denied) => false,
+                Err(error) => return Err(error),
+            };
+            let collections = {
+                let transaction = permit.transaction();
+                transaction.query("SELECT collection_id::text,schema_id::text FROM genui.record_collections WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid ORDER BY collection_id", &[org,&app,&work]).await?
+                    .iter()
+                    .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
+                    .collect::<Result<Vec<_>>>()?
+            };
             let mut outline = outline(&content)?;
             outline.definition_digest = admitted;
+            outline.can_write = can_write;
+            outline.collections = collections;
             Ok(outline)
         }
         .await;
