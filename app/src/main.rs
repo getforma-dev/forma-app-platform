@@ -1,20 +1,13 @@
-use axum::{
-    extract::State,
-    http::{header, StatusCode},
-    response::{IntoResponse, Response},
-    routing::get,
-    Router,
-};
+use axum::{extract::State, http::StatusCode, response::Response, routing::get, Router};
 use forma_ir::PageProps;
 use forma_server::{
-    assets, load_ir_modules, render_browser_shell, sw, PageConfig, PageHandle, PageResponse,
-    PolicyExtensions, RenderCtx, RenderError, RouteMode,
+    assets, load_ir_modules, render_browser_shell, sw, PageConfig, PageHandle, RenderCtx, RouteMode,
 };
-use genui::auth::{
-    self, Auth, AuthConfig, DeniedView, InviteView, PendingView, ResendResult, SigninView,
-    WorkspaceView,
+use genui::auth::{self, Auth, AuthConfig};
+use genui::pages::{
+    respond, DeniedProps, InviteProps, PendingProps, RecordProps, SigninProps, SsrPages,
+    WorkspaceProps,
 };
-use genui::commands::{self, Notice, RecordPage, RecordView};
 use rust_embed::Embed;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
@@ -28,311 +21,12 @@ struct HomeProps {
 }
 #[derive(PageProps)]
 struct AboutProps {}
-// APP-009 (ADR-006) pages: typed props only; no page reads a request value.
-// APP-074: the invitation entry never shows a submitted code back.
-#[derive(PageProps)]
-struct InviteProps {
-    failed: bool,
-    /// APP-074 review m4: the ADR-006 window that refused, named.
-    limit_minute: bool,
-    limit_day: bool,
-    limit_service: bool,
-    unavailable: bool,
-    described_by: String,
-}
-#[derive(PageProps)]
-struct SigninProps {
-    action: String,
-    has_action: bool,
-    failed: bool,
-}
-#[derive(PageProps)]
-struct PendingProps {
-    csrf_resend: String,
-    csrf_signout: String,
-    resend_available: bool,
-    cooldown_seconds: u32,
-    held: bool,
-    hours_remaining: u32,
-    requested: bool,
-    unavailable: bool,
-}
-#[derive(PageProps)]
-struct DeniedProps {
-    csrf_signout: String,
-}
-// APP-076 G9: the member's openable works, resolved by the auth route.
-#[derive(PageProps)]
-struct RecordLinkProps {
-    id: String,
-    label: String,
-    href: String,
-}
-#[derive(PageProps)]
-struct WorkspaceItemProps {
-    id: String,
-    title: String,
-    href: String,
-    /// ADR-011: the work's group on the canvas (`/canvas#g-{work}`).
-    canvas: String,
-    has_records: bool,
-    records: Vec<RecordLinkProps>,
-}
-#[derive(PageProps)]
-struct WorkspaceProps {
-    csrf_signout: String,
-    csrf_signout_all: String,
-    has_items: bool,
-    items: Vec<WorkspaceItemProps>,
-}
-// APP-013 record page (D7.16): typed rows and premise fields; the key and the
-// token are minted per render by the route, never read from the request.
-#[derive(PageProps)]
-struct FieldRowProps {
-    id: String,
-    kind: String,
-    value: String,
-    input: String,
-    spec: String,
-    spec_input: String,
-    options: String,
-    nullable: bool,
-    writable: bool,
-}
-#[derive(PageProps)]
-struct RecordProps {
-    app: String,
-    work: String,
-    collection: String,
-    record_id: String,
-    schema: String,
-    schema_version: String,
-    publication: String,
-    work_version: String,
-    version: String,
-    exists: bool,
-    fields: Vec<FieldRowProps>,
-    command: String,
-    action: String,
-    can_write: bool,
-    csrf: String,
-    idempotency_key: String,
-    committed: bool,
-    replayed: bool,
-    conflict: bool,
-    stale: bool,
-    in_flight: bool,
-    busy: bool,
-    refused: bool,
-    unknown: bool,
-}
 
 struct AppState {
     manifest: forma_server::AssetManifest,
     readiness: Arc<genui::readiness::Readiness>,
     home: Option<PageHandle<HomeProps>>,
     about: Option<PageHandle<AboutProps>>,
-}
-
-/// The APP-009 pages, rendered as complete `PageResponse`s (fresh nonce,
-/// CSP and `no-store` together). The auth module decides status and cookies.
-struct SsrPages {
-    /// The configured fAuth origin: the two anonymous forms' `POST` answers
-    /// `303` there, and Chromium and WebKit judge `form-action` on every hop
-    /// of a form submission's redirect chain (APP-009 review M1).
-    auth_origin: Option<String>,
-    invite: PageHandle<InviteProps>,
-    signin: PageHandle<SigninProps>,
-    pending: PageHandle<PendingProps>,
-    denied: PageHandle<DeniedProps>,
-    workspace: PageHandle<WorkspaceProps>,
-    record: PageHandle<RecordProps>,
-}
-impl RecordPage for SsrPages {
-    fn record(&self, view: &RecordView) -> Response {
-        let notice = |expected: Notice| view.notice == Some(expected);
-        respond(
-            "/record",
-            self.record.render(
-                &RecordProps {
-                    app: view.app.clone(),
-                    work: view.work.clone(),
-                    collection: view.collection.clone(),
-                    record_id: view.record_id.clone(),
-                    schema: view.schema.clone(),
-                    schema_version: view.schema_version.clone(),
-                    publication: view.publication.clone(),
-                    work_version: view.work_version.clone(),
-                    version: view.version.clone(),
-                    exists: view.exists,
-                    fields: view
-                        .fields
-                        .iter()
-                        .map(|row| FieldRowProps {
-                            id: row.id.clone(),
-                            kind: row.kind.clone(),
-                            value: row.value.clone(),
-                            input: row.input.clone(),
-                            spec: row.spec.clone(),
-                            spec_input: row.spec_input.clone(),
-                            options: row.options.clone(),
-                            nullable: row.nullable,
-                            writable: row.writable,
-                        })
-                        .collect(),
-                    command: view.command.clone(),
-                    action: view.action.clone(),
-                    can_write: view.can_write,
-                    csrf: view.csrf.clone(),
-                    idempotency_key: view.idempotency_key.clone(),
-                    committed: notice(Notice::Committed),
-                    replayed: notice(Notice::Replayed),
-                    conflict: notice(Notice::Conflict),
-                    stale: notice(Notice::Stale),
-                    in_flight: notice(Notice::InFlight),
-                    busy: notice(Notice::Busy),
-                    refused: notice(Notice::Refused),
-                    unknown: notice(Notice::Unknown),
-                },
-                &RenderCtx::new().with_title("Record"),
-            ),
-        )
-    }
-}
-impl SsrPages {
-    /// A page whose form hands off to the auth origin: `form-action 'self'`
-    /// plus that exact origin (forma-server `PolicyExtensions::form_action`).
-    /// Without a configured origin the form fails neutrally and stays `'self'`.
-    fn handoff(&self, title: &str) -> RenderCtx {
-        let ctx = RenderCtx::new().with_title(title);
-        match &self.auth_origin {
-            Some(origin) => ctx.with_policy(PolicyExtensions::new().form_action(origin.clone())),
-            None => ctx,
-        }
-    }
-}
-impl auth::Pages for SsrPages {
-    fn invite(&self, view: &InviteView) -> Response {
-        respond(
-            "/invite",
-            self.invite.render(
-                &InviteProps {
-                    failed: view.failed,
-                    limit_minute: view.limited == Some(auth::InviteLimit::Minute),
-                    limit_day: view.limited == Some(auth::InviteLimit::Day),
-                    limit_service: view.limited == Some(auth::InviteLimit::Service),
-                    unavailable: view.unavailable,
-                    described_by: if view.failed || view.limited.is_some() || view.unavailable {
-                        "invite-error"
-                    } else {
-                        "invite-help"
-                    }
-                    .into(),
-                },
-                &self.handoff("Enter your invitation code"),
-            ),
-        )
-    }
-    fn signin(&self, view: &SigninView) -> Response {
-        respond(
-            "/signin",
-            self.signin.render(
-                &SigninProps {
-                    action: view.action.clone().unwrap_or_default(),
-                    has_action: view.action.is_some(),
-                    failed: view.failed,
-                },
-                &self.handoff("Sign in"),
-            ),
-        )
-    }
-    fn pending(&self, view: &PendingView) -> Response {
-        respond(
-            "/auth/pending",
-            self.pending.render(
-                &PendingProps {
-                    csrf_resend: view.csrf_resend.clone(),
-                    csrf_signout: view.csrf_signout.clone(),
-                    resend_available: view.resend_available,
-                    cooldown_seconds: view.cooldown_seconds,
-                    held: view.hours_remaining > 0,
-                    hours_remaining: view.hours_remaining,
-                    requested: view.result == Some(ResendResult::Requested),
-                    unavailable: view.result == Some(ResendResult::Unavailable),
-                },
-                &RenderCtx::new().with_title("Confirm your email address"),
-            ),
-        )
-    }
-    fn denied(&self, view: &DeniedView) -> Response {
-        respond(
-            "/auth/callback",
-            self.denied.render(
-                &DeniedProps {
-                    csrf_signout: view.csrf_signout.clone(),
-                },
-                &RenderCtx::new().with_title("No access"),
-            ),
-        )
-    }
-    fn workspace(&self, view: &WorkspaceView) -> Response {
-        respond(
-            "/workspace",
-            self.workspace.render(
-                &WorkspaceProps {
-                    csrf_signout: view.csrf_signout.clone(),
-                    csrf_signout_all: view.csrf_signout_all.clone(),
-                    has_items: !view.items.is_empty(),
-                    items: view
-                        .items
-                        .iter()
-                        .map(|item| WorkspaceItemProps {
-                            id: item.href.clone(),
-                            title: item.title.clone(),
-                            href: item.href.clone(),
-                            canvas: format!(
-                                "/canvas#g-{}",
-                                item.href.rsplit('/').next().unwrap_or_default()
-                            ),
-                            has_records: !item.records.is_empty(),
-                            records: item
-                                .records
-                                .iter()
-                                .map(|record| RecordLinkProps {
-                                    id: record.href.clone(),
-                                    label: record.label.clone(),
-                                    href: record.href.clone(),
-                                })
-                                .collect(),
-                        })
-                        .collect(),
-                },
-                &RenderCtx::new().with_title("Workspace"),
-            ),
-        )
-    }
-}
-
-/// A `PageResponse` sends the HTML with the policy for its nonce,
-/// `Cache-Control: no-store` and the document security headers. Forma logs
-/// nothing: a failure is counted here by code and route and answered with our
-/// own error, never an empty shell.
-fn respond(route: &str, rendered: Result<PageResponse, RenderError>) -> Response {
-    match rendered {
-        Ok(page) => page.into_response(),
-        Err(error) => {
-            tracing::error!(code = error.code(), route, "{error}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [
-                    (header::CACHE_CONTROL, "no-store"),
-                    (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
-                ],
-                "Internal Server Error",
-            )
-                .into_response()
-        }
-    }
 }
 
 fn refuse(message: impl std::fmt::Display) -> ! {
@@ -529,12 +223,6 @@ async fn main() {
             .with_trusted_proxies(proxies)
             .with_invitations(invitations),
     );
-    // APP-013: the command route and the record page share the session,
-    // vault and synchronizer key with the ADR-006 routes.
-    let command_routes = Arc::new(commands::routes::Commands {
-        auth: auth.clone(),
-        page: auth_pages,
-    });
     // APP-012 (ADR-007 D7.10): the confined query engine beside the data
     // store, in the image's private cache and scratch under /run/genui.
     let engine = stores.as_ref().map(|_| {
@@ -560,26 +248,38 @@ async fn main() {
         },
     });
     genui::boxes::intent::install(box_state.clone());
-    let box_routes = genui::boxes::routes::router(box_state.clone());
-    let work_routes = genui::query::routes::router(work.clone());
-    // APP-099 (ADR-011 pitch): Forma as an MCP server (`POST /v1/mcp`, long
-    // deadline: `forma_compose_app` waits on the model), bearer agent tokens
-    // only, over the same query engine, composer and storage operations.
-    let mcp_routes = genui::mcp::router(Arc::new(genui::mcp::Mcp::new(
-        work.clone(),
-        genui::composer::Composer::from_env(),
-    )));
-    // The organization's realtime stream (`pivot/realtime`) once it exists;
-    // until then the island subscribes to nothing.
-    let canvas_routes = genui::query::canvas::router(Arc::new(genui::query::canvas::Canvas {
+    // APP-100 (ADR-011 pitch): Slack, from SLACK_BOT_TOKEN and
+    // SLACK_SIGNING_SECRET alone (absent: no route is mounted, the paths are
+    // the uniform 404, and nothing posts). The approver notifier follows the
+    // event hub for the life of the process.
+    let slack = genui::slack::Slack::from_env(auth.clone());
+    if let Some(slack) = &slack {
+        genui::slack::notify::spawn(slack.clone());
+    }
+    // The product routes, composed once for the binary and the local dev
+    // stand (`genui::product`). The model keys come from the environment
+    // alone (absent: the model routes answer unavailable, nothing else
+    // changes). The organization's realtime stream is named by
+    // GENUI_CANVAS_EVENTS_URL (absent: the island subscribes to nothing).
+    let (product_routes, long_routes) = genui::product::routes(genui::product::Product {
+        auth: auth.clone(),
         work,
-        pages: canvas_page,
+        // APP-013: the command route and the record page share the session,
+        // vault and synchronizer key with the ADR-006 routes.
+        record_page: auth_pages,
+        canvas_pages: canvas_page,
         live_events: std::env::var("GENUI_CANVAS_EVENTS_URL")
             .ok()
             .filter(|url| url.starts_with("/v1/"))
             .unwrap_or_default(),
         demo_organizations: genui::query::canvas::demo_organizations(),
-    }));
+        composer: genui::composer::Composer::from_env(),
+        parser: genui::actions::Parser::from_env(),
+        slack,
+        customizer: genui::widgets::customize::Customizer::from_env(),
+        weather: genui::widgets::weather::OpenMeteo::new(),
+        boxes: box_state,
+    });
     let readiness = genui::readiness::Readiness::start(
         credential_path.into(),
         std::env::var("GENUI_HELPER_PATH")
@@ -617,66 +317,11 @@ async fn main() {
     // The operator harness (feature builds only) replaces the product routes
     // for its isolated run; the two never share a router.
     // APP-076 G8: the uniform 404 for unknown paths and method mismatches
-    // alike (no `Allow`), and the D7.14 handler deadline.
-    // APP-093 (ADR-011): the composer route, under its own deadline; the
-    // model key comes from the environment alone (absent: the route answers
-    // `composer_unavailable` and nothing else changes).
-    let compose_routes = genui::composer::routes::router(Arc::new(
-        genui::composer::routes::Compose::new(auth.clone(), genui::composer::Composer::from_env()),
-    ));
-    // ADR-011 scenarios: the action path (`POST /v1/act`, under the long
-    // deadline: it waits on the model) and the records listing.
-    let act_routes = genui::actions::routes::router(Arc::new(genui::actions::routes::Act::new(
-        auth.clone(),
-        genui::actions::Parser::from_env(),
-    )));
-    let records_routes = genui::actions::routes::records_router(auth.clone());
-    // APP-100 (ADR-011 pitch): Slack, from SLACK_BOT_TOKEN and
-    // SLACK_SIGNING_SECRET alone (absent: no route is mounted, the paths are
-    // the uniform 404, and nothing posts). The approver notifier follows the
-    // event hub for the life of the process.
-    let slack = genui::slack::Slack::from_env(auth.clone());
-    if let Some(slack) = &slack {
-        genui::slack::notify::spawn(slack.clone());
-    }
-    let slack_routes = genui::slack::router(slack);
-    // APP-103: the canvas widgets' weather and customize routes, under the
-    // long deadline (Open-Meteo and the fast model are outside services).
-    let widget_routes =
-        genui::widgets::routes::router(Arc::new(genui::widgets::routes::Widgets::new(
-            auth.clone(),
-            genui::widgets::customize::Customizer::from_env(),
-            genui::widgets::weather::OpenMeteo::new(),
-        )));
+    // alike (no `Allow`), and the D7.14 handler deadline; the long-deadline
+    // paths (model waits, the canvas's library reads) under their own.
     let app = match qualification {
         Some(harness) => genui::http::uniform(app.merge(harness)),
-        None => genui::http::uniform_with_many(
-            app.merge(auth::routes::router(auth.clone()))
-                .merge(commands::routes::router(command_routes))
-                .merge(work_routes)
-                // APP-095 (ADR-011 pitch): share with a teammate; the members
-                // list; the session-gated event stream re-authorized at delivery.
-                .merge(genui::sharing::router(auth.clone()))
-                .merge(genui::events::routes::router(auth.clone()))
-                .merge(canvas_routes.clone())
-                .merge(records_routes)
-                // APP-099: the canvas's "Connect an agent" token routes.
-                .merge(genui::mcp::tokens::router(auth.clone()))
-                .merge(genui::mcp::governance::router(auth.clone()))
-                .merge(slack_routes)
-                // APP-101: the slash-command list and "save as /name".
-                .merge(genui::composer::commands::router(auth.clone()))
-                .merge(box_routes),
-            vec![
-                // The canvas page reads every openable work (library pane).
-                (genui::query::canvas::PATH, canvas_routes),
-                (genui::composer::routes::PATH, compose_routes),
-                (genui::actions::PATH, act_routes),
-                (genui::mcp::PATH, mcp_routes),
-                (genui::widgets::WEATHER_PATH, widget_routes.clone()),
-                (genui::widgets::CUSTOMIZE_PATH, widget_routes),
-            ],
-        ),
+        None => genui::http::uniform_with_many(app.merge(product_routes), long_routes),
     };
 
     // ADR-006 expiry sweep: idle and expired records are destroyed and their
@@ -779,6 +424,11 @@ mod tests {
     use super::*;
     use auth::Pages as _;
     use axum::body::to_bytes;
+    use axum::http::header;
+    use genui::auth::{
+        DeniedView, InviteView, PendingView, ResendResult, SigninView, WorkspaceView,
+    };
+    use genui::commands::{self, Notice, RecordPage as _, RecordView};
 
     #[test]
     fn required_native_routes_refuse_browser_and_missing_outputs() {
