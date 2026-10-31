@@ -31,6 +31,7 @@
 //! nothing canned applies. Everything after the parse is identical and real:
 //! the typed draft, the storage dry run, the member's Confirm, the audited
 //! commit, the share and the live events.
+pub mod guard;
 pub mod ledger;
 pub mod prompt;
 pub mod receipt;
@@ -219,7 +220,9 @@ impl Parser {
     /// Parses `utterance` against `catalog` (the member's record apps,
     /// `prompt::Catalog`). In a demo organization a rehearsed utterance is
     /// answered deterministically and at once; everything else, and every
-    /// utterance outside a demo organization, goes to the model.
+    /// utterance outside a demo organization, goes to the model. Either
+    /// answer passes the read-only guard (`guard`, APP-135): a sentence that
+    /// reads or asks never comes back as a create or decide.
     pub async fn parse(
         &self,
         utterance: &str,
@@ -229,8 +232,18 @@ impl Parser {
     ) -> Result<Parse, ParseFailure> {
         let started = std::time::Instant::now();
         let elapsed = || u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        // APP-135: a sentence that reads, with a money threshold, is never a
+        // command: `place` at once, no model call.
+        if let Some(parsed) = guard::before(utterance) {
+            return Ok(Parse {
+                parsed,
+                rehearsed: false,
+                duration_ms: elapsed(),
+            });
+        }
         if demo {
             if let Some(parsed) = rehearsed::parse(utterance, catalog, today) {
+                let parsed = guard::after(utterance, parsed);
                 tracing::info!(
                     event = "action.rehearsed",
                     kind = parsed.kind.as_str(),
@@ -256,7 +269,7 @@ impl Parser {
         let reply = model.complete(&request).await?;
         decode(&reply.text)
             .map(|parsed| Parse {
-                parsed,
+                parsed: guard::after(utterance, parsed),
                 rehearsed: false,
                 duration_ms: elapsed(),
             })

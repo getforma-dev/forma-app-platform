@@ -93,8 +93,35 @@ function completerFor(name: string, slug: string, rest: string): { completer: Co
   return { completer: completers.get(name) ?? completers.get(slug), rest };
 }
 
-/** Text that reads like a record entry or a decision (the action path's lane). */
-const ENTRY = /\b(approve|approved|reject|rejected|decline|deny|accept|file|submit|spent|paid|log|record|add|sign off)\b|\$\s?\d/i;
+/** Words that write a record or decide one (the action path's lane). */
+const ENTRY_VERB = /\b(approve|approved|reject|rejected|decline|deny|accept|file|submit|spent|paid|log|record|add|sign off)\b/i;
+/** An amount (`$86`, `$ 86`). */
+const AMOUNT = /\$\s?\d/;
+/** An amount written as a threshold (`over $200`, `> $1,000`): a filter, never a filing. */
+const THRESHOLD = /(?:\b(?:over|above|under|below|exceeding|beyond|(?:more|less|greater|bigger|larger|higher|lower|fewer) than|at (?:least|most)|upwards of|up to)|[<>≥≤]=?)\s*\$\s?\d/i;
+/** Polite or first-person words before the verb (`please show …`, `can you list …`). */
+const POLITE = /^(?:(?:please|pls|kindly|just|can you|could you|would you|will you|can i|could i|may i|let me|help me|i want to|i need to|i'd like to)\s+)*/i;
+/** Verbs that only read: show, list, find, review … (the server's guard, APP-135). */
+const READ_VERB = /^(?:show|list|find|review|see|view|display|filter|search|look|check|browse|compare|summari[sz]e|count|sort|pull|tell|explain|audit|inspect|investigate|analy[sz]e|break|chart|graph|plot)\b/i;
+/** A sentence's first word that makes it a question. */
+const QUESTION = /^(?:what|what's|whats|which|who|who's|whose|whom|when|where|why|how|how's|is|are|was|were|am|do|does|did|any)\b/i;
+
+/**
+ * APP-135: whether the words after `/app ` read like a record entry or a
+ * decision (the action path's lane). A sentence that reads or asks ("review
+ * claims over $200", "which ones are late?") never does, and an amount alone
+ * counts only when it is not a threshold; with a writing verb it always does
+ * ("file $86 Nobu", "approve the $86 dinner"). Mirrors the server's
+ * read-only guard (`app/src/actions/guard.rs`), which has the last word.
+ */
+export function isEntry(text: string): boolean {
+  const words = text.trim();
+  const polite = words.match(POLITE)?.[0] ?? '';
+  const verb = words.slice(polite.length);
+  if (READ_VERB.test(verb) || QUESTION.test(words) || (!polite && words.endsWith('?'))) return false;
+  if (ENTRY_VERB.test(words)) return true;
+  return AMOUNT.test(words) && !THRESHOLD.test(words);
+}
 
 /**
  * APP-120: a bare `/<address>` places the app, as `/app <address>` does. The
@@ -143,7 +170,7 @@ export function serverAddress(entry: ServerCommand): Address {
       const rest = text.trim();
       if (entry.kind === 'saved' && entry.work_id) {
         report(await placeWork(entry.app_id, entry.work_id));
-        if (rest && entry.record && ENTRY.test(rest)) await submitAction(rest, report, entry.app_id);
+        if (rest && entry.record && isEntry(rest)) await submitAction(rest, report, entry.app_id);
         return;
       }
       // APP-120: a bare address places the app (`/expenses` = `/app expenses`).
@@ -154,7 +181,7 @@ export function serverAddress(entry: ServerCommand): Address {
         await submitAction(rest, report, entry.app_id);
         return;
       }
-      if (rest && entry.record && ENTRY.test(rest)) {
+      if (rest && entry.record && isEntry(rest)) {
         await submitAction(rest, report, entry.app_id);
         return;
       }
