@@ -250,9 +250,6 @@ async fn stand() {
 
     // --- The database, the library and its sources ---
     let fixture = Fixture::new();
-    // Credentials that outlive the stand (the fixture writes 600 s; the stand
-    // crashed ten minutes in, 2026-10-31).
-    fixture.extend_credentials(seconds + 3600);
     println!("DEV_STAND container {}", fixture.name);
     println!("DEV_STAND scratch {}", fixture.directory.0.display());
     fixture.sql(
@@ -603,6 +600,9 @@ async fn stand() {
             continue;
         }
         touched = Instant::now();
+        // Production's sidecar rewrites the short-lived credentials file; the
+        // stand does too, or it refuses everything ten minutes in (2026-10-31).
+        fixture.refresh_credentials();
         // Keep each session inside its idle limit; one that ended (a
         // sign-out in the browser) is minted again and the file rewritten.
         let mut changed = false;

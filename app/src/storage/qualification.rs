@@ -375,10 +375,11 @@ impl Fixture {
         )
     }
     /// The local dev stand runs for hours; the fixture's credentials file
-    /// (600 s) would expire under it and every request would refuse
-    /// (`pool.rs` expiry check). Rewrites the same generation for `lifetime`.
-    pub(crate) fn extend_credentials(&self, lifetime: u64) {
-        self.write_credentials("localhost", 1, lifetime);
+    /// may live at most 600 s (`config.rs`), as production's short-lived
+    /// tokens do, and production's sidecar rewrites it. The stand does the
+    /// same: a fresh 600 s file for the same generation, every minute.
+    pub(crate) fn refresh_credentials(&self) {
+        self.write_credentials("localhost", 1, 600);
     }
     fn write_credentials(&self, host: &str, generation: u64, lifetime: u64) {
         let now = crate::config::now();
