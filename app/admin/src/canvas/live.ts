@@ -41,16 +41,90 @@ export function liveEvent(data: unknown): LiveEvent | null {
 /** Reconnect delays after the browser gave up on the stream (an HTTP error closes an EventSource for good). */
 const BACKOFF_MS = [1000, 2000, 5000, 10000, 30000];
 
+type LiveState = 'live' | 'reconnecting' | 'off';
+type Relay = { type: 'hello' } | { type: 'state'; state: LiveState } | { type: 'event'; data: string };
+
 /**
  * Subscribes to `url` (same origin, `/v1/` only); returns the unsubscribe.
- * APP-113: hints sent while the stream was down are lost, so every re-open
- * after the first is reported as `stream.lagged` (the board re-runs what it
- * shows); a stream the browser closed (an HTTP error) is reopened with backoff.
+ *
+ * The server keeps one stream per session (events, review M1: a newer stream
+ * replaces the earlier one), and every tab of a browser shares the session
+ * cookie. Two tabs each holding a stream replaced each other forever: "Live",
+ * then "Reconnecting", over and over (2026-10-31). So the tabs share one: the
+ * tab holding a Web Lock named for the stream opens it and relays its events
+ * and state to the others on a BroadcastChannel; when that tab goes, the next
+ * one takes the lock and the stream (and reports `stream.lagged`, since hints
+ * in between were lost). Without Web Locks or BroadcastChannel each tab opens
+ * its own stream, as before.
  */
 export function subscribeLive(
   url: string,
   onEvent: (event: LiveEvent) => void,
-  onState: (state: 'live' | 'reconnecting' | 'off') => void,
+  onState: (state: LiveState) => void,
+): () => void {
+  const locks = (globalThis.navigator as Navigator | undefined)?.locks;
+  if (!url.startsWith('/v1/') || !locks || typeof BroadcastChannel === 'undefined') return streamLive(url, onEvent, onState);
+  const name = `forma-live:${url}`;
+  const channel = new BroadcastChannel(name);
+  let stopped = false;
+  let leading: (() => void) | null = null;
+  let leaderState: LiveState = 'reconnecting';
+  let heardLeader = false;
+  let release: (() => void) | null = null;
+  const relay = (message: Relay) => channel.postMessage(message);
+  channel.onmessage = (message: MessageEvent<Relay>) => {
+    const data = message.data;
+    if (leading) {
+      if (data?.type === 'hello') relay({ type: 'state', state: leaderState });
+      return;
+    }
+    heardLeader = true;
+    if (data?.type === 'state' && (data.state === 'live' || data.state === 'reconnecting')) onState(data.state);
+    else if (data?.type === 'event') {
+      const event = liveEvent(data.data);
+      if (event) onEvent(event);
+    }
+  };
+  onState('reconnecting');
+  relay({ type: 'hello' });
+  void locks.request(name, () => new Promise<void>((resolve) => {
+    if (stopped) {
+      resolve();
+      return;
+    }
+    release = resolve;
+    // Another tab led until now: what it relayed after it went is lost.
+    if (heardLeader) onEvent({ kind: 'stream.lagged' });
+    leading = streamLive(url, (event) => {
+      onEvent(event);
+      relay({ type: 'event', data: JSON.stringify(event) });
+    }, (state) => {
+      onState(state);
+      // A leader that stops hands over: the others see it reconnect, not go offline.
+      leaderState = state === 'off' ? 'reconnecting' : state;
+      relay({ type: 'state', state: leaderState });
+    });
+  }));
+  return () => {
+    stopped = true;
+    leading?.();
+    leading = null;
+    release?.();
+    channel.close();
+    onState('off');
+  };
+}
+
+/**
+ * One tab's own stream.
+ * APP-113: hints sent while the stream was down are lost, so every re-open
+ * after the first is reported as `stream.lagged` (the board re-runs what it
+ * shows); a stream the browser closed (an HTTP error) is reopened with backoff.
+ */
+function streamLive(
+  url: string,
+  onEvent: (event: LiveEvent) => void,
+  onState: (state: LiveState) => void,
 ): () => void {
   if (!url.startsWith('/v1/') || typeof EventSource === 'undefined') {
     onState('off');
