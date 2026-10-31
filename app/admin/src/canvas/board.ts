@@ -313,6 +313,29 @@ export function canvasApi(): WidgetCanvas | null {
   return canvas;
 }
 
+/** APP-116: a card of `work` shown on the canvas: of `kind` if there is one, else the app card, else any. */
+export function workCard(work: string, kind?: string): HTMLElement | null {
+  const group = groups.get(work);
+  if (!group) return null;
+  const shown = shownCards(group);
+  return shown.find((card) => kind && card.dataset.kind === kind) ?? shown.find((card) => card.dataset.kind === 'app') ?? shown[0] ?? null;
+}
+
+/** APP-116: when the last live event for `work` arrived on this page (`performance.now()`). */
+const liveArrivals = new Map<string, number>();
+export function liveArrival(work: string): number | undefined {
+  return liveArrivals.get(work);
+}
+
+/** APP-116: the live transform's outcome for a placed work: `to` is the adapted work, null when the defaults were kept. */
+const tailoredListeners: Array<(from: string, to: string | null) => void> = [];
+export function onTailored(listener: (from: string, to: string | null) => void): void {
+  tailoredListeners.push(listener);
+}
+
+/** A phone-width canvas: placements center the first card at a readable zoom instead of fitting everything. */
+const narrow = (): boolean => typeof matchMedia === 'function' && matchMedia('(max-width: 760px)').matches;
+
 /** Whether the card `id` is on the board now. */
 export function isOnBoard(id: string): boolean {
   if (stackHooks.has(id) || uniteHooks.has(id)) return true;
@@ -400,15 +423,17 @@ function decorateCard(card: HTMLElement): void {
   const title = card.getAttribute('aria-label') ?? 'this card';
   const focus = el(document_, 'button', { type: 'button', class: 'cv-card-focus', 'data-focus-card': '', 'aria-label': `Focus ${title}`, title: 'Focus · F' });
   focus.append(svg);
+  const remove = el(document_, 'button', { type: 'button', class: 'cv-card-focus cv-card-remove', 'data-card-remove': '', 'aria-label': `Take ${title} off the canvas`, title: 'Take off the canvas · Delete (back to the library; nothing is deleted)' }, '×');
   const head = card.querySelector<HTMLElement>(':scope > .cv-card-head');
   if (head) {
-    head.append(focus);
+    head.querySelector('h3')?.setAttribute('title', title);
+    head.append(el(document_, 'span', { class: 'cv-card-tools' }, focus, remove));
     return;
   }
   // The app card: its title, then Unite and focus at the top right.
   const tools = el(document_, 'div', { class: 'cv-app-tools' },
     el(document_, 'button', { type: 'button', class: 'cv-card-unite', 'data-unite-app': '', title: 'Unite · U: assemble this app’s cards into one frame' }, 'Unite'),
-    focus);
+    focus, remove);
   card.querySelector(':scope > h2')?.after(tools);
 }
 /** Where a card is: its group, its element, and its canvas item when it is on the board on its own. */
@@ -555,7 +580,7 @@ function runGroupNow(work: string, live: boolean): void {
   for (const card of shown) {
     if (!card.classList.contains('cv-view')) continue;
     if (parameters === null) {
-      renderNoValue(card, 'failed', 'failed', 'The window was not accepted. Give a start before the end, as UTC date and time. Nothing ran.');
+      renderNoValue(card, 'failed', 'failed', 'That time range isn’t valid: the start must come before the end.');
     } else {
       void runView(card, parameters).then(() => {
         if (live) pulse(card);
@@ -744,7 +769,7 @@ function runCards(group: Group, cards: HTMLElement[]): void {
     if (!card.classList.contains('cv-view')) continue;
     if (card.dataset.state === 'ready' || card.dataset.state === 'empty') continue;
     if (parameters === null) {
-      renderNoValue(card, 'failed', 'failed', 'The window was not accepted. Give a start before the end, as UTC date and time. Nothing ran.');
+      renderNoValue(card, 'failed', 'failed', 'That time range isn’t valid: the start must come before the end.');
     } else {
       void runView(card, parameters);
     }
@@ -936,7 +961,7 @@ async function placeWorkNow(app: string, work: string, labels: string[]): Promis
         el(document_, 'div', { class: 'cv-skeleton-card' }, bar('40'), el(document_, 'span', { class: 'cv-skeleton-block' }), bar('70')),
         el(document_, 'div', { class: 'cv-skeleton-card' }, bar('50'), el(document_, 'span', { class: 'cv-skeleton-chart' },
           ...['35', '60', '45', '80', '55', '95'].map((height) => el(document_, 'i', { 'data-height': height }))), bar('80'))),
-      el(document_, 'p', { class: 'cv-message' }, 'Its views run on your organization’s data. Nothing is shown until each result is released with its receipt.')),
+      el(document_, 'p', { class: 'cv-message' }, 'Loading its cards. Every number arrives with its proof.')),
     chrome: false,
   });
   ghost.classList.add('cv-item', 'cv-item-ghost');
@@ -960,10 +985,19 @@ async function placeWorkNow(app: string, work: string, labels: string[]): Promis
   host.dataset.lastPlaceMs = String(elapsed);
   runGroup(work);
   // Show the whole canvas with the new app arriving; keep fitting while its
-  // results grow the cards.
-  canvas.fitAll();
-  fitPending = true;
-  window.setTimeout(() => { fitPending = false; }, 3000);
+  // results grow the cards. On a phone, fitting a row of cards makes them
+  // unreadable: the first card is centered at a readable zoom instead.
+  const first = adopted.items[0];
+  if (narrow() && first) {
+    canvas.resetZoom();
+    canvas.zoomBy(0.6);
+    canvas.centerItem(first);
+    refreshZoomLabel();
+  } else {
+    canvas.fitAll();
+    fitPending = true;
+    window.setTimeout(() => { fitPending = false; }, 3000);
+  }
   updateSummary();
   saveSoon();
   announce(`${group.title} placed on the canvas.`);
@@ -1159,6 +1193,7 @@ async function reshape(standard: Ref, adapted: Ref): Promise<void> {
   // come from the group route (`query::canvas::adapted_origins`).
   const swapped = await swapGroup(standard.work, adapted.app, adapted.work, []);
   if (swapped) {
+    for (const listener of tailoredListeners) listener(standard.work, adapted.work);
     host?.setAttribute('data-last-reshape-at', String(Math.round(performance.now())));
     announce('Adapted to your request.');
     reportStatus('Adapted to your request. “Back to standard” shows the defaults.', /Tailoring/);
@@ -1199,6 +1234,7 @@ export function noteKept(work: string): void {
   card.querySelector('.cv-tailoring')?.remove();
   card.querySelector('.cv-kept')?.remove();
   card.append(el(card.ownerDocument, 'p', { class: 'cv-kept', role: 'status' }, 'Kept the standard view.'));
+  for (const listener of tailoredListeners) listener(work, null);
   reportStatus('Kept the standard view.', /Tailoring/);
 }
 
@@ -1263,6 +1299,7 @@ export function onLiveEvent(listener: (event: LiveEvent) => void): void {
 }
 
 function onLive(event: LiveEvent): void {
+  if (event.kind !== 'stream.lagged') liveArrivals.set(event.work_id, performance.now());
   for (const listener of liveListeners) listener(event);
   if (event.kind === 'stream.lagged') {
     // Hints were dropped for this stream: re-run what is shown (APP-095 review).
@@ -1403,6 +1440,26 @@ export function startBoard(document_: Document): void {
   flush();
   wireTools(document_);
   startLive(document_);
+  // "Try again" on a failed card re-runs that card's app (views, records, ledger).
+  document_.addEventListener('click', (event) => {
+    const button = (event.target as Element | null)?.closest<HTMLElement>('[data-card-retry]');
+    const card = button?.closest<HTMLElement>('.cv-card');
+    if (!button || !card) return;
+    const found = findCard(card.dataset.card ?? '');
+    if (card.dataset.kind === 'records') void refreshRecords(card);
+    else if (card.dataset.kind === 'ledger') void refreshLedger(card);
+    else if (found) runGroupNow(found.group.work, false);
+  });
+  // APP-112: the card header's "×" takes the card off the canvas (back to the library; no data changes).
+  document_.addEventListener('click', (event) => {
+    const button = (event.target as Element | null)?.closest<HTMLElement>('[data-card-remove]');
+    const card = button?.closest<HTMLElement>('.cv-card');
+    const id = card?.dataset.card;
+    if (!button || !id) return;
+    event.stopPropagation();
+    removeCards([id]);
+    announce(`${card.getAttribute('aria-label') ?? 'The card'} is back in the library. Nothing was deleted.`);
+  });
   const missing = Array.from(placed.entries()).filter(([work]) => !groups.has(work));
   if (missing.length) host.classList.add('has-groups');
   void Promise.all(missing.map(([work, entry]) => fetchGroup(entry.app, work).then((json) => [work, entry, json] as const)))

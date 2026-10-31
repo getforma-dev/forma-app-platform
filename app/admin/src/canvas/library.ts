@@ -106,7 +106,7 @@ function buildAppRow(
     el(document_, 'button', { type: 'button', class: 'cv-lib-expand', 'aria-expanded': 'false', 'data-lib-expand': '' },
       el(document_, 'span', { class: 'cv-lib-chevron', 'aria-hidden': 'true' }),
       el(document_, 'span', { class: 'cv-lib-num' }, entry.number),
-      el(document_, 'span', { class: 'cv-lib-app-title' }, entry.title),
+      el(document_, 'span', { class: 'cv-lib-app-title', title: entry.title }, entry.title),
       ...(entry.slug ? [el(document_, 'code', { class: 'cv-lib-slug' }, `/${entry.slug}`)] : []),
       el(document_, 'span', { class: 'cv-lib-on', 'data-lib-on': '' })),
     ...(entry.widget ? [] : [
@@ -122,7 +122,7 @@ function buildAppRow(
     },
     el(document_, 'button', { type: 'button', class: 'cv-lib-toggle', 'aria-pressed': 'false', 'data-lib-toggle': '' },
       el(document_, 'span', { class: 'cv-lib-num' }, card.number),
-      el(document_, 'span', { class: 'cv-lib-card-title' }, card.title),
+      el(document_, 'span', { class: 'cv-lib-card-title', title: card.title }, card.title),
       el(document_, 'span', { class: 'cv-lib-kind', 'data-kind': card.kind }, card.kind),
       el(document_, 'span', { class: 'cv-lib-action', 'data-lib-action': '' }, 'Add')))));
   const row = el(document_, 'li', {
@@ -310,6 +310,28 @@ function filter(query: string): void {
     section.hidden = shown === 0;
   }
   if (!words) for (const app of apps) expand(app, app.row.classList.contains('was-expanded'));
+  // An empty search says so, with a way out (APP-116 polish).
+  const list = pane?.querySelector<HTMLElement>('[data-lib-list]');
+  const any = Array.from(pane?.querySelectorAll<HTMLElement>('.cv-lib-cat') ?? []).some((section) => !section.hidden);
+  let none = pane?.querySelector<HTMLElement>('.cv-lib-none') ?? null;
+  if (!none && list && documentRef) {
+    const clear = el(documentRef, 'button', { type: 'button', class: 'cv-lib-none-clear' }, 'Clear the search');
+    clear.addEventListener('click', () => {
+      if (search) search.value = '';
+      filter('');
+      search?.focus({ preventScroll: true });
+    });
+    none = el(documentRef, 'div', { class: 'cv-lib-none', role: 'status', hidden: '' },
+      el(documentRef, 'p', { class: 'cv-lib-none-title' }, ''),
+      el(documentRef, 'p', {}, 'Try a card’s name or its number, like 3.2. Or describe what you need in the bar below.'),
+      clear);
+    list.before(none);
+  }
+  if (none) {
+    none.hidden = any || !words;
+    const title = none.querySelector('.cv-lib-none-title');
+    if (title) title.textContent = `Nothing matches “${query.trim().slice(0, 40)}”`;
+  }
 }
 
 async function toggleCard(card: CardRow, report?: Report): Promise<void> {
@@ -445,6 +467,8 @@ export function startLibrary(document_: Document): void {
     const app = index(row);
     if (app) apps.push(app);
   }
+  // Long names are cut with an ellipsis: the full name shows on hover.
+  for (const title of pane.querySelectorAll<HTMLElement>('.cv-lib-app-title, .cv-lib-card-title')) title.title ||= title.textContent ?? '';
   utilities(document_);
   replaceNotesApp();
   // Small libraries open expanded; a large one shows its apps first.

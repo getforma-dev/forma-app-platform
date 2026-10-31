@@ -5,7 +5,8 @@
 //! under a live workspace session, body `{"intent": "<3..500 characters>"}`
 //! of at most 4 KiB, no query string. Answer: `200 application/json`
 //! `{"app_id", "work_id", "origin": "retrieved"|"adapted"|"generated",
-//! "title"}` (forma-json-v1), the saved work the canvas opens at
+//! "title", "tailoring", "duration_ms"}` (forma-json-v1; `duration_ms` is the
+//! route's own time, APP-116), the saved work the canvas opens at
 //! `GET /w/{app_id}/{work_id}`; or a design §9 refusal: the uniform 404 for
 //! no, an unknown, an ended or a refused session and for a member storage
 //! denies anywhere (a member who may compose nothing is indistinguishable
@@ -1053,6 +1054,8 @@ async fn compose(State(state): State<Arc<Compose>>, request: Request) -> Respons
                 "origin": composed.origin.as_str(),
                 "title": composed.title,
                 "tailoring": composed.tailoring.as_str(),
+                // APP-116: the route's own time, for the canvas timing chip.
+                "duration_ms": u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
             });
             match crate::admission::encode(&body) {
                 Ok(bytes) => json_response(bytes),

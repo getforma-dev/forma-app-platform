@@ -275,11 +275,11 @@ export async function makeData(boxId: string, fileId: string, columns: Confirmed
   return { data: dataInfo(json.data), card: card(json.card) };
 }
 
-export async function makeApp(boxId: string, purpose: string, fileIds?: string[]): Promise<{ app_id: string; work_id: string; title: string; files: number }> {
+export async function makeApp(boxId: string, purpose: string, fileIds?: string[]): Promise<{ app_id: string; work_id: string; title: string; files: number; timings: unknown }> {
   if (!isUuid(boxId)) throw new BoxError('not_found', 404);
   const json = await call('POST', `/v1/boxes/${boxId}/apps`, fileIds ? { purpose, file_ids: fileIds.filter(isUuid) } : { purpose });
   if (!isUuid(json.app_id) || !isUuid(json.work_id)) throw new BoxError('unavailable', 500);
-  return { app_id: json.app_id, work_id: json.work_id, title: str(json.title) ? json.title : 'Generated app', files: num(json.files) ? json.files : 0 };
+  return { app_id: json.app_id, work_id: json.work_id, title: str(json.title) ? json.title : 'Generated app', files: num(json.files) ? json.files : 0, timings: json.timings };
 }
 
 export async function attachFile(boxId: string, fileId: string, appId: string, workId: string): Promise<{ box: Box | null; card: Card | null }> {

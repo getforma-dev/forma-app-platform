@@ -676,8 +676,12 @@ async fn campaign() {
     assert_eq!(answer["tailoring"], "pending");
     assert_eq!(
         answer.as_object().unwrap().len(),
-        5,
-        "app_id, work_id, origin, title, tailoring"
+        6,
+        "app_id, work_id, origin, title, tailoring, duration_ms"
+    );
+    assert!(
+        answer["duration_ms"].is_u64(),
+        "APP-116: the route's duration"
     );
     let work_id = answer["work_id"].as_str().unwrap().to_owned();
     assert_ne!(

@@ -11,7 +11,7 @@
 // minor units (BigInt), per currency.
 import { label, money } from './display';
 import { recordsJson, type RecordJson, type RecordsJson } from './records';
-import { el, pulseTarget } from './render';
+import { el, pulseTarget, retryButton, skeleton } from './render';
 
 export const LEDGER_SCOPE = 'live records, last 200';
 
@@ -132,7 +132,7 @@ export function buildLedgerCard(document_: Document, card: LedgerCardJson): HTML
   },
   el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, card.title), el(document_, 'span', { class: 'badge' }, card.scope || LEDGER_SCOPE)),
   el(document_, 'div', { class: 'cv-ledger-controls', 'data-controls': '' }),
-  el(document_, 'div', { class: 'cv-card-body', 'data-body': '' }, el(document_, 'p', { class: 'cv-message', role: 'status' }, 'Loading the ledger…')),
+  el(document_, 'div', { class: 'cv-card-body', 'data-body': '' }, skeleton(document_, 'ledger'), el(document_, 'p', { class: 'sr-only', role: 'status' }, 'Loading the ledger…')),
   el(document_, 'p', { class: 'cv-records-provenance', 'data-provenance': '' }));
 }
 
@@ -259,7 +259,7 @@ export async function refreshLedger(card: HTMLElement, live = false): Promise<vo
     const denied = response?.status === 404;
     card.dataset.state = denied ? 'denied' : 'failed';
     card.querySelector<HTMLElement>('[data-body]')?.replaceChildren(el(card.ownerDocument, 'p', { class: 'cv-message', role: 'alert' },
-      denied ? 'You do not have access to these records. Nothing is shown.' : 'The ledger could not be read right now.'));
+      denied ? 'You don’t have access to these records.' : 'The ledger couldn’t load.'), ...(denied ? [] : [retryButton(card.ownerDocument)]));
     return;
   }
   listings.set(card, listing);

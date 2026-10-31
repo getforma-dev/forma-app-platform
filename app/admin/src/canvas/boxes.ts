@@ -42,9 +42,10 @@ import { startExplain } from './explain';
 import { registerFocusCard, unregisterFocusCard } from './focus';
 import {
   boardWorks, canvasApi, canvasHost, isDemoCanvas, mountWidget, onBoardChange, onLayoutSaved,
-  placeWork, unmountWidget, widgetSpot,
+  placeWork, unmountWidget, widgetSpot, workCard,
 } from './board';
 import { setFileRouter } from './receipt';
+import { formationChip } from './timing';
 import { announce, el, isUuid } from './render';
 import { registerCommands, registerCompleter, type Completion } from './slash';
 
@@ -491,7 +492,9 @@ async function buildApp(boxId: string, purpose: string, report?: Report): Promis
   report?.(`Generating an app from the ${noun}…`);
   try {
     const built = await makeApp(boxId, purpose);
+    const placing = performance.now();
     const placed = await placeWork(built.app_id, built.work_id, []);
+    void formationChip(built.timings, performance.now() - placing, built.work_id, workCard(built.work_id, 'app'));
     void open.get(boxId)?.refresh();
     return `${built.title}: generated from ${built.files} ${built.files === 1 ? 'file' : 'files'} of the ${noun}. ${placed}`;
   } catch (error) {

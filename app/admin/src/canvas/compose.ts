@@ -6,7 +6,8 @@
 // `GET /v1/canvas/works/{app}/{work}`, which re-authorizes, and runs its views
 // through the governed query route. Every refusal here is shown as neutral
 // copy; nothing of the response body is rendered besides the title.
-import { markTailoring, noteKept, placeWork, setReporter } from './board';
+import { markTailoring, noteKept, onTailored, placeWork, setReporter, workCard } from './board';
+import { showTiming, type Chip, type Step } from './timing';
 import { showChooser } from './slash';
 import { isUuid } from './render';
 
@@ -24,6 +25,8 @@ export type ComposeResult = {
   kind: 'placed'; app_id: string; work_id: string; origin: ComposeOrigin; title: string;
   /** The assembly chips the card shows: the server's origin label, verbatim and closed. */
   labels: string[]; tailoring: Tailoring;
+  /** APP-116: the route's own time, when the server reported it. */
+  duration_ms: number | null;
 };
 /** APP-101: a near tie; the member chooses (nothing was written). */
 export type Choice = { app_id: string; title: string; purpose: string };
@@ -91,7 +94,11 @@ export async function composeIntent(text: string, pin: Pin = null): Promise<Comp
   const origin = body.origin as ComposeOrigin;
   const title = typeof body.title === 'string' ? body.title.slice(0, 120) : '';
   const tailoring = TAILORINGS.includes(body.tailoring as Tailoring) ? (body.tailoring as Tailoring) : 'none';
-  return { kind: 'placed', app_id: body.app_id, work_id: body.work_id, origin, title, labels: [origin], tailoring };
+  const duration = (body as { duration_ms?: unknown }).duration_ms;
+  return {
+    kind: 'placed', app_id: body.app_id, work_id: body.work_id, origin, title, labels: [origin], tailoring,
+    duration_ms: typeof duration === 'number' && Number.isFinite(duration) ? duration : null,
+  };
 }
 
 const MESSAGES: Record<ComposeCode, string> = {
@@ -120,7 +127,32 @@ export function messageFor(error: unknown): string {
  * card reshapes in place) or `app.kept` arrives on the live stream. A near
  * tie shows the chooser instead of guessing.
  */
-export async function submitIntent(text: string, bar: (message: string) => void, pin: Pin = null): Promise<void> {
+// APP-116: a compose's chip waits for the live transform's outcome (reshape or kept).
+// (Registered on first use: board.ts and this module import each other.)
+const tailoringChips = new Map<string, { chip: Chip; since: number }>();
+let tailoredWired = false;
+function wireTailored(): void {
+  if (tailoredWired) return;
+  tailoredWired = true;
+  onTailored((from, to) => {
+    const pending = tailoringChips.get(from);
+    if (!pending) return;
+    tailoringChips.delete(from);
+    pending.chip.add({ label: to ? 'reshape' : 'kept defaults', ms: performance.now() - pending.since });
+    if (to) window.setTimeout(() => pending.chip.move(workCard(to, 'app')), 60);
+  });
+}
+
+/** Empties the bar after a request that did what it said (the next one starts clean). */
+export function clearIntentBar(): void {
+  const input = document.getElementById('intent-input') as HTMLInputElement | null;
+  if (input && input.value) {
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+
+export async function submitIntent(text: string, bar: (message: string) => void, pin: Pin = null, before: Step[] = []): Promise<void> {
   const report = setReporter(bar);
   report(pin && 'app_id' in pin ? 'Opening it…' : 'Composing your app…');
   const started = performance.now();
@@ -137,9 +169,19 @@ export async function submitIntent(text: string, bar: (message: string) => void,
     return;
   }
   const result = answer;
-  document.getElementById('cv-canvas')?.setAttribute('data-last-compose-ms', String(Math.round(performance.now() - started)));
+  const composeMs = performance.now() - started;
+  document.getElementById('cv-canvas')?.setAttribute('data-last-compose-ms', String(Math.round(composeMs)));
   report(result.title ? `Placing “${result.title}” on your canvas…` : 'Placing it on your canvas…');
+  const placing = performance.now();
   const placed = await placeWork(result.app_id, result.work_id, result.labels);
+  const chip = showTiming(pin && 'app_id' in pin ? 'Open' : 'Compose', [
+    ...before,
+    { label: pin && 'generate' in pin ? 'build' : 'pick', ms: composeMs, server: result.duration_ms },
+    { label: 'on canvas', ms: performance.now() - placing },
+  ], workCard(result.work_id, 'app'));
+  if (/on your canvas/.test(placed)) clearIntentBar();
+  wireTailored();
+  if (result.tailoring === 'pending') tailoringChips.set(result.work_id, { chip, since: started + composeMs });
   if (result.tailoring === 'pending') {
     const state = markTailoring(result.work_id);
     report(state === 'tailoring' ? `${placed} Tailoring it to your request…`
