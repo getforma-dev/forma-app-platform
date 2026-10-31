@@ -47,7 +47,7 @@ Each app answers to its address: the catalog's slug and aliases for a library ap
 | Folders | `/folder [folder, new or formation] [name or instruction]` | Opens the folder picker, a folder, `new <name>`, `formation <instruction>` or `uploads`. Aliases `/storage`, `/box`. |
 | Widgets | `/weather [city or style]`, `/calculator [expression or style]`, `/clock [city or time zone]` | Utility widgets; restyle them in words. Every utility card has ×. |
 | Agents | `/agent` | Opens "Connect an agent". |
-| Help | `/commands [search]` (`/help`), `/shortcuts` | The pane's Commands tab (its footer: "Your apps answer to /name — see /apps"); the `?` shortcuts sheet. |
+| Help | `/commands [search]` (`/help`), `/shortcuts` | The pane's Commands tab (its footer: "Your apps answer to /name — see /apps"); the pane's Shortcuts tab (`/shortcuts`, `?`). |
 | — | Any other sentence | The instant pick and live reshape; a short chooser when two apps fit equally; "Build something new" generates one. |
 
 **Addressing an app.** `/<address> [hint]` opens that app, tailored by the words. With words that file or decide, it files or decides in that app. `/expense` alone opens the expense ledger. `/expense $86 at Nobu, client dinner, Sarah approves` files the expense. A saved `/big-claims …` opens its saved work.
@@ -62,7 +62,7 @@ Each app answers to its address: the catalog's slug and aliases for a library ap
 | `/access` (`/access-request`) | Access requests; the system owner grants or denies. The access review tracker is now `/access-review`. |
 | `/discount` (`/deal-desk`, `/discounts`) | Deal desk; 10% or less approves itself by the app's rule. |
 
-**The right pane: Library | Commands (APP-119).** One pane, two tabs. `L` and `/apps` open it on Library. `/commands`, `/help` and `?` in the empty bar open it on Commands. `L` on the Commands tab switches to Library; `L` on Library closes the pane. The × and Esc close it (Esc clears a search first), and focus returns to what opened it. The tabs are ARIA tabs (←/→, Home, End). At phone width the pane is the bottom sheet, with the tabs on top.
+**The right pane: Library | Commands | Shortcuts (APP-119).** One pane, three tabs. `L` and `/apps` open it on Library. `/commands` and `/help` open it on Commands. `?` (on the canvas and in the empty bar), `/shortcuts` and ⋯ → Shortcuts and commands open it on Shortcuts: one convention, as on GitHub, Gmail and Linear, `?` means the keyboard shortcuts. `L` on another tab switches to Library; `L` on Library closes the pane. The × and Esc close it (Esc clears a search first), and focus returns to what opened it. The tabs are ARIA tabs (←/→, Home, End). At phone width the pane is the bottom sheet, with the tabs on top.
 - Library: organized as Category → App → numbered cards. Each app row shows its address (`/expense`), its hint and an example; a click on the example puts it in the bar.
 - Click to add or remove a card. "Add all" brings a whole app, "Stack" brings it as a stack, and search finds by name, number, address, alias or hint.
 - Commands: the commands only, by category, with arguments, aliases, examples and a search.
@@ -81,7 +81,7 @@ Each app answers to its address: the catalog's slug and aliases for a library ap
 - Shift+0 / 1 / 2 zoom to 100% / fit / selection.
 - Click a header to select, Shift+click to add, and drag to move.
 - Delete returns a card to the library; it never deletes data.
-- `?` lists all shortcuts and every command (with a link to the pane's Commands tab). `?` in the empty bar opens the Commands tab.
+- `?` (on the canvas or in the empty bar) opens the pane's Shortcuts tab: every action with its click path and its keys or /command, and a link at the top to the Commands tab, where every command has its arguments.
 
 **Folders (APP-108).** Lead with click → type:
 

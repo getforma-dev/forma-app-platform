@@ -13,8 +13,9 @@
 //   toolbar with the zoom menu (zoom in/out, 100%, fit, selection);
 // - zoom keys: Cmd/Ctrl + `=`/`+` and `-` (the browser's page zoom is held
 //   back), Shift + 0 (100%), Shift + 1 (fit all), Shift + 2 (selection);
-// - L opens the library, `?` this sheet of shortcuts (APP-118: its command
-//   list is the registry's verbs, and it links to the pane's Commands tab);
+// - L opens the right pane on Library, `?` on Shortcuts (`shortcut-tab.ts`;
+//   one convention: `?` means the keyboard shortcuts, on the canvas and in
+//   the empty bar alike);
 // - APP-106: F focuses the selected card (`focus.ts`), U unites its app and
 //   Shift + U breaks it apart (`unite.ts`); the toolbar menu has both;
 // - a selected stack: ← / → leaf through it, Enter fans it out;
@@ -27,12 +28,12 @@
 import { eventOriginatesInInteractiveControl, eventOriginatesInTextEntry } from '../canvas-vendor/index';
 import { canvasApi, itemKind, nudgeItems, refreshZoomLabel, removeCards, removeUtilityItem, resetLayout } from './board';
 import { closeLibrary, isLibraryOpen, toggleLibrary } from './library';
-import { announce, el } from './render';
-import { commandList, groupCommands, registerCommands, type CommandGroup } from './command-registry';
-import { insertCommand, openCommandSheet } from './command-sheet';
+import { announce } from './render';
+import { registerCommands } from './command-registry';
+import { openShortcuts } from './shortcut-tab';
 import { removeWidgets } from './widgets/index';
 import { collapseAll, dissolve, expand, isStackItem, shuffle, stackOfItem, stackSelection } from './stacks';
-import { focusFromItem, isFocusOpen, trapTab } from './focus';
+import { focusFromItem, isFocusOpen } from './focus';
 import { isModalOpen } from './box-viewer';
 import { isNoteItem, newNote, removeNoteItem } from './notes';
 import { toggleTimings } from './timing';
@@ -41,25 +42,21 @@ import { frameCardsOfItem, isUniteItem, splitFromItem, uniteFromItem } from './u
 const selection = new Set<HTMLElement>();
 let tool: 'move' | 'hand' = 'move';
 let documentRef: Document | null = null;
-let sheet: HTMLElement | null = null;
-let sheetOpener: HTMLElement | null = null;
 const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-const MOD = mac ? '⌘' : 'Ctrl';
 
 /**
- * APP-113: a modal other than this module's own sheet and focus mode (the
- * file viewer, the data sheet, the agents panel, any `<dialog open>` or
- * `aria-modal` layer) owns the keyboard: no canvas shortcut fires behind it,
+ * APP-113: a modal other than focus mode (the file viewer, the data sheet,
+ * the agents panel, any `<dialog open>` or `aria-modal` layer) owns the keyboard: no canvas shortcut fires behind it,
  * and none fires from inside one.
  */
 export function modalOwnsKeys(event: Event, document_: Document): boolean {
   if (isModalOpen() || document_.querySelector('dialog[open], [data-modal-above]')) return true;
   for (const node of document_.querySelectorAll<HTMLElement>('[aria-modal="true"]')) {
-    if (node === sheet || node.id === 'cv-focus' || node.hidden || node.closest('[hidden]')) continue;
+    if (node.id === 'cv-focus' || node.hidden || node.closest('[hidden]')) continue;
     return true;
   }
   const target = event.target as Element | null;
-  return Boolean(target?.closest?.('dialog[open], [aria-modal="true"]:not(#cv-shortcuts):not(#cv-focus)'));
+  return Boolean(target?.closest?.('dialog[open], [aria-modal="true"]:not(#cv-focus)'));
 }
 
 function renderSelection(): void {
@@ -196,7 +193,7 @@ function action(name: string): void {
     case 'fit': canvas.fitAll(); break;
     case 'selection': zoomToSelection(); break;
     case 'reset-layout': resetLayout(); break;
-    case 'help': showSheet(); break;
+    case 'help': openShortcuts(); break;
     case 'focus': focusSelected(); break;
     case 'unite': uniteSelected(); break;
     case 'move': setTool('move'); break;
@@ -206,146 +203,13 @@ function action(name: string): void {
   refreshZoomLabel();
 }
 
-/**
- * APP-112: every action with both of its paths, the click and the keys or
- * command ("Unite app: App card → Unite · U"). Every command has a click
- * path; not every click has a command.
- */
-const ACTIONS: [string, [what: string, click: string, keys: string][]][] = [
-  ['Bring things in', [
-    ['An app for a request', 'Type it in plain words in the bar', 'Enter'],
-    ['A card', 'Library → click the card', '/card 3.2'],
-    ['A whole app', 'Library → Add all', '/app expense'],
-    ['Every app you can open', 'Library', '/apps'],
-    ['Weather, calculator, clock', 'Library → Utilities, or say “show the weather in Austin”', '/weather Austin'],
-    ['Restyle a widget', 'The widget’s Restyle field', '/calculator make it a TI-84'],
-    ['A note', '⋯ → New note, or Library → Notes', '/note text'],
-    ['A folder', '+ Folder in the toolbar, or drop files on the canvas', '/folder new Q3'],
-    ['An app from a folder', 'Folder → ✨ Formation, or click the folder and type', '/folder 1 formation …'],
-    ['A brief of a folder', 'Folder → Brief me', '/folder 1 formation brief me'],
-    ['File an expense', 'Say it: “I spent $86 at Nobu, Sarah approves”', '/expense …'],
-    ['Approve or reject', 'Records card → Approve · Reject, or say “approve the Nobu dinner”', '—'],
-  ]],
-  ['Cards', [
-    ['Select', 'Click a header · Shift + click to add', '—'],
-    ['Move', 'Drag the header', 'Arrow keys · Shift: 10 px'],
-    ['Focus', 'The [ ] button on a card, or ⋯ → Focus', 'F'],
-    ['Unite an app', 'App card → Unite, Library → Unite, or ⋯ → Unite app', 'U · /unite expense'],
-    ['Break it apart', 'Frame → Break apart, or ⋯ → Break app apart', 'Shift + U · /split expense'],
-    ['Take off the canvas', 'The × on a card, or ⋯ → Take off the canvas', 'Delete'],
-    ['Stack', 'Drag onto a card and hold, Library → Stack, or ⋯ → Stack them', `${MOD} + G`],
-    ['Leaf through a stack', 'The ‹ › on the stack', '← · →'],
-    ['Fan a stack out', 'The +N on the stack', 'Enter · Esc folds'],
-    ['Spread a stack', 'Spread on the stack, or ⋯ → Spread a stack', `${MOD} + Shift + G`],
-    ['Rename a stack', 'Double-click its name', '—'],
-  ]],
-  ['Move around', [
-    ['Pan', 'Scroll, or drag with the hand tool', 'Space + drag'],
-    ['Zoom', 'The zoom menu (100% ▾), or pinch', `${MOD} + = · ${MOD} + −`],
-    ['100% · fit · selection', 'The zoom menu', 'Shift + 0 · 1 · 2'],
-    ['Move tool · hand tool', 'The arrow · hand in the toolbar', 'V · H'],
-    ['Arrange by app', '⋯ → Arrange by app', '/arrange'],
-  ]],
-  ['Canvas', [
-    ['Library', 'Library at the top', 'L · /apps'],
-    ['Every command', 'Library → Commands tab, or this sheet → All commands', '/commands · /help'],
-    ['Address an app', 'Library: each app shows its /address and an example', '/expense …'],
-    ['Show timings', '⋯ → Show timings, or say “show timings”', '#timing=1'],
-    ['This sheet', '⋯ → Shortcuts and commands', '?'],
-  ]],
-];
-
-function keys(document_: Document, text: string): Node[] {
-  if (text === '—') return [document_.createTextNode('—')];
-  return text.split(/(\s·\s|\s\+\s)/).map((part) => (/^(\s·\s|\s\+\s)$/.test(part)
-    ? document_.createTextNode(part)
-    : el(document_, part.startsWith('/') || part.startsWith('#timing') ? 'code' : 'kbd', {}, part)));
-}
-
-/** APP-118: the sheet's command list: the registry's, grouped (exported for the tests). */
-export function shortcutCommandGroups(): CommandGroup[] {
-  return groupCommands(commandList());
-}
-
-/** Rebuilds the sheet's "Commands" section from the registry (commands load after the page). */
-function renderSheetCommands(document_: Document, section: HTMLElement): void {
-  const all = el(document_, 'button', { type: 'button', class: 'cv-shortcuts-all', 'data-open-commands': '' }, 'All commands with their arguments and examples →');
-  all.addEventListener('click', () => {
-    const from = sheetOpener;
-    hideSheet();
-    openCommandSheet('', from);
-  });
-  section.replaceChildren(
-    el(document_, 'h3', {}, 'Commands'),
-    el(document_, 'p', { class: 'cv-shortcuts-sub' }, 'Type / in the bar, or ? in the empty bar. Click one to put it there.'),
-    all,
-    el(document_, 'dl', { class: 'cv-shortcuts-cmds' }, ...shortcutCommandGroups().flatMap((group) => [
-      el(document_, 'dt', {}, group.category),
-      el(document_, 'dd', {}, ...group.commands.map((command) => {
-        const button = el(document_, 'button', { type: 'button', class: 'cv-shortcuts-cmd', 'data-command': command.slug, title: command.title }, el(document_, 'code', {}, `/${command.slug}`));
-        button.addEventListener('click', () => {
-          hideSheet();
-          insertCommand(command.args.length ? `/${command.slug} ` : `/${command.slug}`);
-        });
-        return button;
-      })),
-    ])));
-}
-
-export function showSheet(): void {
-  if (!documentRef) return;
-  if (!sheet) {
-    const document_ = documentRef;
-    const close = el(document_, 'button', { type: 'button', class: 'cv-lib-close', 'aria-label': 'Close the shortcuts', title: 'Close (Esc)' }, '×');
-    sheet = el(document_, 'div', { id: 'cv-shortcuts', class: 'cv-shortcuts', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'cv-shortcuts-title', hidden: '' },
-      el(document_, 'div', { class: 'cv-shortcuts-panel' },
-        el(document_, 'header', { class: 'cv-shortcuts-head' },
-          el(document_, 'div', {},
-            el(document_, 'h2', { id: 'cv-shortcuts-title' }, 'Shortcuts and commands'),
-            el(document_, 'p', { class: 'cv-shortcuts-sub' }, 'Everything works by clicking. Keys and / commands are shortcuts.')),
-          close),
-        el(document_, 'div', { class: 'cv-shortcuts-grid' },
-          ...ACTIONS.map(([title, rows]) => el(document_, 'section', {},
-            el(document_, 'h3', {}, title),
-            el(document_, 'table', { class: 'cv-shortcuts-table' },
-              el(document_, 'thead', { class: 'sr-only' }, el(document_, 'tr', {},
-                el(document_, 'th', { scope: 'col' }, 'Action'), el(document_, 'th', { scope: 'col' }, 'Click'), el(document_, 'th', { scope: 'col' }, 'Keys or command'))),
-              el(document_, 'tbody', {}, ...rows.map(([what, click, shortcut]) => el(document_, 'tr', {},
-                el(document_, 'th', { scope: 'row' }, what),
-                el(document_, 'td', { class: 'cv-shortcuts-click' }, click),
-                el(document_, 'td', { class: 'cv-shortcuts-keys' }, ...keys(document_, shortcut))))))))),
-        el(document_, 'section', { class: 'cv-shortcuts-commands', 'data-sheet-commands': '' })));
-    close.addEventListener('click', hideSheet);
-    sheet.addEventListener('click', (event) => {
-      if (event.target === sheet) hideSheet();
-    });
-    (document_.getElementById('cv-shell') ?? document_.body).append(sheet);
-  }
-  if (sheet.hidden) sheetOpener = documentRef.activeElement as HTMLElement | null;
-  const commands = sheet.querySelector<HTMLElement>('[data-sheet-commands]');
-  if (commands) renderSheetCommands(documentRef, commands);
-  sheet.hidden = false;
-  sheet.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
-}
-function hideSheet(): void {
-  if (!sheet || sheet.hidden) return;
-  sheet.hidden = true;
-  // APP-113: focus returns to what opened the sheet.
-  if (sheetOpener?.isConnected) sheetOpener.focus({ preventScroll: true });
-  sheetOpener = null;
-}
-
-function onKey(event: KeyboardEvent): void {
+/** The canvas keys (capture phase on the document; exported for the tests). */
+export function onKey(event: KeyboardEvent): void {
   if (event.defaultPrevented || event.isComposing || !documentRef) return;
   // Focus mode owns the keyboard while it is open (`focus.ts`), and so does
   // any other modal (APP-113: Delete behind the file viewer removed cards).
   if (isFocusOpen() || modalOwnsKeys(event, documentRef)) return;
   const typing = eventOriginatesInTextEntry(event);
-  // The shortcut sheet is modal: Tab stays inside it.
-  if (sheet && !sheet.hidden && event.key === 'Tab') {
-    trapTab(event, sheet);
-    return;
-  }
   const mod = event.metaKey || event.ctrlKey;
   // The browser's page zoom keys zoom the canvas instead (outside text fields).
   // Cmd/Ctrl+G stacks the selection; with Shift, spreads the selected stacks.
@@ -375,11 +239,6 @@ function onKey(event: KeyboardEvent): void {
       event.preventDefault();
       return;
     }
-    if (sheet && !sheet.hidden) {
-      event.preventDefault();
-      hideSheet();
-      return;
-    }
     if (openMenu()) {
       event.preventDefault();
       closeMenus();
@@ -398,16 +257,16 @@ function onKey(event: KeyboardEvent): void {
     return;
   }
   if (typing || mod || event.altKey) return;
-  if (sheet && !sheet.hidden) return;
   // Shift + digit: the browser reports `)`, `!`, `@` on US layouts; read the code.
   if (event.shiftKey && (event.code === 'Digit0' || event.code === 'Digit1' || event.code === 'Digit2')) {
     event.preventDefault();
     action(event.code === 'Digit0' ? 'zoom-reset' : event.code === 'Digit1' ? 'fit' : 'selection');
     return;
   }
+  // `?` is the keyboard shortcuts, here and in the empty bar (`slash.ts`).
   if (event.key === '?') {
     event.preventDefault();
-    showSheet();
+    openShortcuts();
     return;
   }
   const key = event.key.toLowerCase();
@@ -546,12 +405,12 @@ export function startControls(document_: Document): void {
     slug: 'shortcuts',
     aliases: ['keys'],
     title: 'Shortcuts',
-    purpose: 'Every action with its click path and its keys (the ? sheet)',
+    purpose: 'Every action with its click path and its keys (the Shortcuts tab, or ?)',
     run: (_text: string, report?: (message: string) => void) => {
       const input = document_.getElementById('intent-input') as HTMLInputElement | null;
       if (input) input.value = '';
-      showSheet();
-      report?.('Shortcuts are open. Esc closes them.');
+      openShortcuts(input);
+      report?.('Shortcuts are in the Shortcuts tab. Esc closes it.');
     },
   }]);
   // A page-zoom pinch over the dock or the pane zooms nothing.

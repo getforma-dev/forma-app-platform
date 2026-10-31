@@ -1,11 +1,11 @@
-// APP-118: the command registry is the one source. The autocomplete, the
-// Commands tab and the `?` shortcuts sheet list the same commands, and the
-// argument parsing and hints read each command's typed arguments.
+// APP-118: the command registry is the one source. The autocomplete and
+// the Commands tab list the same commands, and the argument parsing and hints read each command's typed arguments.
 // APP-119: commands are verbs, apps are addresses: `/` and `/commands` list
 // verbs only; apps come from the server with a derived hint and examples,
 // show in their own section from the first letter (on the canvas, saved, or
-// an exact slug), and `/slug …` still runs them. The right pane has two
-// tabs, Library and Commands, and each entry point opens the right one.
+// an exact slug), and `/slug …` still runs them. The right pane has three
+// tabs, Library, Commands and Shortcuts, and each entry point opens the
+// right one: `?` (canvas and empty bar) is Shortcuts, as on GitHub or Linear.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -56,22 +56,19 @@ async function seeded() {
 const slugsOf = (groups: { commands: { slug: string }[] }[]) => groups.flatMap((group) => group.commands.map((command) => command.slug));
 const VERBS = ['apps', 'card', 'arrange', 'note', 'folder', 'weather', 'custom', 'commands'];
 
-test('/ alone lists verbs only; the Commands tab and the ? sheet list the same verbs (APP-119)', async () => {
+test('/ alone lists verbs only; the Commands tab lists the same verbs (APP-119)', async () => {
   const { registry, slash } = await seeded();
   const { sheetGroups } = await import('../src/canvas/command-sheet.ts');
-  const { shortcutCommandGroups } = await import('../src/canvas/controls.ts');
   const all = registry.commandList().map((command) => command.slug);
   assert.deepEqual(all, VERBS);
   assert.deepEqual(slugsOf(slash.slashGroups('')), all);
   assert.deepEqual(slash.slashAddresses('', () => true), [], 'no app under / alone, even on the canvas');
   assert.deepEqual(slugsOf(sheetGroups('')), all);
-  assert.deepEqual(slugsOf(shortcutCommandGroups()), all);
   // No app section anywhere in the verb lists: the Apps and Records categories are gone.
   const categories = slash.slashGroups('').map((group) => group.category);
   assert.deepEqual(categories, ['Library', 'Canvas', 'Folders', 'Widgets', 'Agents', 'Help']);
   assert.ok(!categories.some((category) => (category as string) === 'Apps' || (category as string) === 'Records'));
   assert.deepEqual(sheetGroups('').map((group) => group.category), categories);
-  assert.deepEqual(shortcutCommandGroups().map((group) => group.category), categories);
   assert.deepEqual(slugsOf(sheetGroups('expense')), [], 'searching the Commands tab finds no app');
   // The footer points to /apps.
   assert.equal(registry.ADDRESS_FOOTER, 'Your apps answer to /name — see /apps');
@@ -155,7 +152,7 @@ test('the Library shows each app\'s address, hint and example; /apps searches sl
   assert.ok(search('').includes('big-claims'));
 });
 
-// --- The right pane: one pane, two tabs (a small fake DOM: no browser) ---
+// --- The right pane: one pane, three tabs (a small fake DOM: no browser) ---
 
 class FakeNode {
   attributes = new Map<string, string>();
@@ -220,6 +217,9 @@ class FakeDocument {
   createElement(tag: string) { return new FakeNode(this, tag); }
   createTextNode(text: string) { const node = new FakeNode(this, '#text'); node.text = text; return node; }
   getElementById(id: string) { return this.ids.get(id) ?? null; }
+  // No `<dialog open>`, `[data-modal-above]` or `aria-modal` layer is open.
+  querySelector(_selector: string) { return null; }
+  querySelectorAll(_selector: string) { return []; }
 }
 
 /** The page's pane markup (`app.tsx` `#cv-library`), as the fake DOM builds it. */
@@ -233,36 +233,52 @@ function page() {
   };
   const libraryTab = node('button', { role: 'tab', id: 'cv-tab-library', 'aria-selected': 'true', 'aria-controls': 'cv-panel-library', 'data-pane-tab': 'library' });
   const commandsTab = node('button', { role: 'tab', id: 'cv-tab-commands', 'aria-selected': 'false', 'aria-controls': 'cv-panel-commands', 'data-pane-tab': 'commands' });
-  const tablist = node('div', { role: 'tablist' }, libraryTab, commandsTab);
+  const shortcutsTab = node('button', { role: 'tab', id: 'cv-tab-shortcuts', 'aria-selected': 'false', 'aria-controls': 'cv-panel-shortcuts', 'data-pane-tab': 'shortcuts' });
+  const tablist = node('div', { role: 'tablist' }, libraryTab, commandsTab, shortcutsTab);
   const close = node('button', { 'data-lib-close': '' });
   const search = node('input', { id: 'cv-lib-search' });
   const libraryPanel = node('div', { id: 'cv-panel-library', role: 'tabpanel' }, search);
   const commandsPanel = node('div', { id: 'cv-panel-commands', role: 'tabpanel', hidden: '' });
-  const pane = node('aside', { id: 'cv-library', 'data-open': 'false', 'data-tab': 'library' }, node('header', {}, tablist, close), libraryPanel, commandsPanel);
+  const shortcutsPanel = node('div', { id: 'cv-panel-shortcuts', role: 'tabpanel', hidden: '' });
+  const pane = node('aside', { id: 'cv-library', 'data-open': 'false', 'data-tab': 'library' }, node('header', {}, tablist, close), libraryPanel, commandsPanel, shortcutsPanel);
   const toggle = node('button', { id: 'cv-library-toggle', 'aria-expanded': 'false' });
   const input = node('input', { id: 'intent-input' });
-  node('div', { id: 'cv-shell' }, toggle, pane, input);
-  return { document_, pane, libraryTab, commandsTab, tablist, libraryPanel, commandsPanel, toggle, input };
+  const board = node('div', { class: 'forma-canvas-viewport' });
+  node('div', { id: 'cv-shell' }, toggle, pane, board, input);
+  return { document_, pane, libraryTab, commandsTab, shortcutsTab, tablist, libraryPanel, commandsPanel, shortcutsPanel, toggle, input, board };
 }
 
 test('the right pane opens on the right tab from each entry point (APP-119)', async () => {
-  const { document_, pane, libraryTab, commandsTab, tablist, libraryPanel, commandsPanel, toggle, input } = page();
+  const { document_, pane, libraryTab, commandsTab, shortcutsTab, tablist, libraryPanel, commandsPanel, shortcutsPanel, toggle, input, board } = page();
   (globalThis as { document?: unknown }).document = document_;
   (globalThis as { matchMedia?: unknown }).matchMedia = () => ({ matches: false });
   (globalThis as { fetch?: unknown }).fetch = async () => ({ ok: true, json: async () => SERVER });
   const panes = await import('../src/canvas/pane.ts');
   const sheet = await import('../src/canvas/command-sheet.ts');
+  const shortcuts = await import('../src/canvas/shortcut-tab.ts');
   const library = await import('../src/canvas/library.ts');
+  const controls = await import('../src/canvas/controls.ts');
   const { slash } = await seeded();
   panes.startPane(document_ as unknown as Document);
   sheet.startCommandSheet(document_ as unknown as Document);
-  const state = () => ({ open: pane.dataset.open, tab: pane.dataset.tab, library: !libraryPanel.hidden, commands: !commandsPanel.hidden });
-  const onLibrary = { open: 'true', tab: 'library', library: true, commands: false };
-  const onCommands = { open: 'true', tab: 'commands', library: false, commands: true };
-  const closed = (tab: string) => ({ open: 'false', tab, library: tab === 'library', commands: tab === 'commands' });
+  shortcuts.startShortcutTab(document_ as unknown as Document);
+  // The canvas keys (no canvas in the fake page: only the key handler is wired).
+  controls.startControls(document_ as unknown as Document);
+  const state = () => ({ open: pane.dataset.open, tab: pane.dataset.tab, library: !libraryPanel.hidden, commands: !commandsPanel.hidden, shortcuts: !shortcutsPanel.hidden });
+  const on = (tab: string) => ({ open: 'true', tab, library: tab === 'library', commands: tab === 'commands', shortcuts: tab === 'shortcuts' });
+  const closed = (tab: string) => ({ ...on(tab), open: 'false' });
+  const onLibrary = on('library');
+  const onCommands = on('commands');
+  const onShortcuts = on('shortcuts');
+  const key = (target: FakeNode, name: string) => {
+    const event = { key: name, code: '', target, defaultPrevented: false, isComposing: false, shiftKey: name === '?', metaKey: false, ctrlKey: false, altKey: false,
+      composedPath: () => [target], preventDefault() { this.defaultPrevented = true; }, stopPropagation: noop, stopImmediatePropagation: noop };
+    controls.onKey(event as unknown as KeyboardEvent);
+    return event;
+  };
 
   // `L` opens it on Library; `L` again closes it.
-  library.toggleLibrary();
+  key(board, 'l');
   assert.deepEqual(state(), onLibrary);
   assert.equal(toggle.getAttribute('aria-expanded'), 'true');
   library.toggleLibrary();
@@ -296,23 +312,63 @@ test('the right pane opens on the right tab from each entry point (APP-119)', as
   assert.deepEqual(state(), closed('commands'));
   assert.equal(document_.activeElement, input);
 
-  // `?` in the empty bar opens it on Commands.
-  await slash.openHelp(input as unknown as HTMLElement);
+  // `?` in the empty bar opens it on Shortcuts (not Commands): `?` means the keyboard shortcuts.
+  slash.openHelp(input as unknown as HTMLElement);
+  assert.deepEqual(state(), onShortcuts);
+  assert.equal(document_.activeElement, shortcutsTab);
+  // The tab lists every action with its click path and keys; rows keep their /commands.
+  const text = shortcutsPanel.textContent;
+  assert.ok(text.includes('Unite an app') && text.includes('/unite expense'), 'a row with its /command');
+  assert.ok(text.includes('Shortcuts tab') && !text.includes('This sheet') && !text.includes('this sheet'), 'the ? row describes the tab');
+  // Its one line at the top links to the Commands tab.
+  const link = shortcutsPanel.querySelector('[data-pane-goto="commands"]')!;
+  assert.equal(link.textContent, 'Every command with its arguments → Commands');
+  link.dispatch('click');
   assert.deepEqual(state(), onCommands);
+  // Esc (search empty) closes it; focus returns to the bar, which opened it.
+  pane.dispatch('keydown', { key: 'Escape' });
+  assert.deepEqual(state(), closed('commands'));
+  assert.equal(document_.activeElement, input);
+
+  // `?` on the canvas opens it on Shortcuts too; no modal sheet is made.
+  board.focus();
+  assert.equal(key(board, '?').defaultPrevented, true);
+  assert.deepEqual(state(), onShortcuts);
+  assert.equal(document_.getElementById('cv-shortcuts'), null, 'the old #cv-shortcuts modal is gone');
+  assert.ok(!('showSheet' in controls), 'no showSheet export');
+  // `?` typed in a text field is just text.
+  panes.closePane();
+  const typed = key({ ...input, matches: (selector: string) => selector.includes('input') } as unknown as FakeNode, '?');
+  assert.equal(typed.defaultPrevented, false);
+  assert.equal(pane.dataset.open, 'false');
+  // `L` from Shortcuts switches to Library.
+  key(board, '?');
+  key(board, 'l');
+  assert.deepEqual(state(), onLibrary);
+
   // The tabs are ARIA tabs: one selected, one tab stop; ←/→/Home/End move and select.
+  commandsTab.dispatch('click');
+  assert.deepEqual(state(), onCommands);
   assert.equal(commandsTab.getAttribute('aria-selected'), 'true');
   assert.equal(libraryTab.getAttribute('aria-selected'), 'false');
+  assert.equal(shortcutsTab.getAttribute('aria-selected'), 'false');
   assert.equal(commandsTab.getAttribute('tabindex'), '0');
   assert.equal(libraryTab.getAttribute('tabindex'), '-1');
+  assert.equal(shortcutsTab.getAttribute('tabindex'), '-1');
   tablist.dispatch('keydown', { key: 'ArrowLeft' });
   assert.deepEqual(state(), onLibrary);
   assert.equal(document_.activeElement, libraryTab);
+  tablist.dispatch('keydown', { key: 'ArrowLeft' });
+  assert.deepEqual(state(), onShortcuts, '← wraps to the last tab');
+  assert.equal(document_.activeElement, shortcutsTab);
+  tablist.dispatch('keydown', { key: 'ArrowRight' });
+  assert.deepEqual(state(), onLibrary, '→ wraps to the first tab');
   tablist.dispatch('keydown', { key: 'End' });
-  assert.deepEqual(state(), onCommands);
+  assert.deepEqual(state(), onShortcuts);
   tablist.dispatch('keydown', { key: 'Home' });
   assert.deepEqual(state(), onLibrary);
-  commandsTab.dispatch('click');
-  assert.deepEqual(state(), onCommands);
+  shortcutsTab.dispatch('click');
+  assert.deepEqual(state(), onShortcuts);
   // The one × closes it, whatever the tab.
   panes.closePane();
   assert.equal(pane.dataset.open, 'false');
