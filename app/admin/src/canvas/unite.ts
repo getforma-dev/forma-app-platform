@@ -374,7 +374,7 @@ function clearBar(): void {
 const UNITE_COMMAND = {
   slug: 'unite',
   title: 'Unite an app',
-  purpose: 'Assemble every card of one app into its own frame (“/unite expense”)',
+  purpose: 'Assemble every card of one app into its own frame',
   run: async (text: string, report: Report = () => undefined) => {
     const [app] = text.trim() ? findApps(text) : [];
     if (!app) {
@@ -389,7 +389,7 @@ const UNITE_COMMAND = {
 const SPLIT_COMMAND = {
   slug: 'split',
   title: 'Break an app apart',
-  purpose: 'Return a united app’s cards to where they were (“/split expense”)',
+  purpose: 'Return a united app’s cards to where they were',
   aliases: ['break'],
   run: (text: string, report: Report = () => undefined) => {
     const united = findApps(text).filter((app) => frames.has(app.work));

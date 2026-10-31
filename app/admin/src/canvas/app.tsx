@@ -8,13 +8,13 @@ import { startStacks } from './stacks';
 import { startUnite } from './unite';
 import { startFocus } from './focus';
 import { NOTE_COMMAND, startNotes } from './notes';
-import { registerCommands, startSlash } from './slash';
+import { registerCommands, registerCompleter, startSlash } from './slash';
 import { startBoxes } from './boxes';
 import { startTimings } from './timing';
 // APP-103 utility widgets, registered as canvas slash commands (APP-101):
 // `/weather`, `/calculator`, `/clock` in the `/` list and `/apps`; a command
 // with words restyles the selected widget of that kind (`runWidget`).
-import { restoreWidgets, runWidget, WIDGET_COMMANDS } from './widgets/index';
+import { citySuggestions, restoreWidgets, runWidget, WIDGET_COMMANDS, zoneSuggestions } from './widgets/index';
 
 // ADR-011 pitch canvas (APP-092, APP-094): the signed-in workspace as one
 // canvas. Every group, card, value and receipt row below is resolved by the
@@ -798,6 +798,9 @@ registerCommands(WIDGET_COMMANDS.map((command) => ({
   run: (text: string, report?: (message: string) => void) =>
     runWidget(command.slug as 'weather' | 'calculator' | 'clock', text).then((message) => report?.(message)),
 })));
+// APP-118: recent cities and the clock's zones under the bar (Enter still runs what was typed).
+registerCompleter('weather', citySuggestions, { select: false });
+registerCompleter('clock', zoneSuggestions, { select: false });
 startAgents(document);
 restoreWidgets();
 startLibrary(document);

@@ -194,9 +194,11 @@ export function purposeOf(rest: string): string {
 
 function completions(rest: string): Completion[] {
   const query = rest.trim().toLowerCase();
-  const fixed: Completion[] = [
-    { badge: '+', title: `New ${noun}`, detail: `${CMD} new <name>`, value: `${CMD} new ` },
-    { badge: '↥', title: 'Uploads', detail: 'Files dropped on the canvas', value: `${CMD} uploads` },
+  // APP-118: the folders, then `new`, `formation` (on the selected or last opened folder) and Uploads.
+  const fixed: (Completion & { word: string })[] = [
+    { word: 'new', badge: '+', title: `New ${noun}`, detail: `${CMD} new <name>`, value: `${CMD} new ` },
+    { word: 'formation', badge: '✨', title: 'Formation', detail: `${CMD} formation <instruction> · builds an app from the selected ${noun}`, value: `${CMD} formation ` },
+    { word: 'uploads', badge: '↥', title: 'Uploads', detail: 'Files dropped on the canvas', value: `${CMD} uploads` },
   ];
   const listed = boxes
     .filter((box) => !query || String(box.number).startsWith(query) || boxLabel(box).toLowerCase().includes(query))
@@ -205,7 +207,7 @@ function completions(rest: string): Completion[] {
       badge: String(box.number), title: boxLabel(box), detail: `${box.file_count} ${box.file_count === 1 ? 'file' : 'files'}`,
       value: `${CMD} ${box.number}`,
     }));
-  return [...listed, ...fixed.filter((item) => !query || item.title.toLowerCase().includes(query) || 'new'.startsWith(query))];
+  return [...listed, ...fixed.filter((item) => !query || item.word.startsWith(query)).map(({ word: _word, ...item }) => item)];
 }
 
 // --- Box cards ---
@@ -682,7 +684,7 @@ const FOLDER = {
   slug: FOLDER_COMMAND,
   aliases: FOLDER_ALIASES,
   title: NOUN_PLURAL,
-  purpose: `Your ${nouns} of files (“${CMD} 1”, “${CMD} new Q3 pack”, “${CMD} 1 formation build a metrics app”)`,
+  purpose: `Your ${nouns} of files: open one, make a new one, or build an app from one (formation)`,
   run: async (text: string, report: Report = announce) => {
     const words = text.trim();
     await refreshBoxes();
