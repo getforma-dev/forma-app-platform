@@ -40,6 +40,13 @@ urls() {
 }
 
 build() {
+  # Always rebuild the canvas bundle from this checkout: a stale dist served an
+  # old canvas (2026-10-31).
+  echo "building the canvas bundle (npm run build) ..."
+  (cd "$app/admin" && npm run build >"$state/admin-build.log" 2>&1) || {
+    echo "admin build failed; see $state/admin-build.log" >&2
+    exit 1
+  }
   [[ -f "$app/admin/dist/manifest.json" ]] || {
     echo "admin/dist is not built: cd $app/admin && npm ci && npm run build" >&2
     exit 1
