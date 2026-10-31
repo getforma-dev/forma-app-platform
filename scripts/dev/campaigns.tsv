@@ -19,15 +19,15 @@ command	storage::command_qualification::native_command_campaign	campaign	tenant-
 race	storage::race_qualification::native_race_campaign	campaign	tenant-foundation	GENUI_RACE_REPORT	-	Docker, OpenSSL, runtime venv
 engine-child	query::tests::engine_child_campaign	campaign	tenant-foundation	GENUI_QUERY_LATENCY_REPORT	GENUI_QUERY_PYTHON=@VENV@	runtime venv (DuckDB 2.0.0)
 query	storage::query_qualification::native_query_campaign	campaign	tenant-foundation	GENUI_QUERY_REPORT	GENUI_QUERY_PYTHON=@VENV@	Docker, OpenSSL, runtime venv
-actions	storage::actions_campaign::native_actions_campaign	campaign	-	GENUI_ACTIONS_CAMPAIGN_REPORT	-	Docker, runtime venv
+actions	storage::actions_campaign::native_actions_campaign	campaign	pitch	GENUI_ACTIONS_CAMPAIGN_REPORT	-	Docker, runtime venv
 box	storage::box_campaign::native_box_campaign	campaign	-	-	-	Docker, runtime venv, sealed parser (just parser)
-canvas	storage::query_qualification::canvas_campaign::native_canvas_campaign	campaign	-	GENUI_CANVAS_CAMPAIGN_REPORT	-	Docker, runtime venv
-composer	storage::composer_qualification::native_composer_campaign	campaign	-	GENUI_COMPOSER_REPORT	-	Docker, OpenSSL, runtime venv
-mcp	storage::mcp_campaign::native_mcp_campaign	campaign	-	GENUI_MCP_CAMPAIGN_REPORT	-	Docker, runtime venv
-pitch	storage::query_qualification::pitch_campaign::native_pitch_campaign	campaign	-	GENUI_PITCH_CAMPAIGN_REPORT	-	Docker, runtime venv
-sharing	storage::sharing_qualification::native_sharing_campaign	campaign	-	GENUI_SHARING_REPORT	-	Docker, OpenSSL, runtime venv
-slack	storage::slack_campaign::native_slack_campaign	campaign	-	GENUI_SLACK_CAMPAIGN_REPORT	-	Docker, runtime venv
-workflows	storage::workflows_campaign::native_workflows_campaign	campaign	-	GENUI_WORKFLOWS_CAMPAIGN_REPORT	-	Docker, runtime venv
+canvas	storage::query_qualification::canvas_campaign::native_canvas_campaign	campaign	pitch	GENUI_CANVAS_CAMPAIGN_REPORT	-	Docker, runtime venv
+composer	storage::composer_qualification::native_composer_campaign	campaign	pitch	GENUI_COMPOSER_REPORT	-	Docker, OpenSSL, runtime venv
+mcp	storage::mcp_campaign::native_mcp_campaign	campaign	pitch	GENUI_MCP_CAMPAIGN_REPORT	-	Docker, runtime venv
+pitch	storage::query_qualification::pitch_campaign::native_pitch_campaign	campaign	pitch	GENUI_PITCH_CAMPAIGN_REPORT	-	Docker, runtime venv
+sharing	storage::sharing_qualification::native_sharing_campaign	campaign	pitch	GENUI_SHARING_REPORT	-	Docker, OpenSSL, runtime venv
+slack	storage::slack_campaign::native_slack_campaign	campaign	pitch	GENUI_SLACK_CAMPAIGN_REPORT	-	Docker, runtime venv
+workflows	storage::workflows_campaign::native_workflows_campaign	campaign	pitch	GENUI_WORKFLOWS_CAMPAIGN_REPORT	-	Docker, runtime venv
 parser-sandbox	imports::sandbox::tests::actual_parser_host_parses_refuses_and_lists_sheets	probe	-	-	-	GENUI_TEST_PARSER_MANIFEST naming a built parser
 smoke-composer	composer::tests::real_model_smoke	smoke	-	-	-	the real model; run through app/scripts/composer_smoke.sh
 smoke-transform	composer::transform::smoke::real_haiku_transform_smoke	smoke	-	-	-	the real model; run through app/scripts/composer_smoke.sh transform

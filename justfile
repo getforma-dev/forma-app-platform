@@ -36,7 +36,7 @@ status *args:
 check *steps:
     @scripts/dev/check.sh "$@"
 
-# `check` plus the schema qualifier and the 10 CI campaigns: a local green branch
+# `check` plus the schema qualifier and the 18 CI campaigns: a local green branch
 ci:
     @scripts/dev/check.sh --ci
 
