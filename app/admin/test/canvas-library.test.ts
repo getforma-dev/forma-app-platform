@@ -439,3 +439,53 @@ test('the ✎ editor sends only what the member changed; an untouched save sends
     [{ scope: 'personal', card: 'totals', name: 'Mine' }]);
   assert.deepEqual(naming.editorRequests(card, { ...card, name: 'ignored' }, 'totals', false), [], 'not the owner: the organization fields are not sent');
 });
+
+// APP-122 review: one resolver for Shape and Ask. `/shape` takes every form
+// of an address (APP-121's namespaced ones included); `/ask [address]
+// <question>` scopes to the app or card its first word names exactly, else
+// the whole line is the question (selection, else canvas).
+test('/shape and /ask resolve every form of an address through one resolver; a non-name first word is part of the question (APP-122)', async () => {
+  const { registry, slash, library, expenses } = await setup();
+  const shape = await import('../src/canvas/shape.ts');
+  const ask = await import('../src/canvas/ask.ts');
+  const ledger = expenses.cards.find((card) => card.kind === 'ledger')!;
+  // (Earlier tests renamed Expenses and indexed its row again; the old address is kept, and every form still reaches it.)
+  const app = shape.resolveTarget('expenses');
+  assert.ok(app.kind === 'app' && app.app.work === expenses.work);
+  const name = app.address;
+  const resolved = shape.resolveTarget('expenses.ledger');
+  const cardName = resolved.kind === 'card' ? library.cardAddress(resolved.card) : '';
+  assert.ok(cardName.endsWith('.ledger'));
+  assert.deepEqual(shape.resolveTarget('app:expenses'), app);
+  assert.deepEqual(shape.resolveTarget('/app:Expenses'), app);
+  for (const form of ['expenses.ledger', 'card:expenses.ledger', '3.2', 'card:3.2', 'expense.ledger']) {
+    const card = shape.resolveTarget(form);
+    assert.ok(card.kind === 'card' && card.card.id === ledger.id && card.address === cardName, form);
+  }
+  assert.equal(shape.resolveTarget('folder:q3').kind, 'none');
+  assert.equal(shape.resolveTarget('widget:spreadsheet').kind, 'none');
+  assert.equal(shape.resolveTarget('app:nothing').kind, 'none');
+  // `/ask <app> …` scopes to the app, `/ask <app.card> …` to the card and its collection.
+  const byApp = ask.askLine('expenses why did spend jump in March?');
+  assert.deepEqual(byApp.scope, { kind: 'app', address: name, works: [{ app_id: EXPENSE_APP, work_id: EXPENSE_WORK, address: byApp.scope?.works[0]?.address ?? '' }] });
+  assert.equal(byApp.question, 'why did spend jump in March?');
+  assert.deepEqual(ask.askLine('app:expenses why did spend jump in March?'), byApp, 'the full form is the same');
+  assert.deepEqual(ask.askLine('expense why did spend jump in March?').scope, byApp.scope, 'an alias too');
+  const byCard = ask.askLine('expenses.ledger which claims are overdue?');
+  assert.deepEqual(byCard.scope, { kind: 'card', address: cardName, works: [{ app_id: EXPENSE_APP, work_id: EXPENSE_WORK, address: byApp.scope?.works[0]?.address ?? '', collection: COLLECTION }] });
+  assert.equal(byCard.question, 'which claims are overdue?');
+  assert.deepEqual(ask.askLine('card:expenses.ledger which claims are overdue?'), byCard);
+  assert.deepEqual(ask.askLine('3.2 which claims are overdue?').scope, byCard.scope);
+  // Not a name: the whole line is the question (selection, else canvas). Verbs, prefixes and titles never scope.
+  for (const line of ['why is this high?', 'card why is this high?', 'notes from last week', 'time off is high', 'expenses.led which?', 'exp is high']) {
+    assert.deepEqual(ask.askLine(line), { scope: null, question: line }, line);
+  }
+  assert.ok(ask.askLine('widget:calculator what is it')?.message?.startsWith('A widget has no records'));
+  assert.equal(ask.askLine('folder:q3 what is in it').scope, null);
+  // A personal shortcut names its app for its member.
+  registry.setAddresses(slash.parseCommands({ commands: [{ ...SERVER.commands[0]!, aliases: ['expense', 'claim', 'e'], mine: ['e'] }, SERVER.commands[1]!] }).map(slash.serverAddress));
+  library.decorate(expenses, library.rowAddress(expenses, registry.addressList()));
+  const mine = ask.askLine('e how many claims');
+  assert.ok(mine.scope?.kind === 'app' && mine.scope.works[0]?.work_id === EXPENSE_WORK && mine.question === 'how many claims');
+  assert.ok(shape.resolveTarget('e').kind === 'app');
+});

@@ -64,11 +64,12 @@ pub const LABELS_PATH: &str = "/v1/apps/{app}/labels";
 const BODY_LIMIT: usize = 4096;
 
 /// The canvas verbs and every alias the canvas registers for one
-/// (`command-registry.ts` and the modules that register verbs: the fourteen,
-/// the widget verbs, `agents.ts`, `controls.ts`, `notes.ts`, `unite.ts`,
-/// `slash.ts`, `box-api.ts` `FOLDER_ALIASES`) and the reserved list names:
-/// no address, alias or shortcut may take one. `app/admin/test` checks this
-/// list against the canvas's registrations.
+/// (`command-registry.ts` and the modules that register verbs: the sixteen
+/// with APP-122's `/shape` and `/ask`, the widget verbs, `agents.ts`,
+/// `controls.ts`, `notes.ts`, `unite.ts`, `slash.ts`, `box-api.ts`
+/// `FOLDER_ALIASES`) and the reserved list names: no address, alias or
+/// shortcut may take one. `app/admin/test` checks this list against the
+/// canvas's registrations.
 pub const VERBS: &[&str] = &[
     "app",
     "card",
@@ -80,6 +81,8 @@ pub const VERBS: &[&str] = &[
     "folder",
     "rename",
     "alias",
+    "shape",
+    "ask",
     "apps",
     "commands",
     "shortcuts",

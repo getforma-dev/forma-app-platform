@@ -10,7 +10,7 @@ Four jobs, and where you type picks the job, never the AI:
 
 | Job | What it does | Typed as |
 | --- | --- | --- |
-| **Ask** | Finds out: answers questions about your data. Changes nothing | `? <question>` |
+| **Ask** | Finds out: answers questions about your data. Changes nothing | `/ask [app or app.card] <question>`, or `? <question>` |
 | **Shape** | Changes how something looks or what it shows. Never answers, never touches records | `/shape <address> <words>`, or `/<app>.<card> <words>` |
 | **Do** | Runs one of an app's own commands: the only way records change | `/<app> <words>` |
 | **Forma** | Makes something new: picks or builds an app | A plain sentence, or a folder's formation |
@@ -37,7 +37,7 @@ Four jobs, and where you type picks the job, never the AI:
 | --- | --- | --- |
 | **Library** | **Apps** (category → app → cards) and **Widgets** | `L`, `/apps [query]`, the Library button |
 | **Commands** | Every verb, with its arguments and an example | `/commands`, `/help` |
-| **Ask** | A read-only conversation about your data (APP-122) | `?` + text in the bar, ⋯ → Ask about this |
+| **Ask** | A read-only conversation about your data (APP-122) | `/ask …` or `?` + text in the bar, ⋯ → Ask about this |
 | **Shortcuts** | Keys and gestures | `/shortcuts`, ⋯ → Shortcuts |
 
 Every Library row shows:
@@ -88,8 +88,8 @@ The pane always reflects the canvas.
 | Make | `/folder <name> formation <instruction>` | Builds an app from a folder's files |
 | | `/rename <app or app.card> <new name> [/address]` | Names an app (and gives it a new address) or a card: `/rename expenses Team spend /team-spend`, `/rename expenses.total Q3 spend` (APP-121) |
 | | `/alias <shortcut> <app or app.card>` | Your own shortcut: `/alias exp expenses`, `/alias e expenses`, `/alias q3 expenses.total`; `/alias exp` alone removes it (APP-121) |
-| Shape | `/shape <address> <words>` | Changes how a card, an app (its theme) or a widget looks or what it shows (APP-122) |
-| Ask | `? <question>` | Opens the Ask tab with your question; read-only (APP-122) |
+| Shape | `/shape <address> <words>` | Changes how a card, an app (its theme) or a widget looks or what it shows (APP-122). The address takes every form: `expenses.ledger`, `card:expenses.ledger`, `app:expenses`, `widget:calculator` |
+| Ask | `/ask [app or app.card] <question>` | Opens the Ask tab with your question; read-only (APP-122). Name an app or card first to ask about it (`/ask expenses why did spend jump in March?`, `/ask expenses.ledger which claims are overdue?`); otherwise it asks about the selected card, else the canvas. `? <question>` is the quick form |
 | Help | `/apps [query]` · `/commands` · `/shortcuts` · `/agent` | Library · Commands · Shortcuts · Connect an agent |
 
 Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/clock`, `/note`, `/folder` on its own, and `/help`. Verbs are always bare; the space forms `/app <name>`, `/card <x>`, `/widget <kind>` are the same as the full forms `/app:<name>`, `/card:<x>`, `/widget:<kind>`.
@@ -98,14 +98,53 @@ Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/cl
 
 Ask and Shape are the two AI jobs that work on things already on your canvas. **Where you type decides the job, never the AI.** A question cannot change a card, because the Ask job has no way to change anything.
 
+### How to ask
+
+Ask is a conversation about your data, like talking to an analyst. Every way in opens the **Ask** tab of the right pane:
+
+| You type or click | It asks about |
+| --- | --- |
+| `/ask expenses why did spend jump in March?` | The app: all its records |
+| `/ask expenses.ledger which claims are overdue?` (or `/ask 3.2 …`) | That card: only its records |
+| `/ask app:expenses …` · `/ask card:expenses.ledger …` · `/ask e …` (your shortcut) | The same, in the full form or by your own name |
+| `/ask why is this high?` | The first word names nothing, so the whole line is the question: the selected card, else the canvas |
+| `? where are the red invoices` | The quick form: the selected card, else the canvas |
+| `?` on the canvas | Puts `? ` in an empty bar (it only focuses the bar when you have half-typed something) |
+| ⋯ → **Ask about this** on a card | That card |
+| The Ask tab's own input | The scope its chip shows |
+
+- **What comes back:** a short answer in text, and the records it used, each with its receipt (the record, its version and commit, the app's publication and definition). A number it computes (a count, a total) lists every record it counted.
+- **What never changes:** records, cards, the canvas. Ask runs in a read-only transaction. Asked to change something, it answers with what to type (`/shape expenses.ledger …`); it never switches jobs.
+- **The scope** shows as a chip at the top of the tab ("Asking about /expenses.ledger"). A verb is never an address here: `/ask card why…` asks "card why…".
+
+### How to shape
+
+Shape changes how a card, an app or a widget looks or what it shows. Every way in ends at a **preview**:
+
+| You type or click | It shapes |
+| --- | --- |
+| `/shape expenses.ledger only red invoices` | That card's view |
+| `/expenses.ledger only red invoices` (the dot shortcut) · `/card:expenses.ledger only red invoices` (its full form) | The same card, the same way |
+| `/shape expenses dark green, compact` · `/shape app:expenses …` | A theme on every Expenses card |
+| `/shape calculator make it a TI-84` · `/shape widget:calculator …` | The calculator's look |
+| ⋯ → **Shape…** on a card, an app frame or a widget | Puts `/shape <its address> ` in the bar for your words |
+| A widget's own **Shape** field (formerly Restyle) | That widget, applied at once |
+
+- **What comes back:** a preview on the item, and a small card above the bar: **Apply** (replace the view), **Add as new card** (cards only) or **Cancel**. Applied, the item is labeled *shaped* with **Revert**.
+- **What never changes:** records. Shape never answers in words. A view may filter or hide records; it never removes receipts, and every number it computes traces to its records.
+
+### Why not `/expenses:ask`?
+
+The colon always means *kind:name*: `/app:expenses`, `/card:expenses.ledger`, `/widget:calculator`, `/folder:q3`. It names a thing, never an action. Jobs are verbs and come first: `/ask expenses …`, `/shape expenses …`. So `/expenses:ask` is not a form; type `/ask expenses …`.
+
 | | **Ask** | **Shape** |
 | --- | --- | --- |
 | What it is | A conversation about your data, like talking to an analyst | Changing how a card, an app or a widget looks or what it shows |
-| Where | The **Ask** tab in the right pane, with its own input. `?` as the bar's first character opens it with your text; ⋯ → **Ask about this** opens it scoped to a card | The bar: `/shape <address> <words>` for anything, or `/<app>.<card> <words>` as the shortcut for a card. ⋯ → **Shape…** on any item puts `/shape <its address> ` in the bar. A widget's own Shape field (formerly Restyle) does the same |
+| Where | `/ask [address] <question>`, `?` first in the bar, ⋯ → **Ask about this**, the Ask tab | `/shape <address> <words>`, `/<app>.<card> <words>`, ⋯ → **Shape…**, a widget's Shape field |
 | Examples | "where are all the red invoices?" · "why did spend jump in March?" · "summarize Q3" | A card: `/expenses.ledger highlight overdue in red`. An app: `/shape expenses dark green, compact`. A widget: `/shape calculator make it a TI-84` |
 | What comes back | Text with receipts and links to the records it used | A preview: **Apply** (replace this card) or **Add as new card**. Nothing changes until you click |
-| Can it change anything? | **No.** It runs read-only: it cannot change records, cards or the canvas. Asked to change something, it answers with what to type ("to change the look, type `/expenses.ledger …`"); it never switches jobs | Only the look and the view: chart type, colors, columns, filters, the math shown. **Never records**, and it never answers in words. A view may filter or hide records; it can never remove receipts |
-| Scope | The selected card, or else the whole canvas. A chip shows which | The item you addressed |
+| Can it change anything? | **No.** It runs read-only: it cannot change records, cards or the canvas | Only the look and the view: chart type, colors, columns, filters, the math shown. **Never records** |
+| Scope | The app or card you named, else the selected card, else the whole canvas. A chip shows which | The item you addressed |
 
 **What Shape changes, by target:**
 
@@ -119,14 +158,27 @@ An app has no look of its own; its look is its cards, so shaping an app themes t
 
 **The dot is a shortcut for cards.** `/<app> <words>` (no dot) talks to the app: Do. `/<app>.<card> <words>` (a dot) shapes that card. `/<widget> <details>` places a widget (`/weather Austin`); to restyle it, use `/shape <widget>`. These are the short forms; the full forms say the same thing and are never ambiguous: `/app:<app> <words>`, `/card:<app>.<card> <words>`, `/widget:<kind> <details>`.
 
-**The overlap is only buttons you click:** ⋯ → **Ask about this** on a card opens a scoped Ask, and nothing changes. **Make it a card** on an answer is planned (APP-123); until then, ask first, then shape: `? where are the red invoices`, then `/expenses.ledger only red invoices` → **Add as new card**.
+**The overlap is only buttons you click:** ⋯ → **Ask about this** on a card opens a scoped Ask, and nothing changes. **Make it a card** on an answer is planned (APP-123); until then, ask first, then shape: `/ask expenses.ledger where are the red invoices`, then `/expenses.ledger only red invoices` → **Add as new card**.
 
 **Mis-routes are harmless.** `/expenses.ledger $86 Nobu` gives a preview nobody applies; `/expenses highlight red` matches no app command, so the confirm card stops it.
 
 **The rest of the bar:**
 - **Do:** `/<app> <words>` runs one of the app's own commands (`/expenses $86 Nobu, Sarah approves`). The confirm card names the command before any record changes.
-- **Forma:** a plain sentence picks or builds an app; `/folder <name> formation …` builds one from a folder's files. Both confirm first. A question typed as a plain sentence goes to Forma and stops at its confirm card; type `?` first to ask.
+- **Forma:** a plain sentence picks or builds an app; `/folder <name> formation …` builds one from a folder's files. Both confirm first. A question typed as a plain sentence goes to Forma and stops at its confirm card; type `/ask` or `?` first to ask.
 - **Place:** `/<name>` on its own puts the thing on the canvas.
+
+**As built (APP-122), where the details were open:**
+
+- **"Red"** has no color in the data: Ask and Shape read it as *needs attention*, a record waiting on a decision (submitted, pending, requested, open, overdue, unpaid) or refused, disputed or flagged. "Overdue" is waiting on a decision.
+- **Ask's scope** is the app or card `/ask` names first, else the selected card, else every app on the canvas (at most 12). A card reads only its own collection's records (a view card reads its app's). Everything is read in one read-only transaction; each receipt names the record, its version and commit, and the app's publication and definition. An address you cannot read gets the same "not found" as one that does not exist, and no AI call is made.
+- **Only the newest 200 records of each app are read.** When an app has more, the answer says so ("among the newest 200 …"), a count reads "at least", and a total is never presented as the total ("Not the full total: …"). A shaped card says "From 12 of the newest 200 records loaded; older records exist and are not included", and its computed number is labeled "(newest 200 only)".
+- **Receipts cover every number:** a count or total lists every record it counted, not a sample. Money is added within one currency only: two currencies show two amounts, never one sum. An average is rounded half-even to the currency's minor unit and says "(rounded)" when it is not exact. Decimals compare and add at their own scale (123.45 is 123.45).
+- **A shaped card stays live:** when its records change, its view is computed again over the new data (an applied card and a card added with **Add as new card** alike).
+- **A second preview** on the same item replaces the first; cancelling the first never undoes the second. **A second question** asked while one is being answered waits its turn.
+- **What a card's Shape runs over:** a records or ledger card, its records (each row keeps its record's receipt; a grouped or summed number lists the records it came from); a view card, its released result (the query's receipt stays on the card). Shaping an app card themes its app. A form or a note has no data to shape, and **notes and folders cannot be shaped yet**.
+- **`/<app>.<card>` with no words** places the card, as `/card` does.
+- **A widget's Shape field** applies at once, as Restyle did; `/shape <widget>` previews first, like every other `/shape`.
+- **Without the AI model** Ask and Shape answer only the demo organization's rehearsed sentences (APP-098: "where are the red …", "how many", "what's the total"; "only red invoices", "highlight overdue in red", "total by month", "dark green, compact", "make it a TI-84"); anything else says the model is not configured.
 
 ### Three layers, and what may change each
 
@@ -151,7 +203,7 @@ Planned (APP-123): **Make it a card** on answers, persistent personal cards, `@`
 
 | Keys | Does |
 | --- | --- |
-| `?` | Puts `? ` in the bar, ready to ask (APP-122) |
+| `?` | Puts `? ` in an empty bar, ready to ask; with something half-typed it only focuses the bar (APP-122). `/shortcuts` opens the Shortcuts tab |
 | `L` | Library |
 | `F` · `U` · `Shift+U` | Focus, unite, split the selected card or app |
 | `V` · `H` | Move tool, hand tool |

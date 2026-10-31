@@ -13,9 +13,11 @@
 //   toolbar with the zoom menu (zoom in/out, 100%, fit, selection);
 // - zoom keys: Cmd/Ctrl + `=`/`+` and `-` (the browser's page zoom is held
 //   back), Shift + 0 (100%), Shift + 1 (fit all), Shift + 2 (selection);
-// - L opens the right pane on Library, `?` on Shortcuts (`shortcut-tab.ts`;
-//   one convention: `?` means the keyboard shortcuts, on the canvas and in
-//   the empty bar alike);
+// - L opens the right pane on Library; APP-122: `?` puts `? ` in the bar,
+//   ready to ask (Shortcuts stays on `/shortcuts` and ⋯ → Shortcuts);
+// - APP-122: ⋯ → Ask about this (the selected card) and ⋯ → Shape… (a card,
+//   an app card or frame, a widget: `/shape <address> ` in the bar), through
+//   hooks the Ask and Shape modules set (`setTalkActions`);
 // - APP-106: F focuses the selected card (`focus.ts`), U unites its app and
 //   Shift + U breaks it apart (`unite.ts`); the toolbar menu has both;
 // - a selected stack: ← / → leaf through it, Enter fans it out;
@@ -38,6 +40,14 @@ import { isModalOpen } from './box-viewer';
 import { isNoteItem, newNote, removeNoteItem } from './notes';
 import { toggleTimings } from './timing';
 import { frameCardsOfItem, isUniteItem, splitFromItem, uniteFromItem } from './unite';
+import { primeAsk } from './address-chip';
+
+/** APP-122: what ⋯ → Ask about this and ⋯ → Shape… do with the chosen item (set by `talk.ts`). */
+type TalkActions = { ask: (item: HTMLElement | null) => boolean; shape: (item: HTMLElement | null) => boolean };
+let talk: TalkActions | null = null;
+export function setTalkActions(actions: TalkActions): void {
+  talk = actions;
+}
 
 const selection = new Set<HTMLElement>();
 let tool: 'move' | 'hand' = 'move';
@@ -138,6 +148,10 @@ function removeSelected(): void {
 function chosenItem(): HTMLElement | null {
   return [...selection].find((item) => item.isConnected) ?? canvasApi()?.activeItem() ?? null;
 }
+/** APP-122: the selected item (Ask's scope): the first selected one, none when the selection is empty. */
+export function selectedCanvasItem(): HTMLElement | null {
+  return [...selection].find((item) => item.isConnected) ?? null;
+}
 function focusSelected(): void {
   if (!focusFromItem(chosenItem())) announce('Select a card first, then press F to focus it.');
 }
@@ -194,6 +208,8 @@ function action(name: string): void {
     case 'selection': zoomToSelection(); break;
     case 'reset-layout': resetLayout(); break;
     case 'help': openShortcuts(); break;
+    case 'ask-about': if (!talk?.ask(chosenItem())) announce('Select a card first, then choose Ask about this.'); break;
+    case 'shape': if (!talk?.shape(chosenItem())) announce('Select a card, an app or a widget first, then choose Shape….'); break;
     case 'focus': focusSelected(); break;
     case 'unite': uniteSelected(); break;
     case 'move': setTool('move'); break;
@@ -263,10 +279,10 @@ export function onKey(event: KeyboardEvent): void {
     action(event.code === 'Digit0' ? 'zoom-reset' : event.code === 'Digit1' ? 'fit' : 'selection');
     return;
   }
-  // `?` is the keyboard shortcuts, here and in the empty bar (`slash.ts`).
+  // APP-122: `?` puts `? ` in an empty bar, ready to ask (`ask.ts`); half-typed text is only focused.
   if (event.key === '?') {
     event.preventDefault();
-    openShortcuts();
+    primeAsk(documentRef ?? document);
     return;
   }
   const key = event.key.toLowerCase();

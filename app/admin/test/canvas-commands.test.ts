@@ -46,6 +46,8 @@ async function seeded() {
   const library = await import('../src/canvas/library.ts');
   const widgets = await import('../src/canvas/widgets/index.ts');
   const naming = await import('../src/canvas/naming.ts');
+  const shape = await import('../src/canvas/shape.ts');
+  const talk = await import('../src/canvas/talk.ts');
   // The fourteen verbs as the modules register them (some describe themselves,
   // some rely on KNOWN), and the hidden aliases.
   registry.registerCommands([
@@ -61,25 +63,34 @@ async function seeded() {
     { slug: 'agent', aliases: ['agents', 'mcp'], title: 'Connect an agent', purpose: 'Mint a token', run: noop },
     slash.COMMANDS,
     naming.RENAME_COMMAND, naming.ALIAS_COMMAND,
+    shape.SHAPE_COMMAND, talk.ASK_COMMAND,
   ]);
   registry.setAddresses(slash.parseCommands(SERVER).map(slash.serverAddress));
   return { registry, slash };
 }
 
 const slugsOf = (groups: { commands: { slug: string }[] }[]) => groups.flatMap((group) => group.commands.map((command) => command.slug));
-const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'rename', 'alias', 'apps', 'commands', 'shortcuts', 'agent'];
+const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'rename', 'alias', 'shape', 'ask', 'apps', 'commands', 'shortcuts', 'agent'];
 
-test('/ lists the 14 verbs in four groups and no addresses; a first letter adds the Apps section (APP-120)', async () => {
+test('/ lists the 16 verbs in six groups and no addresses; a first letter adds the Apps section (APP-120, APP-122)', async () => {
   const { registry, slash } = await seeded();
   const { sheetGroups } = await import('../src/canvas/command-sheet.ts');
   const groups = slash.slashGroups('');
   assert.deepEqual(slugsOf(groups), VERBS);
-  assert.deepEqual(groups.map((group) => [group.category, group.commands.length]), [['Place', 3], ['Arrange', 4], ['Make', 3], ['Help', 4]]);
+  assert.deepEqual(groups.map((group) => [group.category, group.commands.length]), [['Place', 3], ['Arrange', 4], ['Make', 3], ['Shape', 1], ['Ask', 1], ['Help', 4]]);
   assert.deepEqual(slash.slashAddresses('', () => true), [], 'no app under / alone, even on the canvas');
   assert.deepEqual(slash.slashAddressSection('', () => true).addresses, []);
   // The Commands tab: the same four groups; hidden aliases show on their verb's row only.
   assert.deepEqual(slugsOf(sheetGroups('')), VERBS);
-  assert.deepEqual(sheetGroups('').map((group) => group.category), ['Place', 'Arrange', 'Make', 'Help']);
+  assert.deepEqual(sheetGroups('').map((group) => group.category), ['Place', 'Arrange', 'Make', 'Shape', 'Ask', 'Help']);
+  // APP-122: Ask is `/ask [app|app.card] <question>` (the address optional, the hint says so), `?` its quick form; Shape names its three targets.
+  const askVerb = registry.findVerb('ask')!;
+  assert.equal(registry.signature(askVerb), '/ask [app|app.card] <question>');
+  assert.equal(askVerb.insert, '/ask ');
+  assert.ok(askVerb.examples.includes('/ask expenses.ledger which claims are overdue?') && askVerb.examples.includes('? where are the red invoices'));
+  assert.equal(registry.argumentHint(askVerb, '').note, 'Optional: app or app.card · Enter runs it as is');
+  assert.deepEqual(registry.argumentHint(askVerb, '').parts.map((part) => part.text), ['/ask', '[app or app.card]', '<question>']);
+  assert.equal(registry.signature(registry.findVerb('shape')!), '/shape <app.card|app|widget> <words>');
   assert.deepEqual(slugsOf(sheetGroups('weather')), ['widget'], 'a hidden alias finds its verb');
   assert.deepEqual(slugsOf(sheetGroups('pto')), [], 'searching the Commands tab finds no app');
   assert.ok(slugsOf(sheetGroups('expenses')).every((slug) => VERBS.includes(slug)), 'only verbs (their examples)');
@@ -268,23 +279,25 @@ function page() {
   };
   const libraryTab = node('button', { role: 'tab', id: 'cv-tab-library', 'aria-selected': 'true', 'aria-controls': 'cv-panel-library', 'data-pane-tab': 'library' });
   const commandsTab = node('button', { role: 'tab', id: 'cv-tab-commands', 'aria-selected': 'false', 'aria-controls': 'cv-panel-commands', 'data-pane-tab': 'commands' });
+  const askTab = node('button', { role: 'tab', id: 'cv-tab-ask', 'aria-selected': 'false', 'aria-controls': 'cv-panel-ask', 'data-pane-tab': 'ask' });
   const shortcutsTab = node('button', { role: 'tab', id: 'cv-tab-shortcuts', 'aria-selected': 'false', 'aria-controls': 'cv-panel-shortcuts', 'data-pane-tab': 'shortcuts' });
-  const tablist = node('div', { role: 'tablist' }, libraryTab, commandsTab, shortcutsTab);
+  const tablist = node('div', { role: 'tablist' }, libraryTab, commandsTab, askTab, shortcutsTab);
   const close = node('button', { 'data-lib-close': '' });
   const search = node('input', { id: 'cv-lib-search' });
   const libraryPanel = node('div', { id: 'cv-panel-library', role: 'tabpanel' }, search);
   const commandsPanel = node('div', { id: 'cv-panel-commands', role: 'tabpanel', hidden: '' });
+  const askPanel = node('div', { id: 'cv-panel-ask', role: 'tabpanel', hidden: '' });
   const shortcutsPanel = node('div', { id: 'cv-panel-shortcuts', role: 'tabpanel', hidden: '' });
-  const pane = node('aside', { id: 'cv-library', 'data-open': 'false', 'data-tab': 'library' }, node('header', {}, tablist, close), libraryPanel, commandsPanel, shortcutsPanel);
+  const pane = node('aside', { id: 'cv-library', 'data-open': 'false', 'data-tab': 'library' }, node('header', {}, tablist, close), libraryPanel, commandsPanel, askPanel, shortcutsPanel);
   const toggle = node('button', { id: 'cv-library-toggle', 'aria-expanded': 'false' });
   const input = node('input', { id: 'intent-input' });
   const board = node('div', { class: 'forma-canvas-viewport' });
   node('div', { id: 'cv-shell' }, toggle, pane, board, input);
-  return { document_, pane, libraryTab, commandsTab, shortcutsTab, tablist, libraryPanel, commandsPanel, shortcutsPanel, toggle, input, board };
+  return { document_, pane, libraryTab, commandsTab, askTab, shortcutsTab, tablist, libraryPanel, commandsPanel, askPanel, shortcutsPanel, toggle, input, board };
 }
 
 test('the right pane opens on the right tab from each entry point (APP-119)', async () => {
-  const { document_, pane, libraryTab, commandsTab, shortcutsTab, tablist, libraryPanel, commandsPanel, shortcutsPanel, toggle, input, board } = page();
+  const { document_, pane, libraryTab, commandsTab, shortcutsTab, tablist, libraryPanel, commandsPanel, askPanel, shortcutsPanel, toggle, input, board } = page();
   (globalThis as { document?: unknown }).document = document_;
   (globalThis as { matchMedia?: unknown }).matchMedia = () => ({ matches: false });
   (globalThis as { fetch?: unknown }).fetch = async () => ({ ok: true, json: async () => SERVER });
@@ -299,8 +312,8 @@ test('the right pane opens on the right tab from each entry point (APP-119)', as
   shortcuts.startShortcutTab(document_ as unknown as Document);
   // The canvas keys (no canvas in the fake page: only the key handler is wired).
   controls.startControls(document_ as unknown as Document);
-  const state = () => ({ open: pane.dataset.open, tab: pane.dataset.tab, library: !libraryPanel.hidden, commands: !commandsPanel.hidden, shortcuts: !shortcutsPanel.hidden });
-  const on = (tab: string) => ({ open: 'true', tab, library: tab === 'library', commands: tab === 'commands', shortcuts: tab === 'shortcuts' });
+  const state = () => ({ open: pane.dataset.open, tab: pane.dataset.tab, library: !libraryPanel.hidden, commands: !commandsPanel.hidden, ask: !askPanel.hidden, shortcuts: !shortcutsPanel.hidden });
+  const on = (tab: string) => ({ open: 'true', tab, library: tab === 'library', commands: tab === 'commands', ask: tab === 'ask', shortcuts: tab === 'shortcuts' });
   const closed = (tab: string) => ({ ...on(tab), open: 'false' });
   const onLibrary = on('library');
   const onCommands = on('commands');
@@ -347,14 +360,16 @@ test('the right pane opens on the right tab from each entry point (APP-119)', as
   assert.deepEqual(state(), closed('commands'));
   assert.equal(document_.activeElement, input);
 
-  // `?` in the empty bar opens it on Shortcuts (not Commands): `?` means the keyboard shortcuts.
+  // `/shortcuts` (and ⋯ → Shortcuts) open it on Shortcuts (APP-122: `?` is Ask now).
   slash.openHelp(input as unknown as HTMLElement);
   assert.deepEqual(state(), onShortcuts);
   assert.equal(document_.activeElement, shortcutsTab);
   // The tab lists every action with its click path and keys; rows keep their /commands.
   const text = shortcutsPanel.textContent;
   assert.ok(text.includes('Unite an app') && text.includes('/unite expense'), 'a row with its /command');
-  assert.ok(text.includes('Shortcuts tab') && !text.includes('This sheet') && !text.includes('this sheet'), 'the ? row describes the tab');
+  assert.ok(text.includes('Shortcuts tab') && !text.includes('This sheet') && !text.includes('this sheet'), 'the Shortcuts row describes the tab');
+  assert.ok(text.includes('Ask about your data') && text.includes('? where are the red invoices'), 'APP-122: the Ask and Shape rows');
+  assert.ok(text.includes('/shape calculator make it a TI-84') && !text.includes('Restyle'), 'APP-122: widgets shape, the Restyle row is gone');
   // Its one line at the top links to the Commands tab.
   const link = shortcutsPanel.querySelector('[data-pane-goto="commands"]')!;
   assert.equal(link.textContent, 'Every command with its arguments → Commands');
@@ -365,10 +380,13 @@ test('the right pane opens on the right tab from each entry point (APP-119)', as
   assert.deepEqual(state(), closed('commands'));
   assert.equal(document_.activeElement, input);
 
-  // `?` on the canvas opens it on Shortcuts too; no modal sheet is made.
+  // APP-122: `?` on the canvas puts `? ` in the bar, ready to ask; the pane stays as it is.
   board.focus();
   assert.equal(key(board, '?').defaultPrevented, true);
-  assert.deepEqual(state(), onShortcuts);
+  assert.deepEqual(state(), closed('commands'));
+  assert.equal(input.value, '? ');
+  assert.equal(document_.activeElement, input);
+  input.value = '';
   assert.equal(document_.getElementById('cv-shortcuts'), null, 'the old #cv-shortcuts modal is gone');
   assert.ok(!('showSheet' in controls), 'no showSheet export');
   // `?` typed in a text field is just text.

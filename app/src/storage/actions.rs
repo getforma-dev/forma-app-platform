@@ -23,7 +23,7 @@ use super::{
         work_fence, work_pin, CommandRequest, Published, RecordCommand, RecordField,
     },
     pool::Data,
-    queries::{collections_many, ordinal, outline_of, pinned_many, Pinned},
+    queries::{collections_many, ordinal, outline_of, pinned_many, pinned_many_with, Pinned},
     require, valid_id, Error, Result, TrustedRequest, WorkOutline, COMMAND_HANDLER_DEADLINE,
     QUERY_HANDLER_DEADLINE,
 };
@@ -147,6 +147,9 @@ fn collection_summary(
             .collect(),
     }
 }
+
+/// APP-122: at most this many works in one Ask or Shape read.
+pub const READ_ONLY_WORKS: usize = 12;
 
 /// One current record from [`RECORD_COLUMNS`] starting at column `at`.
 fn record_row(row: &Row, at: usize, collections: &[CollectionSummary]) -> Result<RecordRow> {
@@ -388,6 +391,123 @@ impl Data {
         }
         .await;
         transaction.finish(result.is_ok()).await?;
+        result
+    }
+
+    /// APP-122 (Ask and Shape): the records listings of `works` (at most
+    /// [`READ_ONLY_WORKS`]), read in one `READ ONLY` snapshot
+    /// (`Transaction::begin_read_only`): the member checks and every work's
+    /// `record_read` (`Transaction::read_only_grants`), each work's pin and
+    /// re-admitted publication, its collections and its newest records, as
+    /// `work_reads` reads them, with no row lock. Every work must be readable,
+    /// else `Denied` for all (the routes answer the uniform 404). The
+    /// transaction cannot write: PostgreSQL refuses any write in it.
+    pub async fn read_only_listings(
+        &self,
+        request: &TrustedRequest,
+        works: &[(&str, &str)],
+    ) -> Result<Vec<RecordsListing>> {
+        self.read_only_listings_with(request, works, false)
+            .await
+            .map(|(listings, _)| listings)
+    }
+
+    /// APP-122 review (Shape's authorization): the same member checks,
+    /// `record_read` grant and re-admitted pin as [`Data::read_only_listings`],
+    /// in the same `READ ONLY` snapshot, but no record is read. Answers the
+    /// work's collections (their published schema fields) and its outline
+    /// (its views' result column types), so the route can judge the card
+    /// fields the client named. `Denied` exactly where a listing would be.
+    pub async fn read_only_schema(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        work: &str,
+    ) -> Result<(Vec<CollectionSummary>, WorkOutline)> {
+        require(valid_id(app) && valid_id(work))?;
+        let works = [(app, work)];
+        let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
+        let transaction = Transaction::begin_read_only(&self.inner, request, cap).await?;
+        let result = async {
+            let org = request.organization.as_str();
+            let grants = transaction.read_only_grants(&works).await?;
+            require(!grants.is_empty() && grants.iter().all(|grant| grant.record_read))?;
+            let pinned = pinned_many_with(&transaction, org, &works, false).await?;
+            let pin = pinned.first().ok_or(Error::Unavailable)?;
+            let outline = outline_of(pin)?;
+            let collections = collections_many(&transaction, org, &works).await?;
+            let rows = collections.first().map(Vec::as_slice).unwrap_or_default();
+            let listing = listing_of(works[0], false, pin, rows, &[])?;
+            Ok((listing.collections, outline))
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
+    /// APP-122 acceptance ("a forced write attempt fails"): the same reads in
+    /// the same kind of transaction, then one write; answers the SQLSTATE
+    /// PostgreSQL refused it with (none: the write ran). Campaigns only.
+    #[cfg(test)]
+    pub async fn read_only_forced_write(
+        &self,
+        request: &TrustedRequest,
+        works: &[(&str, &str)],
+    ) -> Result<Option<String>> {
+        self.read_only_listings_with(request, works, true)
+            .await
+            .map(|(_, refused)| refused)
+    }
+
+    async fn read_only_listings_with(
+        &self,
+        request: &TrustedRequest,
+        works: &[(&str, &str)],
+        force_write: bool,
+    ) -> Result<(Vec<RecordsListing>, Option<String>)> {
+        require(
+            (1..=READ_ONLY_WORKS).contains(&works.len())
+                && works
+                    .iter()
+                    .all(|(app, work)| valid_id(app) && valid_id(work)),
+        )?;
+        let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
+        let transaction = Transaction::begin_read_only(&self.inner, request, cap).await?;
+        let result = async {
+            let org = request.organization.as_str();
+            let grants = transaction.read_only_grants(works).await?;
+            require(grants.iter().all(|grant| grant.record_read))?;
+            let pinned = pinned_many_with(&transaction, org, works, false).await?;
+            for pin in &pinned {
+                outline_of(pin)?;
+            }
+            let collections = collections_many(&transaction, org, works).await?;
+            let records = records_many(&transaction, org, works).await?;
+            let mut listings = Vec::with_capacity(works.len());
+            for (((key, pin), collections), records) in
+                works.iter().zip(&pinned).zip(&collections).zip(&records)
+            {
+                listings.push(listing_of(*key, false, pin, collections, records)?);
+            }
+            let refused = if force_write {
+                match transaction
+                    .query_classified(
+                        "UPDATE genui.internal_records SET current_version=current_version WHERE organization_id=$1::text::uuid",
+                        &[&org],
+                    )
+                    .await?
+                {
+                    Ok(_) => None,
+                    Err(state) => Some(state.code().to_owned()),
+                }
+            } else {
+                None
+            };
+            Ok((listings, refused))
+        }
+        .await;
+        // A refused write aborted the transaction: roll back (nothing to keep).
+        transaction.finish(result.is_ok() && !force_write).await?;
         result
     }
 

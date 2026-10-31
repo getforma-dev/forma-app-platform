@@ -13,7 +13,7 @@ Forma is a canvas where teams describe what they need and get working apps: expe
 3. **Receipt photo to a row.** Drop a receipt and the exact row to be added appears before anything is written.
 4. **Slack.** `/forma …` files the expense, and Sarah gets Approve/Reject in a direct message.
 5. **Any agent.** Claude (or OpenAI) acts through Forma's MCP server under the member's own permissions, marked "via Claude".
-6. **Your canvas, your way.** Bring cards from the library pane, stack and shuffle them, and restyle widgets in words ("make it a TI-84 in Matrix style").
+6. **Your canvas, your way.** Bring cards from the library pane, stack and shuffle them, and shape widgets in words ("make it a TI-84 in Matrix style").
 7. **Proof on every number.** Each governed figure carries a receipt (`Verified …`) that identifies the source revision and query.
 8. **Folders: your files become apps.** Drop PDFs and spreadsheets into a folder, click it, and say "build a metrics app and explain it". The CSVs are parsed and typed at once, the app is built from them, labeled "Built from folder", and its summary's numbers each come from a receipt that names the file.
 
@@ -40,20 +40,37 @@ The full rules (what is on a canvas, names and aliases, verbs, the Ask and Shape
 - **Widgets** (one-off, yours, no governed data): Weather, Calculator, Clock, Note and Folder. A folder holds files; its one power, formation, makes an app that links back to it. A note keeps its private storage but is a widget to you.
 - **Arrangements** (layout only): stacks, unite frames and focus. They are never listed in the Library.
 
-**Verbs: fourteen, in four groups** (APP-121 added `/rename` and `/alias` to Make). They come from one registry (`canvas/command-registry.ts`). `/` alone lists exactly these, each with its signature (`<required>`, `[optional]`). From the first letter (`/e…`), the matching verbs come first, then a separate section, "Apps — type /name and what you want": the matching apps on your canvas and your saved apps (an app's exact name or alias is always offered, even on a clean canvas). After `/name `, a hint row marks the argument being typed and shows an example. Tab fills a suggestion, Enter runs it, ↑/↓ move.
+**Verbs: sixteen, in six groups** (APP-121 added `/rename` and `/alias` to Make; APP-122 added the Shape and Ask groups). They come from one registry (`canvas/command-registry.ts`). `/` alone lists exactly these, each with its signature (`<required>`, `[optional]`). From the first letter (`/e…`), the matching verbs come first, then a separate section, "Apps — type /name and what you want": the matching apps on your canvas and your saved apps (an app's exact name or alias is always offered, even on a clean canvas). After `/name `, a hint row marks the argument being typed and shows an example. Tab fills a suggestion, Enter runs it, ↑/↓ move.
 
 | Group | Verb | Does |
 | --- | --- | --- |
 | Place | `/app <app name or number>` | Places every card of an app (`/app expenses`, `/app 3`). A bare `/<address>` does the same (`/expenses`). |
 | Place | `/card <app.card or number>` | Places one card (`/card expenses.ledger` and `/card 3.2` are the same card). |
-| Place | `/widget <weather\|calculator\|clock\|note\|folder> [args]` | Places a widget (`/widget weather Austin`, `/widget note Call the auditor`). Restyle a widget in words (`/widget calculator make it a TI-84`). `/widget folder` opens the folder picker. |
+| Place | `/widget <weather\|calculator\|clock\|note\|folder> [args]` | Places a widget (`/widget weather Austin`, `/widget note Call the auditor`). `/widget folder` opens the folder picker. |
 | Arrange | `/arrange` | Lays the board out by app. |
 | Arrange | `/unite <app>`, `/split <united app>` | Assembles an app's cards into one frame; breaks it apart again. |
 | Arrange | `/focus [app.card or number]` | Opens the selected card (or the one named) in focus. |
 | Make | `/folder <name> formation <instruction>` | Builds an app from a folder's files (`/folder Q3 formation build a metrics app`). `/folder` alone opens the picker; `/folder new <name>` makes one. |
+| Shape | `/shape <app.card\|app\|widget> <words>` | Changes how a card, an app (a theme on every card) or a widget looks or what it shows: a preview, then **Apply** (or **Add as new card**), labeled *shaped* with **Revert** (APP-122). `/<app>.<card> <words>` is the shortcut for a card (`/expenses.ledger only red invoices`). |
+| Ask | `/ask [app\|app.card] <question>` | Opens the Ask tab with the question: a read-only answer with receipts; it changes nothing (APP-122). Name an app or card first to ask about it; `? <question>` is the quick form. |
 | Help | `/apps [query]` | Opens the Library, filtered. It never places a canvas card. |
-| Help | `/commands [search]`, `/shortcuts`, `/agent` | The pane's Commands tab, its Shortcuts tab (`?`), and "Connect an agent". |
+| Help | `/commands [search]`, `/shortcuts`, `/agent` | The pane's Commands tab, its Shortcuts tab, and "Connect an agent". |
 | — | Any other sentence | The instant pick and live reshape; a short chooser when two apps fit equally; "Build something new" generates one. |
+
+**The four jobs.** Where you type picks the job, never the AI: **Ask** (`/ask`, `?`) finds out and changes nothing; **Shape** (`/shape`, the dot) changes how something looks or what it shows, never records; **Do** (`/<app> <words>`) runs an app's own command, the only way records change; **Forma** (a plain sentence, a folder's formation) makes something new.
+
+**How to ask.** Ask answers questions about your data in the right pane's **Ask** tab, in text, with the records it used and their receipts.
+- `/ask expenses why did spend jump in March?` asks about the Expenses app (all its records); `/ask expenses.ledger which claims are overdue?` (or `/ask 3.2 …`) about that card's records only. The full forms `/ask app:expenses …` and `/ask card:expenses.ledger …`, and your own shortcuts (`/ask e …`), do the same.
+- `/ask why is this high?`: when the first word is not one of your apps or cards (and a verb never is), the whole line is the question, about the selected card, else the canvas. `? <question>` is the quick form of that.
+- `?` on the canvas puts `? ` in an empty bar; ⋯ → **Ask about this** on a card opens the tab scoped to it; the tab has its own input. A chip shows the scope.
+- It never changes records, cards or the canvas. A count or total lists every record it counted. Only the newest 200 records of each app are read; when there are more, the answer says so and never presents a partial total as the total.
+
+**How to shape.** Shape changes the look or the view, through a preview you apply.
+- A card: `/shape expenses.ledger only red invoices`, the dot shortcut `/expenses.ledger only red invoices`, or its full form `/card:expenses.ledger only red invoices`. An app: `/shape expenses dark green, compact` (a theme on every card; `/shape app:expenses …`). A widget: `/shape calculator make it a TI-84` (`/shape widget:calculator …`), or the widget's own **Shape** field, which applies at once.
+- ⋯ → **Shape…** on any card, app frame or widget puts `/shape <its address> ` in the bar.
+- What comes back: a preview with **Apply**, **Add as new card** (cards) or **Cancel**; applied, the item is labeled *shaped* with **Revert**. A shaped card stays live as its records change. Records never change, and every number keeps its receipts.
+
+**Why not `/expenses:ask`?** The colon always means *kind:name* (`/app:expenses`, `/card:expenses.ledger`, `/widget:calculator`, `/folder:q3`): it names a thing, never an action. Jobs are verbs and come first: `/ask expenses …`, `/shape expenses …`.
 
 **Aliases: nothing breaks.** These are accepted and autocompleted from their first letter but not listed under `/` alone: `/weather`, `/calculator`, `/clock` and `/note` (= `/widget <kind>`), `/help` (= `/commands`), `/folder` alone (the picker), and every app's old name (`/expense`, `/pto`, `/purchase`, …). There is no `/remove`: the card's ×, Delete on a selection, or the Library's Remove take things off (as in Figma and Miro).
 
@@ -74,10 +91,10 @@ The hint after an address comes from the app's definition: the server derives it
 | `/access-requests` (`/access`, `/access-request`) | Access requests; the system owner grants or denies. The access review tracker is `/access-review-tracker` (`/access-review`). |
 | `/deal-desk` (`/discount`, `/discounts`) | Deal desk; 10% or less approves itself by the app's rule. |
 
-**The right pane: Library | Commands | Shortcuts.** One pane, three tabs. `L` and `/apps` open it on Library. `/commands` and `/help` open it on Commands. `?` (on the canvas and in the empty bar), `/shortcuts` and ⋯ → Shortcuts and commands open it on Shortcuts: one convention, as on GitHub, Gmail and Linear, `?` means the keyboard shortcuts. `L` on another tab switches to Library; `L` on Library closes the pane. The × and Esc close it (Esc clears a search first), and focus returns to what opened it. The tabs are ARIA tabs (←/→, Home, End). At phone width the pane is the bottom sheet, with the tabs on top.
+**The right pane: Library | Commands | Ask | Shortcuts.** One pane, four tabs. `L` and `/apps` open it on Library. `/commands` and `/help` open it on Commands. `/ask …`, `?` first in the bar and ⋯ → Ask about this open it on Ask (APP-122: `?` now means Ask). `/shortcuts` and ⋯ → Shortcuts and commands open it on Shortcuts. `L` on another tab switches to Library; `L` on Library closes the pane. The × and Esc close it (Esc clears a search first), and focus returns to what opened it. The tabs are ARIA tabs (←/→, Home, End). At phone width the pane is the bottom sheet, with the tabs on top.
 - Library: two sections. **Apps** (Category → App → numbered cards) and **Widgets** (Weather, Calculator, Clock, Note, Folder; the Note and Folder rows expand to your notes and folders). Every row shows an on-canvas dot (filled when it is on the canvas), its name in grey (an app's `/address` chip with "also /…", a card's `app.card`, a widget's `/weather`) and an Add/Remove toggle; app rows read "n of m cards". The pane is a pure projection of the board: it re-renders from one `canvas:changed` event after every add and remove.
 - An app row also shows its hint and an example; a click on the example puts it in the bar. "Stack" brings an app as a stack; search finds by name, number, address, alias, hint or `app.card`.
-- Commands: the fourteen verbs in their four groups, with arguments, aliases, examples and a search; the footer reads "Your apps answer to /name — see /apps".
+- Commands: the sixteen verbs in their six groups, with arguments, aliases, examples and a search (Ask reads `/ask [app|app.card] <question>`, with `? where are the red invoices` among its examples); the footer reads "Your apps answer to /name — see /apps".
 
 **Stacks.**
 - Making one: drag a card onto another and hold, or select several cards and press Cmd/Ctrl+G.
@@ -93,7 +110,7 @@ The hint after an address comes from the app's definition: the server derives it
 - Shift+0 / 1 / 2 zoom to 100% / fit / selection.
 - Click a header to select, Shift+click to add, and drag to move.
 - Delete returns a card to the library; it never deletes data.
-- `?` (on the canvas or in the empty bar) opens the pane's Shortcuts tab: every action with its click path and its keys or /command, and a link at the top to the Commands tab, where every command has its arguments.
+- `?` on the canvas puts `? ` in an empty bar, ready to ask (with something half-typed, it only focuses the bar); `?` first in the bar opens the Ask tab (APP-122). `/shortcuts` (or ⋯ → Shortcuts and commands) opens the pane's Shortcuts tab: every action with its click path and its keys or /command, and a link at the top to the Commands tab, where every command has its arguments.
 
 **Folders (APP-108).** Lead with click → type:
 

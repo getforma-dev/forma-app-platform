@@ -279,11 +279,22 @@ export function setUtteranceRouter(router: UtteranceRouter): void {
 }
 
 /**
+ * APP-122: Ask (`?` first) and the card Shape shortcut (`/<app>.<card> words`)
+ * are decided by where the member typed, before any other lane (`talk.ts`);
+ * the router answers true when it took the text.
+ */
+let talkRouter: UtteranceRouter | null = null;
+export function setTalkRouter(router: UtteranceRouter): void {
+  talkRouter = router;
+}
+
+/**
  * The intent bar's submit: the action path first, the composer when the
  * server says `place`; `report` updates the bar's status line.
  */
 export async function submitUtterance(text: string, report: (message: string) => void, app: string | null = null): Promise<void> {
   const receiptAttached = document.getElementById('intent-form')?.getAttribute('data-receipt') === 'attached';
+  if (!app && !receiptAttached && talkRouter && await talkRouter(text, report)) return;
   // APP-101: `/name rest` is the explicit lane (`slash.ts`): no guessing.
   if (!app && text.startsWith('/') && !receiptAttached) {
     await runSlash(text, report);

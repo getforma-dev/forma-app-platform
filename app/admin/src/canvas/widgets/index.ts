@@ -170,7 +170,7 @@ export async function runWidget(kind: WidgetKind, text: string): Promise<string>
   const target = current ?? placeWidget(kind);
   if (!target) return 'The widget could not be placed.';
   const ok = await customize(target, words);
-  return ok ? `${title} restyled.` : `${title} kept its look.`;
+  return ok ? `${title} shaped.` : `${title} kept its look.`;
 }
 
 export const WIDGET_COMMANDS: WidgetCommand[] = [
@@ -296,6 +296,20 @@ export function zoneSuggestions(rest: string): Suggestion[] {
     .filter(([id, name]) => !query || name.toLowerCase().startsWith(query) || id.toLowerCase().includes(query))
     .slice(0, 8)
     .map(([id, name]) => ({ badge: '◷', title: name, detail: id === 'local' ? 'This device’s time' : id, value: `/clock ${name}` }));
+}
+
+/** APP-122: the widget `/shape <kind>` addresses: the selected one of that kind, else the first placed. */
+export function widgetFor(kind: WidgetKind): WidgetCard | null {
+  const chosen = selected(kind);
+  if (chosen) return chosen;
+  for (const entry of placed.values()) if (entry.widget.kind === kind) return entry.widget;
+  return null;
+}
+
+/** APP-122: the widget whose canvas item is `item` (⋯ → Shape… on a widget). */
+export function widgetOfItem(item: HTMLElement): WidgetCard | null {
+  for (const entry of placed.values()) if (entry.item === item) return entry.widget;
+  return null;
 }
 
 /** APP-104: how many widgets of `kind` are on the canvas (the library pane's indicator). */

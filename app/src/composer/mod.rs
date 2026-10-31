@@ -39,6 +39,7 @@
 //! actions (ADR-007 D7.3): a member who owns no app with `edit_definition`
 //! and `run` can retrieve but not generate. Logs carry identities, codes,
 //! counts and durations; never the intent, a definition or the key.
+pub mod ask;
 pub mod commands;
 pub mod labels;
 pub mod lineage;
@@ -47,6 +48,8 @@ pub mod model;
 pub mod plan;
 pub mod prompt;
 pub mod routes;
+pub mod shape;
+pub mod talk;
 pub mod transform;
 
 use crate::storage::{LibraryApp, ReadableSource};
@@ -192,6 +195,11 @@ impl Composer {
             &std::env::var(DEMO_ORGANIZATIONS_ENV).unwrap_or_default(),
         ))
         .with_matcher(std::env::var(matcher::MATCHER_ENV).as_deref() != Ok("off"))
+    }
+    /// APP-122: the widget customizer over this composer's model and fast
+    /// model name (`/shape <widget>` reaches the APP-103 Restyle mechanism).
+    pub fn customizer(&self) -> crate::widgets::customize::Customizer {
+        crate::widgets::customize::Customizer::new(self.model.clone(), &self.router_model)
     }
     /// A model is configured.
     pub fn enabled(&self) -> bool {

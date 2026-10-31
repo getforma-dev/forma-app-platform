@@ -457,6 +457,20 @@ pub(super) async fn pinned_many(
     organization: &str,
     works: &[(&str, &str)],
 ) -> Result<Vec<Pinned>> {
+    pinned_many_with(transaction, organization, works, true).await
+}
+
+/// [`pinned_many`] with or without `lock_work_revision`. APP-122: an Ask or
+/// Shape read runs in one READ ONLY snapshot (`Transaction::begin_read_only`),
+/// where PostgreSQL refuses the function's `FOR SHARE`; there the pin and its
+/// publication are read from the same snapshot, which no concurrent commit
+/// can change under the read, so `lock: false` takes each pin as read.
+pub(super) async fn pinned_many_with(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    works: &[(&str, &str)],
+    lock: bool,
+) -> Result<Vec<Pinned>> {
     let mut pinned: Vec<Pinned> = (0..works.len()).map(|_| Err(Error::Denied)).collect();
     let sent: Vec<usize> = (0..works.len())
         .filter(|&i| valid_id(works[i].0) && valid_id(works[i].1))
@@ -483,7 +497,11 @@ pub(super) async fn pinned_many(
     }
     let pin = |i: usize| pins[i].as_ref().and_then(|p| p.as_ref().ok());
     let mut locked = vec![false; works.len()];
-    if !locking.is_empty() {
+    if !lock {
+        for &i in &locking {
+            locked[i] = true;
+        }
+    } else if !locking.is_empty() {
         let apps: Vec<&str> = locking.iter().map(|&i| works[i].0).collect();
         let ids: Vec<&str> = locking.iter().map(|&i| works[i].1).collect();
         let publications: Vec<&str> = locking

@@ -112,6 +112,9 @@ pub(super) struct Permit<'a, 'r> {
     precheck: Precheck<'r>,
 }
 
+/// APP-122: how an Ask or Shape read begins (`Transaction::begin_read_only`).
+pub const READ_ONLY_BEGIN: &str = "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY";
+
 /// A member transaction carries its trusted request; the nonmember entry
 /// (ADR-007 D7.1, admission only) carries none and can never precheck, fence
 /// or obtain a `Permit`.
@@ -151,6 +154,18 @@ impl<'a> Transaction<'a> {
             Some(cap),
         )
         .await
+    }
+    /// APP-122 (Ask and Shape): a member read that cannot write. One
+    /// `REPEATABLE READ READ ONLY` snapshot: the member checks, the grants
+    /// and every read see the same committed state, and PostgreSQL refuses
+    /// any write (SQLSTATE 25006) and any row lock in it, so no Ask or Shape
+    /// path can change a record, a card or an audit row.
+    pub async fn begin_read_only(
+        pool: &Arc<RolePool>,
+        request: &'a TrustedRequest,
+        cap: Instant,
+    ) -> Result<Self> {
+        Self::begin_with(pool, request, READ_ONLY_BEGIN, Some(cap)).await
     }
     /// ADR-007 D7.6 (A1): the control role's publication transaction only.
     /// Everything else stays READ COMMITTED. A 40001 at any statement or at
@@ -424,6 +439,19 @@ impl<'a> Transaction<'a> {
             },
             grants,
         ))
+    }
+    /// APP-122: the member half of `fence_works` inside a READ ONLY snapshot
+    /// (`begin_read_only`): current membership, epoch and entitlement, and
+    /// every work's [`Grants`], with no `lock_member_authority` fence (a
+    /// read-only transaction takes no row lock). The checks and the reads
+    /// that follow share one snapshot, so a revocation committed after it
+    /// began is not seen by either; nothing here can write.
+    pub(super) async fn read_only_grants(&self, works: &[(&str, &str)]) -> Result<Vec<Grants>> {
+        let request = self.member()?;
+        require(self.lease.role() != Role::Worker)?;
+        self.current_member(request).await?;
+        self.entitlement(request).await?;
+        self.grants(request, works).await
     }
     /// For each `(app, work)`, in one statement, exactly the `permissions`
     /// clauses for `discover` on the app and `record_read`/`record_write` on

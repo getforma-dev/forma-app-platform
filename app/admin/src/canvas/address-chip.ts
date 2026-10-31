@@ -20,6 +20,21 @@ export function fillBar(text: string, document_: Document = document): void {
 }
 
 /**
+ * APP-122 `?` on the canvas: an empty bar gets `? `, ready to ask; a bar
+ * with half-typed text is only focused (caret at the end), never overwritten.
+ */
+export function primeAsk(document_: Document = document): void {
+  const input = document_.getElementById('intent-input') as HTMLInputElement | null;
+  if (!input) return;
+  if (!input.value.trim()) {
+    fillBar('? ', document_);
+    return;
+  }
+  input.focus();
+  input.setSelectionRange?.(input.value.length, input.value.length);
+}
+
+/**
  * The chip: `/slug` in grey monospace. `interactive` (the default) makes it a
  * button that fills the bar with "/slug "; the bar's own hint uses the plain one.
  */

@@ -1,7 +1,7 @@
-// The Shortcuts tab of the right pane (`pane.ts`), beside Library and
-// Commands. One convention, as on GitHub, Gmail and Linear: `?` means the
-// keyboard shortcuts, everywhere: `?` on the canvas, `?` in the empty bar,
-// `/shortcuts` and ⋯ → "Shortcuts and commands" open the pane on this tab.
+// The Shortcuts tab of the right pane (`pane.ts`), beside Library, Commands
+// and Ask. `/shortcuts` and ⋯ → "Shortcuts and commands" open the pane on
+// this tab. APP-122 (amending APP-120 §3): `?` has one meaning, Ask: on the
+// canvas it puts `? ` in the bar, and `?` first in the bar opens the Ask tab.
 // It replaces the separate `#cv-shortcuts` modal sheet. It lists every
 // action with both of its paths (APP-112): the click and the keys or the
 // command. A line at the top links to the Commands tab, where every command
@@ -26,7 +26,6 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
     ['A whole app', 'Library → Apps → Add', '/app expenses · /expenses'],
     ['A card', 'Library → expand an app → Add', '/card expenses.ledger · /card 3.2'],
     ['A widget', 'Library → Widgets → Add, or say “show the weather in Austin”', '/widget weather Austin · /weather'],
-    ['Restyle a widget', 'The widget’s Restyle field', '/widget calculator make it a TI-84'],
     ['A note', '⋯ → New note, or Library → Widgets → Note', '/widget note text · /note'],
     ['A folder', '+ Folder in the toolbar, Library → Widgets → Folder, or drop files on the canvas', '/folder'],
     ['Take it off the canvas', 'The × on it, Library → Remove, or ⋯ → Take off the canvas', 'Delete'],
@@ -35,6 +34,13 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
     ['File an expense', 'Say it: “I spent $86 at Nobu, Sarah approves”', '/expenses …'],
     ['Approve or reject', 'Records card → Approve · Reject, or say “approve the Nobu dinner”', '/expenses approve …'],
     ['Any app', 'Click its /name chip (Library or the app card) to put it in the bar', '/name …'],
+  ]],
+  ['Ask and Shape', [
+    ['Ask about your data', 'The Ask tab, or ⋯ → Ask about this on a card', '? where are the red invoices'],
+    ['Shape a card', '⋯ → Shape… on the card', '/expenses.ledger only red invoices · /shape expenses.ledger …'],
+    ['Theme an app', '⋯ → Shape… on its app card or frame', '/shape expenses dark green, compact'],
+    ['Shape a widget', 'Its Shape field, or ⋯ → Shape… on it', '/shape calculator make it a TI-84'],
+    ['Undo a shape', 'Revert on the shaped card, app card or widget', '—'],
   ]],
   ['Arrange', [
     ['Select', 'Click a header · Shift + click to add', '—'],
@@ -63,7 +69,8 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
     ['Library', 'Library at the top, or the pane’s Library tab', 'L · /apps'],
     ['Every command', 'The pane’s Commands tab, or the link at the top of this tab', '/commands · /help'],
     ['Show timings', '⋯ → Show timings, or say “show timings”', '#timing=1'],
-    ['Shortcuts tab', '⋯ → Shortcuts and commands, or the pane’s Shortcuts tab', '? · /shortcuts'],
+    ['Shortcuts tab', '⋯ → Shortcuts and commands, or the pane’s Shortcuts tab', '/shortcuts'],
+    ['Ask', 'The pane’s Ask tab', '? · ? <question>'],
   ]],
 ];
 
@@ -71,7 +78,7 @@ function keys(document_: Document, text: string): Node[] {
   if (text === '—') return [document_.createTextNode('—')];
   return text.split(/(\s·\s|\s\+\s)/).map((part) => (/^(\s·\s|\s\+\s)$/.test(part)
     ? document_.createTextNode(part)
-    : el(document_, part.startsWith('/') || part.startsWith('#timing') ? 'code' : 'kbd', {}, part)));
+    : el(document_, part.startsWith('/') || part.startsWith('#timing') || part.startsWith('? ') ? 'code' : 'kbd', {}, part)));
 }
 
 let built = false;
