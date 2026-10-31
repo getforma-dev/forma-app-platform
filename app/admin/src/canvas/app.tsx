@@ -673,64 +673,68 @@ function Canvas(props: CanvasProps) {
         </div>
         <p id="cv-activity" class="sr-only" role="status" aria-live="polite"></p>
       </main>
-      <aside id="cv-library" class="cv-library" aria-labelledby="cv-lib-title" data-open="false">
+      <aside id="cv-library" class="cv-library" aria-label="Library and commands" data-open="false" data-tab="library">
         <header class="cv-lib-head">
-          <div class="cv-lib-heading">
-            <h2 id="cv-lib-title">Library</h2>
-            <p class="cv-lib-summary">{props.librarySummary}</p>
+          <div class="cv-pane-tabs" role="tablist" aria-label="Library and commands">
+            <button type="button" role="tab" id="cv-tab-library" class="cv-pane-tab" aria-selected="true" aria-controls="cv-panel-library" data-pane-tab="library">Library</button>
+            <button type="button" role="tab" id="cv-tab-commands" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-commands" data-pane-tab="commands">Commands</button>
           </div>
-          <button type="button" class="cv-lib-close" data-lib-close aria-label="Close the library" title="Close (Esc)">
+          <button type="button" class="cv-lib-close" data-lib-close aria-label="Close the pane" title="Close (Esc)">
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
               <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" />
             </svg>
           </button>
         </header>
-        <div class="cv-lib-search">
-          <input id="cv-lib-search" type="search" placeholder="Search by name or number, e.g. 3.2" aria-label="Search the library" autocomplete="off" />
-        </div>
-        <p class="cv-lib-hint">Click a card to bring it onto the canvas, or type <code>/card 3.2</code> or <code>/app expense</code>.</p>
-        <div class="cv-lib-list" data-lib-list>
-          {createList(() => props.library, category => category.id, category => (
-            <section class="cv-lib-cat" data-category={category.id} aria-label={category.title}>
-              <h3 class="cv-lib-cat-title">
-                <span>{category.title}</span>
-                <span class="cv-lib-count">{category.count}</span>
-              </h3>
-              <ul class="cv-lib-apps">
-                {createList(() => category.apps, app => app.id, app => (
-                  <li class="cv-lib-app" id={app.id} data-app={app.app} data-work={app.work} data-number={app.number} data-search={app.search}>
-                    <div class="cv-lib-app-head">
-                      <button type="button" class="cv-lib-expand" aria-expanded="false" data-lib-expand>
-                        <span class="cv-lib-chevron" aria-hidden="true"></span>
-                        <span class="cv-lib-num">{app.number}</span>
-                        <span class="cv-lib-app-title">{app.title}</span>
-                        {createShow(() => app.hasSlug, () => (
-                          <code class="cv-lib-slug">{app.slug}</code>
+        <div id="cv-panel-library" class="cv-pane-panel" role="tabpanel" aria-labelledby="cv-tab-library">
+          <p class="cv-lib-summary">{props.librarySummary}</p>
+          <div class="cv-lib-search">
+            <input id="cv-lib-search" type="search" placeholder="Search by name, /address or number, e.g. 3.2" aria-label="Search the library" autocomplete="off" />
+          </div>
+          <p class="cv-lib-hint">Click a card to bring it onto the canvas, or type <code>/card 3.2</code> or <code>/app expense</code>. Each app answers to its <code>/address</code>.</p>
+          <div class="cv-lib-list" data-lib-list>
+            {createList(() => props.library, category => category.id, category => (
+              <section class="cv-lib-cat" data-category={category.id} aria-label={category.title}>
+                <h3 class="cv-lib-cat-title">
+                  <span>{category.title}</span>
+                  <span class="cv-lib-count">{category.count}</span>
+                </h3>
+                <ul class="cv-lib-apps">
+                  {createList(() => category.apps, app => app.id, app => (
+                    <li class="cv-lib-app" id={app.id} data-app={app.app} data-work={app.work} data-number={app.number} data-search={app.search}>
+                      <div class="cv-lib-app-head">
+                        <button type="button" class="cv-lib-expand" aria-expanded="false" data-lib-expand>
+                          <span class="cv-lib-chevron" aria-hidden="true"></span>
+                          <span class="cv-lib-num">{app.number}</span>
+                          <span class="cv-lib-app-title">{app.title}</span>
+                          {createShow(() => app.hasSlug, () => (
+                            <code class="cv-lib-slug">{app.slug}</code>
+                          ))}
+                          <span class="cv-lib-on" data-lib-on></span>
+                        </button>
+                        <button type="button" class="cv-lib-stack" data-lib-stack title="Add the app as one stack">Stack</button>
+                        <button type="button" class="cv-lib-stack cv-lib-unite" data-lib-unite title="Unite: assemble the app's cards into one frame">Unite</button>
+                        <button type="button" class="cv-lib-all" data-lib-all>Add all</button>
+                      </div>
+                      <ul class="cv-lib-cards">
+                        {createList(() => app.cards, card => card.id, card => (
+                          <li class="cv-lib-card" data-card={card.id} data-number={card.number} data-search={card.search}>
+                            <button type="button" class="cv-lib-toggle" aria-pressed="false" data-lib-toggle>
+                              <span class="cv-lib-num">{card.number}</span>
+                              <span class="cv-lib-card-title">{card.title}</span>
+                              <span class="cv-lib-kind" data-kind={card.kind}>{card.kind}</span>
+                              <span class="cv-lib-action" data-lib-action>Add</span>
+                            </button>
+                          </li>
                         ))}
-                        <span class="cv-lib-on" data-lib-on></span>
-                      </button>
-                      <button type="button" class="cv-lib-stack" data-lib-stack title="Add the app as one stack">Stack</button>
-                      <button type="button" class="cv-lib-stack cv-lib-unite" data-lib-unite title="Unite: assemble the app's cards into one frame">Unite</button>
-                      <button type="button" class="cv-lib-all" data-lib-all>Add all</button>
-                    </div>
-                    <ul class="cv-lib-cards">
-                      {createList(() => app.cards, card => card.id, card => (
-                        <li class="cv-lib-card" data-card={card.id} data-number={card.number} data-search={card.search}>
-                          <button type="button" class="cv-lib-toggle" aria-pressed="false" data-lib-toggle>
-                            <span class="cv-lib-num">{card.number}</span>
-                            <span class="cv-lib-card-title">{card.title}</span>
-                            <span class="cv-lib-kind" data-kind={card.kind}>{card.kind}</span>
-                            <span class="cv-lib-action" data-lib-action>Add</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
         </div>
+        <div id="cv-panel-commands" class="cv-pane-panel cv-commands" role="tabpanel" aria-labelledby="cv-tab-commands" hidden></div>
       </aside>
       <footer class="cv-dock">
         <div class="cv-tools" role="toolbar" aria-label="Canvas tools" data-tools hidden>

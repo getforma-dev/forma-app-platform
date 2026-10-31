@@ -575,6 +575,18 @@ COMMANDS = {
     "deal-desk": ("discount", ["deal-desk", "discounts"]),
     "notes": ("note", ["notes"]),
 }
+# APP-119: an app is an address; its hint and examples are derived from the
+# definition by the server (`composer::commands`). These six demo apps keep
+# their hand-written copy as the optional override (`command.hint`,
+# `command.examples`).
+COMMAND_COPY = {
+    "expense-claims": ("what you spent", ["/expense $86 at Nobu, client dinner, Sarah approves", "/expense"]),
+    "time-off": ("dates and reason", ["/pto Nov 24\u201326 for Thanksgiving, Sarah approves"]),
+    "purchase-requests": ("what to buy", ["/purchase 3 monitors for $1,200 from Dell"]),
+    "vendor-invoices": ("vendor, amount and PO", ["/invoice Acme $4,800 against PO-1042"]),
+    "access-requests": ("system and why", ["/access Snowflake read access for the Q3 audit"]),
+    "deal-desk": ("deal and discount", ["/discount 8% on the Globex renewal"]),
+}
 
 
 def routing(description, intents, negatives, capabilities):
@@ -941,8 +953,11 @@ def catalog_entry(library_id, title, purpose, route, b, csv_name):
                 entry["command_id"] = v["command_id"]
         views.append(entry)
     slug, aliases = COMMANDS[library_id]
+    command = {"slug": slug, "aliases": aliases}
+    if library_id in COMMAND_COPY:
+        command["hint"], command["examples"] = COMMAND_COPY[library_id]
     return {"library_id": library_id, "fixture": library_id + ".json", "title": title, "purpose": purpose, "routing": route,
-            "command": {"slug": slug, "aliases": aliases},
+            "command": command,
             "app_id": b["definition"]["app_id"], "definition_revision_id": b["definition"]["revision_id"], "definition_digest": b["definition"]["digest"],
             "publication_id": b["publication"]["publication_id"], "work_id": b["work"]["work_id"], "collection_id": b["work"]["record_collections"][0]["id"],
             "inputs": [{"id": i["id"], "kind": i["kind"], "contract_id": i["contract_id"], "fields": [field_summary(fld) for fld in i["fields"]]} for i in content["inputs"]],

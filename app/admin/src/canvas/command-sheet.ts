@@ -1,33 +1,34 @@
-// APP-118: the command sheet (`/commands`, `/help`, `?` in the empty bar, and
-// the link in the `?` shortcuts sheet). A modal side sheet, never a canvas
-// card: the registry's commands by category, each with its argument
-// signature, description, aliases and examples, and a search box. Clicking a
-// command (or one of its examples) puts it in the bar and closes the sheet;
-// Esc or × close it. Focus stays inside while it is open and returns to what
-// opened it (the APP-113 pattern). Built with `el()` only: text nodes, no
-// markup.
-import { argLabel, groupCommands, searchCommands, type Command, type CommandGroup } from './command-registry';
-import { trapTab } from './focus';
+// APP-118: the commands list (`/commands`, `/help`, `?` in the empty bar,
+// and the link in the `?` shortcuts sheet). APP-119: it is the Commands tab
+// of the right pane (`pane.ts`), beside the Library tab, never a canvas card
+// and no longer a sheet of its own. It lists the verbs only, by category,
+// each with its argument signature, description, aliases and examples, and
+// a search box; its footer says where apps are: "Your apps answer to /name
+// — see /apps". Clicking a command (or one of its examples) puts it in the
+// bar and closes the pane; Esc clears the search, then closes the pane, and
+// focus returns to what opened it (the APP-113 pattern). Built with `el()`
+// only: text nodes, no markup.
+import { ADDRESS_FOOTER, argLabel, groupCommands, searchCommands, type Command, type CommandGroup } from './command-registry';
+import { closePane, isPaneOpen, onPaneTab, openPane, paneTab } from './pane';
 import { el } from './render';
 
-let sheet: HTMLElement | null = null;
 let search: HTMLInputElement | null = null;
 let list: HTMLElement | null = null;
-let opener: HTMLElement | null = null;
 
-/** The sheet's sections for `query`: the registry's commands, grouped by category (exported for the tests). */
+/** The tab's sections for `query`: the registry's verbs, grouped by category (exported for the tests). */
 export function sheetGroups(query: string): CommandGroup[] {
   return groupCommands(searchCommands(query));
 }
 
+/** Whether the pane is open on its Commands tab. */
 export function isCommandSheetOpen(): boolean {
-  return Boolean(sheet && !sheet.hidden);
+  return isPaneOpen() && paneTab() === 'commands';
 }
 
-/** Puts `text` in the intent bar (the autocomplete then shows its hint) and closes the sheet. */
+/** Puts `text` in the intent bar (the autocomplete then shows its hint) and closes the pane. */
 export function insertCommand(text: string): void {
   const input = document.getElementById('intent-input') as HTMLInputElement | null;
-  closeCommandSheet(false);
+  closePane(false);
   if (!input) return;
   input.value = text;
   input.focus();
@@ -66,55 +67,53 @@ function renderList(): void {
   }
 }
 
-function build(document_: Document): HTMLElement {
-  const close = el(document_, 'button', { type: 'button', class: 'cv-lib-close', 'aria-label': 'Close the commands', title: 'Close (Esc)' }, '×');
+/** Fills the Commands tab's panel (once): the intro, search, list and the footer. */
+function build(document_: Document): boolean {
+  if (search) return true;
+  const body = document_.getElementById('cv-panel-commands');
+  if (!body) return false;
   search = el(document_, 'input', {
     type: 'search', class: 'cv-commands-search', placeholder: 'Search commands', 'aria-label': 'Search commands',
     'aria-controls': 'cv-commands-list', autocomplete: 'off', spellcheck: 'false',
   });
   list = el(document_, 'div', { id: 'cv-commands-list', class: 'cv-commands-list' });
-  const panel = el(document_, 'div', { class: 'cv-commands-panel' },
-    el(document_, 'header', { class: 'cv-commands-head' },
-      el(document_, 'div', {},
-        el(document_, 'h2', { id: 'cv-commands-title' }, 'Commands'),
-        el(document_, 'p', { class: 'cv-commands-sub' }, 'Type / in the bar, or click one to put it there. <required> and [optional] arguments.')),
-      close),
+  const apps = el(document_, 'button', { type: 'button', class: 'cv-commands-footer-link', 'data-pane-goto': 'library' }, 'see /apps');
+  apps.addEventListener('click', () => openPane('library'));
+  const [lead] = ADDRESS_FOOTER.split(' — ');
+  body.replaceChildren(
+    el(document_, 'p', { class: 'cv-commands-sub' }, 'Type / in the bar, or click one to put it there. <required> and [optional] arguments.'),
     search,
-    list);
-  const root = el(document_, 'div', { id: 'cv-commands', class: 'cv-commands', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'cv-commands-title', hidden: '' }, panel);
-  close.addEventListener('click', () => closeCommandSheet());
-  root.addEventListener('click', (event) => {
-    if (event.target === root) closeCommandSheet();
-  });
-  root.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      closeCommandSheet();
-    } else if (event.key === 'Tab') {
-      trapTab(event, panel);
-    }
-  });
+    list,
+    el(document_, 'p', { class: 'cv-commands-footer', 'data-commands-footer': '' }, el(document_, 'span', {}, `${lead} — `), apps));
   search.addEventListener('input', renderList);
-  (document_.getElementById('cv-shell') ?? document_.body).append(root);
-  return root;
+  onPaneTab('commands', {
+    show: (focus) => {
+      renderList();
+      if (focus) search?.focus({ preventScroll: true });
+    },
+    escape: () => {
+      if (!search?.value) return false;
+      search.value = '';
+      renderList();
+      return true;
+    },
+  });
+  return true;
 }
 
-/** Opens the sheet (filtered by `query`); focus returns to `from` (else what had it) on close. */
+/** Opens the pane on Commands (filtered by `query`); focus returns to `from` (else what had it) on close. */
 export function openCommandSheet(query = '', from: HTMLElement | null = null): void {
-  const document_ = document;
-  if (!sheet) sheet = build(document_);
-  if (sheet.hidden) opener = from ?? (document_.activeElement as HTMLElement | null);
+  if (!build(document)) return;
   if (search) search.value = query;
-  renderList();
-  sheet.hidden = false;
-  search?.focus({ preventScroll: true });
+  openPane('commands', { focus: true, from });
 }
 
-/** Closes the sheet; `restore` hands focus back to what opened it. */
+/** Closes the pane; `restore` hands focus back to what opened it. */
 export function closeCommandSheet(restore = true): void {
-  if (!sheet || sheet.hidden) return;
-  sheet.hidden = true;
-  if (restore && opener?.isConnected) opener.focus({ preventScroll: true });
-  opener = null;
+  closePane(restore);
+}
+
+/** Wires the Commands tab at start, so a click on the tab finds it filled. */
+export function startCommandSheet(document_: Document): void {
+  build(document_);
 }

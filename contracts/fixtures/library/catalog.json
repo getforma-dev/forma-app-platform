@@ -3800,6 +3800,11 @@
         "aliases": [
           "expenses",
           "claim"
+        ],
+        "hint": "what you spent",
+        "examples": [
+          "/expense $86 at Nobu, client dinner, Sarah approves",
+          "/expense"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001681",
@@ -4188,6 +4193,10 @@
           "time-off",
           "leave",
           "vacation"
+        ],
+        "hint": "dates and reason",
+        "examples": [
+          "/pto Nov 24–26 for Thanksgiving, Sarah approves"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001701",
@@ -4575,6 +4584,10 @@
         "aliases": [
           "purchases",
           "po"
+        ],
+        "hint": "what to buy",
+        "examples": [
+          "/purchase 3 monitors for $1,200 from Dell"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001781",
@@ -5037,6 +5050,10 @@
         "aliases": [
           "invoices",
           "payables"
+        ],
+        "hint": "vendor, amount and PO",
+        "examples": [
+          "/invoice Acme $4,800 against PO-1042"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001801",
@@ -5446,6 +5463,10 @@
         "slug": "access",
         "aliases": [
           "access-request"
+        ],
+        "hint": "system and why",
+        "examples": [
+          "/access Snowflake read access for the Q3 audit"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001881",
@@ -5804,6 +5825,10 @@
         "aliases": [
           "deal-desk",
           "discounts"
+        ],
+        "hint": "deal and discount",
+        "examples": [
+          "/discount 8% on the Globex renewal"
         ]
       },
       "app_id": "00000000-0000-4000-8000-000000001901",
