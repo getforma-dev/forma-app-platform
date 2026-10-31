@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import re
 import sys
+import tomllib
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -138,6 +139,9 @@ def compiled_rust_sources():
                 test_only.add(child)
                 if child.is_file():
                     pending.append(child)
+    manifest = tomllib.loads((harness.APP / "Cargo.toml").read_text())
+    test_only.update((harness.APP / binary["path"]).resolve() for binary in manifest.get("bin", [])
+                     if binary.get("required-features"))
     compiled = []
     for path in sorted(root.rglob("*.rs")):
         resolved = path.resolve()
@@ -175,6 +179,9 @@ class ServiceImageTests(unittest.TestCase):
         for name in ("app/src/query/canvas_tests.rs", "app/src/query/tests.rs", "app/src/composer/tests.rs",
                      "app/src/storage/qualification.rs", "app/src/storage/managed_qualification/tests.rs",
                      "app/src/auth_qualification/tests.rs", "app/src/admission/tests.rs"):
+            self.assertNotIn(name, compiled)
+        # Feature-gated code (dev-stand: genui-dev and its module) is not in a release build.
+        for name in ("app/src/bin/genui-dev.rs", "app/src/dev/mod.rs", "app/src/dev/seed.rs"):
             self.assertNotIn(name, compiled)
 
     def test_service_context_admits_every_compiled_source_and_only_tracked_files(self):

@@ -5,7 +5,7 @@
 #   check.sh <step>...       only those steps
 #   check.sh --list          the steps and the command each runs
 #   check.sh --ci            the fast steps, then the CI campaigns
-#                            (tenant-foundation.yml) and the schema qualifier
+#                            (tenant-foundation.yml, pitch.yml) and the schema qualifier
 #
 # Each step mirrors a CI workflow command (named in the step list below).
 # The steps run in order and all run even after a failure; the exit status is
@@ -42,7 +42,7 @@ steps=(
 # The --ci additions, after the fast steps.
 ci_steps=(
   "schema-qualifier|tenant-foundation.yml|$py app/runtime/qualify_tenant_schema.py --output $reports/schema.json"
-  "campaigns-ci|tenant-foundation.yml|scripts/dev/campaigns.sh run-ci"
+  "campaigns-ci|tenant-foundation.yml, pitch.yml|scripts/dev/campaigns.sh run-ci"
 )
 
 field() { local IFS='|'; read -r a b c <<<"$1"; case $2 in 1) echo "$a";; 2) echo "$b";; 3) echo "$c";; esac; }

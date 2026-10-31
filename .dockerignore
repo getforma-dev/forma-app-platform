@@ -53,6 +53,7 @@ app/src/events/**
 app/src/actions/**
 !app/src/actions/ledger.rs
 !app/src/actions/mod.rs
+!app/src/actions/guard.rs
 !app/src/actions/prompt.rs
 !app/src/actions/receipt.rs
 !app/src/actions/rehearsed.rs
@@ -496,3 +497,4 @@ contracts/fixtures/impl-2026-10-28.1/**
 !contracts/fixtures/library/
 contracts/fixtures/library/**
 !contracts/fixtures/library/catalog.json
+!contracts/fixtures/library/time-off.json

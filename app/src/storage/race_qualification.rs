@@ -386,6 +386,22 @@ async fn campaign() {
     let (mut auth, mut app) = router(&stores);
     let mut author_cookie = mint(&stores, &auth, AUTHOR).await;
     let mut author_epoch = 1;
+    // APP-113 review (storage 1, `commands::compose`): a declared transition
+    // on an existing record is never taken by its filer. The author files
+    // every record; the reviewer, with record_write on the work, takes each
+    // needs_context → reviewed transition (APP-131: the campaign predates the
+    // rule). Refusals that never fire a transition stay the author's.
+    for permission in ["discover", "run"] {
+        grant(&fixture, REVIEWER, permission, &["--app", SPEND_APP]);
+    }
+    grant(&fixture, REVIEWER, "source_read", &["--source", EXPENSES]);
+    grant(
+        &fixture,
+        REVIEWER,
+        "record_write",
+        &["--app", SPEND_APP, "--work", &s05.work],
+    );
+    let mut reviewer_epoch = epoch_of(&fixture, REVIEWER).await;
 
     // ===================================================================
     let mut group =
@@ -421,7 +437,7 @@ async fn campaign() {
         1,
         values("reviewed", "moved on — synthetic"),
     );
-    let o2 = committed(commit(&stores, AUTHOR, author_epoch, &k2).await);
+    let o2 = committed(commit(&stores, REVIEWER, reviewer_epoch, &k2).await);
     assert_eq!(o2.record_version, 2);
     assert_eq!(tally(&fixture, &r1).await, [2, 2, 2]);
     let claims_before = claims(&fixture).await;
@@ -509,6 +525,7 @@ async fn campaign() {
     (auth, app) = router(&stores);
     let old_cookie = author_cookie;
     author_cookie = mint(&stores, &auth, AUTHOR).await;
+    let mut reviewer_cookie = mint(&stores, &auth, REVIEWER).await;
     problem(
         &post(&app, &s05, &old_cookie, &k1).await,
         StatusCode::NOT_FOUND,
@@ -571,9 +588,9 @@ async fn campaign() {
     let mut b_changed = b.clone();
     b_changed.values = values("reviewed", "B changed — synthetic");
     hooks.arm("record_lock");
-    let first = spawn_command(&stores, AUTHOR, author_epoch, &b);
+    let first = spawn_command(&stores, REVIEWER, reviewer_epoch, &b);
     paused(&hooks).await;
-    let second = spawn_command(&stores, AUTHOR, author_epoch, &b_changed);
+    let second = spawn_command(&stores, REVIEWER, reviewer_epoch, &b_changed);
     lock_wait(&fixture, 1).await;
     hooks.release.notify_one();
     let ob = committed(first.await.unwrap());
@@ -679,9 +696,9 @@ async fn campaign() {
         values("reviewed", "D — synthetic"),
     );
     hooks.arm("record_lock");
-    let first = spawn_command(&stores, AUTHOR, author_epoch, &c);
+    let first = spawn_command(&stores, REVIEWER, reviewer_epoch, &c);
     paused(&hooks).await;
-    let second = spawn_command(&stores, AUTHOR, author_epoch, &d);
+    let second = spawn_command(&stores, REVIEWER, reviewer_epoch, &d);
     lock_wait(&fixture, 1).await;
     hooks.release.notify_one();
     let oc = committed(first.await.unwrap());
@@ -708,7 +725,7 @@ async fn campaign() {
         values("reviewed", "D — synthetic"),
     );
     assert_eq!(
-        commit(&stores, AUTHOR, author_epoch, &recovered).await,
+        commit(&stores, REVIEWER, reviewer_epoch, &recovered).await,
         Err(Error::Denied)
     );
     problem(
@@ -717,7 +734,7 @@ async fn campaign() {
         "not_found",
     );
     assert_eq!(
-        commit(&stores, AUTHOR, author_epoch, &d).await.map(|r| matches!(r, CommandResult::Conflict(v) if v.reason == ConflictReason::ExpectedVersion && v.current_record_version == 2)),
+        commit(&stores, REVIEWER, reviewer_epoch, &d).await.map(|r| matches!(r, CommandResult::Conflict(v) if v.reason == ConflictReason::ExpectedVersion && v.current_record_version == 2)),
         Ok(true)
     );
     assert_eq!(tally(&fixture, &r6).await, [2, 2, 2]);
@@ -797,7 +814,7 @@ async fn campaign() {
         values("reviewed", "G — synthetic"),
     );
     assert_eq!(
-        ok(&post(&app, &s05, &author_cookie, &recovered).await)["record_version"],
+        ok(&post(&app, &s05, &reviewer_cookie, &recovered).await)["record_version"],
         2
     );
     assert_eq!(tally(&fixture, &r2).await, [2, 2, 2]);
@@ -810,18 +827,6 @@ async fn campaign() {
     // ===================================================================
     let mut group = Group::new("other_principal_cannot_retrieve_key");
     let r3 = record(3);
-    for permission in ["discover", "run"] {
-        grant(&fixture, REVIEWER, permission, &["--app", SPEND_APP]);
-    }
-    grant(&fixture, REVIEWER, "source_read", &["--source", EXPENSES]);
-    grant(
-        &fixture,
-        REVIEWER,
-        "record_write",
-        &["--app", SPEND_APP, "--work", &s05.work],
-    );
-    let mut reviewer_epoch = epoch_of(&fixture, REVIEWER).await;
-    let mut reviewer_cookie = mint(&stores, &auth, REVIEWER).await;
     let k20 = command(
         &s05,
         &r3,
@@ -1125,7 +1130,7 @@ async fn campaign() {
     let mut k35_recovered = k35.clone();
     k35_recovered.idempotency_key = key(36);
     k35_recovered.expected_work_version = 4;
-    let o36 = committed(commit(&stores, AUTHOR, author_epoch, &k35_recovered).await);
+    let o36 = committed(commit(&stores, REVIEWER, reviewer_epoch, &k35_recovered).await);
     assert_eq!((o36.record_version, o36.work_version), (2, 4));
     assert_eq!(tally(&fixture, &r4).await, [2, 2, 2]);
     group.check("command first: while the command holds the work FOR SHARE (paused at its record lock) the adoption writer waits (observed); the command commits version 1 on work version 3, then the adoption commits version 4; the committed outcome stays recorded and its identical retry replays it (200, work_version 3), a new edit on work version 3 is 412 stale naming 4, and its recovery on version 4 commits record version 2");

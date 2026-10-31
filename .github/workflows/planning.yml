@@ -4,6 +4,10 @@ on:
   pull_request:
 permissions:
   contents: read
+# ADR-013 D13.5: a newer push to the same ref cancels this workflow's superseded run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   planning:
     runs-on: ubuntu-latest
