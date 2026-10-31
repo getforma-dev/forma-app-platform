@@ -374,6 +374,12 @@ impl Fixture {
             "fixture operator SQL",
         )
     }
+    /// The local dev stand runs for hours; the fixture's credentials file
+    /// (600 s) would expire under it and every request would refuse
+    /// (`pool.rs` expiry check). Rewrites the same generation for `lifetime`.
+    pub(crate) fn extend_credentials(&self, lifetime: u64) {
+        self.write_credentials("localhost", 1, lifetime);
+    }
     fn write_credentials(&self, host: &str, generation: u64, lifetime: u64) {
         let now = crate::config::now();
         let mut roles = serde_json::Map::new();
