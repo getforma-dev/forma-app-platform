@@ -20,3 +20,4 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 112 | [APP-112: Command parity: every slash command has a click path](../0-backlog/APP-112.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-104, APP-106, APP-108, APP-109 |
 | 114 | [APP-114: Landing page for getforma.dev: the product, how it connects, security, and the beta list](../0-backlog/APP-114.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-096, APP-110 |
 | 116 | [APP-116: Timing chip: real step durations on screen for demos and trust](../0-backlog/APP-116.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-101, APP-104 |
+| 118 | [APP-118: Command system: one registry, argument hints, /commands help, /apps opens the Library](../0-backlog/APP-118.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-104, APP-112 |
