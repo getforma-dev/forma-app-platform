@@ -7,6 +7,11 @@
 #   dev_stand.sh stop           stop the proxies and the stand; remove its container
 #   dev_stand.sh restart-server rebuild from this checkout, then restart (data is reseeded)
 #   dev_stand.sh status         what is running, and the URLs
+#   dev_stand.sh reset          a new stand from the last build (no rebuild): data reseeded
+#
+# GENUI_DEV_STAND_PROFILE=fresh (app/scripts/fresh_stand.sh) runs a second,
+# separate stand: a new customer (Alex Rivera) on :4010 with the library and
+# nothing else, whose browser storage is cleared after each reset.
 #
 # ANTHROPIC_API_KEY is read from the clone's .env (app/scripts/read_env.py)
 # into the stand's environment only: never printed, never on a command line.
@@ -21,10 +26,19 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 app=$(cd "$here/.." && pwd)
 root=$(cd "$app/.." && pwd)
-state=${GENUI_DEV_STAND_DIR:-${TMPDIR:-/tmp}/forma-dev-stand}
+profile=${GENUI_DEV_STAND_PROFILE:-pitch}
+if [[ "$profile" == fresh ]]; then
+  state=${GENUI_DEV_STAND_DIR:-${TMPDIR:-/tmp}/forma-fresh-stand}
+  personas=("alex:4010")
+  proxy_flags=(--clear-on-reset)
+else
+  state=${GENUI_DEV_STAND_DIR:-${TMPDIR:-/tmp}/forma-dev-stand}
+  personas=("diego:4001" "sarah:4002" "priya:4003")
+  proxy_flags=()
+fi
+export GENUI_DEV_STAND_PROFILE=$profile
 stand_file="$state/stand.json"
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$app/target}
-personas=("diego:4001" "sarah:4002" "priya:4003")
 test_name=storage::dev_stand::native_dev_stand
 
 mkdir -p "$state"
@@ -33,6 +47,12 @@ chmod 700 "$state"
 alive() { [[ -f "$1" ]] && kill -0 "$(cat "$1")" 2>/dev/null; }
 
 urls() {
+  if [[ "$profile" == fresh ]]; then
+    echo "Forma fresh stand, a new customer (loopback only):"
+    echo "  Alex Rivera      http://127.0.0.1:4010/canvas"
+    echo "reset to a brand-new workspace: app/scripts/fresh_stand.sh reset"
+    return
+  fi
   echo "Forma dev stand (loopback only):"
   echo "  Diego Ramos      http://127.0.0.1:4001/canvas"
   echo "  Sarah Chen       http://127.0.0.1:4002/canvas"
@@ -134,7 +154,7 @@ start_proxies() {
   for entry in "${personas[@]}"; do
     persona=${entry%%:*}; port=${entry##*:}
     if alive "$state/proxy-$persona.pid"; then continue; fi
-    nohup python3 -I "$here/dev_stand_proxy.py" "$stand_file" "$persona" "$port" \
+    nohup python3 -I "$here/dev_stand_proxy.py" "$stand_file" "$persona" "$port" ${proxy_flags[@]+"${proxy_flags[@]}"} \
       >"$state/proxy-$persona.log" 2>&1 &
     echo $! >"$state/proxy-$persona.pid"
   done
@@ -215,7 +235,8 @@ case "${1:-start}" in
     start_stand
     start_proxies
     urls
-    echo "logs: $state/stand.log; stop: $0 stop"
+    if [[ "$profile" == fresh ]]; then self="$here/fresh_stand.sh"; else self="$here/dev_stand.sh"; fi
+    echo "logs: $state/stand.log; stop: $self stop"
     ;;
   stop)
     stop_all
@@ -227,6 +248,15 @@ case "${1:-start}" in
     # browser, server data is not). The proxies stay up and follow the new
     # stand file.
     build
+    stop_stand
+    start_stand
+    start_proxies
+    urls
+    ;;
+  reset)
+    # A new stand from the last build: the database is reseeded (and, on the
+    # fresh stand, the browser's storage is cleared on the next page load).
+    [[ -x "$state/dev-stand-bin" ]] || build
     stop_stand
     start_stand
     start_proxies
@@ -245,7 +275,7 @@ case "${1:-start}" in
     fi
     ;;
   *)
-    echo "usage: $0 [start|stop|restart-server|status]" >&2
+    echo "usage: $0 [start|stop|restart-server|reset|status]" >&2
     exit 2
     ;;
 esac

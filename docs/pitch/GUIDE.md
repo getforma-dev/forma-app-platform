@@ -135,6 +135,19 @@ In the desktop app's built-in browser the same URLs are the launch entries `form
 
 **Seeded:** the library granted to all three personas (each with an authoring app), Diego's expense claims (a $42 Sweetgreen lunch approved by Sarah, a $389 Delta flight waiting for her) and his Thanksgiving time off waiting for her, and Diego's "Q3 board pack" folder with the files from `docs/pitch/folder-fixture`.
 
+### A clean workspace (test as a new customer)
+
+A second, separate stand: its own database, one new customer, **Alex Rivera**, at **http://127.0.0.1:4010/canvas**. It has the 20-app library and nothing else: no records, no folders, nothing on the canvas, and no demo shortcuts (it is not the demo organization, so sentences go to the model, as they would for a real customer). The pitch stand on 4001–4003 is not touched.
+
+| Do | Command (from the checkout) |
+| --- | --- |
+| Start | `app/scripts/fresh_stand.sh` (builds if needed; about 10 s after a build) |
+| Start over, brand new | `app/scripts/fresh_stand.sh reset` (about 10 s, no rebuild: the data is reseeded, and the next page load clears what this browser kept for :4010, so the canvas is empty too) |
+| Pick up a code change | `app/scripts/fresh_stand.sh restart-server` |
+| Stop · what is running | `app/scripts/fresh_stand.sh stop` · `app/scripts/fresh_stand.sh status` |
+
+After a reset, just reload the page. The browser storage is cleared by the proxy (`Clear-Site-Data`), once per new stand, only for the :4010 origin.
+
 ## Operating it (operator only)
 
 - **Deploy:** follow [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md). It covers building and qualifying the three images, pushing them, preflight, the reviewed change set, operator tasks and activation. Every AWS change needs Victor's word, recorded in the private approvals file.

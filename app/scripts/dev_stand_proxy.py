@@ -7,7 +7,12 @@ listens on loopback only, adds one persona's session cookie to every request
 and forwards it to the stand (also loopback only), streaming the answer (the
 canvas's `/v1/events` stream included).
 
-  dev_stand_proxy.py <stand.json> <persona> <port> [--host 127.0.0.1]
+  dev_stand_proxy.py <stand.json> <persona> <port> [--host 127.0.0.1] [--clear-on-reset]
+
+With --clear-on-reset (the fresh stand, app/scripts/fresh_stand.sh), the first
+page a browser loads after the stand restarts carries `Clear-Site-Data:
+"storage"`, so the canvas this origin kept in the browser (local storage,
+the service worker) is cleared and a reset starts from an empty canvas.
 
 The stand file (mode 0600, written by the stand) names the origin and each
 persona's session; it is re-read when it changes (the stand mints a session
@@ -26,6 +31,7 @@ import threading
 import urllib.parse
 
 LOOPBACK_NAMES = {"localhost"}
+EPOCH_COOKIE = "forma_stand_epoch"
 HOP_BY_HOP = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers",
     "transfer-encoding", "upgrade", "content-length", "host",
@@ -61,6 +67,8 @@ class Stand:
             if target.scheme != "http" or not loopback(target.hostname or ""):
                 raise SystemExit("the stand origin must be http on loopback")
             persona = stand["personas"][self.persona]
+            # A new stand process is a new epoch (the browser's storage is cleared once per epoch).
+            self.epoch = "%s-%s" % (stand.get("pid", 0), target.port)
             self.current = (target, stand["cookie"], persona["session"], persona["name"])
             self.mtime = mtime
             return self.current
@@ -69,6 +77,16 @@ class Stand:
 class Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     stand = None  # set in main
+    clear_on_reset = False
+
+    def stale_page(self):
+        """A page load from a browser that last saw an earlier stand."""
+        if not self.clear_on_reset or self.command != "GET":
+            return False
+        if self.headers.get("sec-fetch-dest", "document") != "document" or "text/html" not in (self.headers.get("accept") or ""):
+            return False
+        seen = [c.strip()[len(EPOCH_COOKIE) + 1:] for c in (self.headers.get("cookie") or "").split(";") if c.strip().startswith(EPOCH_COOKIE + "=")]
+        return seen != [self.stand.epoch]
 
     def forward(self):
         try:
@@ -106,6 +124,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_error(502, "dev stand unreachable")
             return
         self.send_response(response.status)
+        if self.stale_page():
+            self.send_header("Clear-Site-Data", '"storage"')
+            self.send_header("Set-Cookie", "%s=%s; Path=/; SameSite=Lax" % (EPOCH_COOKIE, self.stand.epoch))
         sized = response.getheader("content-length")
         for key, value in response.getheaders():
             if key.lower() in HOP_BY_HOP:
@@ -155,7 +176,9 @@ def main():
     parser.add_argument("persona")
     parser.add_argument("port", type=int)
     parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--clear-on-reset", action="store_true")
     args = parser.parse_args()
+    Handler.clear_on_reset = args.clear_on_reset
     if not loopback(args.host):
         raise SystemExit("refused: the proxy binds loopback only (127.0.0.1, ::1, localhost)")
     Handler.stand = Stand(args.stand, args.persona)

@@ -20,6 +20,13 @@
 //! for her) and a time off request waiting for her; a "Q3 board pack"
 //! folder of Diego's with `docs/pitch/folder-fixture`.
 //!
+//! The fresh profile (`GENUI_DEV_STAND_PROFILE=fresh`, `app/scripts/fresh_stand.sh`)
+//! is a new customer instead: the same 20-app library, one persona (Alex
+//! Rivera), no records, no folder and demo mode off (so nothing rehearsed:
+//! sentences go to the model, as for any organization that is not the demo
+//! one). Its proxy clears the browser's storage for its origin after each
+//! reset, so the canvas starts empty too.
+//!
 //! Sessions are minted directly (no sign-in provider): the stand writes the
 //! origin and one session cookie per persona to `GENUI_DEV_STAND_FILE`
 //! (mode 0600, scratch only, never printed), keeps the sessions alive, and
@@ -110,6 +117,26 @@ const PERSONAS: [Persona; 3] = [
         name: "Priya Natarajan",
     },
 ];
+/// The fresh profile's one persona: a new customer (Diego's principal, which
+/// holds the library grants, under a new customer's name).
+const FRESH: [Persona; 1] = [Persona {
+    key: "alex",
+    principal: DIEGO,
+    name: "Alex Rivera",
+}];
+
+/// `GENUI_DEV_STAND_PROFILE=fresh`: a new customer's empty workspace.
+fn fresh() -> bool {
+    std::env::var("GENUI_DEV_STAND_PROFILE").as_deref() == Ok("fresh")
+}
+
+fn personas() -> &'static [Persona] {
+    if fresh() {
+        &FRESH
+    } else {
+        &PERSONAS
+    }
+}
 
 #[test]
 #[ignore = "the local dev stand: Docker, the locked Python environment; run by app/scripts/dev_stand.sh"]
@@ -299,11 +326,19 @@ async fn stand() {
 
     // --- Demo organization and personas (in process, as the deployment's
     // environment sets them) ---
-    std::env::set_var(demo::MODE_ENV, "1");
-    std::env::set_var(demo::ORGANIZATIONS_ENV, ORG);
-    demo::configure_for_tests(true, &[ORG]);
+    let fresh = fresh();
+    if fresh {
+        // A new customer is not the demo organization: nothing rehearsed.
+        std::env::remove_var(demo::MODE_ENV);
+        std::env::remove_var(demo::ORGANIZATIONS_ENV);
+        demo::configure_for_tests(false, &[]);
+    } else {
+        std::env::set_var(demo::MODE_ENV, "1");
+        std::env::set_var(demo::ORGANIZATIONS_ENV, ORG);
+        demo::configure_for_tests(true, &[ORG]);
+    }
     directory::set_for_tests(
-        &PERSONAS
+        &personas()
             .iter()
             .map(|p| (p.principal, p.name))
             .collect::<Vec<_>>(),
@@ -413,10 +448,30 @@ async fn stand() {
         }
     };
     let mut sessions = Vec::new();
-    for persona in &PERSONAS {
+    for persona in personas() {
         sessions.push(mint(persona.principal).await);
     }
-    let (diego, sarah) = (sessions[0].clone(), sessions[1].clone());
+    if !fresh {
+        seed_examples(&app, sessions[0].clone(), sessions[1].clone()).await;
+    } else {
+        println!("DEV_STAND fresh: a new customer, no records, no folder, demo mode off");
+    }
+
+    // --- Serve ---
+    serve(
+        &file, seconds, &stop, started, app, &fixture, &mint, sessions,
+    )
+    .await;
+    demo::configure_for_tests(false, &[]);
+    directory::set_for_tests(&[]);
+    stores.close().await.unwrap();
+    drop(fixture);
+}
+
+/// The example data of the pitch's stand: Diego's records (one approved by
+/// Sarah, two waiting for her) and his "Q3 board pack" folder.
+async fn seed_examples(app: &Router, diego: String, sarah: String) {
+    let app = app.clone();
 
     // --- A few existing records: one approved, two waiting for Sarah ---
     let act = |cookie: &str, body: Value| {
@@ -543,8 +598,23 @@ async fn stand() {
         );
     }
     println!("DEV_STAND folder \"Q3 board pack\" (Diego) with {FOLDER_FIXTURE}");
+}
 
-    // --- Serve ---
+/// Serves until the deadline or the stop file, keeping the sessions alive.
+#[allow(clippy::too_many_arguments)]
+async fn serve<M, F>(
+    file: &Path,
+    seconds: u64,
+    stop: &Path,
+    started: Instant,
+    app: Router,
+    fixture: &Fixture,
+    mint: &M,
+    mut sessions: Vec<String>,
+) where
+    M: Fn(&'static str) -> F,
+    F: std::future::Future<Output = String>,
+{
     let listener = tokio::net::TcpListener::bind((
         "127.0.0.1",
         std::env::var("GENUI_DEV_STAND_PORT")
@@ -556,7 +626,7 @@ async fn stand() {
     .unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let write_file = |sessions: &[String]| {
-        let personas: serde_json::Map<String, Value> = PERSONAS
+        let personas: serde_json::Map<String, Value> = personas()
             .iter()
             .zip(sessions)
             .map(|(p, session)| {
@@ -567,7 +637,7 @@ async fn stand() {
             })
             .collect();
         private_write(
-            &file,
+            file,
             &serde_json::to_vec_pretty(&json!({
                 "origin": origin,
                 "cookie": cookies::SESSION,
@@ -606,7 +676,7 @@ async fn stand() {
         // Keep each session inside its idle limit; one that ended (a
         // sign-out in the browser) is minted again and the file rewritten.
         let mut changed = false;
-        for (persona, session) in PERSONAS.iter().zip(sessions.iter_mut()) {
+        for (persona, session) in personas().iter().zip(sessions.iter_mut()) {
             let reply = send(&app, "GET", "/v1/members", Some(session), "", &[]).await;
             if reply.status != StatusCode::OK {
                 *session = mint(persona.principal).await;
@@ -620,10 +690,6 @@ async fn stand() {
     }
     println!("DEV_STAND stopping");
     server.abort();
-    let _ = std::fs::remove_file(&file);
-    let _ = std::fs::remove_file(&stop);
-    demo::configure_for_tests(false, &[]);
-    directory::set_for_tests(&[]);
-    stores.close().await.unwrap();
-    drop(fixture);
+    let _ = std::fs::remove_file(file);
+    let _ = std::fs::remove_file(stop);
 }
