@@ -21,3 +21,4 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 114 | [APP-114: Landing page for getforma.dev: the product, how it connects, security, and the beta list](../0-backlog/APP-114.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-096, APP-110 |
 | 116 | [APP-116: Timing chip: real step durations on screen for demos and trust](../0-backlog/APP-116.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-101, APP-104 |
 | 118 | [APP-118: Command system: one registry, argument hints, /commands help, /apps opens the Library](../0-backlog/APP-118.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-104, APP-112 |
+| 119 | [APP-119: Commands are verbs, apps are addresses: split the registry, derive app hints from definitions](../0-backlog/APP-119.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-118 |
