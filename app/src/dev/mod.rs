@@ -22,7 +22,8 @@
 //!   "Q3 board pack" folder. Seeded once per database volume.
 //! - `clean`: a new customer, Alex Rivera, in a separate (synthetic)
 //!   organization: no library, no records, no folders, demo mode off. Only an
-//!   authoring app, so a sentence generates the first app. Templates are an
+//!   authoring app, the app the composer drafts on (with no sources a
+//!   generated draft is refused `not_runnable` today). Templates are an
 //!   operator install on demand: `genui-dev seed-library` (`just dev clean
 //!   seed-library`) runs the audited `seed-library` and
 //!   `grant-library-access` operator commands.

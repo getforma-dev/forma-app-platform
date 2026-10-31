@@ -58,7 +58,9 @@ pc() { process-compose "$@" --port "$GENUI_DEV_PC_PORT" 2> >(quiet); }
 # `up` keeps its own streams: a detached supervisor must not hold a pipe of
 # ours (it would keep the caller's pipeline open for its whole life).
 pc_up() { process-compose up -f "$root/process-compose.yaml" --port "$GENUI_DEV_PC_PORT" "$@"; }
-running() { pc process list >/dev/null 2>&1; }
+# This checkout's supervisor answers on the instance's API port (another
+# checkout's, on a colliding base, does not count: its file names differ).
+running() { pc project state 2>/dev/null | grep -qF -- "- $root/process-compose.yaml"; }
 compose() { docker compose -f "$root/compose.dev.yaml" "$@"; }
 
 urls() {
@@ -75,7 +77,7 @@ urls() {
 guard_ports() {
   local port holder busy=0
   for port in ${GENUI_DEV_PERSONA_PORTS//,/ } "$GENUI_DEV_DB_PORT" "$GENUI_DEV_PC_PORT"; do
-    holder=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -Fcp 2>/dev/null | tr '\n' ' ' || true)
+    holder=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -Fpc 2>/dev/null | awk '/^p/ {p=substr($0,2)} /^c/ {printf "pid %s %s ", p, substr($0,2)}' || true)
     if [[ -n "$holder" ]]; then
       echo "refused: port $port is in use ($holder); it is not this checkout's $profile instance." >&2
       busy=1

@@ -22,6 +22,9 @@ x-logs: &logs
   disable_json: true
   flush_each_line: true
   no_metadata: true
+  no_color: true
+  add_timestamp: true
+  timestamp_format: "15:04:05.000"
 
 processes:
   db:

@@ -394,8 +394,8 @@ impl Database {
                 }
                 Profile::Clean => {
                     self.operator(&["backfill", "--organization", org])?;
-                    // No library: only the customer's own authoring app, so
-                    // the composer can generate a first app from a sentence.
+                    // No library: only the customer's own authoring app, the
+                    // app the composer drafts a generated definition on.
                     for persona in profile.personas() {
                         self.operator(&[
                             "create-app",
