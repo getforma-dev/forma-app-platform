@@ -1,6 +1,6 @@
 # Forma pitch MVP: guide, highlights and definitions
 
-This is the one page to read before using, demoing or operating the pitch build on **beta.getforma.dev**. The scene-by-scene demo script is [SCENARIOS.md](SCENARIOS.md). The deploy procedure is [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md). The investor narrative is [PITCH-SCRIPT.md](PITCH-SCRIPT.md). How people, agents and AI connect (bring your own AI or use ours) is [CONNECTIONS.md](CONNECTIONS.md).
+This is the one page to read before using, demoing or operating the pitch build on **beta.getforma.dev**. The scene-by-scene demo script is [SCENARIOS.md](SCENARIOS.md). The deploy procedure is [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md). The filming plan is [RECORDING.md](RECORDING.md). The investor narrative is [PITCH-SCRIPT.md](PITCH-SCRIPT.md). How people, agents and AI connect (bring your own AI or use ours) is [CONNECTIONS.md](CONNECTIONS.md).
 
 ## What it is, in one paragraph
 

@@ -1,6 +1,6 @@
 # Forma: presentation script
 
-For Victor, presenting to the YC panel or investors. About 8 minutes spoken plus a 4-minute live demo. Lines in plain text are said aloud. *Italic lines are stage directions.* **[Fill in]** marks what only you can supply. The definitions behind every term are in [GUIDE.md](GUIDE.md), and the demo beats in detail are in [SCENARIOS.md](SCENARIOS.md).
+For Victor, presenting to the YC panel or investors. About 8 minutes spoken plus a 4–5-minute live demo (trim beats to fit). Lines in plain text are said aloud. The shot-by-shot filming plan is [RECORDING.md](RECORDING.md). *Italic lines are stage directions.* **[Fill in]** marks what only you can supply. The definitions behind every term are in [GUIDE.md](GUIDE.md), and the demo beats in detail are in [SCENARIOS.md](SCENARIOS.md).
 
 Three rules for every claim:
 1. Say only what is built and measured. The figures marked *(measured)* below come from the test runs and the live beta.
@@ -90,6 +90,20 @@ The expense review app landed instantly. The pick runs locally in a few millisec
 *On the phone:* Sarah gets a Slack message with Approve and Reject. She approves from Slack. Both canvases update, marked "via Slack".
 
 *Optional, in Claude:* "What expenses are waiting for my approval?" Claude is calling Forma through MCP with Sarah's own permissions, nothing more. It can draft, but it can't bypass the approval.
+
+**Beat 4b: a real company workflow (30 s, pick one)**
+
+*Pick one from the workflow library: time off, purchase request (two-level approval), vendor invoice (PO mismatch flag), access request, or deal desk (≤ 10% approves itself).* For example: "Buy 12 Figma Enterprise seats for $7,200, Sarah and Priya approve." Over $5,000, the app's own rule requires a second approval. The server enforces it, not the AI, and no one can approve their own request.
+
+**Beat 4c: a folder becomes an app (45 s)**
+
+*Create a folder, drop in two spreadsheets and a PDF brief, click the folder and type:* "build a metrics app and explain it."
+
+Forma read the files' structure, not the whole files, and built a metrics app. Every number is computed by the server and carries a receipt back to the exact file it came from. *Open a receipt to show "Source file".* The summary is written by the AI, but every number in it comes from those receipts; the AI can explain your data, it can't invent a figure. *Click "Brief me", then a "p. 1" citation:* the brief quotes the PDF, and every citation opens on its page.
+
+**Beat 4d (optional): governed agents (20 s)**
+
+*An agent scoped to Engineering tries the HR time-off app. Open its activity panel.* Refused, and recorded: which agent, acting for whom, what it tried, and why it was stopped. Every agent action in Forma is identified, scoped and audited.
 
 **Beat 5: your canvas, your way (30 s)**
 
