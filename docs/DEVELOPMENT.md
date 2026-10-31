@@ -75,7 +75,7 @@ just check --list
 just check
 ```
 
-`check` runs formatting, clippy (including the dev feature), Rust library tests, the available MSRV check, campaign-catalog consistency, admin typecheck/build, infrastructure typecheck/tests, Python suites, schema pins, contracts, board checks and shell syntax checks. It runs the selected steps to completion and summarizes failures. Run a focused subset with names from `--list`, for example `just check fmt py-runtime py-ops board`. The MSRV step reports a skip if Rust 1.85.0 is not installed; a skipped local check is not a pass. The admin build also changes the manifest watched by running dev servers.
+`check` runs formatting, clippy (including the dev feature), Rust library tests, binary SSR tests and doctests, the available MSRV check, campaign-catalog consistency, admin typecheck/build, infrastructure typecheck/tests, Python suites, schema pins, contracts, board checks and shell syntax checks. It runs the selected steps to completion and summarizes failures. Run a focused subset with names from `--list`, for example `just check fmt py-runtime py-ops board`. For rendering changes, use `just check admin test` so the SSR tests read freshly built assets. The MSRV step reports a skip if Rust 1.85.0 is not installed; a skipped local check is not a pass. The admin build also changes the manifest watched by running dev servers.
 
 `just ci` adds the tenant schema qualifier and all campaigns marked as CI in the catalog. It is the local app-check set, not a substitute for the independent parser, published-baseline, fixture and image jobs in GitHub Actions. Inspect the exact pushed commit's workflow results before merging.
 

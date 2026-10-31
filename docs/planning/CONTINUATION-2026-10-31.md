@@ -74,7 +74,8 @@ No phase gate or historical acceptance is closed by this maintenance pass.
 
 ## Verification of this continuation
 
-Local checks passed: 345 Rust library tests (30 intentionally ignored), the
+Local checks passed: 345 Rust library tests (30 intentionally ignored), six
+binary SSR tests, three doctests, the
 composer Docker campaign (generated and adapted provenance reread from the
 database), formatting, clippy with and without `dev-stand`, Rust 1.85 MSRV,
 campaign catalog, 48 admin tests, typecheck and strict SSR build, infrastructure
@@ -89,3 +90,9 @@ pitch review query's 192 claims with a verified receipt and no submission
 draft. Both local servers were restarted with data kept; all four persona
 health endpoints returned 200 afterwards. Exact pushed-commit workflow results
 remain in GitHub Actions; local acceptance does not stand in for those runs.
+
+Foundation CI on `07e3c6c` caught two stale binary SSR assertions after the
+copy changes. They were corrected to the intended neutral labels and generic
+creation commands. The local `just check` recipe now builds admin assets
+before running library, binary SSR and documentation tests, matching the
+Foundation check and closing that local coverage gap.

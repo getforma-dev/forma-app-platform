@@ -667,13 +667,11 @@ mod tests {
         );
         // Titles are text, never markup.
         assert!(body.contains("Northstar &lt;operations&gt;") && !body.contains("<operations>"));
-        assert_eq!(
-            body.matches(
-                "Seeded definition, retrieved from the library. Sources seeded by the operator."
-            )
-            .count(),
-            2
-        );
+        // Workspace props carry no provenance: generated or uploaded work
+        // must not be presented as an operator-seeded library definition.
+        assert_eq!(body.matches("Saved work.").count(), 2);
+        assert!(!body.contains("Seeded definition"));
+        assert!(!body.contains("Sources seeded by the operator"));
         assert!(!body.contains("<script src"));
     }
 
@@ -1317,14 +1315,18 @@ mod tests {
         );
         assert!(content.contains("Spend &lt;Review&gt;") && !content.contains("<Review>"));
         assert!(content.contains("2 apps · 3 cards"));
-        // An empty canvas offers the business intents and no group.
+        // An empty canvas offers creation intents that require no installed
+        // apps, so a new customer is not sent to an absent Expense app.
         let empty = canvas::CanvasProps {
             csrf_signout: "S".repeat(43),
             summary: canvas::summary(&[]),
             ..canvas::CanvasProps::default()
         };
         let (_, _, body) = html(ssr.canvas(&empty)).await;
-        assert!(body.contains("Review expenses over $200") && !body.contains("class=\"cv-group\""));
+        assert!(body.contains("data-intent=\"/forma Create a book club reading list\""));
+        assert!(body.contains("data-intent=\"/folder new My project\""));
+        assert!(!body.contains("Review expenses over $200"));
+        assert!(!body.contains("class=\"cv-group\""));
         // No stream configured: no live chip; no organization read: no name.
         assert!(!body.contains("id=\"cv-live\"") && !body.contains("class=\"cv-org\""));
         assert!(!body.contains("Synthetic data") && !body.contains("data-demo=\"on\""));
