@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://getforma.dev/contracts/impl-2026-10-29.3/schema.json",
+  "$id": "https://getforma.dev/contracts/impl-2026-10-31.4/schema.json",
   "$defs": {
     "value": {
       "oneOf": [

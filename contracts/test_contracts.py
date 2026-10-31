@@ -12,6 +12,20 @@ from validate import (ContractError, SCHEMA, canonical, digest, domain_name, exa
 ROOT = Path(__file__).resolve().parent
 RETAINED = ROOT / "fixtures" / "impl-2026-10-28.1"
 RETAINED_TWO = ROOT / "fixtures" / "impl-2026-10-29.2"
+RETAINED_THREE = ROOT / "fixtures" / "impl-2026-10-29.3"
+LIBRARY = ROOT / "fixtures" / "library"
+# Stored-data vectors (edition impl-2026-10-31.4): documents admitted and stored before a later rule, which must keep
+# their stored-document verdict. Beta's Expense claims bundle as seeded at 0c3261b (APP-105), byte for byte.
+STORED_EXPENSE = ROOT / "fixtures" / "stored" / "expense-claims-d70710d3.json"
+STORED_EXPENSE_SHA256 = "446e5485a97b1a261b4c5ca6ee6836aee99f43e14140e61f3b41a3dfc97bd059"
+# The fixture identities edition impl-2026-10-29.3 locked; its copies are retained byte-identically.
+EDITION_THREE_FIXTURES = {
+    "canonical-vectors": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
+    "command-recovery": "b2539b15b32c7086576bd42aed824d823e5fa4c8ed2f40ed57637cdf79d14ecf",
+    "negative-vectors": "315a9d32e91dbeaf21c0ad3ec6f8e882315e46ef23b7db4c3c47f4b161ae1cbc",
+    "northstar": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
+    "spend-review": "186162da87532f368ed3c74faafc46c04780cc7331c095dc92f729bead0f0851",
+}
 # The fixture identities edition impl-2026-10-29.2 locked; its copies are retained byte-identically.
 EDITION_TWO_FIXTURES = {
     "canonical-vectors": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
@@ -498,12 +512,17 @@ class EditionThreeTests(unittest.TestCase):
             bundle = copy.deepcopy(source)
             change(bundle["definition"]["content"]["commands"])
             return bundle
+        # Edition impl-2026-10-31.4: both rules are the authoring verdict (`new_content=True`); the stored-document
+        # verdict is edition impl-2026-10-29.3's, so the same documents stored before the rules keep validating.
         for source, change in ((expense, lambda c: c[next(i for i, x in enumerate(c) if x["id"] == "submit")].pop("initial")),
                                (purchase, lambda c: c[0].pop("initial"))):
             with self.assertRaisesRegex(ContractError, "requires initial"):
-                check_command(edited(source, change))
+                check_command(edited(source, change), new_content=True)
+            check_command(edited(source, change))
+        duplicated = lambda c: c[1]["transitions"].append(copy.deepcopy(c[1]["transitions"][-1]))
         with self.assertRaisesRegex(ContractError, "duplicate transition"):
-            check_command(edited(purchase, lambda c: c[1]["transitions"].append(copy.deepcopy(c[1]["transitions"][-1]))))
+            check_command(edited(purchase, duplicated), new_content=True)
+        check_command(edited(purchase, duplicated))
         # Guard parity: submitted -> manager_approved holds only when amount > $5,000.
         def decided(amount):
             bundle = edited(purchase, lambda c: c[1]["writable_fields"].append("amount"))
@@ -522,10 +541,66 @@ class EditionThreeTests(unittest.TestCase):
             validate_bundle(decided("100"))
 
 
-def check_command(bundle):
+def check_command(bundle, new_content=False):
     """validate_bundle after a definition edit: re-identify the definition and its pins."""
     definition = bundle["definition"]
     definition["digest"] = digest("app-definition", definition["content"])
     bundle["publication"]["definition_digest"] = bundle["receipt"]["definition_digest"] = definition["digest"]
     rehash_receipt(bundle["receipt"])
-    validate_bundle(bundle)
+    validate_bundle(bundle, new_content=new_content)
+
+
+class EditionFourTests(unittest.TestCase):
+    """Edition impl-2026-10-31.4 (APP-129): the APP-107/APP-113 command-declaration amendment and the prebuilt library,
+    over the retained edition impl-2026-10-29.3."""
+
+    def test_edition_four_retains_edition_three_byte_identically(self):
+        for name, identity in EDITION_THREE_FIXTURES.items():
+            with self.subTest(fixture=name):
+                self.assertEqual(hashlib.sha256((RETAINED_THREE / (name + ".json")).read_bytes()).hexdigest(), identity)
+                # The current edition's specimens and vectors are edition three's, unchanged.
+                self.assertEqual((RETAINED_THREE / (name + ".json")).read_bytes(), (ROOT / "fixtures" / (name + ".json")).read_bytes())
+        def kept(name):
+            return loads((RETAINED_THREE / (name + ".json")).read_bytes())
+        for name in ("northstar", "spend-review"):
+            with self.subTest(bundle=name):
+                bundle = kept(name)
+                validate_bundle(bundle)
+                self.assertEqual(bundle["definition"]["digest"], digest("app-definition", bundle["definition"]["content"]))
+        run_negative_vectors(self, json.loads((RETAINED_THREE / "negative-vectors.json").read_text()), kept)
+        specimen = kept("command-recovery")
+        for view in specimen["recovery_views"]:
+            validate(view)
+        validate(specimen["claim"])
+        for body in specimen["problems"]:
+            validate_problem(body)
+
+    def test_every_library_bundle_validates_and_matches_the_catalog(self):
+        catalog = json.loads((LIBRARY / "catalog.json").read_text())
+        names = sorted(p.name for p in LIBRARY.glob("*.json") if p.name != "catalog.json")
+        self.assertEqual(names, sorted(app["fixture"] for app in catalog["apps"]))
+        for app in catalog["apps"]:
+            with self.subTest(app=app["library_id"]):
+                raw = (LIBRARY / app["fixture"]).read_bytes()
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), app["fixture_sha256"])
+                bundle = loads(raw)
+                validate_bundle(bundle, new_content=True)
+                self.assertEqual(bundle["definition"]["schema_version"], 1)
+                self.assertEqual(bundle["definition"]["digest"], app["definition_digest"])
+
+    def test_stored_definitions_keep_their_verdict(self):
+        """Victor's option A (2026-10-31): the APP-113 definition rules judge new content only. Beta's stored Expense
+        claims revision predates them: it validates under the stored-document verdict (as under impl-2026-10-29.3 and
+        Rust admission) and is refused only as new content. Storage's command-time fence protects it instead."""
+        raw = STORED_EXPENSE.read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), STORED_EXPENSE_SHA256)
+        bundle = loads(raw)
+        self.assertEqual(bundle["definition"]["digest"], "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de")
+        validate_bundle(copy.deepcopy(bundle))
+        validate(bundle["definition"])
+        with self.assertRaisesRegex(ContractError, "create writing a governed enum field requires initial"):
+            validate_bundle(copy.deepcopy(bundle), new_content=True)
+        # The library's current Expense claims app is the same app with `initial` declared: a new revision.
+        current = loads((LIBRARY / "expense-claims.json").read_bytes())
+        self.assertEqual(current["definition"]["app_id"], bundle["definition"]["app_id"])
+        self.assertNotEqual(current["definition"]["digest"], bundle["definition"]["digest"])

@@ -15,13 +15,42 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
 const LOCK: &str = include_str!("../../../contracts/implementation-lock.json");
-/// Every locked `contracts/fixtures/**/*.json` artifact: edition three's
-/// specimen, the retained edition two's, the retained edition one's and the
-/// current bundles and vectors (edition two's, unchanged by edition three).
-const FIXTURES: [(&str, &str); 13] = [
+/// Every locked `contracts/fixtures/**/*.json` specimen and vector artifact:
+/// edition three's specimen, the retained editions three, two and one, and the
+/// current bundles and vectors (edition two's, unchanged by editions three and
+/// four). The prebuilt library (`contracts/fixtures/library/`, edition four) is
+/// locked too but is operator seed data, admitted by
+/// `storage::queries::every_library_definition_is_admitted_and_in_the_sidecar`.
+/// `stored/` holds edition four's stored-data vectors (documents admitted
+/// before a later rule, which keep their verdict).
+const FIXTURES: [(&str, &str); 19] = [
+    (
+        "contracts/fixtures/stored/expense-claims-d70710d3.json",
+        include_str!("../../../contracts/fixtures/stored/expense-claims-d70710d3.json"),
+    ),
     (
         "contracts/fixtures/command-recovery.json",
         include_str!("../../../contracts/fixtures/command-recovery.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/canonical-vectors.json",
+        include_str!("../../../contracts/fixtures/impl-2026-10-29.3/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/command-recovery.json",
+        include_str!("../../../contracts/fixtures/impl-2026-10-29.3/command-recovery.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/negative-vectors.json",
+        include_str!("../../../contracts/fixtures/impl-2026-10-29.3/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/northstar.json",
+        include_str!("../../../contracts/fixtures/impl-2026-10-29.3/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/spend-review.json",
+        include_str!("../../../contracts/fixtures/impl-2026-10-29.3/spend-review.json"),
     ),
     (
         "contracts/fixtures/impl-2026-10-29.2/canonical-vectors.json",
@@ -590,7 +619,7 @@ fn sized_definition(target: usize) -> Value {
 fn canonical_vectors_match_contracts_lock() {
     // The embedded vectors and specimens are exactly the locked edition's set.
     let lock: Value = serde_json::from_str(LOCK).unwrap();
-    assert_eq!(lock["edition"], "impl-2026-10-29.3");
+    assert_eq!(lock["edition"], "impl-2026-10-31.4");
     assert_eq!(lock["canonical_encoding"], "forma-json-v1");
     let locked_fixtures: BTreeSet<&str> = lock["artifacts"]
         .as_object()
@@ -598,6 +627,7 @@ fn canonical_vectors_match_contracts_lock() {
         .keys()
         .map(String::as_str)
         .filter(|path| path.starts_with("contracts/fixtures/"))
+        .filter(|path| !path.starts_with("contracts/fixtures/library/"))
         .collect();
     assert_eq!(
         locked_fixtures,
@@ -1388,7 +1418,7 @@ fn retained(name: &str) -> Value {
 #[test]
 fn edition_two_vectors_match_contracts_lock() {
     let lock: Value = serde_json::from_str(LOCK).unwrap();
-    assert_eq!(lock["edition"], "impl-2026-10-29.3");
+    assert_eq!(lock["edition"], "impl-2026-10-31.4");
     let retained_lock = &lock["retained_editions"]["impl-2026-10-28.1"]["artifacts"];
     for (path, identity) in EDITION_ONE {
         assert_eq!(retained_lock[path], identity, "{path}");
@@ -1413,6 +1443,16 @@ fn edition_two_vectors_match_contracts_lock() {
             "{path}"
         );
         let current = path.replace("impl-2026-10-29.2/", "");
+        assert_eq!(locked(&current), locked(path), "{path}");
+    }
+    // Edition four (APP-129) retains edition three byte for byte, the same way.
+    let retained_three = lock["retained_editions"]["impl-2026-10-29.3"]["artifacts"]
+        .as_object()
+        .unwrap();
+    assert_eq!(retained_three.len(), 5);
+    for (path, identity) in retained_three {
+        assert_eq!(lock["artifacts"][path], *identity, "{path}");
+        let current = path.replace("impl-2026-10-29.3/", "");
         assert_eq!(locked(&current), locked(path), "{path}");
     }
 
@@ -1789,4 +1829,22 @@ fn declared_guards_and_initial_values_match_validate_py() {
         assert_eq!(error.code(), code, "{pointer}: {error}");
         assert!(error.to_string().contains(rule), "{pointer}: {error}");
     }
+}
+
+#[test]
+fn stored_definitions_that_predate_the_authoring_rules_still_admit() {
+    // Edition impl-2026-10-31.4 (APP-129, Victor's option A): beta's stored
+    // Expense claims revision (seeded at 0c3261b) declares no `initial` for the
+    // governed `status` its filing create writes. Rust admission admits it, as
+    // contracts/validate.py's stored-document verdict does; the APP-113 rule
+    // judges new content only, and storage's command-time fence
+    // (`Declaration::decided`) protects stored definitions.
+    let bundle = locked("contracts/fixtures/stored/expense-claims-d70710d3.json");
+    let definition = &bundle["definition"];
+    assert_eq!(
+        definition["digest"],
+        "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de"
+    );
+    let admitted = admit(definition).unwrap();
+    assert_eq!(admitted.digest, definition["digest"].as_str().unwrap());
 }

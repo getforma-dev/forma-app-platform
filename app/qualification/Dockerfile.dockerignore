@@ -202,3 +202,13 @@ contracts/fixtures/impl-2026-10-29.2/**
 !contracts/fixtures/impl-2026-10-29.2/negative-vectors.json
 !contracts/fixtures/impl-2026-10-29.2/northstar.json
 !contracts/fixtures/impl-2026-10-29.2/spend-review.json
+!contracts/fixtures/impl-2026-10-29.3/
+contracts/fixtures/impl-2026-10-29.3/**
+!contracts/fixtures/impl-2026-10-29.3/canonical-vectors.json
+!contracts/fixtures/impl-2026-10-29.3/command-recovery.json
+!contracts/fixtures/impl-2026-10-29.3/negative-vectors.json
+!contracts/fixtures/impl-2026-10-29.3/northstar.json
+!contracts/fixtures/impl-2026-10-29.3/spend-review.json
+!contracts/fixtures/stored/
+contracts/fixtures/stored/**
+!contracts/fixtures/stored/expense-claims-d70710d3.json

@@ -237,7 +237,7 @@ def guard_holds(guard, state):
     return {"eq": a == b, "ne": a != b, "lt": a < b, "lte": a <= b, "gt": a > b, "gte": a >= b}[guard["comparison"]]
 
 
-def _definition(content):
+def _definition(content, new_content=False):
     inputs = unique(content["inputs"], "id", "input id")
     for item in inputs.values():
         if "coverage" in item and item["kind"] == "records":
@@ -257,8 +257,10 @@ def _definition(content):
         require(set(command["writable_fields"]) <= schema_fields.keys(), "unknown writable field")
         # APP-113 review: one declaration per (field, from, to); storage's rules would otherwise judge
         # the duplicates' guards together (any of them holding lets the transition fire).
-        moves = [(t["field_id"], t["from"], t["to"]) for t in command["transitions"]]
-        require(len(set(moves)) == len(moves), "duplicate transition")
+        # Edition impl-2026-10-31.4: new content only (see `validate`); a stored definition keeps its verdict.
+        if new_content:
+            moves = [(t["field_id"], t["from"], t["to"]) for t in command["transitions"]]
+            require(len(set(moves)) == len(moves), "duplicate transition")
         for transition in command["transitions"]:
             field = schema_fields.get(transition["field_id"])
             require(field is not None and field["value_type"]["type"] == "enum", "transition requires enum field")
@@ -279,7 +281,10 @@ def _definition(content):
         # APP-113 review: a create that may write an enum field another command of the same record schema
         # governs by declared transitions must declare that field's `initial` value, so no filing create
         # starts a record at a decision outcome (storage refuses such a start for undeclared fields too).
-        if command["operation"] == "create" and not command["transitions"]:
+        # Edition impl-2026-10-31.4: new content only (see `validate`). A stored definition that predates the
+        # rule (beta's Expense claims revision sha256:d70710d3...) keeps its impl-2026-10-29.3 verdict; storage's
+        # command-time fence (`Declaration::decided`, `fence_starts`) refuses such a start for it instead.
+        if new_content and command["operation"] == "create" and not command["transitions"]:
             governed = {t["field_id"] for other in commands.values() if other is not command
                         and other["record_schema_id"] == command["record_schema_id"] for t in other["transitions"]}
             declared = {rule["field_id"] for rule in command.get("initial", [])}
@@ -352,7 +357,11 @@ def _definition(content):
         require(link["from_view"] in views and link["to_view"] in views and link["input_id"] in inputs, "unknown link target")
 
 
-def validate(entity):
+def validate(entity, *, new_content=False):
+    """One contract document. `new_content=True` is the authoring verdict: it adds the edition impl-2026-10-31.4
+    definition rules for content being made now (APP-113: no duplicate (field, from, to) transition; a filing create
+    writing an enum field another command governs declares its `initial`). The default is the stored-document
+    verdict, unchanged from edition impl-2026-10-29.3, so a stored or retained document never changes verdict."""
     raw = canonical(entity)
     require(len(raw) <= 1024 * 1024, "document exceeds 1 MiB")
     errors = sorted(VALIDATOR.iter_errors(entity), key=lambda e: str(list(e.path)))
@@ -361,7 +370,7 @@ def validate(entity):
     kind = entity["kind"]
     if kind == "app_definition":
         require(len(canonical(entity["content"])) <= 256 * 1024, "definition exceeds 256 KiB")
-        _definition(entity["content"])
+        _definition(entity["content"], new_content)
         require(entity["digest"] == digest("app-definition", entity["content"]), "definition digest mismatch")
     elif kind == "publication":
         if entity["schema_version"] == 2:
@@ -425,14 +434,14 @@ def validate(entity):
     return entity
 
 
-def validate_bundle(bundle):
-    """Cross-artifact consistency for one synthetic fixture, not live authority."""
+def validate_bundle(bundle, *, new_content=False):
+    """Cross-artifact consistency for one synthetic fixture, not live authority. `new_content` as in `validate`."""
     require(set(bundle) == {"context", "definition", "publication", "work", "sources", "receipt", "command", "outcome"}, "unexpected bundle members")
     context = bundle["context"]
     require(set(context) == {"organization_id", "principal_id"}, "invalid trusted fixture context")
     entities = [bundle[k] for k in ("definition", "publication", "work", "receipt", "command", "outcome")] + bundle["sources"]
     for item in entities:
-        validate(item)
+        validate(item, new_content=new_content)
         if "organization_id" in item:
             require(item["organization_id"] == context["organization_id"], "cross-organization reference")
     definition, pub, work = (bundle[k] for k in ("definition", "publication", "work"))
