@@ -68,7 +68,7 @@ DEFS = {
     "field": obj({"id": ID, "value_type": {"oneOf": VALUE_TYPES}, "nullable": {"type": "boolean"}}),
     "input_contract": obj({"id": ID, "contract_id": ID, "contract_version": VERSION, "kind": enum("source", "records"), "fields": arr(ref("field"), 32, 1)}),
     "record_schema": obj({"id": ID, "version": VERSION, "fields": arr(ref("field"), 32, 1)}),
-    # Edition impl-2026-10-31.4 (APP-128) records the APP-107 amendment (additive, optional): a declared guard on a transition (`when`, a typed comparison over a field of
+    # Edition impl-2026-10-31.4 (APP-129) records the APP-107 amendment (additive, optional): a declared guard on a transition (`when`, a typed comparison over a field of
     # the same record schema, judged on the record as the command composes it) and `initial`, the starting value of an
     # enum field on a create (the first entry whose guard holds; an entry without a guard always holds).
     "guard": obj({"field_id": ID, "comparison": enum("eq", "ne", "lt", "lte", "gt", "gte"), "value": ref("value")}),

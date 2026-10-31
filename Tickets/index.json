@@ -277,7 +277,7 @@
         "APP-125",
         "APP-126",
         "APP-127",
-        "APP-128"
+        "APP-129"
       ],
       "ticket_count": 37,
       "done_count": 0,
@@ -4003,9 +4003,9 @@
       ]
     },
     {
-      "id": "APP-128",
+      "id": "APP-129",
       "title": "Contract edition impl-2026-10-31.4: lock what the pitch ships (APP-107 amendment, authoring rules for new content, library)",
-      "path": "0-backlog/APP-128.md",
+      "path": "0-backlog/APP-129.md",
       "Field": "Value",
       "---": "---",
       "Epic": "FND",
@@ -4014,10 +4014,10 @@
       "Type": "Chore",
       "Sprint": "S14",
       "Phase": "PH08",
-      "Order": "128",
+      "Order": "129",
       "Size": "S",
       "Repos": "forma-pitch-mvp",
-      "Decision": "[ADR-002](../../docs/architecture/ADR-002-CONTRACT-EDITION.md): future changes create a new edition. Victor, 2026-10-31: \"Approve new edition\", then \"Ok option A note the trade off and document gaps to revisit if needed\". Contract section \"Edition impl-2026-10-31.4\" in [contracts/README.md](../../contracts/README.md); evidence in [evidence/APP-128/contract-edition](../../evidence/APP-128/contract-edition/README.md).",
+      "Decision": "[ADR-002](../../docs/architecture/ADR-002-CONTRACT-EDITION.md): future changes create a new edition. Victor, 2026-10-31: \"Approve new edition\", then \"Ok option A note the trade off and document gaps to revisit if needed\". Contract section \"Edition impl-2026-10-31.4\" in [contracts/README.md](../../contracts/README.md); evidence in [evidence/APP-129/contract-edition](../../evidence/APP-129/contract-edition/README.md).",
       "Requirements": "C16",
       "Depends on": "APP-107, APP-113",
       "External dependencies": "None",

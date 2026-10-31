@@ -1,4 +1,4 @@
-# Contract edition impl-2026-10-31.4 (APP-128)
+# Contract edition impl-2026-10-31.4 (APP-129)
 
 This branch is `pivot/contract-edition`, cut from `origin/pivot/pitch-mvp` at be9c04a. It opens edition `impl-2026-10-31.4` under [ADR-002](../../../docs/architecture/ADR-002-CONTRACT-EDITION.md). [contracts/README.md](../../../contracts/README.md), section "Edition impl-2026-10-31.4", has the change table. The edition records synthetic contract qualification only. It changes no runtime behavior.
 
@@ -53,7 +53,7 @@ The lock was last written at 46ab8e9, edition `impl-2026-10-29.3`. The commits t
 
 ## Gaps to revisit
 
-These are also tracked in [APP-128](../../../Tickets/0-backlog/APP-128.md).
+These are also tracked in [APP-129](../../../Tickets/0-backlog/APP-129.md).
 
 1. Rust admission does not enforce either authoring rule for new content, including composer-generated definitions. Decide whether to add an authoring mode there.
 2. Beta's stored Expense claims revision could be superseded at a later window (option B), with Victor's word. `seed-library` currently refuses on beta ("existing seed differs").

@@ -551,7 +551,7 @@ def check_command(bundle, new_content=False):
 
 
 class EditionFourTests(unittest.TestCase):
-    """Edition impl-2026-10-31.4 (APP-128): the APP-107/APP-113 command-declaration amendment and the prebuilt library,
+    """Edition impl-2026-10-31.4 (APP-129): the APP-107/APP-113 command-declaration amendment and the prebuilt library,
     over the retained edition impl-2026-10-29.3."""
 
     def test_edition_four_retains_edition_three_byte_identically(self):

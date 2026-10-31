@@ -1445,7 +1445,7 @@ fn edition_two_vectors_match_contracts_lock() {
         let current = path.replace("impl-2026-10-29.2/", "");
         assert_eq!(locked(&current), locked(path), "{path}");
     }
-    // Edition four (APP-128) retains edition three byte for byte, the same way.
+    // Edition four (APP-129) retains edition three byte for byte, the same way.
     let retained_three = lock["retained_editions"]["impl-2026-10-29.3"]["artifacts"]
         .as_object()
         .unwrap();
@@ -1833,7 +1833,7 @@ fn declared_guards_and_initial_values_match_validate_py() {
 
 #[test]
 fn stored_definitions_that_predate_the_authoring_rules_still_admit() {
-    // Edition impl-2026-10-31.4 (APP-128, Victor's option A): beta's stored
+    // Edition impl-2026-10-31.4 (APP-129, Victor's option A): beta's stored
     // Expense claims revision (seeded at 0c3261b) declares no `initial` for the
     // governed `status` its filing create writes. Rust admission admits it, as
     // contracts/validate.py's stored-document verdict does; the APP-113 rule
