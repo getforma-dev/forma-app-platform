@@ -50,6 +50,8 @@ await build({
     '/canvas': { js: ['canvas'], css: ['app', 'canvas-vendor', 'canvas', 'actions', 'ledger', 'widgets', 'governance'], canvas: true },
   },
   outputDir: 'dist',
+  // APP-138: the same self-hosted Space Grotesk face as getforma.dev.
+  fontDir: 'src/fonts',
   ssr: isSsr,
   // Keys select native page owners before browser outputs are filtered.
   // About and the APP-009 pages keep their typed native modules and shared

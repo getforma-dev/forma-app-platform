@@ -35,7 +35,7 @@ Four jobs, and where you type picks the job, never the AI:
 
 Data → card → app is one visible path, with no new concepts: a folder holds the files, Ask reads them, formation makes a card or an app.
 
-1. **Bring the files.** On an empty canvas, **Drop files or upload** (beside **Describe what you need** and **Browse your library**) opens a file picker; dropping files anywhere on the empty canvas does the same. A new folder holds them, its name ready to type. "+ Folder" and dropping onto a folder work as before.
+1. **Bring the files.** On an empty canvas, **Bring your files** (drop or upload) (beside **Describe an app** and **Open your library**) opens a file picker; dropping files anywhere on the empty canvas does the same. A new folder holds them, its name ready to type. "+ Folder" and dropping onto a folder work as before.
 2. **The folder offers three buttons** as soon as it holds files (Ask for anyone who can read it; the two Make buttons for its owner):
 
    | Button | What it does | Changes |

@@ -18,6 +18,7 @@ type WorkspaceProps = {
 function Workspace(props: WorkspaceProps) {
   return (
     <main class="page">
+      <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
       <h1>Workspace</h1>
       <p class="lede">You are signed in.</p>
       <a class="canvas-entry" href="/canvas">Open the canvas</a>
