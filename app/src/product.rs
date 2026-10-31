@@ -113,7 +113,9 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         // APP-101: the slash-command list and "save as /name".
         .merge(composer::commands::router(auth.clone()))
         // APP-121: organization labels and personal shortcuts.
-        .merge(composer::labels::router(auth))
+        .merge(composer::labels::router(auth.clone()))
+        // APP-123: cards made by you and pinned answers.
+        .merge(composer::cards::router(auth))
         .merge(boxes::routes::router(boxes));
     let long = vec![
         // The canvas page reads every openable work (library pane).

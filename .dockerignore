@@ -111,6 +111,7 @@ app/src/composer/**
 !app/src/composer/ask.rs
 !app/src/composer/commands.rs
 !app/src/composer/labels.rs
+!app/src/composer/cards.rs
 !app/src/composer/lineage.rs
 !app/src/composer/matcher.rs
 !app/src/composer/model.rs
@@ -137,6 +138,7 @@ app/src/storage/**
 !app/src/storage/agents.rs
 !app/src/storage/governance.rs
 !app/src/storage/labels.rs
+!app/src/storage/cards.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
 !app/src/storage/boxes.rs
@@ -254,6 +256,8 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/shape.ts
 !app/admin/src/canvas/talk.ts
 !app/admin/src/canvas/talk-view.ts
+# APP-123: cards made by you and pinned answers.
+!app/admin/src/canvas/cards.ts
 !app/admin/src/canvas/widgets/
 app/admin/src/canvas/widgets/**
 !app/admin/src/canvas/widgets/index.ts
@@ -305,6 +309,7 @@ app/migrations/**
 !app/migrations/0012_review_fixes.sql
 !app/migrations/0013_agent_governance.sql
 !app/migrations/0014_labels.sql
+!app/migrations/0015_member_cards.sql
 !app/migrations/0009_slack_links.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
@@ -322,6 +327,7 @@ app/migrations/**
 !app/migrations/catalog-v12.json
 !app/migrations/catalog-v13.json
 !app/migrations/catalog-v14.json
+!app/migrations/catalog-v15.json
 !app/certs/
 app/certs/**
 !app/certs/rds-global-bundle.pem

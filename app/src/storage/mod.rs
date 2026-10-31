@@ -11,6 +11,8 @@ mod agents;
 mod authorization;
 // APP-108 (ADR-011 pitch): boxes, files, registered data, derivations.
 mod boxes;
+// APP-123 (ADR-011 pitch): cards made by you and pinned answers.
+mod cards;
 mod catalog;
 mod commands;
 mod composer;
@@ -40,6 +42,7 @@ pub use boxes::{
     box_name, BoxFile, BoxRow, BoxView, Derivation, FileData, Lineage, NewFile, NewRegistration,
     MAX_BOX_FILES,
 };
+pub use cards::{Carded, MemberCard, NewCard, ReceiptKey, MAX_MEMBER_CARDS, MAX_SPEC_BYTES};
 pub use commands::{
     idempotency_key_shaped, CommandOutcome, CommandRequest, CommandResult, ConflictReason,
     RecordCommand, RecordDetail, RecordField, RecoveryView, COMMAND_COMMITTED,

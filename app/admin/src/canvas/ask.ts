@@ -16,14 +16,24 @@
 // question asked while one is being answered waits its turn. Nothing here
 // changes the canvas: an answer never shapes a card (Shape is its own job,
 // `shape.ts`).
-import { activeCanvasItem, boardWorks, focusCard, workCard } from './board';
+//
+// APP-123: `@` mentions scope a question (`? @expenses.total why …`,
+// `@app:expenses`, `@card:expenses.ledger`, a personal shortcut), through
+// the same resolver; the scope chip is removable (×), and removing it scopes
+// the conversation to the canvas. Each answer has **Pin to canvas** (a
+// read-only answer card, stored per member, that never runs again;
+// `placePinnedAnswer`) and, when its records come from one list, **Make it
+// a card** (a Shape preview of a new card over the answer's records;
+// nothing is added without a click).
+import { activeCanvasItem, boardWorks, focusCard, placeUtilityCard, workCard } from './board';
+import { newCardId, pinnedAnswer, pinRequest, storeCard, type Answer, type StoredCard } from './cards';
 import { selectedCanvasItem } from './controls';
 import { cardAddress, findCardRow, findCards, findApps, type CardRow } from './library';
 import { onPaneTab, openPane } from './pane';
 import { el, isUuid } from './render';
-import { addressOfItem, addressOfWork, resolveTarget, type Target } from './shape';
+import { addressOfItem, addressOfWork, previewNewCard, removeButton, resolveTarget, type Target } from './shape';
 import type { Completion } from './slash';
-import { firstWord, splitAddress } from './talk-view';
+import { firstWord, MAX_RECORD_SET, mentionsOf, splitAddress } from './talk-view';
 
 export const ASK_URL = '/v1/ask';
 const MAX_WORKS = 12;
@@ -68,12 +78,28 @@ export function scopeOfItem(item: HTMLElement | null): Scope | null {
   return scopeOfTarget(target);
 }
 
-/** The selected card, else the canvas: every app on it (at most twelve). */
-export function currentScope(): Scope {
-  const card = scopeOfItem(selectedCanvasItem() ?? null);
-  if (card) return card;
+/** The canvas: every app on it (at most twelve). */
+export function canvasScope(): Scope {
   const works = boardWorks().slice(0, MAX_WORKS).map((work) => ({ app_id: work.app, work_id: work.work, address: addressOfWork(work.app, work.work) }));
   return { kind: 'canvas', address: '', works };
+}
+
+/** The selected card, else the canvas. */
+export function currentScope(): Scope {
+  return scopeOfItem(selectedCanvasItem() ?? null) ?? canvasScope();
+}
+
+/**
+ * APP-123: the scope an `@` mention names (`expenses`, `expenses.total`,
+ * `app:expenses`, `card:expenses.ledger`, `3.2`, a personal shortcut), in
+ * the resolver's strict mode; else why not.
+ */
+export function mentionScope(mention: string): Scope | string {
+  const target = resolveTarget(mention, { strict: true });
+  const scope = scopeOfTarget(target);
+  if (scope) return scope;
+  if (target.kind === 'widget' || splitAddress(mention).space === 'widget') return `@${mention} is a widget: it has no records to ask about. Mention an app or a card.`;
+  return target.kind === 'none' ? `@${mention}: ${target.message}` : `Mention an app or a card: @expenses, @expenses.ledger.`;
 }
 
 /**
@@ -125,6 +151,8 @@ export function askCompletions(rest: string): Completion[] {
 let scope: Scope | null = null;
 let thread: HTMLElement | null = null;
 let chip: HTMLElement | null = null;
+let chipText: HTMLElement | null = null;
+let chipRemove: HTMLElement | null = null;
 let input: HTMLInputElement | null = null;
 let busy = false;
 /** Questions sent while one is being answered: asked next, in order, each with the scope it was asked in. */
@@ -186,9 +214,30 @@ function referenceList(document_: Document, references: Reference[], receipts: R
  */
 export async function ask(question: string, explicit: Scope | null = null): Promise<void> {
   const document_ = document;
-  const text = question.trim().replace(/^\?\s*/, '');
+  let text = question.trim().replace(/^\?\s*/, '');
   if (!text) return;
-  const current = explicit ?? scope ?? currentScope();
+  let current = explicit ?? scope ?? currentScope();
+  // APP-123: an `@` mention scopes this question and the chip (removable).
+  const { mentions, question: rest } = mentionsOf(text);
+  if (mentions.length) {
+    if (mentions.length > 1) {
+      entry(document_, 'note', 'Ask about one app or card at a time: keep one @ mention.');
+      return;
+    }
+    const mentioned = mentionScope(mentions[0] ?? '');
+    if (typeof mentioned === 'string') {
+      entry(document_, 'note', mentioned);
+      return;
+    }
+    scope = mentioned;
+    current = mentioned;
+    showScope();
+    text = rest;
+    if (!text) {
+      entry(document_, 'note', `Now ask your question about /${mentioned.address}.`);
+      return;
+    }
+  }
   if (busy) {
     queued.push({ text, scope: current });
     entry(document_, 'note', 'Still answering the previous question; this one is next.');
@@ -231,7 +280,12 @@ export async function ask(question: string, explicit: Scope | null = null): Prom
     // Every record a computed answer counted (up to 12 apps of 200 records).
     const references = Array.isArray(body.references) ? (body.references as Reference[]).filter((r) => typeof r?.record_id === 'string').slice(0, MAX_WORKS * 200) : [];
     const receipts = Array.isArray(body.receipts) ? (body.receipts as Receipt[]) : [];
-    entry(document_, 'forma', el(document_, 'p', {}, body.text), ...(references.length ? [referenceList(document_, references, receipts)] : []));
+    const answer: Answer = {
+      question: text, text: body.text, scope: { kind: current.kind, address: current.address },
+      references: Array.isArray(body.references) ? (body.references as Answer['references']) : [],
+      receipts: Array.isArray(body.receipts) ? (body.receipts as Answer['receipts']) : [],
+    };
+    entry(document_, 'forma', el(document_, 'p', {}, body.text), ...(references.length ? [referenceList(document_, references, receipts)] : []), answerActions(document_, answer));
   } finally {
     busy = false;
     const next = queued.shift();
@@ -240,7 +294,93 @@ export async function ask(question: string, explicit: Scope | null = null): Prom
 }
 
 function showScope(): void {
-  if (chip) chip.textContent = scopeText(scope ?? currentScope());
+  const shown = scope ?? currentScope();
+  if (chipText) chipText.textContent = scopeText(shown);
+  // The chip is removable when it names an app or a card: removing it asks about the canvas.
+  if (chipRemove) chipRemove.hidden = shown.kind === 'canvas';
+}
+
+/** The Ask tab's scope now (null until it is first opened or a mention sets it). */
+export function askScope(): Scope | null {
+  return scope;
+}
+
+/** × on the scope chip: the conversation is about the canvas again. */
+export function clearScope(): void {
+  scope = canvasScope();
+  showScope();
+}
+
+// --- APP-123: Pin to canvas, Make it a card ---
+
+const answerOrigin = (answer: Answer) => (answer.scope.kind === 'canvas' ? 'your canvas' : `/${answer.scope.address}`);
+
+/** What **Make it a card** builds on: the answer's records when they come from one list (one work, one collection). */
+export function recordSet(answer: Answer): { app: string; work: string; collection: string; records: string[]; address: string } | string {
+  const receipts = answer.receipts.filter((r) => typeof r.record_id === 'string');
+  if (!receipts.length) return 'This answer used no records, so there is nothing to make a card from.';
+  const works = new Set(receipts.map((r) => `${String(r.app_id)}/${String(r.work_id)}/${String(r.collection_id)}`));
+  if (works.size > 1) return 'This answer’s records come from more than one list. Ask about one card (/ask expenses.ledger …), then make it a card.';
+  if (receipts.length > MAX_RECORD_SET) return `A card holds at most ${MAX_RECORD_SET} records of an answer.`;
+  const [first] = receipts;
+  const [app, work, collection] = [String(first?.app_id ?? ''), String(first?.work_id ?? ''), String(first?.collection_id ?? '')];
+  if (!isUuid(app) || !isUuid(work) || !isUuid(collection)) return 'This answer’s records cannot be shown as a card.';
+  const reference = answer.references.find((r) => r.work_id === work);
+  const address = answer.scope.kind === 'canvas' || !answer.scope.address ? (reference?.address || addressOfWork(app, work)) : answer.scope.address;
+  return { app, work, collection, records: [...new Set(receipts.map((r) => String(r.record_id)))], address };
+}
+
+/** A card's title from a question: plain, at most 80 characters. */
+export function titleOf(question: string): string {
+  const plain = question.replace(/[<>{}]/g, '').replace(/\s+/g, ' ').trim();
+  return plain.length > 80 ? `${plain.slice(0, 79)}…` : plain || 'Answer';
+}
+
+function answerActions(document_: Document, answer: Answer): HTMLElement {
+  const pin = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-ask-pin', title: 'Keep this answer on the canvas; it does not run again' }, 'Pin to canvas');
+  pin.addEventListener('click', () => {
+    pin.setAttribute('disabled', '');
+    void storeCard(pinRequest(newCardId(), answer)).then((stored) => {
+      if (typeof stored === 'string') {
+        pin.removeAttribute('disabled');
+        entry(document_, 'note', stored);
+        return;
+      }
+      pin.textContent = 'Pinned';
+      placePinnedAnswer(stored);
+    });
+  });
+  const actions = el(document_, 'p', { class: 'cv-ask-actions' }, pin);
+  const set = recordSet(answer);
+  if (typeof set !== 'string') {
+    const make = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-ask-make', title: 'Preview a new card of these records; nothing is added until you click Add as new card' }, 'Make it a card');
+    make.addEventListener('click', () => {
+      void previewNewCard({ app: set.app, work: set.work, collection: set.collection, address: set.address, title: titleOf(answer.question), view: { records: set.records } });
+    });
+    actions.append(make);
+  }
+  return actions;
+}
+
+/**
+ * APP-123: a pinned answer on the canvas: the question, when it was pinned,
+ * the text and every record it used with its receipt. Read-only: it never
+ * runs again. Its maker's **Remove** deletes it (audited).
+ */
+export function placePinnedAnswer(card: StoredCard): boolean {
+  const answer = pinnedAnswer(card);
+  if (!answer) return false;
+  const document_ = document;
+  const placed = `pin-${card.card_id}`;
+  const references = answer.references.filter((r) => typeof r.record_id === 'string').slice(0, MAX_WORKS * 200) as Reference[];
+  const body = el(document_, 'section', { class: 'cv-pinned-answer', 'aria-label': 'Pinned answer' },
+    el(document_, 'p', { class: 'cv-shaped-from' }, `Asked about ${answerOrigin(answer)} · pinned ${card.created_at.replace('T', ' ').replace('Z', ' UTC')} · it does not run again`),
+    el(document_, 'p', { class: 'cv-pinned-question' }, `“${answer.question}”`),
+    el(document_, 'p', { class: 'cv-pinned-text' }, answer.text),
+    ...(references.length ? [referenceList(document_, references, answer.receipts)] : []));
+  if (card.mine) body.append(el(document_, 'p', { class: 'cv-made-actions' }, removeButton(document_, card, placed, (message) => entry(document_, 'note', message))));
+  placeUtilityCard(placed, card.title, body);
+  return true;
 }
 
 /** Opens the Ask tab (scoped to `explicit`, else the selected card, else the canvas) and asks `question` when given. */
@@ -265,9 +405,15 @@ export function askAboutItem(item: HTMLElement | null = activeCanvasItem()): boo
 export function startAsk(document_: Document): void {
   const panel = document_.getElementById('cv-panel-ask');
   if (!panel || thread) return;
-  chip = el(document_, 'p', { class: 'cv-ask-chip', role: 'status' }, '');
+  chipText = el(document_, 'span', { class: 'cv-ask-chip-text' }, '');
+  chipRemove = el(document_, 'button', { type: 'button', class: 'cv-ask-chip-x', 'aria-label': 'Remove the scope: ask about the canvas', title: 'Ask about the canvas instead' }, '×');
+  chipRemove.addEventListener('click', () => {
+    clearScope();
+    input?.focus({ preventScroll: true });
+  });
+  chip = el(document_, 'p', { class: 'cv-ask-chip', role: 'status' }, chipText, chipRemove);
   thread = el(document_, 'ol', { class: 'cv-ask-thread', 'aria-live': 'polite', 'aria-label': 'Questions and answers' });
-  input = el(document_, 'input', { type: 'text', class: 'cv-ask-input', maxlength: '500', autocomplete: 'off', placeholder: 'Ask about your data: where are the red invoices?', 'aria-label': 'Your question' });
+  input = el(document_, 'input', { type: 'text', class: 'cv-ask-input', maxlength: '500', autocomplete: 'off', placeholder: 'Ask about your data: where are the red invoices? (@expenses to scope it)', 'aria-label': 'Your question' });
   const form = el(document_, 'form', { class: 'cv-ask-form', autocomplete: 'off' }, input, el(document_, 'button', { type: 'submit' }, 'Ask'));
   form.addEventListener('submit', (event) => {
     event.preventDefault();

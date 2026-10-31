@@ -52,6 +52,15 @@
 // first in the bar is its quick form (selection, else canvas). `/<app>.<card> <words>` is
 // the shortcut for a card's Shape (the dot is the rule; `slash.ts`). Sixteen
 // verbs in six groups.
+//
+// APP-123: `/forma <words>` (group Make) is a plain sentence typed as a verb:
+// Forma picks or builds an app. A folder's name is an address too: `/<folder>
+// <words>` builds from that folder's files (folder formation), and the full
+// form `/folder:<name> <words>` always does; `/folder <name> formation …`
+// stays as the long form. A folder answers last: verbs first, then the
+// member's apps and card shortcuts, then folders (`setFolderResolver`, from
+// `boxes.ts`), so a folder named like a verb is reached as `/folder:<name>`.
+// Seventeen verbs in six groups.
 
 export type Category = 'Place' | 'Arrange' | 'Make' | 'Shape' | 'Ask' | 'Help';
 /** The order the surfaces list groups in. */
@@ -118,8 +127,8 @@ export type Address = Runnable & {
 const arg = (name: string, kind: ArgKind, required = false): CommandArg => ({ name, kind, required });
 type Meta = Pick<Command, 'category' | 'args' | 'examples'> & { usage?: string; insert?: string };
 
-/** The sixteen verbs in their order; what the registry knows about each (apps are never here, APP-119). */
-export const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'rename', 'alias', 'shape', 'ask', 'apps', 'commands', 'shortcuts', 'agent'] as const;
+/** The seventeen verbs in their order; what the registry knows about each (apps are never here, APP-119). */
+export const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'forma', 'folder', 'rename', 'alias', 'shape', 'ask', 'apps', 'commands', 'shortcuts', 'agent'] as const;
 /** APP-120: the widget kinds `/widget` places; the first four are also hidden verbs of their own. */
 export const WIDGET_KINDS = ['weather', 'calculator', 'clock', 'note', 'folder'] as const;
 export type WidgetName = typeof WIDGET_KINDS[number];
@@ -137,10 +146,16 @@ const KNOWN: Record<string, Meta> = {
   unite: { category: 'Arrange', args: [arg('app', 'app', true)], examples: ['/unite expenses'] },
   split: { category: 'Arrange', args: [arg('united app', 'app', true)], examples: ['/split expenses'] },
   focus: { category: 'Arrange', args: [arg('app.card or number', 'card')], examples: ['/focus', '/focus expenses.ledger'] },
+  forma: {
+    category: 'Make',
+    args: [arg('what you need', 'text', true)],
+    examples: ['/forma track client dinners over $200', '/forma a time-off tracker for my team'],
+    usage: '/forma <words>',
+  },
   folder: {
     category: 'Make',
     args: [arg('name', 'folder', true), arg('formation <instruction>', 'text')],
-    examples: ['/folder Q3 board pack formation build a metrics app', '/folder 1 formation brief me'],
+    examples: ['/q3 build a metrics app', '/folder:q3 brief me', '/folder Q3 board pack formation build a metrics app'],
     usage: '/folder <name> formation <instruction>',
   },
   rename: {
@@ -193,6 +208,15 @@ function complete(command: CanvasCommand): Command {
 }
 
 const registered: CanvasCommand[] = [];
+/** APP-123: what a folder's name runs (`boxes.ts` registers it): its formation with the words after. */
+let folderResolver: ((name: string) => Runnable | undefined) | null = null;
+export function setFolderResolver(resolver: (name: string) => Runnable | undefined): void {
+  folderResolver = resolver;
+}
+/** APP-123: the folder `name` names (`q3`, `q3-board-pack`, its number), as a runnable formation. */
+export function findFolder(name: string): Runnable | undefined {
+  return folderResolver?.(name.toLowerCase());
+}
 let addresses: Address[] = [];
 const addressListeners = new Set<() => void>();
 
@@ -293,6 +317,11 @@ export function findNamespaced(token: string): Runnable | undefined {
   if (!match) return undefined;
   const [, space = '', name = ''] = match;
   if (space === 'app') return findAppAddress(name);
+  // APP-123: `/folder:q3 <words>` is the folder's formation (`/folder q3 …` when no folder has that name).
+  if (space === 'folder') {
+    const folder = findFolder(name);
+    if (folder) return folder;
+  }
   const verb = findVerb(space);
   if (!verb) return undefined;
   return {
@@ -359,14 +388,16 @@ export function cardLabel(address: Address | undefined, card: string, fallback: 
 /**
  * What `/name` runs: a namespaced name (`app:notes`) exactly; else a verb,
  * then an app's address (every `/expense …` path is unchanged), then a card
- * shortcut: verbs first, then the member's names.
+ * shortcut, then a folder's name (APP-123): verbs first, then the member's
+ * names.
  */
 export function findCommand(name: string): Runnable | undefined {
   if (name.includes(':')) return findNamespaced(name);
   const found = findVerb(name) ?? findAddress(name);
   if (found) return found;
   const shortcut = findCardShortcut(name);
-  if (!shortcut) return undefined;
+  // APP-123: then a folder's name: `/q3 <words>` builds from its files.
+  if (!shortcut) return findFolder(name);
   const target = `${shortcut.address.slug}.${shortcut.card}`;
   return {
     slug: name.toLowerCase(),

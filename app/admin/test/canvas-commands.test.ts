@@ -63,21 +63,21 @@ async function seeded() {
     { slug: 'agent', aliases: ['agents', 'mcp'], title: 'Connect an agent', purpose: 'Mint a token', run: noop },
     slash.COMMANDS,
     naming.RENAME_COMMAND, naming.ALIAS_COMMAND,
-    shape.SHAPE_COMMAND, talk.ASK_COMMAND,
+    shape.SHAPE_COMMAND, talk.ASK_COMMAND, talk.FORMA_COMMAND,
   ]);
   registry.setAddresses(slash.parseCommands(SERVER).map(slash.serverAddress));
   return { registry, slash };
 }
 
 const slugsOf = (groups: { commands: { slug: string }[] }[]) => groups.flatMap((group) => group.commands.map((command) => command.slug));
-const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'folder', 'rename', 'alias', 'shape', 'ask', 'apps', 'commands', 'shortcuts', 'agent'];
+const VERBS = ['app', 'card', 'widget', 'arrange', 'unite', 'split', 'focus', 'forma', 'folder', 'rename', 'alias', 'shape', 'ask', 'apps', 'commands', 'shortcuts', 'agent'];
 
-test('/ lists the 16 verbs in six groups and no addresses; a first letter adds the Apps section (APP-120, APP-122)', async () => {
+test('/ lists the 17 verbs in six groups and no addresses; a first letter adds the Apps section (APP-120, APP-122, APP-123)', async () => {
   const { registry, slash } = await seeded();
   const { sheetGroups } = await import('../src/canvas/command-sheet.ts');
   const groups = slash.slashGroups('');
   assert.deepEqual(slugsOf(groups), VERBS);
-  assert.deepEqual(groups.map((group) => [group.category, group.commands.length]), [['Place', 3], ['Arrange', 4], ['Make', 3], ['Shape', 1], ['Ask', 1], ['Help', 4]]);
+  assert.deepEqual(groups.map((group) => [group.category, group.commands.length]), [['Place', 3], ['Arrange', 4], ['Make', 4], ['Shape', 1], ['Ask', 1], ['Help', 4]]);
   assert.deepEqual(slash.slashAddresses('', () => true), [], 'no app under / alone, even on the canvas');
   assert.deepEqual(slash.slashAddressSection('', () => true).addresses, []);
   // The Commands tab: the same four groups; hidden aliases show on their verb's row only.

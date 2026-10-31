@@ -204,7 +204,7 @@ pub(crate) fn address(value: Option<&Value>) -> Option<String> {
 }
 
 /// A view id as a work's outline names it (`by_status`).
-fn view_id(value: &str) -> bool {
+pub(crate) fn view_id(value: &str) -> bool {
     (1..=64).contains(&value.len())
         && value.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
         && value
@@ -212,7 +212,7 @@ fn view_id(value: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
 }
 
-fn exactly(object: &Map<String, Value>, required: &[&str], optional: &[&str]) -> bool {
+pub(crate) fn exactly(object: &Map<String, Value>, required: &[&str], optional: &[&str]) -> bool {
     required.iter().all(|key| object.contains_key(*key))
         && object
             .keys()
@@ -585,6 +585,80 @@ pub(crate) fn fields_known(
                         .get(&field.id)
                         .is_some_and(|kind| column_type(kind) == field.kind)
             })
+        }
+    }
+}
+
+/// APP-123: a card's fields as the server reads them from the published
+/// schema (never the client's): a records card's collection fields (ids,
+/// schema types, declared enum values) plus `filed_by`, or a view card's
+/// result columns. `None`: the work has no such collection or view. A stored
+/// card's spec is judged against exactly these ([`shape::judge_stored_card`]).
+pub(crate) fn schema_fields(
+    source: &CardSource,
+    collections: &[CollectionSummary],
+    outline: &WorkOutline,
+) -> Option<Vec<shape::Field>> {
+    let shaped = |id: &str| {
+        (1..=64).contains(&id.len())
+            && id.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
+            && id
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    };
+    match source {
+        CardSource::Collection(collection) => {
+            let summary = collections.iter().find(|c| &c.collection == collection)?;
+            let mut fields: Vec<shape::Field> = summary
+                .fields
+                .iter()
+                .filter(|field| shaped(&field.id))
+                .map(|field| shape::Field {
+                    id: field.id.clone(),
+                    kind: field_type(
+                        field
+                            .value_type
+                            .get("type")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                    )
+                    .to_owned(),
+                    values: field
+                        .value_type
+                        .get("values")
+                        .and_then(Value::as_array)
+                        .map(|values| {
+                            values
+                                .iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_owned)
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                })
+                .collect();
+            if !fields.iter().any(|f| f.id == "filed_by") {
+                fields.push(shape::Field {
+                    id: "filed_by".into(),
+                    kind: "text".into(),
+                    values: Vec::new(),
+                });
+            }
+            Some(fields)
+        }
+        CardSource::View(view) => {
+            let view = outline.views.iter().find(|v| &v.id == view)?;
+            Some(
+                view.column_types
+                    .iter()
+                    .filter(|(id, _)| shaped(id))
+                    .map(|(id, kind)| shape::Field {
+                        id: id.clone(),
+                        kind: column_type(kind).to_owned(),
+                        values: Vec::new(),
+                    })
+                    .collect(),
+            )
         }
     }
 }

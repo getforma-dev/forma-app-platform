@@ -33,6 +33,8 @@ export type CardView = {
   presentation?: string; palette?: string; columns?: string[]; filters?: Condition[]; highlight?: Highlight[];
   group_by?: string; bucket?: string; measure?: { op: string; field?: string }; sort?: { field: string; direction: string };
   limit?: number; title?: string;
+  /** APP-123 ("Make it a card"): an Ask answer's record set, by record id. Only a stored card carries it, never the model's spec. */
+  records?: string[];
 };
 export type AppTheme = { mode?: string; accent?: string; density?: string };
 
@@ -56,12 +58,26 @@ function condition(value: unknown, color: boolean): Highlight | Condition | null
     ? { ...base, color: value.color } : null;
 }
 
-/** A card view from the server, judged again; null refuses the whole spec. */
-export function cardView(value: unknown): CardView | null {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+/** At most this many records in an answer's record set (the server's bound). */
+export const MAX_RECORD_SET = 200;
+
+/**
+ * A card view from the server, judged again; null refuses the whole spec.
+ * `stored` (APP-123): a card made by you, which may carry an answer's
+ * record set (`records`); a spec from `POST /v1/shape` never does.
+ */
+export function cardView(value: unknown, options: { stored?: boolean } = {}): CardView | null {
   if (!isObject(value)) return null;
-  const keys = ['presentation', 'palette', 'columns', 'filters', 'highlight', 'group_by', 'bucket', 'measure', 'sort', 'limit', 'title'];
+  const keys = ['presentation', 'palette', 'columns', 'filters', 'highlight', 'group_by', 'bucket', 'measure', 'sort', 'limit', 'title', ...(options.stored ? ['records'] : [])];
   if (!onlyKeys(value, keys) || Object.keys(value).length === 0) return null;
   const view: CardView = {};
+  if (value.records !== undefined) {
+    const records = value.records;
+    if (!Array.isArray(records) || records.length > MAX_RECORD_SET || !records.every((id) => typeof id === 'string' && UUID.test(id))
+      || new Set(records).size !== records.length) return null;
+    view.records = records as string[];
+  }
   const { presentation, palette, columns, filters, highlight, group_by: group, bucket, measure, sort, limit, title } = value;
   if (presentation !== undefined) {
     if (typeof presentation !== 'string' || !PRESENTATIONS.includes(presentation)) return null;
@@ -435,7 +451,10 @@ export function measureLabel(view: CardView): string {
 /** The view over the table (module notes). */
 export function evaluate(table: Table, view: CardView): Shaped {
   const column = (id: string | undefined) => table.columns.find((c) => c.id === id);
-  const kept = table.rows.filter((row) => (view.filters ?? []).every((f) => matches(row, column(f.field), f)));
+  // APP-123: an answer's record set keeps only those records (each with its receipt).
+  const set = view.records?.length ? new Set(view.records) : null;
+  const kept = table.rows.filter((row) => (!set || (row.receipt !== undefined && set.has(row.receipt.record_id)))
+    && (view.filters ?? []).every((f) => matches(row, column(f.field), f)));
   const partial = table.truncated;
   // A number over a capped listing is never presented as the whole: its label says so.
   const label = partial ? `${measureLabel(view)} (newest ${table.rows.length} only)` : measureLabel(view);
@@ -510,6 +529,7 @@ const valueWords = (condition: Condition) => (Array.isArray(condition.value) ? c
 /** The spec in words, as chips: what the preview and the *shaped* label show. Built from the judged spec, never model text. */
 export function chips(view: CardView): string[] {
   const out: string[] = [];
+  if (view.records?.length) out.push(`The ${view.records.length} ${view.records.length === 1 ? 'record' : 'records'} of an answer`);
   for (const f of view.filters ?? []) out.push(`Only ${f.field.replace(/_/g, ' ')} ${opWords[f.op]} ${valueWords(f)}`);
   for (const h of view.highlight ?? []) out.push(`${h.color} where ${h.field.replace(/_/g, ' ')} ${opWords[h.op]} ${valueWords(h)}`);
   if (view.group_by) out.push(`${measureLabel(view)} by ${view.bucket ?? view.group_by.replace(/_/g, ' ')}`);
@@ -560,4 +580,20 @@ export function splitAddress(address: string): { space: Space | null; name: stri
 export function firstWord(text: string): [string, string] {
   const match = /^\s*(\S+)\s*([\s\S]*)$/.exec(text);
   return match ? [match[1] ?? '', (match[2] ?? '').trim()] : ['', ''];
+}
+
+/**
+ * APP-123: the `@` mentions of an Ask line (`? @expenses.total why …`,
+ * `@app:expenses`, `@card:expenses.ledger`): each mention, lowercased and
+ * without its `@`, and the question without them. A mention starts a word
+ * (an e-mail address is not one) and ends at a space or the punctuation
+ * that ends a sentence.
+ */
+export function mentionsOf(text: string): { mentions: string[]; question: string } {
+  const mentions: string[] = [];
+  const question = text.replace(/(^|\s)@([a-z0-9][a-z0-9:._-]{0,87})/gi, (_match, lead: string, name: string) => {
+    mentions.push(name.replace(/[.:]+$/, '').toLowerCase());
+    return lead;
+  });
+  return { mentions, question: question.replace(/\s{2,}/g, ' ').replace(/^\s*[,;:]\s*/, '').trim() };
 }

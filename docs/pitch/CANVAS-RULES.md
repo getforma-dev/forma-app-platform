@@ -1,6 +1,6 @@
 # Canvas rules: what is on a canvas, how you talk to it, how things are named
 
-This is the single reference for the canvas model and its grammar. The decisions are recorded in APP-120 (model and grammar), APP-121 (naming), APP-122 (Ask and Shape) and APP-119 (commands versus apps). Where this page and the code disagree, the code is wrong: file a ticket.
+This is the single reference for the canvas model and its grammar. The decisions are recorded in APP-120 (model and grammar), APP-121 (naming), APP-122 (Ask and Shape), APP-123 (cards made by you, `@` mentions, `/forma`, `/<folder>`, pinned answers) and APP-119 (commands versus apps). Where this page and the code disagree, the code is wrong: file a ticket.
 
 ## The one sentence
 
@@ -10,10 +10,10 @@ Four jobs, and where you type picks the job, never the AI:
 
 | Job | What it does | Typed as |
 | --- | --- | --- |
-| **Ask** | Finds out: answers questions about your data. Changes nothing | `/ask [app or app.card] <question>`, or `? <question>` |
+| **Ask** | Finds out: answers questions about your data. Changes nothing | `/ask [app or app.card] <question>`, or `? <question>`; `@app` or `@app.card` anywhere scopes it |
 | **Shape** | Changes how something looks or what it shows. Never answers, never touches records | `/shape <address> <words>`, or `/<app>.<card> <words>` |
 | **Do** | Runs one of an app's own commands: the only way records change | `/<app> <words>` |
-| **Forma** | Makes something new: picks or builds an app | A plain sentence, or a folder's formation |
+| **Forma** | Makes something new: picks or builds an app | A plain sentence, `/forma <words>`, or a folder's formation: `/<folder> <words>` |
 
 **Why "Forma" is not the reshape verb.** *Forma* is Latin for "shape" and "form", but the word is kept for making things: "describe it and Forma builds it". Using it for restyling too would blur two jobs into one word, and a verb should explain itself without a tour. So Forma makes things, and Shape changes their form afterwards.
 
@@ -37,7 +37,7 @@ Four jobs, and where you type picks the job, never the AI:
 | --- | --- | --- |
 | **Library** | **Apps** (category → app → cards) and **Widgets** | `L`, `/apps [query]`, the Library button |
 | **Commands** | Every verb, with its arguments and an example | `/commands`, `/help` |
-| **Ask** | A read-only conversation about your data (APP-122) | `/ask …` or `?` + text in the bar, ⋯ → Ask about this |
+| **Ask** | A read-only conversation about your data (APP-122); `@` scopes it, its chip's × asks about the canvas (APP-123) | `/ask …` or `?` + text in the bar, ⋯ → Ask about this |
 | **Shortcuts** | Keys and gestures | `/shortcuts`, ⋯ → Shortcuts |
 
 Every Library row shows:
@@ -52,7 +52,7 @@ The pane always reflects the canvas.
 
 - Every app and card has a **name** (what you read) and an **address** (what you type). An app's address is its name in lowercase with hyphens: Expenses → `/expenses`. A card's address is `app.card`: `/expenses.ledger`. Every card also has a number in the Library: `3.2`.
 - **Two forms, like `/plugin:skill`** (APP-121, 2026-10-31). The **full form** always works and is never ambiguous: `/app:<name>` (an app, by its address, an alias or your own shortcut), `/card:<app>.<card>` or `/card:<number>`, `/widget:<kind>`, `/folder:<name>`. Words after work the same: `/app:expenses $86 Nobu` is `/expenses $86 Nobu`, and `/card:expenses.ledger <words>` is `/expenses.ledger <words>`. The **short form** (`/expenses`, `/expenses.ledger`, `/weather`, `/q3`, `/e`) works when it is unambiguous.
-- **A bare name reaches a verb first**, then your names. An app whose address equals a verb or a verb's alias is reached by its full form: `/notes` is the Note widget, `/app:notes` is the Notes app.
+- **A bare name reaches a verb first**, then your names: your apps, then your card shortcuts, then your folders (APP-123). An app whose address equals a verb or a verb's alias is reached by its full form: `/notes` is the Note widget, `/app:notes` is the Notes app. A folder is reached by its name in lowercase with hyphens (Q3 board pack → `/q3-board-pack`) or its number; when a verb, an app or a card shortcut takes that name, `/folder:<name>` always reaches the folder.
 - Typing `/app:` lists your apps, `/card:` your cards, `/widget:` the widgets, `/folder:` your folders.
 - The address is shown wherever the thing appears: the Library row, the card header (a `/expenses` chip; click it to put it in the bar), the hint while you type, and the confirm card ("via /expenses"). It shows the short form when that is unambiguous for you, else the full one (`/app:notes`); your own shortcut reads "/e → app:expenses (your shortcut)" in the `/` list.
 - **Aliases** are extra addresses that also work, and only the system makes them: the catalog's own (`/expense` of `/expenses`, kept forever) and the old address an owner renames away from (kept automatically). Nobody edits an organization alias; your own shortcuts are yours alone.
@@ -85,14 +85,15 @@ The pane always reflects the canvas.
 | Arrange | `/arrange` | Lays the canvas out, one row per app |
 | | `/unite <app>` · `/split` | Assembles an app's cards into one frame, and takes them apart again |
 | | `/focus` | Opens the selected card large, in focus mode |
-| Make | `/folder <name> formation <instruction>` | Builds an app from a folder's files |
+| Make | `/forma <words>` | Makes something new from your words: exactly a plain sentence (picks or builds an app, behind its confirm card) (APP-123) |
+| | `/<folder> <words>` · `/folder:<name> <words>` | Builds an app from a folder's files (formation): `/q3 build a metrics app`, `/folder:q3 brief me`. The long form `/folder <name> formation <instruction>` still works (APP-123) |
 | | `/rename <app or app.card> <new name> [/address]` | Names an app (and gives it a new address) or a card: `/rename expenses Team spend /team-spend`, `/rename expenses.total Q3 spend` (APP-121) |
 | | `/alias <shortcut> <app or app.card>` | Your own shortcut: `/alias exp expenses`, `/alias e expenses`, `/alias q3 expenses.total`; `/alias exp` alone removes it (APP-121) |
 | Shape | `/shape <address> <words>` | Changes how a card, an app (its theme) or a widget looks or what it shows (APP-122). The address takes every form: `expenses.ledger`, `card:expenses.ledger`, `app:expenses`, `widget:calculator` |
-| Ask | `/ask [app or app.card] <question>` | Opens the Ask tab with your question; read-only (APP-122). Name an app or card first to ask about it (`/ask expenses why did spend jump in March?`, `/ask expenses.ledger which claims are overdue?`); otherwise it asks about the selected card, else the canvas. `? <question>` is the quick form |
+| Ask | `/ask [app or app.card] <question>` | Opens the Ask tab with your question; read-only (APP-122). Name an app or card first to ask about it (`/ask expenses why did spend jump in March?`, `/ask expenses.ledger which claims are overdue?`), or `@`-mention it anywhere in the question (`? @expenses.total why is it high?`, APP-123); otherwise it asks about the selected card, else the canvas. `? <question>` is the quick form |
 | Help | `/apps [query]` · `/commands` · `/shortcuts` · `/agent` | Library · Commands · Shortcuts · Connect an agent |
 
-Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/clock`, `/note`, `/folder` on its own, and `/help`. Verbs are always bare; the space forms `/app <name>`, `/card <x>`, `/widget <kind>` are the same as the full forms `/app:<name>`, `/card:<x>`, `/widget:<kind>`.
+Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/clock`, `/note`, `/folder` on its own, `/folder <name> formation …`, and `/help`. Verbs are always bare; the space forms `/app <name>`, `/card <x>`, `/widget <kind>` are the same as the full forms `/app:<name>`, `/card:<x>`, `/widget:<kind>`.
 
 ## Ask and Shape (APP-122)
 
@@ -109,13 +110,16 @@ Ask is a conversation about your data, like talking to an analyst. Every way in 
 | `/ask app:expenses …` · `/ask card:expenses.ledger …` · `/ask e …` (your shortcut) | The same, in the full form or by your own name |
 | `/ask why is this high?` | The first word names nothing, so the whole line is the question: the selected card, else the canvas |
 | `? where are the red invoices` | The quick form: the selected card, else the canvas |
+| `? @expenses.total why is it high?` · `? why so many @app:expenses` · `@card:expenses.ledger …` · `@q3 …` (your shortcut) | The app or card the `@` mentions, anywhere in the question (APP-123). One mention per question |
 | `?` on the canvas | Puts `? ` in an empty bar (it only focuses the bar when you have half-typed something) |
 | ⋯ → **Ask about this** on a card | That card |
 | The Ask tab's own input | The scope its chip shows |
 
 - **What comes back:** a short answer in text, and the records it used, each with its receipt (the record, its version and commit, the app's publication and definition). A number it computes (a count, a total) lists every record it counted.
 - **What never changes:** records, cards, the canvas. Ask runs in a read-only transaction. Asked to change something, it answers with what to type (`/shape expenses.ledger …`); it never switches jobs.
-- **The scope** shows as a chip at the top of the tab ("Asking about /expenses.ledger"). A verb is never an address here: `/ask card why…` asks "card why…".
+- **The scope** shows as a chip at the top of the tab ("Asking about /expenses.ledger"). A verb is never an address here: `/ask card why…` asks "card why…". The chip is removable when it names an app or a card: its **×** makes the conversation about the whole canvas (APP-123). A mention sets the chip for the questions that follow.
+- **Pin to canvas** on an answer: a read-only answer card with the question, when it was pinned, the text and every record it used with its receipt. It never runs again. It is yours alone (it is never added for everyone), stays across sessions and has **Remove** (APP-123).
+- **Make it a card** on an answer whose records come from one list: a Shape preview of a new card showing exactly those records (the answer's record set), each with its receipt, and a small card above the bar: **Add as new card** or **Cancel**. Nothing is added until you click; then it is a card made by you (see How to shape) (APP-123).
 
 ### How to shape
 
@@ -131,6 +135,7 @@ Shape changes how a card, an app or a widget looks or what it shows. Every way i
 | A widget's own **Shape** field (formerly Restyle) | That widget, applied at once |
 
 - **What comes back:** a preview on the item, and a small card above the bar: **Apply** (replace the view), **Add as new card** (cards only) or **Cancel**. Applied, the item is labeled *shaped* with **Revert**.
+- **Add as new card** makes a **card made by you** (APP-123): it belongs to its app, reads "Made by you from /expenses.ledger · only you see it", comes back on every visit and stays live over its records. **Remove** (click twice to confirm) deletes it for good, audited; × only takes it off the canvas until your next visit. The app's owner or an admin sees **Add for everyone** on their own cards: every member who can open the app then sees it ("added for everyone by the app's owner"), and **Keep for me only** takes it back; both are audited. You keep at most 100 cards and pinned answers.
 - **What never changes:** records. Shape never answers in words. A view may filter or hide records; it never removes receipts, and every number it computes traces to its records.
 
 ### Why not `/expenses:ask`?
@@ -158,13 +163,13 @@ An app has no look of its own; its look is its cards, so shaping an app themes t
 
 **The dot is a shortcut for cards.** `/<app> <words>` (no dot) talks to the app: Do. `/<app>.<card> <words>` (a dot) shapes that card. `/<widget> <details>` places a widget (`/weather Austin`); to restyle it, use `/shape <widget>`. These are the short forms; the full forms say the same thing and are never ambiguous: `/app:<app> <words>`, `/card:<app>.<card> <words>`, `/widget:<kind> <details>`.
 
-**The overlap is only buttons you click:** ⋯ → **Ask about this** on a card opens a scoped Ask, and nothing changes. **Make it a card** on an answer is planned (APP-123); until then, ask first, then shape: `/ask expenses.ledger where are the red invoices`, then `/expenses.ledger only red invoices` → **Add as new card**.
+**The overlap is only buttons you click:** ⋯ → **Ask about this** on a card opens a scoped Ask, and nothing changes. **Make it a card** on an answer opens a Shape preview of a new card over the answer's records; nothing is added until you click **Add as new card** (APP-123).
 
 **Mis-routes are harmless.** `/expenses.ledger $86 Nobu` gives a preview nobody applies; `/expenses highlight red` matches no app command, so the confirm card stops it.
 
 **The rest of the bar:**
 - **Do:** `/<app> <words>` runs one of the app's own commands (`/expenses $86 Nobu, Sarah approves`). The confirm card names the command before any record changes.
-- **Forma:** a plain sentence picks or builds an app; `/folder <name> formation …` builds one from a folder's files. Both confirm first. A question typed as a plain sentence goes to Forma and stops at its confirm card; type `/ask` or `?` first to ask.
+- **Forma:** a plain sentence, or `/forma <words>` (exactly the same), picks or builds an app; `/<folder> <words>` (or `/folder:<name> <words>`, or the long `/folder <name> formation …`) builds one from a folder's files. Both confirm first. A question typed as a plain sentence goes to Forma and stops at its confirm card; type `/ask` or `?` first to ask.
 - **Place:** `/<name>` on its own puts the thing on the canvas.
 
 **As built (APP-122), where the details were open:**
@@ -189,15 +194,21 @@ An app has no look of its own; its look is its cards, so shaping an app themes t
 | **Answers** | What Ask tells you | Nothing; read-only |
 
 - "Make me a new card from this data in the shape of …" is Shape, not recording data. It's a new view over the same records, and every number still traces to its source records.
-- A card made from an app's data belongs to that app. In the demo it lasts for your session; personal "made by you" cards that persist, and that the owner can add for everyone, are planned (APP-123).
+- A card made from an app's data belongs to that app. It is yours ("made by you") and persists until you remove it; the app's owner or an admin can add their own for everyone who can open the app (APP-123). It stores only its view, never the records: every number is read live, with its receipts.
 - A card that combines two apps (expenses with time off) is a new app: Forma, deferred.
 
-Planned (APP-123): **Make it a card** on answers, persistent personal cards, `@` mentions and a removable scope chip, `/forma` and `/<folder> <words>`, and pinned answers.
+**As built (APP-123), where the details were open:**
+
+- **What a card made by you stores:** its app and work, the card it came from, its address and title, and its closed view spec, judged by the server against the work's published schema (field ids, types and enum values from the schema, never the list the canvas sent; `"receipts": false` is refused). A card made from an answer stores the answer's record set (the records' ids, at most 200) instead of a filter; it shows those records only, and says when some are no longer among the newest records read.
+- **What a pinned answer stores:** the question, the text, the scope, the references and their receipts, exactly as Ask answered them. The server checks every receipt against the records' revisions and the app's publications before storing it; a receipt storage never issued is refused. An answer with no records pins too.
+- **Who sees what:** your cards and answers are yours; a card added for everyone is seen by every member who can open its app. Another organization's member, or anyone without a session, gets the same "not found" as for something that does not exist. Only the maker removes or shares a card. Removing keeps the row (a soft delete) and is audited, like every other change.
+- **`@` in the bar:** in an Ask line (`? …`, `/ask …`) an `@` mentions an app or a card, never a folder; outside one, `@` still mentions a folder for Forma.
+- **Not done yet:** the `@` list does not suggest apps and cards while you type; a card made by you has no Library row (it is placed on every visit; × only hides it until then).
 
 ## Adding and removing
 
 - **Add:** the Library's **Add** button, the verbs above, or a sentence. Clicking and typing always do the same thing.
-- **Remove:** the **×** on a card or widget, **Delete** on the selection, or the Library's **Remove** button. Removing only takes something off your canvas; it never deletes data. There is no `/remove`.
+- **Remove:** the **×** on a card or widget, **Delete** on the selection, or the Library's **Remove** button. Removing only takes something off your canvas; it never deletes data. There is no `/remove`. A card made by you or a pinned answer also has **Remove**, which deletes it for good (it holds no record; APP-123).
 
 ## Shortcuts that are not obvious
 

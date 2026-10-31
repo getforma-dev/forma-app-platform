@@ -142,6 +142,8 @@ function renderPicker(query: string): void {
 /** The `@query` being typed before the caret, if any. */
 function mentionQuery(): { start: number; query: string } | null {
   if (!input) return null;
+  // APP-123: in an Ask line (`? …`, `/ask …`) an `@` mentions an app or a card, never a folder.
+  if (/^\s*(\?|\/ask\b)/i.test(input.value)) return null;
   const caret = input.selectionStart ?? input.value.length;
   const before = input.value.slice(0, caret);
   const match = before.match(/(^|\s)@([^@\n]{0,40})$/);

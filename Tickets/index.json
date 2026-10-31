@@ -3906,7 +3906,7 @@
       "Depends on": "APP-122, APP-097",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
-      "Branch / PR": "Not started (`pivot/talk-2`)",
+      "Branch / PR": "`pivot/app123` (built; not merged into `pivot/pitch-mvp`)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

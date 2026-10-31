@@ -9,8 +9,8 @@
 // server, `composer::shape`, and again here, `talk-view.ts`). Nothing changes
 // until the member clicks: the spec shows as a *preview* on the item with a
 // dock card (Apply, Add as new card for a card, Cancel); Apply labels the
-// item *shaped* with Revert. Cards and themes are session-only (APP-123
-// makes personal cards persist). A card's view is evaluated over the card's
+// item *shaped* with Revert. Applied views and themes are session-only; a
+// card added as new is stored for the member (APP-123, below). A card's view is evaluated over the card's
 // own data in this browser (`talk-view.ts`), never records: a view may
 // filter or hide records, and every number it computes keeps the receipts
 // of the records it came from (ADR-011 I3). Text nodes only.
@@ -25,8 +25,18 @@
 // never undoes the newer preview. Applied cards stay live: on a committed
 // record (or a lagged stream) their data is read again and the view
 // re-evaluated.
+//
+// APP-123: a card made with **Add as new card** is stored per member ("made
+// by you", `cards.ts`, `POST /v1/cards`): it belongs to its app, persists
+// across sessions and is placed again on every load (`placeMadeCard`), live
+// over its records with their receipts; **Remove** deletes it (audited), and
+// the app's owner or an admin can add it for everyone. **Make it a card** on
+// an Ask answer previews a new card over the answer's records
+// (`previewNewCard`, the answer's record set); nothing is added without a
+// click on **Add as new card**.
 import { addressFor, fillBar } from './address-chip';
-import { addCards, focusCard, isOnBoard, onLiveEvent, placeUtilityCard } from './board';
+import { addCards, focusCard, isOnBoard, onLiveEvent, placeUtilityCard, removeUtilityItem } from './board';
+import { madeCardRequest, madeLine, madeView, newCardId, removeCard, shareCard, storeCard, type From, type StoredCard } from './cards';
 import { appForm, findAddress, findAppAddress, findCardShortcut, findVerb, type Address, type CanvasCommand } from './command-registry';
 import { isDismissKey, showDockCard } from './dock-card';
 import { cardAddress, findApps, findCardRow, findCards, libraryApps, type AppRow, type CardRow } from './library';
@@ -152,8 +162,14 @@ export function sourceTarget(source: Source, table: Table): { collection: string
   return view ? { view } : null;
 }
 
+/** APP-123: where a stored card reads its data: its work's records listing (one collection), or its view's query. */
+export function sourceFor(app: string, work: string, from: From): Source {
+  const base = `/v1/work/${app}/${work}`;
+  return 'collection' in from ? { records: `${base}/records`, collection: from.collection } : { query: `${base}/queries/${from.view}` };
+}
+
 /** The card's own data as a table: its records listing, or its released query result. */
-async function loadTable(source: Source): Promise<Table | string> {
+export async function loadTable(source: Source): Promise<Table | string> {
   try {
     const records = source.records;
     if (records && records.startsWith('/v1/work/')) {
@@ -338,7 +354,6 @@ export function shapedSection(document_: Document, state: 'preview' | 'shaped', 
 type Applied = { address: string; view: CardView; table: Table; source: Source; work: string };
 const appliedCards = new Map<string, Applied>();
 const appliedThemes = new Map<string, AppTheme>();
-let newCards = 0;
 
 /**
  * The preview each item shows now: a newer preview takes the token, so an
@@ -522,31 +537,156 @@ async function shapeCard(target: Extract<Target, { kind: 'card' }>, words: strin
       label: 'Add as new card',
       run: () => {
         restore();
-        newCards += 1;
-        const id = `shape-${newCards}`;
-        const title = view.title ?? `${row.title} (shaped)`;
-        const made = (data: Table) => {
-          const section = shapedSection(card.ownerDocument, 'shaped', target.address, view, data);
-          section.prepend(el(card.ownerDocument, 'p', { class: 'cv-shaped-from' }, `Made by you from /${target.address} · this session`));
-          return section;
-        };
-        let section = made(table);
-        placeUtilityCard(id, title, section);
-        // Live too: its numbers follow the records they came from.
-        liveViews.set(`new:${id}`, {
-          work: row.app.work, source, epoch: 0,
-          render: (data) => {
-            if (!section.isConnected) return false;
-            const next = made(data);
-            section.replaceWith(next);
-            section = next;
-            return true;
-          },
-        });
-        report(`A new card from /${target.address} is on the canvas. Its numbers keep their receipts.`);
+        // APP-123: stored per member ("made by you"); it stays until removed.
+        void addMadeCard({ app: row.app.app, work: row.app.work, source: row.slug, address: target.address, title: view.title ?? `${row.title} (shaped)`, from, view }, report);
       },
     },
   ], () => { if (restore()) report('Nothing changed.'); });
+}
+
+// --- APP-123: cards made by you ---
+
+/** Stores a made card and places it; reports why when the server refused (then nothing is added). */
+export async function addMadeCard(card: { app: string; work: string; source: string; address: string; title: string; from: From; view: CardView }, report: Report = announce): Promise<StoredCard | null> {
+  const stored = await storeCard(madeCardRequest({ id: newCardId(), ...card }));
+  if (typeof stored === 'string') {
+    report(stored);
+    return null;
+  }
+  await placeMadeCard(stored, report);
+  report(`A new card from /${card.address} is on the canvas, made by you. It stays until you remove it; its numbers keep their receipts.`);
+  return stored;
+}
+
+/** Takes a placed utility card (a made card, a pinned answer, a preview) off the canvas. */
+export function removePlaced(id: string): void {
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(id)) return;
+  const item = document.querySelector<HTMLElement>(`[data-utility="utility-${id}"]`);
+  if (item) removeUtilityItem(item);
+}
+
+/** **Remove** with a second click to confirm: the server's audited remove, then off the canvas. */
+export function removeButton(document_: Document, card: Pick<StoredCard, 'card_id' | 'everyone'>, placed: string, report: Report, after: () => void = () => undefined): HTMLElement {
+  const button = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-made-remove' }, 'Remove');
+  let armed = false;
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (!armed) {
+      armed = true;
+      button.textContent = card.everyone ? 'Remove for everyone?' : 'Remove for good?';
+      return;
+    }
+    button.setAttribute('disabled', '');
+    void removeCard(card.card_id).then((removed) => {
+      if (removed !== true) {
+        button.removeAttribute('disabled');
+        report(removed);
+        return;
+      }
+      after();
+      removePlaced(placed);
+      report('Removed. Its records are unchanged.');
+    });
+  });
+  return button;
+}
+
+/**
+ * APP-123: a card made by you (or added for everyone by the app's owner) on
+ * the canvas: its stored view over its records, live, with receipts; the
+ * maker's **Remove**, and the owner's **Add for everyone** / **Keep for me
+ * only**. False when the stored spec does not judge (it is not shown).
+ */
+export async function placeMadeCard(card: StoredCard, report: Report = announce): Promise<boolean> {
+  const made = madeView(card);
+  if (!made || !card.app_id || !card.work_id) return false;
+  const [app, work] = [card.app_id, card.work_id];
+  const document_ = document;
+  const placed = `made-${card.card_id}`;
+  const source = sourceFor(app, work, made.from);
+  let current = card;
+  let data: Table | string = await loadTable(source);
+  const build = (): HTMLElement => {
+    const section = typeof data === 'string'
+      ? el(document_, 'section', { class: 'cv-shaped', 'data-state': 'shaped' }, el(document_, 'p', { class: 'cv-shaped-meta' }, data))
+      : shapedSection(document_, 'shaped', current.address, made.view, data);
+    section.prepend(el(document_, 'p', { class: 'cv-shaped-from' }, madeLine(current)));
+    if (typeof data !== 'string' && made.view.records?.length) {
+      const found = new Set(data.rows.map((row) => row.receipt?.record_id));
+      const missing = made.view.records.filter((id) => !found.has(id)).length;
+      if (missing) section.append(el(document_, 'p', { class: 'cv-shaped-meta' }, `${missing} of the answer’s ${made.view.records.length} records are not among the newest records loaded.`));
+    }
+    const actions = el(document_, 'p', { class: 'cv-made-actions' });
+    if (current.mine && current.can_share) {
+      const share = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-made-share' }, current.everyone ? 'Keep for me only' : 'Add for everyone');
+      share.addEventListener('click', (event) => {
+        event.stopPropagation();
+        share.setAttribute('disabled', '');
+        void shareCard(current.card_id, !current.everyone).then((shared) => {
+          if (typeof shared === 'string') {
+            share.removeAttribute('disabled');
+            report(shared);
+            return;
+          }
+          current = shared;
+          rerender();
+          report(shared.everyone ? 'Added for everyone who can open the app.' : 'Only you see it now.');
+        });
+      });
+      actions.append(share);
+    }
+    if (current.mine) actions.append(removeButton(document_, current, placed, report, () => liveViews.delete(`made:${card.card_id}`)));
+    if (actions.childElementCount) section.append(actions);
+    return section;
+  };
+  let section = build();
+  const rerender = () => {
+    if (!section.isConnected) return false;
+    const next = build();
+    section.replaceWith(next);
+    section = next;
+    return true;
+  };
+  placeUtilityCard(placed, card.title, section);
+  liveViews.set(`made:${card.card_id}`, {
+    work, source, epoch: 0,
+    render: (table) => {
+      data = table;
+      return rerender();
+    },
+  });
+  return true;
+}
+
+/**
+ * APP-123 **Make it a card**: a Shape preview of a new card over an Ask
+ * answer's records (its record set), on the canvas with a dock card. Nothing
+ * is added without a click on **Add as new card**; **Cancel** takes the
+ * preview away.
+ */
+export async function previewNewCard(card: { app: string; work: string; collection: string; address: string; title: string; view: CardView }, report: Report = announce): Promise<void> {
+  const source = sourceFor(card.app, card.work, { collection: card.collection });
+  const table = await loadTable(source);
+  if (typeof table === 'string') {
+    report(table);
+    return;
+  }
+  const placed = 'preview-new-card';
+  placeUtilityCard(placed, `Preview: ${card.title}`, shapedSection(document, 'preview', card.address, card.view, table));
+  const current = claimPreview(placed);
+  confirmDock(`Make it a card: ${card.title}`, chips(card.view), [
+    {
+      label: 'Add as new card', primary: true,
+      run: () => {
+        removePlaced(placed);
+        void addMadeCard({ app: card.app, work: card.work, source: 'records', address: card.address, title: card.title, from: { collection: card.collection }, view: card.view }, report);
+      },
+    },
+  ], () => {
+    if (!current()) return;
+    removePlaced(placed);
+    report('Nothing was added.');
+  });
 }
 
 function appCards(app: AppRow): HTMLElement[] {

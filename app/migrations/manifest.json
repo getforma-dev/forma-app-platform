@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 14,
+  "database_version": 15,
   "migrations": [
     {
       "version": 1,
@@ -71,6 +71,11 @@
       "version": 14,
       "file": "0014_labels.sql",
       "sha256": "700f733fb9af5ef032fd04d114246f33cd0c6ce47f9f3e71441eecc8104951fa"
+    },
+    {
+      "version": 15,
+      "file": "0015_member_cards.sql",
+      "sha256": "648c210b3052095527db8c52fe283a2ffaafa5bf9b2d4ddc0d4597c24d122ab2"
     }
   ],
   "catalog": [
@@ -133,6 +138,10 @@
     {
       "file": "catalog-v14.json",
       "sha256": "f67738f1670d1c52ba6d67b4875904d3e8283117d7100e0be4cdae91325d9791"
+    },
+    {
+      "file": "catalog-v15.json",
+      "sha256": "fe56dd6fe9985eaf3ed2e19a728971302a9f20f48e2c8eee27e8339d465a9a5d"
     }
   ]
 }

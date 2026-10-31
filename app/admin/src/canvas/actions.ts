@@ -308,6 +308,18 @@ export async function submitUtterance(text: string, report: (message: string) =>
 }
 
 /**
+ * APP-123 `/forma <words>`: exactly what a plain sentence does (never the Ask
+ * or slash lanes): a canvas action said in words, the folder lane when a
+ * folder chip is active or mentioned, else the action path, which picks or
+ * builds an app (Forma) behind its confirm card.
+ */
+export async function submitSentence(text: string, report: (message: string) => void): Promise<void> {
+  if (await routeSentence(text, report)) return;
+  if (utteranceRouter && await utteranceRouter(text, report)) return;
+  await submitAction(text, report);
+}
+
+/**
  * The action path itself (no slash routing): `app` pins a slash command's
  * app; `/expense` alone opens the expense ledger (the server's bare command).
  */

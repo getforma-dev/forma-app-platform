@@ -2381,6 +2381,16 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
 .cv-ask { gap: 0.6rem; }
 .cv-ask-sub { margin: 0; color: var(--cv-muted); font-size: 0.8rem; }
 .cv-ask-chip { align-self: flex-start; margin: 0; padding: 0.2rem 0.6rem; border-radius: 999px; background: var(--cv-accent-soft); color: var(--cv-accent); font: 600 0.75rem/1.4 var(--cv-mono); }
+.cv-ask-chip { display: inline-flex; align-items: center; gap: 0.35rem; }
+.cv-ask-chip-x { padding: 0 0.2rem; border: 0; background: transparent; color: inherit; font: 700 0.85rem/1 var(--cv-sans); cursor: pointer; }
+.cv-ask-chip-x:hover, .cv-ask-chip-x:focus-visible { color: var(--cv-text); outline: none; }
+.cv-ask-chip-x[hidden] { display: none; }
+/* APP-123: an answer's Pin to canvas and Make it a card; a made card's Remove and Add for everyone. */
+.cv-ask-actions, .cv-made-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.45rem 0 0; }
+.cv-ask-actions button, .cv-made-actions button { padding: 0.2rem 0.6rem; font-size: 0.75rem; }
+.cv-pinned-answer { display: flex; flex-direction: column; gap: 0.45rem; }
+.cv-pinned-question { margin: 0; color: var(--cv-muted); font-style: italic; font-size: 0.85rem; }
+.cv-pinned-text { margin: 0; white-space: pre-wrap; font-size: 0.9rem; line-height: 1.45; }
 .cv-ask-thread { display: flex; flex: 1; flex-direction: column; gap: 0.5rem; min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
 .cv-ask-entry { padding: 0.55rem 0.7rem; border-radius: 12px; font-size: 0.85rem; line-height: 1.45; overflow-wrap: anywhere; }
 .cv-ask-entry p { margin: 0; white-space: pre-wrap; }

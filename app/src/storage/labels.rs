@@ -201,11 +201,11 @@ fn outcome(kind: &str, parts: &[&str]) -> String {
 }
 
 /// Every app of the organization the member can open (`discover`).
-const DISCOVER: &str = "EXISTS(SELECT 1 FROM genui.app_permissions p WHERE p.organization_id=a.organization_id AND p.principal_id=$2::text::uuid AND p.app_id=a.app_id AND p.permission='discover')";
+pub(super) const DISCOVER: &str = "EXISTS(SELECT 1 FROM genui.app_permissions p WHERE p.organization_id=a.organization_id AND p.principal_id=$2::text::uuid AND p.app_id=a.app_id AND p.permission='discover')";
 /// The app is open to someone besides its owner (`discover`).
 const SHARED: &str = "EXISTS(SELECT 1 FROM genui.app_permissions p WHERE p.organization_id=a.organization_id AND p.app_id=a.app_id AND p.permission='discover' AND p.principal_id IS DISTINCT FROM a.owner_principal_id)";
 /// The member owns the app or holds `admin_policy` in the organization.
-const OWNER_OR_ADMIN: &str = "(a.owner_principal_id=$2::text::uuid OR EXISTS(SELECT 1 FROM genui.organization_permissions o WHERE o.organization_id=a.organization_id AND o.principal_id=$2::text::uuid AND o.permission='admin_policy'))";
+pub(super) const OWNER_OR_ADMIN: &str = "(a.owner_principal_id=$2::text::uuid OR EXISTS(SELECT 1 FROM genui.organization_permissions o WHERE o.organization_id=a.organization_id AND o.principal_id=$2::text::uuid AND o.permission='admin_policy'))";
 
 /// The organization's naming lock (transaction-scoped): every label write
 /// and every "Save as /name" judges its names under it.

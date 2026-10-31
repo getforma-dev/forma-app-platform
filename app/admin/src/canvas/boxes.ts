@@ -48,6 +48,7 @@ import { setFileRouter } from './receipt';
 import { formationChip } from './timing';
 import { announce, el, isUuid } from './render';
 import { registerCommands, registerCompleter, type Completion } from './slash';
+import { setFolderResolver, type Runnable } from './command-registry';
 
 type Report = (message: string) => void;
 type OpenBox = { boxId: string; item: HTMLElement; card: HTMLElement; refresh(): Promise<void>; upload(list: File[], auto?: boolean): Promise<void>; rename(): void; name(): string; close(): void };
@@ -751,12 +752,53 @@ const FOLDER = {
   },
 };
 
+/** A folder's name as an address: lowercase, runs of other characters a hyphen (`Q3 board pack` → `q3-board-pack`). */
+export function folderSlug(label: string): string {
+  return label.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+}
+
+/**
+ * APP-123: the folder a name names (`q3`, `q3-board-pack`, or its number),
+ * when exactly one folder answers to it, as a runnable formation: `/q3
+ * <words>` and `/folder:q3 <words>` build from its files (a leading
+ * `formation` is accepted, as `/folder <name> formation …` reads); with no
+ * words it opens the folder.
+ */
+export function folderRunnable(name: string, list: Box[] = boxes): Runnable | undefined {
+  const key = name.toLowerCase();
+  const found = /^\d{1,4}$/.test(key)
+    ? list.filter((box) => box.number === Number(key))
+    : list.filter((box) => folderSlug(boxLabel(box)) === key);
+  const [box] = found;
+  if (!box || found.length > 1) return undefined;
+  const label = boxLabel(box);
+  return {
+    slug: key,
+    title: `Formation from ${label}`,
+    purpose: `Builds from the ${noun} ${label}’s files (folder formation); “brief me” writes a brief`,
+    aliases: [],
+    args: [{ name: 'instruction', kind: 'text', required: false }],
+    examples: [`/${key} build a metrics app`, `/${key} brief me`],
+    run: async (text: string, report: Report = announce) => {
+      const words = text.trim().replace(/^formation\b\s*/i, '');
+      clearBar();
+      if (!words) {
+        report(await openBox(box.box_id));
+        return;
+      }
+      await formation(box, words, report);
+    },
+  };
+}
+
 /** Wires boxes onto the started canvas: commands, pane, drops, provenance links, restored cards. */
 export function startBoxes(document_: Document): void {
   if (started) return;
   started = true;
   setMakeDataHandler((boxId, file, preview: Preview) => openDataSheet(boxId, file, preview, () => void open.get(boxId)?.refresh(), Boolean(file.data)));
   registerCommands([FOLDER]);
+  // APP-123: a folder's name is an address (`/q3 <words>`, `/folder:q3 <words>`).
+  setFolderResolver((name) => folderRunnable(name));
   // The intent bar: the active folder chip, `@` mentions, the folder lane.
   startFolderBar(document_, {
     list: () => boxes,

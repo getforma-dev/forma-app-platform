@@ -205,6 +205,13 @@ pub struct CardView {
     pub limit: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// APP-123 ("Make it a card"): the record set of an Ask answer, by record
+    /// id: the card shows only these records (each with its receipt). Never
+    /// from the model (its replies are judged by [`judge_card`], which
+    /// refuses the key); only a stored card ([`judge_stored_card`]) of a
+    /// records card carries it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub records: Vec<String>,
     /// Only `true` is accepted (and dropped: the canvas always shows receipts).
     #[serde(default, skip_serializing)]
     pub receipts: Option<bool>,
@@ -222,6 +229,7 @@ impl CardView {
             && self.sort.is_none()
             && self.limit.is_none()
             && self.title.is_none()
+            && self.records.is_empty()
     }
 }
 
@@ -280,6 +288,40 @@ const CARD_KEYS: &[&str] = &[
 /// Judges a reply as a card view over `fields` (module notes).
 pub fn judge_card(reply: &str, fields: &[Field]) -> Result<CardView, &'static str> {
     judge_card_object(object_of(reply)?, fields)
+}
+
+/// At most this many records in a card's record set (APP-123).
+pub const MAX_RECORD_SET: usize = 200;
+
+/// APP-123: judges a card spec a member asks to store (a made card, "Add as
+/// new card" or "Make it a card") against the card's fields as the server
+/// derived them from the published schema (`talk::schema_fields`), never
+/// the client's: every key the model may use, and (a records card only,
+/// `records_allowed`) the answer's record set. `"receipts": false` is
+/// `drops_receipts`; any other key `unknown_key`.
+pub fn judge_stored_card(
+    object: Map<String, Value>,
+    fields: &[Field],
+    records_allowed: bool,
+) -> Result<CardView, &'static str> {
+    if object
+        .get("receipts")
+        .is_some_and(|value| value != &Value::Bool(true))
+    {
+        return Err("drops_receipts");
+    }
+    if object.contains_key("records") && !records_allowed {
+        return Err("unknown_key");
+    }
+    let mut rest = object;
+    let records = rest.remove("records");
+    keys_of(&rest, CARD_KEYS)?;
+    if let Some(records) = records {
+        rest.insert("records".into(), records);
+    }
+    let view: CardView = serde_json::from_value(Value::Object(rest)).map_err(|_| "invalid_view")?;
+    check_card(&view, fields)?;
+    Ok(view)
 }
 
 /// [`judge_card`] on a decoded object.
@@ -447,6 +489,19 @@ fn check_card(view: &CardView, fields: &[Field]) -> Result<(), &'static str> {
         .is_some_and(|limit| !(1..=MAX_LIMIT).contains(&limit))
     {
         return Err("invalid_limit");
+    }
+    if view.records.len() > MAX_RECORD_SET
+        || !view
+            .records
+            .iter()
+            .all(|id| crate::storage::valid_identifier(id))
+        || view
+            .records
+            .iter()
+            .enumerate()
+            .any(|(at, id)| view.records[..at].contains(id))
+    {
+        return Err("invalid_records");
     }
     if let Some(title) = view.title.as_deref() {
         let count = title.chars().count();

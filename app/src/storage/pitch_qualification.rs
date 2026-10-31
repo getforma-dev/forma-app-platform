@@ -497,6 +497,8 @@ async fn campaign() {
             .merge(sharing::router(auth.clone()))
             .merge(composer::commands::router(auth.clone()))
             .merge(composer::labels::router(auth.clone()))
+            // APP-123: cards made by you and pinned answers.
+            .merge(composer::cards::router(auth.clone()))
             .merge(events::routes::router(auth.clone()))
             // APP-109: the records listing and the member's notes work.
             .merge(crate::actions::routes::records_router(auth.clone()))
@@ -2299,6 +2301,333 @@ async fn campaign() {
     check(
         &mut checks,
         "ask and shape (APP-122): POST /v1/ask answered exactly {text, receipts, references} for \"where are all the red invoices?\", each receipt storage's (record id, version, publication, definition digest), with record, revision, audit and receipt row counts and saved-work versions identical before and after; a model reply carrying a view spec was refused server-side (422 could_not_answer); a forced write in the Ask transaction failed with SQLSTATE 25006 (READ ONLY); POST /v1/shape answered only a closed spec per target (a card highlight, an app theme dark/green/compact, a widget's TI-84 state through the customizer); prose, an answer object and a view with receipts:false were refused (422 could_not_shape); card fields outside the records card's published schema (an unknown field, an undeclared enum value, a wrong type, another collection, no source) were refused 422 invalid_request with no model call; namespaced addresses (card:…, app:…) were accepted on both routes; an app-scoped Ask and a card-scoped Ask (its collection only; an unknown collection 422) answered; a rehearsed count cited every record it counted; a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on both routes with no model call; in a demo organization the rehearsed question and shape answered without a model call; no row was written by either route",
+    );
+
+    // --- APP-123: cards made by you, add for everyone, pinned answers ---
+    // The member write windows are fresh for this part (one cooldown period).
+    auth.limits.clear();
+    let cards = composer::cards::CARDS_PATH;
+    let made_events =
+        |kind: &str| format!("SELECT count(*) FROM genui.audit_events WHERE kind='{kind}'");
+    let card_rows = "SELECT count(*) FROM genui.member_cards";
+    let listed = |answer: &Answer| -> Vec<Value> {
+        answer.json()["cards"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+    };
+    let has = |list: &[Value], id: &str| list.iter().any(|card| card["card_id"] == id);
+    let red = json!({"highlight": [{"field": "status", "op": "in", "value": ["needs_context"], "color": "crimson"}]});
+    let made_id = "00000000-0000-4000-8000-0000000c4a01";
+    let made = json!({"card_id": made_id, "kind": "card", "app_id": EXPENSE_APP, "work_id": work_id, "card": "records",
+        "address": "expense-review.records", "title": "Red claims", "collection": collection_id, "spec": red});
+    let calls_before_cards = stub.calls();
+    let saved = stand
+        .post(cards, Some(&maya_cookie), &made.to_string())
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.text());
+    assert_eq!(saved.json()["saved"], true);
+    assert_eq!(saved.json()["card"]["mine"], true);
+    assert_eq!(
+        saved.json()["card"]["spec"],
+        json!({"from": {"collection": collection_id}, "view": red})
+    );
+    // Idempotent: the same card again writes nothing.
+    let again = stand
+        .post(cards, Some(&maya_cookie), &made.to_string())
+        .await;
+    assert_eq!(again.json()["saved"], false, "{}", again.text());
+    assert_eq!(scalar(&c.fixture, &made_events("card.made")).await, 1);
+    // The same id with another card is refused.
+    let mut other = made.clone();
+    other["title"] = json!("Something else");
+    let clash = stand
+        .post(cards, Some(&maya_cookie), &other.to_string())
+        .await;
+    assert_eq!(clash.json()["code"], "card_exists", "{}", clash.text());
+    // A stored spec is judged server-side against the published schema: an
+    // unknown field, receipts:false, a client field list, a record set on a
+    // view or an unknown collection are refused, and nothing is stored.
+    let rows_before_refusals = scalar(&c.fixture, card_rows).await;
+    for (change, code) in [
+        (json!({"spec": {"columns": ["salary"]}}), "unknown_field"),
+        (
+            json!({"spec": {"presentation": "number", "receipts": false}}),
+            "drops_receipts",
+        ),
+        (
+            json!({"spec": {"filters": [{"field": "status", "op": "eq", "value": "lost"}]}}),
+            "invalid_value",
+        ),
+        (json!({"spec": {"css": "body{}"}}), "unknown_key"),
+        (
+            json!({"fields": [{"id": "salary", "type": "money"}]}),
+            "invalid_request",
+        ),
+        (json!({"collection": EXPENSE_APP}), "invalid_request"),
+    ] {
+        let mut body = made.clone();
+        body["card_id"] = json!("00000000-0000-4000-8000-0000000c4aff");
+        for (key, value) in change.as_object().unwrap() {
+            body[key] = value.clone();
+        }
+        let refused = stand
+            .post(cards, Some(&maya_cookie), &body.to_string())
+            .await;
+        assert_eq!(
+            refused.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{change}: {}",
+            refused.text()
+        );
+        assert_eq!(refused.json()["code"], code, "{change}");
+    }
+    assert_eq!(
+        scalar(&c.fixture, card_rows).await,
+        rows_before_refusals,
+        "nothing stored"
+    );
+    // It persists across sessions: a new sign-in of Maya lists it.
+    let mut later = c.browser("192.0.2.31:5000");
+    let arrived = c.sign_in(&mut later, NORTHSTAR_HANDLE, &maya_subject).await;
+    assert_eq!(arrived.location(), "/workspace");
+    let later_cookie = later.cookie(cookies::SESSION).unwrap();
+    assert_ne!(later_cookie, maya_cookie, "another session");
+    let maya_list = listed(&stand.get(cards, Some(&later_cookie)).await);
+    assert!(has(&maya_list, made_id), "{maya_list:?}");
+    // Invisible to another member; the foreign organization and anonymous
+    // or forged callers get the uniform 404 on every route.
+    assert!(!has(
+        &listed(&stand.get(cards, Some(&mate_cookie)).await),
+        made_id
+    ));
+    assert!(listed(&stand.get(cards, Some(&outsider_cookie)).await).is_empty());
+    for cookie in [None, Some("forged-session")] {
+        assert!(stand.get(cards, cookie).await.uniform_404());
+        assert!(stand
+            .post(cards, cookie, &made.to_string())
+            .await
+            .uniform_404());
+    }
+    for (who, cookie) in [("teammate", &mate_cookie), ("outsider", &outsider_cookie)] {
+        for path in [
+            format!("/v1/cards/{made_id}/remove"),
+            format!("/v1/cards/{made_id}/everyone"),
+        ] {
+            let body = if path.ends_with("remove") {
+                "{}"
+            } else {
+                r#"{"everyone":true}"#
+            };
+            let refused = stand.post(&path, Some(cookie), body).await;
+            assert!(refused.uniform_404(), "{who} {path}: {}", refused.text());
+        }
+    }
+    let mut foreign = made.clone();
+    foreign["card_id"] = json!("00000000-0000-4000-8000-0000000c4a0f");
+    assert!(stand
+        .post(cards, Some(&outsider_cookie), &foreign.to_string())
+        .await
+        .uniform_404());
+    // The owner adds a card of their app for everyone (audited); every
+    // member who can open the app then reads it. Maya owns Expenses here
+    // (APP-121 above); the teammate reads it and owns nothing.
+    const EXPENSES_WORK: &str = "00000000-0000-4000-8000-000000001684";
+    let expenses_listing = stand
+        .get(
+            &format!("/v1/work/{EXPENSES_APP}/{EXPENSES_WORK}/records"),
+            Some(&maya_cookie),
+        )
+        .await;
+    assert_eq!(
+        expenses_listing.status,
+        StatusCode::OK,
+        "{}",
+        expenses_listing.text()
+    );
+    let expenses_collection = expenses_listing.json()["collections"][0]["collection_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let shared_id = "00000000-0000-4000-8000-0000000c4a02";
+    let team = json!({"card_id": shared_id, "kind": "card", "app_id": EXPENSES_APP, "work_id": EXPENSES_WORK, "card": "ledger",
+        "address": "team-spend.ledger", "title": "Spend by month", "collection": expenses_collection,
+        "spec": {"presentation": "number", "measure": {"op": "count"}}});
+    let team_saved = stand
+        .post(cards, Some(&maya_cookie), &team.to_string())
+        .await;
+    assert_eq!(team_saved.status, StatusCode::OK, "{}", team_saved.text());
+    assert_eq!(team_saved.json()["card"]["can_share"], true);
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&mate_cookie)).await),
+            shared_id
+        ),
+        "personal until shared"
+    );
+    let everyone_path = format!("/v1/cards/{shared_id}/everyone");
+    let shared = stand
+        .post(&everyone_path, Some(&maya_cookie), r#"{"everyone":true}"#)
+        .await;
+    assert_eq!(shared.status, StatusCode::OK, "{}", shared.text());
+    assert_eq!(shared.json()["card"]["everyone"], true);
+    let repeat = stand
+        .post(&everyone_path, Some(&maya_cookie), r#"{"everyone":true}"#)
+        .await;
+    assert_eq!(repeat.json()["saved"], false);
+    assert_eq!(
+        scalar(&c.fixture, &made_events("card.shared")).await,
+        1,
+        "one audited card.shared"
+    );
+    let mate_list = listed(&stand.get(cards, Some(&mate_cookie)).await);
+    let seen = mate_list
+        .iter()
+        .find(|card| card["card_id"] == shared_id)
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(seen["everyone"], true, "{mate_list:?}");
+    assert_eq!(seen["mine"], false);
+    assert_eq!(seen["can_share"], false);
+    // Only its maker may remove it or take it back; the outsider never sees it.
+    for path in [
+        format!("/v1/cards/{shared_id}/remove"),
+        everyone_path.clone(),
+    ] {
+        let body = if path.ends_with("remove") {
+            "{}"
+        } else {
+            r#"{"everyone":false}"#
+        };
+        assert!(
+            stand
+                .post(&path, Some(&mate_cookie), body)
+                .await
+                .uniform_404(),
+            "{path}"
+        );
+    }
+    assert!(!has(
+        &listed(&stand.get(cards, Some(&outsider_cookie)).await),
+        shared_id
+    ));
+    // A member who is not the app's owner (or an admin) cannot add for everyone.
+    let mates_id = "00000000-0000-4000-8000-0000000c4a03";
+    let mut mates = team.clone();
+    mates["card_id"] = json!(mates_id);
+    let mate_saved = stand
+        .post(cards, Some(&mate_cookie), &mates.to_string())
+        .await;
+    assert_eq!(mate_saved.status, StatusCode::OK, "{}", mate_saved.text());
+    assert_eq!(mate_saved.json()["card"]["can_share"], false);
+    assert!(stand
+        .post(
+            &format!("/v1/cards/{mates_id}/everyone"),
+            Some(&mate_cookie),
+            r#"{"everyone":true}"#
+        )
+        .await
+        .uniform_404());
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&maya_cookie)).await),
+            mates_id
+        ),
+        "the teammate's card stays theirs"
+    );
+    // A pinned answer: exactly what Ask answered (its storage receipts),
+    // checked against the record revisions; it never runs again.
+    let pin_id = "00000000-0000-4000-8000-0000000c4a04";
+    let pin = json!({"card_id": pin_id, "kind": "answer", "question": "where are all the red invoices?", "text": answer["text"],
+        "scope": {"kind": "card", "address": "expense-review.records"}, "references": answer["references"], "receipts": answer["receipts"]});
+    let calls_before_pin = stub.calls();
+    let pinned = stand
+        .post(cards, Some(&maya_cookie), &pin.to_string())
+        .await;
+    assert_eq!(pinned.status, StatusCode::OK, "{}", pinned.text());
+    assert_eq!(pinned.json()["card"]["kind"], "answer");
+    assert_eq!(
+        pinned.json()["card"]["spec"]["receipts"],
+        answer["receipts"],
+        "its receipts kept"
+    );
+    assert_eq!(stub.calls(), calls_before_pin, "pinning asks nothing");
+    assert_eq!(scalar(&c.fixture, &made_events("answer.pinned")).await, 1);
+    let mut forged = pin.clone();
+    forged["card_id"] = json!("00000000-0000-4000-8000-0000000c4a05");
+    forged["receipts"][0]["version"] =
+        json!(answer["receipts"][0]["version"].as_i64().unwrap() + 100);
+    let refused = stand
+        .post(cards, Some(&maya_cookie), &forged.to_string())
+        .await;
+    assert_eq!(
+        refused.json()["code"],
+        "unknown_receipt",
+        "{}",
+        refused.text()
+    );
+    let mut outsider_pin = pin.clone();
+    outsider_pin["card_id"] = json!("00000000-0000-4000-8000-0000000c4a06");
+    assert!(stand
+        .post(cards, Some(&outsider_cookie), &outsider_pin.to_string())
+        .await
+        .uniform_404());
+    let not_shareable = stand
+        .post(
+            &format!("/v1/cards/{pin_id}/everyone"),
+            Some(&maya_cookie),
+            r#"{"everyone":true}"#,
+        )
+        .await;
+    assert_eq!(
+        not_shareable.json()["code"],
+        "not_shareable",
+        "{}",
+        not_shareable.text()
+    );
+    assert!(
+        has(
+            &listed(&stand.get(cards, Some(&later_cookie)).await),
+            pin_id
+        ),
+        "it persists"
+    );
+    assert!(
+        !has(&listed(&stand.get(cards, Some(&mate_cookie)).await), pin_id),
+        "it is Maya's alone"
+    );
+    // Remove: a soft delete by its maker, audited, idempotent; one added for
+    // everyone goes for everyone.
+    for id in [pin_id, shared_id] {
+        let path = format!("/v1/cards/{id}/remove");
+        let removed = stand.post(&path, Some(&maya_cookie), "{}").await;
+        assert_eq!(removed.json()["saved"], true, "{}", removed.text());
+        assert_eq!(
+            stand.post(&path, Some(&maya_cookie), "{}").await.json()["saved"],
+            false
+        );
+    }
+    assert_eq!(scalar(&c.fixture, &made_events("card.removed")).await, 2);
+    assert!(!has(
+        &listed(&stand.get(cards, Some(&maya_cookie)).await),
+        pin_id
+    ));
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&mate_cookie)).await),
+            shared_id
+        ),
+        "gone for everyone"
+    );
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.member_cards WHERE card_id IN ('{pin_id}','{shared_id}') AND removed_at IS NOT NULL")).await, 2, "soft-deleted, kept");
+    assert_eq!(
+        stub.calls(),
+        calls_before_cards,
+        "no model call for any card route"
+    );
+    check(
+        &mut checks,
+        "cards made by you (APP-123): POST /v1/cards stored a made card over the records card (its spec judged against the published schema, its record values never stored), idempotently (a repeat wrote nothing; the same id with other contents was card_exists), audited card.made; stored specs with an unknown field, receipts:false, an undeclared enum value, an unknown key, a client field list or a foreign collection were refused 422 and stored nothing; the card persisted into a new session, was invisible to the teammate, and a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on every card route (the teammate too on another member's remove and share); the app's owner added a card for everyone (one audited card.shared; a repeat wrote nothing), every reader of the app then listed it (not theirs, not shareable), a non-owner could not add theirs for everyone (404); a pinned answer stored exactly Ask's text and storage receipts (audited answer.pinned, no model call), a forged receipt version was refused 422 unknown_receipt, the outsider's pin was the uniform 404, an answer cannot be added for everyone, and it stayed Maya's alone; removing is a soft delete by the maker (two audited card.removed, idempotent), a card added for everyone left everyone's list",
     );
 
     // --- Chain integrity ---
