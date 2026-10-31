@@ -32,6 +32,10 @@ import urllib.parse
 
 LOOPBACK_NAMES = {"localhost"}
 EPOCH_COOKIE = "forma_stand_epoch"
+# Each browser gets its own session of the persona (the stand mints several):
+# one live stream per session, so two browsers on one session replaced each
+# other's stream. The browser is told apart by this cookie, set on its first visit.
+CLIENT_COOKIE = "forma_stand_client"
 HOP_BY_HOP = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers",
     "transfer-encoding", "upgrade", "content-length", "host",
@@ -69,6 +73,7 @@ class Stand:
             persona = stand["personas"][self.persona]
             # A new stand process is a new epoch (the browser's storage is cleared once per epoch).
             self.epoch = "%s-%s" % (stand.get("pid", 0), target.port)
+            self.sessions = persona.get("sessions") or [persona["session"]]
             self.current = (target, stand["cookie"], persona["session"], persona["name"])
             self.mtime = mtime
             return self.current
@@ -78,6 +83,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     stand = None  # set in main
     clear_on_reset = False
+
+    clients = {}
+    clients_lock = threading.Lock()
+
+    def browser(self):
+        """This browser's id (new if it has none) and whether it is new."""
+        for c in (self.headers.get("cookie") or "").split(";"):
+            c = c.strip()
+            if c.startswith(CLIENT_COOKIE + "="):
+                value = c[len(CLIENT_COOKIE) + 1:]
+                if value.isalnum() and len(value) <= 64:
+                    return value, False
+        return os.urandom(12).hex(), True
+
+    def session_for(self, client, new_client, default):
+        """The browser's own session. A browser takes the next one on its first
+        page load (when it gets its cookie); requests before that (or from a
+        tool like curl) share the last one, so they never use up a browser's."""
+        sessions = self.stand.sessions
+        if not sessions:
+            return default
+        page = self.command == "GET" and "text/html" in (self.headers.get("accept") or "")
+        with self.clients_lock:
+            slot = Handler.clients.get(client)
+            if slot is None and page:
+                slot = Handler.clients[client] = len(Handler.clients) % max(1, len(sessions) - 1)
+        return sessions[slot] if slot is not None else sessions[-1]
 
     def stale_page(self):
         """A page load from a browser that last saw an earlier stand."""
@@ -108,6 +140,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             c.strip() for c in (self.headers.get("cookie") or "").split(";")
             if c.strip() and not c.strip().startswith(name + "=")
         ]
+        client, new_client = self.browser()
+        session = self.session_for(client, new_client, session)
         headers["Cookie"] = "; ".join(kept + ["%s=%s" % (name, session)])
         headers["Host"] = target.netloc
         if self.headers.get("origin"):
@@ -124,6 +158,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_error(502, "dev stand unreachable")
             return
         self.send_response(response.status)
+        if new_client:
+            self.send_header("Set-Cookie", "%s=%s; Path=/; SameSite=Lax; HttpOnly" % (CLIENT_COOKIE, client))
         if self.stale_page():
             self.send_header("Clear-Site-Data", '"storage"')
             self.send_header("Set-Cookie", "%s=%s; Path=/; SameSite=Lax" % (EPOCH_COOKIE, self.stand.epoch))

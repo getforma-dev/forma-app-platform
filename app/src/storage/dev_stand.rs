@@ -91,6 +91,10 @@ const AUTHORING: [(&str, &str); 3] = [
 ];
 const FOLDER_FIXTURE: &str = "docs/pitch/folder-fixture";
 const DEFAULT_PARSER: &str = "/private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/parser-target";
+/// Sessions per persona: the proxy gives each browser its own (a browser
+/// keeps one live stream per session, so two browsers on one session
+/// replaced each other's stream; production gives every browser its own).
+const BROWSER_SLOTS: usize = 8;
 /// How often the stand touches each persona's session (idle limit: 1 hour).
 const KEEPALIVE: Duration = Duration::from_secs(60);
 
@@ -610,7 +614,7 @@ async fn serve<M, F>(
     app: Router,
     fixture: &Fixture,
     mint: &M,
-    mut sessions: Vec<String>,
+    sessions: Vec<String>,
 ) where
     M: Fn(&'static str) -> F,
     F: std::future::Future<Output = String>,
@@ -625,14 +629,24 @@ async fn serve<M, F>(
     .await
     .unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
-    let write_file = |sessions: &[String]| {
+    // Each persona's first session is the one the examples were seeded with;
+    // the others are for more browsers.
+    let mut slots: Vec<Vec<String>> = Vec::new();
+    for (persona, first) in personas().iter().zip(sessions) {
+        let mut slot = vec![first];
+        for _ in 1..BROWSER_SLOTS {
+            slot.push(mint(persona.principal).await);
+        }
+        slots.push(slot);
+    }
+    let write_file = |slots: &[Vec<String>]| {
         let personas: serde_json::Map<String, Value> = personas()
             .iter()
-            .zip(sessions)
-            .map(|(p, session)| {
+            .zip(slots)
+            .map(|(p, sessions)| {
                 (
                     p.key.to_owned(),
-                    json!({"name": p.name, "principal_id": p.principal, "session": session}),
+                    json!({"name": p.name, "principal_id": p.principal, "session": sessions[0], "sessions": sessions}),
                 )
             })
             .collect();
@@ -649,7 +663,7 @@ async fn serve<M, F>(
             .unwrap(),
         );
     };
-    write_file(&sessions);
+    write_file(&slots);
     let server_app = app.clone();
     let server = tokio::spawn(async move {
         let _ = axum::serve(
@@ -676,16 +690,18 @@ async fn serve<M, F>(
         // Keep each session inside its idle limit; one that ended (a
         // sign-out in the browser) is minted again and the file rewritten.
         let mut changed = false;
-        for (persona, session) in personas().iter().zip(sessions.iter_mut()) {
-            let reply = send(&app, "GET", "/v1/members", Some(session), "", &[]).await;
-            if reply.status != StatusCode::OK {
-                *session = mint(persona.principal).await;
-                changed = true;
-                println!("DEV_STAND session for {} minted again", persona.name);
+        for (persona, sessions) in personas().iter().zip(slots.iter_mut()) {
+            for session in sessions.iter_mut() {
+                let reply = send(&app, "GET", "/v1/members", Some(session), "", &[]).await;
+                if reply.status != StatusCode::OK {
+                    *session = mint(persona.principal).await;
+                    changed = true;
+                    println!("DEV_STAND session for {} minted again", persona.name);
+                }
             }
         }
         if changed {
-            write_file(&sessions);
+            write_file(&slots);
         }
     }
     println!("DEV_STAND stopping");
