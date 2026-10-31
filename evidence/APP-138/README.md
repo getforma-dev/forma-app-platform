@@ -37,3 +37,9 @@ No live-provider sign-in, real upload, model generation or write/approval comman
 ### Final narrow-screen review fix
 
 The reviewer applied a ten-line, mobile-only Tier B fix after the 320×568 check found tabs pushing the pane close button offscreen and long command text widening its grid. Header gap, tab padding/type size and command grid minimums now fit the narrow surface. Browser recheck: header 320/320 client/scroll width, command list 273/273, close button right edge 302 (inside viewport). Strict production build also passes from an isolated output directory, avoiding writes to the running watcher's output. No further broad test repeat was needed for these ten CSS lines. The native input focus action and file-picker opening/cancellation were also checked; no upload occurred.
+
+### HTTP smoke alignment found by CI
+
+Foundation preparation on `e3a359c` failed in `smoke_http.py`: it still expected the scaffold's “Foundation workspace” and counter value7. The independent reviewer replaced that presentation expectation with the native product page, real access links, zero scripts/islands, and a same-origin WOFF2 MIME/magic check. A local run then caught the obsolete demand that the CSP nonce appear in the zero-script body; the reviewer retained header nonce extraction/freshness across two responses and removed only that script-specific body expectation. All readiness/helper prevention, uniform denial, private startup and no-store checks remain.
+
+`just check http-smoke bash-n` passes against the compiled normal server binary: public home/sign-in/invite200, unconfigured readiness503, protected paths uniform404, fresh nonce headers, private configuration refusals with no credential disclosure. The new `http-smoke` step is now part of local `just check`; its registration and developer guide were independently reviewed. No application source changed in this correction. CI is re-run on the corrected commit before landing.
