@@ -19,7 +19,7 @@ import { activeCanvasItem, canvasHost, isDemoCanvas, mountWidget, onLayoutSaved,
 import { mountCalculator, looksLikeExpression } from './calculator';
 import { buildCard, customize, widgetTitle, type WidgetCard } from './card';
 import { mountClock } from './clock';
-import { defaultState, KINDS, placeOf, validState, zoneOf, type ClockState, type WeatherState, type WidgetKind, type WidgetState } from './state';
+import { defaultState, KINDS, placeOf, validState, ZONES, zoneOf, type ClockState, type WeatherState, type WidgetKind, type WidgetState } from './state';
 import { mountWeather } from './weather';
 
 export type WidgetCommand = { slug: string; title: string; purpose: string; run(text: string): void | Promise<void> };
@@ -136,9 +136,11 @@ export async function runWidget(kind: WidgetKind, text: string): Promise<string>
     const place = placeOf(words);
     if (place) {
       if (current) {
+        rememberPlace(place);
         current.apply({ ...(current.state as WeatherState), location: place });
         return `Weather now shows ${place}.`;
       }
+      rememberPlace(place);
       return placeWidget('weather', { ...(defaultState('weather') as WeatherState), location: place })
         ? `Weather for ${place} is on your canvas.`
         : 'The widget could not be placed.';
@@ -174,22 +176,71 @@ export const WIDGET_COMMANDS: WidgetCommand[] = [
   {
     slug: 'weather',
     title: 'Weather',
-    purpose: 'Current weather for a place (“/weather Austin”); restyle it in words.',
+    purpose: 'Current weather for a place; restyle it in words.',
     run: (text) => runWidget('weather', text).then(announce),
   },
   {
     slug: 'calculator',
     title: 'Calculator',
-    purpose: 'A calculator (“/calculator 12*(3+4)”, or “make it a TI-84 in Matrix style”).',
+    purpose: 'A calculator; type an expression, or restyle it in words.',
     run: (text) => runWidget('calculator', text).then(announce),
   },
   {
     slug: 'clock',
     title: 'Clock',
-    purpose: 'A clock for a time zone (“/clock Tokyo”), 12 or 24 hour.',
+    purpose: 'A clock for a time zone; 12 or 24 hour.',
     run: (text) => runWidget('clock', text).then(announce),
   },
 ];
+
+// --- APP-118: live suggestions for `/weather <city>` and `/clock <zone>` ---
+
+const RECENT_KEY = 'forma.weather.recent.v1';
+const SUGGESTED = ['Austin', 'New York', 'London', 'Tokyo', 'Singapore'];
+type Suggestion = { badge: string; title: string; detail: string; value: string };
+
+function storedPlaces(): string[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as unknown;
+    return Array.isArray(list) ? list.flatMap((value) => (typeof value === 'string' && placeOf(value) ? [value] : [])).slice(0, 6) : [];
+  } catch {
+    return [];
+  }
+}
+function rememberPlace(place: string): void {
+  try {
+    const list = [place, ...storedPlaces().filter((other) => other.toLowerCase() !== place.toLowerCase())].slice(0, 6);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+  } catch {
+    // a suggestion list only: nothing to recover
+  }
+}
+
+/** Cities for `/weather`: on the canvas, then recent ones, then a few suggestions. */
+export function citySuggestions(rest: string): Suggestion[] {
+  const query = rest.trim().toLowerCase();
+  const seen = new Set<string>();
+  const out: Suggestion[] = [];
+  const add = (place: string, detail: string) => {
+    const key = place.toLowerCase();
+    if (seen.has(key) || (query && !key.startsWith(query) && !key.split(/[\s,]+/).some((word) => word.startsWith(query)))) return;
+    seen.add(key);
+    out.push({ badge: '☀', title: place, detail, value: `/weather ${place}` });
+  };
+  for (const { widget } of placed.values()) if (widget.kind === 'weather') add((widget.state as WeatherState).location, 'On your canvas');
+  for (const place of storedPlaces()) add(place, 'Recent');
+  for (const place of SUGGESTED) add(place, 'Suggested');
+  return out.slice(0, 8);
+}
+
+/** Zones for `/clock`: the closed list the clock knows. */
+export function zoneSuggestions(rest: string): Suggestion[] {
+  const query = rest.trim().toLowerCase().replace(/^(in|show)\s+/, '');
+  return ZONES
+    .filter(([id, name]) => !query || name.toLowerCase().startsWith(query) || id.toLowerCase().includes(query))
+    .slice(0, 8)
+    .map(([id, name]) => ({ badge: '◷', title: name, detail: id === 'local' ? 'This device’s time' : id, value: `/clock ${name}` }));
+}
 
 /** APP-104: how many widgets of `kind` are on the canvas (the library pane's indicator). */
 export function widgetCount(kind: WidgetKind): number {

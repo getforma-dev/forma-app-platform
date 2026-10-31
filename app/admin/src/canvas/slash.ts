@@ -1,74 +1,57 @@
 // APP-101 slash commands: the intent bar's explicit lane, instant and never
-// a guess. Typing `/` opens a keyboard-navigable list of the member's
-// commands (`GET /v1/commands`: every library app with its slug and aliases,
-// and the member's named saved apps), merged with any canvas commands other
-// modules register (`registerCommands`, e.g. utility widgets). `/name rest`
-// runs that command: a library app opens at once through the pinned compose
-// (`{"intent", "app_id"}`, no routing, no model call) and `rest` is tailored
-// by the live transform, or, for a record app when `rest` reads like an
-// entry or a decision, goes to the action path pinned to that app; a named
-// saved app opens its work directly. `/apps` lists every command as a card
-// on the canvas. The near-tie chooser (`showChooser`) lives here too: the
-// top apps plus "Build something new", one click proceeds.
+// a guess. APP-118: every command lives in one registry
+// (`command-registry.ts`: name, aliases, category, description, typed
+// arguments, examples), fed by the canvas modules (`registerCommands`) and
+// by the member's apps from the server (`GET /v1/commands`: every library
+// app with its slug and aliases, and the member's named saved apps). This
+// module draws the autocomplete from it: `/` lists the commands by category,
+// each with its argument signature; after `/name ` a hint row shows the
+// argument being typed and an example, and live suggestions appear for the
+// arguments that have values (apps, cards, folders, cities, zones; each
+// module registers its own with `registerCompleter`). `?` in the empty bar
+// opens the command sheet (`/commands`).
+//
+// `/name rest` runs that command: a library app opens at once through the
+// pinned compose (`{"intent", "app_id"}`, no routing, no model call) and
+// `rest` is tailored by the live transform, or, for a record app when `rest`
+// reads like an entry or a decision, goes to the action path pinned to that
+// app; a named saved app opens its work directly. The near-tie chooser
+// (`showChooser`) lives here too: the top apps plus "Build something new",
+// one click proceeds.
 //
 // Nothing from the server is rendered as markup: titles and purposes are
 // text nodes; ids are checked UUIDs.
 import { submitAction } from './actions';
-import { placeUtilityCard, placeWork } from './board';
+import { placeWork } from './board';
+import { openCommandSheet } from './command-sheet';
+import {
+  argumentHint, findCommand, groupCommands, matchCommands, registerCommands, serverMeta, setServerCommands, signature,
+  type CanvasCommand, type Command, type CommandGroup,
+} from './command-registry';
 import { submitIntent, type Choice } from './compose';
 import { isDismissKey, showDockCard } from './dock-card';
 import { el, isUuid } from './render';
+
+export { registerCommands } from './command-registry';
+export type { CanvasCommand } from './command-registry';
 
 export const COMMANDS_URL = '/v1/commands';
 type Report = (message: string) => void;
 
 /**
- * A canvas command. Other modules (for example the utility widgets of
- * `pivot/widgets`) register their own with `registerCommands`; the
- * autocomplete and `/apps` merge them with the server's app commands.
- */
-export interface CanvasCommand {
-  slug: string;
-  title: string;
-  purpose: string;
-  aliases?: string[];
-  run(text: string, report?: Report): void | Promise<void>;
-}
-
-const registered: CanvasCommand[] = [];
-let server: CanvasCommand[] = [];
-let loaded: Promise<void> | null = null;
-
-/** Adds canvas commands (a later registration of the same slug wins). */
-export function registerCommands(commands: CanvasCommand[]): void {
-  for (const command of commands) {
-    const at = registered.findIndex((existing) => existing.slug === command.slug);
-    if (at >= 0) registered.splice(at, 1);
-    registered.push(command);
-  }
-}
-
-/**
- * APP-104: an argument completion under the bar (`/card 3.2`, `/app expense`):
+ * APP-104: an argument suggestion under the bar (`/card 3.2`, `/app expense`):
  * a short badge (the number), a title, a detail line and the text it runs.
+ * A `value` ending in a space only fills the bar (`/folder new `).
  */
 export type Completion = { badge: string; title: string; detail: string; value: string };
-const completers = new Map<string, (rest: string) => Completion[]>();
-/** Offers completions for `/slug <rest>`. */
-export function registerCompleter(slug: string, complete: (rest: string) => Completion[]): void {
-  completers.set(slug, complete);
-}
-
-/** Every command: the built-in `/apps`, the registered ones, then the server's. */
-export function allCommands(): CanvasCommand[] {
-  const seen = new Set<string>();
-  const out: CanvasCommand[] = [];
-  for (const command of [APPS, ...registered, ...server]) {
-    if (seen.has(command.slug)) continue;
-    seen.add(command.slug);
-    out.push(command);
-  }
-  return out;
+type Completer = { complete: (rest: string) => Completion[]; select: boolean };
+const completers = new Map<string, Completer>();
+/**
+ * Offers suggestions for `/slug <rest>`. With `select: false` none is
+ * highlighted until an arrow key, so Enter runs what was typed (`/weather`).
+ */
+export function registerCompleter(slug: string, complete: (rest: string) => Completion[], options: { select?: boolean } = {}): void {
+  completers.set(slug, { complete, select: options.select ?? true });
 }
 
 /** Text that reads like a record entry or a decision (the action path's lane). */
@@ -88,6 +71,7 @@ function serverCommand(entry: ServerCommand): CanvasCommand {
     aliases: entry.aliases,
     title: entry.title,
     purpose: entry.purpose,
+    ...serverMeta(entry.slug, entry.record),
     run: async (text: string, report: Report = () => undefined) => {
       const rest = text.trim();
       if (entry.kind === 'saved' && entry.work_id) {
@@ -132,23 +116,19 @@ function parseCommands(body: unknown): ServerCommand[] {
   });
 }
 
+let loaded: Promise<void> | null = null;
 /** Re-reads the member's commands from the server. */
 export function refreshCommands(): Promise<void> {
   loaded = fetch(COMMANDS_URL, { credentials: 'same-origin', cache: 'no-store' })
     .then((response) => (response.ok ? response.json() : null))
     .then((body) => {
-      server = parseCommands(body).map(serverCommand);
+      setServerCommands(parseCommands(body).map(serverCommand));
     })
     .catch(() => undefined);
   return loaded;
 }
 function ensureCommands(): Promise<void> {
   return loaded ?? refreshCommands();
-}
-
-function find(name: string): CanvasCommand | undefined {
-  const all = allCommands();
-  return all.find((command) => command.slug === name) ?? all.find((command) => command.aliases?.includes(name));
 }
 
 /** `/name rest`: runs the command, or explains how to see the list. */
@@ -160,34 +140,30 @@ export async function runSlash(text: string, report: Report): Promise<void> {
   }
   await ensureCommands();
   const name = (match[1] ?? '').toLowerCase();
-  const command = find(name);
+  const command = findCommand(name);
   if (!command) {
-    report(`There is no /${name} command. Type / to see yours, or /apps for the list.`);
+    report(`There is no /${name} command. Type / to see yours, or /commands for the list.`);
     return;
   }
   await command.run(match[2] ?? '', report);
 }
 
-/** `/apps`: every command as a card on the canvas; a click runs it. */
-const APPS: CanvasCommand = {
-  slug: 'apps',
+/** The `/` list for `prefix`: the registry's commands, grouped by category (exported for the tests). */
+export function slashGroups(prefix: string): CommandGroup[] {
+  return groupCommands(matchCommands(prefix));
+}
+
+/** `/commands [search]` (aliases `/help`): the command sheet, never a canvas card. */
+const COMMANDS: CanvasCommand = {
+  slug: 'commands',
+  aliases: ['help'],
   title: 'All commands',
-  purpose: 'Show every app and command you can open',
-  run: async (_text: string, report: Report = () => undefined) => {
-    await ensureCommands();
-    const document_ = document;
-    const list = el(document_, 'ul', { class: 'cv-apps-list' });
-    for (const command of allCommands()) {
-      if (command.slug === 'apps') continue;
-      const button = el(document_, 'button', { type: 'button', class: 'cv-apps-item' },
-        el(document_, 'span', { class: 'cv-apps-slug' }, `/${command.slug}`),
-        el(document_, 'span', { class: 'cv-apps-title' }, command.title),
-        el(document_, 'span', { class: 'cv-apps-purpose' }, command.purpose));
-      button.addEventListener('click', () => void command.run('', report));
-      list.append(el(document_, 'li', {}, button));
-    }
-    placeUtilityCard('apps', 'Your commands', el(document_, 'div', { class: 'cv-card-body' }, list));
-    report('Your commands are on the canvas. Click one, or type /name in the bar.');
+  purpose: 'Every command with its arguments and examples; click one to put it in the bar',
+  run: (text: string, report: Report = () => undefined) => {
+    const input = document.getElementById('intent-input') as HTMLInputElement | null;
+    if (input) input.value = '';
+    openCommandSheet(text.trim(), input);
+    report('Every command is in the sheet. Click one to put it in the bar.');
   },
 };
 
@@ -238,142 +214,199 @@ export function showChooser(text: string, choices: Choice[], report: Report): vo
 
 // --- The autocomplete under the intent bar ---
 
+type Entry = { kind: 'command'; command: Command } | { kind: 'completion'; completion: Completion };
+
 /** Wires the `/` autocomplete onto the intent bar (once). */
 export function startSlash(document_: Document): void {
   const input = document_.getElementById('intent-input') as HTMLInputElement | null;
   const form = document_.getElementById('intent-form') as HTMLFormElement | null;
   if (!input || !form || input.dataset.slash === 'on') return;
   input.dataset.slash = 'on';
+  registerCommands([COMMANDS]);
+  const hint = el(document_, 'div', { id: 'cv-slash-hint', class: 'cv-slash-hint', hidden: '' });
   const list = el(document_, 'ul', { id: 'cv-slash', class: 'cv-slash', role: 'listbox', 'aria-label': 'Commands', hidden: '' });
-  form.append(list);
+  const pop = el(document_, 'div', { class: 'cv-slash-pop', hidden: '' }, hint, list);
+  form.append(pop);
   input.setAttribute('role', 'combobox');
   input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-controls', 'cv-slash');
   input.setAttribute('aria-expanded', 'false');
-  let shown: CanvasCommand[] = [];
-  let completions: Completion[] = [];
+  let entries: Entry[] = [];
   let active = -1;
+  let hintKey = '';
 
+  const options = () => Array.from(list.querySelectorAll<HTMLElement>('[role="option"]'));
+  const sync = () => {
+    pop.hidden = list.hidden && hint.hidden;
+    input.setAttribute('aria-expanded', list.hidden ? 'false' : 'true');
+  };
+  // The bar keeps its own description (the status line); the hint joins it while shown.
+  const describe = (on: boolean) => {
+    const ids = (input.getAttribute('aria-describedby') ?? '').split(/\s+/).filter((id) => id && id !== 'cv-slash-hint');
+    if (on) ids.push('cv-slash-hint');
+    if (ids.length) input.setAttribute('aria-describedby', ids.join(' '));
+    else input.removeAttribute('aria-describedby');
+  };
+  const hideHint = () => {
+    hint.hidden = true;
+    hintKey = '';
+    describe(false);
+  };
   const close = () => {
     list.hidden = true;
-    input.setAttribute('aria-expanded', 'false');
+    entries = [];
+    hideHint();
     input.removeAttribute('aria-activedescendant');
     active = -1;
+    sync();
   };
   const highlight = (index: number) => {
     active = index;
-    Array.from(list.children).forEach((child, at) => child.setAttribute('aria-selected', at === index ? 'true' : 'false'));
+    options().forEach((option, at) => option.setAttribute('aria-selected', at === index ? 'true' : 'false'));
     if (index >= 0) input.setAttribute('aria-activedescendant', `cv-slash-${index}`);
-    list.children[index]?.scrollIntoView({ block: 'nearest' });
+    else input.removeAttribute('aria-activedescendant');
+    options()[index]?.scrollIntoView({ block: 'nearest' });
   };
-  const complete = (command: CanvasCommand) => {
-    input.value = `/${command.slug} `;
-    close();
+  const fill = (value: string) => {
+    input.value = value;
     input.focus();
-    if (completers.has(command.slug)) render();
+    render();
   };
   const run = (value: string) => {
     input.value = value;
     close();
     form.requestSubmit();
   };
-  const renderCompletions = (list_: Completion[]) => {
-    completions = list_;
-    shown = [];
-    list.replaceChildren(...list_.map((completion, index) => {
-      const option = el(document_, 'li', { id: `cv-slash-${index}`, role: 'option', 'aria-selected': 'false', class: 'cv-slash-option cv-slash-completion' },
-        el(document_, 'span', { class: 'cv-slash-name cv-slash-badge' }, completion.badge),
-        el(document_, 'span', { class: 'cv-slash-title' }, completion.title),
-        el(document_, 'span', { class: 'cv-slash-purpose' }, completion.detail));
-      option.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-        run(completion.value);
-      });
-      return option;
-    }));
-    list.hidden = list_.length === 0;
-    input.setAttribute('aria-expanded', list_.length ? 'true' : 'false');
-    highlight(list_.length ? 0 : -1);
+  const accept = (entry: Entry, key: 'Tab' | 'Enter' | 'click') => {
+    if (entry.kind === 'command') {
+      // A command with no arguments runs on Enter; otherwise its name fills the bar.
+      if (key !== 'Tab' && entry.command.args.length === 0) run(`/${entry.command.slug}`);
+      else fill(`/${entry.command.slug} `);
+      return;
+    }
+    const value = entry.completion.value;
+    if (key === 'Tab' || value.endsWith(' ')) fill(value);
+    else run(value);
+  };
+  const option = (entry: Entry, index: number, ...children: Node[]) => {
+    const node = el(document_, 'li', { id: `cv-slash-${index}`, role: 'option', 'aria-selected': 'false', class: `cv-slash-option${entry.kind === 'completion' ? ' cv-slash-completion' : ''}` }, ...children);
+    node.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      accept(entry, 'click');
+    });
+    return node;
+  };
+  const showHint = (command: Command, rest: string) => {
+    const shown = argumentHint(command, rest);
+    const key = JSON.stringify(shown);
+    if (key !== hintKey) {
+      hintKey = key;
+      hint.replaceChildren(
+        el(document_, 'code', { class: 'cv-slash-sig' }, ...shown.parts.flatMap((part, at) => [
+          ...(at ? [document_.createTextNode(' ')] : []),
+          part.current ? el(document_, 'mark', {}, part.text) : document_.createTextNode(part.text),
+        ])),
+        el(document_, 'span', { class: 'cv-slash-note' }, shown.note),
+        ...(shown.example ? [el(document_, 'span', { class: 'cv-slash-example' }, 'e.g. ', el(document_, 'code', {}, shown.example))] : []));
+    }
+    hint.hidden = false;
+    describe(true);
+  };
+  const renderCompletions = (found: Completion[], select: boolean) => {
+    entries = found.map((completion) => ({ kind: 'completion', completion }));
+    list.replaceChildren(...found.map((completion, index) => option(entries[index]!, index,
+      el(document_, 'span', { class: 'cv-slash-name cv-slash-badge' }, completion.badge),
+      el(document_, 'span', { class: 'cv-slash-title' }, completion.title),
+      el(document_, 'span', { class: 'cv-slash-purpose' }, completion.detail))));
+    list.hidden = found.length === 0;
+    highlight(found.length && select ? 0 : -1);
   };
   const render = () => {
     const value = input.value;
     const argument = value.match(/^\/([a-z0-9-]+)\s+([\s\S]*)$/i);
-    const completer = argument ? completers.get((argument[1] ?? '').toLowerCase()) : undefined;
-    if (argument && completer) {
-      renderCompletions(completer(argument[2] ?? ''));
+    if (argument) {
+      const command = findCommand(argument[1] ?? '');
+      const rest = argument[2] ?? '';
+      if (!command) {
+        close();
+        return;
+      }
+      showHint(command, rest);
+      const completer = completers.get((argument[1] ?? '').toLowerCase()) ?? completers.get(command.slug);
+      if (completer) renderCompletions(completer.complete(rest), completer.select);
+      else {
+        entries = [];
+        list.hidden = true;
+        highlight(-1);
+      }
+      sync();
       return;
     }
-    completions = [];
+    hideHint();
     const match = value.match(/^\/([a-z0-9-]*)$/i);
     if (!match) {
       close();
       return;
     }
-    const prefix = (match[1] ?? '').toLowerCase();
-    shown = allCommands()
-      .filter((command) => command.slug.startsWith(prefix) || command.aliases?.some((alias) => alias.startsWith(prefix))
-        || (prefix.length > 1 && command.title.toLowerCase().includes(prefix)))
-      .slice(0, 12);
-    list.replaceChildren(...shown.map((command, index) => {
-      const option = el(document_, 'li', { id: `cv-slash-${index}`, role: 'option', 'aria-selected': 'false', class: 'cv-slash-option' },
-        el(document_, 'span', { class: 'cv-slash-name' }, `/${command.slug}`),
-        el(document_, 'span', { class: 'cv-slash-title' }, command.title),
-        el(document_, 'span', { class: 'cv-slash-purpose' }, command.purpose));
-      option.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-        complete(command);
-      });
-      return option;
-    }));
-    list.hidden = shown.length === 0;
-    input.setAttribute('aria-expanded', shown.length ? 'true' : 'false');
-    highlight(shown.length ? 0 : -1);
+    const groups = slashGroups(match[1] ?? '');
+    entries = [];
+    const nodes = groups.map((group) => {
+      const heading = `cv-slash-cat-${group.category.toLowerCase()}`;
+      return el(document_, 'li', { role: 'group', 'aria-labelledby': heading, class: 'cv-slash-group' },
+        el(document_, 'span', { id: heading, class: 'cv-slash-cat', role: 'presentation' }, group.category),
+        el(document_, 'ul', { role: 'none', class: 'cv-slash-items' }, ...group.commands.map((command) => {
+          const entry: Entry = { kind: 'command', command };
+          entries.push(entry);
+          return option(entry, entries.length - 1,
+            el(document_, 'span', { class: 'cv-slash-name' }, signature(command)),
+            el(document_, 'span', { class: 'cv-slash-title' }, command.title),
+            el(document_, 'span', { class: 'cv-slash-purpose' }, command.purpose));
+        })));
+    });
+    list.replaceChildren(...nodes);
+    list.hidden = entries.length === 0;
+    highlight(entries.length ? 0 : -1);
+    sync();
   };
   input.addEventListener('input', () => {
     if (input.value.startsWith('/')) void ensureCommands().then(render);
     else close();
   });
   input.addEventListener('keydown', (event) => {
-    if (!list.hidden && completions.length) {
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        const step = event.key === 'ArrowDown' ? 1 : -1;
-        highlight((active + step + completions.length) % completions.length);
-      } else if (event.key === 'Tab' || event.key === 'Enter') {
-        const completion = completions[active];
-        if (!completion) return;
-        event.preventDefault();
-        if (event.key === 'Tab') {
-          input.value = `${completion.value}`;
-          render();
-        } else {
-          run(completion.value);
-        }
-      } else if (event.key === 'Escape') {
+    // `?` in the empty bar opens the command sheet.
+    if (event.key === '?' && input.value === '' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault();
+      void ensureCommands().then(() => openCommandSheet('', input));
+      return;
+    }
+    if (list.hidden || !entries.length) {
+      if (event.key === 'Escape' && !pop.hidden) {
         event.preventDefault();
         close();
       }
       return;
     }
-    if (list.hidden || !shown.length) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       const step = event.key === 'ArrowDown' ? 1 : -1;
-      highlight((active + step + shown.length) % shown.length);
+      highlight(active < 0 && step < 0 ? entries.length - 1 : (active + step + entries.length) % entries.length);
     } else if (event.key === 'Tab' || event.key === 'Enter') {
-      const command = shown[active];
-      if (!command) return;
-      // Enter on a fully typed command runs it; otherwise it completes.
-      if (event.key === 'Enter' && input.value.trim().toLowerCase() === `/${command.slug}`) {
-        close();
+      const entry = entries[active];
+      if (!entry || event.shiftKey) return;
+      // Enter on a fully typed command name runs it as typed.
+      if (event.key === 'Enter' && entry.kind === 'command' && /^\/[a-z0-9-]+$/i.test(input.value.trim()) && findCommand(input.value.trim().slice(1))?.slug === entry.command.slug) {
+        event.preventDefault();
+        run(input.value.trim());
         return;
       }
       event.preventDefault();
-      complete(command);
+      accept(entry, event.key);
     } else if (event.key === 'Escape') {
       event.preventDefault();
       close();
     }
   });
-  input.addEventListener('blur', () => window.setTimeout(close, 120));
+  input.addEventListener('blur', () => window.setTimeout(() => {
+    if (document_.activeElement !== input) close();
+  }, 120));
 }

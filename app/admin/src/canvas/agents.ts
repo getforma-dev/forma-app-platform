@@ -7,6 +7,7 @@
 // a placeholder only, never a live token. Nothing here grants anything: a
 // token acts as this member, with this member's permissions, receipts and
 // audit, and the server re-judges every call.
+import { registerCommands } from './command-registry';
 import { when as displayWhen } from './display';
 import { activityButton, scopeFields } from './governance';
 import { el, isUuid } from './render';
@@ -217,4 +218,17 @@ export function startAgents(document_: Document): void {
   const anchor = bar.querySelector('.cv-link');
   if (anchor) bar.insertBefore(open, anchor);
   else bar.prepend(open);
+  // APP-118: `/agent` opens the same panel.
+  registerCommands([{
+    slug: 'agent',
+    aliases: ['agents', 'mcp'],
+    title: 'Connect an agent',
+    purpose: 'Mint a token for Claude Code or OpenAI and get the setup lines',
+    run: (_text: string, report?: (message: string) => void) => {
+      const input = document_.getElementById('intent-input') as HTMLInputElement | null;
+      if (input) input.value = '';
+      open.click();
+      report?.('The agent panel is open.');
+    },
+  }]);
 }

@@ -952,7 +952,7 @@
 .cv-kbd-group { color: var(--cv-faint); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
 .cv-zoom-sep { height: 1px; margin: 0.25rem 0.3rem; background: var(--cv-line); }
 /* The command list opens over the toolbar; the bar's status toast sits above it. */
-.cv-dock .cv-slash { z-index: 24; }
+.cv-dock .cv-slash-pop { z-index: 24; }
 .cv-intent-status { bottom: calc(100% + 62px); }
 
 .cv-shortcuts {
@@ -1320,7 +1320,7 @@
 .cv-lib-card.is-on .cv-lib-toggle:hover .cv-lib-action { background: rgb(180 35 24 / 10%); color: var(--cv-bad); }
 .cv-lib-card.is-on .cv-lib-toggle:hover .cv-lib-action::before { content: "− "; }
 .cv-slash-badge { justify-self: start; padding: 0 0.35rem; border-radius: 6px; background: var(--cv-sunken); color: var(--cv-muted); font-size: 0.75rem; }
-.cv-slash-completion { grid-template-columns: 3.4rem 1fr; }
+/* APP-118: the completion grid lives with the other slash rules (actions.css). */
 
 @media (max-width: 760px) {
   .cv-top { padding: 0 1rem; }
@@ -2222,4 +2222,112 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
 .cv-card .cv-retry { display: inline-flex; align-items: center; width: auto; }
 @media (max-width: 760px) {
   .cv-dock:has(.cv-confirm-host > *) .cv-tools { visibility: hidden; }
+}
+
+/* --- APP-118: the command sheet (`/commands`, `/help`, `?` in the empty bar) --- */
+.cv-commands {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(10 13 20 / 28%);
+  animation: cv-fade 160ms ease-out both;
+}
+.cv-commands[hidden] { display: none; }
+.cv-commands-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(460px, 100%);
+  height: 100%;
+  padding: 1.1rem 1.1rem 0;
+  border-left: 1px solid var(--cv-line);
+  background: var(--cv-surface);
+  box-shadow: var(--cv-shadow-lift);
+}
+.cv-commands-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
+.cv-commands-head h2 { margin: 0; font-size: 1.05rem; }
+.cv-commands-sub { margin: 0.2rem 0 0; color: var(--cv-muted); font-size: 0.8rem; }
+.cv-commands-search {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 10px;
+  background: var(--cv-sunken);
+  color: var(--cv-text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.cv-commands-search:focus-visible { outline: 2px solid var(--cv-accent); outline-offset: 1px; }
+.cv-commands-list { flex: 1; overflow-y: auto; padding-bottom: 1.2rem; }
+.cv-commands-cat h3 {
+  display: flex;
+  justify-content: space-between;
+  margin: 0.9rem 0 0.3rem;
+  color: var(--cv-muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cv-commands-count { color: var(--cv-faint); font-weight: 500; }
+.cv-commands-cat ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.2rem; }
+.cv-commands-row { padding: 0.15rem 0; border-top: 1px solid var(--cv-hairline); }
+.cv-commands-row:first-child { border-top: 0; }
+.cv-commands-item {
+  display: grid;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cv-commands-item:hover, .cv-commands-item:focus-visible { border-color: var(--cv-accent); background: var(--cv-accent-soft); outline: none; }
+.cv-commands-sig { font: 600 0.82rem/1.4 var(--cv-mono); color: var(--cv-text); }
+.cv-commands-arg { color: var(--cv-muted); font-weight: 500; }
+.cv-commands-arg.is-required { color: var(--cv-accent); }
+.cv-commands-title { font-size: 0.82rem; font-weight: 600; }
+.cv-commands-purpose { color: var(--cv-muted); font-size: 0.78rem; }
+.cv-commands-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; padding: 0 0.5rem 0.35rem; font-size: 0.74rem; color: var(--cv-faint); }
+.cv-commands-example {
+  max-width: 100%;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 6px;
+  background: var(--cv-sunken);
+  color: var(--cv-muted);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cv-commands-example code { font: 500 0.72rem/1.4 var(--cv-mono); }
+.cv-commands-example:hover, .cv-commands-example:focus-visible { border-color: var(--cv-accent); color: var(--cv-accent); outline: none; }
+.cv-commands-none { color: var(--cv-muted); font-size: 0.85rem; }
+/* The `?` sheet's command list and its link to the sheet. */
+.cv-shortcuts-commands { margin-top: 1.1rem; }
+.cv-shortcuts-all {
+  margin: 0.3rem 0 0.6rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--cv-accent);
+  border-radius: 8px;
+  background: var(--cv-accent-soft);
+  color: var(--cv-accent);
+  font: 600 0.8rem/1.3 var(--cv-sans);
+  cursor: pointer;
+}
+.cv-shortcuts .cv-shortcuts-cmds { grid-template-columns: 6rem 1fr; align-items: baseline; }
+.cv-shortcuts .cv-shortcuts-cmds dt { color: var(--cv-muted); font-size: 0.74rem; }
+.cv-shortcuts .cv-shortcuts-cmds dd { display: flex; flex-wrap: wrap; gap: 0.25rem; text-align: left; white-space: normal; }
+.cv-shortcuts-cmd { padding: 0; border: 0; background: transparent; cursor: pointer; }
+.cv-shortcuts-cmd code { padding: 0.05rem 0.3rem; border-radius: 5px; background: var(--cv-accent-soft); color: var(--cv-accent); font: 600 0.72rem/1.4 var(--cv-mono); }
+.cv-shortcuts-cmd:hover code, .cv-shortcuts-cmd:focus-visible code { outline: 1px solid var(--cv-accent); }
+@media (max-width: 760px) {
+  .cv-commands-panel { width: 100%; border-left: 0; }
+  .cv-slash-option:not(.cv-slash-completion) .cv-slash-title { display: none; }
 }

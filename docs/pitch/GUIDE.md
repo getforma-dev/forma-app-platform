@@ -32,17 +32,24 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 
 **Intent bar (bottom).** Type a sentence, or `/` for commands.
 
-| Command | Does |
-| --- | --- |
-| `/apps` | Shows every app you can open. |
-| `/expense` | Opens the expense ledger. `/expense <text>` files or decides an expense. |
-| `/card <name or number>` | Brings one card (for example `/card 6.2`). |
-| `/app <name>` | Brings all of an app's cards. |
-| `/arrange` | Lays the board out by app. |
-| `/unite <app>`, `/split <app>` | Assembles an app's cards into one frame; breaks it apart again. |
-| `/note <text>` | Keeps a quick note as a card (your own record; edit in place, saved when you leave it). |
-| `/weather <place>`, `/calculator`, `/clock <zone>` | Utility widgets; restyle them in words. |
-| Any other sentence | The instant pick and live reshape; a short chooser when two apps fit equally; "Build something new" generates one. |
+Every command comes from one registry (APP-118: `canvas/command-registry.ts`). Typing `/` lists them by category, each with its argument signature (`<required>`, `[optional]`). After `/name ` a hint row marks the argument being typed and shows an example, and live suggestions appear for apps, cards, folders, cities and zones. Tab fills a suggestion, Enter runs it, and ↑/↓ move through the list. `/commands` (also `/help`, or `?` in the empty bar) opens the command sheet: categories, search, examples, and a click puts a command in the bar. The `?` shortcuts sheet lists the same commands and links to it.
+
+| Category | Command | Does |
+| --- | --- | --- |
+| Apps | `/apps [app name]` | Opens the Library pane, filtered by the name. Its suggestions list the matching apps, and Enter on one places it, as the pane's Add does. It never places a canvas card. |
+| Apps | `/app <app name or number>` | Brings all of an app's cards (`/app expense`, `/app 3`). |
+| Apps | `/card <card name or number>` | Brings one card (`/card 6.2`, `/card spend by category`). |
+| Apps | `/<app slug> [what to show]` | Opens that library app, tailored by the words. |
+| Records | `/expense [what you spent]` | Alone, opens the expense ledger. With words, files or decides an expense. |
+| Records | `/pto`, `/purchase`, `/invoice`, `/access`, `/discount` | The workflow apps (table below). |
+| Records | `/note [text]` | Keeps a quick note as a card (your own record; edit in place, saved when you leave it). |
+| Folders | `/folder [folder, new or formation] [name or instruction]` | Opens the folder picker, a folder, `new <name>`, `formation <instruction>` or `uploads`. Aliases `/storage`, `/box`. |
+| Canvas | `/unite <app>`, `/split <united app>` | Assembles an app's cards into one frame; breaks it apart again. |
+| Canvas | `/arrange` | Lays the board out by app. |
+| Widgets | `/weather [city or style]`, `/calculator [expression or style]`, `/clock [city or time zone]` | Utility widgets; restyle them in words. Every utility card has ×. |
+| Agents | `/agent` | Opens "Connect an agent". |
+| Help | `/commands [search]` (`/help`), `/shortcuts` | The command sheet; the `?` shortcuts sheet. |
+| — | Any other sentence | The instant pick and live reshape; a short chooser when two apps fit equally; "Build something new" generates one. |
 
 **Workflow commands (APP-107).** Each opens its app; with text after it, files or decides in that app.
 
@@ -72,7 +79,7 @@ Signing out of the canvas also ends that person's agent tokens and Slack link. R
 - Shift+0 / 1 / 2 zoom to 100% / fit / selection.
 - Click a header to select, Shift+click to add, and drag to move.
 - Delete returns a card to the library; it never deletes data.
-- `?` lists all shortcuts.
+- `?` lists all shortcuts and every command (with a link to the command sheet). `?` in the empty bar opens the command sheet.
 
 **Folders (APP-108).** Lead with click → type:
 
