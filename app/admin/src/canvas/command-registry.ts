@@ -1,9 +1,8 @@
 // APP-118: the one command registry. Every command of the intent bar, with
 // its name and aliases, its category, a one-line description, its typed
 // arguments and an example or two, lives here, and the surfaces read only
-// this list: the `/` autocomplete (`slash.ts`), the Commands tab of the
-// right pane (`command-sheet.ts`) and the `?` shortcuts sheet
-// (`controls.ts`).
+// this list: the `/` autocomplete (`slash.ts`) and the Commands tab of the
+// right pane (`command-sheet.ts`).
 //
 // APP-119: commands are verbs, apps are addresses. The verbs are what the
 // canvas modules register (`registerCommands`: `/card`, `/unite`,

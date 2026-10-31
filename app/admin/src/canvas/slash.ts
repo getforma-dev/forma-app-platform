@@ -14,7 +14,7 @@
 // example, and live suggestions appear for the arguments that have values
 // (apps, cards, folders, cities, zones; each module registers its own with
 // `registerCompleter`). `?` in the empty bar opens the right pane on its
-// Commands tab (`/commands`).
+// Shortcuts tab, as `?` on the canvas does; `/commands` opens Commands.
 //
 // `/name rest` runs that command: a library app opens at once through the
 // pinned compose (`{"intent", "app_id"}`, no routing, no model call) and
@@ -36,6 +36,7 @@ import {
 import { submitIntent, type Choice } from './compose';
 import { isDismissKey, showDockCard } from './dock-card';
 import { el, isUuid } from './render';
+import { openShortcuts } from './shortcut-tab';
 
 export { registerCommands } from './command-registry';
 export type { CanvasCommand } from './command-registry';
@@ -220,9 +221,9 @@ export const COMMANDS: CanvasCommand = {
   },
 };
 
-/** `?` in the empty bar: the right pane on its Commands tab. */
-export function openHelp(from: HTMLElement | null): Promise<void> {
-  return ensureCommands().then(() => openCommandSheet('', from));
+/** `?` in the empty bar: the right pane on its Shortcuts tab (`?` means the keyboard shortcuts, everywhere). */
+export function openHelp(from: HTMLElement | null): void {
+  openShortcuts(from);
 }
 
 // --- The near-tie chooser ---
@@ -442,10 +443,10 @@ export function startSlash(document_: Document): void {
     else close();
   });
   input.addEventListener('keydown', (event) => {
-    // `?` in the empty bar opens the right pane on Commands.
+    // `?` in the empty bar opens the right pane on Shortcuts, as on the canvas.
     if (event.key === '?' && input.value === '' && !event.metaKey && !event.ctrlKey && !event.altKey) {
       event.preventDefault();
-      void openHelp(input);
+      openHelp(input);
       return;
     }
     if (list.hidden || !entries.length) {

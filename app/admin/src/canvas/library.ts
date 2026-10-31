@@ -12,7 +12,7 @@
 // address (`/expense`), the server-derived hint and an example
 // (`GET /v1/commands`, `onAddressesChange`), a saved app's row gets the
 // name it was saved as, and the search covers aliases and hints. The pane
-// itself (open, close, its Library and Commands tabs) is `pane.ts`.
+// itself (open, close, its Library, Commands and Shortcuts tabs) is `pane.ts`.
 // Placing goes through the board (`addCards`),
 // which fetches a work through the group route (re-authorized) and runs its
 // views through the governed query route; nothing here reads data.
@@ -21,6 +21,7 @@
 import { addCards, boardWorks, isOnBoard, onBoardChange, removeCards } from './board';
 import { addressList, addressText, onAddressesChange, type Address } from './command-registry';
 import { insertCommand, startCommandSheet } from './command-sheet';
+import { startShortcutTab } from './shortcut-tab';
 import { closePane, isPaneOpen, onPaneTab, openPane, startPane, togglePane } from './pane';
 import { stackCards } from './stacks';
 import { ensureCommands, registerCommands, registerCompleter, type Completion } from './slash';
@@ -560,6 +561,7 @@ export function startLibrary(document_: Document): void {
   documentRef = document_;
   startPane(document_);
   startCommandSheet(document_);
+  startShortcutTab(document_);
   pane = document_.getElementById('cv-library');
   search = document_.getElementById('cv-lib-search') as HTMLInputElement | null;
   if (!pane) return;

@@ -955,35 +955,6 @@
 .cv-dock .cv-slash-pop { z-index: 24; }
 .cv-intent-status { bottom: calc(100% + 62px); }
 
-.cv-shortcuts {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgb(10 13 20 / 34%);
-  animation: cv-fade 160ms ease-out both;
-}
-.cv-shortcuts[hidden] { display: none; }
-.cv-shortcuts-panel {
-  width: min(760px, 100%);
-  max-height: calc(100vh - 2rem);
-  overflow: auto;
-  padding: 1.1rem 1.3rem 1.3rem;
-  border: 1px solid var(--cv-line);
-  border-radius: 16px;
-  background: var(--cv-surface);
-  box-shadow: var(--cv-shadow-lift);
-  animation: cv-rise 200ms var(--cv-ease) both;
-}
-.cv-shortcuts-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
-.cv-shortcuts-head h2 { margin: 0; font-size: 1.05rem; }
-.cv-shortcuts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem 1.6rem; }
-.cv-shortcuts h3 { margin: 0 0 0.4rem; color: var(--cv-muted); font-size: 0.72rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; }
-.cv-shortcuts dl { display: grid; grid-template-columns: 1fr auto; gap: 0.35rem 0.8rem; margin: 0; font-size: 0.82rem; }
-.cv-shortcuts dt { color: var(--cv-text); }
-.cv-shortcuts dd { margin: 0; color: var(--cv-faint); text-align: right; white-space: nowrap; }
 .cv-shortcuts kbd, .cv-kbd {
   display: inline-block;
   min-width: 1.4em;
@@ -2158,17 +2129,19 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
 .cv-lib-none-clear { padding: 0.3rem 0.7rem; border: 1px solid var(--cv-line); border-radius: 8px; background: var(--cv-surface); color: var(--cv-accent); font: inherit; font-weight: 600; cursor: pointer; }
 .cv-lib-app-title, .cv-lib-card-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The shortcuts sheet: action, click path, keys. */
-.cv-shortcuts-panel { width: min(820px, 100%); }
-.cv-shortcuts-head { align-items: flex-start; }
-.cv-shortcuts-sub { margin: 0.2rem 0 0; color: var(--cv-muted); font-size: 0.82rem; }
-.cv-shortcuts-grid { grid-template-columns: minmax(0, 1fr); gap: 1.1rem; }
+/* The Shortcuts tab of the right pane: action, click path, keys. */
+.cv-shortcuts { gap: 0.6rem; padding: 0 1rem; overflow-y: auto; }
+.cv-shortcuts-sub { margin: 0; color: var(--cv-muted); font-size: 0.8rem; }
+.cv-shortcuts-all { padding: 0; border: 0; background: transparent; color: var(--cv-accent); font: 600 0.8rem/1.3 var(--cv-sans); cursor: pointer; }
+.cv-shortcuts-all:hover, .cv-shortcuts-all:focus-visible { text-decoration: underline; outline: none; }
+.cv-shortcuts-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.1rem; padding-bottom: 1.2rem; }
+.cv-shortcuts h3 { margin: 0 0 0.4rem; color: var(--cv-muted); font-size: 0.72rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; }
 .cv-shortcuts-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 .cv-shortcuts-table th, .cv-shortcuts-table td { padding: 0.32rem 0.4rem; border-top: 1px solid var(--cv-hairline); text-align: left; vertical-align: top; }
 .cv-shortcuts-table tr:first-child > * { border-top: 0; }
-.cv-shortcuts-table th[scope="row"] { width: 26%; color: var(--cv-text); font-weight: 600; }
+.cv-shortcuts-table th[scope="row"] { width: 30%; color: var(--cv-text); font-weight: 600; }
 .cv-shortcuts-click { color: var(--cv-muted); }
-.cv-shortcuts-keys { width: 15rem; color: var(--cv-faint); text-align: right; white-space: nowrap; }
+.cv-shortcuts-keys { color: var(--cv-faint); text-align: right; }
 .cv-shortcuts-keys code { padding: 0.05rem 0.3rem; border-radius: 5px; background: var(--cv-accent-soft); color: var(--cv-accent); font: 600 0.72rem/1.4 var(--cv-mono); }
 
 /* APP-116 timing chips: drawn only while "Show timings" is on. */
@@ -2201,11 +2174,7 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
   .cv-intent-status { border-radius: 14px; padding: 0.45rem 0.8rem; font-size: 0.78rem; text-align: center; width: max-content; }
   .cv-lib-app .cv-lib-stack:not(.cv-lib-unite) { display: none; }
   .cv-more-menu { right: -3.2rem; max-height: 60vh; overflow: auto; }
-  .cv-shortcuts { padding: 0; place-items: stretch; }
-  .cv-shortcuts-panel { max-height: 100vh; border-radius: 0; }
-  .cv-shortcuts-grid { grid-template-columns: minmax(0, 1fr); }
   .cv-shortcuts-table th[scope="row"] { width: 34%; }
-  .cv-shortcuts-keys { width: auto; white-space: normal; }
   .cv-timing-line { bottom: calc(100% + 56px); }
   .cv-timing-dock { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .show-timings .cv-intent-status { bottom: calc(100% + 96px); }
@@ -2224,7 +2193,7 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
   .cv-dock:has(.cv-confirm-host > *) .cv-tools { visibility: hidden; }
 }
 
-/* --- APP-118 / APP-119: the Commands tab of the right pane (`/commands`, `/help`, `?` in the empty bar) --- */
+/* --- APP-118 / APP-119: the Commands tab of the right pane (`/commands`, `/help`) --- */
 .cv-pane-panel { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .cv-pane-panel[hidden] { display: none; }
 .cv-pane-tabs { display: inline-flex; gap: 0.15rem; padding: 0.2rem; border-radius: 10px; background: var(--cv-sunken); }
@@ -2324,24 +2293,6 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
 .cv-commands-example code { font: 500 0.72rem/1.4 var(--cv-mono); }
 .cv-commands-example:hover, .cv-commands-example:focus-visible { border-color: var(--cv-accent); color: var(--cv-accent); outline: none; }
 .cv-commands-none { color: var(--cv-muted); font-size: 0.85rem; }
-/* The `?` sheet's command list and its link to the sheet. */
-.cv-shortcuts-commands { margin-top: 1.1rem; }
-.cv-shortcuts-all {
-  margin: 0.3rem 0 0.6rem;
-  padding: 0.35rem 0.7rem;
-  border: 1px solid var(--cv-accent);
-  border-radius: 8px;
-  background: var(--cv-accent-soft);
-  color: var(--cv-accent);
-  font: 600 0.8rem/1.3 var(--cv-sans);
-  cursor: pointer;
-}
-.cv-shortcuts .cv-shortcuts-cmds { grid-template-columns: 6rem 1fr; align-items: baseline; }
-.cv-shortcuts .cv-shortcuts-cmds dt { color: var(--cv-muted); font-size: 0.74rem; }
-.cv-shortcuts .cv-shortcuts-cmds dd { display: flex; flex-wrap: wrap; gap: 0.25rem; text-align: left; white-space: normal; }
-.cv-shortcuts-cmd { padding: 0; border: 0; background: transparent; cursor: pointer; }
-.cv-shortcuts-cmd code { padding: 0.05rem 0.3rem; border-radius: 5px; background: var(--cv-accent-soft); color: var(--cv-accent); font: 600 0.72rem/1.4 var(--cv-mono); }
-.cv-shortcuts-cmd:hover code, .cv-shortcuts-cmd:focus-visible code { outline: 1px solid var(--cv-accent); }
 @media (max-width: 760px) {
   .cv-slash-option:not(.cv-slash-completion) .cv-slash-title { display: none; }
 }

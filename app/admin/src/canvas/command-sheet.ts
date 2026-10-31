@@ -1,6 +1,6 @@
-// APP-118: the commands list (`/commands`, `/help`, `?` in the empty bar,
-// and the link in the `?` shortcuts sheet). APP-119: it is the Commands tab
-// of the right pane (`pane.ts`), beside the Library tab, never a canvas card
+// APP-118: the commands list (`/commands`, `/help`, and the link at the top
+// of the Shortcuts tab). APP-119: it is the Commands tab of the right pane
+// (`pane.ts`), beside the Library and Shortcuts tabs, never a canvas card
 // and no longer a sheet of its own. It lists the verbs only, by category,
 // each with its argument signature, description, aliases and examples, and
 // a search box; its footer says where apps are: "Your apps answer to /name

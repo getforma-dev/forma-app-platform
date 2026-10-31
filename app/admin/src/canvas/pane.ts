@@ -1,16 +1,18 @@
-// APP-119: the right-hand pane, one pane with two tabs: Library (the apps
-// and cards you can bring in, `library.ts`) and Commands (the verbs with
-// their arguments and examples, `command-sheet.ts`). `L` and `/apps` open it
-// on Library; `/commands`, `/help` and `?` in the empty bar on Commands. One
-// × and Esc close it; focus returns to what opened it. The tabs follow the
+// APP-119: the right-hand pane, one pane with three tabs: Library (the apps
+// and cards you can bring in, `library.ts`), Commands (the verbs with their
+// arguments and examples, `command-sheet.ts`) and Shortcuts (every action
+// with its click path and keys, `shortcut-tab.ts`). `L` and `/apps` open it
+// on Library; `/commands` and `/help` on Commands; `?` (on the canvas or in
+// the empty bar) and `/shortcuts` on Shortcuts. One × and Esc close it;
+// focus returns to what opened it. The tabs follow the
 // ARIA tabs pattern: ←/→, Home and End move between them (automatic
 // activation), the selected tab is the only one in the Tab order. At phone
 // width the pane is the bottom sheet it always was, with the tabs on top.
 // The markup is the page's (`app.tsx`, `#cv-library`); this module only
 // wires it.
 
-export type PaneTab = 'library' | 'commands';
-export const PANE_TABS: readonly PaneTab[] = ['library', 'commands'];
+export type PaneTab = 'library' | 'commands' | 'shortcuts';
+export const PANE_TABS: readonly PaneTab[] = ['library', 'commands', 'shortcuts'];
 
 type TabHooks = {
   /** The tab became visible (`focus`: move focus into it). */
@@ -34,10 +36,11 @@ export function isPaneOpen(): boolean {
 
 /** The tab the pane shows (or will show when opened). */
 export function paneTab(): PaneTab {
-  return pane?.dataset.tab === 'commands' ? 'commands' : 'library';
+  const tab = pane?.dataset.tab as PaneTab | undefined;
+  return tab && PANE_TABS.includes(tab) ? tab : 'library';
 }
 
-/** A tab's open, focus and Esc behavior (`library.ts`, `command-sheet.ts`). */
+/** A tab's open, focus and Esc behavior (`library.ts`, `command-sheet.ts`, `shortcut-tab.ts`). */
 export function onPaneTab(tab: PaneTab, tabHooks: TabHooks): void {
   hooks.set(tab, tabHooks);
 }
