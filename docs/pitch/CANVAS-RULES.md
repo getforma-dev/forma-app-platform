@@ -6,7 +6,16 @@ This is the single reference for the canvas model and its grammar. The decisions
 
 **Type `/` and a verb to change the canvas, `/` and a name to tell that thing something, or just type a sentence.**
 
-The AI does two separate jobs, and where you type picks the job: **Ask** answers questions about your data and never changes anything; **Shape** changes how an item looks or what it shows and never answers. Records only change through an app's own commands.
+Four jobs, and where you type picks the job, never the AI:
+
+| Job | What it does | Typed as |
+| --- | --- | --- |
+| **Ask** | Finds out: answers questions about your data. Changes nothing | `? <question>` |
+| **Shape** | Changes how something looks or what it shows. Never answers, never touches records | `/shape <address> <words>`, or `/<app>.<card> <words>` |
+| **Do** | Runs one of an app's own commands: the only way records change | `/<app> <words>` |
+| **Forma** | Makes something new: picks or builds an app | A plain sentence, or a folder's formation |
+
+**Why "Forma" is not the reshape verb.** *Forma* is Latin for "shape" and "form", but the word is kept for making things: "describe it and Forma builds it". Using it for restyling too would blur two jobs into one word, and a verb should explain itself without a tour. So Forma makes things, and Shape changes their form afterwards.
 
 ## What a canvas holds
 
@@ -71,25 +80,36 @@ The pane always reflects the canvas.
 | | `/focus` | Opens the selected card large, in focus mode |
 | Make | `/folder <name> formation <instruction>` | Builds an app from a folder's files |
 | | `/rename …` · `/alias …` | Names things (APP-121) |
+| Shape | `/shape <address> <words>` | Changes how a card, an app (its theme) or a widget looks or what it shows (APP-122) |
 | Ask | `? <question>` | Opens the Ask tab with your question; read-only (APP-122) |
 | Help | `/apps [query]` · `/commands` · `/shortcuts` · `/agent` | Library · Commands · Shortcuts · Connect an agent |
 
 Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/clock`, `/note`, `/folder` on its own, and `/help`.
 
-## Two jobs: Ask and Shape (APP-122)
+## Ask and Shape (APP-122)
 
-The AI does two separate jobs. **Where you type decides the job, never the AI.** A question cannot change a card, because the Ask job has no way to change anything.
+Ask and Shape are the two AI jobs that work on things already on your canvas. **Where you type decides the job, never the AI.** A question cannot change a card, because the Ask job has no way to change anything.
 
 | | **Ask** | **Shape** |
 | --- | --- | --- |
-| What it is | A conversation about your data, like talking to an analyst | Changing how a canvas item looks or what it shows |
-| Where | The **Ask** tab in the right pane, with its own input. `?` as the bar's first character opens it with your text; ⋯ → **Ask about this** opens it scoped to a card | The bar: `/<app>.<card> <words>`. ⋯ → **Shape…** puts the card's address in the bar. Widgets keep their own Shape field (formerly Restyle) |
-| Examples | "where are all the red invoices?" · "why did spend jump in March?" · "summarize Q3" | `/expenses.total by month` · `/expenses.ledger highlight overdue in red` · a calculator's Shape field: "make it a TI-84" |
+| What it is | A conversation about your data, like talking to an analyst | Changing how a card, an app or a widget looks or what it shows |
+| Where | The **Ask** tab in the right pane, with its own input. `?` as the bar's first character opens it with your text; ⋯ → **Ask about this** opens it scoped to a card | The bar: `/shape <address> <words>` for anything, or `/<app>.<card> <words>` as the shortcut for a card. ⋯ → **Shape…** on any item puts `/shape <its address> ` in the bar. A widget's own Shape field (formerly Restyle) does the same |
+| Examples | "where are all the red invoices?" · "why did spend jump in March?" · "summarize Q3" | A card: `/expenses.ledger highlight overdue in red`. An app: `/shape expenses dark green, compact`. A widget: `/shape calculator make it a TI-84` |
 | What comes back | Text with receipts and links to the records it used | A preview: **Apply** (replace this card) or **Add as new card**. Nothing changes until you click |
 | Can it change anything? | **No.** It runs read-only: it cannot change records, cards or the canvas. Asked to change something, it answers with what to type ("to change the look, type `/expenses.ledger …`"); it never switches jobs | Only the look and the view: chart type, colors, columns, filters, the math shown. **Never records**, and it never answers in words. A view may filter or hide records; it can never remove receipts |
-| Scope | The selected card, or else the whole canvas. A chip shows which | The card you addressed |
+| Scope | The selected card, or else the whole canvas. A chip shows which | The item you addressed |
 
-**The dot is the rule.** `/<app> <words>` (no dot) talks to the app: Do. `/<app>.<card> <words>` (a dot) shapes that card: Shape. `/<widget> <details>` places a widget (`/weather Austin`).
+**What Shape changes, by target:**
+
+| Target | Shape changes | Example |
+| --- | --- | --- |
+| **A card** | Its view: chart type, colors, columns, filters, the math shown | `/shape expenses.ledger only red invoices`, or the shortcut `/expenses.ledger only red invoices` |
+| **An app** | A theme across all its cards: colors, accent, density. Each card keeps its own view | `/shape expenses dark green, compact` |
+| **A widget** | Its look | `/shape calculator make it a TI-84` · `/shape weather minimal` |
+
+An app has no look of its own; its look is its cards, so shaping an app themes them all. A widget is a one-off of yours with no records, so shaping it only restyles it. A note keeps its text; only its look changes.
+
+**The dot is a shortcut for cards.** `/<app> <words>` (no dot) talks to the app: Do. `/<app>.<card> <words>` (a dot) shapes that card. `/<widget> <details>` places a widget (`/weather Austin`); to restyle it, use `/shape <widget>`.
 
 **The overlap is only buttons you click:** ⋯ → **Ask about this** on a card opens a scoped Ask, and nothing changes. **Make it a card** on an answer is planned (APP-123); until then, ask first, then shape: `? where are the red invoices`, then `/expenses.ledger only red invoices` → **Add as new card**.
 
@@ -105,14 +125,14 @@ The AI does two separate jobs. **Where you type decides the job, never the AI.**
 | Layer | What it is | Changed by |
 | --- | --- | --- |
 | **Records** | The app's governed data | **Do** (the app's own commands) or **Forma** (a new app from files), always confirmed |
-| **Cards and widgets** | Views: which records, which math, what look. They store no data and read live, with receipts | **Shape**, previewed and applied by you. A shaped card is labeled *shaped* and has **Revert** |
+| **Cards, app themes and widgets** | Views: which records, which math, what look. They store no data and read live, with receipts | **Shape**, previewed and applied by you. A shaped item is labeled *shaped* and has **Revert** |
 | **Answers** | What Ask tells you | Nothing; read-only |
 
 - "Make me a new card from this data in the shape of …" is Shape, not recording data. It's a new view over the same records, and every number still traces to its source records.
 - A card made from an app's data belongs to that app. In the demo it lasts for your session; personal "made by you" cards that persist, and that the owner can add for everyone, are planned (APP-123).
 - A card that combines two apps (expenses with time off) is a new app: Forma, deferred.
 
-Planned (APP-123): **Make it a card** on answers, persistent personal cards, `@` mentions and a removable scope chip, `/shape`, `/forma` and `/<folder> <words>`, and pinned answers.
+Planned (APP-123): **Make it a card** on answers, persistent personal cards, `@` mentions and a removable scope chip, `/forma` and `/<folder> <words>`, and pinned answers.
 
 ## Adding and removing
 
