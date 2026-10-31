@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "forma-diego",
+      "url": "http://127.0.0.1:4001",
+      "port": 4001
+    },
+    {
+      "name": "forma-sarah",
+      "url": "http://127.0.0.1:4002",
+      "port": 4002
+    },
+    {
+      "name": "forma-priya",
+      "url": "http://127.0.0.1:4003",
+      "port": 4003
+    }
+  ]
+}

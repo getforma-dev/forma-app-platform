@@ -25,6 +25,10 @@ pub mod imports;
 pub mod mcp;
 // APP-100 (DS-59): the channel a record version was committed through.
 pub mod origins;
+// The binary's server-rendered pages and its product route composition, shared
+// with the local dev stand (`storage::dev_stand`).
+pub mod pages;
+pub mod product;
 pub mod query;
 pub mod readiness;
 pub mod roles;

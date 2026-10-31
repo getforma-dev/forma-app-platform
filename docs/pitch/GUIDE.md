@@ -87,6 +87,33 @@ A CSV dropped on the canvas or the bar outside a folder goes to your "Uploads" f
 
 **Connect an agent.** The header button mints a token, shown once, and gives the setup lines for Claude Code or OpenAI.
 
+## Local dev stand
+
+The whole product on your laptop, for trying a change in a browser before deploying to beta. Nothing leaves the machine except the model calls (and the weather widget's Open-Meteo calls).
+
+| Do | Command (from the checkout) |
+| --- | --- |
+| Start | `app/scripts/dev_stand.sh` (builds, seeds, starts; about 30 s after the first build) |
+| Stop | `app/scripts/dev_stand.sh stop` (stops the proxies and the stand, removes its Docker container) |
+| Pick up a code change | `app/scripts/dev_stand.sh restart-server` (rebuilds while the old stand serves, then a fresh stand; the database is reseeded, so anything created in the browser is gone) |
+| What is running | `app/scripts/dev_stand.sh status` |
+
+Front-end only changes: `cd app/admin && npm run build`, then reload the page (the stand reads `admin/dist` from disk). Needs Docker, the locked Python environments (`app/runtime/.venv`, `contracts/.venv`) and a built `admin/dist`.
+
+| Persona | URL |
+| --- | --- |
+| Diego Ramos (files expenses) | http://127.0.0.1:4001/canvas |
+| Sarah Chen (approves) | http://127.0.0.1:4002/canvas |
+| Priya Natarajan (library author, finance) | http://127.0.0.1:4003/canvas |
+
+In the desktop app's built-in browser the same URLs are the launch entries `forma-diego`, `forma-sarah` and `forma-priya` (`.claude/launch.json`). Each URL is its own origin, already signed in as its persona, so all three can be open side by side in one browser.
+
+**Real:** the server is the binary's own route composition (`genui::product::routes`, the function `main.rs` calls) and its pages: canvas, commands, records and notes, sharing, live events, compose, act, MCP with agent tokens and governance, widgets, folders and the slash commands. PostgreSQL with every migration and row-level security, the 20-app library with its sources in the real confined query engine (receipts included), audited commands, folders with the sealed parser (when built). The model is the real Anthropic API when `ANTHROPIC_API_KEY` is in the clone's `.env`; it is read into the stand's process environment only and never printed.
+
+**Stubbed or different from beta:** sign-in (no fAuth: each persona's session is minted directly, and a loopback proxy on 4001–4003 adds the session cookie, which a browser will not keep over plain http; after a sign-out the stand mints a fresh session within a minute); synthetic data only (Northstar, demo mode on so rehearsed sentences parse without a model); no model without a key; Slack is off unless `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` are set in your shell; objects are in a local directory, not S3. The stand stops by itself after 8 hours (`GENUI_DEV_STAND_SECONDS`).
+
+**Seeded:** the library granted to all three personas (each with an authoring app), Diego's expense claims (a $42 Sweetgreen lunch approved by Sarah, a $389 Delta flight waiting for her) and his Thanksgiving time off waiting for her, and Diego's "Q3 board pack" folder with the files from `docs/pitch/folder-fixture`.
+
 ## Operating it (operator only)
 
 - **Deploy:** follow [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md). It covers building and qualifying the three images, pushing them, preflight, the reviewed change set, operator tasks and activation. Every AWS change needs Victor's word, recorded in the private approvals file.

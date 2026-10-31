@@ -18,6 +18,8 @@ app/src/**
 !app/src/demo.rs
 !app/src/directory.rs
 !app/src/origins.rs
+!app/src/pages.rs
+!app/src/product.rs
 !app/src/imports/
 app/src/imports/**
 !app/src/imports/mod.rs
@@ -76,6 +78,7 @@ app/src/slack/**
 !app/src/slack/signature.rs
 !app/src/slack/text.rs
 # slack/tests.rs, storage/slack_campaign.rs and storage/workflows_campaign.rs are cfg(test) only; the qualification context lists them.
+# storage/dev_stand.rs (the local dev stand) is cfg(test) only; the qualification context lists it.
 # APP-108: folders (boxes): files, real data, apps built from them.
 !app/src/boxes/
 app/src/boxes/**

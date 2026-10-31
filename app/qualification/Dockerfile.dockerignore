@@ -17,6 +17,8 @@
 !app/src/demo.rs
 !app/src/directory.rs
 !app/src/origins.rs
+!app/src/pages.rs
+!app/src/product.rs
 !app/src/auth/aliases.rs
 !app/src/auth/capability.rs
 !app/src/auth/cookies.rs
@@ -120,6 +122,7 @@
 !app/src/storage/authorization.rs
 !app/src/storage/catalog.rs
 !app/src/storage/command_qualification.rs
+!app/src/storage/dev_stand.rs
 !app/src/storage/commands.rs
 !app/src/storage/canvas_campaign.rs
 !app/src/storage/composer.rs
