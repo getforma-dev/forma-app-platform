@@ -6,9 +6,12 @@ root = Path(__file__).resolve().parents[1]
 evidence = root/'evidence/APP-007'
 python = shutil.which("python3.11") or sys.executable
 venv = str(root / "app/runtime/.venv/bin/python")
+# The runtime venv gets both hashed locks, as tenant-foundation.yml and
+# `just setup` install them (ADR-012 D12.4): app/runtime/test_library.py
+# imports contracts/validate.py, which needs jsonschema (APP-131).
 commands = [
  ('.', [python,'-m','venv','app/runtime/.venv']),
- ('.', [venv,'-m','pip','install','--require-hashes','--only-binary=:all:','-r','app/runtime/requirements.lock']),
+ ('.', [venv,'-m','pip','install','--require-hashes','--only-binary=:all:','-r','app/runtime/requirements.lock','-r','contracts/requirements.lock']),
  ('.', [venv,'-m','unittest','discover','-s','app/runtime','-v']),
  ('app/admin', ['npm','ci']), ('app/admin',['npm','run','typecheck']), ('app/admin',['npm','run','build']),
  ('app',['cargo','fmt','--check']), ('app',['cargo','test','--locked']), ('app',['cargo','build','--locked']),
