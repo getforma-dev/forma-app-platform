@@ -11,7 +11,9 @@
 //   selected, a swipe on touch: the top card leafs to the next one.
 // - Expand: the "+N" badge, Enter on the selected stack, or a
 //   double-click fans its cards out in a grid next to it; Esc or a click
-//   outside folds them back; a card dragged out of the fan leaves the stack.
+//   outside folds them back (a click, not a pan or a drag: moving around the
+//   canvas keeps the fan open), with a short fold; a card dragged out of the
+//   fan leaves the stack.
 //   Cmd/Ctrl+Shift+G spreads a stack onto the canvas.
 // - Live: a record committed in a stacked card's work pulses the stack; a
 //   records card with a record waiting for the member comes to the top.
@@ -34,10 +36,17 @@ type Stack = {
   root: HTMLElement;
   holder: HTMLElement;
   fanned: HTMLElement[] | null;
+  /** Set while the fold animation plays; the fan is still on the board. */
+  folding?: boolean;
 };
 
 const stacks = new Map<string, Stack>();
 const HOLD_MS = 400;
+/** The fold animation (styles: cv-fold). */
+const FOLD_MS = 180;
+/** A pointer that moves farther than this between down and up panned or dragged; it is not a click. */
+const CLICK_SLOP_PX = 6;
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 let documentRef: Document | null = null;
 
 function newId(): string {
@@ -205,7 +214,7 @@ function removeStack(stack: Stack, _why: string): void {
 export function dissolve(stack: Stack): void {
   const canvas = board.canvas();
   if (!canvas) return;
-  collapse(stack);
+  collapse(stack, true);
   const at = canvas.getItemState(stack.item);
   const cards = [...stack.cards];
   removeStack(stack, 'unstack');
@@ -218,8 +227,8 @@ export function dissolve(stack: Stack): void {
 /** Fans a stack's cards out in a grid beside it (macOS Stacks' grid). */
 export function expand(stack: Stack): void {
   const canvas = board.canvas();
-  if (!canvas || stack.fanned) return;
-  for (const other of stacks.values()) if (other !== stack) collapse(other);
+  if (!canvas || stack.fanned || stack.folding) return;
+  for (const other of stacks.values()) if (other !== stack) collapse(other, true);
   const at = canvas.getItemState(stack.item);
   const current = stack.holder.firstElementChild as HTMLElement | null;
   if (current) board.park(current);
@@ -242,8 +251,29 @@ export function expand(stack: Stack): void {
   board.announce(`${stack.title}: ${stack.cards.length} cards fanned out. Esc folds them back; drag one out to take it from the stack.`);
 }
 
-/** Folds a fanned stack back. */
-export function collapse(stack: Stack): void {
+/** Folds a fanned stack back: a short fold first, unless `now` or reduced motion. */
+export function collapse(stack: Stack, now = false): void {
+  if (!stack.fanned) return;
+  if (now || reducedMotion()) {
+    // A fold already playing is cut short; its timer then finds nothing to fold.
+    stack.folding = false;
+    for (const item of stack.fanned) item.classList.remove('is-folding');
+    fold(stack);
+    return;
+  }
+  if (stack.folding) return;
+  const fanned = stack.fanned;
+  stack.folding = true;
+  for (const item of fanned) item.classList.add('is-folding');
+  window.setTimeout(() => {
+    stack.folding = false;
+    for (const item of fanned) item.classList.remove('is-folding');
+    // Expanded again or taken apart meanwhile: nothing left to fold.
+    if (stack.fanned === fanned) fold(stack);
+  }, FOLD_MS);
+}
+
+function fold(stack: Stack): void {
   if (!stack.fanned) return;
   for (const item of stack.fanned) {
     if (item.dataset.fanned && item.isConnected) board.lift(item.dataset.instanceId ?? '');
@@ -426,7 +456,7 @@ function pile(dragged: HTMLElement, onto: HTMLElement): void {
   const draggedIds = draggedStack ? draggedStack.cards : [dragged.dataset.instanceId ?? ''];
   if (ontoStack) {
     if (draggedStack) {
-      collapse(draggedStack);
+      collapse(draggedStack, true);
       removeStack(draggedStack, 'merged');
     }
     addTo(ontoStack, draggedIds);
@@ -453,7 +483,7 @@ export function releaseCards(ids: string[]): string[] {
     const out = stack.cards.filter((id) => ids.includes(id));
     if (!out.length) continue;
     handled.push(...out);
-    collapse(stack);
+    collapse(stack, true);
     const current = stack.holder.firstElementChild as HTMLElement | null;
     if (current && out.includes(current.dataset.card ?? '')) board.park(current);
     stack.cards = stack.cards.filter((id) => !out.includes(id));
@@ -544,11 +574,23 @@ export function startStacks(document_: Document): void {
       travel = 0;
     }
   }, { capture: true, passive: false });
-  // A click outside a fan folds it back.
+  // A click outside a fan folds it back. Only a click: a press that moves
+  // (panning, the hand tool, Space + drag, a marquee) keeps the fan open, so
+  // the member can move around to see the cards it laid out.
+  let press: { x: number; y: number; id: number } | null = null;
   document_.addEventListener('pointerdown', (event) => {
     const target = event.target as Element | null;
-    if (!target?.closest('.forma-canvas-viewport')) return;
+    press = null;
+    if (event.button !== 0 || !target?.closest('.forma-canvas-viewport')) return;
     if (target.closest('.widget-instance.is-fanned, .cv-item-stack')) return;
+    press = { x: event.clientX, y: event.clientY, id: event.pointerId };
+  }, true);
+  document_.addEventListener('pointerup', (event) => {
+    const start = press;
+    press = null;
+    if (!start || event.pointerId !== start.id) return;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return;
     collapseAll();
   }, true);
+  document_.addEventListener('pointercancel', () => { press = null; }, true);
 }
