@@ -36,7 +36,7 @@ status *args:
 check *steps:
     @scripts/dev/check.sh "$@"
 
-# `check` plus the CI campaigns, the schema qualifier and the MSRV floor: a local green branch
+# `check` plus the schema qualifier and the 10 CI campaigns: a local green branch
 ci:
     @scripts/dev/check.sh --ci
 
@@ -47,6 +47,18 @@ campaigns *args:
 # Run one ignored campaign by short name; its report goes to .cache/reports/<name>.json
 campaign name *args:
     @scripts/dev/campaigns.sh run "$@"
+
+# Build the sealed parser from parser/ into .cache/parser-target/
+parser *args:
+    @scripts/dev/parser.sh "$@"
+
+# Build and qualify the three ARM64 images for <candidate> (local, no AWS)
+images candidate *args:
+    @ops/beta/build-images.sh "$@"
+
+# Beta deploy, one runbook step: `just deploy <step> <window> [--approved "<Victor's words>"] [--dry-run]`; `just deploy help`
+deploy step *args:
+    @ops/beta/deploy.sh "$@"
 
 # Remove local build output and stray containers: `just clean [docker|target|all] [--dry-run]`
 clean *args:

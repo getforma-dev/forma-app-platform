@@ -90,7 +90,9 @@ const AUTHORING: [(&str, &str); 3] = [
     (PRINCIPAL, "00000000-0000-4000-8000-00000000d0a3"),
 ];
 const FOLDER_FIXTURE: &str = "docs/pitch/folder-fixture";
-const DEFAULT_PARSER: &str = "/private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/parser-target";
+/// The sealed parser `just parser` builds into this checkout (ADR-012 D12.6);
+/// `GENUI_BOX_PARSER_DIR` overrides it.
+const DEFAULT_PARSER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../.cache/parser-target");
 /// Sessions per persona: the proxy gives each browser its own (a browser
 /// keeps one live stream per session, so two browsers on one session
 /// replaced each other's stream; production gives every browser its own).

@@ -14,6 +14,20 @@ It follows the sequence the five redeploys of 2026-10-30 actually ran (APP-096 a
 
 Every step marked **[MUTATION]** needs Victor's word, recorded verbatim in `$PRIV/approvals.md`. **[read]** steps and local steps need none.
 
+**Recipes (ADR-012 D12.6).** Each checklist item names the `just` recipe that performs it; the scripts are in `ops/beta/` and `just deploy help` lists the steps. Every [MUTATION] step prints its exact commands (stack identifiers by variable name) and refuses unless it is given `--approved "<Victor's verbatim words>"`, which it appends to `$PRIV/approvals.md` before any AWS call; `--dry-run` prints and records nothing. The runbook stays the authority: a recipe performs an item, it does not replace reading it.
+
+**The private directory.** `$PRIV` is `<checkout>/.cache/ops/beta/` (gitignored; directories 0700, files 0600), no longer the forma-app-platform clone's `.cache/operations/beta/app-078-window`:
+
+| Path | Holds |
+| --- | --- |
+| `env.sh` | the stack's identifiers, named in `ops/beta/env.example.sh`; `REPO`, `PRIV` and the operator venv are derived from the checkout |
+| `approvals.md`, `budget-ledger.json` | Victor's words per action; the preflight ledger |
+| `display-names.json`, `signin-aliases.json` | the private names files (0.5) |
+| `windows/<window-id>/` | one deploy: `release.json` (candidate, tag, supersedes, digests, template sha256, times), `base-input.json`, `deployment-input.json`, `receipt.json`, `stack-before.json`, `template-before.json`, `template.json`, `cdk-diff.txt`, `change-set-*.json`, `stack-after.json`, `run-<label>-<n>.*`, `activation.json` |
+| `windows/_pre-adr-012/` | the APP-078 window's flat directory as of 2026-10-31, copied once as history (`ops/beta/import-legacy-priv.sh`) |
+
+The operator venv is `app/operator/.venv` (`just setup`), not `opvenv`.
+
 Some steps involve secrets: the Anthropic key, the Slack bot token and signing secret, and a member's agent token. Victor runs those steps himself. Values are read from the clone's `.env` by `app/scripts/read_env.py` and piped, so they never appear in chat, in argv, in shell history or in a log.
 
 ## State at the last deploy (2026-10-30)
@@ -53,9 +67,9 @@ aws ecs wait services-stable --cluster $CLUSTER --services $SERVICE
 
 ## 0. Local (no AWS)
 
-- [ ] 0.1 `CANDIDATE=$(git -C forma-pitch-mvp rev-parse HEAD)`. The working tree is clean and the commit is pushed.
-- [ ] 0.2 Checks at the tip:
-  - `cd app && cargo +1.93.1 fmt --check && cargo +1.93.1 clippy --locked --all-targets -- -D warnings && cargo +1.93.1 test --locked`
+- [ ] 0.1 `CANDIDATE=$(git -C forma-pitch-mvp rev-parse HEAD)`. The working tree is clean and the commit is pushed. (`just images` and `just deploy new` refuse another commit; `new` warns when it is not pushed.)
+- [ ] 0.2 Checks at the tip: **`just check`** runs all of these (and the MSRV floor, the contracts and `bash -n`); `qualify_tenant_schema.py` is in `just ci`. The toolchain comes from `rust-toolchain.toml`, so no `+1.93.1`:
+  - `cd app && cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked`
   - `cd infra && npm ci && npm run typecheck && npm test`
   - `cd infra/test && python3 -m unittest preflight_test window_requests_test`
   - `python3 -m unittest discover -s app/scripts -p 'test_*.py'`
@@ -63,11 +77,11 @@ aws ecs wait services-stable --cluster $CLUSTER --services $SERVICE
   - `python3 scripts/check-schema-pins.py`
   - `app/runtime/qualify_tenant_schema.py` (369 checks at schema 11, `cefa484`)
   - `python3 Tickets/_tools/board.py check`
-- [ ] 0.3 Build and qualify the three ARM64 images exactly as APP-078 §2.1–2.6:
+- [ ] 0.3 Build and qualify the three ARM64 images exactly as APP-078 §2.1–2.6 → **`just images <candidate>`** (reports in `.cache/images/<sha7>/`):
   - images `genui-service`, `genui-qualification` and `genui-operator`, each tagged `pitch-${CANDIDATE:0:7}`;
   - checks `qualify_image.py`, `qualification/check_image.py` and `operator/check_image.py`;
   - the parser identity must agree between the images.
-- [ ] 0.4 Make a new private window directory and keep every file of this deploy in it: `W=$PRIV/windows/<new window id>; mkdir -m 700 -p $W`. It is the rollback record.
+- [ ] 0.4 Make a new private window directory and keep every file of this deploy in it: `W=$PRIV/windows/<new window id>; mkdir -m 700 -p $W`. It is the rollback record. → **`just deploy new --candidate <sha> --supersedes <live window id> [--input-from <its deployment input>]`** draws the window id (3.1), makes the directory and `release.json`, and copies the superseded window's input as `base-input.json` (for the first window after ADR-012, the live window's input is under `windows/_pre-adr-012/`).
 - [ ] 0.5 The private names file `$PRIV/display-names.json` (mode 0600, never committed) holds `{"members":[{"principal_id":"<Diego's>","display_name":"Diego Ramos"},{"principal_id":"<Sarah's>","display_name":"Sarah Chen"}]}`. The principal ids come from the APP-076 trial record. The synth refuses the file in these cases:
   - a duplicate `principal_id`;
   - a blank name, or a name over 80 characters;
@@ -76,6 +90,8 @@ aws ecs wait services-stable --cluster $CLUSTER --services $SERVICE
 
 ## 1. Observe [read]
 
+Steps 1.1–1.3: **`just deploy observe <W>`** [read].
+
 - [ ] 1.1 `aws sts get-caller-identity` returns account `877573132739`.
 - [ ] 1.2 `readonly_snapshot.py` shows the stack `UPDATE_COMPLETE`, the service 1/1 on the live revision (TaskDefinition:8 at the last deploy) and no change sets pending.
 - [ ] 1.3 Save the rollback record of the live state:
@@ -83,6 +99,8 @@ aws ecs wait services-stable --cluster $CLUSTER --services $SERVICE
   - `aws cloudformation get-template --stack-name $STACK --template-stage Original --query TemplateBody > $W/template-before.json`
 
 ## 2. Registry [MUTATION]
+
+Steps 2.1–2.2: **`just deploy push <W> --approved "…"`** (digests into `release.json`).
 
 - [ ] 2.1 Push to the existing repositories with the tag `pitch-${CANDIDATE:0:7}-arm64`: `genui-synthetic` (the service), `genui-qualification` and `genui-operator`.
 - [ ] 2.2 Record each digest.
@@ -102,7 +120,7 @@ aws ecs wait services-stable --cluster $CLUSTER --services $SERVICE
 
   All other fields keep the live window's values. Before running the preflight, check the ledger's month-to-date. The caps stay $170 GenUI and $208 project.
 
-  Then run `python3 infra/scripts/preflight.py --input $W/deployment-input.json --ledger $PRIV/budget-ledger.json > $W/receipt.json`.
+  Then run `python3 infra/scripts/preflight.py --input $W/deployment-input.json --ledger $PRIV/budget-ledger.json > $W/receipt.json`. → **`just deploy preflight <W>`** [local] writes `deployment-input.json` from `base-input.json` with the window id, supersedes, the three digests and count 0, and prints the expiry it kept, then runs this; **`just deploy abandon <W>`** is the `--abandon` below.
 
   The receipt should show:
   - `superseded_window_id` = the live window;
@@ -114,13 +132,13 @@ aws ecs wait services-stable --cluster $CLUSTER --services $SERVICE
   - the abandoned window keeps only the compute it already used.
 
   A window that has requested activation cannot be abandoned: `--activate` records the time in the ledger before it calls AWS.
-- [ ] 3.2 `cd infra && npm run synth -- --quiet -c displayNamesFile=$PRIV/display-names.json -c signinAliasesFile=$PRIV/signin-aliases.json`. Then:
+- [ ] 3.2 → **`just deploy synth <W>`** [local]. `cd infra && npm run synth -- --quiet -c displayNamesFile=$PRIV/display-names.json -c signinAliasesFile=$PRIV/signin-aliases.json`. Then:
   - copy `cdk.out/GenuiSyntheticFoundation.template.json` to `$W/template.json`;
   - record its sha256 in `$W/template.sha256`.
-- [ ] 3.3 Diff against the live template [local]: `cd infra && npx cdk diff GenuiSyntheticFoundation --no-lookups -c displayNamesFile=$PRIV/display-names.json -c signinAliasesFile=$PRIV/signin-aliases.json --template $W/template-before.json > $W/cdk-diff.txt`.
+- [ ] 3.3 → **`just deploy diff <W>`**. Diff against the live template [local]: `cd infra && npx cdk diff GenuiSyntheticFoundation --no-lookups -c displayNamesFile=$PRIV/display-names.json -c signinAliasesFile=$PRIV/signin-aliases.json --template $W/template-before.json > $W/cdk-diff.txt`.
 
   `--template` compares with the file saved at 1.3 (it implies `--method=template`), so the diff makes no AWS call and creates no change set. It shows the content of every change, including task definition environment, policies and the ALB attributes. CloudFormation's change set only lists resources, and it cannot see parameter values.
-- [ ] 3.4 Create the change set:
+- [ ] 3.4 Create the change set: 1–3 → **`just deploy change-set <W> --approved "…"`**; 4 → **`just deploy review <W>`** [read].
   1. Compose the request: `$WR change-set --receipt $W/receipt.json --template $W/template.json --window-id <id> --output $W/change-set-request.json`.
   2. Upload the template **[MUTATION]**.
   3. Create the change set **[MUTATION]**.
@@ -147,12 +165,12 @@ aws ecs wait services-stable --cluster $CLUSTER --services $SERVICE
   - any Modify of an existing secret (`ProviderCapabilities`, `AuthConfiguration`, `ComposerModel`, `SlackApp`, `OperatorInvitationInput`, `MigrationSecret`). A changed secret resource can rewrite its live value with the template's placeholder.
   - a DNS change;
   - anything in the change set that `cdk-diff.txt` does not explain.
-- [ ] 3.6 Execute **[MUTATION]**. **The outage starts here.**
+- [ ] 3.6 Execute **[MUTATION]** → **`just deploy execute <W> --approved "…"`** (refuses without the 3.4.4 review file). **The outage starts here.**
   1. Wait for `UPDATE_COMPLETE`.
   2. Save `aws cloudformation describe-stacks --stack-name $STACK > $W/stack-after.json`, and copy it to `$PRIV/stack-after.json` for the APP-078 operator-task run pattern.
   3. Observe the stop rather than inferring it from the parameter: `aws ecs describe-services --cluster $CLUSTER --services $SERVICE` [read] shows desired 0, running 0, pending 0 and the new `TaskDefinition` output. Wait with `aws ecs wait services-stable` if a task is still draining. A desired count other than 0 is a stop; see "Downtime" above.
 
-## 4. Secrets: Victor runs these [MUTATION]
+## 4. Secrets: Victor runs these [MUTATION] (no recipe, by design)
 
 Skip this section on a redeploy unless a value changes: `ComposerModel` already holds the key. Run from the clone:
 
@@ -187,18 +205,18 @@ A new value reaches the service at its next task start. Here that is the activat
 
 Skip 5.1–5.2 if 0.6 found no schema change.
 
-- [ ] 5.1 Take an RDS snapshot named `genui-pitch-pre-migration-schema<live version>-<date>` and wait for `available`.
-- [ ] 5.2 Run the operator task `migrate` twice. Both runs report `database_version` equal to the candidate's manifest (12 if `0012` lands), and the second output is identical. Then run `verify-catalog`: the same `catalog_version`, read-only.
-- [ ] 5.3 Run `seed-library --organization 00000000-0000-4000-8000-000000000001` (Northstar) twice. The repeat reports `changed: false`. The library holds 20 apps at `422d332`; the first run reports the candidate catalog's count.
-- [ ] 5.4 Library source bytes:
+- [ ] 5.1 → **`just deploy snapshot <W> --name genui-pitch-pre-migration-schema<N>-<yyyymmdd> --approved "…"`**. Take an RDS snapshot named `genui-pitch-pre-migration-schema<live version>-<date>` and wait for `available`.
+- [ ] 5.2 → **`just deploy migrate <W> --approved "…"`** (migrate, then verify-catalog; run it twice; each run keeps `run-<label>-<n>.*`). Run the operator task `migrate` twice. Both runs report `database_version` equal to the candidate's manifest (12 if `0012` lands), and the second output is identical. Then run `verify-catalog`: the same `catalog_version`, read-only.
+- [ ] 5.3 → **`just deploy seed <W> --approved "…" -- --set=--organization=<org>`**. Run `seed-library --organization 00000000-0000-4000-8000-000000000001` (Northstar) twice. The repeat reports `changed: false`. The library holds 20 apps at `422d332`; the first run reports the candidate catalog's count.
+- [ ] 5.4 → **`just deploy library <W> [--organization <org>] --approved "…"`** (1–3 with `ops/beta/upload-library.py`, reading the bucket and tenants from the live task definition). Library source bytes:
   1. `python3 app/runtime/library_sources.py build --organization <org> --cache-root $PRIV/library` builds the files locally.
   2. `python3 app/runtime/library_sources.py plan --organization <org>` lists the object keys.
   3. Put each **new** object with `If-None-Match: *` and the bucket's SSE-KMS headers under Northstar's key. A 412 on an existing key is expected; compare its checksum. If the operator machine's role cannot write the prefix, run the upload through the operator task, as APP-078 §11 did.
-- [ ] 5.5 Run `grant-library-access --organization <org> --principal <id> --record-write --authoring-app <uuid>` for Diego and for Sarah, twice each, to show it is idempotent (`changed: false` on the repeat).
+- [ ] 5.5 → **`just deploy grants <W> --approved "…" -- <the operator flags>`**. Run `grant-library-access --organization <org> --principal <id> --record-write --authoring-app <uuid>` for Diego and for Sarah, twice each, to show it is idempotent (`changed: false` on the repeat).
 
 ## 6. Activate and check
 
-- [ ] 6.1 In `$W/deployment-input.json`, set `service_desired_count: 1` and run `preflight.py --input $W/deployment-input.json --ledger $PRIV/budget-ledger.json --activate > $W/activation.json` **[MUTATION]**.
+- [ ] 6.1 → **`just deploy activate <W> --approved "…"`** (writes `deployment-input-activate.json`). In `$W/deployment-input.json`, set `service_desired_count: 1` and run `preflight.py --input $W/deployment-input.json --ledger $PRIV/budget-ledger.json --activate > $W/activation.json` **[MUTATION]**.
 
   The window now records its activation request, so it can no longer be abandoned. Activation checks that each of these matches the reservation:
   - the stack parameters;
@@ -207,7 +225,7 @@ Skip 5.1–5.2 if 0.6 found no schema change.
   - the deny-all rollback revision.
 
   It refuses the Anthropic key, the Slack token or the Slack signing secret as a plain environment variable. Wait until the service is stable with one healthy target. **The outage ends here.**
-- [ ] 6.2 HTTPS surface from the operator machine, checked with plain `curl` (no `-k`):
+- [ ] 6.2 → **`just deploy verify`**. HTTPS surface from the operator machine, checked with plain `curl` (no `-k`):
   - `/health/live` gives 200;
   - `/canvas` signed out gives the sign-in page;
   - `/v1/mcp` without a bearer gives the uniform 404;
@@ -251,7 +269,7 @@ Each build checks the database against the catalog it embeds (`storage/catalog.r
 | 3.6 rolls back (`UPDATE_ROLLBACK_COMPLETE`) | CloudFormation restored the previous template and parameters, and the stack policy forbids replacing or deleting the database. The service may sit at count 0. Run `--abandon <new window id>`, then `preflight.py --activate` with the **live window's own input** at count 1. Its parameters match the restored stack. |
 | After 3.6, before 5.2 (no migration ran), never activated | Fix forward, or put the stack back on the previous template **[MUTATION]**. To put it back:<br>1. Run `--abandon <new window id>`.<br>2. Re-run `preflight.py --input <the previous window's input>` at count 0. It reuses that window's reservation and prints its receipt.<br>3. Compose a change set with `$WR change-set` from that receipt and the previous template: `$W/template-before.json` from 1.3, or `$PRIV/windows/<previous>/template.json`. Change `ChangeSetName` and `ClientToken` to fresh values first; they only identify the request.<br>4. Review it as in 3.5: task definitions replaced back and the service modified.<br>5. Execute it, then run `preflight.py --activate` with the previous window's input at count 1.<br>This only works while that window's `deployment_expires_at_utc` is still more than 10 minutes away. Otherwise make a new window with the previous digests and template, superseding the live window. |
 | After 6.1 (activated), no migration ran | `--abandon` refuses: the window may have run. Make a rollback **window**: a new `window_id`, the previous build's three digests and the previous `template.json`, with `supersedes_window_id` set to the failing window. Then run 3–6, skipping 5.1–5.2. |
-| A bad image or an exposed route on the live build | First, stop exposure without a schema question **[MUTATION]**: `aws ecs update-service --cluster $CLUSTER --service $SERVICE --task-definition <RollbackTaskDefinition output>`. That is the deny-all revision on the same image, part of the current stack and so ACTIVE. Every sign-in fails, and every protected route answers 404. Restore with the same call and the `TaskDefinition` output. Then fix forward. |
+| A bad image or an exposed route on the live build | First, stop exposure without a schema question **[MUTATION]** (**`just deploy rollback-deny <W> --approved "…"`**; `--restore` is the restoring call): `aws ecs update-service --cluster $CLUSTER --service $SERVICE --task-definition <RollbackTaskDefinition output>`. That is the deny-all revision on the same image, part of the current stack and so ACTIVE. Every sign-in fails, and every protected route answers 404. Restore with the same call and the `TaskDefinition` output. Then fix forward. |
 | After 5.2 (migration committed) | No earlier build starts on the new schema, so fix forward. The 5.1 snapshot protects the data; it is not a quick rollback. Restoring it means:<br>- restoring a new instance (RDS cannot restore in place);<br>- stopping the service;<br>- swapping instance identifiers so the stack's endpoint name points at the restored data.<br>The restored instance has a new `DbiResourceId`, and the stack's IAM `rds-db:connect` grants name the old one, so the application roles cannot sign in until a reviewed stack update re-points them. Treat it as its own reviewed operation (APP-097), only for data loss, with Victor's word for each step. |
 
 Keep `$PRIV/windows/<id>/` for every window. Its `receipt.json`, `template.json`, `stack-before.json` and `template-before.json` are what a stack-level rollback needs.

@@ -63,7 +63,9 @@ use std::{
 
 const AUTHORING_APP: &str = "00000000-0000-4000-8000-00000000e0a1";
 const FIXTURE: &str = "docs/pitch/folder-fixture";
-const DEFAULT_PARSER: &str = "/private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/parser-target";
+/// The sealed parser `just parser` builds into this checkout (ADR-012 D12.6);
+/// `GENUI_BOX_PARSER_DIR` overrides it.
+const DEFAULT_PARSER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../.cache/parser-target");
 
 #[test]
 #[ignore = "requires Docker, GENUI_NATIVE_FIXTURE_PYTHON (DuckDB 2.0.0) and the built sealed parser"]
@@ -97,8 +99,7 @@ fn parser_identity() -> ParserIdentity {
     let dir = PathBuf::from(dir);
     let host = dir.join("release/parser-host");
     let wasm = dir.join("wasm32-unknown-unknown/release/parser_guest.wasm");
-    let host_bytes =
-        std::fs::read(&host).expect("parser-host built (cargo build --release -p parser-host)");
+    let host_bytes = std::fs::read(&host).expect("parser-host built (just parser)");
     let wasm_bytes = std::fs::read(&wasm).expect("parser_guest.wasm built");
     ParserIdentity {
         host,
