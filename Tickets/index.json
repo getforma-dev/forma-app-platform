@@ -3860,7 +3860,7 @@
     },
     {
       "id": "APP-122",
-      "title": "Two AI jobs: Ask (read-only conversation about the data) and Shape (change an item's look or view), separated by where you type",
+      "title": "Two AI jobs: Ask (read-only conversation about the data) and Shape (change the look or view of a card, an app or a widget), separated by where you type",
       "path": "0-backlog/APP-122.md",
       "Field": "Value",
       "---": "---",
@@ -3888,7 +3888,7 @@
     },
     {
       "id": "APP-123",
-      "title": "Ask and Shape, after the demo: Make it a card, personal cards, @ mentions, /shape, /forma, /<folder> words",
+      "title": "Ask and Shape, after the demo: Make it a card, personal cards, @ mentions, /forma, /<folder> words",
       "path": "0-backlog/APP-123.md",
       "Field": "Value",
       "---": "---",
