@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 172] = [
+const SOURCES: [(&str, &[u8]); 176] = [
     ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
@@ -274,6 +274,10 @@ const SOURCES: [(&str, &[u8]); 172] = [
     (
         "app/src/auth_qualification/tests.rs",
         include_bytes!("../auth_qualification/tests.rs"),
+    ),
+    (
+        "app/src/bin/genui-dev.rs",
+        include_bytes!("../bin/genui-dev.rs"),
     ),
     (
         "app/src/boxes/brief.rs",
@@ -394,6 +398,13 @@ const SOURCES: [(&str, &[u8]); 172] = [
     ),
     ("app/src/config.rs", include_bytes!("../config.rs")),
     ("app/src/demo.rs", include_bytes!("../demo.rs")),
+    ("app/src/dev/db.rs", include_bytes!("../dev/db.rs")),
+    ("app/src/dev/mod.rs", include_bytes!("../dev/mod.rs")),
+    (
+        "app/src/dev/personas.rs",
+        include_bytes!("../dev/personas.rs"),
+    ),
+    ("app/src/dev/seed.rs", include_bytes!("../dev/seed.rs")),
     ("app/src/directory.rs", include_bytes!("../directory.rs")),
     ("app/src/events/mod.rs", include_bytes!("../events/mod.rs")),
     (
@@ -542,10 +553,6 @@ const SOURCES: [(&str, &[u8]); 172] = [
     (
         "app/src/storage/definitions.rs",
         include_bytes!("definitions.rs"),
-    ),
-    (
-        "app/src/storage/dev_stand.rs",
-        include_bytes!("dev_stand.rs"),
     ),
     (
         "app/src/storage/governance.rs",

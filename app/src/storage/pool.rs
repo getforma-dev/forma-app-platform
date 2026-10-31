@@ -88,8 +88,12 @@ impl Settings {
             hooks: Arc::new(TestHooks::default()),
         })
     }
-    #[cfg(test)]
-    pub(super) fn fixture(
+    /// A loopback database: the test fixtures and, under the `dev-stand`
+    /// feature (ADR-012 D12.1), the local dev binary's Compose PostgreSQL.
+    /// The connection is the same verified-TLS role pool as production; only
+    /// the endpoint is not an RDS name. Never compiled into a release build.
+    #[cfg(any(test, feature = "dev-stand"))]
+    pub(crate) fn fixture(
         credentials: PathBuf,
         registry: PathBuf,
         ca: PathBuf,
@@ -102,6 +106,7 @@ impl Settings {
             ca,
             host: host.into(),
             port,
+            #[cfg(test)]
             hooks: Arc::new(TestHooks::default()),
         }
     }

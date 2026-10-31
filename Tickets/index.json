@@ -276,9 +276,10 @@
         "APP-123",
         "APP-125",
         "APP-126",
-        "APP-127"
+        "APP-127",
+        "APP-128"
       ],
-      "ticket_count": 36,
+      "ticket_count": 37,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -3998,6 +3999,35 @@
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
+        "APP-126"
+      ]
+    },
+    {
+      "id": "APP-128",
+      "title": "Developer workflow step 4: the genui-dev binary under process-compose (Compose PostgreSQL, in-process personas, clean profile)",
+      "path": "0-backlog/APP-128.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "128",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "[ADR-012](../../docs/architecture/ADR-012-DEVELOPER-WORKFLOW.md) D12.1, D12.2, the dev parts of D12.7 and implementation-plan step 4 (accepted by Victor, 2026-10-31: \"Accept and build\"). Evidence: [DEV-WORKFLOW-INVENTORY.md](../../docs/planning/DEV-WORKFLOW-INVENTORY.md) \u00a7A, root-cause table.",
+      "Requirements": "C15",
+      "Depends on": "APP-125, APP-126",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
+      "Branch / PR": "`pivot/devserver` (built; not merged into `pivot/pitch-mvp`)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-125",
         "APP-126"
       ]
     }

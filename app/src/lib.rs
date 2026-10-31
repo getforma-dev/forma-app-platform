@@ -16,6 +16,10 @@ pub mod composer;
 pub mod config;
 // ADR-011 scenarios: demo switches scoped to synthetic organizations; display names.
 pub mod demo;
+// ADR-012 D12.1: the local dev binary's environment (`genui-dev`), compiled
+// only with the `dev-stand` feature; release builds never contain it.
+#[cfg(feature = "dev-stand")]
+pub mod dev;
 pub mod directory;
 // APP-095 (ADR-011 pitch): the in-process event hub and the SSE route.
 pub mod events;
@@ -26,7 +30,7 @@ pub mod mcp;
 // APP-100 (DS-59): the channel a record version was committed through.
 pub mod origins;
 // The binary's server-rendered pages and its product route composition, shared
-// with the local dev stand (`storage::dev_stand`).
+// with the local dev binary (`genui::dev`, feature `dev-stand`).
 pub mod pages;
 pub mod product;
 pub mod query;

@@ -794,8 +794,9 @@ impl Workspace {
     /// for a seeded active member with an active entitlement, bypassing the
     /// provider exchange. Everything the route then does (`resolve_session`,
     /// the fence, the data role's command) is the production path. Never
-    /// compiled into a release build.
-    #[cfg(test)]
+    /// compiled into a release build; the local dev binary (feature
+    /// `dev-stand`, ADR-012 D12.1) mints its personas' sessions with it.
+    #[cfg(any(test, feature = "dev-stand"))]
     pub(crate) async fn mint_session_for_tests(
         &self,
         organization: &str,

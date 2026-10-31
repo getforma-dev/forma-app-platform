@@ -32,7 +32,7 @@ list() {
   total=$(rows | wc -l | tr -d ' ')
   ci_count=$(rows | awk -F'\t' '$4!="-"' | wc -l | tr -d ' ')
   echo
-  echo "$total ignored tests; $ci_count run in CI. 'just campaigns --all' adds smokes, the stand and helpers;"
+  echo "$total ignored tests; $ci_count run in CI. 'just campaigns --all' adds smokes and helpers;"
   echo "'just campaign <name>' runs one (needs: column 'needs' in scripts/dev/campaigns.tsv)."
 }
 
@@ -43,7 +43,6 @@ run() {
   local path kind ci report env needs
   IFS=$'\t' read -r _ path kind ci report env needs <<<"$line"
   case $kind in
-    stand) echo "'$name' is the dev stand: use 'just dev'" >&2; exit 2 ;;
     helper) echo "'$name' is a helper ($needs); it is not run on its own" >&2; exit 2 ;;
   esac
   mkdir -p "$reports"

@@ -33,6 +33,9 @@ rustls = { version = "=0.23.46", default-features = false, features = ["ring", "
 rustls-pki-types = { version = "=1.15.1", features = ["std"] }
 # APP-095: the SSE body stream type (already in the lock through axum/hyper).
 futures-core = "=0.3.34"
+# ADR-012 D12.1: the dev binary calls its own router in process (seeding,
+# session keepalive); already in the lock through axum. Feature `dev-stand` only.
+tower = { version = "=0.5.3", features = ["util"], optional = true }
 
 [dev-dependencies]
 tower = { version = "=0.5.3", features = ["util"] }
@@ -44,6 +47,15 @@ genui-auth-verifier = { path = "../spikes/APP-006", features = ["loopback-http"]
 # ADR-007 D7.13: the APP-006 operator qualification harness compiles only in
 # the isolated qualification executable; release builds never enable it.
 qualification-harness = []
+# ADR-012 D12.1: the local dev binary `genui-dev` (src/bin/genui-dev.rs,
+# src/dev/). Same rule as the harness (D7.13): the Dockerfile never enables
+# it, so a release build contains none of this code.
+dev-stand = ["dep:tower"]
+
+[[bin]]
+name = "genui-dev"
+path = "src/bin/genui-dev.rs"
+required-features = ["dev-stand"]
 
 [lib]
 name = "genui"

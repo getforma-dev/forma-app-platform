@@ -374,13 +374,6 @@ impl Fixture {
             "fixture operator SQL",
         )
     }
-    /// The local dev stand runs for hours; the fixture's credentials file
-    /// may live at most 600 s (`config.rs`), as production's short-lived
-    /// tokens do, and production's sidecar rewrites it. The stand does the
-    /// same: a fresh 600 s file for the same generation, every minute.
-    pub(crate) fn refresh_credentials(&self) {
-        self.write_credentials("localhost", 1, 600);
-    }
     fn write_credentials(&self, host: &str, generation: u64, lifetime: u64) {
         let now = crate::config::now();
         let mut roles = serde_json::Map::new();

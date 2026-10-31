@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # just parser (ADR-012 D12.6): build the sealed parser from parser/ into
 # <checkout>/.cache/parser-target/ (gitignored), the default GENUI_BOX_PARSER_DIR
-# of the dev stand and the box campaign (app/src/storage/{dev_stand,box_campaign}.rs).
+# of the dev binary and the box campaign (app/src/dev/mod.rs, app/src/storage/box_campaign.rs).
 #
 # A local development build: the release guest is built only by app/Dockerfile's
 # parser stage (parser/.cargo/config.toml), and these bytes are never shipped or

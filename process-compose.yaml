@@ -1,0 +1,88 @@
+# The dev processes of one instance (ADR-012 D12.2), supervised by
+# process-compose v1.124.0 (pinned in tools.versions; Homebrew tap
+# f1bonacc1/tap/process-compose). Run through scripts/dev/dev.sh (`just dev`,
+# `just dev clean`), which sets every variable used here (scripts/dev/env.sh)
+# and gives each instance its own API port, so the pitch and clean instances
+# and other checkouts run side by side.
+#
+#   db      this instance's Compose PostgreSQL (compose.dev.yaml); stopping it
+#           removes the container and keeps the volume
+#   admin   the front-end watcher (`npm run dev`, one per checkout: a second
+#           instance waits on its lock and shares the first one's build)
+#   server  genui-dev (scripts/dev/server.sh: cargo build, then the binary);
+#           it exits 75 when admin/dist/manifest.json changes and is restarted,
+#           so a front-end edit needs no command; `just restart` rebuilds it
+version: "0.5"
+
+is_strict: true
+
+# Per-process logs under .cache/dev/<profile>/logs/, plain text, written
+# line by line (`just dev [clean] logs` follows the server's).
+x-logs: &logs
+  disable_json: true
+  flush_each_line: true
+  no_metadata: true
+
+processes:
+  db:
+    command: docker compose -f compose.dev.yaml up --no-log-prefix db
+    working_dir: ${GENUI_DEV_ROOT}
+    log_location: ${GENUI_DEV_STATE}/logs/db.log
+    log_configuration: *logs
+    shutdown:
+      command: docker compose -f compose.dev.yaml down
+      timeout_seconds: 60
+    readiness_probe:
+      exec:
+        command: docker exec ${GENUI_DEV_DB_CONTAINER} pg_isready --host=127.0.0.1 --username=postgres
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 5
+      failure_threshold: 180
+    availability:
+      restart: on_failure
+      backoff_seconds: 2
+      max_restarts: 3
+
+  admin:
+    command: scripts/dev/admin.sh
+    working_dir: ${GENUI_DEV_ROOT}
+    log_location: ${GENUI_DEV_STATE}/logs/admin.log
+    log_configuration: *logs
+    readiness_probe:
+      exec:
+        command: test -f app/admin/dist/manifest.json
+        working_dir: ${GENUI_DEV_ROOT}
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 2
+      failure_threshold: 300
+    availability:
+      restart: on_failure
+      backoff_seconds: 2
+
+  server:
+    command: scripts/dev/server.sh
+    working_dir: ${GENUI_DEV_ROOT}
+    log_location: ${GENUI_DEV_STATE}/logs/server.log
+    log_configuration: *logs
+    depends_on:
+      db:
+        condition: process_healthy
+      admin:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        host: 127.0.0.1
+        port: ${GENUI_DEV_SERVER_PORT}
+        path: /health/live
+      initial_delay_seconds: 2
+      period_seconds: 2
+      timeout_seconds: 2
+      # The first build of a checkout takes minutes.
+      failure_threshold: 900
+    availability:
+      # Exit 75 (front end rebuilt) and crashes restart; a failed build
+      # exits 0 and waits for `just restart`.
+      restart: on_failure
+      backoff_seconds: 1

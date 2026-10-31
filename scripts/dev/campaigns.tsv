@@ -4,7 +4,7 @@
 # added here. Columns are tab-separated:
 #   name  path  kind  ci  report  env  needs
 # kind: campaign (Docker fixture), probe, smoke (calls a real external
-# endpoint), stand (the dev stand; run by `just dev`), helper (not run alone).
+# endpoint), helper (not run alone).
 # ci: the workflow that runs it, or "-". report: the GENUI_*_REPORT variable
 # `just campaign` points at .cache/reports/<name>.json. env: extra variables
 # set by the runner (@VENV@ = app/runtime/.venv/bin/python).
@@ -37,6 +37,5 @@ smoke-workflow	actions::workflows::tests::real_haiku_workflow_smoke	smoke	-	-	-	
 smoke-customize	widgets::tests::real_haiku_customize_smoke	smoke	-	-	-	the real model; GENUI_ACT_SMOKE_KEY_FILE
 smoke-folder	boxes::tests::real_haiku_folder_smoke	smoke	-	-	-	the real model; GENUI_BOX_SMOKE_KEY_FILE
 smoke-open-meteo	widgets::tests::real_open_meteo_smoke	smoke	-	-	-	the public Open-Meteo endpoint
-dev-stand	storage::dev_stand::native_dev_stand	stand	-	-	-	run by just dev
 managed-readonly-entry	storage::managed_qualification::managed_readonly_entry	helper	-	-	-	operator-only exact selector (APP-075)
 managed-child-entry	storage::managed_qualification::tests::child_entry	helper	-	-	-	child process of the managed campaign (APP-075)

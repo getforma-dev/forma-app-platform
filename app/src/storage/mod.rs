@@ -156,13 +156,10 @@ pub(crate) mod admission_qualification;
 mod box_campaign;
 #[cfg(test)]
 pub(crate) mod command_qualification;
-// The local dev stand (app/scripts/dev_stand.sh): the product on 127.0.0.1.
 #[cfg(test)]
 mod composer_qualification;
 #[cfg(test)]
 mod definition_qualification;
-#[cfg(test)]
-mod dev_stand;
 #[cfg(test)]
 mod managed_qualification;
 #[cfg(test)]

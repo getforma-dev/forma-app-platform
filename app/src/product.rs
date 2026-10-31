@@ -1,8 +1,8 @@
 //! The product's route composition (ADR-011 pitch), shared by the binary
-//! (`main.rs`) and the local dev stand (`storage::dev_stand`), so the stand
-//! serves exactly the routers the deployment serves. The caller builds the
-//! states (from the environment in the binary, from the fixture in the
-//! stand); this module only composes them.
+//! (`main.rs`) and the local dev binary (`genui::dev`, feature `dev-stand`),
+//! so the dev binary serves exactly the routers the deployment serves. The
+//! caller builds the states (from the environment in the binary, from the
+//! dev configuration in `genui-dev`); this module only composes them.
 use crate::{
     actions,
     auth::Auth,

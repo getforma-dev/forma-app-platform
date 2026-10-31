@@ -20,11 +20,11 @@ setup *args:
 doctor:
     @scripts/dev/doctor.sh
 
-# Local stand: `just dev [start|stop|reset|status]`, `just dev clean [...]` for the clean instance (:4010)
+# Dev instance (genui-dev under process-compose): `just dev [clean] [start|stop|reset|status|logs|seed-library] [-d]`; clean = new customer on base+10
 dev *args:
     @scripts/dev/dev.sh "$@"
 
-# Rebuild and restart the stand's server (`just restart clean` for the clean instance)
+# Rebuild and restart the dev server only, data kept (`just restart clean` for the clean instance)
 restart *args:
     @scripts/dev/dev.sh "$@" restart-server
 

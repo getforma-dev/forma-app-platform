@@ -1,6 +1,6 @@
 //! The binary's server-rendered APP-009/APP-013 pages (sign-in, invitation,
 //! pending, denied, workspace and record), shared by `main.rs` and the local
-//! dev stand (`storage::dev_stand`) so both render the same pages.
+//! dev binary (`genui::dev`, feature `dev-stand`) so both render the same pages.
 use crate::auth::{
     self, DeniedView, InviteView, PendingView, ResendResult, SigninView, WorkspaceView,
 };

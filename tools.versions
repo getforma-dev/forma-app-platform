@@ -18,5 +18,5 @@ npm              11.6.2
 python           3.11.14
 uv               0.12.22
 just             1.59.0
-process-compose  1.124.0  step-4
+process-compose  1.124.0
 docker           present

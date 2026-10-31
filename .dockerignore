@@ -78,7 +78,7 @@ app/src/slack/**
 !app/src/slack/signature.rs
 !app/src/slack/text.rs
 # slack/tests.rs, storage/slack_campaign.rs and storage/workflows_campaign.rs are cfg(test) only; the qualification context lists them.
-# storage/dev_stand.rs (the local dev stand) is cfg(test) only; the qualification context lists it.
+# dev/ and bin/genui-dev.rs (ADR-012 D12.1, feature dev-stand) are never in a release build; the qualification context lists them.
 # APP-108: folders (boxes): files, real data, apps built from them.
 !app/src/boxes/
 app/src/boxes/**

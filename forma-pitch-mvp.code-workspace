@@ -47,6 +47,7 @@
       "parser/Cargo.toml"
     ],
     "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.cargo.features": ["dev-stand"],
     "files.exclude": {
       "**/.DS_Store": true,
       "**/target": true,

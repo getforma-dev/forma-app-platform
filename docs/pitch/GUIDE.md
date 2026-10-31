@@ -132,43 +132,9 @@ A CSV dropped on the canvas or the bar outside a folder goes to your "Uploads" f
 
 ## Local dev stand
 
-The whole product on your laptop, for trying a change in a browser before deploying to beta. Nothing leaves the machine except the model calls (and the weather widget's Open-Meteo calls).
+The whole product on your laptop is one command from the checkout: **`just dev`** (Diego, Sarah and Priya, already signed in, at port base +1, +2, +3: http://127.0.0.1:4001/canvas, :4002, :4003 in the main checkout) and **`just dev clean`** (a new customer, Alex Rivera, at port base +10, :4010: no library, no records, demo mode off; `just dev clean seed-library` installs the template apps). It runs the `genui-dev` binary (the binary's own `product::routes`) under process-compose over this checkout's Compose PostgreSQL; data survives restarts. A front-end edit shows on the next page load with no command, a Rust edit is `just restart`, `just dev [clean] reset` starts over, `just dev [clean] stop` stops it. A worktree gets its own port base (in its `.env.dev`), so checkouts run side by side. Decided in [ADR-012](../architecture/ADR-012-DEVELOPER-WORKFLOW.md) D12.1-D12.2; the full procedure moves to `docs/DEVELOPMENT.md` (ADR-012 plan step 6).
 
-| Do | Command (from the checkout) |
-| --- | --- |
-| Start | `app/scripts/dev_stand.sh` (builds, seeds, starts; about 30 s after the first build) |
-| Stop | `app/scripts/dev_stand.sh stop` (stops the proxies and the stand, removes its Docker container) |
-| Pick up a code change | `app/scripts/dev_stand.sh restart-server` (rebuilds while the old stand serves, then a fresh stand; the database is reseeded, so anything created in the browser is gone) |
-| What is running | `app/scripts/dev_stand.sh status` |
-
-Front-end only changes: `cd app/admin && npm run build`, then reload the page (the stand reads `admin/dist` from disk). Needs Docker, the locked Python environments (`app/runtime/.venv`, `contracts/.venv`) and a built `admin/dist`.
-
-| Persona | URL |
-| --- | --- |
-| Diego Ramos (files expenses) | http://127.0.0.1:4001/canvas |
-| Sarah Chen (approves) | http://127.0.0.1:4002/canvas |
-| Priya Natarajan (library author, finance) | http://127.0.0.1:4003/canvas |
-
-In the desktop app's built-in browser the same URLs are the launch entries `forma-diego`, `forma-sarah` and `forma-priya` (`.claude/launch.json`). Each URL is its own origin, already signed in as its persona, so all three can be open side by side in one browser.
-
-**Real:** the server is the binary's own route composition (`genui::product::routes`, the function `main.rs` calls) and its pages: canvas, commands, records and notes, sharing, live events, compose, act, MCP with agent tokens and governance, widgets, folders and the slash commands. PostgreSQL with every migration and row-level security, the 20-app library with its sources in the real confined query engine (receipts included), audited commands, folders with the sealed parser (when built). The model is the real Anthropic API when `ANTHROPIC_API_KEY` is in the clone's `.env`; it is read into the stand's process environment only and never printed.
-
-**Stubbed or different from beta:** sign-in (no fAuth: each persona's session is minted directly, and a loopback proxy on 4001–4003 adds the session cookie, which a browser will not keep over plain http; after a sign-out the stand mints a fresh session within a minute); synthetic data only (Northstar, demo mode on so rehearsed sentences parse without a model); no model without a key; Slack is off unless `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` are set in your shell; objects are in a local directory, not S3. The stand stops by itself after 8 hours (`GENUI_DEV_STAND_SECONDS`).
-
-**Seeded:** the library granted to all three personas (each with an authoring app), Diego's expense claims (a $42 Sweetgreen lunch approved by Sarah, a $389 Delta flight waiting for her) and his Thanksgiving time off waiting for her, and Diego's "Q3 board pack" folder with the files from `docs/pitch/folder-fixture`.
-
-### A clean workspace (test as a new customer)
-
-A second, separate stand: its own database, one new customer, **Alex Rivera**, at **http://127.0.0.1:4010/canvas**. It has the 20-app library and nothing else: no records, no folders, nothing on the canvas, and no demo shortcuts (it is not the demo organization, so sentences go to the model, as they would for a real customer). The pitch stand on 4001–4003 is not touched.
-
-| Do | Command (from the checkout) |
-| --- | --- |
-| Start | `app/scripts/fresh_stand.sh` (builds if needed; about 10 s after a build) |
-| Start over, brand new | `app/scripts/fresh_stand.sh reset` (about 10 s, no rebuild: the data is reseeded, and the next page load clears what this browser kept for :4010, so the canvas is empty too) |
-| Pick up a code change | `app/scripts/fresh_stand.sh restart-server` |
-| Stop · what is running | `app/scripts/fresh_stand.sh stop` · `app/scripts/fresh_stand.sh status` |
-
-After a reset, just reload the page. The browser storage is cleared by the proxy (`Clear-Site-Data`), once per new stand, only for the :4010 origin.
+Real versus beta: sign-in is minted, not fAuth (each persona's port adds its session cookie; each browser gets its own session); synthetic data only; objects in a local directory, not S3; the model only when `ANTHROPIC_API_KEY` is in the clone's `.env` (read into the server process only, never printed); Slack only with `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` in your shell; CSV/XLSX parsing only after `just parser`.
 
 ## Operating it (operator only)
 
