@@ -144,3 +144,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 137 | [APP-137: One private beta ledger across repository worktrees](0-backlog/APP-137.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127 |
 | 138 | [APP-138: Forma Canvas — shared Forma brand and application design](4-done/APP-138.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Done | None |
 | 139 | [APP-139: Guided first-run trial: a new member, an empty canvas, one app, one record, one share](0-backlog/APP-139.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-074, APP-093, APP-095 |
+| 140 | [APP-140: Clean trial twin and panel accounts, with the sandbox kept off AWS](0-backlog/APP-140.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-139 |
