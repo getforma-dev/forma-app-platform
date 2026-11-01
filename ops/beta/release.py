@@ -18,6 +18,7 @@ other field is set by `ops/beta/deploy.sh` with jq as the steps run.
   release.py append <release.json> <RELEASES.md> append the row once (idempotent)
   release.py tag <release.json>                  beta/<yyyymmdd>-<sha7>
   release.py import-build <release.json> <build.json>   (re)read the local image record
+  release.py activation-receipt <activation.json> <release.json> [--record-only]
 """
 import argparse
 import datetime
@@ -66,7 +67,7 @@ def init(window, supersedes, candidate, branch, database_version, build=None):
         "executed_at_utc": None,
         "activation_requested_at_utc": None,
         "activated_at_utc": None,
-        "verified": {"at_utc": None, "origin": None, "live": None, "canvas": None, "mcp": None, "slack": None},
+        "verified": {"at_utc": None, "origin": None, "live": None, "canvas": None, "entry": None, "mcp": None, "slack": None},
         "git_tag": None,
         "releases_row": None,
         "updated_at_utc": now(),
@@ -134,6 +135,38 @@ def check(record, activated=False):
     return record
 
 
+def activation_receipt(report, record, record_only=False):
+    """Read preflight's reservation envelope without mistaking it for readiness.
+
+    Preserve the raw report. A reconciled flat receipt is accepted only for an
+    explicit record-only recovery; it must still match this window's saved TD.
+    This function never repeats activation or calls AWS.
+    """
+    if not isinstance(report, dict):
+        raise ValueError("activation response must be an object")
+    if "activation" in report:
+        if report.get("status") != "reserved_local_plan_only" or report.get("window_id") != record["window_id"]:
+            raise ValueError("activation reservation does not match this window")
+        receipt = report["activation"]
+    elif record_only:
+        receipt = report
+    else:
+        raise ValueError("preflight response has no activation receipt; reconcile before record-only recovery")
+    if not isinstance(receipt, dict) or receipt.get("status") != "activation_requested_not_healthy":
+        raise ValueError("response does not record a requested activation")
+    if type(receipt.get("desired_count")) is not int or receipt["desired_count"] != 1:
+        raise ValueError("activation receipt does not confirm numeric desired count one")
+    task = receipt.get("task_definition")
+    if not isinstance(task, str) or not re.fullmatch(r"arn:aws:ecs:[^\s]+:task-definition/[^\s:]+:[1-9][0-9]*", task) \
+            or task != record.get("stack", {}).get("task_definition"):
+        raise ValueError("activation task definition differs from this window's executed stack")
+    observed = receipt.get("observed_at_utc")
+    if not isinstance(observed, str) or not UTC.fullmatch(observed):
+        raise ValueError("activation observation must be whole-second UTC")
+    datetime.datetime.strptime(observed, "%Y-%m-%dT%H:%M:%SZ")
+    return receipt
+
+
 def git_tag(record):
     """beta/<yyyymmdd>-<sha7>, the date of the activation (D13.2)."""
     when = record["activated_at_utc"]
@@ -187,6 +220,10 @@ def main(argv=None):
     p = sub.add_parser("import-build")
     p.add_argument("release", type=Path)
     p.add_argument("build", type=Path)
+    p = sub.add_parser("activation-receipt")
+    p.add_argument("response", type=Path)
+    p.add_argument("release", type=Path)
+    p.add_argument("--record-only", action="store_true")
     args = parser.parse_args(argv)
     try:
         if args.command == "init":
@@ -208,6 +245,9 @@ def main(argv=None):
             record["updated_at_utc"] = now()
             args.release.write_text(json.dumps(check(record), indent=2) + "\n")
             print("release.json: local image record imported")
+        elif args.command == "activation-receipt":
+            receipt = activation_receipt(json.loads(args.response.read_text()), json.loads(args.release.read_text()), args.record_only)
+            print(json.dumps(receipt, indent=2))
     except (ValueError, KeyError) as error:
         print("error: %s" % error, file=sys.stderr)
         return 2
