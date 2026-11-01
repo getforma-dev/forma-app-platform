@@ -1539,16 +1539,52 @@ export function startBoard(document_: Document): void {
     });
 }
 
+/** The work a `/canvas#g-{work}` link names. Anything else, including a timing hash, is not a request. */
+export function requestedWork(hash: string): string | null {
+  const work = hash.match(/^#g-([0-9a-f-]{36})$/)?.[1] ?? '';
+  return isUuid(work) ? work : null;
+}
+
+/**
+ * The app id the authorized library lists for `work`. A hash for a work the
+ * page did not list has no app id, so the board does not ask the group route
+ * about it and does not show its title.
+ */
+export function listedWorkApp(root: ParentNode, work: string): string | null {
+  for (const row of root.querySelectorAll<HTMLElement>('.cv-lib-app')) {
+    if (row.dataset.work !== work) continue;
+    const app = row.dataset.app ?? '';
+    return isUuid(app) ? app : null;
+  }
+  return null;
+}
+
+/** What `/canvas#g-{work}` should do once the board's first contents are in place. */
+export function canvasLinkPlan(hash: string, mounted: boolean, app: string | null): 'focus' | 'place' | 'absent' | 'none' {
+  const work = requestedWork(hash);
+  if (!work) return 'none';
+  if (mounted) return 'focus';
+  return app ? 'place' : 'absent';
+}
+
 /** After the board's first contents are in place: camera, summary, runs. */
 function settle(document_: Document): void {
   if (!canvas || !host) return;
   stackHooks.settled();
   uniteHooks.settled();
   const camera = demo() ? null : loadCamera();
-  const target = location.hash.match(/^#g-([0-9a-f-]{36})$/)?.[1];
+  const target = requestedWork(location.hash);
+  const mounted = target ? groups.get(target)?.items[0] : undefined;
+  const linkedApp = target ? listedWorkApp(document_, target) : null;
   const items = Array.from(groups.values()).flatMap((group) => group.items);
-  if (target && groups.get(target)?.items[0]) {
-    canvas.focusItem(groups.get(target)!.items[0]!);
+  const plan = canvasLinkPlan(location.hash, Boolean(mounted), linkedApp);
+  if (plan === 'focus' && mounted) {
+    canvas.focusItem(mounted);
+  } else if (plan === 'place' && target && linkedApp) {
+    // The link asked for this work. Load it through the same authorized
+    // placement the library uses, then that path focuses it. An unlisted
+    // work (plan 'absent') is not fetched and shows no title.
+    void placeWork(linkedApp, target);
   } else if (camera && items.length) {
     canvas.restoreCamera(camera);
   } else if (items.length) {
