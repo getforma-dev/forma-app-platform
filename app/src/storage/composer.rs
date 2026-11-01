@@ -273,7 +273,23 @@ impl Workspace {
                     && granted(permit.also(Action::Run, Resource::App(&app)).await)?;
                 candidates.push(AuthoringCandidate { app, newest, granted });
             }
-            let authoring = choose_authoring(&candidates, &sidecar).map(|app| AuthoringApp { app });
+            let mut authoring = choose_authoring(&candidates, &sidecar).map(|app| AuthoringApp { app });
+            // APP-145: a member who owns no eligible app gets one empty shell
+            // in this same fenced transaction. The function refuses anyone
+            // the session settings do not name. It does not add a publication
+            // policy. A second compose finds the shell above and does not call.
+            if authoring.is_none() {
+                let created = permit.transaction().query(
+                    "SELECT genui_private.ensure_authoring_shell($1::text::uuid,$2::text::uuid)::text",
+                    &[org, principal],
+                ).await?;
+                if let Some(row) = created.first() {
+                    let id: Option<String> = row.try_get(0).map_err(|_| Error::Unavailable)?;
+                    if let Some(app) = id.filter(|app| !app.is_empty()) {
+                        authoring = Some(AuthoringApp { app });
+                    }
+                }
+            }
 
             let policy = permit.transaction().query("SELECT policy_id::text FROM genui.publication_policies WHERE organization_id=$1::text::uuid AND kind='owner_publish' ORDER BY policy_version DESC,policy_id LIMIT 1", &[org]).await?;
             let owner_publish_policy = match policy.first() {

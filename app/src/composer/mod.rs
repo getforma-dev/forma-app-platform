@@ -37,7 +37,8 @@
 //! definition after `admit_definition`, never as markup, SQL, FMIR or a
 //! grant (AGENTS.md). Creating an app and granting on it stay operator
 //! actions (ADR-007 D7.3): a member who owns no app with `edit_definition`
-//! and `run` can retrieve but not generate. Logs carry identities, codes,
+//! and `run` can retrieve but not generate, except the one APP-145 shell
+//! their own compose creates. Logs carry identities, codes,
 //! counts and durations; never the intent, a definition or the key.
 pub mod ask;
 pub mod cards;
