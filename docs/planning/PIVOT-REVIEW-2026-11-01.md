@@ -90,13 +90,15 @@ Victor subsequently authorized updating the tickets and PRs, pushing the fixes a
 | PR | Reviewed fix head | Evidence |
 | --- | --- | --- |
 | 22 | `3382d785f1bbc2f96d856d000e74befedc0df3d3` | App/publication/work identity and governed widget corrections; board checks |
-| 25 | `acba5466d427c210ecb45a6b7ae902d78e5519f5` | Read-only context, concurrency/expiry regressions, schema/image contexts; independent Tier A recheck |
+| 25 | `0573c2068a25a24933b36cd5bfdef6bfcc71a836` | Read-only context, concurrency/expiry regressions, schema/image contexts; independent Tier A recheck |
 | 26 | `febfaae53315d85c341804494dd7c22f47f6db43` | Explicit generation, member favorites, refusal/cancel regressions |
 | 27 | `808cca3bb48f6bb8f785a15d02d0cb53668207d9` | Responsive page, bounded sharing, successful owned-work sharing/live browser evidence |
 
 The retrospective source review also covered merged PRs 5–16: development-only issuer fallback, exact-work authorization/deep links, contract-library verification, library drag/placement, invitation fault/race fixtures and parser artifact paths; the evidence-only APP-013 close was checked against the current command/idempotency implementation. PRs 17–24 are planning/observation work; their original diffs were reconciled against current routes and ticket requirements. No additional blocking regression was found. Historical screenshots and hosted rehearsals were read as evidence, not re-executed or presented as fresh checks.
 
 This read-through also confirmed that current provider invitation capabilities reach the service only on task start. APP-139 now explicitly requires runtime invitation creation/delivery without a per-share operator restart and without expanding ordinary workspace authority.
+
+Exact-head Pitch CI subsequently found two obsolete tests that treated an active member without an owned app as unauthorized to compose. PR 25's follow-up changes only campaign/evidence: a real HTTP compose now proves one owned Canary app, its three grants and one grant audit, with no source or foreign app/work authority. Foreign-pinned, anonymous and forged requests retain their uniform denials, and strict stream assertions retain cross-tenant event isolation. The complete native Pitch campaign passed 18 checks in 78.74 seconds; the model definition is explicitly a test fixture. The production, migration and catalog bytes did not change. Failed CI remains part of the history; the revised head runs fresh checks.
 
 The handoff says Grok stopped after delivering PR 27 for review. A subsequent remote/worktree check found no new APP-139/143/144 branch or tracked work in the original checkout. A resident CLI process alone is not evidence of active implementation. APP-144 is the next isolated Codex lane; APP-139/143/140 remain unfinished. PR and CI links are the authoritative landing status; the inventory above records the initial review snapshot.
 

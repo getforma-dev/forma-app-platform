@@ -4369,7 +4369,7 @@
       "Depends on": "APP-093",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "[pivot/app-145-shell \u2014 PR 25](https://github.com/getforma-dev/forma-app-platform/pull/25); review fixes pushed at `acba546`. The PR records landing status.",
+      "Branch / PR": "[pivot/app-145-shell \u2014 PR 25](https://github.com/getforma-dev/forma-app-platform/pull/25); review fixes and campaign follow-up pushed at `0573c20`. The PR records landing status.",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
