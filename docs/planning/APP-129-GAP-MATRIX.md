@@ -6,11 +6,11 @@ The seven gaps are the list under "Gaps to revisit" in [contracts/README.md](../
 
 | # | Status | Why |
 | --- | --- | --- |
-| 1 | Open, narrowed | `admit_definition` still does not apply the two authoring rules. The sentence composer does, after admission. Folder publication does not. |
+| 1 | Open, narrowed | `admit_definition` still does not apply the two authoring rules. A model-generated folder app does, through `plan_generated`. The deterministic publisher emits no commands. |
 | 2 | Deferred | Victor's option A, 2026-10-31. Option B stays a later window and needs his word again. |
 | 3 | Open, blocked on authorization | No read-only beta check of composer-generated definitions is recorded. This note does not query beta. |
 | 4 | Open | The seed label is still `impl-2026-10-28.1` in the three places the gap names. |
-| 5 | Open | Contract qualification and `just check`'s `contracts` step do not run `make_library.py --check`. DuckDB is not in `contracts/requirements.lock`. |
+| 5 | Closed for the workflow | Contract qualification and `just check contracts` run `make_library.py --check` with the APP-005 DuckDB pin in the contracts venv. Merged as `1b10ab1` in `1a285e2`. |
 | 6 | Open | `contracts/lock.py` lists no library CSV. |
 | 7 | Open | The current negative vectors and `verify_vectors.mjs` do not carry the amendment or the authoring rules. |
 
@@ -22,13 +22,13 @@ The seven gaps are the list under "Gaps to revisit" in [contracts/README.md](../
 
 `composer::plan::plan_generated` admits first, then calls `require_authored` (`app/src/composer/plan.rs`). That function is the two rules: one `(field, from, to)` per command, and `initial` on a transition-free create that writes an enum another command governs. `composer::tests` asserts that `admit` accepts a missing `initial` and a duplicate transition, and that `plan_generated` refuses both with `authoring_rule`. Those assertions were read, not executed here.
 
-`boxes::routes::publish_rule_built` admits and calls `require_runnable`, then publishes. It does not call `require_authored`. A folder-built definition can therefore be new content that admission and the folder publisher both accept while the sentence composer would refuse it. `plan_adapted` and `plan_transformed` also re-admit without `require_authored`. Those two change title, description, or view operations of a library definition; they do not declare new commands.
+A model-generated folder app uses that path. `boxes/routes.rs` calls `Composer::generate_with`, which calls `plan_generated` (`composer/mod.rs`), which calls `require_authored`. `publish_rule_built` is a different caller. It admits, calls `require_runnable`, and publishes the trusted `derive::{data,metrics,card}_definition` values. Their shared builder sets `record_schemas` and `commands` to empty arrays (`boxes/derive.rs`). Those current outputs cannot violate the two command-authoring rules. `plan_adapted` and `plan_transformed` also re-admit without `require_authored`. Those two change title, description, or view operations of a library definition; they do not declare new commands.
 
-**Smallest slice.** Call the existing `require_authored` from `publish_rule_built` before publish. Leave `admit_definition` unchanged so stored re-admission keeps working.
+**Smallest slice.** Leave the model path as it is. A call to `require_authored` inside `publish_rule_built` would be defense in depth for a future caller, not a fix for an unguarded model command. Leave `admit_definition` unchanged so stored re-admission keeps working. Do not implement a generated-command bypass on the strength of this row.
 
 **Modules.** `app/src/boxes/routes.rs`, `app/src/composer/plan.rs`, `app/src/boxes/tests.rs` or the box campaign.
 
-**Acceptance.** A rule-built definition with a duplicate transition, or a filing create that writes a governed enum and declares no `initial`, is refused before publish. The stored Expense claims fixture still admits. A sentence-composed definition keeps today's `authoring_rule` refusal.
+**Acceptance.** No code change is required for the current callers. A model-generated folder app is refused by `require_authored` when it breaks either rule. A deterministic data, metrics, or card definition still publishes with empty `commands` and `record_schemas`. The stored Expense claims fixture still admits. A later guard inside `publish_rule_built` is optional and is not this gap's fix.
 
 **Authorization.** No grant, role, or tenant change. The refusal is a definition rule. Do not put the rules inside default admission: that would start refusing the stored beta definition on re-admission.
 
@@ -48,7 +48,7 @@ The refusal is still in the tree. `fixtures/reset_trial.py` expects `existing se
 
 **Status.** Open, and blocked without Victor's authorization. The gap asks for a read-only check that definitions composed on beta meet the authoring rules. No such check is recorded in APP-129's log or `evidence/APP-129/`. This note did not connect to beta.
 
-Locally, new sentence compositions now pass through `require_authored` (gap 1). That does not inspect definitions already stored on beta, and it does not cover folder publication.
+Locally, new sentence compositions and model-generated folder apps now pass through `require_authored` (gap 1). That does not inspect definitions already stored on beta.
 
 **Smallest slice, after authorization.** A read-only query of beta's composed definition revisions, judged with `validate(..., new_content=True)` or the same two rules, writing a count of refusals and no rows. No publish, no seed, no migration.
 
@@ -78,13 +78,11 @@ Locally, new sentence compositions now pass through `require_authored` (gap 1). 
 
 ## 5. Library check in contract qualification
 
-**Status.** Open. `.github/workflows/contracts.yml` runs the contract unittests, `contracts/verify_vectors.mjs`, and `contracts/lock.py check`. `scripts/dev/check.sh` names the same three commands for the `contracts` step. Neither runs `make_library.py --check`. `contracts/requirements.lock` has no DuckDB. `app/runtime/requirements.lock` pins `duckdb==2.0.0`, which is what `make_library.py` needs.
+**Status.** Closed for the workflow. The reading below is the `af63feb` baseline. Pull request 11 (`1b10ab1`, merged into trunk at `1a285e2`) is the current disposition.
 
-**Smallest slice.** Run `make_library.py --check` from the runtime venv in the contract workflow and in the `contracts` check step. Do not add DuckDB to `contracts/requirements.lock` unless the script must run inside that venv.
+On `af63feb`, `.github/workflows/contracts.yml` ran the contract unittests, `contracts/verify_vectors.mjs`, and `contracts/lock.py check`. `scripts/dev/check.sh` named the same three commands. Neither ran `make_library.py --check`. `contracts/requirements.lock` had no DuckDB. `app/runtime/requirements.lock` pinned `duckdb==2.0.0`.
 
-**Modules.** `.github/workflows/contracts.yml`, `scripts/dev/check.sh`. No schema or grant change.
-
-**Acceptance.** A drifted library JSON or CSV digest fails that step. The contracts venv stays free of DuckDB.
+**Delivered.** Contract qualification and `just check contracts` run `contracts/.venv/bin/python contracts/make_library.py --check`. `just setup` installs `spikes/APP-005/requirements.lock` (`duckdb==2.0.0`, the same hashed block as the runtime lock) into `contracts/.venv` beside the unchanged validator lock. `--check` compares generated bytes in temporary storage, names a stale path under `contracts/fixtures/library/`, and does not rewrite fixtures. The earlier acceptance that the contracts venv stay free of DuckDB is stale: that venv now has the APP-005 pin, and `contracts/requirements.lock` still does not.
 
 **Authorization.** None. The check is local and CI.
 
