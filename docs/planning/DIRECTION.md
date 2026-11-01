@@ -5,7 +5,7 @@ Victor's November 1 direction is the app as a page within a clean new-user trial
 The November 1 sharing clarification prioritizes **APP-154** now: named live app guests, separate platform invitations, and optional connected canvas placement ([ADR-014](../architecture/ADR-014-LIVE-APP-SHARING.md)). APP-139 consumes this implementation for its complete first-run trial. The earlier sequence is retained below for context:
 
 1. **APP-145**, the prerequisite for a real first member: one authoring shell on intentional compose, with no shell created by discovery/listing. PR 25 exists; review repairs are not a deployment.
-2. **APP-141.** Create before placing. PR 26 currently supplies description examples and generation, not admitted-template instantiation; do not label those examples as templates.
+2. **APP-141.** Create before placing. PR 26 supplied description examples; the [MVP follow-up](MVP-GAPS-2026-11-01.md) replaces them with admitted templates, automatic page placement and independent saved-work names.
 3. **APP-142.** The united app is the page on the canvas. Focus returns to it; Fan out returns its parts to the board. PR 27 and its review now include successful owner-created sharing/live updates and narrow-layout evidence.
 4. **APP-144.** Extend the authorized `/w/{app}/{work}` renderer into the same usable app document. Preserve the exact saved work. No public anonymous page is implied.
 5. **APP-143.** Ask about the selected app, focused part or widget. Context grants no authority.
@@ -14,4 +14,4 @@ The November 1 sharing clarification prioritizes **APP-154** now: named live app
 
 Implementation, review, landing and deployment are separate states. These tickets remain Backlog while their older required predecessors are not Done. The dependency Order values follow the sequence above; APP IDs and historical logs are unchanged. Do not use `board.py next` alone to select the pivot work or mark acceptance from an open PR.
 
-Stacks, focus and folders retain APP-104, APP-106 and APP-120 contracts. Detaching a component while keeping its data is undecided. APP-150–153 in [LATER.md](LATER.md) remain later; the recording does not require those enhancements. The original platform roadmap and phase gates still apply after the trial.
+Stacks, focus and folders retain APP-104, APP-106 and APP-120 contracts. Detaching a component while keeping its data is undecided. APP-150–152 in [LATER.md](LATER.md) remain later. APP-153 is now resolved as a small design decision: keep the four tabs for this MVP and use direct contextual Ask entry points ([decision](app-model/library-pane.md)). The original platform roadmap and phase gates still apply after the trial.

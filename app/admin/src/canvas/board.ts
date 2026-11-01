@@ -371,16 +371,28 @@ export function isOnBoard(id: string): boolean {
 export function paneKind(kind: string): string {
   if (kind === 'summary' || kind === 'status') return 'number';
   if (kind === 'timeline' || kind === 'chart') return 'chart';
-  if (['app', 'form', 'records', 'ledger'].includes(kind)) return kind;
+  if (['app', 'form', 'records', 'ledger', 'note'].includes(kind)) return kind;
   return 'table';
 }
 
 /** APP-104: every work the board has in hand, with its cards (the pane lists new ones under "My apps"). */
-export function boardWorks(): { app: string; work: string; title: string; cards: { id: string; title: string; kind: string; canvasKind: string }[] }[] {
+export function updateWorkTitle(app: string, work: string, name: string): void {
+  const group = groups.get(work);
+  if (!group || group.app !== app) return;
+  group.title = name;
+  group.section.dataset.title = name;
+  for (const card of group.cards) if (card.dataset.kind === 'app') {
+    const title = card.querySelector('h2'); if (title) title.textContent = name;
+    card.setAttribute('aria-label', name);
+  }
+}
+
+export function boardWorks(): { app: string; work: string; title: string; workNameScope: boolean; cards: { id: string; title: string; kind: string; canvasKind: string }[] }[] {
   return Array.from(groups.values(), (group) => ({
     app: group.app,
     work: group.work,
     title: group.title,
+    workNameScope: group.section.dataset.workNameScope === 'true',
     cards: group.cards.map((card) => ({
       id: card.dataset.card ?? '',
       title: card.dataset.kind === 'app' ? 'App card' : (card.getAttribute('aria-label') ?? 'Card'),
@@ -519,14 +531,14 @@ export const stackBoard = {
   announce,
   flash,
   /** APP-106: a work's group as the frames need it (cards in definition order). */
-  group(work: string): { app: string; work: string; title: string; cards: HTMLElement[]; origins: string[]; pinned: boolean; canShare: boolean } | null {
+  group(work: string): { app: string; work: string; title: string; cards: HTMLElement[]; origins: string[]; pinned: boolean; canShare: boolean; partLayout: string } | null {
     const group = groups.get(work);
     if (!group) return null;
     const origins = Array.from(group.section.ownerDocument.querySelectorAll<HTMLElement>('.cv-origin'))
       .filter((chip) => group.cards.some((card) => card.contains(chip)))
       .map((chip) => chip.textContent ?? '')
       .filter(Boolean);
-    return { app: group.app, work: group.work, title: group.title, cards: [...group.cards], origins, pinned: group.pinned, canShare: group.section.dataset.canShare === 'true' };
+    return { app: group.app, work: group.work, title: group.title, cards: [...group.cards], origins, pinned: group.pinned, canShare: group.section.dataset.canShare === 'true', partLayout: group.section.dataset.partLayout ?? '' };
   },
   /** APP-106: keeps a group's hand arrangement (a unite or a break apart moved it). */
   pin(work: string): void {

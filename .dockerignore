@@ -125,6 +125,7 @@ app/src/composer/**
 !app/src/composer/plan.rs
 !app/src/composer/prompt.rs
 !app/src/composer/routes.rs
+!app/src/composer/templates.rs
 !app/src/composer/shape.rs
 !app/src/composer/talk.rs
 !app/src/composer/transform.rs
@@ -145,6 +146,7 @@ app/src/storage/**
 !app/src/storage/agents.rs
 !app/src/storage/governance.rs
 !app/src/storage/labels.rs
+!app/src/storage/work_labels.rs
 !app/src/storage/cards.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
@@ -221,6 +223,11 @@ app/admin/src/shared/**
 !app/admin/src/shared/document.ts
 !app/admin/src/shared/authority.ts
 !app/admin/src/shared/canvas-controller.ts
+!app/admin/src/ask/
+app/admin/src/ask/**
+!app/admin/src/ask/client.ts
+!app/admin/src/ask/panel.ts
+!app/admin/src/ask/document.ts
 !app/admin/src/sharing/
 app/admin/src/sharing/**
 !app/admin/src/sharing/api.ts
@@ -234,6 +241,8 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/commands.ts
 !app/admin/src/canvas/compose.ts
 !app/admin/src/canvas/create-app.ts
+!app/admin/src/canvas/page-layout.ts
+!app/admin/src/canvas/work-name.ts
 !app/admin/src/canvas/display.ts
 !app/admin/src/canvas/layout.ts
 !app/admin/src/canvas/live.ts
@@ -312,6 +321,7 @@ app/admin/src/canvas-vendor/**
 !app/admin/src/styles/
 app/admin/src/styles/**
 !app/admin/src/styles/app.css
+!app/admin/src/styles/ask.css
 !app/admin/src/styles/sharing.css
 !app/admin/src/fonts/
 app/admin/src/fonts/**
@@ -346,6 +356,7 @@ app/migrations/**
 !app/migrations/0015_member_cards.sql
 !app/migrations/0016_authoring_shell.sql
 !app/migrations/0017_live_sharing.sql
+!app/migrations/0018_work_names.sql
 !app/migrations/0009_slack_links.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
@@ -366,6 +377,7 @@ app/migrations/**
 !app/migrations/catalog-v15.json
 !app/migrations/catalog-v16.json
 !app/migrations/catalog-v17.json
+!app/migrations/catalog-v18.json
 !app/certs/
 app/certs/**
 !app/certs/rds-global-bundle.pem

@@ -47,6 +47,13 @@ impl Data {
                     && pin.policy_epoch == access.policy_epoch,
             )?;
             let mut outline = outline_of(&pinned)?;
+            if let Some(name) = super::work_labels::names(&tx, org, &keys)
+                .await?
+                .get(&(access.app.clone(), access.work.clone()))
+                .and_then(|label| label.name.as_ref())
+            {
+                outline.title = name.clone();
+            }
             require(outline.views.iter().all(|v| access.views.contains(&v.id)))?;
             outline.can_write = false;
             let collections = collections_many(&tx, org, &keys)

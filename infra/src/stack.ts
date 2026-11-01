@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import * as scheduler from 'aws-cdk-lib/aws-scheduler';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
+import { CLEAN_TRIAL_CONTEXT, cleanTrialConfiguration, SharedBroker, SHARED_BROKER_JSON_ENV } from './shared-broker.js';
 
 // The temporary ingress trial is one real operator address; public mode uses /0.
 // Keep the operator address separately so /0 can never masquerade as that trial.
@@ -167,6 +168,10 @@ export const PROVIDER_MANAGEMENT_URL_PATTERN = '^(?:|https://[a-z0-9](?:[a-z0-9.
 export class GenuiFoundation extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
+    const cleanTrial = cleanTrialConfiguration(this.node.tryGetContext(CLEAN_TRIAL_CONTEXT));
+    if (cleanTrial && this.node.tryGetContext(DISPLAY_NAMES_CONTEXT) !== undefined) {
+      throw new Error('A clean trial does not accept sandbox persona display names');
+    }
     Tags.of(this).add('Application', 'forma-app-platform');
     Tags.of(this).add('Environment', 'synthetic');
     const operator = new CfnParameter(this, 'Operator', { type: 'String', minLength: 1, description: 'Named operator before provisioning' });
@@ -216,8 +221,8 @@ export class GenuiFoundation extends Stack {
       autoMinorVersionUpgrade: false, deletionProtection: true, removalPolicy: RemovalPolicy.RETAIN,
       parameters: { 'rds.force_ssl': '1' },
     });
-    const tenantIds = TENANT_IDS;
-    const keys = ['northstar', 'canary'].map(name => new kms.Key(this, `${name}Key`, {
+    const tenantIds = [...TENANT_IDS, ...(cleanTrial ? [cleanTrial.organization_id] : [])];
+    const keys = ['northstar', 'canary', ...(cleanTrial ? ['cleanTrial'] : [])].map(name => new kms.Key(this, `${name}Key`, {
       description: `GenUI synthetic ${name} organization`, enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
     }));
     const bucket = new s3.Bucket(this, 'Evidence', {
@@ -343,8 +348,8 @@ export class GenuiFoundation extends Stack {
       // organization's live stream at this same-origin route (main.rs accepts
       // only a `/v1/` path). Live updates are on in every deployment.
       [CANVAS_EVENTS_URL_ENV]: CANVAS_EVENTS_URL,
-      [DEMO_ORGANIZATIONS_ENV]: DEMO_ORGANIZATION_ID,
-      [DEMO_MODE_ENV]: '1',
+      [DEMO_ORGANIZATIONS_ENV]: cleanTrial ? '' : DEMO_ORGANIZATION_ID,
+      [DEMO_MODE_ENV]: cleanTrial ? '0' : '1',
       ...displayNamesEnvironment(this.node.tryGetContext(DISPLAY_NAMES_CONTEXT)),
       ...signinAliasesEnvironment(this.node.tryGetContext(SIGNIN_ALIASES_CONTEXT)),
     };
@@ -556,6 +561,24 @@ export class GenuiFoundation extends Stack {
     const managementAttached = new CfnCondition(this, 'ProviderManagementAttached', {
       expression: Fn.conditionNot(Fn.conditionEquals(managementSecretArn.valueAsString, '')),
     });
+    if (cleanTrial) {
+      const trialOrganization = new CfnParameter(this, 'CleanTrialOrganizationId', { type: 'String',
+        allowedValues: [cleanTrial.organization_id], description: 'Fresh trial organization pinned by the reviewed identifiers and budget reservation.' });
+      new CfnRule(this, 'CleanTrialBrokerInputs', { assertions: [{
+        assert: Fn.conditionAnd(Fn.conditionNot(Fn.conditionEquals(managementSecretArn.valueAsString, '')),
+          Fn.conditionNot(Fn.conditionEquals(operatorImage.valueAsString, ''))),
+        assertDescription: 'A clean trial requires its provider management binding and the reviewed operator image for isolated signup.',
+      }] });
+      const broker = new SharedBroker(this, 'SharedBroker', { vpc, cluster, listener, albSecurity, log, runtimePlatform,
+        operatorImage: operatorImage.valueAsString, repositoryArn: repositoryOf(operatorImage.valueAsString),
+        managementSecretArn: managementSecretArn.valueAsString, managementUrl: managementUrl.valueAsString,
+        expiry: Fn.join('', ['at(', Fn.select(0, Fn.split('Z', expiresAt.valueAsString)), ')']), expiryGroup });
+      container.addSecret(SHARED_BROKER_JSON_ENV, ecs.Secret.fromSecretsManager(broker.clientConfiguration));
+      new CfnOutput(this, 'CleanTrialOrganization', { value: cleanTrial.organization_id });
+      new CfnOutput(this, 'CleanTrialProviderTenant', { value: cleanTrial.provider_tenant_id });
+      new CfnOutput(this, 'CleanTrialProviderSlug', { value: cleanTrial.tenant_slug });
+      void trialOrganization;
+    }
     new CfnRule(this, 'ProviderManagementComplete', {
       assertions: [{
         assert: Fn.conditionOr(

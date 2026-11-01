@@ -147,6 +147,21 @@ pub fn view(
     idempotency_key: String,
     notice: Option<Notice>,
 ) -> RecordView {
+    let mut view = view_for_command(app, work, detail, csrf, idempotency_key, None);
+    view.notice = notice;
+    view
+}
+
+/// A declared form selects its own command, never a different command which
+/// happens to sort first. Storage still judges the actual submitted record.
+pub fn view_for_command(
+    app: &str,
+    work: &str,
+    detail: &RecordDetail,
+    csrf: String,
+    idempotency_key: String,
+    selected: Option<&str>,
+) -> RecordView {
     let current = |field: &str| {
         detail
             .fields
@@ -170,6 +185,7 @@ pub fn view(
     let command = detail
         .commands
         .iter()
+        .filter(|command| selected.is_none_or(|id| command.id == id))
         .filter(admits)
         .min_by_key(|c| (detail.version == 0 && !c.transitions.is_empty()) as u8)
         .cloned();
@@ -183,22 +199,41 @@ pub fn view(
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("text")
                 .to_owned();
-            let options = field
-                .value_type
-                .get("values")
-                .and_then(serde_json::Value::as_array)
-                .map(|values| {
-                    values
+            // The first unconditional initial rule always wins when it is
+            // first for this field. Later guarded/default rules cannot change
+            // that value. A guard before it depends on the draft, so retain
+            // the declared choices and let the audited command judge them.
+            let initial = command
+                .as_ref()
+                .filter(|_| detail.version == 0)
+                .and_then(|c| {
+                    c.rules
+                        .initial
                         .iter()
-                        .filter_map(serde_json::Value::as_str)
-                        .collect::<Vec<_>>()
-                        .join(" | ")
-                })
-                .unwrap_or_default();
+                        .find(|(id, _, _)| id == &field.id)
+                        .filter(|(_, _, guard)| guard.is_none())
+                        .map(|(_, value, _)| value.as_str())
+                });
+            let options = initial.map(str::to_owned).unwrap_or_else(|| {
+                field
+                    .value_type
+                    .get("values")
+                    .and_then(serde_json::Value::as_array)
+                    .map(|values| {
+                        values
+                            .iter()
+                            .filter_map(serde_json::Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(" | ")
+                    })
+                    .unwrap_or_default()
+            });
             FieldRow {
                 id: field.id.clone(),
                 kind,
-                value: value_text(&field.value),
+                value: initial
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| value_text(&field.value)),
                 input: format!("value.{}", field.id),
                 spec: serde_json::to_string(&field.value_type).unwrap_or_default(),
                 spec_input: format!("spec.{}", field.id),
@@ -230,6 +265,6 @@ pub fn view(
         command: command.map(|c| c.id).unwrap_or_default(),
         csrf,
         idempotency_key,
-        notice,
+        notice: None,
     }
 }

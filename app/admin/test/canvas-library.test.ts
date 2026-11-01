@@ -480,7 +480,7 @@ test('/shape and /ask resolve every form of an address through one resolver; a n
   for (const line of ['why is this high?', 'card why is this high?', 'notes from last week', 'time off is high', 'expenses.led which?', 'exp is high']) {
     assert.deepEqual(ask.askLine(line), { scope: null, question: line }, line);
   }
-  assert.ok(ask.askLine('widget:calculator what is it')?.message?.startsWith('A widget has no records'));
+  assert.equal(ask.askLine('widget:calculator what is it')?.message, 'Select a weather, clock or calculator widget to ask about its controls and settings.');
   assert.equal(ask.askLine('folder:q3 what is in it').scope, null);
   // A personal shortcut names its app for its member.
   registry.setAddresses(slash.parseCommands({ commands: [{ ...SERVER.commands[0]!, aliases: ['expense', 'claim', 'e'], mine: ['e'] }, SERVER.commands[1]!] }).map(slash.serverAddress));

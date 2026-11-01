@@ -267,6 +267,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except (Exception, socket.timeout):
             self.answer(503, {"error": "invitation_unavailable"})
 
+    def do_GET(self):
+        if self.path == "/health/live":
+            self.answer(200, {"status": "ready"})
+        else:
+            self.answer(404, {"error": "invitation_unavailable"})
+
 
 class Server(http.server.ThreadingHTTPServer):
     daemon_threads = True
@@ -292,23 +298,54 @@ class Server(http.server.ThreadingHTTPServer):
         pass
 
 
+def broker_configuration(config):
+    if not isinstance(config, dict) or set(config) != {"tenant_slug", "provider_tenant_id", "client_token", "state_secret_arn", "port"} or type(config["port"]) is not int or not 1024 <= config["port"] <= 65535:
+        raise Refused()
+    if not isinstance(config["tenant_slug"], str) or not SLUG.fullmatch(config["tenant_slug"]) or not isinstance(config["client_token"], str) or not TOKEN.fullmatch(config["client_token"]):
+        raise Refused()
+    if not isinstance(config["provider_tenant_id"], str) or not re.fullmatch(r"ten_[A-Za-z0-9_-]{1,250}", config["provider_tenant_id"]):
+        raise Refused()
+    if not isinstance(config["state_secret_arn"], str) or not provider.SECRET_ARN.fullmatch(config["state_secret_arn"]):
+        raise Refused()
+    return config
+
+
 def main():
+    # ECS injects only into this isolated task. Consume before provider/AWS work
+    # and materialize privately; the ordinary app never receives these fields.
+    injected = os.environ.pop("GENUI_SHARED_BROKER_CONFIG_JSON", None)
+    directory = None
     try:
-        config = private_config(os.environ.get("GENUI_SHARED_BROKER_CONFIG_FILE"))
-        if not isinstance(config, dict) or set(config) != {"tenant_slug", "provider_tenant_id", "client_token", "state_secret_arn", "port"} or type(config["port"]) is not int or not 1024 <= config["port"] <= 65535:
+        if injected is not None:
+            if "GENUI_SHARED_BROKER_CONFIG_FILE" in os.environ or len(injected.encode("utf-8")) > MAX_BODY:
+                raise Refused()
+            config = broker_configuration(strict_json(injected))
+            directory = provider.runtime.SharedBrokerDirectory("/run/operator/credentials.json", json.dumps(config).encode())
+            path = str(directory.config_path)
+        else:
+            path = os.environ.get("GENUI_SHARED_BROKER_CONFIG_FILE")
+        config = broker_configuration(private_config(path))
+        injected = None
+        bind = os.environ.get("GENUI_SHARED_BROKER_BIND_ADDRESS", "127.0.0.1")
+        if bind not in ("127.0.0.1", "0.0.0.0"):
             raise Refused()
         # Existing managed-key custody and its injected tenant binding remain
         # authoritative; no new management credential path is introduced.
-        provider_config = provider.load_config(os.environ, required=True)
+        if provider.ENV_CAPABILITY_SECRET in os.environ:
+            raise Refused()
+        provider_config = provider.load_config(os.environ, required=True, capability_store_required=False)
         client = provider.Client(provider_config)
         client.require_tenant(config["provider_tenant_id"])
         broker = Broker(config["tenant_slug"], config["provider_tenant_id"], config["client_token"], client, SecretState(config["state_secret_arn"]))
         broker.state.read()  # Fail startup on wrong/missing durable state.
-        with Server(("127.0.0.1", config["port"]), broker) as server:
+        with Server((bind, config["port"]), broker) as server:
             server.serve_forever(poll_interval=0.5)
     except Exception:
         print("shared invitation broker unavailable", file=sys.stderr)
         return 1
+    finally:
+        if directory is not None:
+            directory.close()
     return 0
 
 if __name__ == "__main__":

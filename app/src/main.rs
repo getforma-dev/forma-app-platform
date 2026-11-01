@@ -817,6 +817,7 @@ mod tests {
     /// shows its message and nothing that could be read as a number.
     #[tokio::test]
     async fn work_page_renders_every_view_state_without_a_fabricated_zero() {
+        use axum::response::IntoResponse;
         use genui::query::page::{self as work, Outcome, Reason, SsrWorkPages, WorkPages as _};
         use genui::query::{QueryReceipt, WorkerResult};
         use serde_json::json;
@@ -836,7 +837,7 @@ mod tests {
         let _ = pages.bind::<InviteProps>("invite");
         let _ = pages.bind::<RecordProps>("record");
         let _ = pages.bind::<genui::query::canvas::CanvasProps>("canvas");
-        pages
+        let shared_page = pages
             .bind::<genui::sharing::live::SharedPageProps>("shared")
             .unwrap();
         pages
@@ -939,6 +940,21 @@ mod tests {
             title: "Northstar egress".into(),
             description: String::new(),
             views: vec![],
+            parts: cards
+                .iter()
+                .enumerate()
+                .map(|(row, card)| genui::storage::WorkPart {
+                    id: card.id.clone(),
+                    title: card.title.clone(),
+                    kind: card.kind.clone(),
+                    row: row as u32,
+                    width: 12,
+                    runnable: true,
+                    ..Default::default()
+                })
+                .collect(),
+            can_window: true,
+            can_destination: true,
             definition_digest: String::new(),
             collections: vec![("collection".into(), "Claim".into())],
             can_write: true,
@@ -1050,7 +1066,7 @@ mod tests {
         let (_, _, records_body) = html(ssr.work(&only)).await;
         assert!(!records_body.contains("Window start"));
         assert!(!records_body.contains("Run views"));
-        assert!(records_body.contains("This work keeps records."));
+        assert!(records_body.contains("Changes appear here and on your canvas."));
         assert!(records_body.contains("Open on the canvas"));
         assert!(records_body.contains("/canvas#g-work"));
         assert!(records_body.contains("New Claim record"));
@@ -1079,6 +1095,32 @@ mod tests {
             submit: "File claim".into(),
             ..Default::default()
         }];
+        document.forms[0]
+            .fields
+            .push(genui::query::canvas::FormFieldProps {
+                id: "status".into(),
+                kind: "enum".into(),
+                label: "Status".into(),
+                input: "value.status".into(),
+                value: "reviewed".into(),
+                writable: true,
+                has_choices: true,
+                spec: r#"{"type":"enum","values":["needs_context","reviewed"]}"#.into(),
+                spec_input: "spec.status".into(),
+                choices: vec![
+                    genui::query::canvas::ChoiceProps {
+                        id: "first".into(),
+                        value: "needs_context".into(),
+                        selected: false,
+                    },
+                    genui::query::canvas::ChoiceProps {
+                        id: "current".into(),
+                        value: "reviewed".into(),
+                        selected: true,
+                    },
+                ],
+                ..Default::default()
+            });
         document.record_cards = vec![genui::query::canvas::RecordsCardProps {
             id: "claims".into(),
             title: "Claims".into(),
@@ -1098,13 +1140,91 @@ mod tests {
             }],
             ..Default::default()
         }];
+        document.parts = vec![genui::query::page::PartProps {
+            id: "form-claim".into(),
+            title: "New Claim record".into(),
+            kind: "form".into(),
+            class: "document-part document-column-0 document-width-12 document-row-1".into(),
+            is_form: true,
+            forms: document.forms.clone(),
+            ..Default::default()
+        }];
+        // Shared native HTML uses the same finite layout/data vocabulary but
+        // its props cannot carry a form, member link, selector or Ask context.
+        let shared = genui::sharing::live::SharedPageProps {
+            title: "Shared app".into(),
+            available: true,
+            parts: vec![
+                genui::sharing::live::SharedPartProps {
+                    id: "guide".into(),
+                    title: "Guide".into(),
+                    text: "<script>hostile note</script>".into(),
+                    class: "document-part document-column-0 document-width-6 document-row-1".into(),
+                    is_note: true,
+                    ..Default::default()
+                },
+                genui::sharing::live::SharedPartProps {
+                    id: "write".into(),
+                    title: "Save".into(),
+                    class: "document-part document-column-6 document-width-6 document-row-1".into(),
+                    is_form: true,
+                    message: "This form is view only in a shared app.".into(),
+                    ..Default::default()
+                },
+                genui::sharing::live::SharedPartProps {
+                    id: "ready".into(),
+                    title: "Total".into(),
+                    class: "document-part document-column-0 document-width-12 document-row-2"
+                        .into(),
+                    views: vec![props
+                        .views
+                        .iter()
+                        .find(|v| v.id == "ready")
+                        .unwrap()
+                        .clone()],
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let (_, _, shared_body) = html(
+            shared_page
+                .render(&shared, &RenderCtx::new())
+                .unwrap()
+                .into_response(),
+        )
+        .await;
+        assert!(
+            shared_body.find("data-document-part=\"guide\"").unwrap()
+                < shared_body.find("data-document-part=\"write\"").unwrap()
+        );
+        assert!(shared_body.contains("document-column-6 document-width-6 document-row-1"));
+        assert!(
+            shared_body.contains("&lt;script&gt;hostile note&lt;/script&gt;")
+                && !shared_body.contains("<script>hostile")
+        );
+        assert!(
+            shared_body.contains("This form is view only")
+                && shared_body.contains("sha256:receipt-ready")
+        );
+        assert!(
+            !shared_body.contains("data-command")
+                && !shared_body.contains("data-ask-")
+                && !shared_body.contains("/work/")
+                && !shared_body.contains("<select")
+        );
         let (_, headers, document_body) = html(ssr.work(&document)).await;
         assert!(headers[header::CONTENT_SECURITY_POLICY]
             .to_str()
             .unwrap()
             .contains("require-trusted-types-for"));
-        assert!(document_body.contains("data-document-form=\"collection\""));
+        assert!(document_body.contains("data-document-form=\"form-claim\""));
         assert!(document_body.contains("action=\"/v1/work/app/work/commands/file_claim\""));
+        assert!(
+            document_body.contains("value=\"reviewed\" selected"),
+            "native SSR marks the existing enum value, not the first option"
+        );
+        assert!(!document_body.contains("value=\"needs_context\" selected"));
         assert!(document_body.contains(&format!("value=\"{}\"", "a".repeat(32))));
         assert!(!document_body.contains("<script>untrusted()"));
         assert!(document_body.contains("&lt;script&gt;untrusted()&lt;/script&gt;"));
@@ -1115,9 +1235,10 @@ mod tests {
         );
         assert!(document_body.contains("/work/app/work/records/collection/record"));
         document.forms.clear();
+        document.parts[0].forms.clear();
         let (_, _, read_only) = html(ssr.work(&document)).await;
         assert!(read_only.contains("Admitted saved record"));
-        assert!(!read_only.contains("data-document-form=\"collection\""));
+        assert!(!read_only.contains("data-document-form=\"form-claim\""));
         let mut no_records = outline.clone();
         no_records.collections.clear();
         no_records.can_write = false;
@@ -1143,6 +1264,12 @@ mod tests {
         let mut refused = props.clone();
         refused.form_error = true;
         refused.views = vec![work::card(&view("total", "summary"), Outcome::Idle)];
+        refused.parts = vec![work::PartProps {
+            id: "total".into(),
+            class: "document-part document-column-0 document-width-12 document-row-1".into(),
+            views: refused.views.clone(),
+            ..Default::default()
+        }];
         let (_, _, body) = html(ssr.work(&refused)).await;
         assert!(body.contains("was not accepted") && !body.contains("class=\"value\""));
     }

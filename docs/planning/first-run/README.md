@@ -2,7 +2,7 @@
 
 Victor, 2026-11-01: a demo that opens on a canvas already full of apps and records does not count. A reviewer can call that staged. The trial is a link a new paid user opens, as a person who just signed up. It does not start halfway through someone else's work. The recorded video of that path cannot run past three minutes. The link itself is not on a timer. Someone trying it may take longer than the recording.
 
-The product for that path is already here: an invite and a sign-in, an empty canvas, compose through admission, one audited record, and a share between people who are already members. The trial starts with one invite into an empty organization, not a public signup. One person is on the canvas. They build the app and share it. The other person does not have an account yet. Accepting that share is what makes them sign up. They arrive with no other apps, and the shared app is the one both of them work from.
+The product for that path is already here: an invite and a sign-in, an empty canvas, compose through admission, one audited record, and private live sharing with verified app guests. The trial starts with one invite into an empty organization, not a public signup. One person is on the canvas. They build the app and share it. The other person does not have an account yet. Accepting that share is what makes them sign up. They arrive with no other apps, and the recipient follows that live app without joining the owner’s organization. Adding it to a canvas is a separate, explicit choice.
 
 This note classifies the board. It does not move tickets, close a phase, or delete the seeded demo. `docs/pitch/SCENARIOS.md` and APP-098 stay the record of the concept-car rehearsal. APP-097 still walks that ledger later. They are not what a reviewer is handed.
 
@@ -11,7 +11,7 @@ This note classifies the board. It does not move tickets, close a phase, or dele
 1. The first invite admits one new member into an organization with no library apps, no placed cards, and no records.
 2. The canvas is empty. A short guide on that canvas names the next moves. It does not use `GENUI_DEMO_MODE` or a rehearsed sentence.
 3. The member describes one app. It appears through the existing composer and admission path. The member adds one record through the existing command path. A shown number carries its receipt.
-4. The member shares that work. The recipient does not already have an account. Accepting the share is what makes them sign up and sign in. They arrive with no other apps, and this shared app is the one both members work from. A stranger gets the uniform 404. Today's `share_work` still refuses a grantee who is not already an active member of the organization (`app/src/storage/sharing.rs`). Closing that gap is part of APP-139.
+4. The member shares that work. The recipient does not already have an account. Accepting the share is what makes them sign up and sign in. They arrive with no other apps and can view this exact live app, without membership in the owner’s organization. The owner may separately allow connected canvas placement. A stranger cannot read its content. APP-154 implements this path; APP-139/140 qualify real provider delivery, verification and the complete hosted journey.
 5. The evidence is a sanitized click log, plus a recording of this same path that stays within three minutes. No credential, invite token, or model key. The try-it link is not cut to fit the recording.
 
 ## Review and recording
@@ -38,7 +38,7 @@ The product a new user needs. These stay where they are until their own acceptan
 | APP-092, APP-104 | The canvas and placing a card from the library |
 | APP-093 | Describe an app; the definition is admitted |
 | APP-012, APP-013, APP-094 | A record, its outcome, and a receipt |
-| APP-095 | Share that work with one other member |
+| APP-095, APP-154 | Same-member workflow compatibility plus private named live app guests and explicit connected placement |
 
 ## Pile B — not the trial
 

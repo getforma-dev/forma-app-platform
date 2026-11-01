@@ -712,10 +712,48 @@ async fn http_campaign(fixture: &Fixture, checks: &mut Vec<serde_json::Value>) {
     assert!(body.contains("shared_query_receipt"), "{body}");
     assert!(counting.calls() > 0);
     assert!(
-        !body.contains("command_action") && !body.contains("record_observation"),
+        !body.contains("command_action") && !body.contains("idempotency_key"),
         "{body}"
     );
     let props: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let parts = props["parts"].as_array().unwrap();
+    assert_eq!(
+        parts
+            .iter()
+            .map(|p| p["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "total",
+            "destinations",
+            "timeline",
+            "record_observation",
+            "caution"
+        ]
+    );
+    let note = parts.iter().find(|p| p["id"] == "caution").unwrap();
+    assert_eq!(
+        note["text"],
+        "An unmatched destination does not establish compromise."
+    );
+    assert_eq!(
+        note["class"],
+        "document-part document-column-0 document-width-12 document-row-5"
+    );
+    assert!(parts.iter().all(|part| [
+        "forms",
+        "choices",
+        "action",
+        "command",
+        "collection",
+        "selection_name"
+    ]
+    .iter()
+    .all(|key| part.get(key).is_none())));
+    assert_eq!(
+        parts[3]["message"],
+        "This form is view only in a shared app."
+    );
+    check(checks, "APP-144 shared JSON retains every admitted part in default_layout order and literal note text; form parts are view-only labels without command identity, selectors or member routes");
     assert!(
         props["views"]
             .as_array()

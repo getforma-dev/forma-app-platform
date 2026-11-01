@@ -1,5 +1,6 @@
 import { h, mount, createShow, createList, activateIslands } from '@getforma/core';
 import { startDocument } from './document';
+import { initDocumentAsk } from '../ask/document';
 import { startSharing } from '../sharing/dialog';
 
 // APP-144 app document: native SSR with one registered enhancement island. Every value, state and
@@ -31,12 +32,19 @@ type Card = {
   hasTable: boolean;
   columns: Cell[];
   rows: Row[];
+  hasChart: boolean;
+  chart: {
+    label: string; caption: string; viewBox: string; hasBars: boolean; hasLine: boolean; line: string; area: string;
+    bars: { id: string; x: string; y: string; width: string; height: string; class: string; tip: string }[];
+    grid: { id: string; y: string; labelY: string; text: string }[];
+    ticks: { id: string; x: string; anchor: string; text: string }[];
+  };
   hasReceipt: boolean;
   receiptDigest: string;
   receipt: Pair[];
   receiptJson: string;
 };
-type Choice = { id: string; value: string };
+type Choice = { id: string; value: string; selected: boolean };
 type Field = {
   id: string;
   kind: string;
@@ -104,11 +112,19 @@ type RecordsCard = {
   workVersion: string;
 };
 
+type Part = {
+  id: string; anchor: string; title: string; kind: string; class: string; text: string; collection: string;
+  isNote: boolean; isForm: boolean; hasSelector: boolean; selectionName: string; selected: string;
+  choices: { id: string; label: string; selected: boolean }[];
+  message: string; forms: FormCard[]; views: Card[];
+};
+
 type RecordLink = { id: string; label: string; href: string };
 type WorkProps = {
   title: string;
   app: string;
   work: string;
+  parts: Part[];
   forms: FormCard[];
   recordCards: RecordsCard[];
   recordsTruncated: boolean;
@@ -120,6 +136,8 @@ type WorkProps = {
   formError: boolean;
   views: Card[];
   hasQuery: boolean;
+  canWindow: boolean;
+  canDestination: boolean;
   recordsOnly: boolean;
   hasRecords: boolean;
   records: RecordLink[];
@@ -139,17 +157,21 @@ function DocumentStatus(props: { path: string }) {
 
 function Work(props: WorkProps) {
   return (
-    <main class="page work" data-document="" data-app={props.app} data-work={props.work} data-path={props.action}>
+    <main class="page work" data-document="" data-app={props.app} data-work={props.work} data-path={props.action} data-csrf={props.csrf}>
       <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
-      <h1>{props.title}</h1>
+      <h1 data-document-title="">{props.title}</h1>
       <p class="lede">
-        One app, with the same saved work as your canvas.
+        Your app, connected to your canvas.
       </p>
       <p><a href={props.canvas}>Open on the canvas</a></p>
+      <div class="document-actions">
       {createShow(() => props.canShare, () => <button type="button" class="share-primary" data-manage-share="" data-app={props.app} data-work={props.work} data-title={props.title}>Share app</button>)}
+      <button type="button" data-ask-app="">Ask about this app</button>
+      </div>
+      <div data-document-ask="" hidden></div>
       <DocumentStatus path={props.action} />
       {createShow(() => props.recordsOnly, () => (
-        <p>This work keeps records. Changes appear here and on your canvas.</p>
+        <p>Changes appear here and on your canvas.</p>
       ))}
       {createShow(() => props.hasRecords, () => (
         <section aria-label="Records">
@@ -161,9 +183,44 @@ function Work(props: WorkProps) {
           </ul>
         </section>
       ))}
-      <div class="document-forms" data-document-forms="">
-        {createList(() => props.forms, form => form.id, form => (
-          <section class="view document-form" data-document-form={form.collection} aria-label={form.title}>
+      {createShow(() => props.hasQuery, () => (
+        <form method="post" action={props.action} class="run">
+          <input type="hidden" name="csrf" value={props.csrf} />
+          {createShow(() => props.canWindow, () => <div>
+            <label for="window_start">Window start (UTC, optional)</label>
+            <input id="window_start" name="window_start" type="datetime-local" step="1" value={props.windowStart} />
+          </div>)}
+          {createShow(() => props.canWindow, () => <div>
+            <label for="window_end">Window end (UTC, excluded)</label>
+            <input id="window_end" name="window_end" type="datetime-local" step="1" value={props.windowEnd} />
+          </div>)}
+          {createShow(() => props.canDestination, () => <div>
+            <label for="destination">Destination (optional)</label>
+            <input id="destination" name="destination" type="text" value={props.destination} />
+          </div>)}
+          <button type="submit">Run views</button>
+        </form>
+      ))}
+      {createShow(() => props.formError, () => (
+        <p class="notice" role="alert">
+          The window was not accepted. Give a start before the end, as UTC date and time. Nothing ran.
+        </p>
+      ))}
+      <div class="document-parts" data-document-parts="">
+        {createList(() => props.parts, part => part.id, part => (
+          <article id={part.anchor} class={part.class} data-document-part={part.id} data-view={part.id} data-kind={part.kind} data-collection={part.collection}>
+            {createShow(() => part.isNote, () => <section class="view document-note"><h2>{part.title}</h2><p>{part.text}</p></section>)}
+            {createShow(() => part.hasSelector, () => <form method="post" action={props.action} class="document-selection" data-document-selection="">
+              <input type="hidden" name="csrf" value={props.csrf} />
+              <input type="hidden" name="document_action" value="refresh" />
+              <label><span>{part.title}: choose a record</span><select name={part.selectionName} value={part.selected}>
+                {createList(() => part.choices, choice => choice.id, choice => <option value={choice.id} selected={choice.selected}>{choice.label}</option>)}
+              </select></label>
+              <button type="submit">Open record in this form</button>
+            </form>)}
+            {createShow(() => part.isForm, () => <p class="document-form-message">{part.message}</p>)}
+        {createList(() => part.forms, form => form.id, form => (
+          <section class="view document-form" data-document-form={form.id} aria-label={form.title}>
             <h2>{form.title}</h2>
             <form method="post" action={form.action} data-command={form.command}>
               <input type="hidden" name="csrf" value={form.csrf} />
@@ -182,7 +239,7 @@ function Work(props: WorkProps) {
                   </label>)}
                   {createShow(() => field.hasChoices, () => <label>
                     <span>{field.label}</span><select name={field.input} value={field.value}>
-                      {createList(() => field.choices, choice => choice.id, choice => <option value={choice.value}>{choice.value}</option>)}
+                      {createList(() => field.choices, choice => choice.id, choice => <option value={choice.value} selected={choice.selected}>{choice.value}</option>)}
                     </select>
                   </label>)}
                   {createShow(() => field.readOnly, () => <p>{field.label}: {field.value}</p>)}
@@ -194,53 +251,7 @@ function Work(props: WorkProps) {
             </form>
           </section>
         ))}
-      </div>
-      <div data-document-records="">
-        {createList(() => props.recordCards, card => card.id, card => (
-          <section class="view document-records" data-collection={card.collection} aria-label={card.title}>
-            <h2>{card.title}</h2>
-            <p>{card.summary}</p>
-            {createShow(() => card.hasNoRows, () => <p>No records yet.</p>)}
-            {createShow(() => card.hasRows, () => <table>
-              <thead><tr>
-                {createList(() => card.columns, column => column.id, column => <th scope="col">{column.text}</th>)}
-                <th scope="col">Record</th>
-              </tr></thead>
-              <tbody>{createList(() => card.rows, row => row.id, row => <tr>
-                {createList(() => row.cells, cell => cell.id, cell => <td>{cell.text}</td>)}
-                <td><a href={row.href}>Open record</a>
-                  <small>Revision {row.version} · {row.committedAt} · Commit {row.commitSequence}</small></td>
-              </tr>)}</tbody>
-            </table>)}
-          </section>
-        ))}
-        {createShow(() => props.recordsTruncated, () => <p class="notice">Showing the newest records. This listing has reached its limit.</p>)}
-      </div>
-      {createShow(() => props.hasQuery, () => (
-        <form method="post" action={props.action} class="run">
-          <input type="hidden" name="csrf" value={props.csrf} />
-          <div>
-            <label for="window_start">Window start (UTC)</label>
-            <input id="window_start" name="window_start" type="datetime-local" step="1" required value={props.windowStart} />
-          </div>
-          <div>
-            <label for="window_end">Window end (UTC, excluded)</label>
-            <input id="window_end" name="window_end" type="datetime-local" step="1" required value={props.windowEnd} />
-          </div>
-          <div>
-            <label for="destination">Destination (optional)</label>
-            <input id="destination" name="destination" type="text" value={props.destination} />
-          </div>
-          <button type="submit">Run views</button>
-        </form>
-      ))}
-      {createShow(() => props.formError, () => (
-        <p class="notice" role="alert">
-          The window was not accepted. Give a start before the end, as UTC date and time. Nothing ran.
-        </p>
-      ))}
-      <div data-document-views="">
-      {createList(() => props.views, card => card.id, card => (
+      {createList(() => part.views, card => card.id, card => (
         <section class="view" data-view={card.id} data-state={card.state} aria-label={card.title}>
           <h2>{card.title}</h2>
           <p class="state" role="status">
@@ -256,6 +267,41 @@ function Work(props: WorkProps) {
               ))}
             </dl>
           ))}
+                    {createShow(() => card.hasChart, () => (
+                      <figure class="document-chart">
+                        <svg class="document-chart-svg" viewBox={card.chart.viewBox} role="img" aria-label={card.chart.label}>
+                          <g class="document-grid" aria-hidden="true">
+                            {createList(() => card.chart.grid, line => line.id, line => (
+                              <line x1="52" x2="552" y1={line.y} y2={line.y} />
+                            ))}
+                          </g>
+                          <g class="document-axis" aria-hidden="true">
+                            {createList(() => card.chart.grid, line => line.id, line => (
+                              <text x="44" y={line.labelY} text-anchor="end">{line.text}</text>
+                            ))}
+                            {createList(() => card.chart.ticks, tick => tick.id, tick => (
+                              <text x={tick.x} y="180" text-anchor={tick.anchor}>{tick.text}</text>
+                            ))}
+                          </g>
+                          {createShow(() => card.chart.hasBars, () => (
+                            <g class="cv-bars">
+                              {createList(() => card.chart.bars, bar => bar.id, bar => (
+                                <rect class={bar.class} x={bar.x} y={bar.y} width={bar.width} height={bar.height} rx="2">
+                                  <title>{bar.tip}</title>
+                                </rect>
+                              ))}
+                            </g>
+                          ))}
+                          {createShow(() => card.chart.hasLine, () => (
+                            <g class="cv-series">
+                              <path class="document-area" d={card.chart.area} />
+                              <path class="document-line" d={card.chart.line} pathLength={1} />
+                            </g>
+                          ))}
+                        </svg>
+                        <figcaption>{card.chart.caption}</figcaption>
+                      </figure>
+                    ))}
           {createShow(() => card.hasTable, () => (
             <table>
               <thead>
@@ -288,6 +334,30 @@ function Work(props: WorkProps) {
           ))}
         </section>
       ))}
+            <button type="button" class="document-ask-part" data-ask-card="">Ask about this part</button>
+          </article>
+        ))}
+      </div>
+      <div data-document-records="">
+        {createList(() => props.recordCards, card => card.id, card => (
+          <section class="view document-records" data-collection={card.collection} aria-label={card.title}>
+            <h2>{card.title}</h2>
+            <p>{card.summary}</p>
+            {createShow(() => card.hasNoRows, () => <p>No records yet.</p>)}
+            {createShow(() => card.hasRows, () => <table>
+              <thead><tr>
+                {createList(() => card.columns, column => column.id, column => <th scope="col">{column.text}</th>)}
+                <th scope="col">Record</th>
+              </tr></thead>
+              <tbody>{createList(() => card.rows, row => row.id, row => <tr>
+                {createList(() => row.cells, cell => cell.id, cell => <td>{cell.text}</td>)}
+                <td><a href={row.href}>Open record</a>
+                  <small>Revision {row.version} · {row.committedAt} · Commit {row.commitSequence}</small></td>
+              </tr>)}</tbody>
+            </table>)}
+          </section>
+        ))}
+        {createShow(() => props.recordsTruncated, () => <p class="notice">Showing the newest records. This listing has reached its limit.</p>)}
       </div>
       <p>
         <a href="/workspace">Workspace</a>
@@ -298,6 +368,7 @@ function Work(props: WorkProps) {
 
 await activateIslands({ DocumentStatus });
 startDocument();
+initDocumentAsk(document);
 startSharing(document);
 
 mount(
@@ -306,6 +377,7 @@ mount(
       title: '',
       app: '',
       work: '',
+      parts: [],
       forms: [],
       recordCards: [],
       recordsTruncated: false,
@@ -317,6 +389,8 @@ mount(
       formError: false,
       views: [],
       hasQuery: false,
+      canWindow: false,
+      canDestination: false,
       recordsOnly: true,
       hasRecords: false,
       records: [],

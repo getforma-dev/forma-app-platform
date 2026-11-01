@@ -42,7 +42,7 @@ use super::{
     routes::{self, Restore, Work},
 };
 use crate::{
-    auth::{capability, csrf},
+    auth::csrf,
     commands,
     http::{self, UniformPath},
     storage::{Error, OpenableWork, RecordsListing, TrustedRequest, WorkOutline, WorkReads},
@@ -117,6 +117,7 @@ pub struct LibraryAppProps {
     pub id: String,
     pub app: String,
     pub work: String,
+    pub work_name_scope: bool,
     pub number: String,
     pub title: String,
     pub has_slug: bool,
@@ -182,6 +183,7 @@ pub fn card_kind(view_kind: &str) -> &'static str {
     match view_kind {
         "summary" | "status" => "number",
         "timeline" | "chart" => "chart",
+        "note" => "note",
         _ => "table",
     }
 }
@@ -253,6 +255,7 @@ pub fn library(sources: Vec<LibrarySource>) -> Vec<LibraryCategoryProps> {
             })
             .collect();
         let app = LibraryAppProps {
+            work_name_scope: !crate::composer::matcher::seeded_work(&source.work),
             id: format!("lib-{}", source.work),
             search: format!("{number} {} {slug}", source.title.to_lowercase()),
             app: source.app,
@@ -438,6 +441,13 @@ pub struct GroupProps {
     /// "Open on canvas" link).
     pub id: String,
     pub can_share: bool,
+    pub can_label_work: bool,
+    pub work_name_version: i64,
+    pub work_name_scope: bool,
+    /// Admitted part order, followed separately by record/ledger utilities.
+    pub part_order: String,
+    pub part_layout: String,
+    pub static_parts: Vec<StaticPartProps>,
     pub app: String,
     pub work: String,
     /// `a-{work}`: the app card's canvas item id.
@@ -470,6 +480,25 @@ pub struct GroupProps {
     /// APP-102: the expense ledger over the same listing (`canvas_ledger`).
     pub has_ledger: bool,
     pub ledger: Vec<super::canvas_ledger::LedgerCardProps>,
+}
+
+#[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct StaticPartProps {
+    pub id: String,
+    pub view: String,
+    pub title: String,
+    pub kind: String,
+    pub text: String,
+    pub message: String,
+    pub href: String,
+}
+
+fn part_card_id(work: &str, part: &crate::storage::WorkPart) -> String {
+    format!(
+        "{}-{work}-{}",
+        if part.kind == "form" { "f" } else { "c" },
+        part.id
+    )
 }
 
 /// One records card (ADR-011 scenarios): a collection's current records,
@@ -646,6 +675,7 @@ pub struct FormFieldProps {
 pub struct ChoiceProps {
     pub id: String,
     pub value: String,
+    pub selected: bool,
 }
 
 /// The receipt digest's first eight hex digits.
@@ -814,6 +844,8 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
                         .map(|(index, value)| ChoiceProps {
                             id: format!("o{index}"),
                             value: value.to_owned(),
+                            selected: value == field.value
+                                || (field.value.is_empty() && index == 0),
                         })
                         .collect()
                 };
@@ -1037,7 +1069,7 @@ pub fn schema_title(schema: &str) -> String {
 pub fn summary(groups: &[GroupProps]) -> String {
     let cards: usize = groups
         .iter()
-        .map(|g| g.cards.len() + g.forms.len() + g.records.len())
+        .map(|g| g.cards.len() + g.forms.len() + g.static_parts.len() + g.records.len())
         .sum();
     let apps = groups.len();
     format!(
@@ -1106,11 +1138,6 @@ pub fn router(canvas: Arc<Canvas>) -> Router {
         .route(PATH, get(canvas_page))
         .route("/v1/canvas/works/{app}/{work}", get(group_json))
         .with_state(canvas)
-}
-
-/// A fresh 128-bit idempotency key per render (D7.16).
-fn fresh_key() -> Option<String> {
-    capability::random_hex::<16>()
 }
 
 /// What one work reads before the page or the group route shapes it: the
@@ -1204,21 +1231,12 @@ fn library_source(listed: &OpenableWork, read: &WorkRead) -> LibrarySource {
         "App card".to_owned(),
         "app",
     )];
-    for view in &read.outline.views {
+    for view in &read.outline.parts {
         cards.push(library_card(
-            format!("c-{work}-{}", view.id),
+            part_card_id(work, view),
             display::label(&view.title),
             &view.kind,
         ));
-    }
-    if listed.can_write {
-        for (collection, schema) in &listed.collections {
-            cards.push(library_card(
-                format!("f-{work}-{collection}"),
-                format!("New {schema} record"),
-                "form",
-            ));
-        }
     }
     if let Some(listing) = &read.listing {
         for card in records_cards(app, work, listing, "") {
@@ -1289,7 +1307,17 @@ async fn assemble(
     } else {
         outline.title.clone()
     };
-    let title = crate::composer::labels::title_of(stores, member.as_ref(), app, stored).await;
+    let library = crate::composer::matcher::seeded_work(work);
+    let title = if library {
+        crate::composer::labels::title_of(stores, member.as_ref(), app, stored).await
+    } else {
+        stored
+    };
+    let work_label = stores
+        .workspace
+        .work_label(member, app, work)
+        .await
+        .map_err(|e| routes::storage_refusal(&e))?;
     let mut echo = FormValues::default();
     let mut restored = false;
     let cards = match restore {
@@ -1318,33 +1346,57 @@ async fn assemble(
             .map(|view| canvas_card(app, work, view, page::card(view, page::Outcome::Idle)))
             .collect::<Vec<_>>(),
     };
-    let mut forms = Vec::new();
-    if listed.can_write {
-        for (collection, _) in &listed.collections {
-            let (Some(record), Some(key)) = (capability::random_uuid(), fresh_key()) else {
-                return Err(http::unavailable());
-            };
-            match stores
-                .data
-                .read_record_detail(member, app, work, collection, &record)
-                .await
-            {
-                Ok(detail) => {
-                    let view = commands::view(
-                        app,
-                        work,
-                        &detail,
-                        auth.csrf.token(csrf::Form::Command, cookie),
-                        key,
-                        None,
-                    );
-                    forms.extend(form_card(work, &view));
-                }
-                Err(Error::Denied) => {}
-                Err(error) => return Err(routes::storage_refusal(&error)),
-            }
-        }
+    let mut forms = if let Some(listing) = &listing {
+        routes::document_forms(auth, member, cookie, &outline, listing, &Default::default())
+            .await?
+            .forms
+    } else {
+        Vec::new()
+    };
+    for form in &mut forms {
+        form.id = format!("f-{work}-{}", form.id);
     }
+    let static_parts = outline
+        .parts
+        .iter()
+        .filter(|part| {
+            part.kind == "note"
+                || (!part.runnable && !forms.iter().any(|form| form.id == part_card_id(work, part)))
+        })
+        .map(|part| StaticPartProps {
+            id: part_card_id(work, part),
+            view: part.id.clone(),
+            title: part.title.clone(),
+            kind: part.kind.clone(),
+            text: if part.kind == "note" {
+                part.text.clone()
+            } else {
+                String::new()
+            },
+            message: if part.kind == "note" {
+                ""
+            } else if part.kind == "form" {
+                if listed.can_write {
+                    "Choose an applicable record on the app page to use this command."
+                } else {
+                    "This form is read only for your access."
+                }
+            } else {
+                "This part's query is not supported by the current engine. No result is shown."
+            }
+            .into(),
+            href: format!("/w/{app}/{work}"),
+        })
+        .collect::<Vec<_>>();
+    let part_order = outline
+        .parts
+        .iter()
+        .map(|part| part_card_id(work, part))
+        .collect::<Vec<_>>()
+        .join(",");
+    let part_layout = serde_json::to_string(&outline.parts.iter().map(|part| serde_json::json!({
+        "id":part_card_id(work, part), "row":part.row, "column":part.column, "width":part.width
+    })).collect::<Vec<_>>()).map_err(|_| http::unavailable())?;
     let (records, ledger) = match &listing {
         Some(listing) => (
             records_cards(app, work, listing, member.principal()),
@@ -1363,7 +1415,10 @@ async fn assemble(
     let (label, origins) = match &folder {
         Some(lineage) => (
             if lineage.kind == "data" {
-                format!("Data from a file in your {} (types you confirmed; receipts name the file's revision).", crate::boxes::NOUN_LOWER)
+                format!(
+                    "Data from a file in your {} (types you confirmed; receipts name the file's revision).",
+                    crate::boxes::NOUN_LOWER
+                )
             } else {
                 format!(
                     "Generated from your {}'s capped context (typed definition, admitted).",
@@ -1374,7 +1429,40 @@ async fn assemble(
         ),
         None => definition_provenance(&outline.description, &outline.definition_digest),
     };
+    // Forms and queries can wait. Do not release records under stale work
+    // authority or a publication that changed while this group assembled.
+    let current = stores
+        .data
+        .work_reads(member, &[(app, work, true)])
+        .await
+        .map_err(|e| routes::storage_refusal(&e))?;
+    let current = current.first().ok_or_else(http::unavailable)?;
+    let current_outline = current.outline.as_ref().map_err(routes::storage_refusal)?;
+    if current_outline.definition_digest != outline.definition_digest
+        || current_outline.can_write != outline.can_write
+    {
+        return Err(http::not_found());
+    }
+    if let Some(previous) = &listing {
+        let current_listing = current
+            .records
+            .as_ref()
+            .ok_or_else(http::unavailable)?
+            .as_ref()
+            .map_err(routes::storage_refusal)?;
+        if previous.publication != current_listing.publication
+            || previous.work_version != current_listing.work_version
+        {
+            return Err(http::not_found());
+        }
+    }
     Ok(GroupProps {
+        work_name_scope: !library,
+        part_order,
+        part_layout,
+        static_parts,
+        can_label_work: !library && work_label.can_name,
+        work_name_version: work_label.version,
         can_share: stores
             .workspace
             .can_share_live_work(member, app, work)

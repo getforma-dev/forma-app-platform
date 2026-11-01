@@ -18,9 +18,10 @@
 import { addressFor, fillBar } from './address-chip';
 import { addressList, findAddress, findCardShortcut, type Address, type CanvasCommand } from './command-registry';
 import { isDismissKey, showDockCard } from './dock-card';
-import { cardAddress, findApps, findCardRow, findCards, setLabelEditor, type AppRow, type CardRow } from './library';
+import { applyWorkName, cardAddress, findApps, findCardRow, findCards, setLabelEditor, type AppRow, type CardRow } from './library';
 import { announce, el } from './render';
 import { refreshCommands, registerCommands } from './slash';
+import { readWorkName, saveWorkName, type WorkName } from './work-name';
 
 type Report = (message: string) => void;
 export type LabelBody = {
@@ -108,6 +109,16 @@ export function parseRename(text: string): { target: string; name: string; addre
 /** Renames an app (owner or admin) or a card (for everyone when permitted, else for the member). */
 export async function rename(target: Target, name: string, address: string | null): Promise<string> {
   const { card } = target;
+  if (!card && (target.app.workNameScope || target.address.kind === 'saved')) {
+    if (address) return 'Saved app names are independent. Change its name without a /address.';
+    const current = await readWorkName(target.app.app, target.app.work);
+    if (typeof current === 'string') return current;
+    if (current.scope !== 'work' || !current.can_name) return 'Only this app’s owner or an admin can name it.';
+    const next = await saveWorkName(target.app.app, target.app.work, name, current.version);
+    if (typeof next === 'string') return next;
+    await refreshCommands(); applyWorkName(target.app.app, target.app.work, name);
+    return `This app is now “${name}”. Its records and other apps keep their names.`;
+  }
   if (!card) {
     if (!target.address.canLabel) {
       return `Only the owner of ${target.address.title} or an admin can rename it for everyone. Type /alias <shortcut> ${target.address.slug} for your own shortcut.`;
@@ -232,8 +243,45 @@ function field(document_: Document, label: string, value: string, options: { dis
     ...(options.hint ? [el(document_, 'span', { class: 'cv-naming-hint' }, options.hint)] : []));
 }
 
+/** Independent saved-app names, with a fresh version and no shell-wide fallback. */
+function openWorkEditor(app: AppRow, document_: Document): HTMLElement {
+  const input = el(document_, 'input', { type: 'text', class: 'cv-naming-input', maxlength: '60', 'aria-label': 'App name', disabled: '' }) as HTMLInputElement;
+  input.value = app.title;
+  const status = el(document_, 'p', { role: 'status', class: 'cv-naming-status' }, 'Loading the current app name…');
+  const save = el(document_, 'button', { type: 'submit', class: 'cv-primary', disabled: '' }, 'Save');
+  const cancel = el(document_, 'button', { type: 'button', class: 'cv-secondary' }, 'Cancel');
+  const form = el(document_, 'form', { class: 'cv-card cv-confirm cv-naming', 'aria-label': 'Name this app' },
+    el(document_, 'h3', {}, 'Name this app'), el(document_, 'p', {}, 'This saved app has its own name.'), input, status,
+    el(document_, 'div', { class: 'cv-confirm-actions' }, cancel, save));
+  let current: WorkName | null = null, closed = false, pending = false;
+  const remove = showDockCard(document_, form, () => { closed = true; });
+  const close = () => { closed = true; remove(); };
+  void readWorkName(app.app, app.work).then(value => {
+    if (closed) return;
+    if (typeof value === 'string' || value.scope !== 'work' || !value.can_name) {
+      status.textContent = typeof value === 'string' ? value : 'Only this app’s owner or an admin can name it.'; return;
+    }
+    current = value; input.value = value.name ?? app.title; input.disabled = false; save.disabled = false;
+    status.textContent = ''; input.focus(); input.select();
+  });
+  form.addEventListener('submit', event => {
+    event.preventDefault(); if (pending || !current) return;
+    const name = input.value.trim(); if (!name) { status.textContent = 'Enter an app name.'; return; }
+    pending = true; save.disabled = true; input.disabled = true;
+    void saveWorkName(app.app, app.work, name, current.version).then(async next => {
+      pending = false; if (closed) return; save.disabled = false; input.disabled = false;
+      if (typeof next === 'string') { status.textContent = next; return; }
+      current = next; await refreshCommands(); applyWorkName(app.app, app.work, name); close(); announce(`This app is now “${name}”.`);
+    });
+  });
+  cancel.addEventListener('click', close);
+  form.addEventListener('keydown', event => { if (isDismissKey(event as KeyboardEvent)) { event.preventDefault(); close(); } });
+  return form;
+}
+
 /** Opens the editor for an app row or one of its cards (exported for the tests). */
 export function openEditor(app: AppRow, card: CardRow | null, document_: Document = document): HTMLElement | null {
+  if (!card && app.workNameScope) return openWorkEditor(app, document_);
   const address = app.address;
   if (!address) return null;
   const label = card ? address.cards?.find((entry) => entry.card === card.slug) : undefined;
@@ -312,7 +360,9 @@ function editTitle(heading: HTMLElement): void {
   const cardNode = heading.closest<HTMLElement>('.cv-card');
   const row = cardNode?.dataset.card ? findCardRow(cardNode.dataset.card) : undefined;
   const address = row && (row.app.address ?? addressFor(row.app.app, row.app.work));
-  if (!row || !address || address.kind !== 'library' || heading.querySelector('input')) return;
+  if (!row || heading.querySelector('input')) return;
+  if (row.id.startsWith('a-') && row.app.workNameScope) { openWorkEditor(row.app, heading.ownerDocument); return; }
+  if (!address || address.kind !== 'library') return;
   const appCard = row.id.startsWith('a-');
   if (appCard && !address.canLabel) {
     announce(`Only the owner of ${address.title} or an admin can rename it. Type /alias <shortcut> ${address.slug} for your own shortcut.`);

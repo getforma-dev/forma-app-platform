@@ -32,7 +32,7 @@
 // The commands are loaded at start, so labels and the app card's address
 // chip show without opening the pane.
 import { addressChip, aliasNote, decorateAppCard, decorateAppCards } from './address-chip';
-import { activeCanvasItem, addCards, boardWorks, CANVAS_CHANGED, canvasApi, cardFootprint, isOnBoard, removeCards } from './board';
+import { activeCanvasItem, addCards, boardWorks, CANVAS_CHANGED, canvasApi, cardFootprint, isOnBoard, removeCards, updateWorkTitle } from './board';
 import { bindLibraryDrag } from './library-drag';
 import { addressList, addressText, allAddresses, appForm, cardLabel, onAddressesChange, WIDGET_KINDS, type Address, type WidgetName } from './command-registry';
 import { insertCommand, startCommandSheet } from './command-sheet';
@@ -54,6 +54,7 @@ export type CardRow = {
 };
 export type AppRow = {
   app: string; work: string; number: string; title: string; slug: string;
+  workNameScope?: boolean;
   row: HTMLElement; cards: CardRow[];
   /** APP-119: the app's address, once the server's list arrived. */
   address?: Address;
@@ -164,6 +165,7 @@ export function indexRow(row: HTMLElement): AppRow | null {
   const app: AppRow = {
     app: row.dataset.app ?? '',
     work,
+    workNameScope: row.dataset.workNameScope === 'true',
     number: row.dataset.number ?? '',
     title: row.querySelector('.cv-lib-app-title')?.textContent ?? '',
     slug: (row.querySelector('.cv-lib-slug')?.textContent ?? '').replace(/^\/(app:)?/, ''),
@@ -217,7 +219,7 @@ function nameCards(app: AppRow): void {
 /** An app row built here (a work placed this session), as the server renders one. */
 export function buildAppRow(
   document_: Document,
-  entry: { app: string; work: string; number: string; title: string; slug: string; cards: { id: string; number: string; title: string; kind: string; canvasKind?: string }[] },
+  entry: { app: string; work: string; number: string; title: string; slug: string; workNameScope?: boolean; cards: { id: string; number: string; title: string; kind: string; canvasKind?: string }[] },
 ): HTMLElement {
   const head = el(document_, 'div', { class: 'cv-lib-app-head' },
     el(document_, 'button', { type: 'button', class: 'cv-lib-expand', 'aria-expanded': 'false', 'data-lib-expand': '' },
@@ -244,7 +246,7 @@ export function buildAppRow(
       el(document_, 'span', { class: 'cv-lib-kind', 'data-kind': card.kind }, card.kind),
       el(document_, 'span', { class: 'cv-lib-action', 'data-lib-action': '' }, 'Add')))));
   const row = el(document_, 'li', {
-    class: 'cv-lib-app', 'data-app': entry.app, 'data-work': entry.work, 'data-number': entry.number,
+    class: 'cv-lib-app', 'data-app': entry.app, 'data-work': entry.work, 'data-number': entry.number, 'data-work-name-scope': String(entry.workNameScope === true),
     'data-search': `${entry.number} ${entry.title.toLowerCase()} ${entry.slug ? `/${entry.slug}` : ''}`,
   }, head, list);
   row.id = `lib-${entry.work}`;
@@ -281,7 +283,7 @@ function adoptNewWorks(): void {
     if (apps.some((app) => app.work === work.work)) continue;
     const number = String(nextNumber());
     const row = buildAppRow(documentRef, {
-      app: work.app, work: work.work, number, title: work.title, slug: '',
+      app: work.app, work: work.work, number, title: work.title, slug: '', workNameScope: work.workNameScope,
       cards: work.cards.filter((card) => card.id).map((card, at) => ({ ...card, number: `${number}.${at}` })),
     });
     const section = category(documentRef, 'mine', 'My apps');
@@ -739,10 +741,10 @@ function appCompletions(rest: string): Completion[] {
 // --- APP-119/120: every app row shows its address chip, aliases, hint and an example ---
 
 /** The address a row answers to: a saved app by its work, a library app by its slug. */
-export function rowAddress(row: { slug: string; work: string; widget?: unknown }, list: Address[]): Address | undefined {
+export function rowAddress(row: { slug: string; work: string; widget?: unknown; workNameScope?: boolean }, list: Address[]): Address | undefined {
   if (row.widget) return undefined;
   return list.find((address) => address.kind === 'saved' && address.work === row.work)
-    ?? (row.slug ? list.find((address) => address.kind === 'library' && (address.slug === row.slug || address.aliases.includes(row.slug))) : undefined);
+    ?? (!row.workNameScope && row.slug ? list.find((address) => address.kind === 'library' && (address.slug === row.slug || address.aliases.includes(row.slug))) : undefined);
 }
 
 /** The first example that says more than the bare address. */
@@ -753,6 +755,9 @@ export function firstExample(address: Address): string {
 /** Shows `address` on the app's row: the chip next to the title, then "also /expense", the hint and an example (exported for the tests). */
 export function decorate(app: AppRow, address: Address | undefined): void {
   const document_ = app.row.ownerDocument;
+  if (app.workNameScope && !app.row.querySelector('[data-lib-edit=""]')) {
+    app.row.querySelector('[data-lib-expand]')?.after(el(document_, 'button', { type: 'button', class: 'cv-lib-edit', 'data-lib-edit': '', title: `Name ${app.title}`, 'aria-label': `Name ${app.title}` }, '✎'));
+  }
   if (app.address === address) return;
   app.address = address;
   app.row.querySelector('.cv-lib-address')?.remove();
@@ -763,7 +768,7 @@ export function decorate(app: AppRow, address: Address | undefined): void {
     return;
   }
   app.slug = address.slug;
-  if (address.kind === 'library' && !app.row.querySelector('[data-lib-edit=""]')) {
+  if (!app.workNameScope && address.kind === 'library' && !app.row.querySelector('[data-lib-edit=""]')) {
     app.row.querySelector('[data-lib-expand]')?.after(el(document_, 'button', { type: 'button', class: 'cv-lib-edit', 'data-lib-edit': '', title: `Name ${address.title}`, 'aria-label': `Name ${address.title}` }, '✎'));
   }
   // The plain `/slug` the server rendered becomes the address chip (one component everywhere).
@@ -815,11 +820,24 @@ function retitle(node: HTMLElement | null, name: string, description = ''): void
   node.setAttribute('title', description || shown);
 }
 
+
+/** A saved app name updates only this work; cards and unsent forms stay mounted. */
+export function applyWorkName(appId: string, work: string, name: string): void {
+  for (const app of apps) {
+    if (app.app !== appId || app.work !== work) continue;
+    app.title = name;
+    retitle(app.row.querySelector<HTMLElement>('.cv-lib-app-title'), name);
+    app.row.dataset.search = `${app.number} ${name.toLowerCase()} ${app.slug}`;
+  }
+  updateWorkTitle(appId, work, name);
+  documentRef?.dispatchEvent(new CustomEvent('forma:work-renamed', { detail: { app: appId, work, name } }));
+}
+
 /** APP-121: the app's and cards' labels on the Library rows (exported for the tests). */
 export function applyLabels(list: Address[] = allAddresses()): void {
   for (const app of apps) {
     const address = app.address ?? rowAddress(app, list);
-    if (!address) continue;
+    if (!address || (app.workNameScope && (address.kind !== 'saved' || address.work !== app.work))) continue;
     retitle(app.row.querySelector<HTMLElement>('.cv-lib-app-title'), address.title, address.description);
     app.title = address.title;
     for (const card of app.cards) {
@@ -841,7 +859,7 @@ export function labelCanvasCards(document_: Document, list: Address[] = allAddre
   if (!placed.size) return;
   for (const app of apps) {
     const address = app.address ?? rowAddress(app, list);
-    if (!address) continue;
+    if (!address || (app.workNameScope && (address.kind !== 'saved' || address.work !== app.work))) continue;
     for (const card of app.cards) {
       const node = placed.get(card.id);
       if (!node) continue;

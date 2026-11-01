@@ -171,6 +171,8 @@ DEFINITION_WORK_GRANTS = set().union(
     # ADR-007 amendment (review M2): the creator is recorded, never creator_revoked_at.
     _role_columns('genui_workspace','saved_work','INSERT','organization_id','app_id','work_id','publication_id','version','context',
                   'created_by'),
+    # 0018: display-only work naming; no revision or binding mutation grant.
+    _role_columns('genui_workspace','saved_work','UPDATE','display_name','name_version'),
     _role_columns('genui_workspace','record_collections','INSERT','organization_id','app_id','work_id','publication_id','collection_id',
                   'schema_id','schema_version'),
     _role_columns('genui_workspace','work_bindings','INSERT','organization_id','app_id','work_id','publication_id','input_id','kind',

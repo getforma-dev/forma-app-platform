@@ -37,6 +37,7 @@ import { dismissSharing, openSharing } from '../sharing/dialog';
 import { el, originKind } from './render';
 import { registerCommands, registerCompleter, type Completion } from './slash';
 import { collapseAll, releaseCards, stackCardsOf } from './stacks';
+import { declaredLayout } from './page-layout';
 
 type Spot = { x: number; y: number };
 type Frame = {
@@ -143,6 +144,7 @@ function buildFrame(document_: Document, app: string, work: string, title: strin
     el(document_, 'span', { class: 'cv-unite-count', 'data-unite-count': '' }),
     el(document_, 'div', { class: 'cv-unite-actions', role: 'group', 'aria-label': 'Page' },
       el(document_, 'a', { class: 'cv-secondary', href: `/w/${app}/${work}`, title: 'Open this app as a page' }, 'Open page'),
+      el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-ask': '' }, 'Ask about this app'),
       el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-focus': '', title: 'Focus a part · F' }, 'Focus'),
       ...(canShare ? [el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-share': '', title: 'Share this app' }, 'Share')] : []),
       el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-split': '', title: 'Fan out · Shift+U' }, 'Fan out')));
@@ -156,7 +158,23 @@ function buildFrame(document_: Document, app: string, work: string, title: strin
 }
 
 /** Puts the cards in their slots; returns them in reading order and the frame's width. */
-function fill(root: HTMLElement, cards: HTMLElement[]): { order: HTMLElement[]; width: number } {
+function fill(root: HTMLElement, cards: HTMLElement[], layout = ''): { order: HTMLElement[]; width: number } {
+  const slots = declaredLayout(cards.map(card => card.dataset.card ?? ''), layout);
+  if (slots) {
+    const byId = new Map(cards.map(card => [card.dataset.card ?? '', card]));
+    const grid = root.querySelector<HTMLElement>('.cv-unite-grid')!;
+    const order = slots.flatMap(slot => byId.get(slot.id) ?? []);
+    root.dataset.declaredLayout = 'true';
+    grid.replaceChildren(...slots.flatMap(slot => {
+      const card = byId.get(slot.id); if (!card) return [];
+      return el(root.ownerDocument, 'section', { class: 'cv-unite-part', 'data-part-row': String(slot.row), 'data-part-column': String(slot.column), 'data-part-width': String(slot.width) }, card);
+    }));
+    const width = phone() ? PHONE : WIDE;
+    layoutPage(root, width);
+    const count = root.querySelector('[data-unite-count]');
+    if (count) count.textContent = `${cards.length} ${cards.length === 1 ? 'part' : 'parts'}`;
+    return { order, width };
+  }
   const { kpi, main, side } = arrange(cards);
   const slot = (name: string) => root.querySelector<HTMLElement>(`[data-slot="${name}"]`)!;
   slot('kpi').replaceChildren(...kpi);
@@ -171,6 +189,18 @@ function fill(root: HTMLElement, cards: HTMLElement[]): { order: HTMLElement[]; 
 
 /** Reflow the existing parts when this page narrows, independently of the browser. */
 function layoutPage(root: HTMLElement, width: number): void {
+  if (root.dataset.declaredLayout === 'true') {
+    const single = width <= NARROW;
+    const grid = root.querySelector<HTMLElement>('.cv-unite-grid')!;
+    grid.style.gridTemplateColumns = single ? 'minmax(0, 1fr)' : 'repeat(12, minmax(0, 1fr))';
+    grid.style.gridTemplateAreas = 'none';
+    for (const part of grid.querySelectorAll<HTMLElement>(':scope > .cv-unite-part')) {
+      part.style.gridColumn = single ? '1' : `${Number(part.dataset.partColumn) + 1} / span ${Number(part.dataset.partWidth)}`;
+      part.style.gridRow = single ? 'auto' : String(Number(part.dataset.partRow));
+    }
+    root.classList.toggle('is-single', single);
+    return;
+  }
   const has = (slot: string) => Boolean(root.querySelector(`[data-slot="${slot}"]`)?.childElementCount);
   const single = width <= NARROW;
   const both = has('main') && has('side');
@@ -395,7 +425,7 @@ export async function unite(app: string, work: string, restore?: { at: Spot; pre
   };
   for (const card of members) board.lift(card.dataset.card ?? '');
   const root = buildFrame(documentRef, app, work, group.title, group.origins, group.canShare);
-  const { order, width } = fill(root, members);
+  const { order, width } = fill(root, members, group.partLayout);
   for (const restoreScroll of scrolls) restoreScroll();
   const item = createCanvasItem({ instanceId: `unite-${work}`, displayName: group.title, preferredWidth: width, minHeight: 360, content: root, chrome: false });
   item.classList.add('cv-item', 'cv-item-unite');
@@ -534,6 +564,15 @@ function completions(slug: string, onlyUnited: boolean): (rest: string) => Compl
 export function startUnite(document_: Document): void {
   if (documentRef) return;
   documentRef = document_;
+  document_.addEventListener('forma:work-renamed', event => {
+    const detail = (event as CustomEvent<{app:string;work:string;name:string}>).detail;
+    const frame = detail && frames.get(detail.work);
+    if (!frame || frame.app !== detail.app) return;
+    frame.title = detail.name;
+    const title = frame.root.querySelector<HTMLElement>('.cv-unite-title');
+    if (title) { title.textContent = detail.name; title.title = detail.name; }
+    frame.root.setAttribute('aria-label', detail.name);
+  });
   setUniteHooks({
     has: (id) => [...frames.values()].some((frame) => frame.cards.includes(id)),
     count: () => [...frames.values()].reduce((sum, frame) => sum + frame.cards.length, 0),

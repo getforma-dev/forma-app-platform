@@ -1,15 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { STARTERS, startersIn, toggleFavorite, readFavorites, writeFavorites } from '../src/canvas/create-app.ts';
+import { templateCatalog, startersIn, toggleFavorite, readFavorites, writeFavorites } from '../src/canvas/create-app.ts';
 
-test('example descriptions and favorites are separate lists (APP-141)', () => {
-  assert.deepEqual(startersIn('industries', []).map((template) => template.id), ['expense-claims', 'reading-list']);
-  assert.deepEqual(startersIn('categories', []).map((template) => template.id), ['kept-list', 'a-count']);
-  assert.deepEqual(startersIn('favorites', []), []);
+const catalog = [
+  { id: 'equipment-requests', title: 'Equipment requests', industry: 'Operations', category: 'Trackers', description: 'Keep equipment requests with an item, requester, and notes.' },
+  { id: 'reading-list', title: 'Reading list', industry: 'Education', category: 'Lists', description: 'Keep a reading list with a title, an author, and notes.' },
+];
+
+test('the admitted catalog is grouped by industry/category and favorites are member preferences', () => {
+  assert.deepEqual(templateCatalog({ templates: catalog }), catalog);
+  assert.deepEqual(startersIn(catalog, 'industries', [], 'Education').map((template) => template.id), ['reading-list']);
+  assert.deepEqual(startersIn(catalog, 'categories', [], 'Trackers').map((template) => template.id), ['equipment-requests']);
+  assert.deepEqual(startersIn(catalog, 'favorites', []), []);
   const marked = toggleFavorite([], 'reading-list');
-  assert.deepEqual(startersIn('favorites', marked).map((template) => template.id), ['reading-list']);
+  assert.deepEqual(startersIn(catalog, 'favorites', marked).map((template) => template.id), ['reading-list']);
   assert.deepEqual(toggleFavorite(marked, 'reading-list'), []);
-  for (const template of STARTERS) assert.ok(template.starter.length > 10);
+  assert.deepEqual(templateCatalog({ templates: [...catalog, catalog[0]] }), [], 'duplicate IDs refuse the catalog');
+  assert.deepEqual(templateCatalog({ templates: [{ ...catalog[0], id: '../escape' }] }), []);
 });
 
 test('favorites stay with the member in this browser and blocked storage is harmless', () => {
@@ -75,7 +82,7 @@ class DocumentStub {
   getElementById(id: string) { return this.body.all().find((node) => node.attributes.get('id') === id) ?? null; }
 }
 
-test('choosing or cancelling sends nothing; Create requests generation and refusal places nothing', async () => {
+test('catalog discovery is read-only; confirm sends the exact template and refusal places nothing', async () => {
   const { openCreateApp } = await import('../src/canvas/create-app.ts');
   const document_ = new DocumentStub();
   const activity = document_.createElement('div');
@@ -84,11 +91,13 @@ test('choosing or cancelling sends nothing; Create requests generation and refus
   const calls: { url: string; body: unknown }[] = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (url: string, init: RequestInit) => {
+    if (url === '/v1/templates') return new Response(JSON.stringify({ templates: catalog }));
     calls.push({ url, body: JSON.parse(String(init.body)) });
     return new Response(JSON.stringify({ code: 'could_not_compose' }), { status: 422 });
   }) as typeof fetch;
   try {
     openCreateApp(document_ as unknown as Document);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     let dialog = document_.getElementById('cv-create-app')!;
     assert.equal(dialog.querySelector('textarea')!.parent!.hidden, true);
     dialog.querySelector('[data-template="reading-list"]')!.fire('click');
@@ -97,13 +106,14 @@ test('choosing or cancelling sends nothing; Create requests generation and refus
     assert.equal(document_.getElementById('cv-create-app'), null);
     assert.equal(calls.length, 0);
     openCreateApp(document_ as unknown as Document);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     dialog = document_.getElementById('cv-create-app')!;
-    dialog.querySelector('[data-template="expense-claims"]')!.fire('click');
+    dialog.querySelector('[data-template="equipment-requests"]')!.fire('click');
     const sentence = 'Keep the claims from this team only';
     dialog.querySelector('textarea')!.value = sentence;
     dialog.querySelector('form')!.fire('submit');
     await new Promise((resolve) => setTimeout(resolve, 10));
-    assert.deepEqual(calls, [{ url: '/v1/compose', body: { intent: sentence, generate: true } }]);
+    assert.deepEqual(calls, [{ url: '/v1/compose', body: { intent: sentence, template_id: 'equipment-requests' } }]);
     assert.match(activity.textContent, /Nothing was placed/);
   } finally { globalThis.fetch = originalFetch; }
 });

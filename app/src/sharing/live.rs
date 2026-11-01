@@ -44,6 +44,38 @@ pub struct SharedRecordsCardProps {
     pub columns: Vec<CellProps>,
     pub rows: Vec<SharedRecordRowProps>,
 }
+// Deliberately narrower than member PartProps: no command identity, form,
+// collection, selector, Ask context or member route crosses this boundary.
+#[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct SharedPartProps {
+    pub id: String,
+    pub title: String,
+    pub class: String,
+    pub text: String,
+    pub is_note: bool,
+    pub is_form: bool,
+    pub message: String,
+    pub views: Vec<CardProps>,
+}
+fn shared_parts(outline: &storage::WorkOutline, views: &[CardProps]) -> Vec<SharedPartProps> {
+    page::document_parts(outline, views, &page::WorkChrome::default())
+        .into_iter()
+        .map(|part| SharedPartProps {
+            id: part.id,
+            title: part.title,
+            class: part.class,
+            text: part.text,
+            is_note: part.is_note,
+            is_form: part.is_form,
+            message: if part.is_form {
+                "This form is view only in a shared app.".into()
+            } else {
+                String::new()
+            },
+            views: part.views,
+        })
+        .collect()
+}
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct SharedPageProps {
     pub title: String,
@@ -62,6 +94,7 @@ pub struct SharedPageProps {
     pub can_sign_up: bool,
     pub can_sign_out: bool,
     pub csrf_signout: String,
+    pub parts: Vec<SharedPartProps>,
     pub views: Vec<CardProps>,
     pub record_cards: Vec<SharedRecordsCardProps>,
     pub records_truncated: bool,
@@ -73,6 +106,7 @@ pub struct SharedAppProps {
     pub href: String,
     pub owner_label: String,
     pub can_add_to_canvas: bool,
+    pub parts: Vec<SharedPartProps>,
     pub views: Vec<CardProps>,
     pub record_cards: Vec<SharedRecordsCardProps>,
     pub records_truncated: bool,
@@ -524,7 +558,10 @@ async fn shared_app(
         sign_in_csrf: shared::start_csrf(auth, request.headers(), &key),
         can_sign_up: !pending
             && auth.shared_broker.is_some()
-            && auth.provider.is_some()
+            && key
+                .split_once('.')
+                .and_then(|(organization, _)| auth.provider.as_ref()?.config.route(organization))
+                .is_some_and(|route| route.shared_client_id.is_some())
             && crate::auth::cookies::read(request.headers(), crate::auth::cookies::SESSION)
                 .is_none(),
         message: if pending {
@@ -624,6 +661,11 @@ async fn guest_document(
         .release_guest_access(access)
         .await
         .map_err(refusal)?;
+    let views = views
+        .into_iter()
+        .map(|v| v.ok_or_else(http::unavailable))
+        .collect::<Result<Vec<_>, _>>()?;
+    let parts = shared_parts(&outline, &views);
     Ok(SharedPageProps {
         title: outline.title,
         share_id: access.key(),
@@ -632,10 +674,8 @@ async fn guest_document(
         expires_at: access.expires_at().into(),
         can_add_to_canvas: access.can_add_to_canvas(),
         available: true,
-        views: views
-            .into_iter()
-            .map(|v| v.ok_or_else(http::unavailable))
-            .collect::<Result<_, _>>()?,
+        parts,
+        views,
         record_cards,
         records_truncated: listing.truncated,
         ..Default::default()

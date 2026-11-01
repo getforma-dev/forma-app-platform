@@ -76,6 +76,15 @@ class PureTests(unittest.TestCase):
             with self.subTest(bad=bad[:20]), self.assertRaises(op.Refused):
                 op.parse_grant(bad)
 
+    def test_authoring_only_issue_is_explicit_and_never_combines_resource_grants(self):
+        base = ["issue", "--organization", ORG, "--issued-by", "operator-test"]
+        with self.assertRaisesRegex(op.Refused, "grant_required"):
+            op.validate(op.parser().parse_args(base))
+        parsed = op.validate(op.parser().parse_args(base + ["--authoring-only"]))
+        self.assertEqual(parsed.templates, [])
+        with self.assertRaisesRegex(op.Refused, "authoring_only_with_grants_refused"):
+            op.validate(op.parser().parse_args(base + ["--authoring-only", "--grant", "discover:" + ORG]))
+
     def test_permission_commands_are_a_closed_set(self):
         """ADR-007 amendment (APP-010 review M2): grant/revoke take only the permissions the tables allow,
         never admin_policy, share_work or export, and each permission names exactly its resource."""
@@ -434,11 +443,51 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
                                     (op.handle_digest(raw),)), [(org, None)])
         self.assertNotIn(out["handle"], self.dump())
         self.assertEqual(self.query("SELECT count(*) FROM genui.audit_heads WHERE organization_id=%s", (org,)), [(5,)])
+        spaces = self.query("SELECT space_id::text,display_name FROM genui.spaces WHERE organization_id=%s", (org,))
+        policies = self.query("SELECT policy_id::text,policy_version,kind FROM genui.publication_policies WHERE organization_id=%s", (org,))
+        self.assertEqual(len(spaces), 1)
+        self.assertEqual(spaces[0][1], "Workspace")
+        self.assertEqual(uuid.UUID(spaces[0][0]).version, 4)
+        self.assertEqual(len(policies), 1)
+        self.assertEqual(policies[0][1:], (1, "owner_publish"))
+        self.assertEqual(uuid.UUID(policies[0][0]).version, 4)
+        for table in ("principals", "memberships", "entitlements", "apps", "saved_work", "sources",
+                      "definition_revisions", "publications", "internal_records", "app_permissions",
+                      "work_permissions", "source_permissions", "organization_permissions"):
+            self.assertEqual(self.query(f"SELECT count(*) FROM genui.{table} WHERE organization_id=%s", (org,)), [(0,)], table)
         self.assertEqual(self.operator_events(org), [("organization.provisioned",)])
         self.assertEqual(self.cli("verify", "--organization", org)["verified"], True)
         before = self.dump()
         self.cli("provision", "--organization", org, "--display-name", "again", "--issuer", ISSUER, "--provider-tenant", "ten_x", expect=1)
         self.assertEqual(self.dump(), before)
+
+    def test_fresh_authoring_only_member_redeems_with_entitlement_and_no_resource_grants(self):
+        org = str(uuid.uuid4()); tenant = "ten_" + org[-12:]; subject = "usr_" + uuid.uuid4().hex
+        self.cli("provision", "--organization", org, "--display-name", "Clean first member",
+                 "--issuer", ISSUER, "--provider-tenant", tenant)
+        issued = self.cli("issue", "--organization", org, "--issued-by", "operator-test",
+                          "--kind", "member_invite", "--authoring-only")
+        digest = op.code_digest(op.normalize_code(issued["code"]))
+        self.assertEqual(self.query("SELECT count(*) FROM genui.code_grant_templates WHERE organization_id=%s", (org,)), [(0,)])
+        with self.connect("genui_workspace") as c:
+            c.execute("SELECT set_config('genui.organization_id',%s,true)", (org,))
+            reservation, _, outcome = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)", (org, digest, "sha256:" + "a" * 64)).fetchone()
+            self.assertEqual(outcome, "reserved")
+            pending, _, outcome = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)", (org, reservation, ISSUER, tenant, subject)).fetchone()
+            self.assertEqual(outcome, "pending")
+            parameters = (org, pending, ISSUER, tenant, subject, "sha256:" + "b" * 64)
+            admitted = c.execute("SELECT * FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)", parameters).fetchone()
+            self.assertEqual(admitted[-1], "admitted")
+            replayed = c.execute("SELECT * FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)", parameters).fetchone()
+            self.assertEqual(replayed[:-1], admitted[:-1])
+            self.assertEqual(replayed[-1], "replayed")
+        principal, epoch, entitlement, _, _ = admitted
+        self.assertEqual(epoch, 1)
+        self.assertEqual(self.query("SELECT status FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (org, principal)), [("active",)])
+        self.assertEqual(self.query("SELECT status,kind,expires_at>now() FROM genui.entitlements WHERE organization_id=%s AND entitlement_id=%s", (org, entitlement)), [("active", "member_invite", True)])
+        for table in ("apps", "saved_work", "internal_records", "publications", "app_permissions", "work_permissions", "source_permissions", "organization_permissions"):
+            self.assertEqual(self.query(f"SELECT count(*) FROM genui.{table} WHERE organization_id=%s", (org,)), [(0,)], table)
+        self.assertEqual(self.cli("verify", "--organization", org)["verified"], True)
 
     def test_bind_provider_tenant_adds_the_real_binding_once_without_an_audit_event(self):
         """APP-078 B1: an existing (seeded) organization gains its real provider tenant binding beside

@@ -53,7 +53,7 @@ use axum::{
     extract::{Request, State},
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
     Router,
 };
 use serde_json::{json, Map, Value};
@@ -109,7 +109,121 @@ pub const VERBS: &[&str] = &[
 pub fn router(auth: Arc<Auth>) -> Router {
     Router::new()
         .route(LABELS_PATH, post(label))
+        .route(
+            "/v1/work/{app}/{work}/label",
+            get(work_label).post(set_work_label),
+        )
         .with_state(auth)
+}
+
+fn work_label_json(label: &storage::WorkLabel) -> Value {
+    json!({"name":label.name,"version":label.version,"can_name":label.can_name,"scope":"work"})
+}
+
+async fn work_label(
+    State(auth): State<Arc<Auth>>,
+    UniformPath((app, work)): UniformPath<(String, String)>,
+    request: Request,
+) -> Response {
+    if request.uri().query().is_some()
+        || !storage::valid_identifier(&app)
+        || !storage::valid_identifier(&work)
+    {
+        return http::not_found();
+    }
+    let Some((_, member)) = crate::sharing::session(&auth, request.headers()).await else {
+        return http::not_found();
+    };
+    let Some(stores) = &auth.stores else {
+        return http::not_found();
+    };
+    match stores.workspace.work_label(&member, &app, &work).await {
+        Ok(label) => {
+            let mut body = work_label_json(&label);
+            body["scope"] = json!(if super::matcher::seeded_work(&work) {
+                "library"
+            } else {
+                "work"
+            });
+            document(StatusCode::OK, &body)
+        }
+        Err(Error::Denied) => http::not_found(),
+        Err(_) => http::unavailable(),
+    }
+}
+
+fn work_label_body(bytes: &[u8]) -> Option<(Option<String>, i64)> {
+    let value = crate::admission::decode(bytes).ok()?;
+    let body = value.as_object()?;
+    if body.len() != 2 {
+        return None;
+    }
+    let name = match body.get("name")? {
+        Value::Null => None,
+        Value::String(text) => label_name(text)?,
+        _ => return None,
+    };
+    let version = body.get("expected_version")?.as_i64()?;
+    (0..9_007_199_254_740_991)
+        .contains(&version)
+        .then_some((name, version))
+}
+
+async fn set_work_label(
+    State(auth): State<Arc<Auth>>,
+    UniformPath((app, work)): UniformPath<(String, String)>,
+    request: Request,
+) -> Response {
+    let (parts, body) = request.into_parts();
+    if !csrf::same_origin(&parts.headers, auth.origin()) {
+        return http::cross_site();
+    }
+    if parts.uri.query().is_some()
+        || !storage::valid_identifier(&app)
+        || !storage::valid_identifier(&work)
+    {
+        return http::not_found();
+    }
+    if super::matcher::seeded_work(&work) {
+        return http::not_found();
+    }
+    let Some((_, member)) = crate::sharing::session(&auth, &parts.headers).await else {
+        return http::not_found();
+    };
+    if let Err(retry) = auth
+        .limits
+        .admit_member_write(member.organization(), member.principal())
+    {
+        return http::too_many_requests(retry);
+    }
+    let Some(stores) = &auth.stores else {
+        return http::not_found();
+    };
+    let Some(bytes) = http::bounded(body, BODY_LIMIT).await else {
+        return http::payload_too_large();
+    };
+    let Some((name, version)) = work_label_body(&bytes) else {
+        return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_label");
+    };
+    match stores
+        .workspace
+        .label_work(&member, &app, &work, name.as_deref(), version)
+        .await
+    {
+        Ok(storage::WorkLabelResult::Saved(label)) => document(
+            StatusCode::OK,
+            &json!({"saved":true,"label":work_label_json(&label)}),
+        ),
+        Ok(storage::WorkLabelResult::Unchanged(label)) => document(
+            StatusCode::OK,
+            &json!({"saved":false,"label":work_label_json(&label)}),
+        ),
+        Ok(storage::WorkLabelResult::Conflict) => {
+            http::problem(StatusCode::CONFLICT, "version_conflict")
+        }
+        Err(Error::Denied) => http::not_found(),
+        Err(_) => http::unavailable(),
+    }
 }
 
 /// One library app's catalog names: its address, then its aliases, and
@@ -558,6 +672,26 @@ async fn label(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn work_name_body_is_closed_bounded_and_optimistic() {
+        assert_eq!(
+            super::work_label_body(br#"{"name":"Team equipment","expected_version":0}"#),
+            Some((Some("Team equipment".into()), 0))
+        );
+        assert_eq!(
+            super::work_label_body(br#"{"name":null,"expected_version":4}"#),
+            Some((None, 4))
+        );
+        for body in [
+            br#"{"name":"A","expected_version":-1}"#.as_slice(),
+            br#"{"name":"A","expected_version":0,"app_id":"x"}"#,
+            br#"{"name":"A"}"#,
+            br#"{"name":"A","name":"B","expected_version":0}"#,
+            br#"{"name":"bad\u0000name","expected_version":0}"#,
+        ] {
+            assert!(super::work_label_body(body).is_none());
+        }
+    }
     use super::*;
     use crate::storage::{Label, MemberLabel};
 

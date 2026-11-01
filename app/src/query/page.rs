@@ -51,14 +51,46 @@ pub struct WorkProps {
     /// The submitted parameters were refused (422); nothing ran.
     pub form_error: bool,
     pub views: Vec<CardProps>,
+    pub parts: Vec<PartProps>,
     /// The work has runnable source views, so the page shows the run form.
     pub has_query: bool,
+    pub can_window: bool,
+    pub can_destination: bool,
     /// The work has no runnable source views. Records are the page's controls.
     pub records_only: bool,
     pub has_records: bool,
     pub records: Vec<RecordLinkProps>,
     /// `/canvas#g-{work}` for this work.
     pub canvas: String,
+}
+
+/// One admitted part. The discriminants and closed layout classes are made
+/// here, not interpreted as markup or CSS from a definition.
+#[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct PartProps {
+    pub id: String,
+    pub anchor: String,
+    pub title: String,
+    pub kind: String,
+    pub class: String,
+    pub text: String,
+    pub collection: String,
+    pub is_note: bool,
+    pub is_form: bool,
+    pub has_selector: bool,
+    pub selection_name: String,
+    pub selected: String,
+    pub choices: Vec<SelectionProps>,
+    pub message: String,
+    pub forms: Vec<super::canvas::FormCardProps>,
+    pub views: Vec<CardProps>,
+}
+
+#[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct SelectionProps {
+    pub id: String,
+    pub label: String,
+    pub selected: bool,
 }
 
 #[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
@@ -90,6 +122,8 @@ pub struct CardProps {
     pub has_table: bool,
     pub columns: Vec<CellProps>,
     pub rows: Vec<RowProps>,
+    pub has_chart: bool,
+    pub chart: super::canvas_display::ChartProps,
     pub has_receipt: bool,
     pub receipt_digest: String,
     pub receipt: Vec<PairProps>,
@@ -482,7 +516,9 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
                         .get(column)
                         .and_then(|name| result.column_types.get(name))
                 };
-                if view.kind == "summary" && result.rows.len() == 1 {
+                if matches!(view.kind.as_str(), "summary" | "status" | "detail")
+                    && result.rows.len() == 1
+                {
                     card.has_summary = true;
                     card.summary = result
                         .columns
@@ -530,6 +566,29 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
                 }
                 if result.truncated_page {
                     card.message = "Showing the first page of rows.".into();
+                }
+                if matches!(view.kind.as_str(), "chart" | "timeline") {
+                    // The existing chart renderer qualifies non-negative
+                    // integer series only. Money/decimal remain exact tables;
+                    // a minor-unit coefficient is never labeled a currency.
+                    let integer_columns = result
+                        .column_types
+                        .iter()
+                        .filter_map(|(id, kind)| {
+                            matches!(kind, ColumnType::Integer).then_some(id.clone())
+                        })
+                        .collect::<Vec<_>>();
+                    let rows = result
+                        .rows
+                        .iter()
+                        .map(|row| row.iter().map(raw_text).collect())
+                        .collect::<Vec<Vec<String>>>();
+                    if let Some(chart) =
+                        super::canvas_display::chart(&result.columns, &rows, &integer_columns)
+                    {
+                        card.has_chart = true;
+                        card.chart = chart;
+                    }
                 }
                 "ready"
             }
@@ -584,10 +643,58 @@ pub struct WorkChrome {
     pub app: String,
     pub work: String,
     pub forms: Vec<super::canvas::FormCardProps>,
+    pub form_choices: std::collections::BTreeMap<String, Vec<SelectionProps>>,
     pub record_cards: Vec<super::canvas::RecordsCardProps>,
     pub records_truncated: bool,
     pub records: Vec<RecordLinkProps>,
     pub canvas: String,
+}
+
+/// Trusted admitted order/layout shared by member and read-only guest documents.
+pub(crate) fn document_parts(
+    outline: &WorkOutline,
+    views: &[CardProps],
+    chrome: &WorkChrome,
+) -> Vec<PartProps> {
+    let mut row = 0_u32;
+    let mut declared_row = None;
+    let mut occupied = 0_u16;
+    outline.parts.iter().map(|part| {
+        // Compact unused grid rows, and flow colliding slots to a new row so
+        // admitted overlapping positions never hide another part's controls.
+        let column = part.column.min(11);
+        let width = part.width.clamp(1, 12 - column);
+        let mask = ((1_u16 << width) - 1) << column;
+        if declared_row != Some(part.row) || occupied & mask != 0 {
+            row += 1;
+            occupied = 0;
+        }
+        declared_row = Some(part.row);
+        occupied |= mask;
+        let forms: Vec<_> = chrome.forms.iter().filter(|form| form.id == part.id).cloned().collect();
+        let choices = chrome.form_choices.get(&part.id).cloned().unwrap_or_default();
+        let view = views.iter().find(|view| view.id == part.id).cloned().or_else(|| {
+            (!matches!(part.kind.as_str(), "form" | "note")).then(|| card(&WorkView {
+                id: part.id.clone(), title: part.title.clone(), kind: part.kind.clone(),
+                integer_columns: Vec::new(), column_types: Default::default(),
+            }, Outcome::Failed(Reason::NotQualified)))
+        });
+        PartProps {
+            id: part.id.clone(), anchor: format!("part-{}", part.id), title: part.title.clone(), kind: part.kind.clone(),
+            class: format!("document-part document-column-{column} document-width-{width} document-row-{row}"),
+            text: part.text.clone(),
+            collection: outline.collections.iter().find(|(_, schema)| schema == &part.schema).map(|(id, _)| id.clone()).unwrap_or_default(),
+            is_note: part.kind == "note", is_form: part.kind == "form",
+            has_selector: !choices.is_empty(), selection_name: format!("selection.{}", part.id),
+            selected: choices.iter().find(|item| item.selected).map(|item| item.id.clone()).unwrap_or_default(),
+            message: if part.kind == "form" && forms.is_empty() {
+                if !outline.can_write { "This form is read only for your access." }
+                else if part.creates { "This form is not available for this app revision." }
+                else { "Choose a record that this command can change. No applicable record is available yet." }
+            } else { "" }.into(),
+            choices, forms, views: view.into_iter().collect(),
+        }
+    }).collect()
 }
 
 /// The whole page.
@@ -601,6 +708,7 @@ pub fn props(
     chrome: WorkChrome,
 ) -> WorkProps {
     let has_query = !views.is_empty();
+    let parts = document_parts(outline, &views, &chrome);
     WorkProps {
         title: outline.title.clone(),
         app: chrome.app,
@@ -615,7 +723,10 @@ pub fn props(
         destination: form.destination.clone(),
         form_error,
         views,
+        parts,
         has_query,
+        can_window: outline.can_window,
+        can_destination: outline.can_destination,
         // No runnable source views, and the work actually has collections.
         // An empty definition must not claim that it keeps records.
         records_only: !has_query && !outline.collections.is_empty(),

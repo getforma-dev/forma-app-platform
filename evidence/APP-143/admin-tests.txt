@@ -1,0 +1,512 @@
+
+> test
+> tsx --test test/*.test.ts
+
+TAP version 13
+# Subtest: authority expires from request start, not delayed arrival
+ok 1 - authority expires from request start, not delayed arrival
+  ---
+  duration_ms: 2.179959
+  type: 'test'
+  ...
+# Subtest: superseded, repeated and invalidated responses cannot restore authority
+ok 2 - superseded, repeated and invalidated responses cannot restore authority
+  ---
+  duration_ms: 0.10375
+  type: 'test'
+  ...
+# Subtest: only explicit safe authority verdicts are accepted
+ok 3 - only explicit safe authority verdicts are accepted
+  ---
+  duration_ms: 0.22225
+  type: 'test'
+  ...
+# Subtest: monitor masks offline and hidden views; stale bodies cannot revive after reconnect
+ok 4 - monitor masks offline and hidden views; stale bodies cannot revive after reconnect
+  ---
+  duration_ms: 34.294291
+  type: 'test'
+  ...
+# Subtest: Make it a card opens a Shape preview of the answer’s records; nothing is added without a click (APP-123)
+ok 5 - Make it a card opens a Shape preview of the answer’s records; nothing is added without a click (APP-123)
+  ---
+  duration_ms: 495.017083
+  type: 'test'
+  ...
+# Subtest: a stored card is judged again: the record set only on a stored card, its source closed (APP-123)
+ok 6 - a stored card is judged again: the record set only on a stored card, its source closed (APP-123)
+  ---
+  duration_ms: 63.431333
+  type: 'test'
+  ...
+# Subtest: a pinned answer is read-only: its text and receipts, labeled with the question and time; it never runs again (APP-123)
+ok 7 - a pinned answer is read-only: its text and receipts, labeled with the question and time; it never runs again (APP-123)
+  ---
+  duration_ms: 39.157792
+  type: 'test'
+  ...
+# Subtest: the app’s owner or an admin manages another member’s card added for everyone; nobody else does (APP-123 review)
+ok 8 - the app’s owner or an admin manages another member’s card added for everyone; nobody else does (APP-123 review)
+  ---
+  duration_ms: 0.981666
+  type: 'test'
+  ...
+# Subtest: @expenses.ledger scopes an Ask; removing the chip scopes it to the canvas (APP-123)
+ok 9 - @expenses.ledger scopes an Ask; removing the chip scopes it to the canvas (APP-123)
+  ---
+  duration_ms: 9.919
+  type: 'test'
+  ...
+# Subtest: /forma <words> is exactly a plain sentence (APP-123)
+ok 10 - /forma <words> is exactly a plain sentence (APP-123)
+  ---
+  duration_ms: 18.067625
+  type: 'test'
+  ...
+# Subtest: /q3 <words> and /folder:q3 <words> run formation; verbs and apps answer first (APP-123)
+ok 11 - /q3 <words> and /folder:q3 <words> run formation; verbs and apps answer first (APP-123)
+  ---
+  duration_ms: 12.610209
+  type: 'test'
+  ...
+# Subtest: / lists the 17 verbs in six groups and no addresses; a first letter adds the Apps section (APP-120, APP-122, APP-123)
+ok 12 - / lists the 17 verbs in six groups and no addresses; a first letter adds the Apps section (APP-120, APP-122, APP-123)
+  ---
+  duration_ms: 610.465375
+  type: 'test'
+  ...
+# Subtest: aliases resolve: /weather and /widget weather, /note, /help, /expense bare and with words (APP-120)
+ok 13 - aliases resolve: /weather and /widget weather, /note, /help, /expense bare and with words (APP-120)
+  ---
+  duration_ms: 25.409959
+  type: 'test'
+  ...
+# Subtest: the Library row shows the address, its aliases, hint and example; /apps searches slug, alias and hint (APP-119)
+ok 14 - the Library row shows the address, its aliases, hint and example; /apps searches slug, alias and hint (APP-119)
+  ---
+  duration_ms: 44.856333
+  type: 'test'
+  ...
+# Subtest: the right pane opens on the right tab from each entry point (APP-119)
+ok 15 - the right pane opens on the right tab from each entry point (APP-119)
+  ---
+  duration_ms: 50.584042
+  type: 'test'
+  ...
+# Subtest: the server's reserved verbs are exactly the canvas verbs and their aliases (APP-121)
+ok 16 - the server's reserved verbs are exactly the canvas verbs and their aliases (APP-121)
+  ---
+  duration_ms: 27.722041
+  type: 'test'
+  ...
+# Subtest: /app:expenses is /expenses; /app:notes reaches the app a verb shadows; /app:e and /e reach a shortcut; /app: lists apps (APP-121)
+ok 17 - /app:expenses is /expenses; /app:notes reaches the app a verb shadows; /app:e and /e reach a shortcut; /app: lists apps (APP-121)
+  ---
+  duration_ms: 27.107916
+  type: 'test'
+  ...
+# Subtest: a read sentence or a threshold is never an entry
+ok 18 - a read sentence or a threshold is never an entry
+  ---
+  duration_ms: 77.402625
+  type: 'test'
+  ...
+# Subtest: the admitted catalog is grouped by industry/category and favorites are member preferences
+ok 19 - the admitted catalog is grouped by industry/category and favorites are member preferences
+  ---
+  duration_ms: 0.919541
+  type: 'test'
+  ...
+# Subtest: favorites stay with the member in this browser and blocked storage is harmless
+ok 20 - favorites stay with the member in this browser and blocked storage is harmless
+  ---
+  duration_ms: 0.344333
+  type: 'test'
+  ...
+# Subtest: catalog discovery is read-only; confirm sends the exact template and refusal places nothing
+ok 21 - catalog discovery is read-only; confirm sends the exact template and refusal places nothing
+  ---
+  duration_ms: 88.719125
+  type: 'test'
+  ...
+# Subtest: the empty canvas offers "Drop files or upload": the picked files make a new folder (APP-124)
+ok 22 - the empty canvas offers "Drop files or upload": the picked files make a new folder (APP-124)
+  ---
+  duration_ms: 442.502708
+  type: 'test'
+  ...
+# Subtest: a folder with files offers Ask, Make a card and Make an app; Make waits for its confirm (APP-124)
+ok 23 - a folder with files offers Ask, Make a card and Make an app; Make waits for its confirm (APP-124)
+  ---
+  duration_ms: 38.528875
+  type: 'test'
+  ...
+# Subtest: Make a card and Make an app send one idempotency key per confirm, reused when it is sent again (ADR-011 I4, APP-124 review)
+ok 24 - Make a card and Make an app send one idempotency key per confirm, reused when it is sent again (ADR-011 I4, APP-124 review)
+  ---
+  duration_ms: 72.861291
+  type: 'test'
+  ...
+# Subtest: the Make buttons are the owner’s; a folder without files offers none of the three (APP-124)
+ok 25 - the Make buttons are the owner’s; a folder without files offers none of the three (APP-124)
+  ---
+  duration_ms: 5.923834
+  type: 'test'
+  ...
+# Subtest: Ask on a folder posts the question to the folder; its answer is exactly text and file rows (APP-124)
+ok 26 - Ask on a folder posts the question to the folder; its answer is exactly text and file rows (APP-124)
+  ---
+  duration_ms: 36.43825
+  type: 'test'
+  ...
+# Subtest: the drop point follows pan and zoom, and the footprint sits on that point
+ok 27 - the drop point follows pan and zoom, and the footprint sits on that point
+  ---
+  duration_ms: 0.930167
+  type: 'test'
+  ...
+# Subtest: a drop on the library or off the canvas is not a placement
+ok 28 - a drop on the library or off the canvas is not a placement
+  ---
+  duration_ms: 0.095917
+  type: 'test'
+  ...
+# Subtest: a desktop drag places the card, and a short press stays a click
+ok 29 - a desktop drag places the card, and a short press stays a click
+  ---
+  duration_ms: 0.22625
+  type: 'test'
+  ...
+# Subtest: dropping outside, cancelling, or dragging a placed card does not place
+ok 30 - dropping outside, cancelling, or dragging a placed card does not place
+  ---
+  duration_ms: 0.202209
+  type: 'test'
+  ...
+# Subtest: touch and the naming control do not start a drag
+ok 31 - touch and the naming control do not start a drag
+  ---
+  duration_ms: 0.120125
+  type: 'test'
+  ...
+# Subtest: /card expense.ledger, /card expenses.ledger and /card 3.2 name the same card; /card lists app.card rows with numbers (APP-120)
+ok 32 - /card expense.ledger, /card expenses.ledger and /card 3.2 name the same card; /card lists app.card rows with numbers (APP-120)
+  ---
+  duration_ms: 431.946
+  type: 'test'
+  ...
+# Subtest: Library → Widgets lists the five widgets; Folder expands to the member's folders; dots and "n of m cards" follow canvas:changed (APP-120)
+ok 33 - Library → Widgets lists the five widgets; Folder expands to the member's folders; dots and "n of m cards" follow canvas:changed (APP-120)
+  ---
+  duration_ms: 136.343375
+  type: 'test'
+  ...
+# Subtest: the address chip: Library row, app card header, bar hint and confirm card; a click fills the bar (APP-120)
+ok 34 - the address chip: Library row, app card header, bar hint and confirm card; a click fills the bar (APP-120)
+  ---
+  duration_ms: 11.361959
+  type: 'test'
+  ...
+# Subtest: the app card on the canvas gets its /expenses chip and its display name even when it was placed without data-app (APP-120 gap)
+ok 35 - the app card on the canvas gets its /expenses chip and its display name even when it was placed without data-app (APP-120 gap)
+  ---
+  duration_ms: 5.472209
+  type: 'test'
+  ...
+# Subtest: labels: the renamed app answers to /team-spend and its old names, a member's /exp and /q3 resolve, and names show on rows and canvas cards (APP-121)
+ok 36 - labels: the renamed app answers to /team-spend and its old names, a member's /exp and /q3 resolve, and names show on rows and canvas cards (APP-121)
+  ---
+  duration_ms: 35.863834
+  type: 'test'
+  ...
+# Subtest: /rename and /alias post the right label; a non-owner renames a card for themselves only and cannot rename the app (APP-121)
+ok 37 - /rename and /alias post the right label; a non-owner renames a card for themselves only and cannot rename the app (APP-121)
+  ---
+  duration_ms: 26.117834
+  type: 'test'
+  ...
+# Subtest: the ✎ editor sends only what the member changed; an untouched save sends nothing (APP-121 review)
+ok 38 - the ✎ editor sends only what the member changed; an untouched save sends nothing (APP-121 review)
+  ---
+  duration_ms: 15.44075
+  type: 'test'
+  ...
+# Subtest: /shape and /ask resolve every form of an address through one resolver; a non-name first word is part of the question (APP-122)
+ok 39 - /shape and /ask resolve every form of an address through one resolver; a non-name first word is part of the question (APP-122)
+  ---
+  duration_ms: 88.903
+  type: 'test'
+  ...
+# Subtest: a library row keeps the canvas size apart from the pane label (APP-104)
+ok 40 - a library row keeps the canvas size apart from the pane label (APP-104)
+  ---
+  duration_ms: 12.685708
+  type: 'test'
+  ...
+# Subtest: the canvas link loads an unlisted-placement work and leaves an unknown work alone
+ok 41 - the canvas link loads an unlisted-placement work and leaves an unknown work alone
+  ---
+  duration_ms: 1.572083
+  type: 'test'
+  ...
+# Subtest: two tabs share one live stream, and the next tab takes over when the first goes
+ok 42 - two tabs share one live stream, and the next tab takes over when the first goes
+  ---
+  duration_ms: 141.04675
+  type: 'test'
+  ...
+# Subtest: a page stays at least the header and one part, and no larger than the viewport
+ok 43 - a page stays at least the header and one part, and no larger than the viewport
+  ---
+  duration_ms: 4.89
+  type: 'test'
+  ...
+# Subtest: a stored page keeps its size, and a record from before size still loads
+ok 44 - a stored page keeps its size, and a record from before size still loads
+  ---
+  duration_ms: 287.912833
+  type: 'test'
+  ...
+# Subtest: sharing a page names the saved work and nobody else
+ok 45 - sharing a page names the saved work and nobody else
+  ---
+  duration_ms: 42.077292
+  type: 'test'
+  ...
+# Subtest: plain sentences reach canvas commands, and only those (APP-112)
+ok 46 - plain sentences reach canvas commands, and only those (APP-112)
+  ---
+  duration_ms: 314.1015
+  type: 'test'
+  ...
+# Subtest: timing chips read as real step times (APP-116)
+ok 47 - timing chips read as real step times (APP-116)
+  ---
+  duration_ms: 1.907292
+  type: 'test'
+  ...
+# Subtest: agent tokens say when they expire
+ok 48 - agent tokens say when they expire
+  ---
+  duration_ms: 19.779875
+  type: 'test'
+  ...
+# Subtest: form cards name the record in plain words
+ok 49 - form cards name the record in plain words
+  ---
+  duration_ms: 0.940458
+  type: 'test'
+  ...
+# Subtest: shortcuts stand down while another modal owns the keyboard (finding 2)
+ok 50 - shortcuts stand down while another modal owns the keyboard (finding 2)
+  ---
+  duration_ms: 312.92975
+  type: 'test'
+  ...
+# Subtest: a dock card shown over a pending one settles it (finding 3)
+ok 51 - a dock card shown over a pending one settles it (finding 3)
+  ---
+  duration_ms: 1.22075
+  type: 'test'
+  ...
+# Subtest: ledger sums are exact per currency (finding 13)
+ok 52 - ledger sums are exact per currency (finding 13)
+  ---
+  duration_ms: 1.833375
+  type: 'test'
+  ...
+# Subtest: stored placements keep the most recent works when capped (finding 8)
+ok 53 - stored placements keep the most recent works when capped (finding 8)
+  ---
+  duration_ms: 2.819416
+  type: 'test'
+  ...
+# Subtest: the live stream reopens after the browser closes it, and asks for a catch-up (finding 5)
+ok 54 - the live stream reopens after the browser closes it, and asks for a catch-up (finding 5)
+  ---
+  duration_ms: 1.588834
+  type: 'test'
+  ...
+# Subtest: the bar: ? is Ask, the dot is a card’s Shape, and /weather Austin still places (APP-122)
+ok 55 - the bar: ? is Ask, the dot is a card’s Shape, and /weather Austin still places (APP-122)
+  ---
+  duration_ms: 216.076666
+  type: 'test'
+  ...
+# Subtest: a shaped ledger previews highlights and filters over its records, keeping every receipt; nothing is written (APP-122)
+ok 56 - a shaped ledger previews highlights and filters over its records, keeping every receipt; nothing is written (APP-122)
+  ---
+  duration_ms: 3.724792
+  type: 'test'
+  ...
+# Subtest: /expenses.total by month computes a card whose numbers trace to their source records (APP-122)
+ok 57 - /expenses.total by month computes a card whose numbers trace to their source records (APP-122)
+  ---
+  duration_ms: 11.644667
+  type: 'test'
+  ...
+# Subtest: specs are closed data: receipts cannot be dropped, nothing outside the sets passes (APP-122)
+ok 58 - specs are closed data: receipts cannot be dropped, nothing outside the sets passes (APP-122)
+  ---
+  duration_ms: 0.941292
+  type: 'test'
+  ...
+# Subtest: Ask sends only the question and its scope, and shows only text with receipts; the canvas is untouched (APP-122)
+ok 59 - Ask sends only the question and its scope, and shows only text with receipts; the canvas is untouched (APP-122)
+  ---
+  duration_ms: 16.103584
+  type: 'test'
+  ...
+# Subtest: /card:<app>.<card> <words> is exactly the dot’s Shape; /card:<x> alone stays the /card: verb’s (APP-121 × APP-122)
+ok 60 - /card:<app>.<card> <words> is exactly the dot’s Shape; /card:<x> alone stays the /card: verb’s (APP-121 × APP-122)
+  ---
+  duration_ms: 34.746334
+  type: 'test'
+  ...
+# Subtest: decimals compare and sum at their scale, exactly; integers compare exactly (review finding 1)
+ok 61 - decimals compare and sum at their scale, exactly; integers compare exactly (review finding 1)
+  ---
+  duration_ms: 7.803166
+  type: 'test'
+  ...
+# Subtest: a capped listing is never shown as complete: "From X of the newest Y …", and a total says it is partial (review finding 2)
+ok 62 - a capped listing is never shown as complete: "From X of the newest Y …", and a total says it is partial (review finding 2)
+  ---
+  duration_ms: 2.145959
+  type: 'test'
+  ...
+# Subtest: money: an average rounds half-even to the minor unit and says so; currencies are never added together (review nits)
+ok 63 - money: an average rounds half-even to the minor unit and says so; currencies are never added together (review nits)
+  ---
+  duration_ms: 1.8245
+  type: 'test'
+  ...
+# Subtest: a newer preview owns its item: the older preview’s Cancel (its dock replaced) does not undo it (review finding 3)
+ok 64 - a newer preview owns its item: the older preview’s Cancel (its dock replaced) does not undo it (review finding 3)
+  ---
+  duration_ms: 11.217584
+  type: 'test'
+  ...
+# Subtest: Ask: a second question while one is answered waits its turn, none is dropped; ? never overwrites half-typed text (review finding 6, nit)
+ok 65 - Ask: a second question while one is answered waits its turn, none is dropped; ? never overwrites half-typed text (review finding 6, nit)
+  ---
+  duration_ms: 33.637291
+  type: 'test'
+  ...
+# Subtest: inventory outage masks the original connected item and recovery keeps its geometry
+ok 66 - inventory outage masks the original connected item and recovery keeps its geometry
+  ---
+  duration_ms: 30.42175
+  type: 'test'
+  ...
+# Subtest: record answers retain exact receipts and reject missing, substituted or wrong-collection provenance
+ok 67 - record answers retain exact receipts and reject missing, substituted or wrong-collection provenance
+  ---
+  duration_ms: 0.974417
+  type: 'test'
+  ...
+# Subtest: selected widget payload carries its identity and closed state without work or record selectors
+ok 68 - selected widget payload carries its identity and closed state without work or record selectors
+  ---
+  duration_ms: 0.391375
+  type: 'test'
+  ...
+# Subtest: native document app and part scopes contain only that saved work; source parts explicitly refuse
+ok 69 - native document app and part scopes contain only that saved work; source parts explicitly refuse
+  ---
+  duration_ms: 0.190541
+  type: 'test'
+  ...
+# Subtest: refused responses never release text or amounts and transport captures the exact selected work
+ok 70 - refused responses never release text or amounts and transport captures the exact selected work
+  ---
+  duration_ms: 43.185625
+  type: 'test'
+  ...
+# Subtest: changing Ask context preserves the unsent question and suppresses a delayed old-context reply
+ok 71 - changing Ask context preserves the unsent question and suppresses a delayed old-context reply
+  ---
+  duration_ms: 79.65925
+  type: 'test'
+  ...
+# Subtest: share locators cannot become external URLs, paths or another share response
+ok 72 - share locators cannot become external URLs, paths or another share response
+  ---
+  duration_ms: 0.719625
+  type: 'test'
+  ...
+# Subtest: linked inventory requires explicit canvas capability and rejects duplicate or substituted references
+ok 73 - linked inventory requires explicit canvas capability and rejects duplicate or substituted references
+  ---
+  duration_ms: 0.593625
+  type: 'test'
+  ...
+# Subtest: live props bind the exact shared key and retain read-only capability booleans
+ok 74 - live props bind the exact shared key and retain read-only capability booleans
+  ---
+  duration_ms: 0.10375
+  type: 'test'
+  ...
+# Subtest: uncertain creation retries keep the same idempotency body and never claim unverified success
+ok 75 - uncertain creation retries keep the same idempotency body and never claim unverified success
+  ---
+  duration_ms: 12.468209
+  type: 'test'
+  ...
+# Subtest: declared layout preserves note, form and query order; collisions flow and extras remain
+ok 76 - declared layout preserves note, form and query order; collisions flow and extras remain
+  ---
+  duration_ms: 0.918959
+  type: 'test'
+  ...
+# Subtest: independent work names use the exact work and version; conflict never falls back to shell labels
+ok 77 - independent work names use the exact work and version; conflict never falls back to shell labels
+  ---
+  duration_ms: 12.80025
+  type: 'test'
+  ...
+# Subtest: document renderer keeps hostile text inert and preserves command identity and receipt bytes
+ok 78 - document renderer keeps hostile text inert and preserves command identity and receipt bytes
+  ---
+  duration_ms: 1.198
+  type: 'test'
+  ...
+# Subtest: failed and denied views cannot display old values or receipts; empty results retain their real receipt
+ok 79 - failed and denied views cannot display old values or receipts; empty results retain their real receipt
+  ---
+  duration_ms: 0.58175
+  type: 'test'
+  ...
+# Subtest: forms cannot redirect a command to another work or execute a supplied URL
+ok 80 - forms cannot redirect a command to another work or execute a supplied URL
+  ---
+  duration_ms: 0.491291
+  type: 'test'
+  ...
+# Subtest: shared rendering retains actual values and receipt bytes without exposing record links or write controls
+ok 81 - shared rendering retains actual values and receipt bytes without exposing record links or write controls
+  ---
+  duration_ms: 0.288084
+  type: 'test'
+  ...
+# Subtest: admitted document parts retain interleaving, fixed layout classes and independent form identities
+ok 82 - admitted document parts retain interleaving, fixed layout classes and independent form identities
+  ---
+  duration_ms: 1.632583
+  type: 'test'
+  ...
+# Subtest: existing-record selection stays on the same work and retains native CSRF fallback
+ok 83 - existing-record selection stays on the same work and retains native CSRF fallback
+  ---
+  duration_ms: 0.266875
+  type: 'test'
+  ...
+1..83
+# tests 83
+# suites 0
+# pass 83
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1911.311834

@@ -82,7 +82,7 @@ type Card = {
   receipt: Pair[];
   receiptJson: string;
 };
-type Choice = { id: string; value: string };
+type Choice = { id: string; value: string; selected: boolean };
 type Field = {
   id: string;
   kind: string;
@@ -169,6 +169,12 @@ type LedgerCard = {
 };
 type Group = {
   canShare: boolean;
+  canLabelWork: boolean;
+  workNameVersion: number;
+  workNameScope: boolean;
+  partOrder: string;
+  partLayout: string;
+  staticParts: { id: string; view: string; title: string; kind: string; text: string; message: string; href: string }[];
   id: string;
   app: string;
   work: string;
@@ -198,6 +204,7 @@ type LibraryApp = {
   id: string;
   app: string;
   work: string;
+  workNameScope: boolean;
   number: string;
   title: string;
   hasSlug: boolean;
@@ -346,12 +353,12 @@ function Canvas(props: CanvasProps) {
           <div class="cv-welcome">
             <p class="cv-eyebrow"><span class="cv-welcome-dot" aria-hidden="true"></span> A little space. A lot of possibility.</p>
             <h1 id="cv-empty-title">From idea to<br /><span>working app.</span></h1>
-            <p class="cv-empty-copy">Describe what you need. Bring your data. Shape a workspace that works the way you do.</p>
+            <p class="cv-empty-copy">Create an app, save your first record, then share a live page with a colleague.</p>
             <div class="cv-empty-choices" aria-label="Ways to start">
               <button type="button" class="cv-empty-choice cv-empty-describe" data-empty-describe>
                 <span class="cv-choice-top"><span class="cv-choice-icon" aria-hidden="true">✳</span><span class="cv-choice-number" aria-hidden="true">01 / CREATE</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
                 <span class="cv-choice-title">Create an app</span>
-                <span class="cv-choice-copy">Choose an example, then describe your app. Nothing is placed until you confirm.</span>
+                <span class="cv-choice-copy">Choose a template, then describe your app. Nothing is placed until you confirm.</span>
               </button>
               <button type="button" class="cv-empty-choice cv-empty-upload" data-empty-upload-pick title="A new folder holds your files: CSV, XLSX, PDF, images or text">
                 <span class="cv-choice-top"><svg class="cv-choice-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 3h9v10H3zM12 16v-4m-3 2 3-3 3 3" /></svg><span class="cv-choice-number" aria-hidden="true">02 / CONNECT</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
@@ -384,6 +391,11 @@ function Canvas(props: CanvasProps) {
               data-app={group.app}
               data-work={group.work}
               data-can-share={group.canShare}
+              data-can-label-work={group.canLabelWork}
+              data-work-name-version={group.workNameVersion}
+              data-work-name-scope={group.workNameScope}
+              data-part-order={group.partOrder}
+              data-part-layout={group.partLayout}
               data-auto={group.auto}
               aria-label={group.title}
             >
@@ -558,7 +570,7 @@ function Canvas(props: CanvasProps) {
                 </article>
               ))}
               {createList(() => group.forms, form => form.id, form => (
-                <article class="cv-card cv-form" data-card={form.id} data-kind="form" aria-label={form.title}>
+                <article class="cv-card cv-form" data-card={form.id} data-kind="form" data-collection={form.collection} aria-label={form.title}>
                   <header class="cv-card-head">
                     <h3>{form.title}</h3>
                     <span class="badge">record</span>
@@ -579,7 +591,7 @@ function Canvas(props: CanvasProps) {
                         {createShow(() => field.hasChoices, () => (
                           <select name={field.input} aria-label={field.label}>
                             {createList(() => field.choices, choice => choice.id, choice => (
-                              <option value={choice.value}>{choice.value}</option>
+                              <option value={choice.value} selected={choice.selected}>{choice.value}</option>
                             ))}
                           </select>
                         ))}
@@ -597,6 +609,13 @@ function Canvas(props: CanvasProps) {
                     <button type="submit">{form.submit}</button>
                   </form>
                   <p class="cv-outcome" role="status" data-outcome></p>
+                  <a href={group.href}>Choose a record on the app page</a>
+                </article>
+              ))}
+              {createList(() => group.staticParts, part => part.id, part => (
+                <article class="cv-card cv-static-part" data-card={part.id} data-view={part.view} data-kind={part.kind} aria-label={part.title}>
+                  <header class="cv-card-head"><h3>{part.title}</h3><span class="badge">{part.kind}</span></header>
+                  <div class="cv-card-body"><p class="cv-static-text">{part.text}</p><p class="cv-message">{part.message}</p><a href={part.href}>Open app page</a></div>
                 </article>
               ))}
               {createList(() => group.records, records => records.id, records => (
@@ -703,9 +722,9 @@ function Canvas(props: CanvasProps) {
         </div>
         <p id="cv-activity" class="sr-only" role="status" aria-live="polite"></p>
       </main>
-      <aside id="cv-library" class="cv-library" aria-label="Library, commands and shortcuts" data-open="false" data-tab="library">
+      <aside id="cv-library" class="cv-library" aria-label="Library, commands, Ask and shortcuts" data-open="false" data-tab="library">
         <header class="cv-lib-head">
-          <div class="cv-pane-tabs" role="tablist" aria-label="Library, commands and shortcuts">
+          <div class="cv-pane-tabs" role="tablist" aria-label="Library, commands, Ask and shortcuts">
             <button type="button" role="tab" id="cv-tab-library" class="cv-pane-tab" aria-selected="true" aria-controls="cv-panel-library" data-pane-tab="library">Library</button>
             <button type="button" role="tab" id="cv-tab-commands" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-commands" data-pane-tab="commands">Commands</button>
             <button type="button" role="tab" id="cv-tab-ask" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-ask" data-pane-tab="ask">Ask</button>
@@ -732,7 +751,7 @@ function Canvas(props: CanvasProps) {
                 </h3>
                 <ul class="cv-lib-apps">
                   {createList(() => category.apps, app => app.id, app => (
-                    <li class="cv-lib-app" id={app.id} data-app={app.app} data-work={app.work} data-number={app.number} data-search={app.search}>
+                    <li class="cv-lib-app" id={app.id} data-app={app.app} data-work={app.work} data-work-name-scope={app.workNameScope} data-number={app.number} data-search={app.search}>
                       <div class="cv-lib-app-head">
                         <button type="button" class="cv-lib-expand" aria-expanded="false" data-lib-expand>
                           <span class="cv-lib-chevron" aria-hidden="true"></span>

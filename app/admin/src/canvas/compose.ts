@@ -10,6 +10,7 @@ import { markTailoring, noteKept, onTailored, placeWork, setReporter, workCard }
 import { showTiming, type Chip, type Step } from './timing';
 import { showChooser } from './slash';
 import { isUuid } from './render';
+import { unite } from './unite';
 
 /** The composer route (`app/src/composer/routes.rs` PATH). */
 export const COMPOSE_URL = '/v1/compose';
@@ -32,7 +33,7 @@ export type ComposeResult = {
 export type Choice = { app_id: string; title: string; purpose: string };
 export type ComposeAnswer = ComposeResult | { kind: 'choose'; choices: Choice[] };
 /** APP-101: a slash command or chooser click pins the app; "Build something new" asks for generation. */
-export type Pin = { app_id: string } | { generate: true } | null;
+export type Pin = { app_id: string } | { generate: true } | { template_id: string } | null;
 export type ComposeCode = 'not_connected' | 'unavailable' | 'refused' | 'invalid' | 'too_many' | 'failed';
 export class ComposeError extends Error {
   constructor(
@@ -174,9 +175,13 @@ export async function submitIntent(text: string, bar: (message: string) => void,
   report(result.title ? `Placing “${result.title}” on your canvas…` : 'Placing it on your canvas…');
   const placing = performance.now();
   const placed = await placeWork(result.app_id, result.work_id, result.labels);
+  // Explicit creation opens one app page. A refused compose never reaches
+  // placement; a failed group load never opens an empty frame.
+  const createdPage = pin && ('template_id' in pin || 'generate' in pin) && /on your canvas/.test(placed)
+    ? await unite(result.app_id, result.work_id) : null;
   const chip = showTiming(pin && 'app_id' in pin ? 'Open' : 'Compose', [
     ...before,
-    { label: pin && 'generate' in pin ? 'build' : 'pick', ms: composeMs, server: result.duration_ms },
+    { label: pin && ('generate' in pin || 'template_id' in pin) ? 'build' : 'pick', ms: composeMs, server: result.duration_ms },
     { label: 'on canvas', ms: performance.now() - placing },
   ], workCard(result.work_id, 'app'));
   if (/on your canvas/.test(placed)) clearIntentBar();
@@ -190,5 +195,5 @@ export async function submitIntent(text: string, bar: (message: string) => void,
     return;
   }
   if (result.tailoring === 'kept') noteKept(result.work_id);
-  report(placed);
+  report(createdPage ?? placed);
 }

@@ -68,6 +68,7 @@ export function buildCard(document_: Document, kind: WidgetKind, id: string, sta
     el(document_, 'span', { class: 'wg-mark', 'aria-hidden': 'true' }, mark),
     el(document_, 'div', { class: 'wg-id' }, el(document_, 'p', { class: 'wg-eyebrow' }, eyebrow), el(document_, 'h2', { class: 'wg-title' }, title)),
     chips,
+    el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-widget-ask': '', 'aria-label': `Ask about this ${kind}` }, 'Ask'),
     close),
   body,
   form,

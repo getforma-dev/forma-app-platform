@@ -8,7 +8,7 @@ A small team needs a shared equipment-request tracker. The first member starts w
 
 Use a modest supported records app, for example “Keep equipment requests with an item, requester, and status.” Rehearse the actual model response and choose ordinary supported form fields. Do not promise approval automation, email delivery, sums, billing or external integrations that this app does not implement. “Paid user” means the intended customer journey; no checkout or billing claim is part of this capture.
 
-The fictional request is entered and committed through the real form. If a CSV is included, upload actual synthetic bytes through the parser/import flow and verify the loaded rows. Do not replace network responses, seed a finished app/records off camera, turn on demo mode, or present prompt examples as admitted templates.
+The fictional request is entered and committed through the real form. If a CSV is included, upload actual synthetic bytes through the parser/import flow and verify the loaded rows. Do not replace network responses, seed a finished app/records off camera, or turn on demo mode. A real admitted template is allowed: show its creation and distinguish using it unchanged from model customization.
 
 ## Time budget
 
@@ -27,7 +27,7 @@ Total: 180 seconds, including generation and signup. These are budgets, not meas
 
 - Use one identified, reviewed build with demo mode off and no library/work/record seed. The organization may have its required space and publication policy; those are provisioning, not a finished customer app. Confirm the first member owns no authoring shell before the first compose test.
 - Use two independent authenticated sessions, not two tabs sharing one cookie. Confirm recipient email, signup, invite expiry/revocation and same-work binding work before recording; keep the take's recipient genuinely new.
-- Verify owner record commit, reopen, read-only recipient behavior (or explicitly granted write), authorized page and canvas views, live update and reconnect. Measure latency rather than promising “instant” from a status chip.
+- Verify owner record commit, reopen, read-only recipient behavior (with no write granted by the app share), authorized page and canvas views, live update and reconnect. Measure latency rather than promising “instant” from a status chip.
 - Confirm a stranger cannot open the work and that refusal leaves no grants or records. These checks can be in retained rehearsal evidence rather than consuming the narrated three minutes.
 - Record commit/image/schema identity, route/action outcomes and measured times in a sanitized click log. Exclude cookies, tokens, invitation codes, credentials and private provider data.
 - APP-140 owns the clean local/live match. The main checkout's 4010 uses a persona login and does not prove hosted authentication. Persona footage is local interaction evidence only and cannot qualify the complete journey, even with disclosure. The take must use an actual verified provider signup/sign-in and resulting app session, without a pre-created authoring shell. Configure that real path in the intended recording environment before the take. A worktree check is disposable evidence, not the owner's recording environment.

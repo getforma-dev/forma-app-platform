@@ -320,6 +320,19 @@ pub fn judge(reply: &str, known: &BTreeSet<String>) -> Result<Answer, &'static s
     judge_object(object, known)
 }
 
+/// Utility questions describe the selected controls and configuration. The
+/// widget's transient display is not a server-attested data source: do not
+/// accept an invented temperature, clock reading or calculated result.
+pub const WIDGET_SYSTEM: &str = "Answer a question about the selected utility widget's controls and configuration only. The JSON contains its kind and validated presentation state, not live observations or organization data. You have no app records, current weather, current time, or calculator display. Never claim to read them. For a question requiring those values, say to inspect the widget or use a governed app. Do not calculate a result. Do not change anything. Return exactly {\"text\":\"plain explanatory text without numeric characters, HTML or markdown\",\"references\":[]}. No other keys. Explain settings in words; for a change, suggest the widget controls or Shape without executing it.";
+
+pub fn judge_widget(reply: &str) -> Result<Answer, &'static str> {
+    let answer = judge(reply, &BTreeSet::new())?;
+    if answer.text.chars().any(char::is_numeric) {
+        return Err("unattested_number");
+    }
+    Ok(answer)
+}
+
 /// [`judge`] on a decoded object.
 pub fn judge_object(
     object: &Map<String, Value>,

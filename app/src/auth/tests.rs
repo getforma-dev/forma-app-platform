@@ -137,11 +137,13 @@ pub(crate) fn config(origin: &str) -> AuthConfig {
                 organization: ORG.into(),
                 tenant_slug: "northstar".into(),
                 client_id: "northstar-platform".into(),
+                shared_client_id: Some("northstar-shared".into()),
             },
             Route {
                 organization: OTHER.into(),
                 tenant_slug: "canary".into(),
                 client_id: "canary-platform".into(),
+                shared_client_id: Some("canary-shared".into()),
             },
         ],
     }
@@ -161,8 +163,8 @@ pub(crate) fn auth_configuration_document(registry_version: &str) -> Value {
             "schema_version": 1, "auth_origin": SYNTHETIC_AUTH_ORIGIN, "app_origin": APP_ORIGIN,
             "issuer": ISSUER, "audience": AUDIENCE, "max_access_lifetime_seconds": 900,
             "organizations": [
-                {"organization_id": ORG, "tenant_slug": "northstar", "client_id": "northstar-platform"},
-                {"organization_id": OTHER, "tenant_slug": "canary", "client_id": "canary-platform"},
+                {"organization_id": ORG, "tenant_slug": "northstar", "client_id": "northstar-platform", "shared_client_id": "northstar-shared"},
+                {"organization_id": OTHER, "tenant_slug": "canary", "client_id": "canary-platform", "shared_client_id": "canary-shared"},
             ],
         },
         "identity_registry": {
@@ -273,11 +275,13 @@ pub(crate) fn tenants() -> Vec<Tenant> {
             slug: "northstar",
             tenant_id: NORTHSTAR_TENANT.into(),
             client_id: "northstar-platform",
+            shared_client_id: "northstar-shared",
         },
         Tenant {
             slug: "canary",
             tenant_id: CANARY_TENANT.into(),
             client_id: "canary-platform",
+            shared_client_id: "canary-shared",
         },
     ]
 }

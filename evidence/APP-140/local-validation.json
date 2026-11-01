@@ -1,0 +1,55 @@
+{
+  "scope": "Targeted local validation of APP-140 source; no hosted outcome inferred",
+  "checks": [
+    {
+      "suite": "runtime supervisor",
+      "tests": 55,
+      "passed": true
+    },
+    {
+      "suite": "isolated invitation broker",
+      "tests": 18,
+      "passed": true
+    },
+    {
+      "suite": "provider invitation custody",
+      "tests": 50,
+      "passed": true
+    },
+    {
+      "suite": "real PostgreSQL admission/operator",
+      "tests": 34,
+      "passed": true
+    },
+    {
+      "suite": "infrastructure Python",
+      "tests": 80,
+      "passed": true
+    },
+    {
+      "suite": "infrastructure TypeScript",
+      "tests": 45,
+      "passed": true,
+      "typecheck": true
+    },
+    {
+      "suite": "ops private state/release",
+      "tests": 12,
+      "passed": true
+    },
+    {
+      "suite": "operator package",
+      "tests": 39,
+      "passed": true,
+      "skipped": 6,
+      "skip_reason": "image-dependent cases await final candidate image"
+    }
+  ],
+  "shell_syntax": true,
+  "git_diff_check": true,
+  "notes": [
+    "Root owns the final complete just check, exact-head CI and candidate/image identity.",
+    "New clean-trial Python tests execute through npm test as well as the Python discovery suite.",
+    "Admission suite used real disposable PostgreSQL 16.13 over verify-full TLS, not mocked SQL."
+  ]
+}

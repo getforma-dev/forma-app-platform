@@ -211,6 +211,7 @@ async fn campaign() {
     let begun = start(&auth, &app, &mut browser, &share.key, "sign_in").await;
     assert_eq!(begun.status, StatusCode::SEE_OTHER, "{}", begun.body);
     assert!(begun.location().contains("/t/canary/"));
+    assert!(begun.location().contains("client_id=canary-shared"));
     let query = issuer.login(&begun.location(), "usr_home").unwrap();
     let arrived = browser
         .get(&app, &format!("/auth/shared/callback?{query}"))

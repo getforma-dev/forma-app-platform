@@ -86,7 +86,7 @@ DIGEST_RE = _ACCOUNT_RE + r'\.dkr\.ecr\.' + _REGION_RE + r'\.amazonaws\.com/[a-z
 # disabled and are left out of the window binding, so earlier windows keep
 # their hashes.
 OPTIONAL_INPUTS = ('qualification_config_secret_arn', 'qualification_image_digest', 'operator_image_digest', 'operating_plan',
-                   'provider_management_secret_arn', 'provider_management_url', 'supersedes_window_id')
+                   'provider_management_secret_arn', 'provider_management_url', 'supersedes_window_id', 'clean_trial_organization_id')
 # Stack parameters an older deployed template may lack; absent means disabled.
 OPTIONAL_PARAMETERS = ('QualificationImageDigest', 'OperatorImageDigest', 'ProviderManagementSecretArn', 'ProviderManagementUrl')
 # ADR-003 amendment 2026-10-30 (managed invitations, revised after FormaStack's answers; approval A12):
@@ -99,6 +99,8 @@ MANAGEMENT_URL_RE = r'https://[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::[0-9]{1,
 WITHIN_WINDOW = ('ingress_mode', 'service_desired_count', 'provider_management_secret_arn', 'provider_management_url')
 # Conservative Linux x86 price even when deploying an ARM64 image.
 TASK_HOURLY = Decimal('0.1215248')  # 2 CPU + 8 GiB + task IPv4
+BROKER_HOURLY = Decimal('0.0173428')  # conservative x86: 0.25 CPU + 0.5 GiB + task IPv4
+CLEAN_RETAINED_MONTHLY = Decimal('3.60')  # third tenant key, broker key, three broker secrets and fresh provider management secret
 FIXED_HOURLY = Decimal('0.0645')   # RDS + ALB + two ALB IPv4
 FIXED_STORAGE_KEYS = Decimal('4.30')  # 20 GiB RDS + two tenant keys
 # Retained window records: the original four fields never change. A window
@@ -174,13 +176,15 @@ def validate_windows(windows, ledger_plan):
     """Closed record contract plus a consistent, acyclic, single-successor supersession graph."""
     for key, old in windows.items():
         canonical_window(key, 'retained window identity')
-        optional = [k for k in dict.fromkeys(('service_identity', 'supersedes_window_id', ACTIVATION) + SUPERSEDED + ABANDONED)
+        optional = [k for k in dict.fromkeys(('service_identity', 'supersedes_window_id', 'clean_trial_organization_id', ACTIVATION) + SUPERSEDED + ABANDONED)
                     if isinstance(old, dict) and k in old]
         exact_keys(old, list(WINDOW_FIELDS) + optional, 'retained window')
         require(re.fullmatch('[0-9a-f]{64}', old['input_sha256']) is not None, 'invalid retained input digest')
         created = timestamp(old['created_at_utc']); timestamp(old['expires_at_utc'])
         reserved = old['reserved_compute_cents_by_month']
         require(isinstance(reserved, dict) and all(integer(v, 1) for v in reserved.values()), 'invalid retained reservation')
+        if 'clean_trial_organization_id' in old:
+            clean_trial_id(old['clean_trial_organization_id'])
         if 'service_identity' in old:
             exact_keys(old['service_identity'], IDENTITY_FIELDS, 'retained window service identity')
             require(old['service_identity']['operating_plan'] == ledger_plan, 'retained window was reserved under another operating plan')
@@ -220,6 +224,13 @@ def counted_compute(record):
     return record.get('counted_compute_cents_by_month', record['reserved_compute_cents_by_month'])
 
 
+def clean_trial_id(value):
+    require(isinstance(value, str) and re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', value)
+            and value not in ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'),
+            'clean trial requires a fresh organization UUID, never a sandbox tenant')
+    return value
+
+
 def supersede(earlier, now):
     """What the earlier window still counts once superseded at `now`.
 
@@ -236,7 +247,8 @@ def supersede(earlier, now):
         if datetime(year, number, 1, tzinfo=UTC) >= now:
             counted[month] = 0
         else:
-            counted[month] = max(0, reserved - floor_cents(unused.get(month, Decimal(0)) * TASK_HOURLY))
+            rate = TASK_HOURLY + (BROKER_HOURLY if earlier.get('clean_trial_organization_id') else 0)
+            counted[month] = max(0, reserved - floor_cents(unused.get(month, Decimal(0)) * rate))
     return counted
 
 
@@ -317,6 +329,13 @@ def reserve(config, ledger, now, activating=False):
             'provider_management_secret_arn and provider_management_url are set together or left empty together')
     require(not management['provider_management_secret_arn'] or task_images['operator_image_digest'],
             'an attached management secret needs the operator task (operator_image_digest)')
+    clean_trial = config.get('clean_trial_organization_id', '')
+    if clean_trial:
+        clean_trial_id(clean_trial)
+        require(plan == ALWAYS_ON and management['provider_management_secret_arn'] and task_images['operator_image_digest'],
+                'clean trial requires always-on accounting, provider management binding and operator image')
+    else:
+        require(clean_trial == '', 'clean trial identifier must be empty or a fresh organization UUID')
     require(str(uuid.UUID(config['window_id'])) == config['window_id'], 'window_id must be a canonical UUID retained across retry')
     supersedes = config.get('supersedes_window_id', '')
     if supersedes != '':
@@ -366,13 +385,16 @@ def reserve(config, ledger, now, activating=False):
     # the first month's headroom.
     for month in active:
         active[month] += config['extra_task_hours']
-    reserved = existing['reserved_compute_cents_by_month'] if existing else {month: cents(hours * TASK_HOURLY) for month, hours in active.items()}
+    rate = TASK_HOURLY + (BROKER_HOURLY if clean_trial else 0)
+    reserved = existing['reserved_compute_cents_by_month'] if existing else {month: cents(hours * rate) for month, hours in active.items()}
     updated = copy.deepcopy(ledger)
     record = copy.deepcopy(existing) if existing else {
         'input_sha256': binding, 'created_at_utc': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
         'expires_at_utc': config['deployment_expires_at_utc'], 'reserved_compute_cents_by_month': reserved,
         'service_identity': identity, ACTIVATION: '',
     }
+    if clean_trial:
+        record['clean_trial_organization_id'] = clean_trial
     if activating and not record.get(ACTIVATION):
         # Recorded before any AWS call: from here on this window may have run at count one,
         # so it can no longer be abandoned (only fixed forward or superseded).
@@ -406,7 +428,8 @@ def reserve(config, ledger, now, activating=False):
             # never below "about $33" and never above its quoted $38.
             require(rules['auth_min_cents'] <= entry['auth_spent_or_reserved_cents'] <= rules['auth_max_cents'], 'reserve FormaStack lean fAuth at its approved $33-38 figure')
         year, number = (int(x) for x in month.split('-'))
-        retained = cents(FIXED_HOURLY * calendar.monthrange(year, number)[1] * 24 + FIXED_STORAGE_KEYS)
+        clean_retained = CLEAN_RETAINED_MONTHLY if any(w.get('clean_trial_organization_id') for w in updated['windows'].values()) else 0
+        retained = cents(FIXED_HOURLY * calendar.monthrange(year, number)[1] * 24 + FIXED_STORAGE_KEYS + clean_retained)
         windows = sum(counted_compute(w).get(month, 0) for w in updated['windows'].values())
         released = sum(w['reserved_compute_cents_by_month'].get(month, 0) - counted_compute(w).get(month, 0) for w in updated['windows'].values())
         genui = retained + windows + entry['prior_extra_spend_cents'] + entry['variable_reserve_cents']
@@ -425,6 +448,8 @@ def reserve(config, ledger, now, activating=False):
                   'OperatorImageDigest': task_images['operator_image_digest'],
                   'ProviderManagementSecretArn': management['provider_management_secret_arn'],
                   'ProviderManagementUrl': management['provider_management_url']}
+    if clean_trial:
+        parameters['CleanTrialOrganizationId'] = clean_trial
     return updated, {'status': 'reserved_local_plan_only', 'window_id': config['window_id'], 'input_sha256': binding,
                      'observed_at_utc': now.strftime('%Y-%m-%dT%H:%M:%SZ'), 'reused_reservation': existing is not None,
                      'superseded_window_id': record.get('supersedes_window_id'),
@@ -441,7 +466,7 @@ def reserve(config, ledger, now, activating=False):
 
 # Names that reach the service only through the stack's secrets: never as plain environment values
 # (a plain value would be readable in describe-task-definition, CloudTrail and the console).
-SECRET_ENV_PREFIXES = ('GENUI_AUTH_QUALIFICATION_', 'GENUI_PROVIDER_CAPABILIT', 'GENUI_AUTH_CONFIG', 'GENUI_IDENTITY_REGISTRY')
+SECRET_ENV_PREFIXES = ('GENUI_AUTH_QUALIFICATION_', 'GENUI_PROVIDER_CAPABILIT', 'GENUI_AUTH_CONFIG', 'GENUI_IDENTITY_REGISTRY', 'GENUI_SHARED_INVITE_BROKER')
 SECRET_ENV_NAMES = ('ANTHROPIC_API_KEY', 'SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET')
 
 
@@ -496,6 +521,8 @@ def activate(config, report, call, clock):
                         {'name': 'ANTHROPIC_API_KEY', 'valueFrom': outputs['ComposerModelSecretArn']},
                         {'name': 'SLACK_BOT_TOKEN', 'valueFrom': outputs['SlackAppSecretArn'] + ':bot_token::'},
                         {'name': 'SLACK_SIGNING_SECRET', 'valueFrom': outputs['SlackAppSecretArn'] + ':signing_secret::'}]
+    if config.get('clean_trial_organization_id'):
+        expected_secrets.append({'name': 'GENUI_SHARED_INVITE_BROKER_JSON', 'valueFrom': outputs['SharedBrokerClientConfigurationSecretArn']})
     by_name = lambda entries: sorted(entries, key=lambda entry: entry['name'])
     require(by_name(containers[0].get('secrets', [])) == by_name(expected_secrets), 'live secret injection differs from the reviewed stack')
     # APP-076 item 8 / gap G11: the deny-all rollback revision (`PREVIOUS_TD`) exists on the same
@@ -532,10 +559,18 @@ def activate(config, report, call, clock):
         require(type(service['desiredCount']) is int and service['desiredCount'] in (0, 1), 'live service desired count is outside the bounded plan')
         return service
     current_service()
+    broker_spec = importlib.util.spec_from_file_location('genui_shared_broker_activation', Path(__file__).with_name('shared_broker_activation.py'))
+    broker_module = importlib.util.module_from_spec(broker_spec)
+    broker_spec.loader.exec_module(broker_module)
+    broker_service = broker_module.verify(config, outputs, containers[0], cluster_arn, call)
     observed = clock()
     require(observed + timedelta(minutes=10) <= timestamp(config['deployment_expires_at_utc']) <= observed + PLANS[plan_of(config)]['max_expiry'], 'live expiry is too close, past or beyond the bounded window')
     # UpdateService is an immediate control-plane call after the live check,
     # never a count-one request hidden behind a slow CloudFormation deployment.
+    if broker_service:
+        broker_result = call('ecs', 'update-service', '--cluster', cluster_arn, '--service', broker_service, '--desired-count', '1')['service']
+        require(broker_result.get('serviceArn') == broker_service and broker_result.get('clusterArn') == cluster_arn
+                and type(broker_result.get('desiredCount')) is int and broker_result['desiredCount'] == 1, 'broker activation response differs; retain reservation and reconcile')
     result = call('ecs', 'update-service', '--cluster', cluster_arn, '--service', service_arn, '--desired-count', '1')
     service = result['service']
     require(service['serviceArn'] == service_arn and service['clusterArn'] == cluster_arn and type(service['desiredCount']) is int and service['desiredCount'] == 1, 'activation response did not confirm the intended service')
@@ -545,6 +580,8 @@ def activate(config, report, call, clock):
         # A late/unknown control-plane response must not report active success
         # after the sole scheduled stop. Make one bounded compensating stop.
         call('ecs', 'update-service', '--cluster', cluster_arn, '--service', service_arn, '--desired-count', '0')
+        if broker_service:
+            call('ecs', 'update-service', '--cluster', cluster_arn, '--service', broker_service, '--desired-count', '0')
         raise ValueError('expiry elapsed during activation; stop requested and outcome must be reconciled')
     return {'status': 'activation_requested_not_healthy', 'observed_at_utc': observed.strftime('%Y-%m-%dT%H:%M:%SZ'),
             'cluster_arn': cluster_arn, 'service_arn': service_arn, 'schedule_arn': arn,

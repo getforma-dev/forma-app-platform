@@ -44,15 +44,18 @@ import { firstWord, MAX_RECORD_SET, mentionsOf, splitAddress } from './talk-view
 // After the board's modules: `box-api` must not be evaluated first (an import cycle through `render`).
 import { contentUrl, folderAnswer, type RowReference } from './box-api';
 import { openViewer } from './box-viewer';
+import { requestAsk, ASK_URL, type AskScope, type WidgetScope } from '../ask/client';
+import { mountAskPanel, type AskPanel } from '../ask/panel';
+import { setFocusAsk } from './focus';
+import { widgetOfItem } from './widgets/index';
 
-export const ASK_URL = '/v1/ask';
+export { ASK_URL };
 const MAX_WORKS = 12;
 /** References shown at once; the rest under "n more". */
 const SHOWN_REFERENCES = 12;
 
-type ScopeWork = { app_id: string; work_id: string; address: string; collection?: string };
 /** A card (one work, its collection when it has one), an app (one work), the canvas (every app on it), or a folder (APP-124: its tables). */
-export type Scope = { kind: 'card' | 'app' | 'canvas' | 'folder'; address: string; works: ScopeWork[]; box_id?: string };
+export type Scope = (AskScope & { refusal?: string }) | { kind: 'folder'; address: string; works: []; box_id?: string };
 
 /** APP-124: a folder's scope: its tables, read by the folder's own route. `name` is what the chip shows. */
 export function folderScope(boxId: string, name: string): Scope | null {
@@ -71,6 +74,9 @@ const workOf = (card: CardRow) => ({ app_id: card.app.app, work_id: card.app.wor
 
 /** The scope a resolved address names: a card (and its collection), or an app; null for anything else. */
 export function scopeOfTarget(target: Target, element: HTMLElement | null = null): Scope | null {
+  if (target.kind === 'widget') {
+    return { kind: 'widget', address: target.address, works: [], widget_id: target.widget.id, widget: target.widget.kind, state: { ...target.widget.state } } as WidgetScope;
+  }
   if (target.kind === 'app') {
     const { app } = target;
     return { kind: 'app', address: target.address, works: [{ app_id: app.app, work_id: app.work, address: addressOfWork(app.app, app.work) || app.slug }] };
@@ -79,12 +85,15 @@ export function scopeOfTarget(target: Target, element: HTMLElement | null = null
   const element_ = element ?? (typeof document?.querySelector === 'function' && /^[A-Za-z0-9_-]{1,160}$/.test(target.card.id)
     ? document.querySelector<HTMLElement>(`.cv-card[data-card="${target.card.id}"]`) : null);
   const collection = collectionOf(target.card, element_);
-  return { kind: 'card', address: target.address, works: [{ ...workOf(target.card), ...(collection ? { collection } : {}) }] };
+  return { kind: 'card', address: target.address, works: [{ ...workOf(target.card), ...(collection ? { collection } : {}) }],
+    ...(!collection && !target.card.id.startsWith('a-') ? { refusal: 'Ask cannot yet read source-query results or static content. Ask about a records card or the app instead.' } : {}) };
 }
 
 /** The scope for a canvas item: a card of an app (its address, work and collection), an app card or frame (the app), else null. */
 export function scopeOfItem(item: HTMLElement | null): Scope | null {
   if (!item) return null;
+  const widget = widgetOfItem(item);
+  if (widget) return scopeOfTarget({ kind: 'widget', widget, address: widget.kind });
   // APP-124: a folder card asks about the folder's tables.
   const folder = item.matches?.('.bx-card[data-box]') ? item : item.querySelector?.<HTMLElement>('.bx-card[data-box]');
   if (folder?.dataset.box) return folderScope(folder.dataset.box, folder.querySelector('.bx-title')?.textContent ?? '');
@@ -104,7 +113,15 @@ export function canvasScope(): Scope {
 
 /** The selected card, else the canvas. */
 export function currentScope(): Scope {
+  const focused = typeof document?.querySelector === 'function' ? document.querySelector<HTMLElement>('.cv-card[data-focused="true"]') : null;
+  if (focused) return scopeOfCard(focused) ?? canvasScope();
   return scopeOfItem(selectedCanvasItem() ?? null) ?? canvasScope();
+}
+
+function scopeOfCard(card: HTMLElement): Scope | null {
+  const row = findCardRow(card.dataset.card ?? '');
+  if (row) return scopeOfTarget({ kind: 'card', card: row, address: cardAddress(row) }, card);
+  return scopeOfItem(card.closest<HTMLElement>('.widget-instance'));
 }
 
 /**
@@ -116,7 +133,7 @@ export function mentionScope(mention: string): Scope | string {
   const target = resolveTarget(mention, { strict: true });
   const scope = scopeOfTarget(target);
   if (scope) return scope;
-  if (target.kind === 'widget' || splitAddress(mention).space === 'widget') return `@${mention} is a widget: it has no records to ask about. Mention an app or a card.`;
+  if (splitAddress(mention).space === 'widget') return `@${mention} is not an available weather, clock or calculator widget.`;
   return target.kind === 'none' ? `@${mention}: ${target.message}` : 'Use @ followed by an app or card address to mention it.';
 }
 
@@ -136,8 +153,8 @@ export function askLine(text: string): { scope: Scope | null; question: string; 
   const scope = scopeOfTarget(target);
   if (scope) return { scope, question: rest };
   if (splitAddress(word).space) {
-    const message = target.kind === 'widget' || splitAddress(word).space === 'widget'
-      ? 'A widget has no records to ask about. Choose an app or a card from the Library to ask about.'
+    const message = splitAddress(word).space === 'widget'
+      ? 'Select a weather, clock or calculator widget to ask about its controls and settings.'
       : target.kind === 'none' ? target.message : 'Choose an app or a card from the Library to ask about.';
     return { scope: null, question: '', message };
   }
@@ -145,6 +162,7 @@ export function askLine(text: string): { scope: Scope | null; question: string; 
 }
 
 export function scopeText(scope: Scope): string {
+  if (scope.kind === 'widget') return `Asking about ${scope.widget} · controls and settings`;
   if (scope.kind === 'folder') return `Asking about 📁 ${scope.address} (its tables)`;
   if (scope.kind === 'card') return `Asking about /${scope.address}`;
   if (scope.kind === 'app') return `Asking about /${scope.address} (all its records)`;
@@ -275,42 +293,21 @@ export async function ask(question: string, explicit: Scope | null = null): Prom
     }
     return;
   }
-  if (!current.works.length) {
+  if (current.refusal) { entry(document_, 'note', current.refusal); return; }
+  if (current.kind !== 'widget' && !current.works.length) {
     entry(document_, 'note', 'Create an app from the bar or place one from the Library (L), then ask about it.');
     return;
   }
   busy = true;
   const pending = entry(document_, 'note', 'Reading…');
   try {
-    let response: Response;
-    try {
-      response = await fetch(ASK_URL, {
-        method: 'POST', credentials: 'same-origin', cache: 'no-store',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ question: text, scope: { kind: current.kind, address: current.address, works: current.works } }),
-      });
-    } catch {
-      pending.textContent = 'The question could not be sent. Check your connection.';
-      return;
-    }
-    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-    if (response.status === 404) {
-      pending.textContent = 'You can’t read one of the apps in scope.';
-      return;
-    }
-    if (!response.ok || !body || typeof body.text !== 'string') {
-      pending.textContent = REFUSALS[typeof body?.code === 'string' ? body.code : ''] ?? 'Ask could not answer right now. Nothing changed.';
-      return;
-    }
-    // Exactly the three keys: anything else (a view spec) is not shown.
-    if (Object.keys(body).some((key) => !['text', 'receipts', 'references'].includes(key))) {
-      pending.textContent = REFUSALS.could_not_answer ?? '';
-      return;
-    }
+    const body = await requestAsk(text, current);
+    if (typeof body === 'string') { pending.textContent = body; return; }
     pending.remove();
     // Every record a computed answer counted (up to 12 apps of 200 records).
     const references = Array.isArray(body.references) ? (body.references as Reference[]).filter((r) => typeof r?.record_id === 'string').slice(0, MAX_WORKS * 200) : [];
     const receipts = Array.isArray(body.receipts) ? (body.receipts as Receipt[]) : [];
+    if (current.kind === 'widget') { entry(document_, 'forma', el(document_, 'p', {}, body.text)); return; }
     const answer: Answer = {
       question: text, text: body.text, scope: { kind: current.kind, address: current.address },
       references: Array.isArray(body.references) ? (body.references as Answer['references']) : [],
@@ -341,7 +338,7 @@ function rowItem(document_: Document, reference: RowReference, boxId: string): H
 }
 
 /** APP-124: a question about a folder's tables: `POST /v1/boxes/{box}/ask`; the answer and every row it used. */
-async function askFolder(document_: Document, current: Scope, text: string): Promise<void> {
+async function askFolder(document_: Document, current: Extract<Scope, { kind: 'folder' }>, text: string): Promise<void> {
   const boxId = current.box_id ?? '';
   const pending = entry(document_, 'note', 'Reading the folder’s tables…');
   if (!isUuid(boxId)) {
@@ -522,5 +519,26 @@ export function startAsk(document_: Document): void {
       showScope();
       if (focus) input?.focus({ preventScroll: true });
     },
+  });
+  // Selecting another object changes the next question, never a question
+  // already queued with its captured scope. Draft text stays untouched.
+  document_.getElementById('cv-canvas')?.addEventListener('pointerdown', () => {
+    queueMicrotask(() => { scope = currentScope(); showScope(); });
+  });
+  document_.addEventListener('click', event => {
+    const target = event.target as Element | null;
+    if (target?.closest('[data-unite-ask], [data-widget-ask]')) askAboutItem(target.closest<HTMLElement>('.widget-instance'));
+  });
+  let focusedPanel: AskPanel | null = null;
+  setFocusAsk((card, host, focus) => {
+    if (!card || !host) { focusedPanel?.dispose(); focusedPanel = null; scope = currentScope(); showScope(); return; }
+    const next = scopeOfCard(card);
+    if (!next || next.kind === 'folder') { host.hidden = true; return; }
+    const refusal = next.kind === 'card' && card.dataset.view && !next.works[0]?.collection
+      ? 'Ask cannot yet read source-query results or static content. Ask about a records part or the app instead.' : '';
+    if (focusedPanel) focusedPanel.setScope(next, refusal);
+    else focusedPanel = mountAskPanel(host, next, refusal);
+    scope = next; showScope();
+    if (focus) { host.hidden = false; focusedPanel.focus(); }
   });
 }

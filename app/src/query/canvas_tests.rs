@@ -102,13 +102,23 @@ async fn anonymous_forged_and_pre_access_requests_get_the_uniform_404_and_run_no
     let group = format!("/v1/canvas/works/{APP}/{WORK}");
     for headers in [
         vec![],
-        vec![("cookie", "__Host-genui_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")],
-        vec![("cookie", "__Host-genui_pre=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")],
+        vec![(
+            "cookie",
+            "__Host-genui_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        )],
+        vec![(
+            "cookie",
+            "__Host-genui_pre=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        )],
     ] {
         assert!(uniform_404(&send(&app, "/canvas", &headers).await));
-        assert!(uniform_404(&send(&app, "/canvas?intent=spend", &headers).await));
+        assert!(uniform_404(
+            &send(&app, "/canvas?intent=spend", &headers).await
+        ));
         assert!(uniform_404(&send(&app, &group, &headers).await));
-        assert!(uniform_404(&send(&app, "/v1/canvas/works/%FF/x", &headers).await));
+        assert!(uniform_404(
+            &send(&app, "/v1/canvas/works/%FF/x", &headers).await
+        ));
     }
     // Other methods are the fallback's uniform 404 too.
     let post = app
