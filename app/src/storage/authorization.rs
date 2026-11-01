@@ -628,6 +628,11 @@ impl<'r> Permit<'_, 'r> {
     pub(super) fn transaction(&self) -> &Transaction<'r> {
         self.transaction
     }
+    /// Rechecks the wall-clock entitlement after an additional wait while
+    /// this permit still holds the membership/epoch fence.
+    pub(super) async fn recheck_entitlement(&self) -> Result<()> {
+        self.transaction.entitlement(self.request).await
+    }
     /// A further permission of the same member, re-read after the fence (for
     /// example `source_read` on each source a saved work binds).
     pub(super) async fn also(&self, action: Action, resource: Resource<'_>) -> Result<()> {

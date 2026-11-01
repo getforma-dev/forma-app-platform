@@ -1,6 +1,6 @@
-# Six-phase delivery roadmap
+# Delivery roadmap
 
-The workspace preparation is complete. Application implementation is organized into seven phases, with 88 tickets and 13 sprints ([ADR-010](../architecture/ADR-010-NOV-2-MVP-CUT.md) added PH07 and APP-082–088 for the November 2 MVP cut). **GenUI** owns the application; **FormaStack** owns the four upstream handoff items. No phase has started or passed its implementation gate yet.
+The original six-phase platform design remains the long-term plan. The authoritative board now also carries PH07 (post-MVP completion) and PH08 (the November 2 product pivot). Implementation has progressed substantially; phase completion still requires its recorded gate. Use [DIRECTION.md](DIRECTION.md), [first-run](first-run/README.md) and the [November 1 review](PIVOT-REVIEW-2026-11-01.md) for current work, not the historical first-ticket queue. **GenUI** owns the application; **FormaStack** owns framework and identity-provider contracts. Counts and individual statuses come from the generated board rather than a second handwritten inventory.
 
 | Phase | Sprints | Tickets | What we will have at the end |
 |---|---|---|---|
@@ -12,11 +12,13 @@ The workspace preparation is complete. Application implementation is organized i
 | [6 — Qualification and pilot learning](../../Tickets/phases/PH06.md) | S12 | APP-067–072, APP-079 (7) | Measured release readiness, a controlled real-data pilot, and observed customer reuse |
 | [7 — Post-MVP completion](../../Tickets/phases/PH07.md) | S13 | APP-082–086 (5) | Every acceptance sentence and review residual deferred by ADR-010 for the November 2 MVP is proven or dispositioned |
 
+| [8 — November 2 product pivot](../../Tickets/phases/PH08.md) | S14 | Current PH08 ticket list | A clean first-member workflow, coherent app page and real sharing; retain earlier seeded rehearsal as development evidence |
+
 The maintained [phase board](../../Tickets/PHASES.md) shows progress. Each phase page contains entry requirements, deliverables, checks and evidence gates, applicable FormaStack blockers and its ordered tickets. [Sprints](../../Tickets/SPRINTS.md) divide the phase into smaller batches; [categories](../../Tickets/CATEGORIES.md) group ownership. `Tickets/plan.json` owns phase definitions; ticket Markdown owns individual work status.
 
 ## Execution and completion
 
-Start PH01 with APP-001. Select work by its actual dependencies. Independent eligible tickets may begin while another phase's integration gate waits; this does not pass that gate or waive a required check. Phase acceptance remains sequential and requires ticket completion plus reviewed evidence.
+For the active pivot, follow the app-page sequence and first-run dependencies in DIRECTION.md. Select the later platform work by its actual dependencies. Independent eligible tickets may begin while another phase's integration gate waits; this does not pass that gate or waive a required check. Phase acceptance remains sequential and requires ticket completion plus reviewed evidence.
 
 PH01 directly waited on FORMA-232's budget disposition, FORMA-246 native conformance and FORMA-247 hosted authentication; all three are cleared (FORMA-247 and FORMA-248 by founder disposition, [ADR-008](../architecture/ADR-008-YC-DEMO-AND-BETA-MVP.md)), and PH01's beta go-live trial waits on FORMA-366 (the qualified mail image). PH05 and PH06 wait on FORMA-365 (the deferred hosted identity, custody and rotation campaign) before real-organization identity readiness. Their scope and unblock evidence are in the [cross-team handoff](CROSS-TEAM-HANDOFF.md). Downstream local dependencies preserve these gates.
 

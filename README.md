@@ -20,11 +20,13 @@ Pitch personas are [Diego on 4001](http://127.0.0.1:4001/canvas), [Sarah on 4002
 
 ## Current work and delivery
 
-The November 2 pitch follows [ADR-011](docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md). Local code includes app creation, Ask/Shape, made cards and pins, imports, sharing and live updates. The [product guide](docs/pitch/GUIDE.md), [canvas rules](docs/pitch/CANVAS-RULES.md), [pitch script](docs/pitch/PITCH-SCRIPT.md) and [recording checklist](docs/pitch/RECORDING.md) describe their behavior and demo limits.
+The November 1 [clean first-run decision](docs/planning/first-run/README.md) supersedes the seeded November 2 rehearsal: invite a new member into an empty organization, create one app, save a real record, and share with a recipient who signs up from that share. Only the recording has a three-minute cap. Synthetic input data is allowed; ingestion, admission, persistence, identity and sharing must be real.
+
+Read the [November 1 review](docs/planning/PIVOT-REVIEW-2026-11-01.md) for the design history, Grok PR inventory, fixes and remaining delivery gaps, then [DIRECTION.md](docs/planning/DIRECTION.md) for implementation order. App-page work on open branches is not shipped behavior. The [product guide](docs/pitch/GUIDE.md), [canvas rules](docs/pitch/CANVAS-RULES.md), [pitch script](docs/pitch/PITCH-SCRIPT.md) and [recording checklist](docs/pitch/RECORDING.md) retain the seeded rehearsal; use the [clean recording outline](docs/planning/first-run/RECORDING.md) for the current trial.
 
 Beta and local source are separate states. The latest **recorded** beta deploy is `3901992`, TaskDefinition 12, on October 31; [RELEASES.md](docs/pitch/RELEASES.md) is the history, not a fresh AWS observation. Later local changes are not deployed just because they are merged. Every AWS mutation follows the [deploy runbook](docs/pitch/DEPLOY-RUNBOOK.md) and Victor's approval for that action. A production environment does not yet exist. The `getforma.dev` website on OVH is a separate repository and pipeline.
 
-The [October 31 continuation record](docs/planning/CONTINUATION-2026-10-31.md) records remaining technical work. [APP-007 foundation evidence](evidence/APP-007/managed/README.md) preserves an earlier stage; its stopped-service and incomplete-runtime observations are historical, not the current operating instructions. The pitch does not close the unfinished [Phase 1 gate](evidence/phases/PH01/GATE.md) or later platform obligations.
+The [October 31 continuation record](docs/planning/CONTINUATION-2026-10-31.md) preserves the pre-pivot backlog; the November 1 direction controls the current trial. [APP-007 foundation evidence](evidence/APP-007/managed/README.md) preserves an earlier stage; its stopped-service and incomplete-runtime observations are historical, not the current operating instructions. The pitch does not close the unfinished [Phase 1 gate](evidence/phases/PH01/GATE.md) or later platform obligations.
 
 ## Find the owner
 

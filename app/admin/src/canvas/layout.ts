@@ -2,6 +2,7 @@
 // kept in this browser's localStorage per app/work. No data, receipt or
 // parameter is stored, and nothing here reaches the server. Storage that is
 // unavailable (private mode, blocked site data) just means the default layout.
+import { storedPageSize } from './page';
 import { isUuid } from './render';
 
 export type ItemLayout = { x: number; y: number; width?: number; height?: number; z?: number; manualScale?: number };
@@ -128,10 +129,19 @@ export function saveStacks(member: string, stacks: StoredStack[]): void {
   if (/^[0-9a-f]{16}$/.test(member)) write(stacksKey(member), stacks.slice(-MAX_FRAMES));
 }
 
-// APP-106 unite frames (DS-67): per member in this browser, the works shown
-// as one assembled frame, the frame's position and each card's position before
-// the unite (for "Break apart"). Ids and numbers only.
-export type StoredUnite = { work: string; app: string; x: number; y: number; previous: Record<string, { x: number; y: number }> };
+// APP-106 unite frames, and APP-142 the page (DS-67): per member in this
+// browser, the works open as a page, the page's position and size, and each
+// part's position before the page opened (for fan-out). Ids and numbers only.
+// A record written before size was stored still loads.
+export type StoredUnite = {
+  work: string;
+  app: string;
+  x: number;
+  y: number;
+  previous: Record<string, { x: number; y: number }>;
+  width?: number;
+  height?: number;
+};
 const unitedKey = (member: string) => `forma.canvas.united.v1:${member}`;
 export function loadUnited(member: string): StoredUnite[] {
   if (!/^[0-9a-f]{16}$/.test(member)) return [];
@@ -145,7 +155,8 @@ export function loadUnited(member: string): StoredUnite[] {
     for (const [id, spot] of Object.entries(entry.previous).slice(-MAX_CARDS)) {
       if (CARD.test(id) && spot && finite(spot.x) && finite(spot.y)) previous[id] = { x: spot.x, y: spot.y };
     }
-    return [{ work: entry.work, app: entry.app, x: entry.x, y: entry.y, previous }];
+    const size = storedPageSize(entry.width, entry.height);
+    return [{ work: entry.work, app: entry.app, x: entry.x, y: entry.y, previous, ...size }];
   });
 }
 export function saveUnited(member: string, united: StoredUnite[]): void {

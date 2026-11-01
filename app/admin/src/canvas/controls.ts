@@ -18,8 +18,9 @@
 // - APP-122: ⋯ → Ask about this (the selected card) and ⋯ → Shape… (a card,
 //   an app card or frame, a widget: `/shape <address> ` in the bar), through
 //   hooks the Ask and Shape modules set (`setTalkActions`);
-// - APP-106: F focuses the selected card (`focus.ts`), U unites its app and
-//   Shift + U breaks it apart (`unite.ts`); the toolbar menu has both;
+// - APP-106 / APP-142: F focuses the selected card (`focus.ts`), U opens its
+//   app as a page and Shift + U fans that page out (`unite.ts`); the toolbar
+//   menu has both;
 // - a selected stack: ← / → leaf through it, Enter fans it out;
 // - touch: one finger on the empty canvas pans (the vendor's), two fingers
 //   pinch to zoom; Safari's trackpad gesture events zoom too.
@@ -39,7 +40,7 @@ import { focusFromItem, isFocusOpen } from './focus';
 import { isModalOpen } from './box-viewer';
 import { isNoteItem, newNote, removeNoteItem } from './notes';
 import { toggleTimings } from './timing';
-import { frameCardsOfItem, isUniteItem, splitFromItem, uniteFromItem } from './unite';
+import { dismissPageShare, frameCardsOfItem, isUniteItem, splitFromItem, uniteFromItem } from './unite';
 import { primeAsk } from './address-chip';
 
 /** APP-122: what ⋯ → Ask about this and ⋯ → Shape… do with the chosen item (set by `talk.ts`). */
@@ -251,6 +252,10 @@ export function onKey(event: KeyboardEvent): void {
     return;
   }
   if (event.key === 'Escape') {
+    if (dismissPageShare(documentRef)) {
+      event.preventDefault();
+      return;
+    }
     if (!typing && collapseAll()) {
       event.preventDefault();
       return;
@@ -294,7 +299,7 @@ export function onKey(event: KeyboardEvent): void {
   }
   // Inside the library pane and the toolbar, keys belong to their controls.
   if ((event.target as Element | null)?.closest?.('#cv-library, .cv-tools, .cv-dock')) return;
-  // APP-106: F focus, U unite, Shift + U break apart.
+  // APP-106 / APP-142: F focus, U opens the page, Shift + U fans it out.
   if (key === 'f' && !event.shiftKey) {
     event.preventDefault();
     focusSelected();

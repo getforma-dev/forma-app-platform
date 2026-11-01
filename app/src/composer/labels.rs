@@ -99,6 +99,7 @@ pub const VERBS: &[&str] = &[
     "keys",
     "notes",
     "break",
+    "fan",
     "storage",
     "box",
     "boxes",
@@ -624,7 +625,7 @@ mod tests {
         }
         // The canvas's verb aliases (review finding 4).
         for alias in [
-            "agents", "mcp", "keys", "notes", "break", "storage", "box", "boxes", "folders",
+            "agents", "mcp", "keys", "notes", "break", "fan", "storage", "box", "boxes", "folders",
         ] {
             assert!(VERBS.contains(&alias), "{alias}");
         }

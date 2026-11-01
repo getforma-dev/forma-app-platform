@@ -1,0 +1,15 @@
+{
+  "scope": "Local clean persona; real model and audited record, no hosted signup or billing",
+  "checks": [
+    "fresh profile has no library apps and demo mode is off",
+    "cancelled create makes no compose request",
+    "create requests generation and real model returns admitted generated work"
+  ],
+  "demoMode": "",
+  "composeStatus": 200,
+  "app": "00000000-0000-4000-8000-00000000d0a4",
+  "work": "06b2bef1-4654-46aa-ae8d-d3b38a9a28e7",
+  "modelDurationMs": 7149,
+  "status": "failed",
+  "failure": "TimeoutError: locator.click: Timeout 12000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-lib-open]')\u001b[22m\n"
+}

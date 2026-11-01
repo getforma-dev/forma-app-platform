@@ -14,9 +14,13 @@ This note classifies the board. It does not move tickets, close a phase, or dele
 4. The member shares that work. The recipient does not already have an account. Accepting the share is what makes them sign up and sign in. They arrive with no other apps, and this shared app is the one both members work from. A stranger gets the uniform 404. Today's `share_work` still refuses a grantee who is not already an active member of the organization (`app/src/storage/sharing.rs`). Closing that gap is part of APP-139.
 5. The evidence is a sanitized click log, plus a recording of this same path that stays within three minutes. No credential, invite token, or model key. The try-it link is not cut to fit the recording.
 
-## The hole
+## Review and recording
 
-A generated or rule-built definition is published onto an app the member already owns, with `edit_definition` and `run` (`app/src/storage/composer.rs`, `choose_authoring`). The clean dev stand creates that shell with `create-app` before the persona signs in (`app/src/dev/db.rs`). An invitation does not. A new member of an empty organization therefore has no authoring app, and compose answers `no_authoring_app` (`app/src/boxes/routes.rs`). That is the first slice of APP-139. It is not a new permission model, a server-side layout store, or a second demo mode.
+The [November 1 review](../PIVOT-REVIEW-2026-11-01.md) distinguishes trunk, open implementations and local repairs. The [recording outline](RECORDING.md) budgets 180 seconds and lists the real-path acceptance needed before recording. “Paid user” describes the intended customer experience; this trial does not implement or prove billing. Synthetic rows are allowed, but every shown row must actually be imported or committed through the product.
+
+## First authoring transition
+
+At the start of the pivot, a generated definition could only publish onto an app the member already owned. APP-145 now separates read-only context from explicit compose preparation and creates the first owned shell when needed, under the existing identity/entitlement fence. Publication still requires the provisioned space and owner-publish policy. The clean dev stand's operator-created shell hides that transition; APP-139 must verify an actually new member after provider signup/sign-in. PR 25 and the [pivot review](../PIVOT-REVIEW-2026-11-01.md) carry implementation, tests and delivery status. This is not a new demo mode or a server-side layout store.
 
 ## Two machines, not one canvas
 

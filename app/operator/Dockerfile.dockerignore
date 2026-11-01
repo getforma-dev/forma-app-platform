@@ -32,6 +32,7 @@
 !app/migrations/0013_agent_governance.sql
 !app/migrations/0014_labels.sql
 !app/migrations/0015_member_cards.sql
+!app/migrations/0016_authoring_shell.sql
 !app/migrations/0009_slack_links.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
@@ -50,6 +51,7 @@
 !app/migrations/catalog-v13.json
 !app/migrations/catalog-v14.json
 !app/migrations/catalog-v15.json
+!app/migrations/catalog-v16.json
 !app/certs/rds-global-bundle.pem
 !contracts/validate.py
 !contracts/schema.json

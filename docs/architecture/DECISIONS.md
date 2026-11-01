@@ -2,6 +2,8 @@
 
 Prepared 2026-10-28. This record turns the delivered designs into implementation guidance. It does not claim that the app exists, that a spike passed, or that cloud resources have been provisioned. No runtime scaffold is created during repository preparation.
 
+Current November 1 product direction is the [clean-trial amendment to ADR-011](ADR-011-NOV-2-EMERGENCY-PIVOT.md) and [DIRECTION.md](../planning/DIRECTION.md). The preparation observations below retain their original date; they do not describe current implementation status.
+
 ## Source precedence
 
 1. The user's current instructions establish released Forma 3.2 implementation and the invite-first public beta direction recorded in [ADR-003](ADR-003-PUBLIC-BETA-ACCESS.md). New explicit instructions amend preparation assumptions; they do not fabricate completed runtime evidence.

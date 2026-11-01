@@ -21,9 +21,10 @@ reports="$root/.cache/reports"
 # name|CI source|command (run with bash -c from the repository root)
 steps=(
   "fmt|tenant-foundation.yml|cargo fmt --check -p forma-app-platform"
+  # RustEmbed in the service and campaign tests requires this checkout's assets.
+  "admin|foundation.yml (before RustEmbed consumers)|npm --prefix app/admin run typecheck && npm --prefix app/admin test && npm --prefix app/admin run build"
   "clippy|tenant-foundation.yml|cargo clippy --locked -p forma-app-platform --all-targets -- -D warnings"
   "clippy-dev|ADR-012 D12.1 (the dev binary)|cargo clippy --locked -p forma-app-platform --all-targets --features dev-stand -- -D warnings"
-  "admin|tenant-foundation.yml, foundation.yml (before SSR tests)|npm --prefix app/admin run typecheck && npm --prefix app/admin run build"
   "test|foundation.yml (library, binary SSR, doctests)|cargo test --locked -p forma-app-platform"
   "http-smoke|foundation.yml (native public entry and security)|cargo build --locked -p forma-app-platform --bin forma-app-platform && $py app/runtime/smoke_http.py --binary target/debug/forma-app-platform"
   "msrv|tenant-foundation.yml|cargo +1.85.0 check --locked -p forma-app-platform --lib --tests"

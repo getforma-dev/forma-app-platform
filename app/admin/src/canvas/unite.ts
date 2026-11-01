@@ -1,33 +1,39 @@
-// APP-106 Unite (Victor: "a unite view like the power rangers when they
-// unite. So the whole app assembles?"). An app's cards fly together into one
-// bordered frame, the app's own composed layout, and break apart again.
+// APP-106 Unite, and APP-142 the page. An app's cards fly together into one
+// page. The parts stay that page until the member fans them out.
 //
 // - Start: the app card's "Unite", the library pane's app row, `/unite <app>`,
 //   U with a card of the app selected, or the toolbar menu. Cards of the app
-//   that are not on the canvas yet are brought in; cards in a stack leave it.
+//   that are not on the canvas yet are brought in. A stack is left alone:
+//   selecting the stack does not open a page. A card of the app that sits in
+//   a stack still leaves that stack, because the page is the app, not a pile.
 // - Layout: computed here, with no model, from the app's definition order
 //   (the board keeps the group's cards as the server lists them: the app card,
 //   the views in declared order, then the command forms, records and ledger)
 //   into a fixed arrangement: a KPI row (summary views), the primary visual
 //   (the first chart, else the first table), the detail tables, and a side
 //   panel with the app card, the forms and the records. At phone width the
-//   frame is one column.
+//   page is one column.
 // - Identity: every card element is moved, never rebuilt, so receipts, form
 //   drafts, open details, scroll positions and live updates survive (the
 //   board runs and refreshes every card that is not parked, wherever it is).
 // - Motion: a staggered fly-in (FLIP, about 600–800 ms) in world coordinates,
 //   so the camera can move at the same time; with prefers-reduced-motion, a
 //   short cross-fade.
-// - Break apart: the frame's "Break apart", `/split <app>` or Shift+U returns
-//   every card to the spot it had before the unite.
-// - A frame is one canvas item (it moves as one) and is kept per member in
-//   this browser (DS-06/DS-67): the work, the frame's spot and each card's
-//   previous spot.
+// - Focus opens one part. Closing it returns that part to the page.
+// - Fan-out is the only action that puts the parts back on the board: the
+//   page's "Fan out", `/fan`, `/split`, or Shift+U. Each part returns to the
+//   spot it had before the page opened.
+// - The corner drag resizes the page, down to the header and one part and up
+//   to the viewport. The size is this browser's layout, with the position.
+// - Share on the page shares the app's saved work. It does not share a card.
+// - A page is one canvas item (it moves as one) and is kept per member in
+//   this browser (DS-06/DS-67).
 import { createCanvasItem } from '../canvas-vendor/index';
 import { addCards, GAP, onLayoutSaved, setUniteHooks, SLOT_WIDTH, stackBoard as board } from './board';
 import { loadUnited, saveUnited } from './layout';
 import { findApps } from './library';
-import { el, originKind } from './render';
+import { appShareRequest, pageSize } from './page';
+import { el, isUuid, originKind } from './render';
 import { registerCommands, registerCompleter, type Completion } from './slash';
 import { collapseAll, releaseCards, stackCardsOf } from './stacks';
 
@@ -91,7 +97,16 @@ function save(): void {
   if (!canvas || !restored) return;
   saveUnited(board.member(), Array.from(frames.values(), (frame) => {
     const state = canvas.getItemState(frame.item);
-    return { work: frame.work, app: frame.app, x: state.x, y: state.y, previous: Object.fromEntries(frame.previous) };
+    const sized = frame.root.classList.contains('is-sized');
+    const height = Number.parseFloat(frame.item.style.height);
+    return {
+      work: frame.work,
+      app: frame.app,
+      x: state.x,
+      y: state.y,
+      previous: Object.fromEntries(frame.previous),
+      ...(sized && Number.isFinite(height) ? { width: state.width, height } : {}),
+    };
   }));
 }
 
@@ -121,19 +136,21 @@ function buildFrame(document_: Document, work: string, title: string, origins: s
   const head = el(document_, 'header', { class: 'cv-unite-head', 'data-canvas-drag-handle': '' },
     el(document_, 'span', { class: 'cv-unite-mark', 'aria-hidden': 'true' }),
     el(document_, 'div', { class: 'cv-unite-heading' },
-      el(document_, 'h2', { class: 'cv-unite-title' }, title),
+      el(document_, 'h2', { class: 'cv-unite-title', title }, title),
       el(document_, 'p', { class: 'cv-origins cv-unite-origins', 'aria-label': 'How this app was assembled' },
         ...origins.map((text) => el(document_, 'span', { class: 'cv-origin', 'data-origin': originKind(text) }, text)))),
     el(document_, 'span', { class: 'cv-unite-count', 'data-unite-count': '' }),
-    el(document_, 'div', { class: 'cv-unite-actions', role: 'group', 'aria-label': 'Frame' },
-      el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-focus': '', title: 'Focus the first card · F' }, 'Focus'),
-      el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-split': '', title: 'Break apart · Shift+U' }, 'Break apart')));
-  return el(document_, 'article', { class: 'cv-unite', 'data-unite': work, 'data-kind': 'unite', 'aria-label': `${title}, united` },
+    el(document_, 'div', { class: 'cv-unite-actions', role: 'group', 'aria-label': 'Page' },
+      el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-focus': '', title: 'Focus a part · F' }, 'Focus'),
+      el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-share': '', title: 'Share this app' }, 'Share'),
+      el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-split': '', title: 'Fan out · Shift+U' }, 'Fan out')));
+  return el(document_, 'article', { class: 'cv-unite', 'data-unite': work, 'data-kind': 'unite', 'aria-label': title },
     head,
     el(document_, 'div', { class: 'cv-unite-grid' },
       el(document_, 'div', { class: 'cv-unite-kpis', 'data-slot': 'kpi' }),
       el(document_, 'div', { class: 'cv-unite-main', 'data-slot': 'main' }),
-      el(document_, 'div', { class: 'cv-unite-side', 'data-slot': 'side' })));
+      el(document_, 'div', { class: 'cv-unite-side', 'data-slot': 'side' })),
+    el(document_, 'button', { type: 'button', class: 'cv-unite-resize', 'data-unite-resize': '', 'aria-label': 'Resize the page', title: 'Drag to resize this page' }));
 }
 
 /** Puts the cards in their slots; returns them in reading order and the frame's width. */
@@ -143,23 +160,30 @@ function fill(root: HTMLElement, cards: HTMLElement[]): { order: HTMLElement[]; 
   slot('kpi').replaceChildren(...kpi);
   slot('main').replaceChildren(...main);
   slot('side').replaceChildren(...side);
-  const single = phone();
-  const both = main.length > 0 && side.length > 0;
+  const width = phone() ? PHONE : main.length && side.length ? WIDE : NARROW;
+  layoutPage(root, width);
+  const count = root.querySelector('[data-unite-count]');
+  if (count) count.textContent = `${cards.length} ${cards.length === 1 ? 'part' : 'parts'}`;
+  return { order: [...kpi, ...main, ...side], width };
+}
+
+/** Reflow the existing parts when this page narrows, independently of the browser. */
+function layoutPage(root: HTMLElement, width: number): void {
+  const has = (slot: string) => Boolean(root.querySelector(`[data-slot="${slot}"]`)?.childElementCount);
+  const single = width <= NARROW;
+  const both = has('main') && has('side');
   const grid = root.querySelector<HTMLElement>('.cv-unite-grid')!;
   const columns = !single && both;
   grid.style.gridTemplateColumns = columns ? 'minmax(0, 1.55fr) minmax(0, 1fr)' : 'minmax(0, 1fr)';
   const rows: string[] = [];
-  if (kpi.length) rows.push(columns ? '"kpi kpi"' : '"kpi"');
+  if (has('kpi')) rows.push(columns ? '"kpi kpi"' : '"kpi"');
   if (columns) rows.push('"main side"');
   else {
-    if (main.length) rows.push('"main"');
-    if (side.length) rows.push('"side"');
+    if (has('main')) rows.push('"main"');
+    if (has('side')) rows.push('"side"');
   }
   grid.style.gridTemplateAreas = rows.join(' ');
   root.classList.toggle('is-single', single);
-  const count = root.querySelector('[data-unite-count]');
-  if (count) count.textContent = `${cards.length} ${cards.length === 1 ? 'card' : 'cards'}`;
-  return { order: [...kpi, ...main, ...side], width: single ? PHONE : columns ? WIDE : NARROW };
 }
 
 /** A card's box in world coordinates, measured through the canvas item that holds it. */
@@ -225,31 +249,200 @@ function syncAppButton(cards: HTMLElement[], united: boolean): void {
   for (const card of cards) {
     const button = card.querySelector<HTMLElement>('[data-unite-app]');
     if (!button) continue;
-    button.textContent = united ? 'Break apart' : 'Unite';
-    button.title = united ? 'Break apart · Shift+U: every card back where it was' : 'Unite · U: assemble this app’s cards into one frame';
+    button.textContent = united ? 'Fan out' : 'Unite';
+    button.title = united ? 'Fan out · Shift+U: the parts return to the board' : 'Unite · U: open this app as a page';
   }
+}
+
+function syncLibrary(work: string, united: boolean): void {
+  const button = documentRef?.querySelector<HTMLElement>(`.cv-lib-app[data-work="${CSS.escape(work)}"] [data-lib-unite]`);
+  if (!button) return;
+  button.textContent = united ? 'Fan out' : 'Unite';
+  button.title = united ? 'Fan out: return the parts to the board' : 'Unite: open this app as a page';
+}
+
+function viewportWorld(): { width: number; height: number } {
+  const zoom = board.canvas()?.getCamera().zoom || 1;
+  const view = documentRef?.querySelector<HTMLElement>('[data-forma-canvas-viewport]');
+  return {
+    width: (view?.clientWidth ?? 0) / zoom,
+    height: (view?.clientHeight ?? 0) / zoom,
+  };
+}
+
+/** The page's window. Size is applied after mount: the canvas ignores a restored width until then. */
+function applySize(item: HTMLElement, width: number, height: number): void {
+  const canvas = board.canvas();
+  if (!canvas) return;
+  const size = pageSize({ width, height }, viewportWorld());
+  canvas.resizeItem(item, size.width, size.height);
+  item.style.height = `${Math.round(size.height)}px`;
+  item.style.overflow = 'hidden';
+  const root = item.querySelector<HTMLElement>('.cv-unite');
+  if (root) {
+    root.classList.add('is-sized');
+    layoutPage(root, size.width);
+  }
+}
+
+/** Corner drag. The press stays here so the page header does not start a move. */
+function bindResize(document_: Document): void {
+  document_.addEventListener('pointerdown', (event) => {
+    const handle = (event.target as Element | null)?.closest<HTMLElement>('[data-unite-resize]');
+    if (!handle || event.button !== 0) return;
+    const frame = frames.get(handle.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
+    const canvas = board.canvas();
+    if (!frame || !canvas) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const pointer = event.pointerId;
+    try {
+      handle.setPointerCapture(pointer);
+    } catch {
+      // The move is still followed on the document when capture is unavailable.
+    }
+    const origin = canvas.getItemState(frame.item);
+    const startHeight = frame.item.offsetHeight;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointer) return;
+      const zoom = canvas.getCamera().zoom || 1;
+      applySize(frame.item, origin.width + (ev.clientX - startX) / zoom, startHeight + (ev.clientY - startY) / zoom);
+    };
+    const end = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointer) return;
+      document_.removeEventListener('pointermove', move);
+      document_.removeEventListener('pointerup', end);
+      document_.removeEventListener('pointercancel', end);
+      save();
+    };
+    document_.addEventListener('pointermove', move);
+    document_.addEventListener('pointerup', end);
+    document_.addEventListener('pointercancel', end);
+  }, true);
+}
+
+type Member = { id: string; label: string };
+
+async function loadMembers(): Promise<Member[] | null> {
+  try {
+    const response = await fetch('/v1/members', {
+      credentials: 'same-origin',
+      headers: { accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!response.ok) return null;
+    const body: unknown = await response.json();
+    const rows = (body as { members?: unknown } | null)?.members;
+    if (!Array.isArray(rows)) return null;
+    const members: Member[] = [];
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue;
+      const entry = row as { principal_id?: unknown; label?: unknown };
+      const label = typeof entry.label === 'string' ? entry.label.trim().slice(0, 80) : '';
+      if (!isUuid(entry.principal_id) || !label) continue;
+      members.push({ id: entry.principal_id, label });
+    }
+    return members;
+  } catch {
+    return null;
+  }
+}
+
+async function shareApp(frame: Frame, grantee: string, label: string): Promise<string> {
+  const request = appShareRequest(frame.app, frame.work, grantee);
+  if (!request) return 'The share could not be sent.';
+  try {
+    const response = await fetch(request.url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: request.body,
+    });
+    if (response.ok) return `Shared ${frame.title} with ${label}.`;
+    if (response.status === 404) return 'The share was refused.';
+    return 'The share could not be sent.';
+  } catch {
+    return 'The share could not be sent.';
+  }
+}
+
+function closeShareMenus(): void {
+  documentRef?.querySelectorAll('.cv-unite-share').forEach((node) => node.remove());
+}
+
+/** Escape closes the page's share menu before the library. True when a menu was open. */
+export function dismissPageShare(document_: Document): boolean {
+  const menu = document_.querySelector('.cv-unite-share');
+  if (!menu) return false;
+  menu.remove();
+  return true;
+}
+
+async function toggleShare(button: HTMLElement): Promise<void> {
+  const frame = frames.get(button.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
+  const actions = button.closest('.cv-unite-actions');
+  if (!frame || !actions || !documentRef) return;
+  const existing = actions.querySelector('.cv-unite-share');
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  closeShareMenus();
+  const menu = el(documentRef, 'div', { class: 'cv-unite-share', role: 'menu', 'aria-label': 'Share this app' });
+  actions.append(menu);
+  // A short page clips its children. Keep the member list in the remaining
+  // page space and let it scroll, including at the minimum window size.
+  const bounds = frame.root.getBoundingClientRect();
+  const scale = bounds.width / frame.root.offsetWidth || 1;
+  const room = (bounds.bottom - menu.getBoundingClientRect().top) / scale - 12;
+  menu.style.maxHeight = `${Math.max(48, Math.min(240, room))}px`;
+  const members = await loadMembers();
+  if (!menu.isConnected || !documentRef) return;
+  if (members === null) {
+    menu.append(el(documentRef, 'p', { class: 'cv-unite-share-note' }, 'The member list could not be loaded.'));
+    return;
+  }
+  if (!members.length) {
+    menu.append(el(documentRef, 'p', { class: 'cv-unite-share-note' }, 'No one else is in this organization yet.'));
+    return;
+  }
+  for (const member of members) {
+    menu.append(el(documentRef, 'button', {
+      type: 'button', role: 'menuitem', 'data-unite-grantee': member.id,
+    }, member.label));
+  }
+}
+
+/** Fan-out while a part is in focus puts that part back on the page first. */
+function releaseFocus(frame: Frame): void {
+  const open = documentRef?.querySelector<HTMLElement>('#cv-focus .cv-card[data-card]');
+  const id = open?.dataset.card ?? '';
+  if (!id || !frame.cards.includes(id)) return;
+  documentRef?.querySelector<HTMLElement>('[data-focus-close]')?.click();
 }
 
 /**
  * Assembles the app's cards into its frame. `restore` rebuilds a kept frame
  * quietly (no fetch, no motion, no camera).
  */
-export async function unite(app: string, work: string, restore?: { at: Spot; previous: Map<string, Spot> }): Promise<string> {
+export async function unite(app: string, work: string, restore?: { at: Spot; previous: Map<string, Spot>; width?: number; height?: number }): Promise<string> {
   const canvas = board.canvas();
-  if (!canvas || !documentRef) return 'Nothing was united.';
+  if (!canvas || !documentRef) return 'Nothing was opened.';
   const existing = frames.get(work);
   if (existing) {
     canvas.centerItem(existing.item);
     board.flash(existing.item);
-    return `${existing.title} is already united.`;
+    return `${existing.title} is already open. Shift+U fans it out.`;
   }
   if (!restore) {
     collapseAll();
     await addCards(app, work, null, { focus: false });
-    if (frames.has(work)) return 'That app is already united.';
+    if (frames.has(work)) return 'That app is already open.';
   }
   const group = board.group(work);
-  if (!group) return 'That app could not be opened. Nothing was united.';
+  if (!group) return 'That app could not be opened.';
   // Where each card is now: its own item, or the stack that holds it.
   const before = new Map<HTMLElement, { x: number; y: number; width: number; height: number }>();
   const previous = new Map<string, Spot>(restore?.previous ?? []);
@@ -287,21 +480,28 @@ export async function unite(app: string, work: string, restore?: { at: Spot; pre
   const root = buildFrame(documentRef, work, group.title, group.origins);
   const { order, width } = fill(root, members);
   for (const restoreScroll of scrolls) restoreScroll();
-  const item = createCanvasItem({ instanceId: `unite-${work}`, displayName: `${group.title}, united`, preferredWidth: width, minHeight: 360, content: root, chrome: false });
+  const item = createCanvasItem({ instanceId: `unite-${work}`, displayName: group.title, preferredWidth: width, minHeight: 360, content: root, chrome: false });
   item.classList.add('cv-item', 'cv-item-unite');
   item.dataset.unite = work;
   canvas.mountItem(item, at, { focus: false });
+  // A tall app must keep its resize handle reachable; its parts scroll in
+  // the page from the first open, not only after the first corner drag.
+  const viewport = viewportWorld();
+  applySize(item,
+    restore?.width ?? Math.min(width, viewport.width * 0.8),
+    restore?.height ?? Math.min(item.offsetHeight, viewport.height * 0.6));
   for (const restoreScroll of scrolls) restoreScroll();
   const frame: Frame = { work, app, title: group.title, cards: order.map((card) => card.dataset.card ?? ''), item, root, previous };
   frames.set(work, frame);
   syncAppButton(members, true);
+  syncLibrary(work, true);
   board.pin(work);
   board.changed();
   save();
-  if (restore) return `${group.title} is united.`;
+  if (restore) return `${group.title} is open.`;
   fly(order, before, () => item);
   canvas.focusItem(item);
-  const message = `${group.title} united: ${order.length} ${order.length === 1 ? 'card' : 'cards'} in one frame.`;
+  const message = `${group.title} is open. ${order.length} ${order.length === 1 ? 'part' : 'parts'}.`;
   board.announce(message);
   return message;
 }
@@ -310,7 +510,8 @@ export async function unite(app: string, work: string, restore?: { at: Spot; pre
 export function breakApart(work: string): string {
   const canvas = board.canvas();
   const frame = frames.get(work);
-  if (!canvas || !frame) return 'That app is not united.';
+  if (!canvas || !frame) return 'That app is not open as a page.';
+  releaseFocus(frame);
   const frameState = canvas.getItemState(frame.item);
   const before = new Map<HTMLElement, { x: number; y: number; width: number; height: number }>();
   const cards: HTMLElement[] = [];
@@ -333,37 +534,37 @@ export function breakApart(work: string): string {
   });
   canvas.removeItem(frame.item, { selectFallback: false });
   syncAppButton(cards, false);
+  syncLibrary(work, false);
   board.pin(work);
   board.changed();
   save();
   fly(cards, before, (card) => items.get(card) ?? null);
-  const message = `${frame.title} broken apart: every card is back where it was.`;
+  const message = `${frame.title} is back on the board.`;
   board.announce(message);
   return message;
 }
 
-/** U on a selected item: the app of that card or stack (a frame is already united). */
+/** U on a selected card opens that app as a page. A stack is left alone. */
 export function uniteFromItem(item: HTMLElement | null): Promise<string> | string {
   if (!item) return 'Select a card of an app first, then press U.';
+  if (item.classList.contains('cv-item-stack')) return 'A stack stays a stack. Select a card of the app, then press U.';
   if (isUniteItem(item)) {
     const frame = frames.get(item.dataset.unite ?? '');
-    return frame ? `${frame.title} is already united. Shift+U breaks it apart.` : 'Nothing was united.';
+    return frame ? `${frame.title} is already open. Shift+U fans it out.` : 'Nothing was opened.';
   }
-  const id = item.classList.contains('cv-item-stack')
-    ? item.querySelector<HTMLElement>('.cv-stack-top > .cv-card')?.dataset.card ?? ''
-    : item.dataset.instanceId ?? '';
+  const id = item.dataset.instanceId ?? '';
   const found = id ? board.findCard(id) : null;
   if (!found) return 'Unite works on an app’s cards. Select one first.';
   return unite(found.group.app, found.group.work);
 }
 
-/** Shift+U on a selected item: breaks apart its frame, or the frame of its app. */
+/** Shift+U on a selected item fans out its page, or the page of its app. */
 export function splitFromItem(item: HTMLElement | null): string {
-  if (!item) return 'Select a united app first, then press Shift+U.';
+  if (!item) return 'Select a page first, then press Shift+U.';
   if (isUniteItem(item)) return breakApart(item.dataset.unite ?? '');
   const id = item.dataset.instanceId ?? '';
   const work = board.findCard(id)?.group.work ?? '';
-  return frames.has(work) ? breakApart(work) : 'That app is not united.';
+  return frames.has(work) ? breakApart(work) : 'That app is not open as a page.';
 }
 
 function clearBar(): void {
@@ -374,7 +575,7 @@ function clearBar(): void {
 const UNITE_COMMAND = {
   slug: 'unite',
   title: 'Unite an app',
-  purpose: 'Assemble every card of one app into its own frame',
+  purpose: 'Open every part of one app as one page',
   run: async (text: string, report: Report = () => undefined) => {
     const [app] = text.trim() ? findApps(text) : [];
     if (!app) {
@@ -388,13 +589,14 @@ const UNITE_COMMAND = {
 
 const SPLIT_COMMAND = {
   slug: 'split',
-  title: 'Break an app apart',
-  purpose: 'Return a united app’s cards to where they were',
-  aliases: ['break'],
+  title: 'Fan out',
+  purpose: 'Return each part of the page to where it was',
+  aliases: ['break', 'fan'],
+  usage: '/fan <app>',
   run: (text: string, report: Report = () => undefined) => {
     const united = findApps(text).filter((app) => frames.has(app.work));
     const work = united[0]?.work ?? (text.trim() ? '' : frames.size === 1 ? [...frames.keys()][0] ?? '' : '');
-    report(work ? breakApart(work) : text.trim() ? `${text.trim()} is not united.` : 'Name the united app: /split expense.');
+    report(work ? breakApart(work) : text.trim() ? `${text.trim()} is not open as a page.` : 'Name the page: /fan expense.');
     clearBar();
   },
 };
@@ -406,7 +608,7 @@ function completions(slug: string, onlyUnited: boolean): (rest: string) => Compl
     .map((app) => ({
       badge: app.number,
       title: app.title,
-      detail: `${app.cards.length} cards${frames.has(app.work) ? ' · united' : ''}`,
+      detail: `${app.cards.length} cards${frames.has(app.work) ? ' · open' : ''}`,
       value: `/${slug} ${app.slug || app.number}`,
     }));
 }
@@ -434,11 +636,12 @@ export function startUnite(document_: Document): void {
         }
         frame.cards = frame.cards.filter((id) => !out.includes(id));
         if (!frame.cards.length) {
+          syncLibrary(frame.work, false);
           board.canvas()?.removeItem(frame.item, { selectFallback: false });
           frames.delete(frame.work);
         } else {
           const count = frame.root.querySelector('[data-unite-count]');
-          if (count) count.textContent = `${frame.cards.length} ${frame.cards.length === 1 ? 'card' : 'cards'}`;
+          if (count) count.textContent = `${frame.cards.length} ${frame.cards.length === 1 ? 'part' : 'parts'}`;
         }
       }
       if (handled.length) save();
@@ -448,7 +651,11 @@ export function startUnite(document_: Document): void {
       restored = true;
       for (const row of loadUnited(board.member())) {
         if (!board.group(row.work)) continue;
-        void unite(row.app, row.work, { at: { x: row.x, y: row.y }, previous: new Map(Object.entries(row.previous)) });
+        void unite(row.app, row.work, {
+          at: { x: row.x, y: row.y },
+          previous: new Map(Object.entries(row.previous)),
+          ...(row.width !== undefined && row.height !== undefined ? { width: row.width, height: row.height } : {}),
+        });
       }
       save();
     },
@@ -456,6 +663,21 @@ export function startUnite(document_: Document): void {
   onLayoutSaved(save);
   document_.addEventListener('click', (event) => {
     const target = event.target as Element | null;
+    if (!target?.closest('.cv-unite-share, [data-unite-share]')) closeShareMenus();
+    const grantee = target?.closest<HTMLElement>('[data-unite-grantee]');
+    if (grantee) {
+      const frame = frames.get(grantee.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
+      const id = grantee.dataset.uniteGrantee ?? '';
+      const label = (grantee.textContent ?? '').trim();
+      grantee.closest('.cv-unite-share')?.remove();
+      if (frame) void shareApp(frame, id, label).then((message) => board.announce(message));
+      return;
+    }
+    const share = target?.closest<HTMLElement>('[data-unite-share]');
+    if (share) {
+      void toggleShare(share);
+      return;
+    }
     const split = target?.closest<HTMLElement>('[data-unite-split]');
     if (split) {
       breakApart(split.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
@@ -477,7 +699,9 @@ export function startUnite(document_: Document): void {
       if (phone()) documentRef?.querySelector<HTMLElement>('[data-lib-close]')?.click();
     }
   });
+  bindResize(document_);
   registerCommands([UNITE_COMMAND, SPLIT_COMMAND]);
   registerCompleter('unite', completions('unite', false));
   registerCompleter('split', completions('split', true));
+  registerCompleter('fan', completions('fan', true));
 }

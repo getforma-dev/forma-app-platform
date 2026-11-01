@@ -144,7 +144,7 @@ const KNOWN: Record<string, Meta> = {
   },
   arrange: { category: 'Arrange', args: [], examples: ['/arrange'] },
   unite: { category: 'Arrange', args: [arg('app', 'app', true)], examples: ['/unite expenses'] },
-  split: { category: 'Arrange', args: [arg('united app', 'app', true)], examples: ['/split expenses'] },
+  split: { category: 'Arrange', args: [arg('open page', 'app', true)], examples: ['/split expenses', '/fan expenses'] },
   focus: { category: 'Arrange', args: [arg('app.card or number', 'card')], examples: ['/focus', '/focus expenses.ledger'] },
   forma: {
     category: 'Make',

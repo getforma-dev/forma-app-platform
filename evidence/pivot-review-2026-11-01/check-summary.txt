@@ -1,0 +1,24 @@
+Command: just check
+Exit: 0
+Scope: combined local review candidate from c5b9452 plus PR22/25/26/27 and local repairs
+
+=== check summary
+  ok    fmt (1s)
+  ok    admin (7s)
+  ok    clippy (48s)
+  ok    clippy-dev (42s)
+  ok    test (38s)
+  ok    http-smoke (15s)
+  ok    msrv (10s)
+  ok    catalog (1s)
+  ok    infra (8s)
+  ok    py-scripts (5s)
+  ok    py-runtime (199s)
+  ok    py-qualification (1s)
+  ok    py-app-scripts (1s)
+  ok    py-ops (3s)
+  ok    py-infra (1s)
+  ok    schema-pins (0s)
+  ok    contracts (5s)
+  ok    board (0s)
+  ok    bash-n (0s)
