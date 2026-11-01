@@ -19,11 +19,15 @@ From the repository root:
 
 ```sh
 python3 -m venv contracts/.venv
-contracts/.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r contracts/requirements.lock
+contracts/.venv/bin/python -m pip install --require-hashes --only-binary=:all: \
+  -r contracts/requirements.lock -r spikes/APP-005/requirements.lock
 contracts/.venv/bin/python -m unittest discover -s contracts -p 'test_*.py' -v
 node contracts/verify_vectors.mjs
 contracts/.venv/bin/python contracts/lock.py check
+contracts/.venv/bin/python contracts/make_library.py --check
 ```
+
+`spikes/APP-005/requirements.lock` is only `duckdb==2.0.0`, the same hashed block as `app/runtime/requirements.lock`. `make_library.py` imports the library normalizer, and that normalizer imports DuckDB. `just setup` installs both locks into `contracts/.venv`. `just check contracts` runs the same four commands as Contract qualification. `--check` prints each stale path under `contracts/fixtures/library/` and does not rewrite the tree.
 
 When deliberately revising this edition before it lands, regenerate `schema.json` with `python3 contracts/schema.py`, regenerate synthetic examples with `contracts/.venv/bin/python contracts/make_fixtures.py`, rerun checks and update the lock with `contracts/.venv/bin/python contracts/lock.py write`. After the edition is in use, a compatibility change requires a new edition and review; changing a lock is not approval to reinterpret stored data.
 
@@ -81,7 +85,7 @@ The edition then found that one APP-113 rule refuses a definition stored on beta
 2. Beta's stored Expense claims revision could be superseded at a later window (option B), with Victor's word: a new revision and publication, then adoption. `seed-library` currently refuses on beta ("existing seed differs").
 3. Composer-generated definitions on beta are unverified against the authoring rules. A read-only check on beta needs Victor's word.
 4. The catalog's `edition` label (and `make_library.py` `EDITION`, `tenant_seed.py` `LIBRARY_EDITION`) still says `impl-2026-10-28.1`, although six library bundles use members that edition refuses.
-5. The Contract qualification workflow does not run the library (`make_library.py --check` needs DuckDB, which `contracts/requirements.lock` does not carry). It is a candidate for `just check` or CI.
+5. **Closed for the workflow.** Contract qualification and `just check contracts` run `make_library.py --check`. DuckDB stays out of `contracts/requirements.lock`. The job installs the existing `spikes/APP-005/requirements.lock` pin (`duckdb==2.0.0`, the same block as the runtime lock) beside the validator lock. The validator lock, retained editions and stored-definition verdict are unchanged.
 6. The lock binds the library CSVs only through the digests inside their bundles, not as artifacts.
 7. The amendment and authoring rules have no entries in `negative-vectors.json`; unit tests in `test_contracts.py` cover them. Rust parity rests on unit tests (`admission::tests::declared_guards_and_initial_values_match_validate_py`, `storage::rules`), not on shared vectors, and the JavaScript verifier does not judge guards.
 
