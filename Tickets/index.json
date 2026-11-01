@@ -4453,7 +4453,7 @@
       "Depends on": "APP-106, APP-120, APP-141",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "`pivot/app-142-page` implements the page. Not merged.",
+      "Branch / PR": "`pivot/app-142-page`, https://github.com/getforma-dev/forma-app-platform/pull/27. Not merged.",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
