@@ -287,9 +287,10 @@
         "APP-135",
         "APP-136",
         "APP-137",
-        "APP-138"
+        "APP-138",
+        "APP-139"
       ],
-      "ticket_count": 47,
+      "ticket_count": 48,
       "done_count": 1,
       "blocked_count": 0
     }
@@ -4333,6 +4334,36 @@
       "Blocked by": "None",
       "Unblock evidence": "Not applicable.",
       "dependencies": []
+    },
+    {
+      "id": "APP-139",
+      "title": "Guided first-run trial: a new member, an empty canvas, one app, one record, one share",
+      "path": "0-backlog/APP-139.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "139",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: a demo that opens on a canvas already in use does not count. The trial is a link a new paid user can try. The recorded video of that path cannot run past three minutes. The link is not on a timer. Record: [first-run](../../docs/planning/first-run/README.md).",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-074, APP-093, APP-095",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started. The classification is `pivot/first-run-trial`.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-074",
+        "APP-093",
+        "APP-095"
+      ]
     }
   ]
 }
