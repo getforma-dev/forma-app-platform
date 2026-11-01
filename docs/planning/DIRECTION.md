@@ -9,6 +9,6 @@ Start in this order:
 3. **APP-144.** That page is a real HTML page at its own address, rendered by us from the admitted app.
 4. **APP-143.** Ask about the app, the focused part, or the widget that was clicked.
 
-Before the description step in APP-141 can succeed for a brand-new member, APP-139 still has to give that member an authoring app. APP-140 is the clean world that member signs in to. Neither of those replaces the order above.
+Before the description step in APP-141 can succeed for a brand-new member, APP-145 creates one authoring shell for that member. APP-139 is the trial that uses it. APP-140 is the clean world they sign in to. None of those replaces the order above.
 
 Stacks, focus, and the folder stay as APP-104, APP-106, and APP-120 already define them. Detach-and-keep-data is not decided and is not a starting ticket.

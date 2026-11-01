@@ -293,9 +293,10 @@
         "APP-141",
         "APP-142",
         "APP-143",
-        "APP-144"
+        "APP-144",
+        "APP-145"
       ],
-      "ticket_count": 53,
+      "ticket_count": 54,
       "done_count": 1,
       "blocked_count": 0
     }
@@ -4513,6 +4514,34 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-142",
+        "APP-093"
+      ]
+    },
+    {
+      "id": "APP-145",
+      "title": "Give a new member one authoring shell so the first description can publish",
+      "path": "0-backlog/APP-145.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "AUT",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "145",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: a new member must be able to describe an app. The server creates one empty authoring shell for that member when they own none. This is the one exception to ADR-007 D7.3 for that case.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-093",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started. Recorded with the app-page direction.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
         "APP-093"
       ]
     }
