@@ -342,3 +342,15 @@ button, input, select, textarea { font: inherit; }
   .home-principles { grid-template-columns: 1fr; gap: 24px; margin-block: 40px 32px; }
   .home-principles h2 { margin-top: 10px; }
 }
+
+/* APP-144: the saved app as a document, including its admitted record forms. */
+.document-status { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 13px; color: var(--muted); margin-bottom: 28px; }
+.document-status button { min-height: 36px; padding: 6px 12px; }
+.document-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: 20px; }
+.document-form form { display: grid; gap: 16px; }
+.document-field, .document-field label { display: grid; gap: 6px; font-size: 13px; }
+.document-field input, .document-field select { width: 100%; }
+.document-form button { justify-self: start; }
+.document-form [role="status"] { margin: 0; font-size: 13px; }
+.document-records small { display: block; color: var(--muted); white-space: nowrap; }
+.work .receipt summary code { overflow-wrap: anywhere; }

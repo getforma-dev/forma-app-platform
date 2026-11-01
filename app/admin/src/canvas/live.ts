@@ -4,7 +4,7 @@
 // Nothing in an event is rendered; it only tells the board which cards to
 // re-run (through the governed query route) or which work to place (through
 // `GET /v1/canvas/works/{app}/{work}`, which re-authorizes).
-import { isUuid } from './render';
+import { isUuid } from './ids';
 
 export type LiveKind = 'record.committed' | 'app.shared' | 'app.placed' | 'app.adapted' | 'app.kept' | 'stream.lagged';
 /** An announcement with ids, or the lag marker (`stream.lagged`, no ids): the

@@ -4458,7 +4458,7 @@
       "Depends on": "APP-142, APP-093",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started. Recorded with the app-model tickets.",
+      "Branch / PR": "`codex/app-144-document` \u2014 bounded document slice under review; no Done claim.",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

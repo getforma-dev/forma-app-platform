@@ -2800,3 +2800,6 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
 .cv-create-template { flex: 1; text-align: left; }
 .cv-create-text { display: block; width: 100%; margin-top: 0.35rem; }
 .cv-create-actions { justify-content: flex-end; margin-top: 0.75rem; }
+
+.cv-unite-actions a.cv-secondary { display: inline-flex; align-items: center; text-decoration: none; white-space: nowrap; }
+.cv-unite.is-single .cv-unite-actions { flex-wrap: wrap; justify-content: flex-end; }

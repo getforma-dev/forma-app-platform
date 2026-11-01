@@ -1,0 +1,76 @@
+{
+  "browser": {
+    "errors": [],
+    "wire": {
+      "status": 200,
+      "type": "application/json",
+      "vary": "Accept",
+      "snakeCase": true
+    },
+    "submission": {
+      "lostResponseRecovered": true,
+      "posts": 2,
+      "sameKeyAndPayload": true,
+      "records": 1,
+      "readerLiveWithinMs": 15000,
+      "draftAndKeyPreserved": true
+    },
+    "mobileNoHorizontalOverflow": true
+  },
+  "more": {
+    "errors": [],
+    "refusal": {
+      "status": 404,
+      "samePage": true,
+      "draftAndKeyKept": true
+    },
+    "denials": [
+      {
+        "status": 404,
+        "body": "{\"code\":\"not_found\",\"status\":404}"
+      },
+      {
+        "status": 404,
+        "body": "{\"code\":\"not_found\",\"status\":404}"
+      }
+    ],
+    "persistedLifecycle": {
+      "realCommandReplay": true,
+      "sameKeyAndPayload": true,
+      "freshFormRecovered": true,
+      "mechanism": "PageTransitionEvent persisted boundary"
+    },
+    "denialLifecycle": {
+      "clearedFormsAndRecords": true,
+      "mechanism": "injected404; real backend revoke covered by query campaign"
+    }
+  },
+  "board": {
+    "errors": [],
+    "twoWay": {
+      "boardToDocument": true,
+      "documentToBoard": true,
+      "deadlineMs": 15000
+    },
+    "navigation": {
+      "unitedHeaderToDocument": true,
+      "backToSameCanvasWork": true
+    }
+  },
+  "receipt-reconnect": {
+    "errors": [],
+    "live": {
+      "submitToRecipientObservedMs": 853
+    },
+    "reconnect": {
+      "observedMs": 792,
+      "draftAndKeyKept": true
+    },
+    "receipts": {
+      "readyViews": 1,
+      "realResultDigest": true,
+      "inlineInspector": true,
+      "stillPresentAfterLiveRefresh": true
+    }
+  }
+}

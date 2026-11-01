@@ -204,6 +204,8 @@ app/admin/src/record/**
 !app/admin/src/work/
 app/admin/src/work/**
 !app/admin/src/work/app.tsx
+!app/admin/src/work/document.ts
+!app/admin/src/work/render.ts
 # ADR-011 pitch canvas (APP-092/094): the canvas page, its island modules and the vendored runtime canvas.
 !app/admin/src/canvas/
 app/admin/src/canvas/**
@@ -216,6 +218,7 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/display.ts
 !app/admin/src/canvas/layout.ts
 !app/admin/src/canvas/live.ts
+!app/admin/src/canvas/ids.ts
 !app/admin/src/canvas/queries.ts
 !app/admin/src/canvas/render.ts
 !app/admin/src/canvas/actions.ts

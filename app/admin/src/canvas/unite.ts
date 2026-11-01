@@ -132,7 +132,7 @@ function arrange(cards: HTMLElement[]): { kpi: HTMLElement[]; main: HTMLElement[
   return { kpi, main: primary ? [primary, ...views] : views, side };
 }
 
-function buildFrame(document_: Document, work: string, title: string, origins: string[]): Frame['root'] {
+function buildFrame(document_: Document, app: string, work: string, title: string, origins: string[]): Frame['root'] {
   const head = el(document_, 'header', { class: 'cv-unite-head', 'data-canvas-drag-handle': '' },
     el(document_, 'span', { class: 'cv-unite-mark', 'aria-hidden': 'true' }),
     el(document_, 'div', { class: 'cv-unite-heading' },
@@ -141,6 +141,7 @@ function buildFrame(document_: Document, work: string, title: string, origins: s
         ...origins.map((text) => el(document_, 'span', { class: 'cv-origin', 'data-origin': originKind(text) }, text)))),
     el(document_, 'span', { class: 'cv-unite-count', 'data-unite-count': '' }),
     el(document_, 'div', { class: 'cv-unite-actions', role: 'group', 'aria-label': 'Page' },
+      el(document_, 'a', { class: 'cv-secondary', href: `/w/${app}/${work}`, title: 'Open this app as a page' }, 'Open page'),
       el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-focus': '', title: 'Focus a part · F' }, 'Focus'),
       el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-share': '', title: 'Share this app' }, 'Share'),
       el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-split': '', title: 'Fan out · Shift+U' }, 'Fan out')));
@@ -477,7 +478,7 @@ export async function unite(app: string, work: string, restore?: { at: Spot; pre
     y: Math.min(...[...previous.values()].map((spot) => spot.y)),
   };
   for (const card of members) board.lift(card.dataset.card ?? '');
-  const root = buildFrame(documentRef, work, group.title, group.origins);
+  const root = buildFrame(documentRef, app, work, group.title, group.origins);
   const { order, width } = fill(root, members);
   for (const restoreScroll of scrolls) restoreScroll();
   const item = createCanvasItem({ instanceId: `unite-${work}`, displayName: group.title, preferredWidth: width, minHeight: 360, content: root, chrome: false });
