@@ -8,6 +8,8 @@ Accepted direction, 2026-11-01; implementation planned in [ADR-015](../../archit
 
 The useful mental model is **app → components → presentations**. A component can be a small metric, a chart, narrative text, a list or an interactive form. Its card is how the builder exposes it on the canvas; a visible card border is not its identity. The form does not need to occupy the dashboard until the user invokes it.
 
+Buttons and actions are **app-agnostic**. The expense screenshots supply examples, not a special action library: the builder can label a control “View customer,” target a details component and present it in a modal, or label it “Add equipment” and open the appropriate form. A section link uses the same app's declared navigation action. Behavior and target are configured separately from the label and domain; each still obeys the app's current permissions. The first supported action kinds are deliberate, reusable building blocks rather than a promise that every possible interaction is already implemented.
+
 | Reference element | Forma composition decision | Needed behavior |
 | --- | --- | --- |
 | Name and persistent “Log meal” button | App header, one primary action | Button targets the admitted meal form; view-only guests receive no write action |
