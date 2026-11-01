@@ -228,7 +228,8 @@ try {
   await formCard.locator('[data-focus-card]').click();
   assert.equal(await page.locator('[data-focus-stage] [name="value.restaurant"]').inputValue(), 'Canvas draft');
   await page.locator('[data-focus-close]').click();
-  await formCard.locator('[data-unite-app]').click();
+  await page.locator(`.navigator-item[data-instance-id="a-${dining.work_id}"]`).click();
+  await page.locator(`.cv-card[data-kind="app"][data-work="${dining.work_id}"] [data-unite-app]`).click();
   await united.getByRole('button', { name: 'Log meal', exact: true }).click();
   assert.equal(await page.evaluate(() => window.canvasDraft === document.querySelector('.app-component-dialog [name="value.restaurant"]') && window.canvasKey === document.querySelector('.app-component-dialog [name="idempotency_key"]').value), true);
   await shot(page, 'canvas-modal.png');
