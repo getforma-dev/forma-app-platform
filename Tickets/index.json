@@ -4350,7 +4350,7 @@
       "Order": "139",
       "Size": "M",
       "Repos": "forma-pitch-mvp",
-      "Decision": "Victor, 2026-11-01: a demo that opens on a canvas already in use does not count. The trial is a link a new paid user finishes in about three minutes. Record: [first-run](../../docs/planning/first-run/README.md).",
+      "Decision": "Victor, 2026-11-01: a demo that opens on a canvas already in use does not count. The trial is a link a new paid user can try. The recorded video of that path cannot run past three minutes. The link is not on a timer. Record: [first-run](../../docs/planning/first-run/README.md).",
       "Requirements": "C01, C11, SR1",
       "Depends on": "APP-074, APP-093, APP-095",
       "External dependencies": "None",
