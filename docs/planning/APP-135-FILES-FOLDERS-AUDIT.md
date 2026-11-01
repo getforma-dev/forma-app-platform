@@ -57,11 +57,11 @@ Screenshots: [app-135-files/](app-135-files/).
 
 ### Malformed CSV — partial
 
-- Action: add `broken.csv` (unclosed quote), then `notes.txt`.
+- Action: add `broken.csv` (unclosed quote). A text file was also tried; the frame below does not show it.
 - Expected: a file the parser cannot read as a table is refused, with nothing stored.
-- Observed: `broken.csv` returned 201 and "broken.csv added." The sheet included "may be empty". **Make data** remained. No second app was created. `notes.txt` was stored and added. The folder then held `reading.csv` (Data check, 2 rows), `broken.csv`, and `notes.txt`. The built app stayed **Reading Notes Overview**. [18-broken.png](app-135-files/18-broken.png).
+- Observed: `broken.csv` returned 201 and "broken.csv added." **Make data** remained. No second app was created. [18-broken.png](app-135-files/18-broken.png) shows the folder holding two files only: `reading.csv` (Data check, 2 rows) and `broken.csv` (26 B, Make data). It does not show `notes.txt` or a preview sheet. "may be empty" is the nullable checkbox on every column of every preview, including a successful CSV (`app/admin/src/canvas/data-sheet.ts`). It is not evidence that this file failed to parse. The built app stayed **Reading Notes Overview**.
 - Severity: low. The bad file is visible and did not duplicate the app. It does leave a file the member may try to build from.
-- Suggested fix: if the parser cannot produce columns, answer as the empty file does (`unsupported_file`, nothing stored) and say why.
+- Suggested fix: if the parser cannot produce columns, answer as the empty file does (`unsupported_file`, nothing stored) and say why. Do not key that refusal off the "may be empty" checkbox.
 
 ## Not a product failure
 
