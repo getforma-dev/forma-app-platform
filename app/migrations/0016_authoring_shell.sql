@@ -15,8 +15,12 @@ ALTER TABLE genui_meta.schema_migrations DROP CONSTRAINT schema_migrations_versi
  ADD CONSTRAINT schema_migrations_version_check CHECK (version BETWEEN 1 AND 16);
 
 -- The definer runs as genui_admit, which could already write permissions and
--- the admission chain (share_work) but not an app row.
+-- the admission chain (share_work) but not an app row. It could not read
+-- publications or spaces; the unpublished check and the space pick need those
+-- columns, and nothing else on those tables.
 GRANT INSERT ON genui.apps TO genui_admit;
+GRANT SELECT(organization_id,app_id) ON genui.publications TO genui_admit;
+GRANT SELECT(organization_id,space_id) ON genui.spaces TO genui_admit;
 
 CREATE FUNCTION genui_private.ensure_authoring_shell(p_org uuid, p_principal uuid)
  RETURNS uuid

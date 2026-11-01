@@ -80,7 +80,7 @@
     {
       "version": 16,
       "file": "0016_authoring_shell.sql",
-      "sha256": "089bdaea4ccf2cb40c32822ffef83e0615dc709da7f6cb215bfe44c18fbf34a5"
+      "sha256": "c15885e703750c657e2afc7fe2da5e3f843291a0809f05d2703ca974f5ad8728"
     }
   ],
   "catalog": [
@@ -150,7 +150,7 @@
     },
     {
       "file": "catalog-v16.json",
-      "sha256": "a8d4128fdd9fc6cb98254c122e03789338d1c8fc6badd58a3d816f5bbe623ec1"
+      "sha256": "90821504a3ef3da4d11bb964157fb260ad787bbd26d1e69f8773f5391d2ba4af"
     }
   ]
 }

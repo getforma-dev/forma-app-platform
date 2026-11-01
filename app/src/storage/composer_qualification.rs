@@ -3,7 +3,9 @@
 //! APP-010 definition campaign. A scripted model (nothing here calls the real
 //! endpoint) drives `composer::routes::compose_for` over real rows: the
 //! member's context names only what the member owns, may read and may run;
-//! a stranger to every app composes nothing (the uniform refusal); a foreign
+//! a revoked member and a principal with no row compose nothing (the uniform
+//! refusal) and no shell is written for them; an active member who owns no
+//! app receives one authoring shell (APP-145); a foreign
 //! organization's library is never offered; the disabled composer answers
 //! neutrally; a confident router choice instantiates the library app as a
 //! new saved work labeled `retrieved` under the member's own `source_read`;
@@ -33,6 +35,17 @@ use std::{
 
 const NORTHSTAR: &str =
     include_str!("../../../contracts/fixtures/impl-2026-10-28.1/northstar.json");
+/// tenant_seed's revoked member. Epoch 2. APP-145 must not create a shell.
+const REVOKED: &str = "00000000-0000-4000-8000-00000000006e";
+/// tenant_seed's active member who owns no app and holds no grant.
+const BARE: &str = "00000000-0000-4000-8000-00000000006f";
+/// No principal row exists for this id.
+const NOBODY: &str = "00000000-0000-4000-8000-0000000000ff";
+/// An organization with a space, a member and no owner_publish policy.
+const EMPTY_ORG: &str = "00000000-0000-4000-8000-000000000145";
+const EMPTY_SPACE: &str = "00000000-0000-4000-8000-000000000146";
+const EMPTY_MEMBER: &str = "00000000-0000-4000-8000-000000000147";
+const EMPTY_ENTITLEMENT: &str = "0000e000-0000-4000-8000-000000000147";
 
 /// A model that answers from a script; every request it saw is kept.
 struct Script {
@@ -167,6 +180,18 @@ async fn campaign() {
         let out = operator(&fixture, &["backfill", "--organization", org]);
         assert_eq!(out["created"].as_array().unwrap().len(), 5);
     }
+    // begin refuses an organization the closed registry does not bind, before
+    // any SQL. The empty organization is inserted later; the stores have to
+    // load a registry that already names it.
+    fixture.write_registry(&json!({
+        "schema_version": 1,
+        "registry_version": "00000000-0000-4000-8000-000000000aaa",
+        "bindings": [
+            {"issuer": "app008-fixture-only", "provider_tenant_id": format!("ten_{ORG}"), "organization_id": ORG},
+            {"issuer": "app008-fixture-only", "provider_tenant_id": format!("ten_{OTHER}"), "organization_id": OTHER},
+            {"issuer": "app008-fixture-only", "provider_tenant_id": format!("ten_{EMPTY_ORG}"), "organization_id": EMPTY_ORG}
+        ]
+    }));
     let stores = Arc::new(Stores::new(fixture.settings()).unwrap());
     stores.readiness().await.unwrap();
     let member = request(&stores, ORG, PRINCIPAL, 1);
@@ -193,14 +218,6 @@ async fn campaign() {
         &context.sources
     )
     .is_some_and(|bindings| bindings.len() == 3));
-    let stranger_context = stores.workspace.composer_context(&stranger).await.unwrap();
-    assert_eq!(stranger_context.authoring, None);
-    assert!(stranger_context.sources.is_empty() && stranger_context.library.is_empty());
-    assert_eq!(
-        stranger_context.owner_publish_policy.as_deref(),
-        Some(POLICY),
-        "the policy row is the organization's, not a grant"
-    );
     let foreign_context = stores.workspace.composer_context(&foreign).await.unwrap();
     assert!(foreign_context
         .library
@@ -213,19 +230,45 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "the composer context names the owned authoring app, the owner_publish policy, the two readable source revisions and the one bindable library app; a member without grants sees nothing; a foreign organization's apps are never offered",
+        "the composer context names the owned authoring app, the owner_publish policy, the two readable source revisions and the one bindable library app; a foreign organization's apps are never offered",
     );
 
-    // --- Nothing composable, disabled, and a model that is never consulted ---
+    // --- Revoked and unknown principals compose nothing and get no shell ---
+    // An active member who owns no app is the APP-145 case, later. These two
+    // stay the uniform refusal, and the refusal must not insert an app row.
+    let revoked = request(&stores, ORG, REVOKED, 2);
+    let nobody = request(&stores, ORG, NOBODY, 1);
+    let untouched = footprint(&fixture).await;
+    assert_eq!(
+        stores.workspace.composer_context(&revoked).await,
+        Err(Error::Denied)
+    );
+    assert_eq!(
+        stores.workspace.composer_context(&nobody).await,
+        Err(Error::Denied)
+    );
     let (script, composer) = Script::composer(vec![Ok(router_reply(APP, "high", "x"))]);
     assert_eq!(
-        compose_for(&stores, &composer, &stranger, intent).await,
+        compose_for(&stores, &composer, &revoked, intent).await,
+        Err(Refused::NotFound)
+    );
+    assert_eq!(
+        compose_for(&stores, &composer, &nobody, intent).await,
         Err(Refused::NotFound)
     );
     assert_eq!(
         script.calls(),
         0,
-        "no model call for a member who may compose nothing"
+        "no model call for a revoked member or a principal with no row"
+    );
+    assert_eq!(
+        footprint(&fixture).await,
+        untouched,
+        "a refusal inserts no app, grant or audit row"
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE owner_principal_id IN ('{REVOKED}','{NOBODY}')")).await,
+        0
     );
     let disabled = Composer::new(None, "r", "g");
     assert_eq!(
@@ -235,7 +278,7 @@ async fn campaign() {
     let before = footprint(&fixture).await;
     check(
         &mut checks,
-        "a member who may compose nothing gets the uniform refusal before any model call; without a key the composer answers composer_unavailable; neither writes a row",
+        "a revoked member and a principal with no row get the uniform refusal before any model call and no app row is inserted; without a key the composer answers composer_unavailable and writes nothing",
     );
 
     // --- Retrieved: a confident router choice instantiates the library app ---
@@ -531,16 +574,300 @@ async fn campaign() {
         Err(Refused::CouldNotCompose("model_unavailable"))
     );
     assert_eq!(footprint(&fixture).await, before);
-    // A member who may not draft on any app (the stranger holds nothing) is
-    // the uniform refusal even when the library would have answered.
-    let (_, composer) = Script::composer(vec![Ok(router_reply(APP, "high", ""))]);
+    // A revoked member stays the uniform refusal. The scripted router reply
+    // is never consulted: membership fails before a model call, and no row
+    // is written. The ungranted teammate's read denial is the earlier check.
+    let (script, composer) = Script::composer(vec![Ok(router_reply(APP, "high", ""))]);
     assert_eq!(
-        compose_for(&stores, &composer, &stranger, intent).await,
+        compose_for(&stores, &composer, &revoked, intent).await,
         Err(Refused::NotFound)
+    );
+    assert_eq!(script.calls(), 0);
+    assert_eq!(footprint(&fixture).await, before);
+    check(
+        &mut checks,
+        "a model failure after the router is the neutral could_not_compose with no row written; a revoked member stays refused and no row is written",
+    );
+
+    // --- APP-145: one shell when an active member owns no eligible app ---
+    // The member above already owns APP. A fresh context still selects it
+    // and does not insert a shell. The bare member owns nothing.
+    assert_eq!(
+        stores
+            .workspace
+            .composer_context(&member)
+            .await
+            .unwrap()
+            .authoring
+            .as_ref()
+            .map(|authoring| authoring.app.as_str()),
+        Some(APP)
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{PRINCIPAL}'")).await,
+        1,
+        "a member who already owns an eligible app composes without a new shell"
+    );
+    let policies = scalar(
+        &fixture,
+        &format!("SELECT count(*) FROM genui.publication_policies WHERE organization_id='{ORG}'"),
+    )
+    .await;
+    let granted_before = chain_events(&fixture, "admission", "permission.granted").await;
+    let bare = request(&stores, ORG, BARE, 1);
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{BARE}'")).await,
+        0
+    );
+    let first = stores.workspace.composer_context(&bare).await.unwrap();
+    let shell = first
+        .authoring
+        .as_ref()
+        .expect("one authoring shell")
+        .app
+        .clone();
+    assert_ne!(shell, APP);
+    assert!(first.library.is_empty() && first.sources.is_empty());
+    assert_eq!(
+        first.owner_publish_policy.as_deref(),
+        Some(POLICY),
+        "the policy row is the organization's, not a grant"
+    );
+    assert_eq!(
+        scalar(
+            &fixture,
+            &format!(
+                "SELECT count(*) FROM genui.publication_policies WHERE organization_id='{ORG}'"
+            )
+        )
+        .await,
+        policies,
+        "the shell does not invent a publication policy"
+    );
+    assert_eq!(
+        text(&fixture, &format!("SELECT owner_principal_id::text FROM genui.apps WHERE organization_id='{ORG}' AND app_id='{shell}'")).await,
+        BARE
+    );
+    assert_eq!(
+        text(&fixture, &format!("SELECT space_id::text FROM genui.apps WHERE organization_id='{ORG}' AND app_id='{shell}'")).await,
+        text(&fixture, &format!("SELECT space_id::text FROM genui.spaces WHERE organization_id='{ORG}' ORDER BY space_id LIMIT 1")).await,
+        "the shell uses a space the organization already has"
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{shell}'")).await,
+        0,
+        "the shell is not a library app and has no publication"
+    );
+    assert_eq!(
+        fixture
+            .sql(
+                &format!("SELECT permission FROM genui.app_permissions WHERE organization_id='{ORG}' AND principal_id='{BARE}' AND app_id='{shell}' ORDER BY 1"),
+                "genui",
+            )
+            .trim(),
+        "discover\nedit_definition\nrun"
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.app_permissions WHERE organization_id='{ORG}' AND principal_id='{BARE}'")).await,
+        3
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{BARE}'")).await,
+        0
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.source_permissions WHERE organization_id='{ORG}' AND principal_id='{BARE}'")).await,
+        0
+    );
+    assert_eq!(
+        chain_events(&fixture, "admission", "permission.granted").await,
+        granted_before + 1
+    );
+    assert_eq!(
+        text(&fixture, &format!("SELECT app_id::text||':'||actor_principal_id::text FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role='admission' AND kind='permission.granted' AND actor_principal_id='{BARE}'")).await,
+        format!("{shell}:{BARE}")
+    );
+    let second = stores.workspace.composer_context(&bare).await.unwrap();
+    assert_eq!(
+        second
+            .authoring
+            .as_ref()
+            .map(|authoring| authoring.app.as_str()),
+        Some(shell.as_str())
+    );
+    assert!(second.library.iter().all(|app| app.app != shell));
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{BARE}'")).await,
+        1,
+        "a second compose does not create a second shell"
+    );
+    assert_eq!(
+        chain_events(&fixture, "admission", "permission.granted").await,
+        granted_before + 1,
+        "a second compose does not grant again"
+    );
+
+    let time_off: Value = serde_json::from_str(include_str!(
+        "../../../contracts/fixtures/library/time-off.json"
+    ))
+    .unwrap();
+    let records_only = prompt::records_example(time_off["definition"]["content"].clone());
+    let (script, composer) = Script::composer(vec![
+        Ok(with(
+            records_only.clone(),
+            "/views/0/script",
+            json!("<script>alert(1)</script>"),
+        )
+        .to_string()),
+        Ok(with(
+            records_only.clone(),
+            "/permissions",
+            json!(["admin_policy"]),
+        )
+        .to_string()),
+        Ok(with(
+            records_only.clone(),
+            "/views/0/sql",
+            json!("DROP TABLE genui.apps; --"),
+        )
+        .to_string()),
+    ]);
+    assert_eq!(
+        compose_for(
+            &stores,
+            &composer,
+            &bare,
+            "Track the team's time-off requests",
+        )
+        .await,
+        Err(Refused::CouldNotCompose("admission_refused"))
+    );
+    assert_eq!(
+        script.calls(),
+        3,
+        "an empty library generates; three refusals and no router call"
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{shell}'")).await,
+        0
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.definition_revisions WHERE organization_id='{ORG}' AND app_id='{shell}'")).await,
+        0,
+        "a hostile reply does not publish and does not draft"
+    );
+
+    let (script, composer) = Script::composer(vec![Ok(records_only.to_string())]);
+    let composed = compose_for(
+        &stores,
+        &composer,
+        &bare,
+        "Track the team's time-off requests",
+    )
+    .await
+    .unwrap();
+    assert_eq!(script.calls(), 1, "one generation call and no router call");
+    assert_eq!(composed.origin, Origin::Generated);
+    assert_eq!(composed.app, shell);
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{BARE}'")).await,
+        1
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{shell}'")).await,
+        1
+    );
+    assert_eq!(
+        text(&fixture, &format!("SELECT app_id::text FROM genui.saved_work WHERE organization_id='{ORG}' AND work_id='{}'", composed.work)).await,
+        shell
+    );
+    assert_eq!(
+        chain_events(&fixture, "admission", "permission.granted").await,
+        granted_before + 1
+    );
+    let third = stores.workspace.composer_context(&bare).await.unwrap();
+    assert_eq!(
+        third
+            .authoring
+            .as_ref()
+            .map(|authoring| authoring.app.as_str()),
+        Some(shell.as_str()),
+        "choose_authoring keeps the shell after it is published"
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{BARE}'")).await,
+        1
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{PRINCIPAL}'")).await,
+        1
     );
     check(
         &mut checks,
-        "a model failure after the router is the neutral could_not_compose with no row written; the stranger stays refused",
+        "APP-145: an active member who owns no app composes once and receives one empty shell (edit_definition, run, discover, one permission.granted naming that app); a second compose reuses it; a hostile reply is refused and does not draft; a records-only definition is admitted and published on that shell and not as a second app; a member who already owns an eligible app gains no shell and no publication policy is inserted",
+    );
+
+    // No owner_publish policy: the shell may be created and must not publish.
+    fixture.sql(
+        &format!(
+            "BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{EMPTY_ORG}',true); \
+             INSERT INTO genui.organizations (organization_id,display_name,status) VALUES ('{EMPTY_ORG}','Empty organization','active'); \
+             INSERT INTO genui.provider_tenant_bindings (organization_id,issuer,provider_tenant_id,active) VALUES ('{EMPTY_ORG}','app008-fixture-only','ten_{EMPTY_ORG}',true); \
+             INSERT INTO genui.principals (organization_id,principal_id,issuer,provider_tenant_id,provider_subject) VALUES ('{EMPTY_ORG}','{EMPTY_MEMBER}','app008-fixture-only','ten_{EMPTY_ORG}','usr_{EMPTY_MEMBER}'); \
+             INSERT INTO genui.memberships (organization_id,principal_id,status,membership_epoch) VALUES ('{EMPTY_ORG}','{EMPTY_MEMBER}','active',1); \
+             INSERT INTO genui.entitlements (organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at,revoked_at) VALUES ('{EMPTY_ORG}','{EMPTY_MEMBER}','{EMPTY_ENTITLEMENT}','active','member_invite','2026-10-01T00:00:00+00:00','2036-10-01T00:00:00+00:00',NULL); \
+             INSERT INTO genui.spaces (organization_id,space_id,display_name) VALUES ('{EMPTY_ORG}','{EMPTY_SPACE}','Empty space'); \
+             COMMIT;"
+        ),
+        "genui",
+    );
+    let created = operator(&fixture, &["backfill", "--organization", EMPTY_ORG]);
+    assert_eq!(created["created"].as_array().unwrap().len(), 5);
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.publication_policies WHERE organization_id='{EMPTY_ORG}'")).await,
+        0
+    );
+    let empty_member = request(&stores, EMPTY_ORG, EMPTY_MEMBER, 1);
+    let empty_context = stores
+        .workspace
+        .composer_context(&empty_member)
+        .await
+        .unwrap();
+    let empty_shell = empty_context
+        .authoring
+        .as_ref()
+        .expect("shell without a publication policy")
+        .app
+        .clone();
+    assert!(empty_context.owner_publish_policy.is_none());
+    let (script, composer) = Script::composer(vec![Ok(records_only.to_string())]);
+    assert_eq!(
+        compose_for(
+            &stores,
+            &composer,
+            &empty_member,
+            "Track the team's time-off requests",
+        )
+        .await,
+        Err(Refused::CouldNotCompose("no_owner_publish_policy"))
+    );
+    assert_eq!(script.calls(), 1);
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{EMPTY_ORG}' AND owner_principal_id='{EMPTY_MEMBER}'")).await,
+        1
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{EMPTY_ORG}' AND app_id='{empty_shell}'")).await,
+        0
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.definition_revisions WHERE organization_id='{EMPTY_ORG}' AND app_id='{empty_shell}'")).await,
+        0,
+        "without owner_publish the shell does not publish"
+    );
+    check(
+        &mut checks,
+        "APP-145: an organization with no owner_publish policy still refuses no_owner_publish_policy; the shell is created and nothing is drafted or published",
     );
 
     let _: Option<Composed> = None;
