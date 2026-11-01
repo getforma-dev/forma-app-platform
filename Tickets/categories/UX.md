@@ -30,3 +30,4 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 132 | [APP-132: Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)](../0-backlog/APP-132.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-128 |
 | 135 | [APP-135: MVP overbuild and hard-code audit: everything that only works because of the seeded library, the demo organization or fixed data](../0-backlog/APP-135.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-132 |
 | 138 | [APP-138: Forma Canvas — shared Forma brand and application design](../4-done/APP-138.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Done | None |
+| 139 | [APP-139: Guided first-run trial: a new member, an empty canvas, one app, one record, one share](../0-backlog/APP-139.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-074, APP-093, APP-095 |
