@@ -1,0 +1,263 @@
+libc6:
+  Installed: 2.36-9+deb12u13
+  Candidate: 2.36-9+deb12u14
+  Version table:
+     2.36-9+deb12u14 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+ *** 2.36-9+deb12u13 100
+        100 /var/lib/dpkg/status
+     2.36-9+deb12u7 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+libc-bin:
+  Installed: 2.36-9+deb12u13
+  Candidate: 2.36-9+deb12u14
+  Version table:
+     2.36-9+deb12u14 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+ *** 2.36-9+deb12u13 100
+        100 /var/lib/dpkg/status
+     2.36-9+deb12u7 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+dpkg:
+  Installed: 1.21.22
+  Candidate: 1.21.23
+  Version table:
+     1.21.23 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+ *** 1.21.22 100
+        100 /var/lib/dpkg/status
+zlib1g:
+  Installed: 1:1.2.13.dfsg-1
+  Candidate: 1:1.2.13.dfsg-1
+  Version table:
+ *** 1:1.2.13.dfsg-1 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+libpcre2-8-0:
+  Installed: 10.42-1
+  Candidate: 10.42-1+deb12u2
+  Version table:
+     10.42-1+deb12u2 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+ *** 10.42-1 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+libsqlite3-0:
+  Installed: 3.40.1-2+deb12u2
+  Candidate: 3.40.1-2+deb12u2
+  Version table:
+ *** 3.40.1-2+deb12u2 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+libkrb5-3:
+  Installed: 1.20.1-2+deb12u4
+  Candidate: 1.20.1-2+deb12u5
+  Version table:
+     1.20.1-2+deb12u5 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+ *** 1.20.1-2+deb12u4 100
+        100 /var/lib/dpkg/status
+libk5crypto3:
+  Installed: 1.20.1-2+deb12u4
+  Candidate: 1.20.1-2+deb12u5
+  Version table:
+     1.20.1-2+deb12u5 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+ *** 1.20.1-2+deb12u4 100
+        100 /var/lib/dpkg/status
+libgssapi-krb5-2:
+  Installed: 1.20.1-2+deb12u4
+  Candidate: 1.20.1-2+deb12u5
+  Version table:
+     1.20.1-2+deb12u5 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+ *** 1.20.1-2+deb12u4 100
+        100 /var/lib/dpkg/status
+libkrb5support0:
+  Installed: 1.20.1-2+deb12u4
+  Candidate: 1.20.1-2+deb12u5
+  Version table:
+     1.20.1-2+deb12u5 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+ *** 1.20.1-2+deb12u4 100
+        100 /var/lib/dpkg/status
+util-linux:
+  Installed: 2.38.1-5+deb12u3
+  Candidate: 2.38.1-5+deb12u3
+  Version table:
+ *** 2.38.1-5+deb12u3 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+     2.38.1-5+deb12u1 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+libblkid1:
+  Installed: 2.38.1-5+deb12u3
+  Candidate: 2.38.1-5+deb12u3
+  Version table:
+ *** 2.38.1-5+deb12u3 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+     2.38.1-5+deb12u1 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+libmount1:
+  Installed: 2.38.1-5+deb12u3
+  Candidate: 2.38.1-5+deb12u3
+  Version table:
+ *** 2.38.1-5+deb12u3 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+     2.38.1-5+deb12u1 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+libsmartcols1:
+  Installed: 2.38.1-5+deb12u3
+  Candidate: 2.38.1-5+deb12u3
+  Version table:
+ *** 2.38.1-5+deb12u3 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+     2.38.1-5+deb12u1 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+libuuid1:
+  Installed: 2.38.1-5+deb12u3
+  Candidate: 2.38.1-5+deb12u3
+  Version table:
+ *** 2.38.1-5+deb12u3 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+     2.38.1-5+deb12u1 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+mount:
+  Installed: 2.38.1-5+deb12u3
+  Candidate: 2.38.1-5+deb12u3
+  Version table:
+ *** 2.38.1-5+deb12u3 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+     2.38.1-5+deb12u1 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+bsdutils:
+  Installed: 1:2.38.1-5+deb12u3
+  Candidate: 1:2.38.1-5+deb12u3
+  Version table:
+ *** 1:2.38.1-5+deb12u3 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+     1:2.38.1-5+deb12u1 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+libcap2:
+  Installed: 1:2.66-4+deb12u2+b2
+  Candidate: 1:2.66-4+deb12u3+b1
+  Version table:
+     1:2.66-4+deb12u3+b1 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+ *** 1:2.66-4+deb12u2+b2 100
+        100 /var/lib/dpkg/status
+adduser	3.134	adduser
+apt	2.6.1	apt
+base-files	12.4+deb12u13	base-files
+base-passwd	3.6.1	base-passwd
+bash	5.2.15-2+b10	bash
+bsdutils	1:2.38.1-5+deb12u3	util-linux
+ca-certificates	20230311+deb12u1	ca-certificates
+coreutils	9.1-1	coreutils
+dash	0.5.12-2	dash
+debconf	1.5.82	debconf
+debian-archive-keyring	2023.3+deb12u2	debian-archive-keyring
+debianutils	5.7-0.5~deb12u1	debianutils
+diffutils	1:3.8-4	diffutils
+dpkg	1.21.22	dpkg
+e2fsprogs	1.47.0-2+b2	e2fsprogs
+findutils	4.9.0-4	findutils
+gcc-12-base:arm64	12.2.0-14+deb12u1	gcc-12
+gpgv	2.2.40-1.1+deb12u2	gnupg2
+grep	3.8-5	grep
+gzip	1.12-1	gzip
+hostname	3.23+nmu1	hostname
+init-system-helpers	1.65.2+deb12u1	init-system-helpers
+libacl1:arm64	2.3.1-3	acl
+libapt-pkg6.0:arm64	2.6.1	apt
+libattr1:arm64	1:2.5.1-4	attr
+libaudit-common	1:3.0.9-1	audit
+libaudit1:arm64	1:3.0.9-1	audit
+libblkid1:arm64	2.38.1-5+deb12u3	util-linux
+libbz2-1.0:arm64	1.0.8-5+b1	bzip2
+libc-bin	2.36-9+deb12u13	glibc
+libc6:arm64	2.36-9+deb12u13	glibc
+libcap-ng0:arm64	0.8.3-1+b3	libcap-ng
+libcap2:arm64	1:2.66-4+deb12u2+b2	libcap2
+libcom-err2:arm64	1.47.0-2+b2	e2fsprogs
+libcrypt1:arm64	1:4.4.33-2	libxcrypt
+libdb5.3:arm64	5.3.28+dfsg2-1	db5.3
+libdebconfclient0:arm64	0.270	cdebconf
+libext2fs2:arm64	1.47.0-2+b2	e2fsprogs
+libffi8:arm64	3.4.4-1	libffi
+libgcc-s1:arm64	12.2.0-14+deb12u1	gcc-12
+libgcrypt20:arm64	1.10.1-3	libgcrypt20
+libgdbm6:arm64	1.23-3	gdbm
+libgmp10:arm64	2:6.2.1+dfsg1-1.1	gmp
+libgnutls30:arm64	3.7.9-2+deb12u7	gnutls28
+libgpg-error0:arm64	1.46-1	libgpg-error
+libgssapi-krb5-2:arm64	1.20.1-2+deb12u4	krb5
+libhogweed6:arm64	3.8.1-2	nettle
+libidn2-0:arm64	2.3.3-1+b1	libidn2
+libk5crypto3:arm64	1.20.1-2+deb12u4	krb5
+libkeyutils1:arm64	1.6.3-2	keyutils
+libkrb5-3:arm64	1.20.1-2+deb12u4	krb5
+libkrb5support0:arm64	1.20.1-2+deb12u4	krb5
+liblz4-1:arm64	1.9.4-1	lz4
+liblzma5:arm64	5.4.1-1	xz-utils
+libmd0:arm64	1.0.4-2	libmd
+libmount1:arm64	2.38.1-5+deb12u3	util-linux
+libncursesw6:arm64	6.4-4	ncurses
+libnettle8:arm64	3.8.1-2	nettle
+libnsl2:arm64	1.3.0-2	libnsl
+libp11-kit0:arm64	0.24.1-2	p11-kit
+libpam-modules:arm64	1.5.2-6+deb12u2	pam
+libpam-modules-bin	1.5.2-6+deb12u2	pam
+libpam-runtime	1.5.2-6+deb12u2	pam
+libpam0g:arm64	1.5.2-6+deb12u2	pam
+libpcre2-8-0:arm64	10.42-1	pcre2
+libreadline8:arm64	8.2-1.3	readline
+libseccomp2:arm64	2.5.4-1+deb12u1	libseccomp
+libselinux1:arm64	3.4-1+b6	libselinux
+libsemanage-common	3.4-1	libsemanage
+libsemanage2:arm64	3.4-1+b5	libsemanage
+libsepol2:arm64	3.4-2.1	libsepol
+libsmartcols1:arm64	2.38.1-5+deb12u3	util-linux
+libsqlite3-0:arm64	3.40.1-2+deb12u2	sqlite3
+libss2:arm64	1.47.0-2+b2	e2fsprogs
+libssl3:arm64	3.0.22-1~deb12u2	openssl
+libstdc++6:arm64	12.2.0-14+deb12u1	gcc-12
+libsystemd0:arm64	252.39-1~deb12u1	systemd
+libtasn1-6:arm64	4.19.0-2+deb12u1	libtasn1-6
+libtinfo6:arm64	6.4-4	ncurses
+libtirpc-common	1.3.3+ds-1	libtirpc
+libtirpc3:arm64	1.3.3+ds-1	libtirpc
+libudev1:arm64	252.39-1~deb12u1	systemd
+libunistring2:arm64	1.0-2	libunistring
+libuuid1:arm64	2.38.1-5+deb12u3	util-linux
+libxxhash0:arm64	0.8.1-1	xxhash
+libzstd1:arm64	1.5.4+dfsg2-5	libzstd
+login	1:4.13+dfsg1-1+deb12u2	shadow
+logsave	1.47.0-2+b2	e2fsprogs
+mawk	1.3.4.20200120-3.1	mawk
+mount	2.38.1-5+deb12u3	util-linux
+ncurses-base	6.4-4	ncurses
+ncurses-bin	6.4-4	ncurses
+netbase	6.4	netbase
+openssl	3.0.22-1~deb12u2	openssl
+passwd	1:4.13+dfsg1-1+deb12u2	shadow
+perl-base	5.36.0-7+deb12u4	perl
+readline-common	8.2-1.3	readline
+sed	4.9-1	sed
+sysvinit-utils	3.06-4	sysvinit
+tar	1.34+dfsg-1.2+deb12u1	tar
+tzdata	2025b-0+deb12u2	tzdata
+usr-is-merged	37~deb12u1	usrmerge
+util-linux	2.38.1-5+deb12u3	util-linux
+util-linux-extra	2.38.1-5+deb12u3	util-linux
+zlib1g:arm64	1:1.2.13.dfsg-1	zlib

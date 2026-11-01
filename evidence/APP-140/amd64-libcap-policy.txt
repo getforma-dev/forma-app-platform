@@ -1,0 +1,6 @@
+libcap2:
+  Installed: (none)
+  Candidate: 1:2.66-4+deb12u3+b1
+  Version table:
+     1:2.66-4+deb12u3+b1 500
+        500 http://deb.debian.org/debian bookworm/main amd64 Packages

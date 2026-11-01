@@ -4,6 +4,7 @@ November 1 source, local qualification and specifically authorized provider setu
 
 - [hosted-preparation.json](hosted-preparation.json): sanitized live baseline, fresh provider tenant/client registration, the one SES verification request, local budget reconciliation and remaining execution boundaries.
 - [local-validation.json](local-validation.json): focused suite results. The full candidate check, CI and image identities belong to the integration delivery record.
+- [Image security follow-up](IMAGE-SECURITY.md): exact ARM64 scan findings, available Debian fixes, package resolution and the remaining vendor-open findings. Replacement image qualification and scans are required before deployment.
 - [Clean deployment sequence](../../docs/pitch/CLEAN-TRIAL-DEPLOY.md): actual inputs, operator steps, empty first-member admission and activation checks.
 
 ## Changes and checks

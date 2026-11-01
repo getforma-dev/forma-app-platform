@@ -36,11 +36,17 @@ RUN --mount=type=cache,id=genui-cargo-registry,target=/usr/local/cargo/registry,
         --rustc-vv /source/rustc-vv.txt --output /source/parser-out/parser-manifest.json
 
 FROM python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
-# Debian security fixes for the base image's openssl, gnutls and perl (APP-078 step 3.5, ECR scan of
-# 2026-10-30: 10 CRITICAL in these packages). Exact versions from bookworm-security; bump them with the base digest.
+# Exact Bookworm security updates, checked against Debian's tracker and ARM64 APT metadata.
+# Preserve APP-078's critical fixes; APP-140 adds every available fix from the 2026-11-01 scan.
+# Remaining vendor-open findings and package evidence: evidence/APP-140/IMAGE-SECURITY.md.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends --only-upgrade \
        libssl3=3.0.22-1~deb12u2 openssl=3.0.22-1~deb12u2 libgnutls30=3.7.9-2+deb12u7 perl-base=5.36.0-7+deb12u4 \
+       libc6=2.36-9+deb12u14 libc-bin=2.36-9+deb12u14 dpkg=1.21.23 libcap2=1:2.66-4+deb12u3+b1 \
+       libpcre2-8-0=10.42-1+deb12u2 libkrb5-3=1.20.1-2+deb12u5 libk5crypto3=1.20.1-2+deb12u5 \
+       libgssapi-krb5-2=1.20.1-2+deb12u5 libkrb5support0=1.20.1-2+deb12u5 \
+       libsystemd0=252.39-1~deb12u2 libudev1=252.39-1~deb12u2 libgcrypt20=1.10.1-3+deb12u1 \
+       liblzma5=5.4.1-1+deb12u2 sed=4.9-1+deb12u1 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /operator
 COPY app/operator/requirements.lock /tmp/operator-requirements.lock
