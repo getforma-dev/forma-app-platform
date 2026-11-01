@@ -427,6 +427,7 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
         page: modules.bind::<CanvasProps>("canvas").map_err(bind_error)?,
     });
     let shared_pages = Arc::new(crate::sharing::live::SsrSharedPages {
+        auth_origin: None,
         app: modules
             .bind::<crate::sharing::live::SharedPageProps>("shared")
             .map_err(bind_error)?,

@@ -1,0 +1,52 @@
+{
+  "browser": "156.0.8078.74",
+  "nativeFixture": "shared_auth_entry_keeps_the_exact_provider_form_policy",
+  "syntheticNetworkOnly": true,
+  "results": [
+    {
+      "name": "self_only_reproduces_blocked_redirect",
+      "passed": true,
+      "posts": 1,
+      "providerGets": 0,
+      "policyErrors": 1,
+      "pageErrors": 0,
+      "unexpected": []
+    },
+    {
+      "name": "signup_reaches_exact_provider",
+      "passed": true,
+      "posts": 1,
+      "providerGets": 1,
+      "policyErrors": 0,
+      "pageErrors": 0,
+      "unexpected": []
+    },
+    {
+      "name": "signin_reaches_exact_provider",
+      "passed": true,
+      "posts": 1,
+      "providerGets": 1,
+      "policyErrors": 0,
+      "pageErrors": 0,
+      "unexpected": []
+    },
+    {
+      "name": "pending_verification_signin_reaches_provider",
+      "passed": true,
+      "posts": 1,
+      "providerGets": 1,
+      "policyErrors": 0,
+      "pageErrors": 0,
+      "unexpected": []
+    },
+    {
+      "name": "foreign_redirect_stays_blocked",
+      "passed": true,
+      "posts": 1,
+      "providerGets": 0,
+      "policyErrors": 1,
+      "pageErrors": 0,
+      "unexpected": []
+    }
+  ]
+}

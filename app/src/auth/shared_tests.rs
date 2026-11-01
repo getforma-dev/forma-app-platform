@@ -20,7 +20,10 @@ use axum::{
     Json, Router,
 };
 use serde_json::{json, Value};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 const PRINCIPAL: &str = "00000000-0000-4000-8000-000000000066";
 const WORK: &str = "00000000-0000-4000-8000-000000000069";
 const EMAIL: &str = "external@example.test";
@@ -54,12 +57,14 @@ async fn footprint(fixture: &Fixture) -> Vec<i64> {
 struct Broker {
     issuer: Arc<Issuer>,
     token: String,
+    calls: Arc<AtomicUsize>,
 }
 async fn broker(
     State(state): State<Broker>,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
+    state.calls.fetch_add(1, Ordering::SeqCst);
     assert_eq!(
         headers.get("authorization").unwrap().to_str().unwrap(),
         format!("Bearer {}", state.token)
@@ -147,6 +152,7 @@ async fn campaign() {
     let stores = Arc::new(Stores::new(fixture.settings_with_registry(registry)).unwrap());
     stores.readiness().await.unwrap();
     let broker_token = super::capability::random_capability().unwrap();
+    let broker_calls = Arc::new(AtomicUsize::new(0));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let broker_app = Router::new()
@@ -154,6 +160,7 @@ async fn campaign() {
         .with_state(Broker {
             issuer: issuer.clone(),
             token: broker_token.clone(),
+            calls: broker_calls.clone(),
         });
     let broker_server =
         tokio::spawn(async move { axum::serve(listener, broker_app).await.unwrap() });
@@ -164,6 +171,13 @@ async fn campaign() {
     );
     let app =
         http::uniform(shared::router(auth.clone()).merge(super::routes::router(auth.clone())));
+    let entry = http::uniform(crate::sharing::live::router(Arc::new(
+        crate::query::Work::new(
+            auth.clone(),
+            None,
+            Arc::new(crate::query::routes::tests::RecordingPages::default()),
+        ),
+    )));
     let log = Arc::default();
     let mut checks = Vec::new();
     let reference = super::capability::random_uuid().unwrap();
@@ -206,6 +220,162 @@ async fn campaign() {
         .mint_session_for_tests(OTHER, PRINCIPAL, &home_ref)
         .await
         .unwrap();
+    // Actual entry HTTP + session resolution, without forging a trusted member.
+    let mut current = Browser::new("198.51.100.82:1000", &log);
+    current.install_cookie(cookies::SESSION, &home);
+    let landing = current
+        .send(
+            &entry,
+            "GET",
+            &format!("/s/{}", share.key),
+            "",
+            &[("accept", "application/json")],
+        )
+        .await;
+    assert_eq!(landing.status, StatusCode::OK);
+    assert_eq!(
+        serde_json::from_str::<Value>(&landing.body).unwrap()["can_sign_up"],
+        false
+    );
+    for (index, case) in [
+        "none",
+        "malformed",
+        "absent",
+        "expired",
+        "revoked",
+        "missing_vault",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut visitor = Browser::new(&format!("198.51.100.{}:1000", 90 + index), &log);
+        let mut raw_cookie = None;
+        if case == "malformed" {
+            raw_cookie = Some("malformed-session".to_owned());
+        } else if case != "none" {
+            let token =
+                tests::issued_token(&issuer, &auth.provider.as_ref().unwrap().client, "usr_home")
+                    .await;
+            let reference = auth.vault.insert("northstar", &token).unwrap();
+            let cookie = stores
+                .workspace
+                .mint_session_for_tests(OTHER, PRINCIPAL, &reference)
+                .await
+                .unwrap();
+            match case {
+                "absent" => fixture.sql(&format!("DELETE FROM genui.sessions WHERE refresh_token_ref='{reference}'"),"genui"),
+                "expired" => fixture.sql(&format!("UPDATE genui.sessions SET created_at=now()-interval '13 hours',absolute_expires_at=now()-interval '1 hour',last_seen_at=now()-interval '2 hours' WHERE refresh_token_ref='{reference}'"),"genui"),
+                "revoked" => fixture.sql(&format!("UPDATE genui.sessions SET revoked_at=clock_timestamp() WHERE refresh_token_ref='{reference}'"),"genui"),
+                "missing_vault" => { auth.vault.take(&reference).await; String::new() },
+                _ => unreachable!(),
+            };
+            raw_cookie = Some(cookie);
+        }
+        if let Some(cookie) = &raw_cookie {
+            visitor.install_cookie(cookies::SESSION, cookie);
+        }
+        let landing = visitor
+            .send(
+                &entry,
+                "GET",
+                &format!("/s/{}", share.key),
+                "",
+                &[("accept", "application/json")],
+            )
+            .await;
+        assert_eq!(landing.status, StatusCode::OK, "{case}");
+        let props: Value = serde_json::from_str(&landing.body).unwrap();
+        assert_eq!(props["can_sign_up"], true, "{case}");
+        let calls = broker_calls.load(Ordering::SeqCst);
+        if raw_cookie.is_some() {
+            let refused = visitor
+                .post(
+                    &app,
+                    &format!("/auth/shared/{}/start", share.key),
+                    "intent=sign_up&csrf=wrong",
+                )
+                .await;
+            assert_eq!(refused.status, StatusCode::FORBIDDEN, "{case}");
+            assert_eq!(broker_calls.load(Ordering::SeqCst), calls);
+        }
+        let begun = visitor
+            .post(
+                &app,
+                &format!("/auth/shared/{}/start", share.key),
+                &format!(
+                    "intent=sign_up&csrf={}",
+                    props["sign_in_csrf"].as_str().unwrap()
+                ),
+            )
+            .await;
+        assert_eq!(
+            begun.status,
+            StatusCode::SEE_OTHER,
+            "{case}: {}",
+            begun.body
+        );
+        assert!(
+            begun.location().contains("/t/northstar/")
+                && begun.location().contains("client_id=northstar-shared"),
+            "{case}"
+        );
+        assert_eq!(broker_calls.load(Ordering::SeqCst), calls + 1);
+        assert_eq!(
+            visitor.cookie(cookies::SESSION),
+            raw_cookie,
+            "{case}: home cookie unchanged"
+        );
+        stores
+            .workspace
+            .discard_shared_flow(&visitor.cookie(cookies::SHARED_PRELOGIN).unwrap())
+            .await
+            .unwrap();
+    }
+    tests::check(&mut checks,"anonymous, malformed, absent-row, expired, revoked and missing-vault home sessions offer signup through the actual JSON entry and exact target-tenant POST; raw-cookie CSRF remains required; live home session suppresses signup");
+    // Hold the exact membership lock until both requests finish. Lookup Denied
+    // is uncertainty, never permission to create in the recipient's tenant.
+    let op = fixture.operator().await;
+    let flow_count = || async {
+        op.client
+            .query_one(
+                "SELECT count(*)::bigint FROM genui_identity.shared_auth_flows",
+                &[],
+            )
+            .await
+            .unwrap()
+            .get::<_, i64>(0)
+    };
+    let flows = flow_count().await;
+    let calls = broker_calls.load(Ordering::SeqCst);
+    let pars = issuer.count(|c| &c.par);
+    op.client.batch_execute("BEGIN").await.unwrap();
+    op.client.query("SELECT 1 FROM genui.memberships WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid FOR UPDATE",&[&OTHER,&PRINCIPAL]).await.unwrap();
+    let landing = current
+        .send(
+            &entry,
+            "GET",
+            &format!("/s/{}", share.key),
+            "",
+            &[("accept", "application/json")],
+        )
+        .await;
+    assert_eq!(landing.status, StatusCode::OK);
+    assert_eq!(
+        serde_json::from_str::<Value>(&landing.body).unwrap()["can_sign_up"],
+        false
+    );
+    let blocked = start(&auth, &app, &mut current, &share.key, "sign_up").await;
+    assert!(blocked.uniform_404());
+    assert_eq!(broker_calls.load(Ordering::SeqCst), calls);
+    assert_eq!(issuer.count(|c| &c.par), pars);
+    assert_eq!(flow_count().await, flows);
+    assert!(current.cookie(cookies::SHARED_PRELOGIN).is_none());
+    assert_eq!(
+        current.cookie(cookies::SESSION).as_deref(),
+        Some(home.as_str())
+    );
+    op.client.batch_execute("ROLLBACK").await.unwrap();
+    tests::check(&mut checks,"real locked home membership makes GET suppress signup and POST refuse without flow/broker/PAR growth or replacing the home cookie; no fallback tenant on uncertain lookup");
     let mut browser = Browser::new("198.51.100.81:1000", &log);
     browser.install_cookie(cookies::SESSION, &home);
     let begun = start(&auth, &app, &mut browser, &share.key, "sign_in").await;

@@ -34,6 +34,25 @@ pub async fn identity(auth: &Auth, headers: &HeaderMap) -> Option<ShareAccount> 
         .ok()
         .flatten()
 }
+/// A cookie is not a live home workspace. Absence/expiry may use recipient
+/// signup, while an uncertain lookup must never fall back to a different tenant.
+pub(crate) async fn home_organization(
+    auth: &Auth,
+    headers: &HeaderMap,
+) -> Result<Option<String>, storage::Error> {
+    let Some(cookie) = cookies::read(headers, cookies::SESSION) else {
+        return Ok(None);
+    };
+    let stores = auth.stores.as_ref().ok_or(storage::Error::Unavailable)?;
+    match stores
+        .workspace
+        .resolve_session(&cookie, &|r| auth.vault.contains(r))
+        .await?
+    {
+        Lookup::Live(member) => Ok(Some(member.organization().to_owned())),
+        Lookup::Absent | Lookup::Ended(_) => Ok(None),
+    }
+}
 fn start_binding(headers: &HeaderMap, key: &str) -> Option<String> {
     cookies::read(headers, cookies::SHARED_SESSION)
         .or_else(|| cookies::read(headers, cookies::SESSION))
@@ -186,18 +205,7 @@ async fn begin(
         .map_err(|_| ())?;
     // A current home member may reauthenticate in their own provider tenant.
     // The returned proof remains account-only and cannot change their home org.
-    let home = if let Some(cookie) = cookies::read(headers, cookies::SESSION) {
-        match stores
-            .workspace
-            .resolve_session(&cookie, &|r| auth.vault.contains(r))
-            .await
-        {
-            Ok(Lookup::Live(member)) => Some(member.organization().to_owned()),
-            _ => None,
-        }
-    } else {
-        None
-    };
+    let home = home_organization(auth, headers).await.map_err(|_| ())?;
     let provider_org = home.as_deref().unwrap_or(&target.organization);
     let route = provider.config.route(provider_org).ok_or(())?;
     let shared_client = route.shared_client_id.as_deref().ok_or(())?;
@@ -476,6 +484,47 @@ mod tests {
     };
     use tower::ServiceExt;
     const KEY: &str = "00000000-0000-4000-8000-000000000001.00000000-0000-4000-8000-000000000099";
+    #[test]
+    fn shared_entry_origin_is_an_exact_trusted_configuration_value() {
+        let mut value = tests::auth_configuration_document("00000000-0000-4000-8000-000000000d09")
+            ["auth_config"]
+            .clone();
+        let decode = |value: &serde_json::Value| {
+            super::super::AuthConfig::decode(&serde_json::to_vec(value).unwrap())
+        };
+        assert!(decode(&value).is_ok());
+        for origin in [
+            "https://auth.example.test/path",
+            "https://auth.example.test?redirect=elsewhere",
+            "https://user:password@auth.example.test",
+            "https://*.example.test",
+            "javascript:alert(1)",
+            "http://auth.example.test",
+        ] {
+            value["auth_origin"] = serde_json::json!(origin);
+            assert!(decode(&value).is_err(), "refuse {origin}");
+        }
+    }
+    #[tokio::test]
+    async fn uncertain_home_lookup_is_not_anonymous() {
+        let auth = Auth::loopback(
+            tests::config("http://127.0.0.1:9"),
+            None,
+            Arc::new(TestPages),
+        );
+        let mut headers = HeaderMap::new();
+        assert_eq!(home_organization(&auth, &headers).await.unwrap(), None);
+        headers.insert(
+            "cookie",
+            format!("{}=synthetic-cookie", cookies::SESSION)
+                .parse()
+                .unwrap(),
+        );
+        assert!(matches!(
+            home_organization(&auth, &headers).await,
+            Err(storage::Error::Unavailable)
+        ));
+    }
     #[test]
     fn a_shared_callback_requires_its_own_registered_client() {
         let mut value = tests::auth_configuration_document("00000000-0000-4000-8000-000000000d09")

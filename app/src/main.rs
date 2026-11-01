@@ -199,6 +199,7 @@ async fn main() {
             .unwrap_or_else(bind_errors),
     });
     let shared_pages = Arc::new(genui::sharing::live::SsrSharedPages {
+        auth_origin: auth_config.as_ref().map(|c| c.auth_origin.clone()),
         app: pages
             .bind::<genui::sharing::live::SharedPageProps>("shared")
             .unwrap_or_else(bind_errors),
@@ -545,6 +546,106 @@ mod tests {
         let headers = response.headers().clone();
         let body = to_bytes(response.into_body(), 1 << 20).await.unwrap();
         (status, headers, String::from_utf8(body.to_vec()).unwrap())
+    }
+
+    /// The shared entry submits locally, then redirects to the configured
+    /// provider. The originating document must permit that exact second hop.
+    #[tokio::test]
+    async fn shared_auth_entry_keeps_the_exact_provider_form_policy() {
+        const AUTH_ORIGIN: &str = "https://localhost:7697";
+        use genui::sharing::live::{
+            SharedCanvasProps, SharedPageProps, SharedPages, SsrSharedPages,
+        };
+        let manifest = assets::try_load_manifest::<Assets>().unwrap();
+        let modules = load_ir_modules::<Assets>(&manifest).unwrap();
+        modules.bind::<HomeProps>("home").unwrap();
+        modules.bind::<AboutProps>("about").unwrap();
+        modules.bind::<InviteProps>("invite").unwrap();
+        modules.bind::<SigninProps>("signin").unwrap();
+        modules.bind::<PendingProps>("pending").unwrap();
+        modules.bind::<DeniedProps>("denied").unwrap();
+        modules.bind::<WorkspaceProps>("workspace").unwrap();
+        modules.bind::<RecordProps>("record").unwrap();
+        modules
+            .bind::<genui::query::page::WorkProps>("work")
+            .unwrap();
+        modules
+            .bind::<genui::query::canvas::CanvasProps>("canvas")
+            .unwrap();
+        let mut pages = SsrSharedPages {
+            auth_origin: Some(AUTH_ORIGIN.into()),
+            app: modules.bind::<SharedPageProps>("shared").unwrap(),
+            canvas: modules.bind::<SharedCanvasProps>("sharedCanvas").unwrap(),
+        };
+        modules.finalize().unwrap();
+        let key = "11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222";
+        let mut entry = SharedPageProps {
+            title: "Shared app".into(),
+            share_id: key.into(),
+            needs_sign_in: true,
+            can_sign_up: true,
+            sign_in_action: format!("/auth/shared/{key}/start"),
+            sign_in_csrf: "synthetic-csrf".into(),
+            ..Default::default()
+        };
+        let mut fixtures = serde_json::Map::new();
+        for (name, signup) in [("anonymous", true), ("verification_pending", false)] {
+            entry.can_sign_up = signup;
+            let (status, headers, body) = html(pages.app(&entry)).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(
+                form_action(&headers),
+                format!("form-action 'self' {AUTH_ORIGIN}")
+            );
+            assert!(headers[header::CACHE_CONTROL]
+                .to_str()
+                .unwrap()
+                .contains("no-store"));
+            let csp = policy(&headers);
+            assert!(csp.contains("frame-ancestors 'none'") && csp.contains("nonce-"));
+            assert!(body.contains(&format!("action=\"{}\"", entry.sign_in_action)));
+            assert!(body.contains("value=\"sign_in\""));
+            assert_eq!(body.contains("value=\"sign_up\""), signup);
+            fixtures.insert(name.into(), serde_json::json!({
+                "body": body,
+                "headers": headers.iter().map(|(k,v)| (k.to_string(),v.to_str().unwrap().to_owned())).collect::<std::collections::BTreeMap<_,_>>()
+            }));
+        }
+        // Wrong-account neutral entry has the same handoff with signout too.
+        entry.can_sign_out = true;
+        assert_eq!(
+            form_action(&html(pages.app(&entry)).await.1),
+            format!("form-action 'self' {AUTH_ORIGIN}")
+        );
+        entry.needs_sign_in = false;
+        for available in [false, true] {
+            entry.available = available;
+            assert_eq!(
+                form_action(&html(pages.app(&entry)).await.1),
+                "form-action 'self'"
+            );
+        }
+        assert_eq!(
+            form_action(&html(pages.canvas(&SharedCanvasProps::default())).await.1),
+            "form-action 'self'"
+        );
+        // An absent provider cannot widen the policy. It is also the browser
+        // negative control: the same native form's external redirect is blocked.
+        pages.auth_origin = None;
+        entry.needs_sign_in = true;
+        entry.available = false;
+        entry.can_sign_up = true;
+        let (_, headers, body) = html(pages.app(&entry)).await;
+        assert_eq!(form_action(&headers), "form-action 'self'");
+        fixtures.insert("no_provider".into(), serde_json::json!({
+            "body": body,
+            "headers": headers.iter().map(|(k,v)| (k.to_string(),v.to_str().unwrap().to_owned())).collect::<std::collections::BTreeMap<_,_>>()
+        }));
+        // Invalid origins are rejected by AuthConfig before renderer wiring;
+        // shared_entry_origin_is_an_exact_trusted_configuration_value covers it.
+        if let Some(path) = std::env::var_os("GENUI_SHARED_ENTRY_FIXTURE") {
+            std::fs::write(path, serde_json::to_vec_pretty(&fixtures).unwrap()).unwrap();
+        }
     }
 
     /// APP-074: the invitation entry renders natively with no script and

@@ -20,7 +20,7 @@ use axum::{
     Router,
 };
 use forma_ir::PageProps;
-use forma_server::{PageHandle, RenderCtx};
+use forma_server::{PageHandle, PolicyExtensions, RenderCtx};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -126,13 +126,22 @@ pub trait SharedPages: Send + Sync {
     fn canvas(&self, props: &SharedCanvasProps) -> Response;
 }
 pub struct SsrSharedPages {
+    /// Trusted configured provider origin, never a share/request parameter.
+    /// Browsers apply form-action to the native start form's 303 handoff too.
+    pub auth_origin: Option<String>,
     pub app: PageHandle<SharedPageProps>,
     pub canvas: PageHandle<SharedCanvasProps>,
 }
 impl SharedPages for SsrSharedPages {
     fn app(&self, props: &SharedPageProps) -> Response {
+        let mut context = RenderCtx::new().with_title(&props.title);
+        if props.needs_sign_in {
+            if let Some(origin) = &self.auth_origin {
+                context = context.with_policy(PolicyExtensions::new().form_action(origin.clone()));
+            }
+        }
         self.app
-            .render(props, &RenderCtx::new().with_title(&props.title))
+            .render(props, &context)
             .map(IntoResponse::into_response)
             .unwrap_or_else(|_| http::unavailable())
     }
@@ -562,8 +571,10 @@ async fn shared_app(
                 .split_once('.')
                 .and_then(|(organization, _)| auth.provider.as_ref()?.config.route(organization))
                 .is_some_and(|route| route.shared_client_id.is_some())
-            && crate::auth::cookies::read(request.headers(), crate::auth::cookies::SESSION)
-                .is_none(),
+            && matches!(
+                shared::home_organization(auth, request.headers()).await,
+                Ok(None)
+            ),
         message: if pending {
             "Verify your email, then sign in again to open this app."
         } else {
