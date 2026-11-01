@@ -126,6 +126,7 @@ fn bounded(value: &str, max: usize) -> bool {
 fn exact_origin(value: &str) -> bool {
     url::Url::parse(value).is_ok_and(|u| {
         u.scheme() == "https"
+            && u.host_str().is_some_and(|host| !host.contains('*'))
             && u.origin().ascii_serialization() == value
             && u.username().is_empty()
             && u.password().is_none()
