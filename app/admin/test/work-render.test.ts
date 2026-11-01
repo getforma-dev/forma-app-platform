@@ -93,3 +93,59 @@ test('shared rendering retains actual values and receipt bytes without exposing 
   assert.ok(!text(result).includes(APP));
   assert.ok(!elements(result).some(node => Object.hasOwn(node.attributes, 'href') || Object.hasOwn(node.attributes, 'action')));
 });
+
+test('admitted document parts retain interleaving, fixed layout classes and independent form identities', () => {
+  const source = props();
+  const part = (id: string, kind: string, row: number) => ({ id, title: id, kind,
+    class: `document-part document-column-0 document-width-12 document-row-${row}`,
+    text: '', collection: '', is_note: kind === 'note', is_form: kind === 'form', has_selector: false,
+    selection_name: `selection.${id}`, selected: '', choices: [], message: '', forms: [], views: [],
+  });
+  source.parts = [
+    { ...part('instructions', 'note', 1), text: HOSTILE },
+    { ...part('add_one', 'form', 2), collection: COLLECTION, forms: [{ ...source.forms[0]!, id: 'add_one' }] },
+    { ...part('total', 'status', 3), views: [source.views[0]!] },
+    { ...part('add_two', 'form', 4), collection: COLLECTION, forms: [{ ...source.forms[0]!, id: 'add_two' }] },
+  ];
+  const root = renderRegions(document, source).parts as unknown as Element;
+  assert.deepEqual(root.children.map(node => (node as Element).attributes['data-document-part']), ['instructions','add_one','total','add_two']);
+  assert.ok(text(root).includes(HOSTILE));
+  assert.ok(!elements(root).some(node => node.tag === 'script' || 'style' in node.attributes));
+  assert.deepEqual(elements(root).filter(node => 'data-document-form' in node.attributes).map(node => node.attributes['data-document-form']), ['add_one','add_two']);
+  assert.equal(text(elements(root).find(node => node.tag === 'pre')!), source.views[0]!.receipt_json);
+  source.parts[0]!.class += ' arbitrary-css';
+  assert.throws(() => renderRegions(document, source), /invalid layout/);
+});
+
+test('existing-record selection stays on the same work and retains native CSRF fallback', () => {
+  const source = props(); source.csrf = 'read-token';
+  source.parts = [{ id: 'edit', title: 'Edit item', kind: 'form', class: 'document-part document-column-6 document-width-6 document-row-1',
+    text: '', collection: COLLECTION, is_note: false, is_form: true, has_selector: true,
+    selection_name: 'selection.edit', selected: RECORD, choices: [{ id: RECORD, label: HOSTILE, selected: true }],
+    message: '', forms: [{ ...source.forms[0]!, id: 'edit' }], views: [] }];
+  const root = renderRegions(document, source).parts as unknown as Element;
+  const selector = elements(root).find(node => 'data-document-selection' in node.attributes)!;
+  assert.equal(selector.attributes.action, source.action);
+  assert.equal(elements(selector).find(node => node.attributes.name === 'csrf')?.attributes.value, 'read-token');
+  assert.equal(elements(selector).find(node => node.tag === 'select')?.value, RECORD);
+  assert.ok(text(selector).includes(HOSTILE));
+  source.parts[0]!.selection_name = 'organization_id';
+  assert.throws(() => renderRegions(document, source), /invalid selection/);
+});
+
+
+test('shared parts retain declared note/view/form-label order without member metadata or controls', () => {
+  const source = props();
+  const part = (id: string, row: number) => ({ id, title: id, class: `document-part document-column-0 document-width-12 document-row-${row}`, text: '', is_note: false, is_form: false, message: '', views: [] });
+  const read = { ...source, parts: [
+    { ...part('guide', 1), is_note: true, text: HOSTILE },
+    { ...part('form', 2), is_form: true, message: 'This form is view only in a shared app.', forms: source.forms, action: source.action },
+    { ...part('total', 3), views: source.views },
+  ] };
+  const root = renderReadOnlyRegions(document, read) as unknown as Element;
+  assert.deepEqual(elements(root).filter(node => 'data-document-part' in node.attributes).map(node => node.attributes['data-document-part']), ['guide', 'form', 'total']);
+  assert.ok(text(root).includes(HOSTILE) && text(root).includes('view only'));
+  assert.ok(elements(root).every(node => !['form', 'input', 'select', 'button', 'a', 'script'].includes(node.tag)));
+  assert.ok(!text(root).includes(APP));
+  assert.equal(text(elements(root).find(node => node.tag === 'pre')!), source.views[0]!.receipt_json);
+});

@@ -798,3 +798,75 @@ fn the_record_page_offers_only_a_command_storage_would_admit_and_only_its_writab
     reader.can_write = false;
     assert!(!offered(&reader).1);
 }
+
+#[test]
+fn declared_form_selects_exact_command_and_unconditional_initial_enum() {
+    use crate::storage::{RecordCommand, RecordDetail, RecordField};
+    let rules = |initial: Value| {
+        crate::storage::rules::Rules::from_declaration(
+            &json!({"transitions": [], "initial": initial}),
+        )
+        .unwrap()
+    };
+    let command = RecordCommand {
+        id: "add_book".into(),
+        operation: "create".into(),
+        writable_fields: vec!["status".into()],
+        transitions: Vec::new(),
+        rules: rules(json!([{"field_id":"status","value":"to_read"}])),
+    };
+    let mut detail = RecordDetail {
+        record_id: "00000000-0000-4000-8000-0000000000f0".into(),
+        collection: "00000000-0000-4000-8000-0000000000ce".into(),
+        schema: "book".into(),
+        schema_version: 1,
+        publication: "00000000-0000-4000-8000-0000000000cc".into(),
+        definition_digest: format!("sha256:{}", "7".repeat(64)),
+        work_version: 1,
+        version: 0,
+        can_write: true,
+        fields: vec![RecordField {
+            id: "status".into(),
+            value_type: json!({"type":"enum","values":["to_read","reading","done"]}),
+            nullable: false,
+            value: json!({"type":"null"}),
+            writable: true,
+        }],
+        commands: vec![command],
+    };
+    let offered = |detail: &RecordDetail, selected| {
+        super::view_for_command("a", "w", detail, "csrf".into(), "same-key".into(), selected)
+    };
+    let view = offered(&detail, Some("add_book"));
+    assert_eq!(view.fields[0].options, "to_read");
+    assert_eq!(view.fields[0].value, "to_read");
+    assert_eq!(
+        view.fields[0].spec,
+        r#"{"type":"enum","values":["to_read","reading","done"]}"#
+    );
+    assert_eq!(view.action, "/v1/work/a/w/commands/add_book");
+    assert!(!offered(&detail, Some("other")).can_write);
+    detail.commands[0].rules = rules(json!([
+        {"field_id":"status","value":"reading","when":{"field_id":"status","comparison":"eq","value":{"type":"enum","value":"reading"}}},
+        {"field_id":"status","value":"to_read"}
+    ]));
+    assert_eq!(
+        offered(&detail, Some("add_book")).fields[0].options,
+        "to_read | reading | done",
+        "a draft-dependent guard is not guessed from an empty record"
+    );
+    detail.commands[0].rules = rules(json!([{"field_id":"status","value":"to_read"}]));
+    detail.commands[0].operation = "update".into();
+    detail.version = 2;
+    detail.fields[0].value = json!({"type":"enum","value":"reading"});
+    assert_eq!(
+        offered(&detail, Some("add_book")).fields[0].value,
+        "reading"
+    );
+    assert_eq!(
+        offered(&detail, Some("add_book")).fields[0].options,
+        "to_read | reading | done"
+    );
+    detail.can_write = false;
+    assert!(!offered(&detail, Some("add_book")).can_write);
+}

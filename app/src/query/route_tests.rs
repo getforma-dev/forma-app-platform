@@ -362,10 +362,19 @@ fn the_page_requires_the_window_and_reads_the_form_body_only() {
     .unwrap();
     assert_eq!(filtered["destination"], "198.51.100.7");
     assert_eq!(filtered["window"]["end"], "2026-10-22T10:10:00Z");
-    // No window, half a window, a reversed or malformed one, a duplicate or
+    assert_eq!(
+        form_parameters(&fields(&[("csrf", "t")])).unwrap().0,
+        json!({})
+    );
+    assert_eq!(
+        form_parameters(&fields(&[("csrf", "t"), ("destination", "198.51.100.7")]))
+            .unwrap()
+            .0,
+        json!({"destination":"198.51.100.7"})
+    );
+    // Half a window, a reversed or malformed one, a duplicate or
     // an unknown field: refused, and the submitted values are echoed back.
     for refused in [
-        fields(&[("csrf", "t"), ("destination", "198.51.100.7")]),
         fields(&[
             ("csrf", "t"),
             ("window_start", "2026-10-22T10:00"),
@@ -634,6 +643,18 @@ fn view_states_loading_empty_failed_denied_never_zero() {
     let ready = card(&total, Outcome::Released(&exact, &receipt));
     assert_eq!(ready.state, "ready");
     assert!(ready.ready && ready.has_summary && !ready.has_table);
+    for kind in ["detail", "status"] {
+        let shown = card(&view(kind, kind), Outcome::Released(&exact, &receipt));
+        assert!(shown.has_summary && !shown.has_table && shown.has_receipt);
+        assert_eq!(shown.summary[0].raw, "1140000");
+        assert_eq!(shown.receipt_json, ready.receipt_json);
+    }
+    let filtered = card(
+        &view("filtered", "filter"),
+        Outcome::Released(&exact, &receipt),
+    );
+    assert!(filtered.has_table && filtered.has_receipt && !filtered.has_summary);
+    assert_eq!(filtered.rows[0].cells[0].raw, "1140000");
     assert_eq!(
         (
             ready.summary[0].label.as_str(),
@@ -818,4 +839,57 @@ async fn the_library_route_is_the_uniform_404_without_a_live_session() {
         assert!(uniform_404(&send(&app, "GET", "/v1/library/x", &headers, vec![]).await));
     }
     assert_eq!(counting.calls(), 0);
+}
+
+#[test]
+fn document_record_selection_is_closed_bounded_and_not_a_command() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let fields = |items: &[(&str, &str)]| {
+        items
+            .iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        document_selections(&fields(&[
+            ("csrf", "token"),
+            ("document_action", "refresh"),
+            ("selection.edit", id)
+        ]))
+        .unwrap()
+        .get("edit")
+        .map(String::as_str),
+        Some(id)
+    );
+    assert_eq!(
+        document_selections(&fields(&[
+            ("document_action", "refresh"),
+            ("selection.file", "new")
+        ]))
+        .unwrap()
+        .get("file")
+        .map(String::as_str),
+        Some("new")
+    );
+    for bad in [
+        fields(&[("document_action", "commit"), ("selection.edit", id)]),
+        fields(&[
+            ("document_action", "refresh"),
+            ("selection.edit", id),
+            ("selection.edit", id),
+        ]),
+        fields(&[
+            ("document_action", "refresh"),
+            ("selection.edit", "javascript:alert(1)"),
+        ]),
+        fields(&[("document_action", "refresh"), ("selection.Bad", id)]),
+        fields(&[("document_action", "refresh"), ("organization_id", id)]),
+    ] {
+        assert!(document_selections(&bad).is_none());
+    }
+    let mut many = fields(&[("document_action", "refresh")]);
+    for index in 0..25 {
+        many.push((format!("selection.form_{index}"), id.into()));
+    }
+    assert!(document_selections(&many).is_none());
 }

@@ -1,0 +1,14 @@
+{
+  "scope": "Integrated local source; disposable Chrome profile; synthetic member. No paid-account onboarding qualification.",
+  "checks": [
+    "Fresh browser Library and united app retain the independent saved-work name after reload and command discovery.",
+    "Ask stylesheet is emitted and loaded; mobile scope switch preserves draft; static-part refusal is explicit and page has no horizontal overflow.",
+    "Clock question completes through the local configured model route with a safe presentation-only answer or explicit refusal; no records or numeric current-value claim."
+  ],
+  "errors": [],
+  "widget": {
+    "status": 200,
+    "code": null,
+    "answer": "This clock widget is configured to display time in twelve-hour format, using the local time zone. It applies default styling for both the accent color and font, along with the default skin appearance. To see the current time displayed, you would need to inspect the widget directly."
+  }
+}

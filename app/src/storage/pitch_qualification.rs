@@ -104,6 +104,12 @@ struct Stub {
     replies: Mutex<VecDeque<String>>,
     bodies: Mutex<Vec<Value>>,
     keys: Mutex<Vec<String>>,
+    pause: Mutex<Option<Arc<ModelPause>>>,
+}
+#[derive(Default)]
+struct ModelPause {
+    arrived: tokio::sync::Notify,
+    release: tokio::sync::Notify,
 }
 impl Stub {
     fn script(&self, replies: Vec<String>) {
@@ -118,6 +124,7 @@ async fn stub_server() -> (String, Arc<Stub>) {
         replies: Mutex::new(VecDeque::new()),
         bodies: Mutex::new(Vec::new()),
         keys: Mutex::new(Vec::new()),
+        pause: Mutex::new(None),
     });
     let state = stub.clone();
     let app = axum::Router::new().route(
@@ -144,6 +151,11 @@ async fn stub_server() -> (String, Arc<Stub>) {
                         .unwrap()
                         .pop_front()
                         .unwrap_or_else(|| r#"{"choice":"none","confidence":"low"}"#.into());
+                    let pause = state.pause.lock().unwrap().take();
+                    if let Some(pause) = pause {
+                        pause.arrived.notify_one();
+                        pause.release.notified().await;
+                    }
                     let reply = json!({"id": "msg", "model": "stub-model",
                         "content": [{"type": "text", "text": text}],
                         "usage": {"input_tokens": 5, "output_tokens": 7}});
@@ -772,8 +784,12 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        &format!("compose (APP-101 instant pick, retrieved): POST /v1/compose answered {{app_id, work_id, origin: retrieved, title, tailoring: pending}} in {} ms with no router call (the local matcher picked the expense review app); the group route placed it {} ms after the intent was sent; GET /canvas lists the new work; Maya's stream received app.placed, then app.adapted {} ms after the intent was sent, after exactly one transform call through the real client (key as the header only, the intent in the user message)",
-            ms(composed.elapsed), timings["compose_to_placed_ms"], ms(reshaped)),
+        &format!(
+            "compose (APP-101 instant pick, retrieved): POST /v1/compose answered {{app_id, work_id, origin: retrieved, title, tailoring: pending}} in {} ms with no router call (the local matcher picked the expense review app); the group route placed it {} ms after the intent was sent; GET /canvas lists the new work; Maya's stream received app.placed, then app.adapted {} ms after the intent was sent, after exactly one transform call through the real client (key as the header only, the intent in the user message)",
+            ms(composed.elapsed),
+            timings["compose_to_placed_ms"],
+            ms(reshaped)
+        ),
     );
 
     // --- The views run with receipts ---
@@ -812,8 +828,11 @@ async fn campaign() {
     timings.insert("query_totals_samples".into(), json!(samples.len()));
     check(
         &mut checks,
-        &format!("governed data: the four views of the placed app ran through POST /v1/work/{{app}}/{{work}}/queries/{{view}} on the confined engine over the normalized library revision, each 200 carrying a contract-valid receipt with digest and result_digest; totals p50 {} ms over {} runs",
-            timings["query_totals_p50_ms"], samples.len()),
+        &format!(
+            "governed data: the four views of the placed app ran through POST /v1/work/{{app}}/{{work}}/queries/{{view}} on the confined engine over the normalized library revision, each 200 carrying a contract-valid receipt with digest and result_digest; totals p50 {} ms over {} runs",
+            timings["query_totals_p50_ms"],
+            samples.len()
+        ),
     );
 
     // --- APP-101: the adapted work: chips, filtered views, receipts ---
@@ -931,8 +950,13 @@ async fn campaign() {
     timings.insert("pinned_compose_ms".into(), json!(ms(picked.elapsed)));
     check(
         &mut checks,
-        &format!("chooser: an ambiguous sentence (\"expenses\") answered {} choices ({}) in {} ms with no model call and no row written; the click (a pinned app_id) placed the chosen app in {} ms with no model call; a pin outside her library is the uniform 404",
-            choices.len(), offered.join(", "), ms(chooser.elapsed), ms(picked.elapsed)),
+        &format!(
+            "chooser: an ambiguous sentence (\"expenses\") answered {} choices ({}) in {} ms with no model call and no row written; the click (a pinned app_id) placed the chosen app in {} ms with no model call; a pin outside her library is the uniform 404",
+            choices.len(),
+            offered.join(", "),
+            ms(chooser.elapsed),
+            ms(picked.elapsed)
+        ),
     );
 
     // --- APP-101: slash commands and "save as /name" ---
@@ -1110,8 +1134,10 @@ async fn campaign() {
     timings.insert("command_commit_ms".into(), json!(ms(committed.elapsed)));
     check(
         &mut checks,
-        &format!("commands: Maya's decision committed once through the audited command route ({} ms) with the group's server-minted key; the identical retry is replayed, not duplicated; the teammate's and Maya's streams received record.committed",
-            ms(committed.elapsed)),
+        &format!(
+            "commands: Maya's decision committed once through the audited command route ({} ms) with the group's server-minted key; the identical retry is replayed, not duplicated; the teammate's and Maya's streams received record.committed",
+            ms(committed.elapsed)
+        ),
     );
 
     // --- Generated: a valid typed definition on her dedicated app ---
@@ -1198,8 +1224,10 @@ async fn campaign() {
     timings.insert("compose_generated_ms".into(), json!(ms(generated.elapsed)));
     check(
         &mut checks,
-        &format!("compose (generated, \"build something new\"): with the stub returning a valid typed definition with amount > $200 written directly, the composition was admitted, drafted on Maya's dedicated authoring app, owner-published and saved as origin generated in {} ms (one generation call, no router); its group route places it, app.placed reached her stream, and its totals view's rows, result digest, query digest and source revisions equal the live transform's adapted totals (the transform's filter is the direct filter); the library app's newest publication is unchanged",
-            ms(generated.elapsed)),
+        &format!(
+            "compose (generated, \"build something new\"): with the stub returning a valid typed definition with amount > $200 written directly, the composition was admitted, drafted on Maya's dedicated authoring app, owner-published and saved as origin generated in {} ms (one generation call, no router); its group route places it, app.placed reached her stream, and its totals view's rows, result digest, query digest and source revisions equal the live transform's adapted totals (the transform's filter is the direct filter); the library app's newest publication is unchanged",
+            ms(generated.elapsed)
+        ),
     );
 
     // --- Hostile generation: refused on every attempt, nothing placed ---
@@ -1363,7 +1391,10 @@ async fn campaign() {
             .status,
         StatusCode::OK
     );
-    check(&mut checks, "APP-145: an entitled canary member with no authoring app, edit_definition, source or work grant explicitly composes a valid records-only definition through HTTP; exactly one owned app receives discover/edit_definition/run and one permission.granted audit, the work is published/saved in their tenant with no source dependency, the invitation's existing discover/run on its seeded app are unchanged and no source grant or new grant on existing/foreign apps or works is acquired, and the member can open it and receives their own app.placed event");
+    check(
+        &mut checks,
+        "APP-145: an entitled canary member with no authoring app, edit_definition, source or work grant explicitly composes a valid records-only definition through HTTP; exactly one owned app receives discover/edit_definition/run and one permission.granted audit, the work is published/saved in their tenant with no source dependency, the invitation's existing discover/run on its seeded app are unchanged and no source grant or new grant on existing/foreign apps or works is acquired, and the member can open it and receives their own app.placed event",
+    );
 
     // --- Isolation: the outsider, anonymous and forged callers ---
     let before_dispatch = counting.calls();
@@ -1467,7 +1498,9 @@ async fn campaign() {
     expect_silence(&mut outsider_stream, Duration::from_millis(1500)).await;
     check(
         &mut checks,
-        &format!("isolation: {denials} requests by the canary member (both Northstar groups, compose pinned to Northstar's app, the query route, share and the command route), anonymous and forged sessions (canvas, group, library, events, members, compose) got the uniform 404; the engine and the model saw none; the outsider's library is empty, their canvas shows neither Northstar work and their event stream stayed silent through every Northstar event"),
+        &format!(
+            "isolation: {denials} requests by the canary member (both Northstar groups, compose pinned to Northstar's app, the query route, share and the command route), anonymous and forged sessions (canvas, group, library, events, members, compose) got the uniform 404; the engine and the model saw none; the outsider's library is empty, their canvas shows neither Northstar work and their event stream stayed silent through every Northstar event"
+        ),
     );
 
     // --- The local stand for the pitch screenshots (scratch only) ---
@@ -1594,8 +1627,12 @@ async fn campaign() {
     assert!(page_ms < 1000, "GET /canvas p50 {page_ms} ms");
     check(
         &mut checks,
-        &format!("batched canvas reads (APP-113): for Maya ({compared} works compared) and the teammate ({mate_compared}), the batched listing and library catalog equal the serial ones, and the batched outline and records reads equal work_outline and list_records per work (an unknown work and a malformed id refused alike); for Maya's {} works the listing and reads took {batched_transactions} transactions and {batched_statements} statements in {batched_ms} ms (one work at a time: {serial_transactions} transactions, {serial_statements} statements, {serial_ms} ms); GET /canvas took {} transactions and {} statements per page, p50 {page_ms} ms over {PAGES}",
-            listed.len(), page_transactions / PAGES, page_statements / PAGES),
+        &format!(
+            "batched canvas reads (APP-113): for Maya ({compared} works compared) and the teammate ({mate_compared}), the batched listing and library catalog equal the serial ones, and the batched outline and records reads equal work_outline and list_records per work (an unknown work and a malformed id refused alike); for Maya's {} works the listing and reads took {batched_transactions} transactions and {batched_statements} statements in {batched_ms} ms (one work at a time: {serial_transactions} transactions, {serial_statements} statements, {serial_ms} ms); GET /canvas took {} transactions and {} statements per page, p50 {page_ms} ms over {PAGES}",
+            listed.len(),
+            page_transactions / PAGES,
+            page_statements / PAGES
+        ),
     );
 
     // --- APP-121: naming (organization labels, personal shortcuts) ---
@@ -1615,7 +1652,9 @@ async fn campaign() {
     );
     let labels_path = format!("/v1/apps/{EXPENSES_APP}/labels");
     let governed = |app: &str| {
-        format!("SELECT (SELECT count(*) FROM genui.definition_revisions WHERE app_id='{app}')*1000+(SELECT count(*) FROM genui.publications WHERE app_id='{app}')*100+(SELECT count(*) FROM genui.query_receipts)")
+        format!(
+            "SELECT (SELECT count(*) FROM genui.definition_revisions WHERE app_id='{app}')*1000+(SELECT count(*) FROM genui.publications WHERE app_id='{app}')*100+(SELECT count(*) FROM genui.query_receipts)"
+        )
     };
     let before = scalar(&c.fixture, &governed(EXPENSES_APP)).await;
     let labeled = "SELECT count(*) FROM genui.audit_events WHERE kind='app.labeled'";
@@ -1855,7 +1894,9 @@ async fn campaign() {
         .await;
     assert!(!outside.text().contains("Team spend"));
     let scoped = |org: &str, principal: &str| {
-        format!("SET ROLE genui_workspace; SELECT set_config('genui.organization_id','{org}',false); SELECT set_config('genui.principal_id','{principal}',false); SELECT (SELECT count(organization_id) FROM genui.app_labels)*10+(SELECT count(organization_id) FROM genui.member_labels);")
+        format!(
+            "SET ROLE genui_workspace; SELECT set_config('genui.organization_id','{org}',false); SELECT set_config('genui.principal_id','{principal}',false); SELECT (SELECT count(organization_id) FROM genui.app_labels)*10+(SELECT count(organization_id) FROM genui.member_labels);"
+        )
     };
     let last = |out: String| out.trim().lines().last().unwrap_or("").trim().to_owned();
     assert_eq!(last(c.fixture.sql(&scoped(OTHER, &mate_id), "genui")), "0");
@@ -1950,7 +1991,9 @@ async fn campaign() {
             assert_eq!(answer.json()["code"], "invalid_label", "{card}");
         }
     }
-    let filler = format!("INSERT INTO genui.member_labels(organization_id,principal_id,app_id,card,name,aliases,updated_at) SELECT '{ORG}','{mate_id}','{EXPENSES_APP}','x'||g,NULL,'{{}}',now() FROM generate_series(1,98) g");
+    let filler = format!(
+        "INSERT INTO genui.member_labels(organization_id,principal_id,app_id,card,name,aliases,updated_at) SELECT '{ORG}','{mate_id}','{EXPENSES_APP}','x'||g,NULL,'{{}}',now() FROM generate_series(1,98) g"
+    );
     c.fixture.sql(&filler, "genui");
     let capped = stand
         .post(
@@ -2154,6 +2197,70 @@ async fn campaign() {
         refused_collection.text()
     );
     assert_eq!(stub.calls(), calls_before_collection);
+    // APP-143: utility scopes carry only validated presentation state. No
+    // work/record selector reaches this model call, and no receipt is invented.
+    for widget in [
+        crate::widgets::state::Widget::Weather,
+        crate::widgets::state::Widget::Clock,
+        crate::widgets::state::Widget::Calculator,
+    ] {
+        stub.script(vec![json!({"text":"Use the widget controls to inspect its current display.","references":[]}).to_string()]);
+        let reply = stand.post(composer::talk::ASK_PATH, Some(&maya_cookie), &json!({"question":"How do these controls work?", "scope":{
+            "kind":"widget", "widget_id":format!("w-{}-abc123",widget.as_str()), "widget":widget.as_str(), "state":widget.default_state()}}).to_string()).await;
+        assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
+        assert_eq!(reply.json()["receipts"], json!([]));
+        assert_eq!(reply.json()["references"], json!([]));
+        let sent = stub.bodies.lock().unwrap().last().cloned().unwrap();
+        let user: Value =
+            serde_json::from_str(sent["messages"][0]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(user.as_object().unwrap().len(), 3);
+        assert!(user.get("records").is_none() && user.get("works").is_none());
+    }
+    let calls_before_widget_denial = stub.calls();
+    let denied_widget = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question":"What is its total?", "scope":{
+        "kind":"widget","widget":"note","widget_id":"w-note-abc123","state":{}}})
+            .to_string(),
+        )
+        .await;
+    assert_eq!(denied_widget.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(denied_widget.json()["code"], "invalid_request");
+    assert_eq!(stub.calls(), calls_before_widget_denial);
+    stub.script(vec![
+        json!({"text":"The temperature is 25.","references":[]}).to_string(),
+    ]);
+    let unattested = stand.post(composer::talk::ASK_PATH, Some(&maya_cookie), &json!({"question":"What is the temperature?", "scope":{
+        "kind":"widget","widget":"weather","widget_id":"w-weather-abc123","state":crate::widgets::state::Widget::Weather.default_state()}}).to_string()).await;
+    assert_eq!(unattested.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(unattested.json()["code"], "could_not_answer");
+    assert!(!unattested.text().contains("temperature"));
+
+    // The initial read succeeds, then the model waits while the operator
+    // revokes this exact work. The answer must not release old record values.
+    let pause = Arc::new(ModelPause::default());
+    *stub.pause.lock().unwrap() = Some(pause.clone());
+    stub.script(vec![
+        json!({"text":"This record needs attention.","references":["r1"]}).to_string(),
+    ]);
+    let pending_body = json!({"question":"Explain this record", "scope":card_scope}).to_string();
+    let pending = stand.post(composer::talk::ASK_PATH, Some(&maya_cookie), &pending_body);
+    tokio::pin!(pending);
+    tokio::select! {
+        reply = &mut pending => panic!("Ask finished before the model barrier: {}", reply.status),
+        reached = tokio::time::timeout(WAIT, pause.arrived.notified()) => { reached.expect("Ask reached the held model after its record read"); },
+    }
+    c.fixture.sql(&format!("CREATE TABLE public.app143_reads AS SELECT * FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{maya_id}' AND app_id='{EXPENSE_APP}' AND work_id='{work_id}' AND permission='record_read'; DELETE FROM genui.work_permissions p USING public.app143_reads r WHERE p.organization_id=r.organization_id AND p.principal_id=r.principal_id AND p.app_id=r.app_id AND p.work_id=r.work_id AND p.permission=r.permission; UPDATE genui.saved_work SET creator_revoked_at=clock_timestamp() WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND work_id='{work_id}' AND created_by='{maya_id}';"), "genui");
+    pause.release.notify_one();
+    let revoked_answer = pending.await;
+    assert!(revoked_answer.uniform_404(), "{}", revoked_answer.text());
+    c.fixture.sql(&format!("INSERT INTO genui.work_permissions SELECT * FROM public.app143_reads; DROP TABLE public.app143_reads; UPDATE genui.saved_work SET creator_revoked_at=NULL WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND work_id='{work_id}' AND created_by='{maya_id}';"), "genui");
+    check(
+        &mut checks,
+        "APP-143 contextual Ask: weather, clock and calculator have closed presentation-only scopes with no records/work identifiers or invented receipts; unsupported widgets refuse before a model call, unattested numeric widget replies are suppressed, and a scoped work revoked while the model waits yields uniform 404 before record-answer release",
+    );
     // The Ask transaction is READ ONLY: a forced write in it fails (25006).
     let forced = stores
         .data
@@ -2794,7 +2901,12 @@ async fn campaign() {
     let shared_before = scalar(&c.fixture, &made_events("card.shared")).await;
     let removed_before = scalar(&c.fixture, &made_events("card.removed")).await;
     // An admin (here the teammate, for this part) adds their own card for everyone.
-    c.fixture.sql(&format!("INSERT INTO genui.organization_permissions VALUES ('{ORG}','{mate_id}','admin_policy')"), "genui");
+    c.fixture.sql(
+        &format!(
+            "INSERT INTO genui.organization_permissions VALUES ('{ORG}','{mate_id}','admin_policy')"
+        ),
+        "genui",
+    );
     let mates_everyone = format!("/v1/cards/{mates_id}/everyone");
     let mate_shared = stand
         .post(&mates_everyone, Some(&mate_cookie), r#"{"everyone":true}"#)

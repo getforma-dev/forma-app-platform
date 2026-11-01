@@ -297,3 +297,39 @@ class SecretStateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HostedBrokerConfiguration(unittest.TestCase):
+    def test_configuration_is_closed_and_never_contains_a_management_key(self):
+        good = {"tenant_slug":"forma-trial", "provider_tenant_id":"ten_trial_test", "client_token":"A"*43,
+                "state_secret_arn":"arn:aws:secretsmanager:us-east-1:877573132739:secret:broker-state-AbCdEf", "port":3001}
+        self.assertEqual(b.broker_configuration(good), good)
+        for change in ({"management_key":"never"}, {"client_token":"short"}, {"port":True}, {"port":80}, {"provider_tenant_id":"unbound"}, {"state_secret_arn":"not-an-arn"}):
+            with self.subTest(change=change), self.assertRaises(b.Refused): b.broker_configuration(dict(good, **change))
+
+    def test_ecs_injection_is_consumed_privately_then_cleaned_and_wrong_bind_refused(self):
+        import contextlib, io, os, tempfile
+        good = {"tenant_slug":"forma-trial", "provider_tenant_id":"ten_trial_test", "client_token":"A"*43,
+                "state_secret_arn":"arn:aws:secretsmanager:us-east-1:877573132739:secret:broker-state-AbCdEf", "port":3001}
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); root.chmod(0o700)
+            real_directory=b.provider.runtime.SharedBrokerDirectory
+            captured=[]
+            def materialize(_path, content):
+                made=real_directory(root/'credentials.json',content); captured.append(made.config_path); return made
+            def client(config):
+                self.assertNotIn('GENUI_SHARED_BROKER_CONFIG_JSON', os.environ)
+                self.assertIsNone(config.capability_store)
+                self.assertEqual(config.tenant_id, good['provider_tenant_id'])
+                return mock.Mock()
+            env={'GENUI_SHARED_BROKER_CONFIG_JSON':json.dumps(good),'GENUI_SHARED_BROKER_BIND_ADDRESS':'0.0.0.0',
+                 'GENUI_PROVIDER_MANAGEMENT_URL':'https://auth.example.test','GENUI_PROVIDER_MANAGEMENT_SECRET_KEY':'mgmt_fixture_key_only',
+                 'GENUI_PROVIDER_MANAGEMENT_SECRET_TENANT_ID':good['provider_tenant_id']}
+            with mock.patch.dict(os.environ,env,clear=True), mock.patch.object(b.provider.runtime,'SharedBrokerDirectory',side_effect=materialize), mock.patch.object(b.provider,'Client',side_effect=client), mock.patch.object(b,'SecretState'), mock.patch.object(b,'Server') as server:
+                self.assertEqual(b.main(),0)
+                self.assertEqual(server.call_args.args[0],('0.0.0.0',3001))
+            self.assertFalse(captured[0].exists()); self.assertEqual(list(root.iterdir()),[])
+            with mock.patch.dict(os.environ,{**env,'GENUI_SHARED_BROKER_BIND_ADDRESS':'example.test'},clear=True), mock.patch.object(b.provider.runtime,'SharedBrokerDirectory',side_effect=materialize), mock.patch.object(b.provider,'load_config') as provider, contextlib.redirect_stderr(io.StringIO()) as error:
+                self.assertEqual(b.main(),1); provider.assert_not_called()
+                self.assertNotIn(good['client_token'], error.getvalue())
+            self.assertEqual(list(root.iterdir()),[])

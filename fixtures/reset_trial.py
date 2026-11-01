@@ -192,7 +192,7 @@ def verify_seed_manifest(state, setup, bundles, seed_module, tables):
             apps.append({"organization_id": oid, "app_id": app, "space_id": seed_module.SPACE, "owner_principal_id": author})
             # Seeded work records no creator (ADR-007 amendment, APP-010 review M2): its authority is the seeded work grants.
             work.append({"organization_id": oid, "app_id": app, "work_id": fixture["work_id"], "publication_id": fixture["publication_id"], "version": fixture["work_version"], "context": bundle["work"]["context"],
-                         "created_by": None, "creator_revoked_at": None})
+                         "created_by": None, "creator_revoked_at": None, "display_name": None, "name_version": 0})
             require(len(fixture["collection_ids"]) == 1, "unexpected seeded collection count")
             records.append({"organization_id": oid, "app_id": app, "work_id": fixture["work_id"], "collection_id": fixture["collection_ids"][0], "record_id": fixture["record_id"], "current_version": fixture["record_version"]})
             for purpose, principal in (("author_app", author), ("reviewer_app", reviewer)):

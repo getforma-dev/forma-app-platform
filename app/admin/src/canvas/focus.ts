@@ -38,6 +38,9 @@ let session: Session | null = null;
 let observer: MutationObserver | null = null;
 let lastPointed: HTMLElement | null = null;
 const INERT = ['.cv-top', '#cv-canvas', '#cv-library', '.cv-dock'];
+type FocusAsk = (card: HTMLElement | null, host: HTMLElement | null, focus: boolean) => void;
+let focusAsk: FocusAsk | null = null;
+export function setFocusAsk(callback: FocusAsk): void { focusAsk = callback; }
 
 /**
  * APP-108: cards that are not an app's cards (a folder, an app's Summary, a
@@ -145,11 +148,17 @@ function build(document_: Document): HTMLElement {
           el(document_, 'p', { class: 'cv-focus-app', 'data-focus-app': '' }),
           el(document_, 'h2', { id: 'cv-focus-title', class: 'cv-focus-title', 'data-focus-title': '' })),
         el(document_, 'span', { class: 'cv-focus-pos', 'data-focus-pos': '', 'aria-live': 'polite' }),
+        el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-focus-ask': '' }, 'Ask about this'),
         prev, next, close),
       stage,
+      el(document_, 'div', { 'data-focus-ask-panel': '', hidden: '' }),
       strip));
   root.addEventListener('click', (event) => {
     const target = event.target as Element | null;
+    if (target?.closest('[data-focus-ask]')) {
+      focusAsk?.(session?.card ?? null, root.querySelector<HTMLElement>('[data-focus-ask-panel]'), true);
+      return;
+    }
     if (target?.closest('[data-focus-backdrop]')) {
       closeFocus();
       return;
@@ -306,6 +315,7 @@ function show(index: number): void {
   restoreScroll();
   session.card = card;
   session.placeholder = placeholder;
+  focusAsk?.(card, dialog.querySelector<HTMLElement>('[data-focus-ask-panel]'), false);
   const work = board.workOf(card) ?? '';
   const app = dialog.querySelector('[data-focus-app]');
   const own = standalone.get(id);
@@ -367,6 +377,9 @@ export function closeFocus(): void {
   putBack();
   observer?.disconnect();
   session = null;
+  focusAsk?.(null, null, false);
+  const askPanel = dialog.querySelector<HTMLElement>('[data-focus-ask-panel]');
+  if (askPanel) askPanel.hidden = true;
   dialog.hidden = true;
   for (const selector of INERT) documentRef.querySelector<HTMLElement>(selector)?.removeAttribute('inert');
   documentRef.getElementById('cv-shell')?.classList.remove('is-focus-open');

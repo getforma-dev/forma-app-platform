@@ -117,6 +117,7 @@ app/src/bin/**
 !app/src/composer/plan.rs
 !app/src/composer/prompt.rs
 !app/src/composer/routes.rs
+!app/src/composer/templates.rs
 !app/src/composer/shape.rs
 !app/src/composer/talk.rs
 !app/src/composer/transform.rs
@@ -142,6 +143,7 @@ app/src/bin/**
 !app/src/storage/agents.rs
 !app/src/storage/governance.rs
 !app/src/storage/labels.rs
+!app/src/storage/work_labels.rs
 !app/src/storage/cards.rs
 !app/src/storage/admission_qualification.rs
 !app/src/storage/authorization.rs
@@ -188,6 +190,7 @@ app/src/bin/**
 !app/migrations/catalog-v15.json
 !app/migrations/catalog-v16.json
 !app/migrations/catalog-v17.json
+!app/migrations/catalog-v18.json
 !app/certs/rds-global-bundle.pem
 !app/runtime/runtime.py
 !app/runtime/qualification_supervisor.py

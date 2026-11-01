@@ -45,7 +45,7 @@ use axum::{
     extract::{Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
     Router,
 };
 use serde_json::{json, Value};
@@ -106,6 +106,27 @@ pub const TAILOR_DEADLINE: std::time::Duration = std::time::Duration::from_secs(
 
 pub fn router(state: Arc<Compose>) -> Router {
     Router::new().route(PATH, post(compose)).with_state(state)
+}
+
+pub fn catalog_router(auth: Arc<Auth>) -> Router {
+    Router::new()
+        .route("/v1/templates", get(templates))
+        .with_state(auth)
+}
+
+async fn templates(State(auth): State<Arc<Auth>>, request: Request) -> Response {
+    if request.uri().query().is_some() {
+        return http::not_found();
+    }
+    if let Err(response) = member(&auth, request.headers()).await {
+        return response;
+    }
+    // Catalog discovery neither prepares an authoring shell nor calls a model.
+    let body = json!({"templates": super::templates::CATALOG.iter().map(|template| template.metadata()).collect::<Vec<_>>()});
+    match crate::admission::encode(&body) {
+        Ok(bytes) => json_response(bytes),
+        Err(_) => http::unavailable(),
+    }
 }
 
 /// A composed, saved work.
@@ -172,6 +193,8 @@ pub enum Pin {
     App(String),
     /// "Build something new": straight to generation.
     Generate,
+    /// A first-party admitted starting definition, optionally customized.
+    Template(String),
 }
 
 /// One app the chooser offers.
@@ -208,7 +231,18 @@ pub(crate) async fn compose_instant(
         refusal
     };
     let demo = composer.demo_for(member.organization());
-    if !composer.available_for(member.organization()) {
+    let template = match pin {
+        Pin::Template(id) => Some(super::templates::find(id).ok_or_else(|| {
+            refused(
+                "unknown_template",
+                None,
+                Refused::CouldNotCompose("unknown_template"),
+            )
+        })?),
+        _ => None,
+    };
+    let instantiate = template.is_some_and(|template| intent.trim() == template.description);
+    if !instantiate && !composer.available_for(member.organization()) {
         return Err(refused(
             "composer_unavailable",
             None,
@@ -222,6 +256,65 @@ pub(crate) async fn compose_instant(
     if context.library.is_empty() && context.authoring.is_none() {
         // Nothing this member may compose: indistinguishable from a stranger.
         return Err(refused("nothing_composable", None, Refused::NotFound));
+    }
+
+    if let Some(template) = template {
+        let authoring = context.authoring.as_ref().ok_or_else(|| {
+            refused(
+                "no_authoring_app",
+                Some(Origin::Adapted),
+                Refused::CouldNotCompose("no_authoring_app"),
+            )
+        })?;
+        // The fixed definition is admitted before it can become a model input.
+        let base = template
+            .instantiate(member.organization(), &authoring.app)
+            .map_err(|error| {
+                refused(
+                    error.code,
+                    Some(Origin::Adapted),
+                    Refused::CouldNotCompose(error.code),
+                )
+            })?;
+        let planned = if instantiate {
+            base
+        } else {
+            let base_content = template.content();
+            let generated = composer
+                .generate_from_template(
+                    intent,
+                    &base_content,
+                    &context.sources,
+                    member.organization(),
+                    &authoring.app,
+                    deadline,
+                )
+                .await
+                .map_err(|error| match error {
+                    GenerationFailure::Model(super::model::ModelError::Unavailable) => {
+                        Refused::ComposerUnavailable
+                    }
+                    _ => refused(
+                        "template_customization_refused",
+                        Some(Origin::Adapted),
+                        Refused::CouldNotCompose("template_customization_refused"),
+                    ),
+                })?;
+            let content = crate::admission::decode(&generated.planned.admitted.canonical)
+                .map_err(|_| Refused::StoreUnavailable)?;
+            template
+                .plan(content, member.organization(), &authoring.app)
+                .map_err(|error| {
+                    refused(
+                        error.code,
+                        Some(Origin::Adapted),
+                        Refused::CouldNotCompose(error.code),
+                    )
+                })?
+        };
+        return draft_publish_save(stores, member, &context, planned, intent, started, true)
+            .await
+            .map(|composed| First::Placed(composed, None));
     }
 
     // Step 1: the router.
@@ -262,6 +355,7 @@ pub(crate) async fn compose_instant(
             None => return Err(refused("unknown_pin", None, Refused::NotFound)),
         },
         Pin::Generate => Ok((Decision::Generate, "requested")),
+        Pin::Template(_) => unreachable!("template composition is handled above"),
         Pin::Free | Pin::Chooser => composer.route(intent, &context.library, exclude).await,
     };
     let (decision, confidence) = match routing {
@@ -939,15 +1033,23 @@ async fn member(auth: &Auth, headers: &HeaderMap) -> Result<TrustedRequest, Resp
 /// command or a chooser click) or `"generate": true` ("Build something
 /// new"); nothing else. Without either, a near tie answers the chooser.
 pub(super) fn body_request(bytes: &[u8]) -> Option<(String, Pin)> {
-    let value: Value = serde_json::from_slice(bytes).ok()?;
+    let value = crate::admission::decode(bytes).ok()?;
     let object = value.as_object()?;
     let intent = super::prompt::intent(object.get("intent")?.as_str()?)?.to_owned();
-    let pin = match (object.get("app_id"), object.get("generate"), object.len()) {
-        (None, None, 1) => Pin::Chooser,
-        (Some(Value::String(app)), None, 2) if crate::storage::valid_identifier(app) => {
+    let pin = match (
+        object.get("app_id"),
+        object.get("generate"),
+        object.get("template_id"),
+        object.len(),
+    ) {
+        (None, None, None, 1) => Pin::Chooser,
+        (Some(Value::String(app)), None, None, 2) if crate::storage::valid_identifier(app) => {
             Pin::App(app.clone())
         }
-        (None, Some(Value::Bool(true)), 2) => Pin::Generate,
+        (None, Some(Value::Bool(true)), None, 2) => Pin::Generate,
+        (None, None, Some(Value::String(id)), 2) if super::templates::find(id).is_some() => {
+            Pin::Template(id.clone())
+        }
         _ => return None,
     };
     Some((intent, pin))
@@ -996,10 +1098,6 @@ async fn compose(State(state): State<Arc<Compose>>, request: Request) -> Respons
         Err(refusal) => return refusal,
     };
     let started = Instant::now();
-    if !state.composer.available_for(member.organization()) {
-        log_refused(&member, "composer_unavailable", None, started);
-        return problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
-    }
     let key = format!("compose:{}:{}", member.organization(), member.principal());
     if let Err(retry_after) = state.auth.limits.admit(&[(&key, COMPOSE_MEMBER)]) {
         log_refused(&member, "too_many_requests", None, started);

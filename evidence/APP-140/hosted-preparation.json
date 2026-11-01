@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-11-01T18:49:05.366526+00:00",
+  "scope": "APP-140 hosted preparation and specifically authorized provider bootstrap; no application deployment",
+  "aws_read_observation": {
+    "observed_at_utc": "2026-11-01T18:08:53Z",
+    "account": "877573132739",
+    "region": "us-east-1",
+    "stack_status": "UPDATE_COMPLETE",
+    "pending_change_sets": 0,
+    "service_task_revision": 12,
+    "service_counts": {
+      "desired": 1,
+      "running": 1,
+      "pending": 0
+    },
+    "image_architecture": "ARM64",
+    "application_schema_observed": false,
+    "expiry_utc": "2026-11-30T23:00:00Z"
+  },
+  "provider_bootstrap": {
+    "organization_id": "2bd9340d-8d92-4b44-9251-998e073c7fa0",
+    "tenant_slug": "forma-trial-20261101",
+    "provider_tenant_id": "ten_6cee7ea6-5d3d-499f-9ac1-19a2ed6acea4",
+    "started_at_utc": "2026-11-01T18:45:44.918865+00:00",
+    "completed_at_utc": "2026-11-01T18:45:46.038479+00:00",
+    "status": "configured_no_users_or_invitations",
+    "clients": [
+      {
+        "client_id": "forma-trial-20261101-platform",
+        "redirect_uri": "https://beta.getforma.dev/auth/callback"
+      },
+      {
+        "client_id": "forma-trial-20261101-shared",
+        "redirect_uri": "https://beta.getforma.dev/auth/shared/callback"
+      }
+    ],
+    "provider_user_count": 0,
+    "users_created": 0,
+    "invitations_sent": 0,
+    "emails_requested": 0
+  },
+  "ses_prerequisite": {
+    "smtp_region": "us-east-1",
+    "production_access": false,
+    "sending_enabled": true,
+    "single_verification_request_accepted_at_utc": "2026-11-01T18:27:55.245465+00:00",
+    "request_id": "d036f2db-1fa7-4bb7-8d5d-e478f1e92a27",
+    "recipient_identity_omitted": true,
+    "verification_completion_not_observed": true
+  },
+  "local_budget_reconciliation": {
+    "observed_at_utc": "2026-11-01T18:38:19Z",
+    "changed_fields": [
+      "months.2026-11.reconciled_at_utc",
+      "months.2026-11.basis"
+    ],
+    "october_and_all_reservations_preserved": true,
+    "november_billing_lag": true,
+    "october31_all_account_estimated_cost_usd": "5.1327227476",
+    "new_window_reserved": false,
+    "projected_clean_trial_genui_cents": 16980,
+    "projected_clean_trial_combined_cents": 20780,
+    "genui_cap_cents": 17000,
+    "combined_cap_cents": 20800,
+    "headroom_cents": 20,
+    "projection_is_not_billing_cap_or_deployment": true
+  },
+  "prepared_auth_configuration_sha256": "3bdfd24c51a7da9cbb9b2ac068c87845d368813829d5e6b6b883813cd0566a94",
+  "application_secret_updated": false,
+  "application_database_provisioned": false,
+  "application_deployed": false,
+  "limitations": [
+    "Candidate ARM64 image qualification, managed catalog observation/migration, fresh app organization, real owner admission and external guest trial remain deployment work.",
+    "Provider tenant/client creation is proven; provider account registration and mailbox delivery are not.",
+    "Operator image-dependent tests require the final qualified candidate image; local package run skipped six.",
+    "The qualification task retains its established trusted runtime role; its managed manifest remains confined to the two synthetic qualification organizations. No managed campaign was run against the fresh organization."
+  ]
+}

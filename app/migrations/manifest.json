@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 17,
+  "database_version": 18,
   "migrations": [
     {
       "version": 1,
@@ -86,6 +86,11 @@
       "version": 17,
       "file": "0017_live_sharing.sql",
       "sha256": "34b9484d791eff75c85a9f270432b8aea6c47480cf065c428546681e8fc6a805"
+    },
+    {
+      "version": 18,
+      "file": "0018_work_names.sql",
+      "sha256": "cb72989ea53b5c1d08a52c88a14c154038fd4c8e045dfde50e8075a40bbf5435"
     }
   ],
   "catalog": [
@@ -160,6 +165,10 @@
     {
       "file": "catalog-v17.json",
       "sha256": "4cfd700fc0acf5786cb33edc313a0c31b064b9caa299a182cd7d6ed4fb04279d"
+    },
+    {
+      "file": "catalog-v18.json",
+      "sha256": "b59e28f38e0a6aab0a0fc4e7feeea8be229b606ed503ecd2988d2e11c92d2f91"
     }
   ]
 }

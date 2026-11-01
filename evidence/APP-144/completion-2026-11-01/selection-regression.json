@@ -1,0 +1,8 @@
+{
+  "scope": "Injected revision-removal response over real authorized work; controller regression, not an actual publication change",
+  "requests": [
+    "POST",
+    "GET"
+  ],
+  "pass": true
+}

@@ -106,7 +106,7 @@ pub fn router(state: Arc<Talk>) -> Router {
         .with_state(state)
 }
 
-async fn member(auth: &Auth, headers: &HeaderMap) -> Result<TrustedRequest, Response> {
+async fn resolve_member(auth: &Auth, headers: &HeaderMap) -> Result<TrustedRequest, Response> {
     let cookie = cookies::read(headers, cookies::SESSION).ok_or_else(http::not_found)?;
     let stores = auth.stores.as_ref().ok_or_else(http::not_found)?;
     let live = |reference: &str| auth.vault.contains(reference);
@@ -150,7 +150,7 @@ async fn front(
     if !csrf::same_origin(&parts.headers, state.auth.origin()) {
         return Err(http::cross_site());
     }
-    let member = member(&state.auth, &parts.headers).await?;
+    let member = resolve_member(&state.auth, &parts.headers).await?;
     if parts.uri.query().is_some() {
         return Err(http::problem(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -234,6 +234,7 @@ pub(crate) struct AskBody {
     pub question: String,
     pub address: String,
     pub works: Vec<ScopeWork>,
+    pub widget: Option<(Widget, Value)>,
 }
 
 pub(crate) fn ask_body(value: &Value) -> Option<AskBody> {
@@ -243,6 +244,33 @@ pub(crate) fn ask_body(value: &Value) -> Option<AskBody> {
     }
     let question = ask::question(object.get("question")?.as_str()?)?.to_owned();
     let scope = object.get("scope")?.as_object()?;
+    if scope.get("kind")?.as_str()? == "widget" {
+        if !exactly(
+            scope,
+            &["kind", "widget_id", "widget", "state"],
+            &["address"],
+        ) {
+            return None;
+        }
+        let widget = Widget::parse(scope.get("widget")?.as_str()?)?;
+        let id = scope.get("widget_id")?.as_str()?;
+        let suffix = id.strip_prefix(&format!("w-{}-", widget.as_str()))?;
+        if suffix.is_empty()
+            || suffix.len() > 32
+            || !suffix
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        {
+            return None;
+        }
+        let state = state::validate(widget, scope.get("state")?)?;
+        return Some(AskBody {
+            question,
+            address: address(scope.get("address"))?,
+            works: Vec::new(),
+            widget: Some((widget, state)),
+        });
+    }
     if !exactly(scope, &["kind", "works"], &["address"]) {
         return None;
     }
@@ -298,11 +326,13 @@ pub(crate) fn ask_body(value: &Value) -> Option<AskBody> {
         question,
         address: address(scope.get("address"))?,
         works: out,
+        widget: None,
     })
 }
 
 /// `POST /v1/ask`.
 async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response {
+    let headers = request.headers().clone();
     let (member, value) = match front(&state, request, "talk.ask", ASK_MEMBER).await {
         Ok(front) => front,
         Err(refusal) => return refusal,
@@ -311,6 +341,44 @@ async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response
     let Some(body) = ask_body(&value) else {
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_request");
     };
+    if let Some((widget, current)) = &body.widget {
+        // Utility state is presentation data, not an authorization selector.
+        // This branch never opens a work or reads an organization record.
+        if !state.composer.enabled() {
+            return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
+        }
+        let reply = state
+            .composer
+            .complete_fast(
+                ask::WIDGET_SYSTEM,
+                json!({"question": body.question, "widget": widget.as_str(), "state": current})
+                    .to_string(),
+                ASK_MAX_TOKENS,
+                ASK_BUDGET,
+            )
+            .await;
+        let answer = match reply
+            .ok()
+            .and_then(|reply| ask::judge_widget(&reply.text).ok())
+        {
+            Some(answer) => answer,
+            None => return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_answer"),
+        };
+        if let Err(refusal) = resolve_member(&state.auth, &headers).await {
+            return refusal;
+        }
+        tracing::info!(
+            event = "talk.answered",
+            source = "model",
+            target = "widget",
+            widget = widget.as_str(),
+            organization_id = member.organization(),
+            principal_id = member.principal(),
+            duration_ms = elapsed_ms(started),
+            "ask answered"
+        );
+        return document(&ask::document(&answer, &[]));
+    }
     let Some(stores) = state.auth.stores.as_ref() else {
         return http::not_found();
     };
@@ -394,6 +462,20 @@ async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response
             }
         }
     };
+    // A model may take seconds. Re-resolve this same session, and re-read
+    // current authority plus the exact publication/work pins before release.
+    let current_member = match resolve_member(&state.auth, &headers).await {
+        Ok(current) => current,
+        Err(refusal) => return refusal,
+    };
+    let current = match stores.data.read_only_listings(&current_member, &keys).await {
+        Ok(current) => current,
+        Err(storage::Error::Denied) => return http::not_found(),
+        Err(_) => return http::unavailable(),
+    };
+    if !same_pins(&listings, &current) {
+        return http::not_found();
+    }
     tracing::info!(
         event = "talk.answered",
         source,
@@ -407,6 +489,17 @@ async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response
         "ask answered"
     );
     document(&ask::document(&answer, &rows))
+}
+
+fn same_pins(before: &[storage::RecordsListing], after: &[storage::RecordsListing]) -> bool {
+    before.len() == after.len()
+        && before.iter().zip(after).all(|(a, b)| {
+            a.app == b.app
+                && a.work == b.work
+                && a.publication == b.publication
+                && a.definition_digest == b.definition_digest
+                && a.work_version == b.work_version
+        })
 }
 
 /// Where a card's data comes from: a records or ledger card's collection,
@@ -846,6 +939,49 @@ mod tests {
     }
 
     #[test]
+    fn widget_ask_cannot_carry_a_work_or_untrusted_display() {
+        for widget in [Widget::Weather, Widget::Clock, Widget::Calculator] {
+            let body = json!({"question":"Explain these controls", "scope":{
+                "kind":"widget", "widget_id":format!("w-{}-abc123", widget.as_str()),
+                "widget":widget.as_str(), "state":widget.default_state(), "address":widget.as_str()}});
+            let parsed = ask_body(&body).unwrap();
+            assert!(parsed.works.is_empty());
+            assert_eq!(parsed.widget.as_ref().unwrap().0, widget);
+            for key in ["works", "app_id", "work_id", "display", "receipt", "query"] {
+                let mut bad = body.clone();
+                bad["scope"][key] = json!([]);
+                assert!(ask_body(&bad).is_none(), "{key}");
+            }
+            let mut bad = body.clone();
+            bad["scope"]["state"]["html"] = json!("<script>");
+            assert!(ask_body(&bad).is_none());
+            let mut bad = body;
+            bad["scope"]["widget_id"] = json!("w-note-abc123");
+            assert!(ask_body(&bad).is_none());
+        }
+        for kind in ["note", "folder", "query", "app", "unknown"] {
+            assert!(ask_body(&json!({"question":"What is it?", "scope":{"kind":"widget", "widget_id":"w-note-abc", "widget":kind, "state":{}}})).is_none());
+        }
+    }
+
+    #[test]
+    fn widget_answers_cannot_claim_unattested_numbers_or_receipts() {
+        assert!(ask::judge_widget(
+            r#"{"text":"The clock uses the selected time zone.","references":[]}"#
+        )
+        .is_ok());
+        for reply in [
+            r#"{"text":"It is 9:30.","references":[]}"#,
+            r#"{"text":"The temperature is ２４.","references":[]}"#,
+            r#"{"text":"The total is ready.","references":["r1"]}"#,
+            r#"{"text":"A result.","receipts":[]}"#,
+            r#"{"text":"A result.","view":{}}"#,
+        ] {
+            assert!(ask::judge_widget(reply).is_err(), "{reply}");
+        }
+    }
+
+    #[test]
     fn shape_bodies_are_closed() {
         let card = json!({"address": "expenses.ledger", "words": "only red invoices", "target": {"kind": "card",
             "app_id": APP, "work_id": WORK, "card": "ledger", "collection": COLLECTION,
@@ -954,6 +1090,9 @@ mod tests {
                 .into_iter()
                 .collect(),
             }],
+            parts: Vec::new(),
+            can_window: true,
+            can_destination: true,
             definition_digest: String::new(),
             collections: Vec::new(),
             can_write: false,

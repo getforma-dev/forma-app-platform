@@ -1,0 +1,4 @@
+arch=arm64
+sqlite_cli=fstab_noncomment_lines=0
+LANG=C.UTF-8
+LANGUAGE=setuid_or_setgid_binaries=11

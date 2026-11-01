@@ -13,6 +13,7 @@ export function sharedJson(value: unknown, key: string): SharedJson {
     || typeof data.can_add_to_canvas !== 'boolean' || typeof data.added_to_canvas !== 'boolean'
     || typeof data.can_accept !== 'boolean' || typeof data.needs_sign_in !== 'boolean'
     || typeof data.title !== 'string' || typeof data.message !== 'string'
+    || (data.parts !== undefined && !Array.isArray(data.parts))
     || !Array.isArray(data.views) || !Array.isArray(data.record_cards)) throw new Error('The shared app could not be verified.');
   return data;
 }

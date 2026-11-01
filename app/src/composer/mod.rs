@@ -52,6 +52,7 @@ pub mod prompt;
 pub mod routes;
 pub mod shape;
 pub mod talk;
+pub mod templates;
 pub mod transform;
 
 use crate::storage::{LibraryApp, ReadableSource};
@@ -381,6 +382,42 @@ impl Composer {
         app: &str,
         deadline: Instant,
     ) -> Result<Generated, GenerationFailure> {
+        self.generate_using(intent, context, None, sources, organization, app, deadline)
+            .await
+    }
+
+    pub async fn generate_from_template(
+        &self,
+        intent: &str,
+        template: &serde_json::Value,
+        sources: &[ReadableSource],
+        organization: &str,
+        app: &str,
+        deadline: Instant,
+    ) -> Result<Generated, GenerationFailure> {
+        self.generate_using(
+            intent,
+            None,
+            Some(template),
+            sources,
+            organization,
+            app,
+            deadline,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn generate_using(
+        &self,
+        intent: &str,
+        context: Option<&serde_json::Value>,
+        template: Option<&serde_json::Value>,
+        sources: &[ReadableSource],
+        organization: &str,
+        app: &str,
+        deadline: Instant,
+    ) -> Result<Generated, GenerationFailure> {
         let model = self
             .model
             .as_ref()
@@ -405,7 +442,7 @@ impl Composer {
             let request = ModelRequest {
                 model: self.generation_model.clone(),
                 system: prompt::generation_system().to_owned(),
-                user: prompt::generation_user_with(intent, &contracts, feedback, context),
+                user: prompt::generation_user_from(intent, &contracts, feedback, context, template),
                 max_tokens: GENERATION_MAX_TOKENS,
                 budget,
             };

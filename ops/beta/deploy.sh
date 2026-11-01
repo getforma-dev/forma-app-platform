@@ -12,6 +12,7 @@
 #
 # Steps ([read] calls only read APIs; [local] calls no AWS API):
 #   new        [local]    --candidate <sha> --supersedes <live window id> [--input-from <file>]
+#                         [--clean-trial-file <private fresh identifiers JSON>]
 #                         makes the window id and directory and release.json (0.1, 0.4),
 #                         with the local image record of `just images` (build.json)
 #   observe    [read]     caller identity, read-only snapshot, stack-before.json, template-before.json (1.1-1.3)
@@ -56,7 +57,7 @@ usage() { sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'
 step=${1:-help}; shift || true
 case $step in help|-h|--help) usage; exit 0 ;; esac
 
-WINDOW_ID="" organization="" candidate="" supersedes="" input_from="" snap_name="" restore=0 record_only=0 origin=$BETA_ORIGIN extra=()
+WINDOW_ID="" organization="" candidate="" supersedes="" input_from="" clean_trial_file="" snap_name="" restore=0 record_only=0 origin=$BETA_ORIGIN extra=()
 if [[ $step == verify ]]; then
   if [[ $# -gt 0 && $1 != --* ]]; then WINDOW_ID=$1; shift; fi
 elif [[ $step != new ]]; then
@@ -71,6 +72,7 @@ while (( $# )); do
     --candidate) candidate=$2; shift 2 ;;
     --supersedes) supersedes=$2; shift 2 ;;
     --input-from) input_from=$2; shift 2 ;;
+    --clean-trial-file) clean_trial_file=$2; shift 2 ;;
     --name) snap_name=$2; shift 2 ;;
     --restore) restore=1; shift ;;
     --record-only) record_only=1; shift ;;
@@ -106,8 +108,12 @@ case $step in
     branch=$(git -C "$REPO" rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null || git -C "$REPO" rev-parse --abbrev-ref HEAD)
     WINDOW_ID=$(uuidgen | tr 'A-Z' 'a-z')
     window_dir "$WINDOW_ID"
+    if [[ -n "$clean_trial_file" ]]; then
+      python3 "$REPO/infra/scripts/window_requests.py" clean-trial-check --clean-trial "$clean_trial_file" >/dev/null
+    fi
     if (( DRY_RUN )); then echo "would create $W and release.json for candidate ${full:0:12} (schema $schema, $branch)"; exit 0; fi
     mkdir -m 700 -p "$W"
+    if [[ -n "$clean_trial_file" ]]; then cp "$clean_trial_file" "$W/clean-trial.json"; fi
     if [[ -n "$input_from" ]]; then
       [[ -f "$input_from" ]] || die "no file $input_from"
       cp "$input_from" "$W/base-input.json"
@@ -115,6 +121,9 @@ case $step in
       cp "$PRIV/windows/$supersedes/deployment-input.json" "$W/base-input.json"
     else
       die "no input for window $supersedes under $PRIV/windows; pass --input-from <its deployment input> (for example under windows/_pre-adr-012/)"
+    fi
+    if [[ -n "$(jq -r '.clean_trial_organization_id // empty' "$W/base-input.json")" && ! -f "$W/clean-trial.json" ]]; then
+      die "this is a clean-trial redeploy; pass --clean-trial-file with its existing reviewed identifiers"
     fi
     release_py init --window "$WINDOW_ID" --supersedes "$supersedes" --candidate "$full" --branch "$branch" \
       --database-version "$schema" ${build_args[@]+"${build_args[@]}"} > "$W/release.json"
@@ -177,6 +186,10 @@ release_set ".pushed_at_utc = (now | floor | todate)"'
          --arg o "$REG/genui-operator@$(release_get .images.operator.digest)" \
          '.window_id=$w | .supersedes_window_id=$sup | .image_digest=$s | .qualification_image_digest=$q | .operator_image_digest=$o | .service_desired_count=0' \
          "$W/base-input.json" > "$W/deployment-input.json"
+      if [[ -f "$W/clean-trial.json" ]]; then
+        jq --arg trial "$(jq -er .organization_id "$W/clean-trial.json")" '.clean_trial_organization_id=$trial' "$W/deployment-input.json" > "$W/deployment-input.new.json"
+        mv "$W/deployment-input.new.json" "$W/deployment-input.json"
+      fi
       echo "deployment-input.json written; deployment_expires_at_utc kept from the base input: $(jq -r .deployment_expires_at_utc "$W/deployment-input.json") (renew it if it is less than a day away, runbook 3.1)"
     fi
     shown '
@@ -191,9 +204,14 @@ jq -c "{status, window_id, superseded_window_id}" "$W/receipt.json"'
 
   synth)
     load_env; window_dir "$WINDOW_ID"; need_window_dir
-    for f in display-names.json signin-aliases.json; do [[ -f "$PRIV/$f" ]] || (( DRY_RUN )) || die "missing $PRIV/$f (runbook 0.5)"; done
+    if [[ -f "$W/clean-trial.json" ]]; then
+      cdk_context=(-c "cleanTrialFile=$W/clean-trial.json")
+    else
+      for f in display-names.json signin-aliases.json; do [[ -f "$PRIV/$f" ]] || (( DRY_RUN )) || die "missing $PRIV/$f (runbook 0.5)"; done
+      cdk_context=(-c "displayNamesFile=$PRIV/display-names.json" -c "signinAliasesFile=$PRIV/signin-aliases.json")
+    fi
     shown '
-(cd "$REPO/infra" && npm run synth -- --quiet -c displayNamesFile="$PRIV/display-names.json" -c signinAliasesFile="$PRIV/signin-aliases.json") > "$W/synth.log" 2>&1
+(cd "$REPO/infra" && npm run synth -- --quiet "${cdk_context[@]}") > "$W/synth.log" 2>&1
 cp "$REPO/infra/cdk.out/GenuiSyntheticFoundation.template.json" "$W/template.json"
 shasum -a 256 "$W/template.json" | cut -d" " -f1 > "$W/template.sha256"
 release_set ".stack.template_sha256 = \$t" --arg t "$(cat "$W/template.sha256")"'
@@ -202,8 +220,13 @@ release_set ".stack.template_sha256 = \$t" --arg t "$(cat "$W/template.sha256")"
   diff)
     load_env; window_dir "$WINDOW_ID"; need_window_dir
     [[ -f "$W/template-before.json" ]] || (( DRY_RUN )) || die "no template-before.json (just deploy observe)"
+    if [[ -f "$W/clean-trial.json" ]]; then
+      cdk_context=(-c "cleanTrialFile=$W/clean-trial.json")
+    else
+      cdk_context=(-c "displayNamesFile=$PRIV/display-names.json" -c "signinAliasesFile=$PRIV/signin-aliases.json")
+    fi
     shown '
-(cd "$REPO/infra" && npx cdk diff GenuiSyntheticFoundation --no-lookups -c displayNamesFile="$PRIV/display-names.json" -c signinAliasesFile="$PRIV/signin-aliases.json" --template "$W/template-before.json") > "$W/cdk-diff.txt" 2>&1 || true'
+(cd "$REPO/infra" && npx cdk diff GenuiSyntheticFoundation --no-lookups "${cdk_context[@]}" --template "$W/template-before.json") > "$W/cdk-diff.txt" 2>&1 || true'
     echo "diff in $W/cdk-diff.txt"
     ;;
 
@@ -261,6 +284,10 @@ aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAP_NAME"'
     # Operator tasks: ops/beta/run-step.sh asks for and records the approval of
     # each task it runs ([MUTATION]); the composing is local.
     load_env; window_dir "$WINDOW_ID"; need_window_dir
+    [[ ! -f "$W/clean-trial.json" || "$step" == migrate ]] || die "clean trial refuses sandbox seed and library grants; provision an empty organization and issue its member invite"
+    if [[ -f "$W/clean-trial.json" ]]; then
+      shown 'python3 "$REPO/infra/scripts/shared_broker_activation.py" --outputs "$W/stack-after.json" --state stopped > "$W/services-stopped.json"'
+    fi
     fwd=(--window "$WINDOW_ID"); [[ -n "$APPROVED" ]] && fwd+=(--approved "$APPROVED"); (( DRY_RUN )) && fwd+=(--dry-run)
     case $step in
       migrate)
@@ -279,6 +306,7 @@ aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAP_NAME"'
 
   library)
     load_env; window_dir "$WINDOW_ID"; need_window_dir
+    [[ ! -f "$W/clean-trial.json" ]] || die "clean trial refuses sandbox library upload"
     [[ -f "$W/stack-after.json" ]] || (( DRY_RUN )) || die "no $W/stack-after.json (just deploy execute)"
     ORG=${organization:-00000000-0000-4000-8000-000000000001}; export ORG
     # [read] the live task definition's environment (bucket, tenants); [local] the files and the plan.
@@ -325,6 +353,13 @@ jq -c "{status, window_id}" "$W/activation.json"'
       fi
       sleep 10; waited=$((waited + 10))
     done
+    if [[ -f "$W/clean-trial.json" ]]; then
+      # The app health route cannot establish that signup issuance is ready.
+      shown '
+BROKER=$(jq -er ".Stacks[0].Outputs[] | select(.OutputKey==\"SharedBrokerServiceName\") | .OutputValue" "$W/stack-after.json")
+aws ecs wait services-stable --cluster "$CLUSTER" --services "$BROKER"
+python3 "$REPO/infra/scripts/shared_broker_activation.py" --outputs "$W/stack-after.json" --state healthy > "$W/broker-health.json"'
+    fi
     # The first healthy observation is the activation time (a --record-only
     # rerun keeps it, so the row and the tag name stay the same).
     release_set '.activated_at_utc //= (now | floor | todate)'

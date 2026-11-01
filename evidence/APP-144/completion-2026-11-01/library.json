@@ -1,0 +1,1026 @@
+{
+  "scope": "Real authorized source-query defaults and admitted library layout, synthetic seeded inputs; isolated headless profile",
+  "apps": [
+    {
+      "title": "Expense review queue",
+      "parts": [
+        {
+          "id": "totals",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "queue",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "by_category",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "decision",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        },
+        {
+          "id": "caution",
+          "kind": "note",
+          "class": "document-part document-column-0 document-width-12 document-row-6"
+        }
+      ],
+      "states": [
+        {
+          "id": "totals",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "queue",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_category",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_status",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Vendor spend breakdown",
+      "parts": [
+        {
+          "id": "totals",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_vendor",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "by_category",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "unpaid",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "decision",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "totals",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_vendor",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_category",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "unpaid",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Outbound traffic investigation",
+      "parts": [
+        {
+          "id": "total",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_destination",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "timeline",
+          "kind": "timeline",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "largest",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "record_observation",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        },
+        {
+          "id": "caution",
+          "kind": "note",
+          "class": "document-part document-column-0 document-width-12 document-row-6"
+        }
+      ],
+      "states": [
+        {
+          "id": "total",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_destination",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "timeline",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "largest",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Incident timeline",
+      "parts": [
+        {
+          "id": "timeline",
+          "kind": "timeline",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_severity",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "open",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "totals",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "review",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "timeline",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_severity",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "open",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "totals",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Access review tracker",
+      "parts": [
+        {
+          "id": "pending",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_system",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "admin_requests",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "approval",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "pending",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_system",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "admin_requests",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_status",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Sales pipeline by stage",
+      "parts": [
+        {
+          "id": "by_stage",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_owner",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "largest",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "totals",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "review",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "by_stage",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_owner",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "largest",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "totals",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Inventory comparison",
+      "parts": [
+        {
+          "id": "by_warehouse",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_product",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "low_stock",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "totals",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "reorder",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "by_warehouse",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_product",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "low_stock",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "totals",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Support ticket queue",
+      "parts": [
+        {
+          "id": "open",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_channel",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "timeline",
+          "kind": "timeline",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "totals",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "triage",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "open",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_channel",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "timeline",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "totals",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Budget vs actual",
+      "parts": [
+        {
+          "id": "by_department",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_month",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "lines",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "totals",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "variance_review",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "by_department",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_month",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "lines",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "totals",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Audit trail viewer",
+      "parts": [
+        {
+          "id": "recent",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_action",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "denied",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "timeline",
+          "kind": "timeline",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "review",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "recent",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_action",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "denied",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "timeline",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Cash-flow statement",
+      "parts": [
+        {
+          "id": "by_direction",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "timeline",
+          "kind": "timeline",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "recent",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "largest_debits",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "reconcile",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "by_direction",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "timeline",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "recent",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "largest_debits",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Hiring funnel",
+      "parts": [
+        {
+          "id": "by_stage",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_source",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "by_role",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "recent",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "screening",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "by_stage",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_source",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_role",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "recent",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Subscription revenue",
+      "parts": [
+        {
+          "id": "by_plan",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "active",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "top_customers",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "review",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "by_plan",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_status",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "active",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "top_customers",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Expense claims",
+      "parts": [
+        {
+          "id": "totals",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "recent",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "submit",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "totals",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_status",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "recent",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Time off",
+      "parts": [
+        {
+          "id": "upcoming",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "days_by_person",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "by_type",
+          "kind": "status",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "upcoming",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "days_by_person",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_type",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Purchase requests",
+      "parts": [
+        {
+          "id": "totals",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "awaiting_finance",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "by_cost_center",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "class": "document-part document-column-0 document-width-12 document-row-6"
+        }
+      ],
+      "states": [
+        {
+          "id": "totals",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "awaiting_finance",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_cost_center",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_status",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Vendor invoices",
+      "parts": [
+        {
+          "id": "by_status",
+          "kind": "status",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "po_mismatches",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "to_pay",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "log",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "by_status",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "po_mismatches",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "to_pay",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Access requests",
+      "parts": [
+        {
+          "id": "expiring",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_system",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "by_status",
+          "kind": "status",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "expiring",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_system",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_status",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Deal desk",
+      "parts": [
+        {
+          "id": "by_status",
+          "kind": "status",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "deep_discounts",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "by_owner",
+          "kind": "chart",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "class": "document-part document-column-0 document-width-12 document-row-5"
+        }
+      ],
+      "states": [
+        {
+          "id": "by_status",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "deep_discounts",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_owner",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "title": "Notes",
+      "parts": [
+        {
+          "id": "count",
+          "kind": "summary",
+          "class": "document-part document-column-0 document-width-12 document-row-1"
+        },
+        {
+          "id": "by_topic",
+          "kind": "status",
+          "class": "document-part document-column-0 document-width-12 document-row-2"
+        },
+        {
+          "id": "pinned",
+          "kind": "table",
+          "class": "document-part document-column-0 document-width-12 document-row-3"
+        },
+        {
+          "id": "add",
+          "kind": "form",
+          "class": "document-part document-column-0 document-width-12 document-row-4"
+        }
+      ],
+      "states": [
+        {
+          "id": "count",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "by_topic",
+          "state": "ready",
+          "receipt": true
+        },
+        {
+          "id": "pinned",
+          "state": "ready",
+          "receipt": true
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

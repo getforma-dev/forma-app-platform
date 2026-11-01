@@ -159,6 +159,20 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(sorted(p.name for p in self.path.parent.iterdir()), ["credentials.json"])
 
+    def test_clean_third_tenant_requires_its_own_role_key_and_prefix(self):
+        third = dict(self.value['storage']['tenants'][0], organization_id='00000000-0000-4000-8000-0000000000e1',
+                     prefix='o/00000000-0000-4000-8000-0000000000e1/', role_arn='unit-role-clean', kms_key_arn='unit-key-clean')
+        self.value['storage']['tenants'].append(third)
+        runtime.atomic_write(self.path, self.value)
+        self.assertEqual(len(runtime.load(self.path)['storage']['tenants']), 3)
+        for field in ('organization_id', 'role_arn', 'kms_key_arn'):
+            value = copy.deepcopy(self.value)
+            value['storage']['tenants'][2][field] = value['storage']['tenants'][0][field]
+            runtime.atomic_write(self.path, value)
+            with self.assertRaises(runtime.Refused): runtime.load(self.path)
+        for count in (0, 33):
+            with self.assertRaises(runtime.Refused): runtime.require_runtime_tenants([third] * count)
+
     def test_expired_future_overlong_and_role_interchange_refused(self):
         cases = [lambda v: v.update(expires_at=v["issued_at"]), lambda v: v.update(issued_at=v["issued_at"] + 60),
                  lambda v: v.update(expires_at=v["issued_at"] + 700),
@@ -1026,6 +1040,13 @@ class AuthConfigurationInjectionTests(unittest.TestCase):
         self.assertEqual(json.loads(files['identity-registry.json']), good['identity_registry'])
         self.assertIsNone(runtime.auth_configuration('{}'), 'the initial secret value means not configured')
         self.assertIsNone(runtime.auth_configuration(' {} \n'))
+        shared = auth_document()
+        shared['auth_config']['organizations'][0]['shared_client_id'] = 'northstar-shared'
+        self.assertIsNotNone(runtime.auth_configuration(json.dumps(shared)))
+        for client in ('northstar-platform', 'northstar-hosted', 'invalid client', '', None):
+            shared['auth_config']['organizations'][0]['shared_client_id'] = client
+            with self.assertRaises(runtime.Refused):
+                runtime.auth_configuration(json.dumps(shared))
         # A non-default port and an uppercase client id are within the service's rules.
         self.assertIsNotNone(runtime.auth_configuration(json.dumps(auth_document(auth_config__auth_origin='https://auth.example.test:8443'))))
         bad = [
@@ -1255,3 +1276,46 @@ class BoxObjects(unittest.TestCase):
             raw.update(change)
             with self.assertRaises((runtime.Refused, Exception)):
                 runtime.object_request(json.dumps(raw).encode())
+
+
+class SharedBrokerInjectionTests(unittest.TestCase):
+    def test_closed_https_document_and_duplicate_keys(self):
+        good = {"origin": "https://beta.example.test", "token": "A" * 43}
+        self.assertEqual(json.loads(runtime.shared_broker_configuration(json.dumps(good))), good)
+        self.assertIsNone(runtime.shared_broker_configuration('{}'))
+        for text in ['[]', 'null', 'not json', '{"origin":"https://one.test","origin":"https://two.test","token":"' + 'A'*43 + '"}',
+                     *[json.dumps(dict(good, **change)) for change in ({"origin":"http://localhost"}, {"origin":"https://beta.example.test/"}, {"origin":"https://USER@beta.example.test"}, {"token":"bad"}, {"extra":1})]]:
+            with self.subTest(text=text[:30]), self.assertRaises((runtime.Refused, ValueError)):
+                runtime.shared_broker_configuration(text)
+
+    def test_injection_is_private_removed_from_environment_and_cleaned_on_exit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); root.chmod(0o700)
+            path = root / 'credentials.json'
+            text = json.dumps({"origin":"https://beta.example.test", "token":"A"*43})
+            captured = {}
+            def launch(*args, **kwargs):
+                env = kwargs['env']
+                self.assertNotIn(runtime.SHARED_BROKER_JSON_ENV, env)
+                config = Path(env[runtime.SHARED_BROKER_FILE_ENV])
+                self.assertEqual(stat.S_IMODE(config.stat().st_mode), 0o600)
+                self.assertEqual(stat.S_IMODE(config.parent.stat().st_mode), 0o700)
+                self.assertEqual(config.stat().st_uid, os.geteuid())
+                self.assertEqual(json.loads(config.read_text()), json.loads(text))
+                captured['config'] = config
+                return types.SimpleNamespace(poll=lambda: 0, returncode=0)
+            with patch.dict(os.environ, {runtime.SHARED_BROKER_JSON_ENV:text}, clear=True), patch.object(runtime.signal, 'signal'), patch.object(runtime, 'refresh'), patch.object(runtime.subprocess, 'Popen', side_effect=launch):
+                self.assertEqual(runtime.serve(path), 0)
+                self.assertNotIn(runtime.SHARED_BROKER_JSON_ENV, os.environ)
+            self.assertFalse(captured['config'].exists())
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_invalid_or_conflicting_configuration_refuses_before_credentials_or_child(self):
+        for text, extra in [('[]', {}), (json.dumps({"origin":"https://beta.example.test", "token":"A"*43}), {runtime.SHARED_BROKER_FILE_ENV:'/some/file'})]:
+            with patch.dict(os.environ, {runtime.SHARED_BROKER_JSON_ENV:text, **extra}, clear=True), patch.object(runtime, 'refresh') as refresh, patch.object(runtime.subprocess, 'Popen') as launch:
+                with self.assertRaises(runtime.Refused): runtime.serve('/missing/credentials.json')
+                refresh.assert_not_called(); launch.assert_not_called()
+                self.assertNotIn(runtime.SHARED_BROKER_JSON_ENV, os.environ)
+        with patch.dict(os.environ, {runtime.SHARED_BROKER_JSON_ENV:'{}'}, clear=True):
+            self.assertEqual(runtime.take_shared_broker_injection(), '{}')
+            self.assertNotIn(runtime.SHARED_BROKER_JSON_ENV, os.environ)

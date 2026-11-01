@@ -76,6 +76,23 @@ struct RouteDocument {
     organization_id: String,
     tenant_slug: String,
     client_id: String,
+    #[serde(default, deserialize_with = "shared_client")]
+    shared_client_id: Option<String>,
+}
+
+fn shared_client<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    String::deserialize(deserializer).map(Some)
+}
+
+fn oauth_client(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && !value.ends_with("-hosted")
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// Per-organization provider routing, read only after the organization is
@@ -85,6 +102,9 @@ pub struct Route {
     pub organization: String,
     pub tenant_slug: String,
     pub client_id: String,
+    /// Separate registered public client, bound only to /auth/shared/callback.
+    /// Missing configuration disables guest sign-in without changing members.
+    pub shared_client_id: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -141,6 +161,9 @@ impl AuthConfig {
                         .bytes()
                         .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
                     || r.client_id.ends_with("-hosted")
+                    || r.shared_client_id
+                        .as_ref()
+                        .is_some_and(|client| !oauth_client(client) || client == &r.client_id)
             })
         {
             return Err("auth configuration refused");
@@ -159,6 +182,7 @@ impl AuthConfig {
                     organization: r.organization_id,
                     tenant_slug: r.tenant_slug,
                     client_id: r.client_id,
+                    shared_client_id: r.shared_client_id,
                 })
                 .collect(),
         })

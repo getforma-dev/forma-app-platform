@@ -138,7 +138,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v17.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v18.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 195] = [
+const SOURCES: [(&str, &[u8]); 197] = [
     // ADR-013 D13.3: the root workspace's manifest (profiles) and lockfile.
     ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
     ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
@@ -408,6 +408,10 @@ const SOURCES: [(&str, &[u8]); 195] = [
         include_bytes!("../composer/talk.rs"),
     ),
     (
+        "app/src/composer/templates.rs",
+        include_bytes!("../composer/templates.rs"),
+    ),
+    (
         "app/src/composer/tests.rs",
         include_bytes!("../composer/tests.rs"),
     ),
@@ -646,6 +650,10 @@ const SOURCES: [(&str, &[u8]); 195] = [
         include_bytes!("slack_campaign.rs"),
     ),
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
+    (
+        "app/src/storage/work_labels.rs",
+        include_bytes!("work_labels.rs"),
+    ),
     (
         "app/src/storage/workflows_campaign.rs",
         include_bytes!("workflows_campaign.rs"),

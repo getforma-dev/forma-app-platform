@@ -287,6 +287,7 @@ impl Data {
                 .filter(|&i| valid_id(keys[i].0) && valid_id(keys[i].1) && grants[i].record_read)
                 .collect();
             let readable_keys: Vec<(&str, &str)> = readable.iter().map(|&i| keys[i]).collect();
+            let work_names = super::work_labels::names(transaction, org, &readable_keys).await?;
             let pinned = pinned_many(transaction, org, &readable_keys).await?;
             // Same collections and after-fence `record_write` bit as
             // `work_outline`, whether or not this call also lists records.
@@ -304,6 +305,12 @@ impl Data {
             for ((&i, pinned), rows) in readable.iter().zip(pinned).zip(collection_rows) {
                 let mut outline = outline_of(&pinned);
                 if let Ok(outline) = outline.as_mut() {
+                    if let Some(name) = work_names
+                        .get(&(keys[i].0.to_owned(), keys[i].1.to_owned()))
+                        .and_then(|label| label.name.as_ref())
+                    {
+                        outline.title = name.clone();
+                    }
                     outline.can_write = grants[i].record_write;
                     outline.collections = rows
                         .iter()

@@ -323,6 +323,8 @@ def parser():
     q.add_argument("--max-redemptions", type=int, default=DEFAULTS["max_redemptions_default"])
     q.add_argument("--expires-days", type=int, default=DEFAULTS["code_expiry_days_default"])
     q.add_argument("--grant", action="append", default=[])
+    q.add_argument("--authoring-only", action="store_true",
+                   help="Explicitly admit an entitled member with no grants to existing resources; first compose creates their owned shell")
     # APP-078 managed channel: the operator mints the code on its own machine
     # (mint_access_code) and the task receives only its digest, so no secret
     # reaches a task override, CloudTrail or the awslogs group.
@@ -421,7 +423,7 @@ def validate(args):
         require(args.kind in ("trial", "member_invite"), "kind_refused")
         require(1 <= args.max_redemptions <= DEFAULTS["max_redemptions_max"], "max_redemptions_out_of_range")
         require(1 <= args.expires_days <= DEFAULTS["code_expiry_days_max"], "expiry_out_of_range")
-        require(args.grant, "grant_required")
+        require(bool(args.grant) != args.authoring_only, "grant_required" if not args.authoring_only else "authoring_only_with_grants_refused")
         args.templates = sorted({parse_grant(g) for g in args.grant}, key=str)
         invitation = (args.provider_email, args.provider_role, args.provider_issuer, args.provider_tenant)
         if args.provider_input_from_secret:
@@ -693,6 +695,14 @@ def provision(c, args):
     c.execute("INSERT INTO genui.organizations(organization_id,display_name,status) VALUES (%s,%s,'active')", (org, args.display_name))
     c.execute("INSERT INTO genui.provider_tenant_bindings(organization_id,issuer,provider_tenant_id,active) VALUES (%s,%s,%s,true)",
               (org, args.issuer, args.provider_tenant))
+    # A real first member has no seeded app or grants. The first explicit
+    # compose still needs an organization space and an owner-publish policy;
+    # these empty defaults are operator-owned, in the same provision commit.
+    # Existing organizations refuse above, so their settings are never replaced.
+    c.execute("INSERT INTO genui.spaces(organization_id,space_id,display_name) VALUES (%s,%s,'Workspace')",
+              (org, str(uuid.uuid4())))
+    c.execute("INSERT INTO genui.publication_policies(organization_id,policy_id,policy_version,kind) VALUES (%s,%s,1,'owner_publish')",
+              (org, str(uuid.uuid4())))
     for chain in CHAINS:
         c.execute("INSERT INTO genui.audit_heads(organization_id,writer_role,chain_sequence,head_hash) VALUES (%s,%s,1,%s)",
                   (org, chain, genesis(org, chain)))

@@ -98,6 +98,7 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         weather,
     )));
     let router = Router::new()
+        .merge(composer::routes::catalog_router(auth.clone()))
         .merge(crate::auth::routes::router(auth.clone()))
         .merge(crate::auth::shared::router(auth.clone()))
         .merge(commands::routes::router(command_routes))

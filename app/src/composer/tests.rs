@@ -456,6 +456,36 @@ fn book_club() -> Value {
     })
 }
 
+#[test]
+fn template_customization_passes_the_actual_admitted_starting_definition() {
+    let template = templates::find("reading-list").unwrap();
+    let script = Script::new(vec![Ok(book_club().to_string())]);
+    let generated = runtime()
+        .block_on(composer(&script).generate_from_template(
+            "Add reading status to our book list",
+            &template.content(),
+            &[],
+            ORG,
+            APP,
+            far(),
+        ))
+        .unwrap();
+    let requests = script.requests();
+    assert_eq!(requests.len(), 1);
+    let input: Value = serde_json::from_str(&requests[0].user).unwrap();
+    assert_eq!(input["template"], template.content());
+    assert!(input.get("box").is_none());
+    let content = admission::decode(&generated.planned.admitted.canonical).unwrap();
+    let planned = template.plan(content, ORG, APP).unwrap();
+    assert_eq!(planned.origin, Origin::Adapted);
+    let persisted = admission::decode(&planned.admitted.canonical).unwrap();
+    assert!(persisted["description"]
+        .as_str()
+        .unwrap()
+        .starts_with(transform::ADAPTED_PREFIX));
+    assert_eq!(persisted["record_schemas"][0]["fields"][3]["id"], "status");
+}
+
 /// APP-132 (the gap APP-128's log recorded): on a clean workspace the model
 /// first answers a table over its own records input, which no query can
 /// run; the retry's hint says so, and the records-only answer is admitted,
@@ -965,11 +995,21 @@ fn the_body_is_one_intent_of_bounded_shape() {
         request(r#"{"intent":"x y z"}"#),
         Some(("x y z".into(), routes::Pin::Chooser))
     );
+    assert_eq!(
+        request(r#"{"intent":"Track new equipment","template_id":"equipment-requests"}"#),
+        Some((
+            "Track new equipment".into(),
+            routes::Pin::Template("equipment-requests".into())
+        ))
+    );
     for refused in [
         format!(r#"{{"intent":"over $200","app_id":"{app}","generate":true}}"#),
         r#"{"intent":"over $200","app_id":"not-a-uuid"}"#.to_owned(),
         r#"{"intent":"over $200","generate":false}"#.to_owned(),
         r#"{"intent":"over $200","app_id":null}"#.to_owned(),
+        r#"{"intent":"some app","template_id":"unknown"}"#.to_owned(),
+        r#"{"intent":"some app","template_id":"reading-list","generate":true}"#.to_owned(),
+        r#"{"intent":"some app","template_id":"reading-list","definition":{}}"#.to_owned(),
     ] {
         assert_eq!(request(&refused), None, "{refused}");
     }

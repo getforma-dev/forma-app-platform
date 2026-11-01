@@ -938,7 +938,10 @@ async fn campaign() {
     assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{AUTHOR}'")).await, 1);
     assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{ORG}' AND actor_principal_id='{AUTHOR}' AND kind='permission.granted'")).await, 1);
     drop(holder);
-    check(&mut checks, "APP-145: a queued first compose re-reads the owned apps after the shell lock, reusing a shell published while it waited; one app and one grant audit remain");
+    check(
+        &mut checks,
+        "APP-145: a queued first compose re-reads the owned apps after the shell lock, reusing a shell published while it waited; one app and one grant audit remain",
+    );
 
     // No owner_publish policy: the shell may be created and must not publish.
     fixture.sql(
@@ -1026,7 +1029,10 @@ async fn campaign() {
     assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{EMPTY_ORG}' AND kind='permission.granted'")).await, 0);
     holder.client.batch_execute(&format!("UPDATE genui.entitlements SET expires_at='2036-10-01T00:00:00Z' WHERE organization_id='{EMPTY_ORG}' AND principal_id='{EMPTY_MEMBER}'")).await.unwrap();
     drop(holder);
-    check(&mut checks, "APP-145: entitlement expiry while waiting for the authoring lock is rechecked before any app, permission or audit write");
+    check(
+        &mut checks,
+        "APP-145: entitlement expiry while waiting for the authoring lock is rechecked before any app, permission or audit write",
+    );
     let empty_context = stores
         .workspace
         .prepare_composer(&empty_member)
@@ -1067,6 +1073,291 @@ async fn campaign() {
     check(
         &mut checks,
         "APP-145: an organization with no owner_publish policy still refuses no_owner_publish_policy; the shell is created and nothing is drafted or published",
+    );
+
+    // APP-141: catalog definitions create real empty works without a model,
+    // including the first intentional compose of a member who owns no app.
+    let template_member_id = "00000000-0000-4000-8000-000000000148";
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); \
+        INSERT INTO genui.principals(organization_id,principal_id,issuer,provider_tenant_id,provider_subject) VALUES('{ORG}','{template_member_id}','app008-fixture-only','ten_{ORG}','usr_{template_member_id}'); \
+        INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES('{ORG}','{template_member_id}','active',1); \
+        INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at) VALUES('{ORG}','{template_member_id}','0000e000-0000-4000-8000-000000000148','active','member_invite','2026-10-01T00:00:00Z','2036-10-01T00:00:00Z'); COMMIT;"), "genui");
+    let template_member = request(&stores, ORG, template_member_id, 1);
+    assert!(stores
+        .workspace
+        .composer_context(&template_member)
+        .await
+        .unwrap()
+        .authoring
+        .is_none());
+    let no_model = Composer::new(None, "router-model", "generation-model");
+    let template = crate::composer::templates::find("equipment-requests").unwrap();
+    // Keep the pin outside the futures: compose awaits through the whole
+    // publication and saved-work transaction sequence.
+    let pin = crate::composer::routes::Pin::Template(template.id.to_owned());
+    let crate::composer::routes::First::Placed(first_template, _) =
+        crate::composer::routes::compose_instant(
+            &stores,
+            &no_model,
+            &template_member,
+            template.description,
+            &pin,
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("template cannot choose a different app");
+    };
+    let crate::composer::routes::First::Placed(second_template, _) =
+        crate::composer::routes::compose_instant(
+            &stores,
+            &no_model,
+            &template_member,
+            template.description,
+            &pin,
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("template cannot choose a different app");
+    };
+    assert_eq!(first_template.app, second_template.app);
+    assert_ne!(first_template.work, second_template.work);
+    assert_eq!(first_template.origin, Origin::Adapted);
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{template_member_id}'")).await, 1);
+    let first_outline = stores
+        .data
+        .work_outline(&template_member, &first_template.app, &first_template.work)
+        .await
+        .unwrap();
+    assert_eq!(first_outline.title, template.title);
+    assert_eq!(first_outline.parts[0].id, "guide");
+    assert!(stores
+        .data
+        .list_records(&template_member, &first_template.app, &first_template.work)
+        .await
+        .unwrap()
+        .records
+        .is_empty());
+    check(
+        &mut checks,
+        "APP-141: an unseeded member discovers without creating a shell, then confirms two exact admitted templates without a model; one authoring shell, two distinct empty works, declared guide-first layout and honest adapted provenance",
+    );
+
+    let label_before = stores
+        .workspace
+        .work_label(
+            &template_member,
+            &second_template.app,
+            &second_template.work,
+        )
+        .await
+        .unwrap();
+    assert_eq!(label_before.version, 0);
+    assert!(label_before.can_name);
+    let saved = stores
+        .workspace
+        .label_work(
+            &template_member,
+            &second_template.app,
+            &second_template.work,
+            Some("Design team equipment"),
+            0,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(saved, WorkLabelResult::Saved(_)));
+    assert_eq!(
+        stores
+            .data
+            .work_outline(&template_member, &first_template.app, &first_template.work)
+            .await
+            .unwrap(),
+        first_outline
+    );
+    assert_eq!(
+        stores
+            .data
+            .work_outline(
+                &template_member,
+                &second_template.app,
+                &second_template.work
+            )
+            .await
+            .unwrap()
+            .title,
+        "Design team equipment"
+    );
+    // Name discovery must use the same exact work label as the document.
+    // The operator fixture marks both as saved commands; it grants nothing.
+    fixture.sql(&format!(
+        "UPDATE genui.saved_work SET context='forma-command:/first-template' WHERE organization_id='{ORG}' AND app_id='{}' AND work_id='{}'; \
+         UPDATE genui.saved_work SET context='forma-command:/second-template' WHERE organization_id='{ORG}' AND app_id='{}' AND work_id='{}';",
+        first_template.app, first_template.work, second_template.app, second_template.work
+    ), "genui");
+    let listed_names = stores.data.openable_works(&template_member).await.unwrap();
+    assert_eq!(
+        listed_names
+            .iter()
+            .find(|w| w.work == first_template.work)
+            .unwrap()
+            .title,
+        template.title
+    );
+    assert_eq!(
+        listed_names
+            .iter()
+            .find(|w| w.work == second_template.work)
+            .unwrap()
+            .title,
+        "Design team equipment"
+    );
+    assert_eq!(
+        listed_names,
+        stores
+            .data
+            .openable_works_serial(&template_member)
+            .await
+            .unwrap()
+    );
+    let command_names = stores.data.named_works(&template_member).await.unwrap();
+    assert_eq!(
+        command_names
+            .iter()
+            .find(|w| w.work.work == first_template.work)
+            .unwrap()
+            .work
+            .title,
+        template.title
+    );
+    assert_eq!(
+        command_names
+            .iter()
+            .find(|w| w.work.work == second_template.work)
+            .unwrap()
+            .work
+            .title,
+        "Design team equipment"
+    );
+    assert_eq!(
+        stores
+            .workspace
+            .label_work(
+                &template_member,
+                &second_template.app,
+                &second_template.work,
+                Some("Stale name"),
+                0
+            )
+            .await
+            .unwrap(),
+        WorkLabelResult::Conflict
+    );
+    assert_eq!(
+        stores
+            .workspace
+            .label_work(
+                &foreign,
+                &second_template.app,
+                &second_template.work,
+                Some("Foreign name"),
+                1
+            )
+            .await,
+        Err(Error::Denied)
+    );
+    assert_eq!(
+        stores
+            .workspace
+            .label_work(
+                &member,
+                &second_template.app,
+                &second_template.work,
+                Some("Other member"),
+                1
+            )
+            .await,
+        Err(Error::Denied)
+    );
+    let (left, right) = tokio::join!(
+        stores.workspace.label_work(
+            &template_member,
+            &second_template.app,
+            &second_template.work,
+            Some("Team A equipment"),
+            1
+        ),
+        stores.workspace.label_work(
+            &template_member,
+            &second_template.app,
+            &second_template.work,
+            Some("Team B equipment"),
+            1
+        ),
+    );
+    assert!(matches!(
+        (&left, &right),
+        (Ok(WorkLabelResult::Saved(_)), Ok(WorkLabelResult::Conflict))
+            | (Ok(WorkLabelResult::Conflict), Ok(WorkLabelResult::Saved(_)))
+    ));
+    assert_eq!(scalar(&fixture, &format!("SELECT version FROM genui.saved_work WHERE organization_id='{ORG}' AND app_id='{}' AND work_id='{}'", second_template.app, second_template.work)).await, 1, "display naming cannot advance publication/work authority pins");
+    check(
+        &mut checks,
+        "APP-141: renaming the second work leaves its sibling's title, definition and layout unchanged; names survive authorized reads; stale and concurrent versions conflict, foreign/ungranted callers deny, and the saved-work authority version stays unchanged",
+    );
+
+    // A second rename may wait on the exact work after its entitlement
+    // precheck. Expiry while queued must leave the name and audit unchanged.
+    let labels_before = chain_events(&fixture, "workspace", "app.labeled").await;
+    let holder = fixture.operator().await;
+    holder.client.batch_execute("BEGIN").await.unwrap();
+    let before = holder.client.query_one(
+        "SELECT display_name,name_version FROM genui.saved_work WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid FOR UPDATE",
+        &[&ORG, &second_template.app, &second_template.work],
+    ).await.unwrap();
+    let held_name: Option<String> = before.get(0);
+    let held_version: i64 = before.get(1);
+    let pending = stores.workspace.label_work(
+        &template_member,
+        &second_template.app,
+        &second_template.work,
+        Some("Expired rename"),
+        held_version,
+    );
+    tokio::pin!(pending);
+    let mut waiting = 0_i64;
+    for _ in 0..40 {
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(10), &mut pending)
+                .await
+                .is_err(),
+            "rename reaches the held work row before expiry"
+        );
+        waiting = holder.client.query_one(
+            "SELECT count(*) FROM pg_locks waiting JOIN pg_locks held USING(locktype,transactionid) WHERE waiting.locktype='transactionid' AND NOT waiting.granted AND held.pid=pg_backend_pid() AND held.granted", &[])
+            .await.unwrap().get(0);
+        if waiting == 1 {
+            break;
+        }
+    }
+    assert_eq!(waiting, 1, "rename is blocked on this work row");
+    holder.client.batch_execute(&format!("UPDATE genui.entitlements SET expires_at=starts_at+interval '1 millisecond' WHERE organization_id='{ORG}' AND principal_id='{template_member_id}'; COMMIT")).await.unwrap();
+    assert_eq!(pending.await, Err(Error::Denied));
+    let after = holder.client.query_one(
+        "SELECT display_name,name_version FROM genui.saved_work WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid",
+        &[&ORG, &second_template.app, &second_template.work],
+    ).await.unwrap();
+    assert_eq!(after.get::<_, Option<String>>(0), held_name);
+    assert_eq!(after.get::<_, i64>(1), held_version);
+    assert_eq!(
+        chain_events(&fixture, "workspace", "app.labeled").await,
+        labels_before
+    );
+    holder.client.batch_execute(&format!("UPDATE genui.entitlements SET expires_at='2036-10-01T00:00:00Z' WHERE organization_id='{ORG}' AND principal_id='{template_member_id}'")).await.unwrap();
+    drop(holder);
+    check(
+        &mut checks,
+        "APP-141: entitlement expiry while a rename waits for its work row denies the mutation, preserving both name/version and the audit count",
     );
 
     let _: Option<Composed> = None;

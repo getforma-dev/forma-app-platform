@@ -1,0 +1,40 @@
+{
+  "observed_at_utc": "2026-11-01T18:51:22Z",
+  "base_commit": "9ba2061ce318fafe6211db53d056760d450e267e",
+  "source_files": 446,
+  "source_tree_sha256": "50d68f8fee17bbffd68e6c7e188ff9aecceb7fa22f253ab6eb77aa5fbae5305c",
+  "required_local_checks_passed_after_repairs": true,
+  "initial_command": "just check",
+  "repaired_checks": [
+    {
+      "command": "just check test",
+      "passed": true,
+      "reason": "Native SSR selected-option assertion now accounts for renderer-inserted attributes; actual selected value remains required."
+    },
+    {
+      "command": "python3 Tickets/_tools/board.py render && just check fmt board",
+      "passed": true,
+      "reason": "Rebuilt generated board after all parallel ticket edits."
+    }
+  ],
+  "all_other_check_steps": "passed in the complete run",
+  "rust": {
+    "library_passed": 362,
+    "binary_ssr_passed": 7,
+    "doctests_passed": 3,
+    "ignored_campaigns": 33,
+    "msrv_1_85_passed": true
+  },
+  "admin_tests_passed": 84,
+  "native_campaign_checks": {
+    "composer": 15,
+    "query": 26,
+    "pitch": 19,
+    "canvas": 5,
+    "shared_identity": 6,
+    "live_sharing": 14
+  },
+  "schema_qualification_checks": 381,
+  "managed_deployment_proven": false,
+  "real_signup_rehearsal_proven": false
+}

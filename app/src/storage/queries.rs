@@ -874,6 +874,24 @@ pub struct WorkView {
     /// and the canvas display each value (APP-093 review M4).
     pub column_types: BTreeMap<String, ColumnType>,
 }
+/// Trusted presentation metadata from the pinned, re-admitted definition.
+/// This grants no query or command authority. Unsupported data views remain
+/// visible as unavailable parts instead of silently disappearing.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct WorkPart {
+    pub id: String,
+    pub title: String,
+    pub kind: String,
+    pub text: String,
+    pub command: String,
+    pub schema: String,
+    pub operation: String,
+    pub creates: bool,
+    pub row: u32,
+    pub column: u32,
+    pub width: u32,
+    pub runnable: bool,
+}
 /// What the work page shows before any run: the pinned definition's title
 /// and its runnable views, in definition order.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -883,6 +901,10 @@ pub struct WorkOutline {
     /// line carries the canvas chips, `composer::transform::chips_of`).
     pub description: String,
     pub views: Vec<WorkView>,
+    /// Every admitted part in visual reading order (row, column, declaration).
+    pub parts: Vec<WorkPart>,
+    pub can_window: bool,
+    pub can_destination: bool,
     /// The pinned definition's admitted digest (APP-104: the canvas library
     /// pane names a library app's category from the sidecar by it).
     pub definition_digest: String,
@@ -944,10 +966,76 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
             });
         }
     }
+    let supports = |field: &str, kind: &str| {
+        !views.is_empty()
+            && views.iter().all(|view| {
+                let declared = content["views"]
+                    .as_array()
+                    .and_then(|all| all.iter().find(|v| v["id"] == view.id));
+                declared
+                    .and_then(|v| v["query"]["inputs"][0].as_str())
+                    .and_then(|id| source_fields(&content, id))
+                    .is_some_and(|fields| {
+                        fields
+                            .iter()
+                            .any(|f| f["id"] == field && f["value_type"]["type"] == kind)
+                    })
+            })
+    };
+    let can_window = supports("time", "timestamp");
+    let can_destination = supports("destination", "text");
+    let mut parts = Vec::new();
+    for (index, view) in content["views"]
+        .as_array()
+        .ok_or(Error::Unavailable)?
+        .iter()
+        .enumerate()
+    {
+        let id = label(view.get("id"))?;
+        let position = content["default_layout"]
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["view_id"] == id));
+        let command = view["command_id"].as_str().unwrap_or_default();
+        let declaration = content["commands"]
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["id"] == command));
+        let coordinate = |key: &str, default: u32| {
+            position
+                .and_then(|p| p[key].as_u64())
+                .and_then(|n| u32::try_from(n).ok())
+                .unwrap_or(default)
+        };
+        parts.push(WorkPart {
+            runnable: views.iter().any(|v| v.id == id),
+            id,
+            title: label(view.get("title"))?,
+            kind: label(view.get("kind"))?,
+            text: view["text"].as_str().unwrap_or_default().into(),
+            command: command.into(),
+            schema: declaration
+                .and_then(|c| c["record_schema_id"].as_str())
+                .unwrap_or_default()
+                .into(),
+            operation: declaration
+                .and_then(|c| c["operation"].as_str())
+                .unwrap_or_default()
+                .into(),
+            creates: declaration.is_some_and(|c| {
+                c["operation"] == "create" && c["transitions"].as_array().is_some_and(Vec::is_empty)
+            }),
+            row: coordinate("row", index as u32),
+            column: coordinate("column", 0),
+            width: coordinate("width", 12),
+        });
+    }
+    parts.sort_by_key(|part| (part.row, part.column));
     Ok(WorkOutline {
         title,
         description,
         views,
+        parts,
+        can_window,
+        can_destination,
         definition_digest: String::new(),
         collections: Vec::new(),
         can_write: false,
@@ -1005,6 +1093,11 @@ impl Data {
             outline.definition_digest = admitted;
             outline.can_write = can_write;
             outline.collections = collections;
+            if let Some(name) = super::work_labels::names(permit.transaction(), org, &[(app, work)])
+                .await?.get(&(app.to_owned(), work.to_owned())).and_then(|label| label.name.as_ref())
+            {
+                outline.title = name.clone();
+            }
             Ok(outline)
         }
         .await;
@@ -1094,7 +1187,11 @@ async fn open_listed(
     if admitted != premise.definition_digest {
         return Err(Error::Unavailable);
     }
-    let title = outline(&content)?.title;
+    let title = super::work_labels::names(transaction, org, &[(app, work)])
+        .await?
+        .remove(&(app.to_owned(), work.to_owned()))
+        .and_then(|label| label.name)
+        .unwrap_or(outline(&content)?.title);
     let collections = transaction.query("SELECT collection_id::text,schema_id::text FROM genui.record_collections WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid ORDER BY collection_id", &[&org,&app,&work]).await?
         .iter()
         .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
@@ -1173,8 +1270,8 @@ async fn library_candidates(
 }
 
 /// The listing clause (`open_listed`) for many saved works under one permit,
-/// in nine statements whatever their number (APP-113's deferred batching:
-/// the grants; `pinned_many`; the collections): per work the same clauses,
+/// in a bounded number of statements whatever their number (APP-113's deferred
+/// batching plus exact-work display names): per work the same clauses,
 /// the same lock, re-admission and checks, in the same order. Per work
 /// `Ok(None)` when the member may not open it, and an `Err` that the
 /// listing ends with when it reaches that work, as `open_listed`'s does.
@@ -1197,6 +1294,7 @@ async fn open_many(
     let transaction = permit.transaction();
     let pinned = pinned_many(transaction, org, &keys).await?;
     let collections = collections_many(transaction, org, &keys).await?;
+    let work_names = super::work_labels::names(transaction, org, &keys).await?;
     for ((&i, pinned), rows) in eligible.iter().zip(pinned).zip(collections) {
         let (app, work) = works[i];
         opened[i] = (|| {
@@ -1209,7 +1307,10 @@ async fn open_many(
             if admitted != premise.definition_digest {
                 return Err(Error::Unavailable);
             }
-            let title = outline(&content)?.title;
+            let title = work_names
+                .get(&(app.to_owned(), work.to_owned()))
+                .and_then(|label| label.name.clone())
+                .unwrap_or(outline(&content)?.title);
             let collections = rows
                 .iter()
                 .map(|row| Ok((text(row, 1)?, text(row, 2)?)))
@@ -1736,6 +1837,59 @@ mod tests {
         assert_eq!(
             outline(&admission::encode(&json!({"views": []})).unwrap()),
             Err(Error::Unavailable)
+        );
+    }
+
+    #[test]
+    fn document_parts_keep_default_layout_notes_commands_and_unqualified_views() {
+        let content = json!({"title":"A complete app", "inputs":[{"id":"source","kind":"source","fields":[]}],
+        "commands":[{"id":"add","record_schema_id":"item","operation":"create","transitions":[]}],
+        "views":[
+            {"id":"table","title":"Table","kind":"table","query":{"inputs":["source"],"operations":[{"type":"project"}]}},
+            {"id":"note","title":"Instructions","kind":"note","text":"Plain text stays plain"},
+            {"id":"form","title":"Add item","kind":"form","command_id":"add"},
+            {"id":"later","title":"Unsupported calculation","kind":"summary","query":{"inputs":["source"],"operations":[{"type":"ratio"}]}}
+        ], "default_layout":[
+            {"view_id":"table","row":2,"column":6,"width":6},
+            {"view_id":"note","row":0,"column":0,"width":12},
+            {"view_id":"form","row":2,"column":0,"width":6},
+            {"view_id":"later","row":3,"column":0,"width":12}
+        ]});
+        let result = outline(&admission::encode(&content).unwrap()).unwrap();
+        assert_eq!(
+            result
+                .parts
+                .iter()
+                .map(|part| part.id.as_str())
+                .collect::<Vec<_>>(),
+            ["note", "form", "table", "later"]
+        );
+        assert_eq!(result.parts[0].text, "Plain text stays plain");
+        assert_eq!(
+            (
+                result.parts[1].command.as_str(),
+                result.parts[1].schema.as_str(),
+                result.parts[1].creates
+            ),
+            ("add", "item", true)
+        );
+        assert_eq!(
+            (
+                result.parts[2].row,
+                result.parts[2].column,
+                result.parts[2].width,
+                result.parts[2].runnable
+            ),
+            (2, 6, 6, true)
+        );
+        assert!(!result.parts[3].runnable);
+        assert_eq!(
+            result
+                .views
+                .iter()
+                .map(|view| view.id.as_str())
+                .collect::<Vec<_>>(),
+            ["table"]
         );
     }
 

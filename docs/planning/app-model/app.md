@@ -13,9 +13,9 @@ In the product, an app on the canvas is a saved work with its admitted definitio
 
 `choose_authoring` can reuse the same owned non-library container for successive generated definitions (`app/src/storage/composer.rs`). `draft_publish_save` publishes each definition, and `save` creates a new work pinned to that publication (`app/src/composer/routes.rs`). Therefore two separately generated product apps can share one `app_id`; that ID alone does not identify the page or the record set. Page, Ask and share targets must keep the exact `(app_id, work_id)` under the trusted organization. They must not substitute the container's latest publication.
 
-The library address, such as `expenses`, and pane number are UI locators, not authority. A component is addressed `app.card` or by pane number (APP-120). Current persistent names and aliases are keyed by `app_id`, with an optional card key (`app/src/storage/labels.rs`, `app_labels` and `member_labels`). Independent naming of two generated works in the same container is therefore an unresolved product-model gap; this spike does not assert it exists. A card, a widget, a stack, and a focus modal are not a product app.
+The library address, such as `expenses`, and pane number are UI locators, not authority. A component is addressed `app.card` or by pane number (APP-120). Library names and aliases remain keyed by `app_id`, with an optional card key (`app/src/storage/labels.rs`). The MVP follow-up adds a separate display name/version on each `saved_work` (migration 0018, `storage/work_labels.rs`). Generated works use that exact-work name; an optimistic, audited rename does not change sibling names, publication, work version, records or share pins. A card, a widget, a stack, and a focus modal are not a product app.
 
-Creating that app begins in a modal before placement (APP-141). Current examples supply descriptions for generation; actual template instantiation and automatic united-page placement remain incomplete. Placing a library app is not creation. An explicit description publishes onto an eligible owned app, creating a first shell through APP-145 when necessary.
+Creating that app begins in a modal before placement (APP-141). The MVP follow-up supplies four real admitted empty templates. An unchanged description instantiates the selected definition; an edited description customizes it through model admission. Successful confirmation places and opens one united page automatically. Placing a library app is not creation. An explicit description publishes onto an eligible owned app, creating a first shell through APP-145 when necessary.
 
 ## Who it belongs to
 
@@ -25,10 +25,10 @@ APP-145 is the reviewed exception to ADR-007 D7.3: an eligible member's intentio
 
 ## Where it lives
 
-Two views of the same saved work are **proposed**.
+The MVP follow-up implements two views of the same saved work; final source and hosted evidence is tracked in [MVP gap completion](../MVP-GAPS-2026-11-01.md).
 
-- The board shows the app as cards. Unite can gather those cards into one frame today (`canvas/unite.ts`). That frame is not yet the app page. APP-142 adopts it as the page.
-- The HTML page is the existing `GET /w/{app}/{work}` (`app/src/query/routes.rs`). APP-144 extends that renderer so the page is the admitted app. The model does not write the HTML.
+- The board shows the app as cards. Unite can gather those cards into one frame today (`canvas/unite.ts`). APP-142 adopts that frame as the app page; its parts follow the admitted default layout.
+- The HTML page is the existing `GET /w/{app}/{work}` (`app/src/query/routes.rs`). APP-144 renders the admitted parts/layout, exact command forms, current records and qualified source views. Unqualified queries show an explicit unavailable state. The model does not write the HTML.
 
 ## What it is not
 

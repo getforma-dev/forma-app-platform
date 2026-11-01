@@ -1627,7 +1627,7 @@ async fn route_campaign(
         "impossible window bounds (2026-02-31, 2026-04-31, year 0000) are 422 invalid_parameters on the JSON route before authorization or any engine (review M2, probe P6)",
     );
 
-    // --- The work page: idle views, then a run with every state's receipt ---
+    // --- The work page: declared defaults, then parameterized runs ---
     let opened = maya.get(&routes, &page).await;
     assert_eq!(opened.status, StatusCode::OK);
     let props = last_page();
@@ -1637,15 +1637,16 @@ async fn route_campaign(
             .iter()
             .map(|v| (v.id.as_str(), v.state.as_str()))
             .collect::<Vec<_>>(),
-        [("total", "idle"), ("timeline", "idle")]
+        [("total", "ready"), ("timeline", "ready")]
     );
-    assert!(props
-        .views
-        .iter()
-        .all(|v| !v.has_summary && !v.has_table && !v.has_receipt));
+    assert!(props.views.iter().all(|v| v.has_receipt));
     assert_eq!(props.action, page);
     let csrf = props.csrf.clone();
-    assert_eq!(counting.calls(), 4, "opening the page runs nothing");
+    assert_eq!(
+        counting.calls(),
+        6,
+        "opening the page runs declared defaults"
+    );
     let form = |start: &str, end: &str, destination: &str| {
         format!("csrf={csrf}&window_start={start}&window_end={end}&destination={destination}")
     };
@@ -1726,11 +1727,11 @@ async fn route_campaign(
         delivered_receipts.push(serde_json::from_str(&view.receipt_json).unwrap());
     }
     let calls = counting.calls();
-    // No window: 422 rendered directly (no redirect, the run cookie untouched),
+    // Half a window: 422 rendered directly (no redirect, the run cookie untouched),
     // every view idle, nothing ran; an impossible day likewise; a bad token: 403.
     let kept = maya.cookie(crate::auth::cookies::RUN).unwrap();
     for refused_form in [
-        form("", "", "198.51.100.7"),
+        form("2026-10-22T10:00", "", "198.51.100.7"),
         form("2026-02-31T00:00", "2026-03-01T00:00", ""),
         form("0000-01-01T00:00", "0000-01-01T10:10", ""),
     ] {
@@ -1762,7 +1763,7 @@ async fn route_campaign(
     assert_eq!(counting.calls(), calls, "refused forms run nothing");
     check(
         checks,
-        "work page: GET /w/{app}/{work} shows the definition's two runnable views idle and runs nothing; the run form (window required, destination optional, synchronizer token) answers 303 to the page with the run cookie and the page then shows total 1,140,000 and the five timeline buckets with contract-valid receipts listing every source dependency, 900,000 for the destination, and empty (never zero) for a destination with no event; a missing window and an impossible day (2026-02-31, year 0000) are 422 with every view idle and the run cookie untouched, a forged token 403, none reaching the engine",
+        "work page: GET /w/{app}/{work} runs the definition's two source views with their declared defaults and released receipts; the run form (optional complete window, destination, synchronizer token) answers 303 to the page with the run cookie and the page then shows total 1,140,000 and the five timeline buckets with contract-valid receipts listing every source dependency, 900,000 for the destination, and empty (never zero) for a destination with no event; a partial window and an impossible day (2026-02-31, year 0000) are 422 with every view idle and the run cookie untouched, a forged token 403, none reaching the engine",
     );
 
     // --- Reload restores (ADR-010 §1 act 4): GET again, fresh run and release ---
@@ -1877,7 +1878,7 @@ async fn route_campaign(
     assert!(last_page().views.iter().all(|v| v.idle));
     let idle_again = maya.get(&routes, &page).await;
     assert_eq!(idle_again.status, StatusCode::OK);
-    assert!(last_page().views.iter().all(|v| v.idle));
+    assert!(last_page().views.iter().all(|v| v.ready && v.has_receipt));
     let shown = run_and_show(
         &mut maya,
         &routes,
@@ -1886,7 +1887,7 @@ async fn route_campaign(
     )
     .await;
     assert_eq!(shown.status, StatusCode::OK);
-    let calls = calls + 2;
+    let calls = calls + 4;
     assert_eq!(counting.calls(), calls);
     let mut tampered = maya.cookie(crate::auth::cookies::RUN).unwrap();
     let last = tampered.pop().unwrap();
@@ -2373,6 +2374,65 @@ async fn route_campaign(
                     .any(|cell| cell.text == "APP-144 private record before revoke")),
         "the authorized document contains the committed record"
     );
+    let form_id = before_revoke
+        .parts
+        .iter()
+        .find(|part| part.is_form)
+        .expect("declared form")
+        .id
+        .clone();
+    let selection = format!(
+        "csrf={}&document_action=refresh&selection.{}={}",
+        before_revoke.csrf, form_id, command.record
+    );
+    let selected = maya.post(&routes, &page, &selection).await;
+    assert_eq!(selected.status, StatusCode::OK);
+    assert_eq!(last_page().forms[0].record, command.record);
+    assert_eq!(last_page().forms[0].record_version, "1");
+    assert_eq!(last_page().forms[0].command, "record_decision");
+    let refreshed = maya
+        .send(
+            &routes,
+            "POST",
+            &page,
+            &selection,
+            &[
+                ("sec-fetch-site", "same-origin"),
+                ("accept", "application/json"),
+            ],
+        )
+        .await;
+    assert_eq!(refreshed.status, StatusCode::OK);
+    let wire: Value = serde_json::from_str(&refreshed.body).unwrap();
+    assert_eq!(wire["forms"][0]["record"], command.record);
+    assert_eq!(
+        wire["parts"].as_array().unwrap().len(),
+        before_revoke.parts.len()
+    );
+    assert_eq!(wire["forms"][0]["record_version"], "1");
+    assert!(maya
+        .post(
+            &routes,
+            &page,
+            &format!(
+                "csrf={}&document_action=refresh&selection.{}=00000000-0000-4000-8000-0000000012ff",
+                before_revoke.csrf, form_id
+            )
+        )
+        .await
+        .uniform_404());
+    assert!(maya
+        .post(
+            &routes,
+            &page,
+            &format!(
+                "csrf={}&document_action=refresh&selection.unknown={}",
+                before_revoke.csrf, command.record
+            )
+        )
+        .await
+        .uniform_404());
+    check(checks, "APP-144: declared form chooses a real current record through a CSRF-protected body, keeping its exact command/version; live JSON uses the same ordered parts and snake_case wire props; missing records and undeclared form selectors are uniform 404");
     let csrf = before_revoke.csrf;
     let posted = maya
         .post(

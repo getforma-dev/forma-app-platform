@@ -200,6 +200,7 @@ async fn begin(
     };
     let provider_org = home.as_deref().unwrap_or(&target.organization);
     let route = provider.config.route(provider_org).ok_or(())?;
+    let shared_client = route.shared_client_id.as_deref().ok_or(())?;
     stores
         .workspace
         .provider_tenant(provider_org, &provider.config.issuer)
@@ -232,7 +233,7 @@ async fn begin(
             .client
             .par(
                 &route.tenant_slug,
-                &route.client_id,
+                shared_client,
                 &callback,
                 &flow.state,
                 &pkce.challenge,
@@ -242,7 +243,7 @@ async fn begin(
             .map_err(|_| ())?;
         Ok(provider
             .client
-            .authorize_url(&route.tenant_slug, &route.client_id, &uri))
+            .authorize_url(&route.tenant_slug, shared_client, &uri))
     }
     .await;
     match result {
@@ -326,7 +327,7 @@ async fn arrive(
         .client
         .exchange(
             &route.tenant_slug,
-            &route.client_id,
+            route.shared_client_id.as_deref().ok_or(())?,
             &callback,
             code,
             &verifier,
@@ -475,6 +476,95 @@ mod tests {
     };
     use tower::ServiceExt;
     const KEY: &str = "00000000-0000-4000-8000-000000000001.00000000-0000-4000-8000-000000000099";
+    #[test]
+    fn a_shared_callback_requires_its_own_registered_client() {
+        let mut value = tests::auth_configuration_document("00000000-0000-4000-8000-000000000d09")
+            ["auth_config"]
+            .clone();
+        let decode = |value: &serde_json::Value| {
+            super::super::AuthConfig::decode(&serde_json::to_vec(value).unwrap())
+        };
+        assert!(decode(&value).is_ok());
+        for bad in [
+            serde_json::json!("northstar-platform"),
+            serde_json::Value::Null,
+            serde_json::json!("northstar-hosted"),
+            serde_json::json!("invalid client"),
+        ] {
+            value["organizations"][0]["shared_client_id"] = bad;
+            assert!(decode(&value).is_err());
+        }
+        value["organizations"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("shared_client_id");
+        assert!(
+            decode(&value)
+                .unwrap()
+                .route(tests::ORG)
+                .unwrap()
+                .shared_client_id
+                .is_none(),
+            "member-only config remains compatible; guest start fails closed"
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_fake_enforces_one_exact_callback_per_client() {
+        let issuer = Issuer::start(tests::tenants()).await;
+        let auth = Auth::loopback(tests::config(&issuer.origin), None, Arc::new(TestPages));
+        let provider = auth.provider.as_ref().unwrap();
+        let pkce = Pkce::fresh().unwrap();
+        let shared_callback = format!("{}/auth/shared/callback", provider.config.app_origin);
+        assert!(provider
+            .client
+            .par(
+                "northstar",
+                "northstar-platform",
+                &shared_callback,
+                "state",
+                &pkce.challenge,
+                None
+            )
+            .await
+            .is_err());
+        assert!(provider
+            .client
+            .par(
+                "northstar",
+                "northstar-shared",
+                &provider.config.callback,
+                "state",
+                &pkce.challenge,
+                None
+            )
+            .await
+            .is_err());
+        assert!(provider
+            .client
+            .par(
+                "northstar",
+                "northstar-shared",
+                &shared_callback,
+                "state",
+                &pkce.challenge,
+                None
+            )
+            .await
+            .is_ok());
+        assert!(provider
+            .client
+            .par(
+                "northstar",
+                "northstar-platform",
+                &provider.config.callback,
+                "state",
+                &pkce.challenge,
+                None
+            )
+            .await
+            .is_ok());
+    }
     #[test]
     fn closed_intent_and_exact_share_csrf() {
         let auth = Auth::new(None, None, Arc::new(TestPages)).unwrap();

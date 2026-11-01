@@ -11,11 +11,11 @@
 //!   one would be a product rule, not an authority or contract rule (routes
 //!   open question 3).
 //! - `GET /w/{app}/{work}`: the app document (Forma 3.2 native SSR with
-//!   command/live enhancement), runnable views idle and the run form; when the
+//!   command/live enhancement), source views using admitted defaults; when the
 //!   browser carries this work's run cookie from its own earlier run, the
 //!   same views run again with those parameters under a fresh authorization
 //!   (reload restores, ADR-010 §1 act 4; below).
-//! - `POST /w/{app}/{work}`: the run form (window required, destination
+//! - `POST /w/{app}/{work}`: the run form (complete window optional, destination
 //!   optional). Valid parameters are normalized into the run cookie and
 //!   answered `303 See Other` back to `GET /w/{app}/{work}`, which runs every
 //!   runnable view and shows each view's state and receipt; a refused form
@@ -30,16 +30,17 @@
 //! process key's HMAC over the work path, the session cookie and the
 //! parameter bytes (`csrf::CsrfKey::run_tag`), so the cookie restores only
 //! that work's run for that session; `__Host-` forbids a path scope, so the
-//! path is bound through the tag instead. A cookie that is absent renders
-//! the idle page; one that is foreign, forged, tampered, from another session
+//! path is bound through the tag instead. An absent cookie runs the admitted
+//! defaults; one that is foreign, forged, tampered, from another session
 //! or not exactly normalized parameters is ignored and cleared (idle page).
 //! Every restored run passes the full authorization again (`run_query`,
 //! `release_result`) and produces a fresh receipt and release; the browser's
 //! re-submit dialog never appears because the page the member sees is the
 //! `GET`. `SameSite=Strict` keeps a cross-site link to the page from carrying
-//! the cookie, so such a link runs nothing (design M45 is about state
-//! changes; this GET changes none, and still runs only what the same browser
-//! itself submitted through the token-checked form).
+//! the cookie, so such a link uses the admitted defaults (design M45 concerns
+//! state changes; this GET changes none). A closed, CSRF-protected POST body
+//! with document_action=refresh selects an existing record for a declared
+//! form; it only reads and does not execute a command.
 //!
 //! Refusal order: fetch metadata (403 `cross_site`) → bounded body (413) →
 //! a live workspace session (else the uniform 404, so anonymous, pre-access,
@@ -545,32 +546,57 @@ fn idle_views(outline: &WorkOutline) -> Vec<page::CardProps> {
         .collect()
 }
 
-/// Read the document's outline and records under one authorization and pin.
-/// Each form is a fresh authoritative record detail; a publication change or
-/// later denial fails the whole page rather than combining stale premises.
-async fn document(
-    work: &Work,
+pub(crate) struct DocumentForms {
+    pub forms: Vec<super::canvas::FormCardProps>,
+    pub choices: std::collections::BTreeMap<String, Vec<page::SelectionProps>>,
+}
+
+/// Shared native/canvas form preparation, still backed by fresh record details.
+/// Callers must release their whole response after this helper and any queries.
+pub(crate) async fn document_forms(
+    auth: &Auth,
     member: &TrustedRequest,
     cookie: &str,
-    app: &str,
-    saved: &str,
-) -> Result<(WorkOutline, page::WorkChrome), Response> {
-    let stores = work.auth.stores.as_ref().ok_or_else(http::not_found)?;
-    let mut reads = stores
-        .data
-        .work_reads(member, &[(app, saved, true)])
-        .await
-        .map_err(|e| storage_refusal(&e))?;
-    let read = reads.pop().ok_or_else(http::unavailable)?;
-    let outline = read.outline.map_err(|e| storage_refusal(&e))?;
-    let listing = read
-        .records
-        .ok_or_else(http::unavailable)?
-        .map_err(|e| storage_refusal(&e))?;
+    outline: &WorkOutline,
+    listing: &crate::storage::RecordsListing,
+    selections: &std::collections::BTreeMap<String, String>,
+) -> Result<DocumentForms, Response> {
+    let stores = auth.stores.as_ref().ok_or_else(http::not_found)?;
+    let (app, saved) = (listing.app.as_str(), listing.work.as_str());
     let mut forms = Vec::new();
+    let mut form_choices = std::collections::BTreeMap::new();
+    if selections.keys().any(|id| {
+        !outline.parts.iter().any(|part| {
+            part.id == *id
+                && part.kind == "form"
+                && !part.creates
+                && (selections[id] != "new" || part.operation == "create")
+        })
+    }) {
+        return Err(http::not_found());
+    }
     if outline.can_write {
-        for (collection, _) in &outline.collections {
-            let record = crate::auth::capability::random_uuid().ok_or_else(http::unavailable)?;
+        for part in outline.parts.iter().filter(|part| part.kind == "form") {
+            let (collection, _) = outline
+                .collections
+                .iter()
+                .find(|(_, schema)| schema == &part.schema)
+                .ok_or_else(http::unavailable)?;
+            let creating =
+                part.operation == "create" && selections.get(&part.id).is_none_or(|id| id == "new");
+            let record = if creating {
+                crate::auth::capability::random_uuid().ok_or_else(http::unavailable)?
+            } else {
+                let selected = selections.get(&part.id).or_else(|| {
+                    listing
+                        .records
+                        .iter()
+                        .find(|record| record.collection == *collection)
+                        .map(|record| &record.record_id)
+                });
+                let Some(selected) = selected else { continue };
+                selected.clone()
+            };
             let key = crate::auth::capability::random_hex::<16>().ok_or_else(http::unavailable)?;
             let detail = stores
                 .data
@@ -584,17 +610,99 @@ async fn document(
             {
                 return Err(http::unavailable());
             }
-            let view = crate::commands::view(
+            if !creating && detail.version == 0 {
+                return Err(http::not_found());
+            }
+            if !part.creates {
+                let mut choices: Vec<_> = listing
+                    .records
+                    .iter()
+                    .filter(|row| row.collection == *collection)
+                    .map(|row| {
+                        let label = row
+                            .values
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|item| item["value"]["value"].as_str())
+                            .next()
+                            .unwrap_or("Record");
+                        page::SelectionProps {
+                            id: row.record_id.clone(),
+                            label: format!(
+                                "{} · revision {}",
+                                label.chars().take(100).collect::<String>(),
+                                row.version
+                            ),
+                            selected: row.record_id == record,
+                        }
+                    })
+                    .collect();
+                if part.operation == "create" {
+                    choices.insert(
+                        0,
+                        page::SelectionProps {
+                            id: "new".into(),
+                            label: "New record".into(),
+                            selected: creating,
+                        },
+                    );
+                }
+                if !creating && !choices.iter().any(|item| item.id == record) {
+                    choices.push(page::SelectionProps {
+                        id: record.clone(),
+                        label: format!("Selected record · revision {}", detail.version),
+                        selected: true,
+                    });
+                }
+                form_choices.insert(part.id.clone(), choices);
+            }
+            let view = crate::commands::view_for_command(
                 app,
                 saved,
                 &detail,
-                work.auth.csrf.token(csrf::Form::Command, cookie),
+                auth.csrf.token(csrf::Form::Command, cookie),
                 key,
-                None,
+                Some(&part.command),
             );
-            forms.extend(super::canvas::form_card(saved, &view));
+            if let Some(mut form) = super::canvas::form_card(saved, &view) {
+                form.id = part.id.clone();
+                form.title = part.title.clone();
+                forms.push(form);
+            }
         }
     }
+    Ok(DocumentForms {
+        forms,
+        choices: form_choices,
+    })
+}
+
+/// Read the document's outline and records under one authorization and pin.
+/// Each form is a fresh authoritative record detail; a publication change or
+/// later denial fails the whole page rather than combining stale premises.
+async fn document(
+    work: &Work,
+    member: &TrustedRequest,
+    cookie: &str,
+    app: &str,
+    saved: &str,
+    selections: &std::collections::BTreeMap<String, String>,
+) -> Result<(WorkOutline, page::WorkChrome), Response> {
+    let stores = work.auth.stores.as_ref().ok_or_else(http::not_found)?;
+    let mut reads = stores
+        .data
+        .work_reads(member, &[(app, saved, true)])
+        .await
+        .map_err(|e| storage_refusal(&e))?;
+    let read = reads.pop().ok_or_else(http::unavailable)?;
+    let outline = read.outline.map_err(|e| storage_refusal(&e))?;
+    let listing = read
+        .records
+        .ok_or_else(http::unavailable)?
+        .map_err(|e| storage_refusal(&e))?;
+    let prepared =
+        document_forms(&work.auth, member, cookie, &outline, &listing, selections).await?;
     let chrome = page::WorkChrome {
         publication: listing.publication.clone(),
         work_version: listing.work_version,
@@ -606,7 +714,8 @@ async fn document(
             .map_err(|e| storage_refusal(&e))?,
         app: app.into(),
         work: saved.into(),
-        forms,
+        forms: prepared.forms,
+        form_choices: prepared.choices,
         record_cards: super::canvas::records_cards(app, saved, &listing, member.principal()),
         records_truncated: listing.truncated,
         canvas: page::canvas_href(saved),
@@ -662,14 +771,22 @@ async fn work_page(
         return http::not_found();
     }
     let member = Arc::new(member);
-    let (outline, chrome) = match document(&work, &member, &cookie, &app, &saved).await {
-        Ok(document) => document,
-        Err(refusal) => return refusal,
-    };
+    let (outline, chrome) =
+        match document(&work, &member, &cookie, &app, &saved, &Default::default()).await {
+            Ok(document) => document,
+            Err(refusal) => return refusal,
+        };
     let csrf_token = work.auth.csrf.token(csrf::Form::Query, &cookie);
     let mut set_cookie = None;
     let (echo, views) = match restore(&work.auth, &parts.headers, &app, &saved, &cookie) {
-        Restore::Absent => (FormValues::default(), idle_views(&outline)),
+        Restore::Absent => {
+            let views =
+                match run_views(&work, member.clone(), &outline, &app, &saved, &json!({})).await {
+                    Ok(views) => views,
+                    Err(refusal) => return refusal,
+                };
+            (FormValues::default(), views)
+        }
         Restore::Invalid => {
             set_cookie = Some(cookies::clear(cookies::RUN));
             (FormValues::default(), idle_views(&outline))
@@ -761,16 +878,19 @@ pub fn form_parameters(fields: &[(String, String)]) -> Result<(Value, FormValues
         window_end: field("window_end"),
         destination: field("destination"),
     };
-    let (Some(start), Some(end)) = (
-        form_timestamp(&echo.window_start),
-        form_timestamp(&echo.window_end),
-    ) else {
-        return Err(echo);
-    };
     if echo.destination.chars().count() > FORM_DESTINATION_CHARACTERS {
         return Err(echo);
     }
-    let mut parameters = json!({"window": {"start": start, "end": end}});
+    let mut parameters = json!({});
+    if !echo.window_start.is_empty() || !echo.window_end.is_empty() {
+        let (Some(start), Some(end)) = (
+            form_timestamp(&echo.window_start),
+            form_timestamp(&echo.window_end),
+        ) else {
+            return Err(echo);
+        };
+        parameters["window"] = json!({"start": start, "end": end});
+    }
     if !echo.destination.is_empty() {
         parameters["destination"] = json!(echo.destination);
     }
@@ -920,6 +1040,35 @@ pub(crate) async fn run_views(
     Ok(views)
 }
 
+/// Closed read-only form selection, sent in a CSRF-protected body rather
+/// than a URL. At most one selected existing record per admitted form.
+fn document_selections(
+    fields: &[(String, String)],
+) -> Option<std::collections::BTreeMap<String, String>> {
+    let mut result = std::collections::BTreeMap::new();
+    let mut action = false;
+    for (name, value) in fields {
+        match name.as_str() {
+            "csrf" => {}
+            "document_action" if !action && value == "refresh" => action = true,
+            _ => {
+                let view = name.strip_prefix("selection.")?;
+                if !(view.len() <= 64
+                    && view.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
+                    && view
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'))
+                    || !(value == "new" || crate::storage::valid_identifier(value))
+                    || result.insert(view.into(), value.clone()).is_some()
+                {
+                    return None;
+                }
+            }
+        }
+    }
+    (action && result.len() <= 24).then_some(result)
+}
+
 /// `POST /w/{app}/{work}`: validates the run form, stores its normalized
 /// parameters in the run cookie and redirects to the page, which runs them
 /// (reload restores). A refused form renders the page (422) with nothing
@@ -952,11 +1101,64 @@ async fn run_page(
     {
         return http::cross_site();
     }
+    let selections = if fields.iter().any(|(name, _)| name == "document_action") {
+        match document_selections(&fields) {
+            Some(selections) => Some(selections),
+            None => return http::not_found(),
+        }
+    } else {
+        None
+    };
     let member = Arc::new(member);
-    let (outline, chrome) = match document(&work, &member, &cookie, &app, &saved).await {
+    let (outline, chrome) = match document(
+        &work,
+        &member,
+        &cookie,
+        &app,
+        &saved,
+        selections.as_ref().unwrap_or(&Default::default()),
+    )
+    .await
+    {
         Ok(document) => document,
         Err(refusal) => return refusal,
     };
+    if selections.is_some() {
+        let parameters = match restore(&work.auth, &parts.headers, &app, &saved, &cookie) {
+            Restore::Parameters(parameters) => parameters,
+            _ => json!({}),
+        };
+        let views =
+            match run_views(&work, member.clone(), &outline, &app, &saved, &parameters).await {
+                Ok(views) => views,
+                Err(refusal) => return refusal,
+            };
+        if let Err(refusal) = release_document(&work, &member, &outline, &chrome).await {
+            return refusal;
+        }
+        let props = page::props(
+            &outline,
+            action(&app, &saved),
+            work.auth.csrf.token(csrf::Form::Query, &cookie),
+            &echo_of(&parameters),
+            false,
+            views,
+            chrome,
+        );
+        return if parts
+            .headers
+            .get(header::ACCEPT)
+            .and_then(|v| v.to_str().ok())
+            == Some("application/json")
+        {
+            match serde_json::to_vec(&props) {
+                Ok(bytes) => json_response(bytes),
+                Err(_) => http::unavailable(),
+            }
+        } else {
+            work.pages.work(&props)
+        };
+    }
     let (parameters, echo) = match form_parameters(&fields) {
         Ok(accepted) => accepted,
         Err(echo) => {

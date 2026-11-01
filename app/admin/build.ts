@@ -19,7 +19,7 @@ await build({
     { entry: 'src/canvas/app.tsx', outfile: 'canvas.js' },
   ],
   cssEntries: [
-    { input: 'src/styles/app.css', outfile: 'app.css' },
+    { input: ['src/styles/app.css', 'src/styles/ask.css'], outfile: 'app.css' },
     { input: 'src/styles/sharing.css', outfile: 'sharing.css' },
     // ADR-011: the vendored GenUI canvas geometry styles and the pitch canvas.
     { input: 'src/canvas-vendor/canvas.css', outfile: 'canvas-vendor.css' },

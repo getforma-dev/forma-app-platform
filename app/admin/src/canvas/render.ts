@@ -353,6 +353,8 @@ export type FormJson = {
 export type OriginJson = { id: string; kind: string; text: string };
 export type GroupJson = {
   can_share?: boolean;
+  can_label_work?: boolean; work_name_version?: number; work_name_scope?: boolean; part_order?: string; part_layout?: string;
+  static_parts?: { id: string; view: string; title: string; kind: string; text: string; message: string; href: string }[];
   id: string; app: string; work: string; app_card: string; title: string; label: string; origins?: OriginJson[];
   href: string; csrf: string; window_start: string; window_end: string; destination: string;
   cards: CardJson[]; forms: FormJson[]; records?: RecordsCardJson[]; ledger?: LedgerCardJson[];
@@ -409,10 +411,11 @@ export function formTitle(title: string): string {
 
 export function buildFormCard(document_: Document, form: FormJson): HTMLElement {
   const title = formTitle(form.title);
-  return el(document_, 'article', { class: 'cv-card cv-form', 'data-card': form.id, 'data-kind': 'form', 'aria-label': title },
+  return el(document_, 'article', { class: 'cv-card cv-form', 'data-card': form.id, 'data-kind': 'form', 'data-collection': form.collection, 'aria-label': title },
     el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, title), el(document_, 'span', { class: 'badge' }, 'form')),
     buildForm(document_, form),
-    el(document_, 'p', { class: 'cv-outcome', role: 'status', 'data-outcome': '' }));
+    el(document_, 'p', { class: 'cv-outcome', role: 'status', 'data-outcome': '' }),
+    ...(form.action.match(/^\/v1\/work\/([0-9a-f-]+)\/([0-9a-f-]+)\/commands\//) ? [el(document_, 'a', { href: form.action.replace(/^\/v1\/work\//, '/w/').replace(/\/commands\/.*$/, '') }, 'Choose a record on the app page')] : []));
 }
 
 /** An origin label's style: library, adapted, generated or seeded. */
@@ -447,7 +450,8 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
     el(document_, 'p', { class: 'sr-only' }, group.label),
     el(document_, 'details', { class: 'cv-window-wrap' }, el(document_, 'summary', {}, 'Time range and filters'), window_));
   if (group.can_share) app.append(el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-manage-share': '', 'data-app': group.app, 'data-work': group.work, 'data-title': group.title }, 'Share app'));
-  const section = el(document_, 'section', { class: 'cv-group', id: group.id, 'data-app': group.app, 'data-work': group.work, 'data-can-share': String(group.can_share === true), 'aria-label': group.title }, app);
+  const section = el(document_, 'section', { class: 'cv-group', id: group.id, 'data-app': group.app, 'data-work': group.work, 'data-can-share': String(group.can_share === true), 'data-can-label-work': String(group.can_label_work === true), 'data-work-name-version': String(group.work_name_version ?? 0), 'data-part-order': group.part_order ?? '', 'data-part-layout': group.part_layout ?? '', 'aria-label': group.title }, app);
+  section.dataset.workNameScope = String(group.work_name_scope === true);
   for (const card of group.cards) {
     section.append(el(document_, 'article', {
       class: 'cv-card cv-view', id: card.id, 'data-card': card.id, 'data-view': card.view, 'data-kind': card.kind,
@@ -457,6 +461,10 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
     el(document_, 'div', { class: 'cv-card-body', 'data-body': '' }, el(document_, 'p', { class: 'cv-message', role: 'status' }, card.message))));
   }
   for (const form of group.forms) section.append(buildFormCard(document_, form));
+  for (const part of group.static_parts ?? []) section.append(el(document_, 'article', {
+    class: 'cv-card cv-static-part', 'data-card': part.id, 'data-view': part.view, 'data-kind': part.kind, 'aria-label': part.title,
+  }, el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, part.title), el(document_, 'span', { class: 'badge' }, part.kind)),
+  el(document_, 'div', { class: 'cv-card-body' }, el(document_, 'p', { class: 'cv-static-text' }, part.text), el(document_, 'p', { class: 'cv-message' }, part.message), el(document_, 'a', { href: `/w/${group.app}/${group.work}` }, 'Open app page'))));
   for (const card of group.records ?? []) section.append(buildRecordsCard(document_, card));
   for (const card of group.ledger ?? []) section.append(buildLedgerCard(document_, card));
   return section;

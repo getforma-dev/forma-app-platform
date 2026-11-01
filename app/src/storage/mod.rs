@@ -28,6 +28,7 @@ mod shared_access;
 mod shared_identity;
 mod shared_reads;
 mod sharing;
+mod work_labels;
 
 pub use actions::{
     CollectionSummary, DryRun, RecordRow, RecordsListing, WorkReads, READ_ONLY_WORKS, RECORDS_LIMIT,
@@ -71,8 +72,8 @@ pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use queries::QueryActor;
 pub use queries::{
     command_slug, events_fields, field_type, library_sidecar, parse_parameters, query_digests,
-    LibraryEntry, NamedWork, OpenableWork, Parameters, QueryRun, RunSource, WorkOutline, WorkView,
-    COMMAND_MARKER, QUALIFIED_OPERATORS, QUERY_HANDLER_DEADLINE,
+    LibraryEntry, NamedWork, OpenableWork, Parameters, QueryRun, RunSource, WorkOutline, WorkPart,
+    WorkView, COMMAND_MARKER, QUALIFIED_OPERATORS, QUERY_HANDLER_DEADLINE,
 };
 pub use registry::RegistryIdentity;
 pub use sessions::{
@@ -90,6 +91,7 @@ pub use sharing::{
     member_label, Granted, Member, Openable, Shared, Standing, JUDGMENT_LIMIT,
     SHARE_HANDLER_DEADLINE,
 };
+pub use work_labels::{WorkLabel, WorkLabelResult};
 
 use std::fmt;
 
