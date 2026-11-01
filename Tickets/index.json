@@ -298,9 +298,13 @@
         "APP-146",
         "APP-147",
         "APP-148",
-        "APP-149"
+        "APP-149",
+        "APP-150",
+        "APP-151",
+        "APP-152",
+        "APP-153"
       ],
-      "ticket_count": 58,
+      "ticket_count": 62,
       "done_count": 1,
       "blocked_count": 0
     }
@@ -4661,6 +4665,121 @@
       "dependencies": [
         "APP-108",
         "APP-120"
+      ]
+    },
+    {
+      "id": "APP-150",
+      "title": "Favorite sections, and a way to go to one",
+      "path": "0-backlog/APP-150.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P2",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "150",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: a member can mark a section as a favorite and jump to it. This is later than the app-page direction. It is not the creation-modal favorites in APP-141.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-142",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-142"
+      ]
+    },
+    {
+      "id": "APP-151",
+      "title": "Middle-click zooms into focus, then Tab moves through the app",
+      "path": "0-backlog/APP-151.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P2",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "151",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: middle-click zooms into the focus that already exists, and Tab moves through that app. This is later than the app page. It is not a second focus mode.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-106, APP-142",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-106",
+        "APP-142"
+      ]
+    },
+    {
+      "id": "APP-152",
+      "title": "An API bank, and an easy way to add an API",
+      "path": "0-backlog/APP-152.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "AI",
+      "Status": "Backlog",
+      "Priority": "P2",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "152",
+      "Size": "L",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: an API should be as easy to add as a library card, with an API bank to pick from. This is later than the app-page direction and is not the MVP. The model does not write server code.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-093, APP-104",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-093",
+        "APP-104"
+      ]
+    },
+    {
+      "id": "APP-153",
+      "title": "Spike \u2014 why the library pane has four tabs",
+      "path": "0-backlog/APP-153.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Spike",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "153",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: find out why the pane has Library, Commands, Ask, and Shortcuts, and whether each one belongs there. The spike writes the answer. It does not move a tab.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-112, APP-122",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-112",
+        "APP-122"
       ]
     }
   ]

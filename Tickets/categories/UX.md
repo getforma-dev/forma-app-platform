@@ -38,3 +38,6 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 147 | [APP-147: Spike — what a component of an app is](../0-backlog/APP-147.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-120 |
 | 148 | [APP-148: Spike — what a widget is](../0-backlog/APP-148.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-103, APP-120 |
 | 149 | [APP-149: Spike — what a box is, and where it sits](../0-backlog/APP-149.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-108, APP-120 |
+| 150 | [APP-150: Favorite sections, and a way to go to one](../0-backlog/APP-150.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-142 |
+| 151 | [APP-151: Middle-click zooms into focus, then Tab moves through the app](../0-backlog/APP-151.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-106, APP-142 |
+| 153 | [APP-153: Spike — why the library pane has four tabs](../0-backlog/APP-153.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-112, APP-122 |
