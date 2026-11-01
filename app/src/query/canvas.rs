@@ -510,6 +510,8 @@ pub struct RecordsCardProps {
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct RecordRowProps {
     pub id: String,
+    /// The same authorized record document, never an arbitrary definition URL.
+    pub href: String,
     pub record_id: String,
     pub version: String,
     pub status: String,
@@ -949,6 +951,10 @@ pub fn records_cards(
                         raw: String::new(),
                     });
                     RecordRowProps {
+                        href: format!(
+                            "/work/{app}/{work}/records/{}/{}",
+                            collection.collection, record.record_id
+                        ),
                         id: format!("rec-{}", record.record_id),
                         record_id: record.record_id.clone(),
                         version: record.version.to_string(),

@@ -3,6 +3,8 @@
 // runs under Trusted Types; nothing here assigns markup). A card shows a
 // value only from a released query result that carries its receipt; every
 // other state is built from a message alone (ADR-011 I3).
+import { isUuid } from './ids';
+export { isUuid } from './ids';
 import { chartFigure, chartOf } from './chart';
 import { buildRecordsCard, type RecordsCardJson } from './records';
 import { buildLedgerCard, type LedgerCardJson } from './ledger';
@@ -355,10 +357,6 @@ export type GroupJson = {
   cards: CardJson[]; forms: FormJson[]; records?: RecordsCardJson[]; ledger?: LedgerCardJson[];
 };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-export function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID.test(value);
-}
 
 export function groupJson(value: unknown): GroupJson | null {
   if (typeof value !== 'object' || value === null) return null;

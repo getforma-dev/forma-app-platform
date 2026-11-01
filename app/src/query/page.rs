@@ -32,9 +32,14 @@ use forma_server::{PageHandle, RenderCtx};
 use serde_json::Value;
 
 /// The page's typed props (camelCase in `work/app.tsx`).
-#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct WorkProps {
     pub title: String,
+    pub app: String,
+    pub work: String,
+    pub forms: Vec<super::canvas::FormCardProps>,
+    pub record_cards: Vec<super::canvas::RecordsCardProps>,
+    pub records_truncated: bool,
     /// `/w/{app}/{work}`: the run form's own route.
     pub action: String,
     /// The synchronizer token of the run form, tied to the session cookie.
@@ -55,14 +60,14 @@ pub struct WorkProps {
     pub canvas: String,
 }
 
-#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct RecordLinkProps {
     pub id: String,
     pub label: String,
     pub href: String,
 }
 
-#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct CardProps {
     pub id: String,
     pub title: String,
@@ -542,7 +547,17 @@ pub fn canvas_href(work: &str) -> String {
 }
 
 /// Record links and the canvas address for one work page.
+#[derive(Default)]
 pub struct WorkChrome {
+    /// Kept server-side for the final authorization/pin check before release.
+    pub publication: String,
+    pub work_version: i64,
+    pub can_write: bool,
+    pub app: String,
+    pub work: String,
+    pub forms: Vec<super::canvas::FormCardProps>,
+    pub record_cards: Vec<super::canvas::RecordsCardProps>,
+    pub records_truncated: bool,
     pub records: Vec<RecordLinkProps>,
     pub canvas: String,
 }
@@ -560,6 +575,11 @@ pub fn props(
     let has_query = !views.is_empty();
     WorkProps {
         title: outline.title.clone(),
+        app: chrome.app,
+        work: chrome.work,
+        forms: chrome.forms,
+        record_cards: chrome.record_cards,
+        records_truncated: chrome.records_truncated,
         action,
         csrf,
         window_start: form.window_start.clone(),

@@ -925,6 +925,7 @@ mod tests {
             work::WorkChrome {
                 records: Vec::new(),
                 canvas: "/canvas#g-w".into(),
+                ..Default::default()
             },
         );
         let (status, headers, body) = html(ssr.work(&props)).await;
@@ -948,7 +949,17 @@ mod tests {
                 .find(&format!("data-view=\"{id}\""))
                 .unwrap_or_else(|| panic!("{id}"));
             let rest = &body[start..];
-            rest[..rest.find("</section>").unwrap()].to_owned()
+            // Native interactive pages add stable text anchors. Judge the
+            // rendered badge/content independently of those hydration markers.
+            let mut tail = &rest[..rest.find("</section>").unwrap()];
+            let mut content = String::new();
+            while let Some(start) = tail.find("<!--") {
+                content.push_str(&tail[..start]);
+                let end = tail[start..].find("-->").unwrap();
+                tail = &tail[start + end + 3..];
+            }
+            content.push_str(tail);
+            content
         };
         let ready = section("ready");
         assert!(ready.contains("data-state=\"ready\"") && ready.contains(">1,140,000<"));
@@ -999,6 +1010,7 @@ mod tests {
             work::WorkChrome {
                 records: work::record_links(&outline, "app", "work"),
                 canvas: work::canvas_href("work"),
+                ..Default::default()
             },
         );
         assert!(only.records_only && only.has_records && !only.has_query);
@@ -1010,6 +1022,69 @@ mod tests {
         assert!(records_body.contains("/canvas#g-work"));
         assert!(records_body.contains("New Claim record"));
         assert!(records_body.contains("/work/app/work/records/collection/"));
+        // APP-144: the admitted form and current records are real native HTML;
+        // values remain escaped and commands retain their existing route/key.
+        let mut document = only.clone();
+        document.forms = vec![genui::query::canvas::FormCardProps {
+            id: "form-claim".into(),
+            title: "File a claim".into(),
+            command: "file_claim".into(),
+            action: "/v1/work/app/work/commands/file_claim".into(),
+            idempotency_key: "a".repeat(32),
+            collection: "collection".into(),
+            fields: vec![genui::query::canvas::FormFieldProps {
+                id: "description".into(),
+                label: "Description".into(),
+                input: "value.description".into(),
+                value: "<script>untrusted()</script>".into(),
+                spec: r#"{"type":"text"}"#.into(),
+                spec_input: "spec.description".into(),
+                has_text: true,
+                writable: true,
+                ..Default::default()
+            }],
+            submit: "File claim".into(),
+            ..Default::default()
+        }];
+        document.record_cards = vec![genui::query::canvas::RecordsCardProps {
+            id: "claims".into(),
+            title: "Claims".into(),
+            collection: "collection".into(),
+            has_rows: true,
+            rows: vec![genui::query::canvas::RecordRowProps {
+                id: "claim-one".into(),
+                href: "/work/app/work/records/collection/record".into(),
+                version: "1".into(),
+                commit_sequence: "7".into(),
+                cells: vec![work::CellProps {
+                    id: "description".into(),
+                    text: "Admitted saved record".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }];
+        let (_, headers, document_body) = html(ssr.work(&document)).await;
+        assert!(headers[header::CONTENT_SECURITY_POLICY]
+            .to_str()
+            .unwrap()
+            .contains("require-trusted-types-for"));
+        assert!(document_body.contains("data-document-form=\"collection\""));
+        assert!(document_body.contains("action=\"/v1/work/app/work/commands/file_claim\""));
+        assert!(document_body.contains(&format!("value=\"{}\"", "a".repeat(32))));
+        assert!(!document_body.contains("<script>untrusted()"));
+        assert!(document_body.contains("&lt;script&gt;untrusted()&lt;/script&gt;"));
+        assert!(
+            document_body.contains("Admitted saved record")
+                && document_body.contains("Commit ")
+                && document_body.contains(">7<")
+        );
+        assert!(document_body.contains("/work/app/work/records/collection/record"));
+        document.forms.clear();
+        let (_, _, read_only) = html(ssr.work(&document)).await;
+        assert!(read_only.contains("Admitted saved record"));
+        assert!(!read_only.contains("data-document-form=\"collection\""));
         let mut no_records = outline.clone();
         no_records.collections.clear();
         no_records.can_write = false;
@@ -1023,6 +1098,7 @@ mod tests {
             work::WorkChrome {
                 records: Vec::new(),
                 canvas: work::canvas_href("work"),
+                ..Default::default()
             },
         );
         assert!(!blank.records_only && !blank.has_query && blank.form_error);

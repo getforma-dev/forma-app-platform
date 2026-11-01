@@ -1751,12 +1751,16 @@ async fn route_campaign(
         delivered_receipts.push(serde_json::from_str(&props.views[0].receipt_json).unwrap());
         reloads.push(json!({"reload": reload, "total": props.views[0].summary[0].value, "timeline_rows": props.views[1].rows.len(), "receipt_digest": props.views[0].receipt_digest}));
     }
-    // Revocation between execution and release on a restored run: denied cards.
+    // APP-144: revocation between execution and release denies the whole
+    // document, including the record/form props assembled before the query.
+    *pages.last.lock().unwrap() = None;
     let (computed, resume) = counting.pause_next();
-    let racing = tokio::spawn(send_raw(
-        routes.clone(),
-        raw_request("GET", &page, &jar(&maya), Vec::new()),
-    ));
+    let mut refreshing = raw_request("GET", &page, &jar(&maya), Vec::new());
+    refreshing.headers_mut().insert(
+        header::ACCEPT,
+        axum::http::HeaderValue::from_static("application/json"),
+    );
+    let racing = tokio::spawn(send_raw(routes.clone(), refreshing));
     computed.await.unwrap();
     operator(
         &c.fixture,
@@ -1774,20 +1778,11 @@ async fn route_campaign(
     );
     resume.send(()).unwrap();
     let reply = racing.await.unwrap();
-    assert_eq!(reply.0, StatusCode::OK);
-    let props = last_page();
-    assert_eq!(
-        props
-            .views
-            .iter()
-            .map(|v| v.state.as_str())
-            .collect::<Vec<_>>(),
-        ["denied", "denied"]
+    assert!(raw_404(&reply), "{:?}", String::from_utf8_lossy(&reply.2));
+    assert!(
+        pages.last.lock().unwrap().is_none(),
+        "no document rendered after revocation"
     );
-    assert!(props
-        .views
-        .iter()
-        .all(|v| v.summary.is_empty() && v.rows.is_empty() && !v.has_receipt));
     // Authority already lost when the page reloads: the page itself fails
     // closed (uniform 404), so nothing is shown at all.
     assert!(maya.get(&routes, &page).await.uniform_404());
@@ -1859,7 +1854,7 @@ async fn route_campaign(
         .uniform_404());
     check(
         checks,
-        "reload restores (ADR-010 act 4): after the run form's 303, GET /w/{app}/{work} twice shows the same 1,140,000 and five buckets with a fresh run and release each time (dispatch +2 per reload, identical receipt identity for the same pinned state and parameters) and refreshes the Strict run cookie; a source_read revocation between execution and release of a restored run renders both views denied, a revocation before the reload makes the page the uniform 404; the cookie presented on another work of hers and a tampered cookie are ignored and cleared with every view idle and no dispatch; a query string stays the uniform 404",
+        "reload restores (ADR-010 act 4): after the run form's 303, GET /w/{app}/{work} twice shows the same 1,140,000 and five buckets with a fresh run and release each time (dispatch +2 per reload, identical receipt identity for the same pinned state and parameters) and refreshes the Strict run cookie; a source_read revocation between execution and release of an Accept: application/json refresh refuses the whole document with the uniform 404 and never invokes its renderer, as does a revocation before reload; the cookie presented on another work of hers and a tampered cookie are ignored and cleared with every view idle and no dispatch; a query string stays the uniform 404",
     );
 
     // --- D7.9 (review M4): a lock wait on the member's own row during session
@@ -2266,11 +2261,67 @@ async fn route_campaign(
         "the engine computed; the release was denied"
     );
     grant(&c.fixture, &member, "source_read", &["--source", SOURCE]);
+    // APP-144: put a real committed record behind the page before pausing
+    // its source query. The final authority check must protect the records
+    // and command forms already assembled, not only the computed numbers.
+    operator(&c.fixture, &["backfill", "--organization", ORG]);
+    let live = |reference: &str| c.auth.vault.contains(reference);
+    let current = match stores
+        .workspace
+        .resolve_session(&maya.cookie(crate::auth::cookies::SESSION).unwrap(), &live)
+        .await
+        .unwrap()
+    {
+        Lookup::Live(member) => member,
+        _ => panic!("current page member"),
+    };
+    let listing = stores
+        .data
+        .list_records(&current, APP, ROUTE_WORK)
+        .await
+        .unwrap();
+    let command = CommandRequest {
+        app: APP.into(),
+        work: ROUTE_WORK.into(),
+        publication: listing.publication,
+        command: "record_decision".into(),
+        schema: "decision".into(),
+        schema_version_expected: 1,
+        record: "00000000-0000-4000-8000-0000000012d4".into(),
+        expected_record_version: 0,
+        expected_work_version: listing.work_version,
+        values: json!([
+            {"field_id":"status","value":{"type":"enum","value":"needs_context"}},
+            {"field_id":"note","value":{"type":"text","value":"APP-144 private record before revoke"}},
+        ]),
+        idempotency_key: "000000000000000000000000000012d4".into(),
+    };
+    assert!(matches!(
+        stores.data.commit_record(&current, &command).await.unwrap(),
+        CommandResult::Committed(_)
+    ));
     // The page: the form's 303 saves the run; the GET it redirects to computes
-    // both views, then denies both at release.
+    // both views, then denies the entire document at release.
     let opened = maya.get(&routes, &page).await;
     assert_eq!(opened.status, StatusCode::OK);
-    let csrf = last_page().csrf;
+    let before_revoke = last_page();
+    assert!(
+        !before_revoke.forms.is_empty(),
+        "a writer's real command form is present"
+    );
+    assert!(
+        before_revoke
+            .record_cards
+            .iter()
+            .flat_map(|card| &card.rows)
+            .any(|row| row.record_id == command.record
+                && row
+                    .cells
+                    .iter()
+                    .any(|cell| cell.text == "APP-144 private record before revoke")),
+        "the authorized document contains the committed record"
+    );
+    let csrf = before_revoke.csrf;
     let posted = maya
         .post(
             &routes,
@@ -2279,6 +2330,7 @@ async fn route_campaign(
         )
         .await;
     assert_eq!(posted.status, StatusCode::SEE_OTHER);
+    *pages.last.lock().unwrap() = None;
     let (computed, resume) = counting.pause_next();
     let racing = tokio::spawn(send_raw(
         routes.clone(),
@@ -2297,25 +2349,17 @@ async fn route_campaign(
     );
     resume.send(()).unwrap();
     let reply = racing.await.unwrap();
-    assert_eq!(reply.0, StatusCode::OK);
-    let props = last_page();
-    assert_eq!(
-        props
-            .views
-            .iter()
-            .map(|v| v.state.as_str())
-            .collect::<Vec<_>>(),
-        ["denied", "denied"]
+    assert!(raw_404(&reply), "{:?}", String::from_utf8_lossy(&reply.2));
+    assert!(!String::from_utf8_lossy(&reply.2).contains("APP-144 private record before revoke"));
+    assert!(
+        pages.last.lock().unwrap().is_none(),
+        "no record/form document rendered after revocation"
     );
-    assert!(props
-        .views
-        .iter()
-        .all(|v| v.summary.is_empty() && v.rows.is_empty() && !v.has_receipt));
     // And the revoked membership ends the session for the next request.
     assert!(maya.get(&routes, &page).await.uniform_404());
     check(
         checks,
-        "revocation between execution and delivery denies release: with the engine paused after computing 1,140,000, a source_read revocation turns the JSON response into the uniform 404 with no number; on the page a membership revocation in the same gap (the run form's 303, then the restored GET) renders both views denied with no value or receipt, and the next request finds no session",
+        "revocation between execution and delivery denies release: with the engine paused after computing 1,140,000, a source_read revocation turns the JSON response into the uniform 404 with no number; the authorized work page contains a real committed record and command form, then a membership revocation during its source query refuses the whole document with uniform 404, no record value and no renderer invocation; the next request finds no session",
     );
     // Every receipt the page delivered validates under contracts/validate.py
     // (review M2: a receipt the validator refuses is never delivered).
