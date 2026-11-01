@@ -292,9 +292,10 @@
         "APP-140",
         "APP-141",
         "APP-142",
-        "APP-143"
+        "APP-143",
+        "APP-144"
       ],
-      "ticket_count": 52,
+      "ticket_count": 53,
       "done_count": 1,
       "blocked_count": 0
     }
@@ -4484,6 +4485,35 @@
       "dependencies": [
         "APP-094",
         "APP-142"
+      ]
+    },
+    {
+      "id": "APP-144",
+      "title": "Open an app as a page and use it there",
+      "path": "0-backlog/APP-144.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "144",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: an app can be viewed as an HTML page and interacted with as a page. The page is our rendering of the admitted app, not markup from the model.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-142, APP-093",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started. Recorded with the app-model tickets.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-142",
+        "APP-093"
       ]
     }
   ]

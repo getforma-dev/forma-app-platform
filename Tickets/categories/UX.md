@@ -33,3 +33,4 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 139 | [APP-139: Guided first-run trial: a new member, an empty canvas, one app, one record, one share](../0-backlog/APP-139.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-074, APP-093, APP-095 |
 | 141 | [APP-141: Create an app before it reaches the canvas](../0-backlog/APP-141.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-093, APP-104, APP-120 |
 | 142 | [APP-142: The app is a page: focus inside it, fan-out back to cards](../0-backlog/APP-142.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-106, APP-120, APP-141 |
+| 144 | [APP-144: Open an app as a page and use it there](../0-backlog/APP-144.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-142, APP-093 |
