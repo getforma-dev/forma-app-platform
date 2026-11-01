@@ -6,7 +6,7 @@ The implementation order stays:
 
 1. **APP-145**, the prerequisite for a real first member: one authoring shell on intentional compose, with no shell created by discovery/listing. PR 25 exists; review repairs are not a deployment.
 2. **APP-141.** Create before placing. PR 26 currently supplies description examples and generation, not admitted-template instantiation; do not label those examples as templates.
-3. **APP-142.** The united app is the page on the canvas. Focus returns to it; Fan out returns its parts to the board. PR 27 exists; prove successful owner-created sharing and narrow layout.
+3. **APP-142.** The united app is the page on the canvas. Focus returns to it; Fan out returns its parts to the board. PR 27 and its review now include successful owner-created sharing/live updates and narrow-layout evidence.
 4. **APP-144.** Extend the authorized `/w/{app}/{work}` renderer into the same usable app document. Preserve the exact saved work. No public anonymous page is implied.
 5. **APP-143.** Ask about the selected app, focused part or widget. Context grants no authority.
 6. **APP-139.** Qualify the whole empty-user journey, including a share that causes the recipient to sign up, page/canvas placement and measured live updates. APP-145 and APP-144 are explicit dependencies. Active-member sharing alone does not pass it.

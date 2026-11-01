@@ -9,7 +9,7 @@ This is the implementation board for Forma's company app platform and its Norths
 3. For the November 1 clean-user pivot, use [DIRECTION.md](../docs/planning/DIRECTION.md) and the [review](../docs/planning/PIVOT-REVIEW-2026-11-01.md). `board.py next` follows the older dependency queue and does not select this work. Existing dependency and Done gates still apply; implementation on an open PR is recorded in the ticket log without declaring it Done.
 4. Use [IMPLEMENT](_tools/IMPLEMENT.md) for execution and [REVIEW](_tools/REVIEW.md) for independent review.
 
-The current product direction is the app as a page. Start at [APP-141](0-backlog/APP-141.md), then APP-142, APP-144, and APP-143, in that order. The record is [DIRECTION.md](../docs/planning/DIRECTION.md). `board.py next` still lists the older queue. It does not choose this work.
+The current product direction is the app as a page in the clean-user trial. [APP-145](0-backlog/APP-145.md) enables the first compose; then follow APP-141, APP-142, APP-144, APP-143, APP-139 and APP-140. The record is [DIRECTION.md](../docs/planning/DIRECTION.md). `board.py next` still lists the older queue. It does not choose this work.
 
 Sprints are ordered scope batches, not calendar commitments. Start dates and capacity are unset. Team ownership is assigned; individual implementers are selected when work starts. Later sprints are forecasts; refine or split a ticket before selection if it cannot fit a small, reviewable change. The GenUI and FormaStack teams work in parallel when actual dependencies permit it. An upstream integration gate blocks only the dependent behavior; continue unrelated app work and record precisely what evidence is needed to unblock integration.
 
@@ -48,4 +48,4 @@ python3 Tickets/_tools/board.py next
 
 ## Phase acceptance
 
-Each ticket and sprint belongs to exactly one PH01–PH06 phase. A phase is complete only when all its tickets are Done, predecessor gates have passed, and its own gate has reviewed evidence. Use the [gate record](_tools/PHASE-GATE.md) and the phase page. Pending upstream gates still block only their consumers; eligible independent tickets may proceed. The board validates evidence links and status relationships, while the reviewer judges whether the tests satisfy the design.
+Each ticket and sprint belongs to exactly one phase in `plan.json` (currently PH01–PH08). A phase is complete only when all its tickets are Done, predecessor gates have passed, and its own gate has reviewed evidence. Use the [gate record](_tools/PHASE-GATE.md) and the phase page. Pending upstream gates still block only their consumers; eligible independent tickets may proceed. The board validates evidence links and status relationships, while the reviewer judges whether the tests satisfy the design.

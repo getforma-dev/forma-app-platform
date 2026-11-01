@@ -1,6 +1,6 @@
 # Forma platform: November 1 pivot review
 
-This review reconstructs the original design, the seeded pitch, today's clean-user decision, Grok's delivery, and the remaining work. Source baseline: `origin/pivot/pitch-mvp` at `c5b9452`. Review work is isolated on `codex/pivot-review-2026-11-01`; changes assembled here are a local review candidate, not a trunk merge or deployment. GitHub was read on November 1. Ticket status, branch implementation, CI and deployment are different facts.
+This review reconstructs the original design, the seeded pitch, today's clean-user decision, Grok's delivery, and the remaining work. Source baseline: `origin/pivot/pitch-mvp` at `c5b9452`. Review work is isolated on `codex/pivot-review-2026-11-01`; the combined candidate retains the four reviewed topic histories. Delivery details follow below; no deployment is implied. GitHub was read on November 1. Ticket status, branch implementation, CI and deployment are different facts.
 
 ## Assessment
 
@@ -53,7 +53,7 @@ Git commits are attributed to Victor; the association with Grok comes from the h
 | [26](https://github.com/getforma-dev/forma-app-platform/pull/26) | Create modal before placement | Open at `ed4e496`; local review repairs |
 | [27](https://github.com/getforma-dev/forma-app-platform/pull/27) | United app page, focus return, fan-out, resize and share menu | Open at `0d919f2`; local review repairs |
 
-At initial CI inspection PR22 and PR26 had 12 successful PR-triggered workflows each. PR25 had four failures (Foundation, Parser release, Pitch, Tenant foundation). PR27 had ten successful and two running. PR27 subsequently completed all 12 successfully. These observations bind those remote commits, not the local repaired candidate; full image/deployment acceptance is separate.
+At the initial CI inspection PR22 and PR26 had 12 successful PR-triggered workflows each. PR25 had four failures (Foundation, Parser release, Pitch, Tenant foundation). PR27 had ten successful and two running. PR27 subsequently completed all 12 successfully. These observations bind those remote commits, not the local repaired candidate; full image/deployment acceptance is separate.
 
 ## What an app means in this implementation
 
@@ -83,13 +83,26 @@ The current share menu grants read access by default. It does not make the recip
 
 Detailed command results and any remaining review findings are recorded below and in the owning ticket evidence. A regression test that uses a fake model or provider is labeled as such; it is not a hosted customer trial.
 
+## Delivery review
+
+Victor subsequently authorized updating the tickets and PRs, pushing the fixes and merging into the current repository trunk, `pivot/pitch-mvp`. ADR-013's frozen `main` branch is unchanged. PR review comments and descriptions carry the exact source checks; the connected account is also the PR author, so GitHub cannot record a self-approval. This is independent agent code review recorded as comments, not a formal GitHub approval event.
+
+| PR | Reviewed fix head | Evidence |
+| --- | --- | --- |
+| 22 | `3382d785f1bbc2f96d856d000e74befedc0df3d3` | App/publication/work identity and governed widget corrections; board checks |
+| 25 | `acba5466d427c210ecb45a6b7ae902d78e5519f5` | Read-only context, concurrency/expiry regressions, schema/image contexts; independent Tier A recheck |
+| 26 | `febfaae53315d85c341804494dd7c22f47f6db43` | Explicit generation, member favorites, refusal/cancel regressions |
+| 27 | `808cca3bb48f6bb8f785a15d02d0cb53668207d9` | Responsive page, bounded sharing, successful owned-work sharing/live browser evidence |
+
+The handoff says Grok stopped after delivering PR 27 for review. A subsequent remote/worktree check found no new APP-139/143/144 branch or tracked work in the original checkout. A resident CLI process alone is not evidence of active implementation. APP-144 is the next isolated Codex lane; APP-139/143/140 remain unfinished. PR and CI links are the authoritative landing status; the inventory above records the initial review snapshot.
+
 ## Remaining work for the requested experience
 
 | Priority | Owner | Required result |
 | --- | --- | --- |
-| Before first live compose | APP-145 | Finish independent recheck and exact-source CI; provision a real clean organization with the required space and owner-publish policy, no pre-created customer app; prove first compose on a member with no shell. |
+| Before first live compose | APP-145 | Independent source recheck is complete; require green exact-source CI and provision a real clean organization with the required space and owner-publish policy, no pre-created customer app; prove first compose on a member with no shell. |
 | Current app creation | APP-141 | Finish actual template instantiation if templates are promised; keep generation labeled. Combine creation and APP-142 into one coherent page presentation, with cancel/refusal/reload evidence. |
-| Current app presentation | APP-142 | Finish review and a successful share of owner-created work; preserve focus/fan-out, narrow layout and browser-local persistence. |
+| Current app presentation | APP-142 | Review and successful owned-work share/live update are evidenced. Preserve focus/fan-out, narrow layout and browser-local persistence while integrating creation. |
 | Standalone app | APP-144 | Extend the existing authorized `/w/{app}/{work}` from a legacy query/new-record surface into the admitted parts and form as one usable document; use the same command and receipt path. |
 | Required new recipient | APP-139 | Durable work-bound invitation, verified recipient signup, no premature grants, acceptance expiry/revocation/replay tests, preserved destination, recipient page/canvas placement and real live update. Existing active-member sharing cannot stand in for this. |
 | Contextual Ask | APP-143 | Bind questions to the selected app/part/widget without creating authority. This remains planned; APP-153 owns the later placement decision for the Ask pane. |
@@ -110,4 +123,4 @@ The local clean stand still uses automatic persona sign-in and an operator-creat
 
 Independent document review tightened APP-140 so persona footage cannot qualify the required sign-in progression, even with disclosure. Board validation passes 152 tickets, eight phases, 14 sprints and all 80 requirement mappings; no ticket or phase was promoted to Done. Ticket Order values now express the recorded prerequisite sequence without changing APP IDs.
 
-All fixes are local and uncommitted. The combined checkout is `forma-pivot-review-20261101`, branch `codex/pivot-review-2026-11-01`. The corresponding PR worktrees retain their individual repairs. Owner listeners 4001–4003 and 4010 were untouched. Review stands are stopped and their local volumes retained. No AWS changes, external messages, trunk merge, image release, hosted authentication trial or completed recording is claimed. Exact-source remote CI and all three release-image builds remain to run on the final landing candidate before any deployment.
+The fixes are committed on their original PR branches and assembled with their histories in `forma-pivot-review-20261101`, branch `codex/pivot-review-2026-11-01`. Exact-source remote CI and landing are recorded on the linked PRs. Owner listeners 4001–4003 and 4010 were untouched. Review stands are stopped and their local volumes retained. No AWS changes, image release, hosted authentication trial or completed recording is claimed. All three release images still need qualification on the final deployment candidate before any deployment.
