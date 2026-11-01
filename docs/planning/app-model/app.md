@@ -15,13 +15,13 @@ In the product, an app on the canvas is a saved work with its admitted definitio
 
 The library address, such as `expenses`, and pane number are UI locators, not authority. A component is addressed `app.card` or by pane number (APP-120). Current persistent names and aliases are keyed by `app_id`, with an optional card key (`app/src/storage/labels.rs`, `app_labels` and `member_labels`). Independent naming of two generated works in the same container is therefore an unresolved product-model gap; this spike does not assert it exists. A card, a widget, a stack, and a focus modal are not a product app.
 
-**Proposed.** Creating that app happens in a modal before anything is placed (APP-141). Today, placing a library app is not creation, and describing something new publishes onto an app the member already owns.
+Creating that app begins in a modal before placement (APP-141). Current examples supply descriptions for generation; actual template instantiation and automatic united-page placement remain incomplete. Placing a library app is not creation. An explicit description publishes onto an eligible owned app, creating a first shell through APP-145 when necessary.
 
 ## Who it belongs to
 
 The owner is the principal in `genui.apps.owner_principal_id`. `choose_authoring` will publish onto an owned app only when that member has both `edit_definition` and `run`, and it never chooses a library app (APP-093 review M2, `app/src/storage/composer.rs`). An `edit_definition` grant by itself does not make its holder the owner. A share grants use of the exact work; it does not make the recipient the owner (APP-095, APP-120). The current route grants read access by default; write access requires its explicit `record_write` request and the sharer's existing authority (`app/src/sharing/mod.rs`, `app/src/storage/sharing.rs`).
 
-ADR-007 D7.3, restated in `app/src/composer/mod.rs`: a member who owns no such app can retrieve but not generate. **Proposed.** APP-145 is the one exception. The member's own first compose creates one empty shell. As of the 2026-11-01 review, that implementation exists on open PR 25 (`pivot/app-145-shell`), separate from this spike; it is not merged or accepted by this note.
+APP-145 is the reviewed exception to ADR-007 D7.3: an eligible member's intentional first compose creates one empty owned shell. Read-only commands, catalog and context access create nothing. The existing publication policy still governs publication. [PR 25](https://github.com/getforma-dev/forma-app-platform/pull/25) records delivery and CI; the model definition does not substitute for first-user hosted acceptance.
 
 ## Where it lives
 

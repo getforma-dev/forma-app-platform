@@ -91,5 +91,109 @@
     "ignored_campaigns": 31
   },
   "hosted_acceptance": false,
-  "remote_ci_at_evidence_capture": "Not rerun; inspect PR 25 for subsequent exact-head results."
+  "remote_ci_at_evidence_capture": "Not rerun; inspect PR 25 for subsequent exact-head results.",
+  "pitch_ci_followup": {
+    "base_head": "acba5466d427c210ecb45a6b7ae902d78e5519f5",
+    "failed_ci_runs": [
+      41322209358,
+      41322911213
+    ],
+    "production_source_changed": false,
+    "source_sha256": {
+      "app/src/storage/pitch_qualification.rs": "d6f645bf4ea1c55a37e9516c2cd4cbd727baa54daf278659616b9cfd385d1b5c"
+    },
+    "campaign": {
+      "passed": true,
+      "check_count": 18,
+      "wall_seconds": 78.74,
+      "checks": [
+        {
+          "name": "membership: before the grant Maya's library and command discovery create no app or app grant; anonymous compose is the uniform 404 with no model call; grant-library-access gives her all 20 library apps (GET /v1/library lists them with can_write) and a dedicated authoring app, which the composer context chooses over a library app she owns and never replaces with one (review M2)",
+          "passed": true
+        },
+        {
+          "name": "compose (APP-101 instant pick, retrieved): POST /v1/compose answered {app_id, work_id, origin: retrieved, title, tailoring: pending} in 402 ms with no router call (the local matcher picked the expense review app); the group route placed it 1239 ms after the intent was sent; GET /canvas lists the new work; Maya's stream received app.placed, then app.adapted 720 ms after the intent was sent, after exactly one transform call through the real client (key as the header only, the intent in the user message)",
+          "passed": true
+        },
+        {
+          "name": "governed data: the four views of the placed app ran through POST /v1/work/{app}/{work}/queries/{view} on the confined engine over the normalized library revision, each 200 carrying a contract-valid receipt with digest and result_digest; totals p50 364 ms over 9 runs",
+          "passed": true
+        },
+        {
+          "name": "live transform: the adapted work (drafted on Maya's own app, owner-published, admitted whole) carries the chips Adapted to your request \u00b7 Amount > $200 on its group route, runs the same four views with the filter and a contract-valid receipt (fewer than the 240 claims), and the standard work stays openable for back to standard",
+          "passed": true
+        },
+        {
+          "name": "chooser: an ambiguous sentence (\"expenses\") answered 2 choices (Expense review queue, Expense claims) in 327 ms with no model call and no row written; the click (a pinned app_id) placed the chosen app in 408 ms with no model call; a pin outside her library is the uniform 404",
+          "passed": true
+        },
+        {
+          "name": "slash commands: GET /v1/commands lists the 20 library apps she may compose with their slugs (/expense-review for the expense review queue); POST /v1/work/{app}/{work}/name saved the adapted app as /big-claims (a new saved work of the same publication, slug on its context, no migration), listed as her saved command and running the same views; a taken name, a library slug, the reserved /apps and a malformed name are refused (422); the teammate, who cannot open it, does not see it",
+          "passed": true
+        },
+        {
+          "name": "sharing: the teammate's group route was the uniform 404 before the share; POST /v1/work/{app}/{work}/share wrote the sharer's subset, the teammate's stream received app.shared with the ids and then app.adapted naming the adapted work (shared too, through the same share path under Maya's authority), and their group routes (standard and adapted), canvas and totals view (with a receipt) answer under their own grants",
+          "passed": true
+        },
+        {
+          "name": "commands: Maya's decision committed once through the audited command route (129 ms) with the group's server-minted key; the identical retry is replayed, not duplicated; the teammate's and Maya's streams received record.committed",
+          "passed": true
+        },
+        {
+          "name": "compose (generated, \"build something new\"): with the stub returning a valid typed definition with amount > $200 written directly, the composition was admitted, drafted on Maya's dedicated authoring app, owner-published and saved as origin generated in 554 ms (one generation call, no router); its group route places it, app.placed reached her stream, and its totals view's rows, result digest, query digest and source revisions equal the live transform's adapted totals (the transform's filter is the direct filter); the library app's newest publication is unchanged",
+          "passed": true
+        },
+        {
+          "name": "compose (hostile): a model output with markup, an executable view and a grant member is refused by admission on each of the three attempts, answered 422 could_not_compose without disclosing it, and no work is saved",
+          "passed": true
+        },
+        {
+          "name": "model unavailable: with no key, the same sentence is still picked and retrieved at once (no model call) and the transform is skipped with the neutral kept state",
+          "passed": true
+        },
+        {
+          "name": "APP-145: an entitled canary member with no authoring app, edit_definition, source or work grant explicitly composes a valid records-only definition through HTTP; exactly one owned app receives discover/edit_definition/run and one permission.granted audit, the work is published/saved in their tenant with no source dependency, the invitation's existing discover/run on its seeded app are unchanged and no source grant or new grant on existing/foreign apps or works is acquired, and the member can open it and receives their own app.placed event",
+          "passed": true
+        },
+        {
+          "name": "isolation: 21 requests by the canary member (both Northstar groups, compose pinned to Northstar's app, the query route, share and the command route), anonymous and forged sessions (canvas, group, library, events, members, compose) got the uniform 404; the engine and the model saw none; the outsider's library is empty, their canvas shows neither Northstar work and their event stream stayed silent through every Northstar event",
+          "passed": true
+        },
+        {
+          "name": "batched canvas reads (APP-113): for Maya (28 works compared) and the teammate (4), the batched listing and library catalog equal the serial ones, and the batched outline and records reads equal work_outline and list_records per work (an unknown work and a malformed id refused alike); for Maya's 26 works the listing and reads took 2 transactions and 32 statements in 232 ms (one work at a time: 53 transactions, 1248 statements, 4285 ms); GET /canvas took 4 transactions and 44 statements per page, p50 343 ms over 5",
+          "passed": true
+        },
+        {
+          "name": "naming (APP-121): the group JSON (app card header, placement messages) reads \"Expenses\", then the label; the owner renamed Expenses \"Team spend\" at /team-spend (one app.labeled event; a repeat writes nothing); the teammate sees the name and address while /expenses and /expense stay aliases and Vendor spend keeps /spend (catalog names stay with their app); a teammate (non-owner) and a foreign organization's member get the uniform 404 on the label route; an organization address or alias taking another app's address or hidden alias (/time-off, /spend, /vendors) or a saved work's /big-claims, a display name equal to another app's title or address (Time off, Vendor-Spend), a verb or verb alias (/card, /weather, /agents) and a malformed name are refused (422); the teammate's personal /exp is listed for them only, and a personal alias taking /spend, /team-spend, /expense, /pto, /big-claims, /card or /keys is refused while a one-letter /e is kept; \"Save as /team-spend\" is refused; a private app gets no address (not_shared) but a name, and the same app shared again gets it; a label of a card the app does not have (nope, total) is refused and the 100th personal label is the last; the card label \"Q3 spend\" reaches every member while definitions, publications and receipts are unchanged; app_labels and member_labels are ENABLE+FORCE RLS, another organization's scope reads none and the workspace reads only the scoped principal's personal labels; organization labels take no aliases (the old address is kept automatically on a rename) and GET /v1/commands names each app's full form app:<address>",
+          "passed": true
+        },
+        {
+          "name": "ask and shape (APP-122): POST /v1/ask answered exactly {text, receipts, references} for \"where are all the red invoices?\", each receipt storage's (record id, version, publication, definition digest), with record, revision, audit and receipt row counts and saved-work versions identical before and after; a model reply carrying a view spec was refused server-side (422 could_not_answer); a forced write in the Ask transaction failed with SQLSTATE 25006 (READ ONLY); POST /v1/shape answered only a closed spec per target (a card highlight, an app theme dark/green/compact, a widget's TI-84 state through the customizer); prose, an answer object and a view with receipts:false were refused (422 could_not_shape); card fields outside the records card's published schema (an unknown field, an undeclared enum value, a wrong type, another collection, no source) were refused 422 invalid_request with no model call; namespaced addresses (card:\u2026, app:\u2026) were accepted on both routes; an app-scoped Ask and a card-scoped Ask (its collection only; an unknown collection 422) answered; a rehearsed count cited every record it counted; a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on both routes with no model call; in a demo organization the rehearsed question and shape answered without a model call; no row was written by either route",
+          "passed": true
+        },
+        {
+          "name": "cards made by you (APP-123): POST /v1/cards stored a made card over the records card (its spec judged against the published schema, its record values never stored), idempotently (a repeat wrote nothing; the same id with other contents was card_exists), audited card.made; stored specs with an unknown field, receipts:false, an undeclared enum value, an unknown key, a client field list or a foreign collection were refused 422 and stored nothing; the card persisted into a new session, was invisible to the teammate, and a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on every card route (the teammate too on another member's remove and share); the app's owner added a card for everyone (one audited card.shared; a repeat wrote nothing), every reader of the app then listed it (not theirs, not shareable), a non-owner could not add theirs for everyone (404); a pinned answer stored exactly Ask's text and storage receipts (audited answer.pinned, no model call), a forged receipt version was refused 422 unknown_receipt, the outsider's pin was the uniform 404, an answer cannot be added for everyone, and it stayed Maya's alone; removing is a soft delete by the maker (two audited card.removed, idempotent), a card added for everyone left everyone's list; review fixes: a listing requires record_read on the card's work (a discover-only member never lists a card added for everyone; revoking the reader's source_read on a dependency hides it, granting it again shows it; revoking Maya's work grant hides her pinned answer and her own made card over that work), a pinned answer stores the works it read, a receipt citing another publication of the same app (same definition digest) is 422 unknown_receipt, the app's owner took an admin's card added for everyone back to its maker (audited card.shared, never to everyone) and removed it (audited card.removed), a discover-only member got the uniform 404 on both, a private card stays its maker's alone, a card added for everyone by a maker who left stops listing and the owner removed it; a card write waits on the member's cards advisory lock (one waiter while another session holds it) and stores once it is released",
+          "passed": true
+        },
+        {
+          "name": "audit: every Northstar chain recomputes to its head after the grants, the compositions, the share and the commit",
+          "passed": true
+        }
+      ],
+      "scope": "ADR-011 pitch integration (APP-096), local Docker campaign over a loopback TCP stand of the binary's routes, synthetic identities and the synthetic library, a loopback model stub"
+    },
+    "checks": {
+      "fmt": "passed",
+      "clippy": "passed",
+      "library_tests": 346,
+      "binary_ssr_tests": 7,
+      "doctests": 3,
+      "diff_check": "passed"
+    },
+    "independent_review": "Final source assertions re-read by a separate agent; no blocking finding. No duplicate campaign run.",
+    "limitations": [
+      "Loopback deterministic model fixture; HTTP, PostgreSQL admission, publication and save are real.",
+      "No hosted sign-in, deployment or migration. Exact new-head remote CI remains separate."
+    ]
+  }
 }

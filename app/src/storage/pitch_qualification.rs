@@ -27,8 +27,9 @@
 //! definition and a `generated` app is drafted on her dedicated authoring
 //! app (never a library app), published, saved and runs; a hostile
 //! generation is refused by admission on every attempt and places nothing;
-//! the outsider, an anonymous caller and a forged session get the uniform
-//! 404 everywhere and the outsider's stream stays silent. Timings
+//! the canary member can compose an app of their own but has no authority on
+//! Northstar's apps; foreign-scoped, anonymous and forged requests get the
+//! uniform 404 and the canary stream sees no Northstar events. Timings
 //! (compose→200, compose→placed, query p50) are recorded in the report.
 use super::*;
 use crate::{
@@ -554,19 +555,21 @@ async fn campaign() {
     // --- Three real members sign in ---
     let (maya_subject, maya) = c.member("00000000e001").await;
     let (mate_subject, mate) = c.member("00000000e002").await;
-    let (_, outsider) = c.member_in(OTHER, "00000000e003").await;
+    let (outsider_subject, outsider) = c.member_in(OTHER, "00000000e003").await;
     let maya_id = c.principal(&maya_subject).await;
     let mate_id = c.principal(&mate_subject).await;
+    let outsider_id = c.principal(&outsider_subject).await;
     let maya_cookie = maya.cookie(cookies::SESSION).unwrap();
     let mate_cookie = mate.cookie(cookies::SESSION).unwrap();
     let outsider_cookie = outsider.cookie(cookies::SESSION).unwrap();
 
-    // Before any grant: Maya may compose nothing (the uniform 404, no model
-    // call) and her library is empty.
+    // APP-145: an active entitled member may create their own shell on an
+    // explicit first intent. Read-only discovery still creates nothing;
+    // an anonymous compose is refused before the model.
     let nothing = stand
         .post(
             composer::routes::PATH,
-            Some(&maya_cookie),
+            None,
             &json!({"intent": INTENT}).to_string(),
         )
         .await;
@@ -575,6 +578,17 @@ async fn campaign() {
     let empty = stand.get("/v1/library", Some(&maya_cookie)).await;
     assert_eq!(empty.status, StatusCode::OK);
     assert_eq!(empty.json()["apps"], json!([]));
+    assert_eq!(
+        stand
+            .get(composer::commands::COMMANDS_PATH, Some(&maya_cookie))
+            .await
+            .status,
+        StatusCode::OK
+    );
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{maya_id}'")).await, 0);
+    // The invitation fixture grants discover/run on its seeded app, which
+    // are insufficient to read a work or author a definition.
+    assert_eq!(text(&c.fixture, &format!("SELECT string_agg(permission,',' ORDER BY permission) FROM genui.app_permissions WHERE organization_id='{ORG}' AND principal_id='{maya_id}'")).await, "discover,run");
 
     // --- The operator: Maya gets the library and her own authoring app ---
     let granted = operator(
@@ -659,7 +673,7 @@ async fn campaign() {
     c.fixture.sql(&format!("DELETE FROM genui.app_permissions WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND principal_id='{maya_id}' AND permission='edit_definition'"), "genui");
     check(
         &mut checks,
-        "membership: before the grant Maya composes nothing (uniform 404, no model call) and her library is empty; grant-library-access gives her all 20 library apps (GET /v1/library lists them with can_write) and a dedicated authoring app, which the composer context chooses over a library app she owns and never replaces with one (review M2)",
+        "membership: before the grant Maya's library and command discovery create no app or app grant; anonymous compose is the uniform 404 with no model call; grant-library-access gives her all 20 library apps (GET /v1/library lists them with can_write) and a dedicated authoring app, which the composer context chooses over a library app she owns and never replaces with one (review M2)",
     );
 
     // --- Streams open: Maya's, the teammate's, the outsider's ---
@@ -1251,6 +1265,106 @@ async fn campaign() {
         "model unavailable: with no key, the same sentence is still picked and retrieved at once (no model call) and the transform is skipped with the neutral kept state",
     );
 
+    // APP-145: a signed-in, entitled member of another tenant has authority
+    // to author their own first app, without acquiring any existing work or
+    // source. This is a real HTTP compose through admission/publish/save;
+    // only the model's typed definition is the deterministic test fixture.
+    // Preserve the whole queued Northstar history: none may be discarded
+    // while waiting for the member's own event below.
+    expect_silence(&mut outsider_stream, Duration::from_millis(1500)).await;
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{OTHER}' AND owner_principal_id='{outsider_id}'")).await, 0);
+    let existing_grants = text(&c.fixture, &format!("SELECT string_agg(organization_id::text||':'||app_id::text||':'||permission,',' ORDER BY organization_id,app_id,permission) FROM genui.app_permissions WHERE principal_id='{outsider_id}'")).await;
+    assert_eq!(
+        existing_grants,
+        format!("{OTHER}:{APP}:discover,{OTHER}:{APP}:run")
+    );
+    assert_eq!(
+        scalar(
+            &c.fixture,
+            &format!(
+                "SELECT count(*) FROM genui.source_permissions WHERE principal_id='{outsider_id}'"
+            )
+        )
+        .await,
+        0
+    );
+    assert_eq!(
+        scalar(
+            &c.fixture,
+            &format!(
+                "SELECT count(*) FROM genui.work_permissions WHERE principal_id='{outsider_id}'"
+            )
+        )
+        .await,
+        0
+    );
+    let grant_audits = scalar(&c.fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{OTHER}' AND writer_role='admission' AND kind='permission.granted'")).await;
+    let time_off: Value = serde_json::from_str(include_str!(
+        "../../../contracts/fixtures/library/time-off.json"
+    ))
+    .unwrap();
+    let mut own_content =
+        composer::prompt::records_example(time_off["definition"]["content"].clone());
+    own_content["title"] = json!("Private clean-member requests");
+    stub.script(vec![own_content.to_string()]);
+    let own_calls = stub.calls();
+    let own = stand
+        .post(
+            composer::routes::PATH,
+            Some(&outsider_cookie),
+            &json!({"intent": "Track my team's time-off requests"}).to_string(),
+        )
+        .await;
+    assert_eq!(own.status, StatusCode::OK, "{}", own.text());
+    let own = own.json();
+    assert_eq!(own["origin"], "generated");
+    assert_eq!(
+        stub.calls(),
+        own_calls + 1,
+        "one generation; an empty library needs no router"
+    );
+    let own_app = own["app_id"].as_str().unwrap();
+    let own_work = own["work_id"].as_str().unwrap();
+    assert_ne!(own_app, AUTHORING_APP);
+    assert_ne!(own_app, EXPENSE_APP);
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{OTHER}' AND owner_principal_id='{outsider_id}'")).await, 1);
+    assert_eq!(text(&c.fixture, &format!("SELECT string_agg(permission,',' ORDER BY permission) FROM genui.app_permissions WHERE organization_id='{OTHER}' AND principal_id='{outsider_id}' AND app_id='{own_app}'")).await, "discover,edit_definition,run");
+    assert_eq!(text(&c.fixture, &format!("SELECT string_agg(organization_id::text||':'||app_id::text||':'||permission,',' ORDER BY organization_id,app_id,permission) FROM genui.app_permissions WHERE principal_id='{outsider_id}' AND (organization_id<>'{OTHER}' OR app_id<>'{own_app}')")).await, existing_grants, "the invitation's discover/run are the only pre-existing app grants; no new authority on any other app");
+    assert_eq!(
+        scalar(
+            &c.fixture,
+            &format!(
+                "SELECT count(*) FROM genui.source_permissions WHERE principal_id='{outsider_id}'"
+            )
+        )
+        .await,
+        0
+    );
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE principal_id='{outsider_id}' AND (organization_id<>'{OTHER}' OR app_id<>'{own_app}')")).await, 0);
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.saved_work WHERE organization_id='{OTHER}' AND app_id='{own_app}' AND work_id='{own_work}' AND created_by='{outsider_id}'")).await, 1);
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.work_source_dependencies WHERE organization_id='{OTHER}' AND app_id='{own_app}' AND work_id='{own_work}'")).await, 0);
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{OTHER}' AND writer_role='admission' AND kind='permission.granted'")).await, grant_audits + 1);
+    let own_event = tokio::time::timeout(WAIT, outsider_stream.recv())
+        .await
+        .expect("the member's own app.placed event")
+        .expect("the member's event stream remains open");
+    assert_eq!(own_event["kind"], "app.placed", "no other event is skipped");
+    assert_eq!(own_event["app_id"], own_app);
+    assert_eq!(own_event["work_id"], own_work);
+    assert!(own_event["at"].as_str().is_some_and(|at| at.ends_with('Z')));
+    assert_eq!(own_event.as_object().unwrap().len(), 4, "ids and time only");
+    assert_eq!(
+        stand
+            .get(
+                &format!("/v1/canvas/works/{own_app}/{own_work}"),
+                Some(&outsider_cookie)
+            )
+            .await
+            .status,
+        StatusCode::OK
+    );
+    check(&mut checks, "APP-145: an entitled canary member with no authoring app, edit_definition, source or work grant explicitly composes a valid records-only definition through HTTP; exactly one owned app receives discover/edit_definition/run and one permission.granted audit, the work is published/saved in their tenant with no source dependency, the invitation's existing discover/run on its seeded app are unchanged and no source grant or new grant on existing/foreign apps or works is acquired, and the member can open it and receives their own app.placed event");
+
     // --- Isolation: the outsider, anonymous and forged callers ---
     let before_dispatch = counting.calls();
     let before_model = stub.calls();
@@ -1265,7 +1379,7 @@ async fn campaign() {
         (
             "POST",
             composer::routes::PATH.to_owned(),
-            Some(json!({"intent": INTENT}).to_string()),
+            Some(json!({"intent": INTENT, "app_id": EXPENSE_APP}).to_string()),
         ),
         (
             "POST",
@@ -1353,7 +1467,7 @@ async fn campaign() {
     expect_silence(&mut outsider_stream, Duration::from_millis(1500)).await;
     check(
         &mut checks,
-        &format!("isolation: {denials} requests by the canary member (both groups, compose, the query route, share and the command route), anonymous and forged sessions (canvas, group, library, events, members, compose) got the uniform 404; the engine and the model saw none; the outsider's library is empty, their canvas shows neither work and their event stream stayed silent through every Northstar event"),
+        &format!("isolation: {denials} requests by the canary member (both Northstar groups, compose pinned to Northstar's app, the query route, share and the command route), anonymous and forged sessions (canvas, group, library, events, members, compose) got the uniform 404; the engine and the model saw none; the outsider's library is empty, their canvas shows neither Northstar work and their event stream stayed silent through every Northstar event"),
     );
 
     // --- The local stand for the pitch screenshots (scratch only) ---

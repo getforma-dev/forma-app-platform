@@ -6,7 +6,7 @@ This review reconstructs the original design, the seeded pitch, today's clean-us
 
 The platform has a real foundation: hosted identity integration, scoped storage, typed admission, confined query/parser execution, persisted records with idempotent audited commands, permission-checked sharing and live-event infrastructure. The earlier seeded demo exercised much of that foundation. It also used rehearsed shortcuts and pre-existing users/apps, which cannot prove the new trial.
 
-The clean first-user journey is **not yet complete**. The app-creation and united-page implementations exist on open PRs, with verified defects repaired during this review. A recipient who has no account still cannot accept a work share and sign up through the product. The standalone app document remains the legacy work page. Today's retained beta observation still describes the seeded sandbox. A clean local persona is not a real hosted signup test. No billing/checkout functionality is implied by the phrase “paid-user journey.”
+The clean first-user journey is **not yet complete**. The app-creation and united-page implementations have been built and reviewed, with verified defects repaired. The linked PRs record CI and landing. A recipient who has no account still cannot accept a work share and sign up through the product. The standalone app document remains the legacy work page. Today's retained beta observation still describes the seeded sandbox. A clean local persona is not a real hosted signup test. No billing/checkout functionality is implied by the phrase “paid-user journey.”
 
 ## Before, pivot, now, next
 
@@ -16,7 +16,7 @@ The clean first-user journey is **not yet complete**. The app-creation and unite
 | October 28–30 foundation and deadline cut | Published Forma 3.2 baseline; Phase 1 auth/storage/query/command work; ADR-010 cut to invite → query → receipt → command → reopen. | Much of the real plumbing exists and has tests; managed/phase acceptance remains explicitly incomplete. |
 | October 30–31 seeded pitch | ADR-011 adds canvas, composer, 20-app library, folders/imports, workflows, sharing, agent surfaces and live hints. Diego/Sarah/Priya and demo-mode shortcuts support the rehearsal. | Broad product capability, but not a new customer's unaided start. |
 | November 1 clean trial | First invite into an empty organization → describe an app → commit a record → share to someone without an account → signup → same work as a page/on their canvas. Three-minute cap applies only to video. | The right acceptance target. Real ingestion and loading are required even with fictional input data. |
-| Current source | Trunk includes the planning pivot and earlier repairs. PRs 22, 25, 26, 27 are open; this review adds local repairs and tests. | Reviewed source and bounded checks, not completed signup sharing or a release. |
+| Source at initial review | Trunk included the planning pivot and earlier repairs. PRs 22, 25, 26, 27 were open; this review added repairs and tests. | Reviewed source and bounded checks, not completed signup sharing or a release. |
 | After the trial | APP-097 reconciles retained pitch code/debt with PH01–PH07. APP-150–153 remain later ideas. | Long-term platform work remains visible; it has not been silently replaced by the demo. |
 
 Primary sources: [delivered platform design](../../design/forma-generative-app-platform-v2/deliverables/v1/md/design.md), [delivered Northstar design](../../design/forma-northstar-demo/deliverables/v1/md/design.md), [ADR-010](../architecture/ADR-010-NOV-2-MVP-CUT.md), [ADR-011](../architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md), [first-run decision](first-run/README.md), [DIRECTION](DIRECTION.md). The old design's version, latency, capacity and cost assumptions are historical targets; this review does not requalify them.
@@ -90,13 +90,15 @@ Victor subsequently authorized updating the tickets and PRs, pushing the fixes a
 | PR | Reviewed fix head | Evidence |
 | --- | --- | --- |
 | 22 | `3382d785f1bbc2f96d856d000e74befedc0df3d3` | App/publication/work identity and governed widget corrections; board checks |
-| 25 | `acba5466d427c210ecb45a6b7ae902d78e5519f5` | Read-only context, concurrency/expiry regressions, schema/image contexts; independent Tier A recheck |
+| 25 | `0573c2068a25a24933b36cd5bfdef6bfcc71a836` | Read-only context, concurrency/expiry regressions, schema/image contexts; independent Tier A recheck |
 | 26 | `febfaae53315d85c341804494dd7c22f47f6db43` | Explicit generation, member favorites, refusal/cancel regressions |
 | 27 | `808cca3bb48f6bb8f785a15d02d0cb53668207d9` | Responsive page, bounded sharing, successful owned-work sharing/live browser evidence |
 
 The retrospective source review also covered merged PRs 5–16: development-only issuer fallback, exact-work authorization/deep links, contract-library verification, library drag/placement, invitation fault/race fixtures and parser artifact paths; the evidence-only APP-013 close was checked against the current command/idempotency implementation. PRs 17–24 are planning/observation work; their original diffs were reconciled against current routes and ticket requirements. No additional blocking regression was found. Historical screenshots and hosted rehearsals were read as evidence, not re-executed or presented as fresh checks.
 
 This read-through also confirmed that current provider invitation capabilities reach the service only on task start. APP-139 now explicitly requires runtime invitation creation/delivery without a per-share operator restart and without expanding ordinary workspace authority.
+
+Exact-head Pitch CI subsequently found two obsolete tests that treated an active member without an owned app as unauthorized to compose. PR 25's follow-up changes only campaign/evidence: a real HTTP compose now proves one owned Canary app, its three grants and one grant audit, with no source or foreign app/work authority. Foreign-pinned, anonymous and forged requests retain their uniform denials, and strict stream assertions retain cross-tenant event isolation. The complete native Pitch campaign passed 18 checks in 78.74 seconds; the model definition is explicitly a test fixture. The production, migration and catalog bytes did not change. Failed CI remains part of the history; the revised head runs fresh checks.
 
 The handoff says Grok stopped after delivering PR 27 for review. A subsequent remote/worktree check found no new APP-139/143/144 branch or tracked work in the original checkout. A resident CLI process alone is not evidence of active implementation. APP-144 is the next isolated Codex lane; APP-139/143/140 remain unfinished. PR and CI links are the authoritative landing status; the inventory above records the initial review snapshot.
 
