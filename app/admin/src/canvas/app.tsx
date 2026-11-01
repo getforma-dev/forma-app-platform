@@ -348,7 +348,7 @@ function Canvas(props: CanvasProps) {
               <button type="button" class="cv-empty-choice cv-empty-describe" data-empty-describe>
                 <span class="cv-choice-top"><span class="cv-choice-icon" aria-hidden="true">✳</span><span class="cv-choice-number" aria-hidden="true">01 / CREATE</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
                 <span class="cv-choice-title">Create an app</span>
-                <span class="cv-choice-copy">Pick a template, then describe it. Nothing is placed until you confirm.</span>
+                <span class="cv-choice-copy">Choose an example, then describe your app. Nothing is placed until you confirm.</span>
               </button>
               <button type="button" class="cv-empty-choice cv-empty-upload" data-empty-upload-pick title="A new folder holds your files: CSV, XLSX, PDF, images or text">
                 <span class="cv-choice-top"><svg class="cv-choice-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 3h9v10H3zM12 16v-4m-3 2 3-3 3 3" /></svg><span class="cv-choice-number" aria-hidden="true">02 / CONNECT</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>

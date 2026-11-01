@@ -166,7 +166,7 @@ test('the empty canvas offers "Drop files or upload": the picked files make a ne
   boxes.startEmptyChoices(document_ as unknown as Document);
   boxes.startEmptyChoices(document_ as unknown as Document);
   describe.click();
-  assert.equal(document_.activeElement, bar, 'Describe what you need puts the caret in the bar');
+  assert.equal(document_.activeElement, null, 'the upload module leaves creation to the APP-141 modal');
   pick.click();
   assert.equal(picked, 1, 'the button opens the file picker (wired once)');
   assert.equal(calls.length, 0, 'nothing is created before files are picked');
