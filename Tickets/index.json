@@ -4237,7 +4237,7 @@
       "Depends on": "APP-132",
       "External dependencies": "None",
       "Assignee": "Codex \u2014 GenUI owner (continuing Claude's handoff)",
-      "Branch / PR": "`pivot/pitch-mvp`; audit remains open pending the full clean-profile walk and founder disposition",
+      "Branch / PR": "`pivot/app-135-clean-audit` records the focused walk. Runtime `574e26d` is `pivot/local-surfaces` PR 5 and is not in this tree. Acceptance and founder disposition stay open",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
