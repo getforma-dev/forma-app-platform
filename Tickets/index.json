@@ -294,9 +294,13 @@
         "APP-142",
         "APP-143",
         "APP-144",
-        "APP-145"
+        "APP-145",
+        "APP-146",
+        "APP-147",
+        "APP-148",
+        "APP-149"
       ],
-      "ticket_count": 54,
+      "ticket_count": 58,
       "done_count": 1,
       "blocked_count": 0
     }
@@ -4543,6 +4547,120 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-093"
+      ]
+    },
+    {
+      "id": "APP-146",
+      "title": "Spike \u2014 what an app is",
+      "path": "0-backlog/APP-146.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Spike",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "146",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: define an app before building the creation modal or the page. The definition is a document. It does not change the canvas.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-120",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-120"
+      ]
+    },
+    {
+      "id": "APP-147",
+      "title": "Spike \u2014 what a component of an app is",
+      "path": "0-backlog/APP-147.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Spike",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "147",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: cards are parts of an app. This spike names those parts and the rules for keeping or detaching them. It does not build the page.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-120",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-120"
+      ]
+    },
+    {
+      "id": "APP-148",
+      "title": "Spike \u2014 what a widget is",
+      "path": "0-backlog/APP-148.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Spike",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "148",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: a widget is a one-off, not an app. This spike writes that boundary. It does not add widgets.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-103, APP-120",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-103",
+        "APP-120"
+      ]
+    },
+    {
+      "id": "APP-149",
+      "title": "Spike \u2014 what a box is, and where it sits",
+      "path": "0-backlog/APP-149.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Spike",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "149",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: say what a box is in the app model before anyone removes it. The folder stays until this note is accepted.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-108, APP-120",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-108",
+        "APP-120"
       ]
     }
   ]

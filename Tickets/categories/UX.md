@@ -34,3 +34,7 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 141 | [APP-141: Create an app before it reaches the canvas](../0-backlog/APP-141.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-093, APP-104, APP-120 |
 | 142 | [APP-142: The app is a page: focus inside it, fan-out back to cards](../0-backlog/APP-142.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-106, APP-120, APP-141 |
 | 144 | [APP-144: Open an app as a page and use it there](../0-backlog/APP-144.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-142, APP-093 |
+| 146 | [APP-146: Spike — what an app is](../0-backlog/APP-146.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-120 |
+| 147 | [APP-147: Spike — what a component of an app is](../0-backlog/APP-147.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-120 |
+| 148 | [APP-148: Spike — what a widget is](../0-backlog/APP-148.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-103, APP-120 |
+| 149 | [APP-149: Spike — what a box is, and where it sits](../0-backlog/APP-149.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-108, APP-120 |
