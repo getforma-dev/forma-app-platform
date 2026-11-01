@@ -4091,7 +4091,7 @@
       "Depends on": "APP-107, APP-113",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
-      "Branch / PR": "Edition is on `pivot/pitch-mvp`. Gap 5: `pivot/app-129-library-check`. The other gaps stay open",
+      "Branch / PR": "Edition and gap 5 are on `pivot/pitch-mvp`. Gap matrix: `pivot/app-129-gaps`. The other gaps stay open",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
