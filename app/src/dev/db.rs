@@ -22,7 +22,6 @@ use std::{
 
 const MIGRATION_PASSWORD: &str = "synthetic-migration";
 const GENERATION: &str = "00000000-0000-4000-8000-00000000de01";
-const ISSUER: &str = "app008-fixture-only";
 
 pub(crate) struct Database {
     container: String,
@@ -259,7 +258,7 @@ impl Database {
         )?;
         let bindings: Vec<Value> = [super::ORG, super::OTHER]
             .iter()
-            .map(|org| json!({"issuer": ISSUER, "provider_tenant_id": format!("ten_{org}"), "organization_id": org}))
+            .map(|org| json!({"issuer": super::DEV_ISSUER, "provider_tenant_id": format!("ten_{org}"), "organization_id": org}))
             .collect();
         private_write(
             &self.state.join("registry.json"),

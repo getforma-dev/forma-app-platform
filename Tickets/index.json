@@ -4237,7 +4237,7 @@
       "Depends on": "APP-132",
       "External dependencies": "None",
       "Assignee": "Codex \u2014 GenUI owner (continuing Claude's handoff)",
-      "Branch / PR": "`pivot/app-135-files` records the files, folders and naming walk. Other paths and founder disposition stay open",
+      "Branch / PR": "`pivot/local-surfaces` https://github.com/getforma-dev/forma-app-platform/pull/5. The files walk is on trunk",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

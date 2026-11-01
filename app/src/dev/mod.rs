@@ -39,6 +39,11 @@
 //!
 //! Commands: `genui-dev [serve]`, `genui-dev seed-library`. Configuration is
 //! the environment `scripts/dev/env.sh` sets; nothing here prints a secret.
+
+/// The fixture issuer written into this instance's closed registry. Workspace
+/// cookies are checked against it when no sign-in provider is configured.
+pub(crate) const DEV_ISSUER: &str = "app008-fixture-only";
+
 mod db;
 mod personas;
 mod seed;

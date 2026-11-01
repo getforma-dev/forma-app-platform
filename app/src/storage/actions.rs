@@ -261,11 +261,13 @@ impl Data {
     /// The canvas page's reads of many works (APP-113's deferred batching)
     /// in one READ COMMITTED data-role transaction of a fixed number of
     /// statements: per work `(app, work, records)`, the outline
-    /// `work_outline` answers and, when `records`, the listing `list_records`
-    /// answers, under the same authorization (`Transaction::fence_works`:
-    /// the member precheck, `record_read` on the work before and after the
-    /// member fence, `record_write` after it), the work's pinned publication
-    /// under `lock_work_revision` and its stored definition re-admitted.
+    /// `work_outline` answers (its views, its record collections, and
+    /// `can_write` from the after-fence `record_write` grant) and, when
+    /// `records`, the listing `list_records` answers, under the same
+    /// authorization (`Transaction::fence_works`: the member precheck,
+    /// `record_read` on the work before and after the member fence,
+    /// `record_write` after it), the work's pinned publication under
+    /// `lock_work_revision` and its stored definition re-admitted.
     /// Nothing is written. A member refusal is `Denied` for the batch (each
     /// work's own read would be `Denied`); a store failure ends it.
     pub async fn work_reads(
@@ -286,6 +288,12 @@ impl Data {
                 .collect();
             let readable_keys: Vec<(&str, &str)> = readable.iter().map(|&i| keys[i]).collect();
             let pinned = pinned_many(transaction, org, &readable_keys).await?;
+            // Same collections and after-fence `record_write` bit as
+            // `work_outline`, whether or not this call also lists records.
+            let collection_rows = collections_many(transaction, org, &readable_keys).await?;
+            if pinned.len() != readable.len() || collection_rows.len() != readable.len() {
+                return Err(Error::Unavailable);
+            }
             let mut reads: Vec<WorkReads> = (0..keys.len())
                 .map(|_| WorkReads {
                     outline: Err(Error::Denied),
@@ -293,18 +301,24 @@ impl Data {
                 })
                 .collect();
             let mut listed = Vec::new();
-            for (&i, pinned) in readable.iter().zip(pinned) {
-                reads[i].outline = outline_of(&pinned);
-                if reads[i].outline.is_ok() && works[i].2 {
-                    listed.push((i, pinned));
+            for ((&i, pinned), rows) in readable.iter().zip(pinned).zip(collection_rows) {
+                let mut outline = outline_of(&pinned);
+                if let Ok(outline) = outline.as_mut() {
+                    outline.can_write = grants[i].record_write;
+                    outline.collections = rows
+                        .iter()
+                        .map(|row| Ok((text(row, 1)?, text(row, 2)?)))
+                        .collect::<Result<Vec<_>>>()?;
+                }
+                let show_records = outline.is_ok() && works[i].2;
+                reads[i].outline = outline;
+                if show_records {
+                    listed.push((i, pinned, rows));
                 }
             }
-            let listed_keys: Vec<(&str, &str)> = listed.iter().map(|(i, _)| keys[*i]).collect();
-            let collections = collections_many(transaction, org, &listed_keys).await?;
+            let listed_keys: Vec<(&str, &str)> = listed.iter().map(|(i, _, _)| keys[*i]).collect();
             let records = records_many(transaction, org, &listed_keys).await?;
-            for (((i, pinned), collections), records) in
-                listed.into_iter().zip(collections).zip(records)
-            {
+            for ((i, pinned, collections), records) in listed.into_iter().zip(records) {
                 reads[i].records = Some(listing_of(
                     keys[i],
                     grants[i].record_write,

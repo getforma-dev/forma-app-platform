@@ -97,6 +97,34 @@ pub(super) async fn equivalent_reads(stores: &Stores, request: &TrustedRequest) 
     works.len()
 }
 
+/// Both outline paths for one work. `Err` is the shared refusal.
+pub(super) async fn agreed_outline(
+    stores: &Stores,
+    request: &TrustedRequest,
+    app: &str,
+    work: &str,
+) -> std::result::Result<crate::storage::WorkOutline, Error> {
+    let batched = stores
+        .data
+        .work_reads(request, &[(app, work, true)])
+        .await
+        .unwrap();
+    assert_eq!(batched.len(), 1);
+    let serial = stores.data.work_outline(request, app, work).await;
+    assert_eq!(batched[0].outline, serial, "{app}/{work}");
+    let quiet = stores
+        .data
+        .work_reads(request, &[(app, work, false)])
+        .await
+        .unwrap();
+    assert_eq!(
+        quiet[0].outline, serial,
+        "{app}/{work}: outline without a listing"
+    );
+    assert!(quiet[0].records.is_none());
+    serial
+}
+
 /// The member as storage sees her (the identity the loopback issuer signed
 /// in).
 fn maya_request(c: &Campaign, subject: &str, principal: &str) -> TrustedRequest {
@@ -302,7 +330,8 @@ async fn campaign() {
             REVISION,
         ],
     );
-    let (_, mut canary) = c.member_in(OTHER, "0000000013c2").await;
+    let (canary_subject, mut canary) = c.member_in(OTHER, "0000000013c2").await;
+    let canary_principal = c.principal(&canary_subject).await;
     let group_path = format!("/v1/canvas/works/{APP}/{CANVAS_WORK}");
     let spend_path = format!("/v1/canvas/works/{SPEND_APP}/{}", spend.work);
 
@@ -453,6 +482,74 @@ async fn campaign() {
     check(
         &mut checks,
         "sharing: once Spend Review is shared with the member (discover, run, source_read, record_read, record_write), her canvas renders it with its record form posting to the audited command route, and its group JSON (the island's placement seam) answers with the form",
+    );
+
+    // The two outline paths agree, and write is the grant rather than a
+    // consequence of being able to see the collections.
+    let maya_storage = maya_request(&c, &maya_subject, &member);
+    let source = agreed_outline(&stores, &maya_storage, APP, CANVAS_WORK)
+        .await
+        .expect("the creator can open the source-query work");
+    assert!(
+        !source.views.is_empty(),
+        "the source-query work keeps its runnable views"
+    );
+    assert!(
+        source.can_write,
+        "the creator's record_write is the outline's can_write"
+    );
+    let writer = agreed_outline(&stores, &maya_storage, SPEND_APP, &spend.work)
+        .await
+        .expect("the grantee can open Spend Review");
+    assert!(
+        !writer.collections.is_empty(),
+        "record collections stay visible with record_read"
+    );
+    assert!(writer.can_write, "record_write is granted");
+    let (reader_subject, _) = c.member("0000000013c3").await;
+    let reader_id = c.principal(&reader_subject).await;
+    for permission in ["discover", "run"] {
+        grant(&c.fixture, &reader_id, permission, &["--app", SPEND_APP]);
+    }
+    grant(
+        &c.fixture,
+        &reader_id,
+        "source_read",
+        &["--source", EXPENSES],
+    );
+    grant(
+        &c.fixture,
+        &reader_id,
+        "record_read",
+        &["--app", SPEND_APP, "--work", &spend.work],
+    );
+    let reader = maya_request(&c, &reader_subject, &reader_id);
+    let read_only = agreed_outline(&stores, &reader, SPEND_APP, &spend.work)
+        .await
+        .expect("record_read without record_write still opens the work");
+    assert!(!read_only.can_write, "no record_write grant");
+    assert_eq!(
+        read_only.collections, writer.collections,
+        "the same collections are visible without write"
+    );
+    let stranger = TrustedRequest {
+        organization: OTHER.into(),
+        principal: canary_principal,
+        epoch: 1,
+        issuer: GATEWASM.into(),
+        provider_tenant: harness::CANARY_TENANT.into(),
+        provider_subject: canary_subject,
+        registry_sha256: c.stores.registry_identity().sha256.clone(),
+    };
+    assert!(
+        agreed_outline(&stores, &stranger, APP, CANVAS_WORK)
+            .await
+            .is_err(),
+        "another organization's member is refused"
+    );
+    check(
+        &mut checks,
+        "outline authority: the batched outline matches work_outline for the source-query work and for Spend Review; the creator and the record_write grantee have can_write, a record_read grantee sees the same collections with can_write false, and the canary member is refused",
     );
 
     // --- Isolation: foreign, anonymous and forged callers ---

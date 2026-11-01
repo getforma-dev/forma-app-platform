@@ -955,6 +955,8 @@ mod tests {
                 .collect(),
             }],
             definition_digest: String::new(),
+            collections: Vec::new(),
+            can_write: false,
         };
         let f = |id: &str, kind: &str, values: &[&str]| shape::Field {
             id: id.into(),

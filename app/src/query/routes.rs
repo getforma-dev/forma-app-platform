@@ -588,6 +588,10 @@ async fn work_page(
         &echo,
         false,
         views,
+        page::WorkChrome {
+            records: page::record_links(&outline, &app, &saved),
+            canvas: page::canvas_href(&saved),
+        },
     ));
     if let Some(value) = set_cookie {
         response.headers_mut().append(header::SET_COOKIE, value);
@@ -842,6 +846,10 @@ async fn run_page(
                 &echo,
                 true,
                 idle_views(&outline),
+                page::WorkChrome {
+                    records: page::record_links(&outline, &app, &saved),
+                    canvas: page::canvas_href(&saved),
+                },
             ));
             return crate::auth::routes::with_status(response, StatusCode::UNPROCESSABLE_ENTITY);
         }
@@ -872,6 +880,10 @@ async fn run_page(
                 &echo,
                 false,
                 views,
+                page::WorkChrome {
+                    records: page::record_links(&outline, &app, &saved),
+                    canvas: page::canvas_href(&saved),
+                },
             ))
         }
     }
