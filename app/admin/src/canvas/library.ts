@@ -229,7 +229,7 @@ export function buildAppRow(
     ...(entry.slug ? [el(document_, 'code', { class: 'cv-lib-slug cv-addr-chip' }, `/${entry.slug}`)] : []),
     el(document_, 'button', { type: 'button', class: 'cv-lib-stack', 'data-lib-stack': '', title: 'Add the app as one stack' }, 'Stack'),
     // APP-106: `unite.ts` handles the click.
-    el(document_, 'button', { type: 'button', class: 'cv-lib-stack cv-lib-unite', 'data-lib-unite': '', title: 'Unite: assemble the app’s cards into one frame' }, 'Unite'),
+    el(document_, 'button', { type: 'button', class: 'cv-lib-stack cv-lib-unite', 'data-lib-unite': '', title: 'Unite: open this app as a page' }, 'Unite'),
     el(document_, 'button', { type: 'button', class: 'cv-lib-all', 'data-lib-all': '' }, 'Add'));
   const list = el(document_, 'ul', { class: 'cv-lib-cards' },
     ...entry.cards.map((card) => el(document_, 'li', {

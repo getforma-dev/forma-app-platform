@@ -11,6 +11,7 @@ test('plain sentences reach canvas commands, and only those (APP-112)', async ()
   };
   for (const [text, rest] of [
     ['unite the expense app', 'expense'], ['Unite expense', 'expense'], ['break apart the expense app', 'expense'],
+    ['fan out the expense app', 'expense'],
     ['take a note: call the auditor Friday', 'call the auditor Friday'], ['show the weather in Austin', 'Austin'],
     ['open the calculator', ''], ['what time is it in Tokyo?', 'Tokyo'], ['new folder Q3 board pack', 'Q3 board pack'],
     ['arrange the canvas', ''], ['open the library', ''], ['show timings', 'show'],

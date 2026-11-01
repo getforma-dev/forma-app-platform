@@ -1076,6 +1076,20 @@ export class WidgetCanvas {
     this.#requestNavigatorRender();
   }
 
+  /**
+   * Local change (APP-142): set one item's window size. The page clamps
+   * itself to the viewport before calling this. Widgets do not.
+   */
+  resizeItem(item: HTMLElement, width: number, height: number): void {
+    if (!this.#items.has(this.#itemId(item))) return;
+    if (!Number.isFinite(width) || !Number.isFinite(height)) return;
+    const state = this.getItemState(item);
+    this.#positionItem(item, { ...state, width, height });
+    this.#requestVisibilityUpdate();
+    this.#requestNavigatorRender();
+    this.#scheduleChange();
+  }
+
   getItemState(item: HTMLElement): WidgetCanvasItemState {
     return {
       x: finiteNumber(Number(item.dataset.canvasX), 0),

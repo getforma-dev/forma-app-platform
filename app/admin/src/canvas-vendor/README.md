@@ -22,6 +22,10 @@ APP-106 local changes in `widget-canvas.ts` (DS-10), each marked "Local change (
 - `#normalizedPlacement` accepts a preferred width up to 1440 px (was 720), for the unite frame (1240 px); every card and widget asks for 680 px or less (only the placement skeleton, 760 px, now shows at its asked width).
 - `#bindDragHandle` ignores a press unless the item it was bound for is still mounted and still holds the handle. A card's header is bound once per item that adopts it; after a unite frame, a break apart or the focus view moved the card, the stale binding of the old item would otherwise take the drag.
 
+APP-142 local change in `widget-canvas.ts`, marked "Local change (APP-142)" in the code:
+
+- Public `resizeItem(item, width, height)` writes one item's window size through the same placement path as a move, so a page can be dragged larger and smaller and the navigator stays in step. The page clamps the size. Widgets do not call it.
+
 APP-113 local change in `widget-canvas.ts` (DS-10), marked "Local change (APP-113)" in the code:
 
 - `#bindItemDrag` gives each mounted item its own `AbortController` for its drag-handle listeners (pointer and keyboard), aborted by `removeItem`, `clearItems` and `dispose`. A card header re-adopted by a new item (stacks, unite, focus) no longer keeps one listener per earlier mount on the canvas-wide signal.

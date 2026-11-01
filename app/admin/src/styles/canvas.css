@@ -1827,7 +1827,7 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
 .cv-unite-title { margin: 0; font-family: var(--cv-display); font-size: 1.3rem; font-weight: 680; letter-spacing: -0.022em; line-height: 1.2; }
 .cv-unite-origins { margin: 0.2rem 0 0; }
 .cv-unite-count { color: var(--cv-muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.cv-unite-actions { display: flex; gap: 0.4rem; }
+.cv-unite-actions { position: relative; display: flex; gap: 0.4rem; }
 .cv-unite-grid { display: grid; gap: 16px; align-items: start; }
 .cv-unite-kpis { display: flex; flex-wrap: wrap; gap: 16px; grid-area: kpi; }
 .cv-unite-kpis > .cv-card { flex: 1 1 240px; min-width: 0; max-width: 460px; }
@@ -1853,6 +1853,59 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
   box-shadow: var(--cv-shadow-lift), 0 0 0 3px var(--cv-accent-soft);
 }
 .cv-canvas [data-forma-canvas] .widget-instance.is-arrived > .cv-unite { animation: cv-arrive 900ms ease-out; }
+/* APP-142: a resized page is a window. The parts scroll inside it. */
+.cv-canvas [data-forma-canvas] .widget-instance.cv-item-unite:has(.cv-unite.is-sized) { overflow: hidden; }
+.cv-unite.is-sized {
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.cv-unite.is-sized .cv-unite-grid { flex: 1; min-height: 0; overflow: auto; }
+.cv-unite-resize {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-right: 2px solid var(--cv-muted);
+  border-bottom: 2px solid var(--cv-muted);
+  background: transparent;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.cv-unite-share {
+  position: absolute;
+  z-index: 3;
+  top: 100%;
+  right: 0;
+  min-width: 180px;
+  max-height: 240px;
+  margin: 6px 0 0;
+  padding: 6px;
+  overflow: auto;
+  border: 1px solid var(--cv-line);
+  border-radius: 12px;
+  background: var(--cv-surface);
+  box-shadow: var(--cv-shadow-lift);
+}
+.cv-unite-share button {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cv-unite-share button:hover,
+.cv-unite-share button:focus-visible { background: var(--cv-accent-soft); }
+.cv-unite-share-note { margin: 0; padding: 0.4rem 0.55rem; color: var(--cv-muted); font-size: 0.85rem; }
 
 /* Focus mode: the card's spot while it is in focus. */
 .cv-focus-placeholder {

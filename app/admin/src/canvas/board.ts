@@ -400,7 +400,7 @@ const stackHooks = {
 export function setStackHooks(hooks: Partial<typeof stackHooks>): void {
   Object.assign(stackHooks, hooks);
 }
-// --- APP-106 unite frames (`unite.ts`): an app's cards assembled in one frame ---
+// --- APP-106 / APP-142: an app's cards gathered into one page (`unite.ts`) ---
 const uniteHooks = {
   has: (_id: string): boolean => false,
   count: (): number => 0,
@@ -453,7 +453,7 @@ function decorateCard(card: HTMLElement): void {
   }
   // The app card: its title, then Unite and focus at the top right.
   const tools = el(document_, 'div', { class: 'cv-app-tools' },
-    el(document_, 'button', { type: 'button', class: 'cv-card-unite', 'data-unite-app': '', title: 'Unite · U: assemble this app’s cards into one frame' }, 'Unite'),
+    el(document_, 'button', { type: 'button', class: 'cv-card-unite', 'data-unite-app': '', title: 'Unite · U: open this app as a page' }, 'Unite'),
     focus, remove);
   card.querySelector(':scope > h2')?.after(tools);
 }

@@ -234,6 +234,7 @@ app/admin/src/canvas/**
 # APP-106: focus mode and unite.
 !app/admin/src/canvas/focus.ts
 !app/admin/src/canvas/unite.ts
+!app/admin/src/canvas/page.ts
 # APP-109: quick notes.
 !app/admin/src/canvas/notes.ts
 # APP-108: folders on the canvas (cards, viewer, data sheet, summary, brief, folder bar).

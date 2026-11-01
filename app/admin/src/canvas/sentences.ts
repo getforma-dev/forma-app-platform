@@ -19,7 +19,7 @@ const APP = '(?:the\\s+|my\\s+)?(.+?)(?:\\s+app)?(?:\\s+cards)?';
 /** Sentence → canvas command (tested in `test/canvas-polish.test.ts`). */
 export const RULES: Rule[] = [
   { match: new RegExp(`^(?:unite|assemble|put together)\\s+${APP}$`, 'i'), run: slash('unite') },
-  { match: new RegExp(`^(?:break apart|break up|split(?: up)?|take apart)\\s+${APP}$`, 'i'), run: slash('split') },
+  { match: new RegExp(`^(?:break apart|break up|fan out|split(?: up)?|take apart)\\s+${APP}$`, 'i'), run: slash('split') },
   { match: /^(?:(?:take|add|make|write|new)\s+(?:a\s+)?note|note)\s*[:,–-]\s*([\s\S]+)$/i, run: slash('note') },
   { match: /^(?:take|add|make|write)\s+a\s+note\s+(?:that\s+|to\s+)?([\s\S]+)$/i, run: slash('note') },
   { match: /^(?:(?:take|add|make|write)\s+a\s+note|new\s+note)$()/i, run: slash('note') },

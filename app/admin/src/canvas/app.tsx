@@ -739,7 +739,7 @@ function Canvas(props: CanvasProps) {
                           <code class="cv-lib-slug cv-addr-chip">{app.slug}</code>
                         ))}
                         <button type="button" class="cv-lib-stack" data-lib-stack title="Add the app as one stack">Stack</button>
-                        <button type="button" class="cv-lib-stack cv-lib-unite" data-lib-unite title="Unite: assemble the app's cards into one frame">Unite</button>
+                        <button type="button" class="cv-lib-stack cv-lib-unite" data-lib-unite title="Unite: open this app as a page">Unite</button>
                         <button type="button" class="cv-lib-all" data-lib-all>Add</button>
                       </div>
                       <ul class="cv-lib-cards">
@@ -806,7 +806,7 @@ function Canvas(props: CanvasProps) {
               <p class="cv-menu-label" aria-hidden="true">Selected cards</p>
               <button type="button" role="menuitem" data-tool="focus"><span>Focus</span><span class="cv-kbd-group">F</span></button>
               <button type="button" role="menuitem" data-tool="unite"><span>Unite app</span><span class="cv-kbd-group">U</span></button>
-              <button type="button" role="menuitem" data-tool="split"><span>Break app apart</span><span class="cv-kbd-group">⇧ U</span></button>
+              <button type="button" role="menuitem" data-tool="split"><span>Fan out</span><span class="cv-kbd-group">⇧ U</span></button>
               <button type="button" role="menuitem" data-tool="stack"><span>Stack them</span><span class="cv-kbd-group">⌘ G</span></button>
               <button type="button" role="menuitem" data-tool="spread"><span>Spread a stack</span><span class="cv-kbd-group">⌘ ⇧ G</span></button>
               <button type="button" role="menuitem" data-tool="remove"><span>Take off the canvas</span><span class="cv-kbd-group">Del</span></button>
