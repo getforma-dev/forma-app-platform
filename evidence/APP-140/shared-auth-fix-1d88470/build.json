@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "candidate_sha": "1d884707223765c782fc16ab00ec1c89f771ec24",
+  "built_at_utc": "2026-11-01T21:20:03Z",
+  "images": {
+    "service": {
+      "reference": "genui-service:pitch-1d88470",
+      "id": "sha256:e86e338bd55eaf50f3244a727ec1f86bf6e88f76dd75d8d8fb1b7e6d6088d8d6",
+      "size_bytes": 542747961,
+      "architecture": "arm64",
+      "created_at_utc": "2026-11-01T21:18:56Z"
+    },
+    "qualification": {
+      "reference": "genui-qualification:pitch-1d88470",
+      "id": "sha256:89c833dddc68575e19595b1b0f785875de4f4e7f5f04a3b0545df5e7798e6141",
+      "size_bytes": 620405991,
+      "architecture": "arm64",
+      "created_at_utc": "2026-11-01T21:20:03Z"
+    },
+    "operator": {
+      "reference": "genui-operator:pitch-1d88470",
+      "id": "sha256:7756df219fe58c6b69e8108ef2f990817143105a94d24f85b3cf6f3f15396b56",
+      "size_bytes": 513992925,
+      "architecture": "arm64",
+      "created_at_utc": "2026-11-01T19:24:27Z"
+    }
+  },
+  "parser": {
+    "service_manifest_sha256": "68d9c7d132282635805f3e5e433f6e20b0e5001fe93ed32394157105901d3ed9",
+    "operator_manifest_sha256": "9cd03be78b42f7e1e99020f8765c973e8f5cf7f81a47ed52b8058fc68c4a8a13",
+    "equal": true,
+    "identity": {
+      "guest_sha256": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
+      "host_sha256": "44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934",
+      "source": {
+        "cargo_lock_sha256": "d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+        "rust_toolchain": "1.93.1",
+        "rustc": {
+          "LLVM version": "21.1.8",
+          "commit-hash": "01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf",
+          "host": "aarch64-unknown-linux-gnu",
+          "release": "1.93.1"
+        },
+        "source_files": 102,
+        "sources_sha256": "8971131071475adc792392c4813a869c2e7b141d34b8b50011da6301424bde61",
+        "vendor_provenance_sha256": "5259d9a04cb06b892c19fa17a0c99b0951a40484ae1c25ea98332a12bcf20e1a"
+      }
+    }
+  },
+  "checks_passed": true,
+  "passed": true
+}

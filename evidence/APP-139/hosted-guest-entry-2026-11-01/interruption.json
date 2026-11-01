@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "scope": "Actual hosted guest-entry interruption and later read-only reconciliation; no completed signup claim",
+  "deployed_candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "browser_attempt": {
+    "stage": "guest-register",
+    "started_at_utc": "2026-11-01T20:57:52.171Z",
+    "finished_at_utc": "2026-11-01T20:58:23.283Z",
+    "passed": false,
+    "failure_type": "TimeoutError",
+    "final_page_kind": "shared_app",
+    "instrumentation": "response events only; requests field in original is not an issued-request log",
+    "received_response_count": 5,
+    "received_response_methods": {
+      "GET": 5
+    },
+    "received_response_statuses": {
+      "200": 5
+    },
+    "response_path_classes": {
+      "shared_document": 1,
+      "asset": 4
+    },
+    "javascript_page_error_events": 0,
+    "issued_request_log_captured": false,
+    "failed_request_log_captured": false,
+    "csp_console_captured": false,
+    "absence_of_post_proven": false
+  },
+  "read_only_reconciliation": {
+    "observed_at_utc": "2026-11-01T21:02:46.988534+00:00",
+    "candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+    "provider_tenant_exact_match": true,
+    "provider_signup_mode": "invite_only",
+    "provider_status": "active",
+    "provider_total_user_count": 1,
+    "matching_guest_account_count": 0,
+    "provider_total_invitation_count": 2,
+    "matching_guest_invitation_count": 1,
+    "matching_guest_invitations": [
+      {
+        "status": "pending",
+        "created_at": "2026-11-01T20:57:53.161345+00:00",
+        "expires_at": "2026-11-04T20:57:53.148617+00:00",
+        "role": "user"
+      }
+    ],
+    "broker_total_entry_count": 1,
+    "matching_guest_broker_entry_count": 1,
+    "matching_guest_broker_entries": [
+      {
+        "state": "issued",
+        "created_at": "2026-11-01T20:57:52+00:00",
+        "expires_at": "2026-11-04T20:57:53+00:00",
+        "capability_present": true,
+        "provider_invitation_id_matches": true
+      }
+    ],
+    "shared_client": {
+      "matches_deployed_auth_config": true,
+      "distinct_from_member_client": true,
+      "redirect_uri_exact": true
+    },
+    "client_status_and_enabled_fields": "not returned as values; no enabled/status claim inferred",
+    "remote_mutations_performed": false,
+    "methods": "Read-only provider config/users/invites/OAuth-client inventory and broker/configuration state; no database query or PAR/code replay",
+    "discovery_note": "Two read-only client-discovery requests returned404 before the documented OAuth-client endpoint was used"
+  },
+  "causal_evidence": {
+    "original_live_csp_console_captured": false,
+    "followup_hosted_form_action_observed": "form-action 'self'",
+    "followup_anonymous_native_buttons_present": true,
+    "source_defect": "Shared native renderer omitted the exact configured auth-origin policy already used by workspace auth pages",
+    "controlled_browser_repair_cases_passed": 5,
+    "controlled_browser_evidence": "../../APP-154/shared-auth-entry-2026-11-01/browser-report.json",
+    "controlled_browser_scope": "Actual native PageResponse policy and real loopback HTTPS303 navigation with synthetic endpoints; no hosted account proof",
+    "conclusion": "CSP redirect restriction is supported by follow-up hosted header/source inspection and controlled reproduction; the original failed browser did not capture its security console",
+    "subsequent_header_inspection": "subsequent-header-inspection.json"
+  },
+  "remaining_acceptance": [
+    "Qualified repair deployment",
+    "Genuine guest provider registration and email verification",
+    "Fresh guest sign-in and explicit app acceptance",
+    "Connected placement, live updates and revocation/reconnect",
+    "Complete narrated recording"
+  ],
+  "retention": {
+    "construction": "Positive selection of named metadata/count/state fields; original files unchanged",
+    "private_sources": [
+      {
+        "name": "guest-register-result.json",
+        "bytes": 1152,
+        "sha256": "a381c811fec7630387c3363099f9d82feeaccc799e4fddabc5f10df7d7e4f2d1"
+      },
+      {
+        "name": "guest-start-reconciliation-20261101T210246Z.json",
+        "bytes": 2102,
+        "sha256": "b1b1eb4fe269f8d3f9588856818eb7a078c09c127883794da9e39f15557e9c44"
+      },
+      {
+        "name": "guest-register-readonly-profile.json",
+        "bytes": 419,
+        "sha256": "9705db3006a56a789754b3608a37efaddf322e6e7f6f3584d2d96ef9a38134ca"
+      }
+    ],
+    "omitted": [
+      "Recipient and owner email addresses",
+      "Share/work/organization/account/invitation IDs",
+      "Exact private application/provider paths",
+      "Cookies, tokens, capabilities and verification links",
+      "Secret references and raw management response bodies",
+      "Browser profiles and authentication footage"
+    ],
+    "sanitization_does_not_change_observed_outcomes": true
+  },
+  "subsequent_profile_inspection": {
+    "capture_time": "not recorded in source artifact",
+    "read_only": true,
+    "shared_prelogin_flow_cookie_present": true,
+    "workspace_session_cookie_present": false,
+    "shared_account_cookie_present": false,
+    "sign_in_button_present": true,
+    "create_account_button_present": true,
+    "control_actionable": true,
+    "private_dom_body_and_cookie_domains_omitted": true
+  }
+}
