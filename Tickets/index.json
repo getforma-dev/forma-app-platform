@@ -289,9 +289,12 @@
         "APP-137",
         "APP-138",
         "APP-139",
-        "APP-140"
+        "APP-140",
+        "APP-141",
+        "APP-142",
+        "APP-143"
       ],
-      "ticket_count": 49,
+      "ticket_count": 52,
       "done_count": 1,
       "blocked_count": 0
     }
@@ -4392,6 +4395,95 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-139"
+      ]
+    },
+    {
+      "id": "APP-141",
+      "title": "Create an app before it reaches the canvas",
+      "path": "0-backlog/APP-141.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "141",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: an app is defined before it is placed. A template comes first. Describing the app is the second step. Cards are parts of that app. Widgets stay one-offs.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-093, APP-104, APP-120",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started. This ticket is the record.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-093",
+        "APP-104",
+        "APP-120"
+      ]
+    },
+    {
+      "id": "APP-142",
+      "title": "The app is a page: focus inside it, fan-out back to cards",
+      "path": "0-backlog/APP-142.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "142",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: pursue Unite as the app. The united app is a page. Focus stays. Fan-out is how the parts return to the board. Polish of the united frame comes after the page exists.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-106, APP-120, APP-141",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started. This ticket is the record.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-106",
+        "APP-120",
+        "APP-141"
+      ]
+    },
+    {
+      "id": "APP-143",
+      "title": "Ask about the app, the card, or the widget you clicked",
+      "path": "0-backlog/APP-143.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "AI",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "143",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: clicking a thing makes it the context. The member can ask about the app on the board, inside the app page, or about a widget.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-094, APP-142",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started. This ticket is the record.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-094",
+        "APP-142"
       ]
     }
   ]
