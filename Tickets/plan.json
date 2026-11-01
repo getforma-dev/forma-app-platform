@@ -173,6 +173,14 @@
       "outcome": "The pitch journey (describe, canvas, governed data, share) rehearsed on the live beta, then the November 3 revisit.",
       "exit": "APP-091–097 Done; rehearsal evidence is sanitized and every deferred item is closed or re-ticketed by APP-097.",
       "phase": "PH08"
+    },
+    {
+      "id": "S15",
+      "name": "Composed app experience",
+      "entry": "Follow the genuine APP-139/140 clean trial; select bounded work when its listed predecessors and contract evidence are satisfied. ADR-015 is the accepted direction. This sprint adds no November 2 acceptance gate.",
+      "outcome": "One coherent app across embedded, member and guest use, with typed component actions, durable appearance and qualified record dashboards. A separate spike decides future idle execution options.",
+      "exit": "APP-155–160 acceptance and independent integrated evidence are complete; APP-161 records a measured architecture decision and explicitly owned follow-ups, not an unqualified sleep/wake deployment.",
+      "phase": "PH09"
     }
   ],
   "phases": [
@@ -372,6 +380,30 @@
       ],
       "parallel_work": "Runs on the clone until 2026-11-02; no other platform ticket moves except Victor's pending trial checks (ADR-011 Consequences). Placed after PH07 because the board requires a new phase to have the highest order; it has no phase dependency, and its tickets depend only on earlier tickets.",
       "order": 8,
+      "depends_on": [],
+      "gate_status": "pending",
+      "gate_evidence": []
+    },
+    {
+      "id": "PH09",
+      "name": "Composed app experience",
+      "entry": "ADR-015 is accepted. APP-139/140 genuine-trial continuation stays first; individual ticket dependencies govern selection. This follow-through neither expands the November 2 cut nor waits for unrelated historical PH08 leftovers.",
+      "outcome": "Cards behave as components of one coherent, authorized web app, with a consistent embedded and standalone experience and real record-backed behavior.",
+      "deliverables": [
+        "A backward-compatible admitted app presentation contract and trusted responsive shell (APP-155).",
+        "Typed component actions with builder target selection and preserved command/draft semantics; persisted bounded themes (APP-156/157).",
+        "Admitted record components and scoped filters, bounded exact record calculations and receipts (APP-158/159).",
+        "A normally created reference app with actual saved records, cross-presentation interaction, permission and accessibility evidence (APP-160).",
+        "Measured future idle/wake options, an architecture decision and follow-up ownership; no automatic infrastructure change (APP-161)."
+      ],
+      "exit_criteria": [
+        "All APP-155–161 tickets are Done with their own required evidence; visual references and planning checks do not pass runtime acceptance.",
+        "The same exact saved work is qualified across embedded, standalone member and guest presentations; commands remain explicit and sharing retains ADR-014 authority and five-second visibility lease.",
+        "Record metrics and charts are recomputable from admitted real snapshots with exact arithmetic, declared scope and receipts; no fake or page-truncated totals.",
+        "Independent review accepts compatibility, isolation, keyboard/mobile behavior, recovery and honest availability states. APP-161 ends at an evidence-backed decision; any implementation is separately ticketed."
+      ],
+      "parallel_work": "No earlier phase depends on PH09. The shell and data contracts can proceed in bounded parallel slices after their ticket prerequisites; the future idle/wake investigation does not change today’s shared runtime. Historical phase gates remain unchanged.",
+      "order": 9,
       "depends_on": [],
       "gate_status": "pending",
       "gate_evidence": []

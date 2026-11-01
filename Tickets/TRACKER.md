@@ -159,3 +159,10 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 152 | [APP-151: Middle-click zooms into focus, then Tab moves through the app](0-backlog/APP-151.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-106, APP-142 |
 | 153 | [APP-152: An API bank, and an easy way to add an API](0-backlog/APP-152.md) | [PH08](phases/PH08.md) | S14 | AI | P2 | L | Backlog | APP-093, APP-104 |
 | 154 | [APP-153: Spike — why the library pane has four tabs](0-backlog/APP-153.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-112, APP-122 |
+| 155 | [APP-155: One coherent app presentation on the canvas and at its own URL](0-backlog/APP-155.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-139, APP-140, APP-142, APP-144, APP-146, APP-147, APP-154 |
+| 156 | [APP-156: Typed buttons that open app components and command forms](0-backlog/APP-156.md) | [PH09](phases/PH09.md) | S15 | AUT | P1 | L | Backlog | APP-155 |
+| 157 | [APP-157: Persisted bounded app appearance across all presentations](0-backlog/APP-157.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-155, APP-122 |
+| 158 | [APP-158: Place an admitted records list with authoritative scoped filters](0-backlog/APP-158.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-144, APP-155, APP-020, APP-025 |
+| 159 | [APP-159: Compute bounded authorized record summaries, trends and rankings](0-backlog/APP-159.md) | [PH09](phases/PH09.md) | S15 | QRY | P1 | L | Backlog | APP-158, APP-021, APP-023, APP-024 |
+| 160 | [APP-160: Qualify one composed reference app across canvas, page and sharing](0-backlog/APP-160.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-154, APP-155, APP-156, APP-157, APP-158, APP-159 |
+| 161 | [APP-161: Spike — measure idle app costs and decide safe sleep/wake architecture](0-backlog/APP-161.md) | [PH09](phases/PH09.md) | S15 | OPS | P2 | M | Backlog | APP-140, APP-154 |
