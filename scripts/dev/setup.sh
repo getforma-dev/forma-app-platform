@@ -59,7 +59,10 @@ say "venvs from the hashed locks"
 # The runtime venv carries both locks, exactly as CI installs it
 # (tenant-foundation.yml); campaigns and the dev stand use it.
 venv app/runtime app/runtime/requirements.lock contracts/requirements.lock
-venv contracts contracts/requirements.lock
+# The library check imports the normalizer, which needs the reviewed DuckDB
+# pin. That pin is spikes/APP-005/requirements.lock, the same block as
+# app/runtime/requirements.lock; the operator union test refuses them to diverge.
+venv contracts contracts/requirements.lock spikes/APP-005/requirements.lock
 # The operator lock is the union of the three (app/operator/requirements.lock:2-4);
 # image checks and operator steps use this venv (replaces the other clone's opvenv).
 venv app/operator app/operator/requirements.lock

@@ -190,7 +190,7 @@ type Group = {
   ledger: LedgerCard[];
 };
 // APP-104: the library pane, metadata only (`query::canvas::library`).
-type LibraryCard = { id: string; number: string; title: string; kind: string; search: string };
+type LibraryCard = { id: string; number: string; title: string; kind: string; canvasKind: string; search: string };
 type LibraryApp = {
   id: string;
   app: string;
@@ -716,7 +716,7 @@ function Canvas(props: CanvasProps) {
           <div class="cv-lib-search">
             <input id="cv-lib-search" type="search" placeholder="Search by name, /address or number, e.g. 3.2" aria-label="Search the library" autocomplete="off" />
           </div>
-          <p class="cv-lib-hint">Add brings an app, a card or a widget onto the canvas; Remove takes it off. Use an app’s address shown below to tell that app something.</p>
+          <p class="cv-lib-hint">Drag a card onto the canvas, or use Add. Remove takes it off. Use an app’s address shown below to tell that app something.</p>
           <div class="cv-lib-list" data-lib-list>
             {createList(() => props.library, category => category.id, category => (
               <section class="cv-lib-cat" data-category={category.id} aria-label={category.title}>
@@ -744,7 +744,7 @@ function Canvas(props: CanvasProps) {
                       </div>
                       <ul class="cv-lib-cards">
                         {createList(() => app.cards, card => card.id, card => (
-                          <li class="cv-lib-card" data-card={card.id} data-number={card.number} data-search={card.search}>
+                          <li class="cv-lib-card" data-card={card.id} data-number={card.number} data-canvas-kind={card.canvasKind} data-search={card.search}>
                             <button type="button" class="cv-lib-toggle" aria-pressed="false" data-lib-toggle>
                               <span class="cv-lib-dot" data-lib-dot aria-hidden="true"></span>
                               <span class="cv-lib-num">{card.number}</span>
