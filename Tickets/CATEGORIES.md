@@ -10,7 +10,7 @@ Categories describe ownership; sprints describe execution order. A ticket lives 
 | [QRY: Queries and provenance](categories/QRY.md) | Deterministic operations, exact semantics, receipts and resource bounds. | 9 |
 | [REC: Internal records](categories/REC.md) | Declared mutations, durable outcomes, conflict recovery and concurrency. | 3 |
 | [UX: Workspace and accessibility](categories/UX.md) | Native presentation, canvas and equivalent keyboard/focused workflows. | 30 |
-| [AUT: App authoring](categories/AUT.md) | Typed definitions, direct composition, patches and isolated preview. | 4 |
+| [AUT: App authoring](categories/AUT.md) | Typed definitions, direct composition, patches and isolated preview. | 5 |
 | [GOV: Publication and lifecycle](categories/GOV.md) | Policy, exact-content publication, pinned work and maintenance. | 7 |
 | [AI: AI and retrieval](categories/AI.md) | Authorized discovery, bounded generation, explanation and evaluation. | 15 |
 | [SHR: Sharing and handoff](categories/SHR.md) | Separate grants, derived information, revocation and exports. | 5 |

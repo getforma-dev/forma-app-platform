@@ -9,6 +9,8 @@ This is the implementation board for Forma's company app platform and its Norths
 3. When implementation begins, run `python3 Tickets/_tools/board.py next` from the repository root. Start with the first ready ticket, initially APP-001, after checking its external dependencies and acceptance criteria.
 4. Use [IMPLEMENT](_tools/IMPLEMENT.md) for execution and [REVIEW](_tools/REVIEW.md) for independent review.
 
+The current product direction is the app as a page. Start at [APP-141](0-backlog/APP-141.md), then APP-142, APP-144, and APP-143, in that order. The record is [DIRECTION.md](../docs/planning/DIRECTION.md). `board.py next` still lists the older queue. It does not choose this work.
+
 Sprints are ordered scope batches, not calendar commitments. Start dates and capacity are unset. Team ownership is assigned; individual implementers are selected when work starts. Later sprints are forecasts; refine or split a ticket before selection if it cannot fit a small, reviewable change. The GenUI and FormaStack teams work in parallel when actual dependencies permit it. An upstream integration gate blocks only the dependent behavior; continue unrelated app work and record precisely what evidence is needed to unblock integration.
 
 ## One authoritative ticket

@@ -149,3 +149,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 142 | [APP-142: The app is a page: focus inside it, fan-out back to cards](0-backlog/APP-142.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-106, APP-120, APP-141 |
 | 143 | [APP-143: Ask about the app, the card, or the widget you clicked](0-backlog/APP-143.md) | [PH08](phases/PH08.md) | S14 | AI | P1 | M | Backlog | APP-094, APP-142 |
 | 144 | [APP-144: Open an app as a page and use it there](0-backlog/APP-144.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-142, APP-093 |
+| 145 | [APP-145: Give a new member one authoring shell so the first description can publish](0-backlog/APP-145.md) | [PH08](phases/PH08.md) | S14 | AUT | P0 | M | Backlog | APP-093 |
