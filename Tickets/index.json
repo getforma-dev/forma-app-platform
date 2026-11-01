@@ -4237,7 +4237,7 @@
       "Depends on": "APP-132",
       "External dependencies": "None",
       "Assignee": "Codex \u2014 GenUI owner (continuing Claude's handoff)",
-      "Branch / PR": "`pivot/local-surfaces` https://github.com/getforma-dev/forma-app-platform/pull/5. The files walk is on trunk",
+      "Branch / PR": "Local surfaces: `pivot/local-surfaces` PR 5. Clean-customer walk: `pivot/app-135-clean-audit` PR 6. Files walk is on trunk. Acceptance stays open",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
