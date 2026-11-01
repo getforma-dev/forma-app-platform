@@ -48,7 +48,7 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
     ['Move', 'Drag the header', 'Arrow keys · Shift: 10 px'],
     ['Arrange by app', '⋯ → Arrange by app', '/arrange'],
     ['Unite an app', 'App card → Unite, Library → Unite, or ⋯ → Unite app', 'U · /unite expenses'],
-    ['Break it apart', 'Frame → Break apart, or ⋯ → Break app apart', 'Shift + U · /split expenses'],
+    ['Fan out', 'Page → Fan out, or ⋯ → Fan out', 'Shift + U · /fan expenses · /split expenses'],
     ['Focus', 'The [ ] button on a card, or ⋯ → Focus', 'F · /focus'],
     ['Stack', 'Drag onto a card and hold, Library → Stack, or ⋯ → Stack them', `${MOD} + G`],
     ['Leaf through a stack', 'The ‹ › on the stack', '← · →'],

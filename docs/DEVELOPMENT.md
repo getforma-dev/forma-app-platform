@@ -42,7 +42,7 @@ The main checkout's defaults are:
 | Pitch | Priya Natarajan | [127.0.0.1:4003/canvas](http://127.0.0.1:4003/canvas) |
 | Clean (`just dev clean -d`) | Alex Rivera, new customer | [127.0.0.1:4010/canvas](http://127.0.0.1:4010/canvas) |
 
-`just dev` without `-d` runs in the foreground (a TUI in a terminal). The first build can take minutes. Pitch starts with the synthetic Northstar scenario and 20 library apps. A newly reset clean instance has no apps or records and demo mode is off; its data persists after you start using it. Each browser gets its own persona session. These loopback listeners mint sign-in locally; they do not test the hosted fAuth flow.
+`just dev` without `-d` runs in the foreground (a TUI in a terminal). The first build can take minutes. Pitch starts with the synthetic Northstar scenario and 20 library apps. A newly reset clean instance has no apps or records and demo mode is off; its data persists after you start using it. Each browser gets its own persona session. These loopback listeners mint sign-in locally; they do not test the hosted fAuth flow. The clean profile also pre-creates an authoring shell through the operator. It therefore does not by itself prove a freshly invited member can create their first app; APP-145 must be qualified with a member who owns no app. “Clean” means no visible saved apps/records, not an unprovisioned database.
 
 The pitch profile is the test sandbox. Diego, Sarah, Priya, and the seeded library stay on `127.0.0.1:4001`–`4003` for local testing. That profile is not what gets deployed. The pinned local twin of the AWS trial is the main checkout's clean profile, `127.0.0.1:4010`. It is the empty-customer world Victor demos from, and the world a new user and the panel sign in to. A worktree's clean port is a disposable copy, not that twin. APP-140 holds the rule.
 
@@ -74,7 +74,7 @@ Run `just setup` in the checkout you are about to start. A worktree does not sha
 
 A dry-run of these local commands is in [DEVELOPMENT-DRY-RUN-2026-10-31.md](planning/DEVELOPMENT-DRY-RUN-2026-10-31.md). It did not run the delivery recipes.
 
-Tell the owner before restarting, resetting or stopping an instance they are using. Check which checkout owns the listener; do not kill another checkout's process to free a port. Use separate worktree ports for independent testing. The [pitch script](pitch/PITCH-SCRIPT.md) and [recording checklist](pitch/RECORDING.md) name exact demo words, expected outcomes and limitations.
+Tell the owner before restarting, resetting or stopping an instance they are using. Check which checkout owns the listener; do not kill another checkout's process to free a port. Use separate worktree ports for independent testing. The [clean recording outline](planning/first-run/RECORDING.md) describes the current trial. The older [pitch script](pitch/PITCH-SCRIPT.md) and [recording checklist](pitch/RECORDING.md) retain the seeded rehearsal.
 
 ## Before pushing
 

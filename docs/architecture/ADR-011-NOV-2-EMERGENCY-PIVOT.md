@@ -4,6 +4,12 @@
 - Date: 2026-10-30
 - Supersedes for November 2 only: the MVP definition of [ADR-010](ADR-010-NOV-2-MVP-CUT.md) §1 and its §4.5 scope locks (no canvas island beyond APP-003; no model before APP-043; UI limited to the SSR pages). Everything else in ADR-010 stands and resumes after November 2.
 
+## November 1 amendment: the clean customer trial
+
+Victor's [first-run decision](../planning/first-run/README.md), reaffirmed in the November 1 review request, supersedes this ADR's seeded/concept-car presentation and permission to use canned demo responses for the recorded trial. The first user starts empty, creates an app and a real record, then shares to a recipient who signs up from that share. Fictional data is allowed; ingestion, loading, admission, identity, persistence and sharing are real. The recording is at most three minutes; the try-it workflow is not timed. The sandbox and earlier scripts remain development/history, not trial acceptance.
+
+The [current sequence](../planning/DIRECTION.md), [review](../planning/PIVOT-REVIEW-2026-11-01.md), APP-139–145 and APP-140's environment split govern this work. The original invariants, deferred platform obligations and independent review requirements remain. This amendment records product direction, not completed implementation or an approval to deploy. The earlier text below is retained with its original dates.
+
 ## Context
 
 ADR-010 cut the November 2 MVP to Phase 1 live: invite, verified sign-in, governed query with receipt, explicit command, restart/reopen. That is live at `https://beta.getforma.dev` since 2026-10-30 (APP-078 window, APP-076 trial; records in `evidence/APP-078/window/` and `evidence/APP-076/trial/`). It proves the platform's backbone, but it does not show the product: a company describing an app, seeing it appear on a canvas, running it on its data and sharing it with a teammate. For a YC investment conversation, the backbone alone reads as a course project. Working prototypes of the missing experience exist beside this repository: Forma Vector Studio (describe an interface; Claude generates reusable Forma modules), Forma Generative UI (an intent-driven infinite canvas routing through a vector index of published modules) and Forma GenUI Runtime (the reusable canvas layer).

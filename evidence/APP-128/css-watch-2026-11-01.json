@@ -1,0 +1,11 @@
+{
+  "command": "npm --prefix app/admin run dev",
+  "initial_build_seconds": 2.154,
+  "css_reload_seconds": 0.612,
+  "restored_css_seconds": 1.846,
+  "source_sha256_before": "62a6da5f2d5cf524b4029dacb4d752dd19473332051a9c5242f3ce8e8602800a",
+  "source_sha256_after": "62a6da5f2d5cf524b4029dacb4d752dd19473332051a9c5242f3ce8e8602800a",
+  "manifest_changed_with_css": true,
+  "marker_removed": true,
+  "no_application_server_started": true
+}

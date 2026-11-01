@@ -315,6 +315,13 @@ function show(index: number): void {
   if (title) title.textContent = titleOf(card);
   const pos = dialog.querySelector('[data-focus-pos]');
   if (pos) pos.textContent = total > 1 ? `${next + 1} / ${total}` : '';
+  const onPage = frameCardsOf(id) !== null;
+  const close = dialog.querySelector<HTMLElement>('[data-focus-close]');
+  if (close) {
+    const label = onPage ? 'Back to the page (Esc)' : 'Back to the canvas (Esc)';
+    close.setAttribute('aria-label', label);
+    close.title = label;
+  }
   for (const step of dialog.querySelectorAll<HTMLButtonElement>('[data-focus-step]')) step.disabled = total < 2;
   syncStrip();
   strip?.querySelector<HTMLElement>(`[data-focus-index="${next}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -346,7 +353,10 @@ export function openFocus(id: string, opener: HTMLElement | null = null): boolea
   document_.getElementById('cv-shell')?.classList.add('is-focus-open');
   watch();
   dialog.querySelector<HTMLElement>('[data-focus-close]')?.focus({ preventScroll: true });
-  board.announce(`${titleOf(session.card ?? undefined)} in focus. Left and right arrows walk the cards; Esc returns to the canvas.`);
+  const onPage = frameCardsOf(session.card?.dataset.card ?? '') !== null;
+  board.announce(onPage
+    ? `${titleOf(session.card ?? undefined)} in focus. Left and right arrows walk the parts; Esc returns to the page.`
+    : `${titleOf(session.card ?? undefined)} in focus. Left and right arrows walk the cards; Esc returns to the canvas.`);
   return true;
 }
 
@@ -370,7 +380,7 @@ export function closeFocus(): void {
     ? card.querySelector<HTMLElement>('[data-focus-card]')
     : opener?.isConnected ? opener : card ? stackCardsOf(card.dataset.card ?? '')?.item ?? null : null;
   back?.focus({ preventScroll: true });
-  board.announce('Back to the canvas.');
+  board.announce(card?.closest('.cv-unite') ? 'Back to the page.' : 'Back to the canvas.');
 }
 
 /** F on a selected canvas item: a card, a stack's top card, or the frame's last touched card. */

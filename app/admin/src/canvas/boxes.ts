@@ -916,7 +916,7 @@ export function folderRunnable(name: string, list: Box[] = boxes): Runnable | un
 /**
  * APP-124: the empty canvas's choices. "Drop files or upload" opens a file
  * picker whose files land in a new folder (a drop on the empty canvas does
- * the same, below); "Describe what you need" puts the caret in the bar.
+ * the same, below). "Create an app" is the template modal (APP-141).
  */
 export function startEmptyChoices(document_: Document): void {
   const input = document_.querySelector<HTMLInputElement>('[data-empty-upload]');
@@ -931,11 +931,6 @@ export function startEmptyChoices(document_: Document): void {
       input.value = '';
       if (list.length) void newUntitled(list).then(announce);
     });
-  }
-  const describe = document_.querySelector<HTMLElement>('[data-empty-describe]');
-  if (describe && !describe.dataset.wired) {
-    describe.dataset.wired = 'true';
-    describe.addEventListener('click', () => document_.getElementById('intent-input')?.focus());
   }
 }
 

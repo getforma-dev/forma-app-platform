@@ -2,6 +2,7 @@ import { h, mount, createShow, createList, createSignal, activateIslands } from 
 import { submitUtterance } from './actions';
 import { startAgents } from './agents';
 import { startBoard } from './board';
+import { startCreateApp } from './create-app';
 import { startLibrary } from './library';
 import { startNaming } from './naming';
 import { startControls } from './controls';
@@ -346,8 +347,8 @@ function Canvas(props: CanvasProps) {
             <div class="cv-empty-choices" aria-label="Ways to start">
               <button type="button" class="cv-empty-choice cv-empty-describe" data-empty-describe>
                 <span class="cv-choice-top"><span class="cv-choice-icon" aria-hidden="true">✳</span><span class="cv-choice-number" aria-hidden="true">01 / CREATE</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
-                <span class="cv-choice-title">Describe an app</span>
-                <span class="cv-choice-copy">Start with an idea. Make it something you can use.</span>
+                <span class="cv-choice-title">Create an app</span>
+                <span class="cv-choice-copy">Choose an example, then describe your app. Nothing is placed until you confirm.</span>
               </button>
               <button type="button" class="cv-empty-choice cv-empty-upload" data-empty-upload-pick title="A new folder holds your files: CSV, XLSX, PDF, images or text">
                 <span class="cv-choice-top"><svg class="cv-choice-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 3h9v10H3zM12 16v-4m-3 2 3-3 3 3" /></svg><span class="cv-choice-number" aria-hidden="true">02 / CONNECT</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
@@ -739,7 +740,7 @@ function Canvas(props: CanvasProps) {
                           <code class="cv-lib-slug cv-addr-chip">{app.slug}</code>
                         ))}
                         <button type="button" class="cv-lib-stack" data-lib-stack title="Add the app as one stack">Stack</button>
-                        <button type="button" class="cv-lib-stack cv-lib-unite" data-lib-unite title="Unite: assemble the app's cards into one frame">Unite</button>
+                        <button type="button" class="cv-lib-stack cv-lib-unite" data-lib-unite title="Unite: open this app as a page">Unite</button>
                         <button type="button" class="cv-lib-all" data-lib-all>Add</button>
                       </div>
                       <ul class="cv-lib-cards">
@@ -806,7 +807,7 @@ function Canvas(props: CanvasProps) {
               <p class="cv-menu-label" aria-hidden="true">Selected cards</p>
               <button type="button" role="menuitem" data-tool="focus"><span>Focus</span><span class="cv-kbd-group">F</span></button>
               <button type="button" role="menuitem" data-tool="unite"><span>Unite app</span><span class="cv-kbd-group">U</span></button>
-              <button type="button" role="menuitem" data-tool="split"><span>Break app apart</span><span class="cv-kbd-group">⇧ U</span></button>
+              <button type="button" role="menuitem" data-tool="split"><span>Fan out</span><span class="cv-kbd-group">⇧ U</span></button>
               <button type="button" role="menuitem" data-tool="stack"><span>Stack them</span><span class="cv-kbd-group">⌘ G</span></button>
               <button type="button" role="menuitem" data-tool="spread"><span>Spread a stack</span><span class="cv-kbd-group">⌘ ⇧ G</span></button>
               <button type="button" role="menuitem" data-tool="remove"><span>Take off the canvas</span><span class="cv-kbd-group">Del</span></button>
@@ -844,6 +845,7 @@ registerCompleter('clock', zoneSuggestions, { select: false });
 startAgents(document);
 restoreWidgets();
 startLibrary(document);
+startCreateApp(document);
 // APP-121: /rename, /alias, the Library's ✎ and double-click a card title.
 startNaming(document);
 // APP-108: boxes (cards, upload, viewer, data, /storage, the pane's Boxes).

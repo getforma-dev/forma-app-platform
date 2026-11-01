@@ -6,7 +6,7 @@ This is the implementation board for Forma's company app platform and its Norths
 
 1. Read the repository [contribution guide](../CONTRIBUTING.md) and the [source guide](../docs/planning/SOURCE-GUIDE.md).
 2. Read the [phase plan](PHASES.md) and [quality gates](../docs/planning/QUALITY-GATES.md), then the [sprint plan](SPRINTS.md) for smaller outcomes and the [ordered tracker](TRACKER.md) for individual tickets. [Categories](CATEGORIES.md) group responsibility; they do not create separate copies of a ticket.
-3. When implementation begins, run `python3 Tickets/_tools/board.py next` from the repository root. Start with the first ready ticket, initially APP-001, after checking its external dependencies and acceptance criteria.
+3. For the November 1 clean-user pivot, use [DIRECTION.md](../docs/planning/DIRECTION.md) and the [review](../docs/planning/PIVOT-REVIEW-2026-11-01.md). `board.py next` follows the older dependency queue and does not select this work. Existing dependency and Done gates still apply; implementation on an open PR is recorded in the ticket log without declaring it Done.
 4. Use [IMPLEMENT](_tools/IMPLEMENT.md) for execution and [REVIEW](_tools/REVIEW.md) for independent review.
 
 The current product direction is the app as a page. Start at [APP-141](0-backlog/APP-141.md), then APP-142, APP-144, and APP-143, in that order. The record is [DIRECTION.md](../docs/planning/DIRECTION.md). `board.py next` still lists the older queue. It does not choose this work.

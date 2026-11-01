@@ -1,5 +1,7 @@
 # November 2 MVP plan — Oct 29 evening → Nov 2
 
+**Historical October 29 plan.** The November 1 [clean first-run decision](first-run/README.md) and [current direction](DIRECTION.md) supersede this recording/demo scope. The original schedule and obligations below remain evidence; they are not current approvals or completion claims.
+
 Prepared 2026-10-29 (evening UTC) by the GenUI planning lead under [ADR-010](../architecture/ADR-010-NOV-2-MVP-CUT.md). Status: plan, not evidence. The orchestrator is the GenUI owner and single GenUI operator; implementers and reviewers are separate agents in worktrees under `.claude/worktrees/`. Times are UTC. The MVP is defined in ADR-010 §1; the invariants in §2; the review tiers (A/B/C), evidence rule and batched landing in §4.
 
 **Starting state (2026-10-29, after `0f9025d`):** PH01 Done: APP-001–008, 011, 073, 075 (PR 2 landed on `main` at `699b8a9`). In review: APP-010 (re-check clean; lands in PR 3). Ready by dependencies: APP-009 (being implemented, worktree `agent-a4241d58b67f65c4e`), APP-077 (implemented and merged on the branch at `34a42eb`; Tier B review pending; the ticket is still Backlog and moves to In progress/In review with the review). Backlog: APP-074, 012, 013, 014, 078, 076. fAuth is live (FORMA-367) and the mail image qualified (FORMA-366); both gates cleared. Victor approved the always-on figure (about $150–170/month) and the SES sandbox with pre-verified recipients.

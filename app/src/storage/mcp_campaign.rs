@@ -124,6 +124,10 @@ async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
 }
 /// Every row the campaign's writes can touch in either organization.
 async fn footprint(fixture: &Fixture) -> Vec<i64> {
+    footprint_in(fixture, None).await
+}
+
+async fn footprint_in(fixture: &Fixture, organization: Option<&str>) -> Vec<i64> {
     let mut counts = Vec::new();
     for table in [
         "internal_records",
@@ -136,7 +140,16 @@ async fn footprint(fixture: &Fixture) -> Vec<i64> {
         "audit_events",
         "agent_attributions",
     ] {
-        counts.push(scalar(fixture, &format!("SELECT count(*) FROM genui.{table}")).await);
+        let scope = organization
+            .map(|org| format!(" WHERE organization_id='{org}'"))
+            .unwrap_or_default();
+        counts.push(
+            scalar(
+                fixture,
+                &format!("SELECT count(*) FROM genui.{table}{scope}"),
+            )
+            .await,
+        );
     }
     counts
 }
@@ -1058,9 +1071,12 @@ async fn campaign() {
         scalar(&fixture, &format!("SELECT count(*) FROM genui.agent_attributions WHERE work_id='{composed_work}' AND record_id IS NULL")).await,
         1
     );
-    // Outside the demo organization and without a model key: the instant
-    // matcher runs in every organization (APP-101), and a member with nothing
-    // composable gets the uniform not_found; nothing is written.
+    // APP-145: this is an active member in their own organization, not an
+    // unauthorized caller. Their explicit compose may create their own shell.
+    // This stand has no model outside the demo organization, so it cannot
+    // publish; nothing in Northstar may change or become readable.
+    let northstar_before = footprint_in(&fixture, Some(ORG)).await;
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{OTHER}' AND owner_principal_id='{OUTSIDER}'")).await, 0);
     let refused = client
         .call(
             &outsider_token,
@@ -1068,10 +1084,21 @@ async fn campaign() {
             json!({"description": "expense claims"}),
         )
         .await;
-    assert_eq!(error_code(&refused), "not_found");
+    assert_eq!(error_code(&refused), "could_not_compose");
+    assert_eq!(
+        footprint_in(&fixture, Some(ORG)).await,
+        northstar_before,
+        "a canary's first compose cannot change Northstar"
+    );
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{OTHER}' AND owner_principal_id='{OUTSIDER}'")).await, 1);
+    assert_eq!(fixture.sql(&format!("SELECT permission FROM genui.app_permissions WHERE organization_id='{OTHER}' AND principal_id='{OUTSIDER}' ORDER BY 1"), "genui").trim(), "discover\nedit_definition\nrun");
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{OTHER}' AND actor_principal_id='{OUTSIDER}' AND kind='permission.granted'")).await, 1);
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.publications p JOIN genui.apps a USING(organization_id,app_id) WHERE p.organization_id='{OTHER}' AND a.owner_principal_id='{OUTSIDER}'")).await, 0);
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{OTHER}' AND principal_id='{OUTSIDER}'")).await, 0);
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.source_permissions WHERE organization_id='{OTHER}' AND principal_id='{OUTSIDER}'")).await, 0);
     check(
         &mut checks,
-        &format!("forma_compose_app runs the composer route's compose_for (demo organization, rehearsed routing, no model): the expense app retrieved as a new saved work in {} ms, app.placed live on Diego's stream, the work attributed to his token; an outsider with nothing composable gets the uniform not_found and nothing is written", timings["compose_ms"]),
+        &format!("forma_compose_app runs the composer route's compose_for (demo organization, rehearsed routing, no model): the expense app retrieved as a new saved work in {} ms, app.placed live on Diego's stream, the work attributed to his token; an active canary member's first compose creates only their own unpublished shell with three grants and one audit; model absence returns could_not_compose, Northstar is unchanged and no source/work grant is added", timings["compose_ms"]),
     );
     drop(diego_stream);
 

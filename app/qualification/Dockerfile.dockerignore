@@ -178,6 +178,7 @@ app/src/bin/**
 !app/migrations/catalog-v13.json
 !app/migrations/catalog-v14.json
 !app/migrations/catalog-v15.json
+!app/migrations/catalog-v16.json
 !app/certs/rds-global-bundle.pem
 !app/runtime/runtime.py
 !app/runtime/qualification_supervisor.py
