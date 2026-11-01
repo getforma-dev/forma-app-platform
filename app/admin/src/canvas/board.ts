@@ -374,7 +374,7 @@ export function paneKind(kind: string): string {
 }
 
 /** APP-104: every work the board has in hand, with its cards (the pane lists new ones under "My apps"). */
-export function boardWorks(): { app: string; work: string; title: string; cards: { id: string; title: string; kind: string }[] }[] {
+export function boardWorks(): { app: string; work: string; title: string; cards: { id: string; title: string; kind: string; canvasKind: string }[] }[] {
   return Array.from(groups.values(), (group) => ({
     app: group.app,
     work: group.work,
@@ -383,6 +383,7 @@ export function boardWorks(): { app: string; work: string; title: string; cards:
       id: card.dataset.card ?? '',
       title: card.dataset.kind === 'app' ? 'App card' : (card.getAttribute('aria-label') ?? 'Card'),
       kind: paneKind(card.dataset.kind ?? ''),
+      canvasKind: card.dataset.kind ?? '',
     })),
   }));
 }

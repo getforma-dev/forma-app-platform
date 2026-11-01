@@ -190,7 +190,7 @@ type Group = {
   ledger: LedgerCard[];
 };
 // APP-104: the library pane, metadata only (`query::canvas::library`).
-type LibraryCard = { id: string; number: string; title: string; kind: string; search: string };
+type LibraryCard = { id: string; number: string; title: string; kind: string; canvasKind: string; search: string };
 type LibraryApp = {
   id: string;
   app: string;
@@ -744,7 +744,7 @@ function Canvas(props: CanvasProps) {
                       </div>
                       <ul class="cv-lib-cards">
                         {createList(() => app.cards, card => card.id, card => (
-                          <li class="cv-lib-card" data-card={card.id} data-number={card.number} data-search={card.search}>
+                          <li class="cv-lib-card" data-card={card.id} data-number={card.number} data-canvas-kind={card.canvasKind} data-search={card.search}>
                             <button type="button" class="cv-lib-toggle" aria-pressed="false" data-lib-toggle>
                               <span class="cv-lib-dot" data-lib-dot aria-hidden="true"></span>
                               <span class="cv-lib-num">{card.number}</span>

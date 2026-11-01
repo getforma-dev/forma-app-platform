@@ -48,7 +48,7 @@ import { focusFromItem, openFocus } from './focus';
 
 type Report = (message: string) => void;
 export type CardRow = {
-  id: string; number: string; title: string; kind: string; slug: string; row: HTMLElement; button: HTMLButtonElement; app: AppRow;
+  id: string; number: string; title: string; kind: string; canvasKind: string; slug: string; row: HTMLElement; button: HTMLButtonElement; app: AppRow;
   /** APP-121: the title the server rendered (`title` is the label shown now). */
   base?: string;
 };
@@ -182,6 +182,7 @@ export function indexRow(row: HTMLElement): AppRow | null {
       number: item.dataset.number ?? '',
       title: item.querySelector('.cv-lib-card-title')?.textContent ?? '',
       kind,
+      canvasKind: item.dataset.canvasKind || kind,
       slug: cardSlug(id, kind, work, taken),
       row: item,
       button,
@@ -216,7 +217,7 @@ function nameCards(app: AppRow): void {
 /** An app row built here (a work placed this session), as the server renders one. */
 export function buildAppRow(
   document_: Document,
-  entry: { app: string; work: string; number: string; title: string; slug: string; cards: { id: string; number: string; title: string; kind: string }[] },
+  entry: { app: string; work: string; number: string; title: string; slug: string; cards: { id: string; number: string; title: string; kind: string; canvasKind?: string }[] },
 ): HTMLElement {
   const head = el(document_, 'div', { class: 'cv-lib-app-head' },
     el(document_, 'button', { type: 'button', class: 'cv-lib-expand', 'aria-expanded': 'false', 'data-lib-expand': '' },
@@ -233,6 +234,7 @@ export function buildAppRow(
   const list = el(document_, 'ul', { class: 'cv-lib-cards' },
     ...entry.cards.map((card) => el(document_, 'li', {
       class: 'cv-lib-card', 'data-card': card.id, 'data-number': card.number,
+      ...(card.canvasKind ? { 'data-canvas-kind': card.canvasKind } : {}),
       'data-search': `${card.number} ${card.title.toLowerCase()} ${card.kind}`,
     },
     el(document_, 'button', { type: 'button', class: 'cv-lib-toggle', 'aria-pressed': 'false', 'data-lib-toggle': '' },
@@ -980,7 +982,7 @@ export function startLibrary(document_: Document): void {
         const card = app.cards.find((candidate) => candidate.row === row);
         if (!card) continue;
         return {
-          id: card.id, title: card.title, number: card.number, kind: card.kind, app: app.app, work: app.work,
+          id: card.id, title: card.title, number: card.number, kind: card.canvasKind || card.kind, app: app.app, work: app.work,
         };
       }
       return null;
