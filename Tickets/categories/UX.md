@@ -34,3 +34,5 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 141 | [APP-141: Create an app before it reaches the canvas](../0-backlog/APP-141.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-093, APP-104, APP-120 |
 | 142 | [APP-142: The app is a page: focus inside it, fan-out back to cards](../0-backlog/APP-142.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-106, APP-120, APP-141 |
 | 144 | [APP-144: Open an app as a page and use it there](../0-backlog/APP-144.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-142, APP-093 |
+| 150 | [APP-150: Favorite sections, and a way to go to one](../0-backlog/APP-150.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-142 |
+| 151 | [APP-151: Middle-click zooms into focus, then Tab moves through the app](../0-backlog/APP-151.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-106, APP-142 |
