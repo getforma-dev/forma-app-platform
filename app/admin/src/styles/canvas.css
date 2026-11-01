@@ -2729,3 +2729,16 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
   .cv-commands-row, .cv-commands-item, .cv-commands-item > * { min-width: 0; }
   .cv-commands-sig { overflow-wrap: anywhere; white-space: normal; }
 }
+
+/* APP-141: create an app before anything is placed. */
+.cv-create { border: 0; padding: 0; background: transparent; color: inherit; }
+.cv-create::backdrop { background: rgba(8, 10, 14, 0.55); }
+.cv-create-form { width: min(32rem, calc(100vw - 2rem)); padding: 1.25rem; border-radius: 16px; background: var(--cv-paper, #f7f4ee); color: var(--cv-ink, #1c1915); }
+.cv-create-lead, .cv-create-blurb, .cv-create-empty { color: var(--cv-muted, #5c564c); }
+.cv-create-tabs, .cv-create-actions, .cv-create-row { display: flex; gap: 0.5rem; align-items: center; }
+.cv-create-tabs { margin: 0.75rem 0; }
+.cv-create-template, .cv-create-confirm, .cv-create-cancel, .cv-create-star { font: inherit; }
+.cv-create-row { margin: 0.35rem 0; }
+.cv-create-template { flex: 1; text-align: left; }
+.cv-create-text { display: block; width: 100%; margin-top: 0.35rem; }
+.cv-create-actions { justify-content: flex-end; margin-top: 0.75rem; }

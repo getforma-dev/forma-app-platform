@@ -212,6 +212,7 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/chart.ts
 !app/admin/src/canvas/commands.ts
 !app/admin/src/canvas/compose.ts
+!app/admin/src/canvas/create-app.ts
 !app/admin/src/canvas/display.ts
 !app/admin/src/canvas/layout.ts
 !app/admin/src/canvas/live.ts

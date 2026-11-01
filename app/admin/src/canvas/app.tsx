@@ -2,6 +2,7 @@ import { h, mount, createShow, createList, createSignal, activateIslands } from 
 import { submitUtterance } from './actions';
 import { startAgents } from './agents';
 import { startBoard } from './board';
+import { startCreateApp } from './create-app';
 import { startLibrary } from './library';
 import { startNaming } from './naming';
 import { startControls } from './controls';
@@ -346,8 +347,8 @@ function Canvas(props: CanvasProps) {
             <div class="cv-empty-choices" aria-label="Ways to start">
               <button type="button" class="cv-empty-choice cv-empty-describe" data-empty-describe>
                 <span class="cv-choice-top"><span class="cv-choice-icon" aria-hidden="true">✳</span><span class="cv-choice-number" aria-hidden="true">01 / CREATE</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
-                <span class="cv-choice-title">Describe an app</span>
-                <span class="cv-choice-copy">Start with an idea. Make it something you can use.</span>
+                <span class="cv-choice-title">Create an app</span>
+                <span class="cv-choice-copy">Pick a template, then describe it. Nothing is placed until you confirm.</span>
               </button>
               <button type="button" class="cv-empty-choice cv-empty-upload" data-empty-upload-pick title="A new folder holds your files: CSV, XLSX, PDF, images or text">
                 <span class="cv-choice-top"><svg class="cv-choice-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 3h9v10H3zM12 16v-4m-3 2 3-3 3 3" /></svg><span class="cv-choice-number" aria-hidden="true">02 / CONNECT</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
@@ -844,6 +845,7 @@ registerCompleter('clock', zoneSuggestions, { select: false });
 startAgents(document);
 restoreWidgets();
 startLibrary(document);
+startCreateApp(document);
 // APP-121: /rename, /alias, the Library's ✎ and double-click a card title.
 startNaming(document);
 // APP-108: boxes (cards, upload, viewer, data, /storage, the pane's Boxes).

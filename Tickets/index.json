@@ -4423,7 +4423,7 @@
       "Depends on": "APP-093, APP-104, APP-120",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started. This ticket is the record.",
+      "Branch / PR": "`pivot/app-141-create` opens the template modal. Not merged.",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
