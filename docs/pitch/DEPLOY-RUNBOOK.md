@@ -210,6 +210,12 @@ Skip 5.1–5.2 if 0.6 found no schema change.
   3. Put each **new** object with `If-None-Match: *` and the bucket's SSE-KMS headers under Northstar's key. A 412 on an existing key is expected; compare its checksum. If the operator machine's role cannot write the prefix, run the upload through the operator task, as APP-078 §11 did.
 - [ ] 5.5 → **`just deploy grants <window-id> --approved "…" -- <the operator flags>`**. Run `grant-library-access --organization <org> --principal <id> --record-write --authoring-app <uuid>` for Diego and for Sarah, twice each, to show it is idempotent (`changed: false` on the repeat).
 
+Operator task runs are sequential within a window. Each new logical run uses its label and run number for the ECS client token, so the second migration starts a second task. CLI retries within one request retain that token. The stopped task's numeric exit code (or `null` when unavailable) is journaled before the helper returns; only numeric zero succeeds or marks a migration complete. A failed migration stops `just deploy migrate` before `verify-catalog`.
+
+An interrupted or unconfirmed run blocks a new run with that label. If the original receipt contains its task ARN, resume observation with `bash ops/beta/run-step.sh --window <window-id> --resume-run <n> --approved "…" <label> <override>`. This verifies the frozen request hash and override, then waits for and reads that same task; it never submits `RunTask` again. It preserves the original request/receipt and writes observations under `run-<label>-<n>-resume-<attempt>.*`. Changed request arguments are refused. After a confirmed terminal outcome, another ordinary invocation creates a new logical run.
+
+If the original `RunTask` response was lost, stop and reconcile the original request and ECS task under operator review. Do not delete the request, choose another label, or blindly replay it: an idempotency token does not guarantee deduplication indefinitely. Resume does not bypass this unknown-acceptance gate.
+
 ## 6. Activate and check
 
 - [ ] 6.1 → **`just deploy activate <window-id> --approved "…"`** (writes `deployment-input-activate.json`). In `$W/deployment-input.json`, set `service_desired_count: 1` and run `preflight.py --input $W/deployment-input.json --ledger $PRIV/budget-ledger.json --activate > $W/activation.json` **[MUTATION]**.
