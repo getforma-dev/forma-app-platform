@@ -41,3 +41,7 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 151 | [APP-150: Favorite sections, and a way to go to one](../0-backlog/APP-150.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-142 |
 | 152 | [APP-151: Middle-click zooms into focus, then Tab moves through the app](../0-backlog/APP-151.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-106, APP-142 |
 | 154 | [APP-153: Spike — why the library pane has four tabs](../0-backlog/APP-153.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-112, APP-122 |
+| 155 | [APP-155: One coherent app presentation on the canvas and at its own URL](../0-backlog/APP-155.md) | [PH09](../phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-139, APP-140, APP-142, APP-144, APP-146, APP-147, APP-154 |
+| 157 | [APP-157: Persisted bounded app appearance across all presentations](../0-backlog/APP-157.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-155, APP-122 |
+| 158 | [APP-158: Place an admitted records list with authoritative scoped filters](../0-backlog/APP-158.md) | [PH09](../phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-144, APP-155, APP-020, APP-025 |
+| 160 | [APP-160: Qualify one composed reference app across canvas, page and sharing](../0-backlog/APP-160.md) | [PH09](../phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-154, APP-155, APP-156, APP-157, APP-158, APP-159 |
