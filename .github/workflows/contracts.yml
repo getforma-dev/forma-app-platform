@@ -15,12 +15,17 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22.21.0'
-      - name: Install isolated pinned validator
+      - name: Install isolated pinned validator and the library normalizer's DuckDB
         run: |
           python3 -m venv contracts/.venv
-          contracts/.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r contracts/requirements.lock
-      - name: Validate contract shapes, refusals and canonical bytes
+          # duckdb==2.0.0 is spikes/APP-005/requirements.lock, the same hashed
+          # block as app/runtime/requirements.lock. The normalizer imports it.
+          # The validator lock stays the jsonschema set.
+          contracts/.venv/bin/python -m pip install --require-hashes --only-binary=:all: \
+            -r contracts/requirements.lock -r spikes/APP-005/requirements.lock
+      - name: Validate contract shapes, refusals, canonical bytes and the generated library
         run: |
           contracts/.venv/bin/python -m unittest discover -s contracts -p 'test_*.py' -v
           node contracts/verify_vectors.mjs
           contracts/.venv/bin/python contracts/lock.py check
+          contracts/.venv/bin/python contracts/make_library.py --check
