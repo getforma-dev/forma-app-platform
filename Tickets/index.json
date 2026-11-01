@@ -4091,7 +4091,7 @@
       "Depends on": "APP-107, APP-113",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
-      "Branch / PR": "`pivot/contract-edition` (built; not merged into `pivot/pitch-mvp`)",
+      "Branch / PR": "Edition is on `pivot/pitch-mvp`. Gap matrix: `pivot/app-129-gaps`. Acceptance already recorded; gaps stay open",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
