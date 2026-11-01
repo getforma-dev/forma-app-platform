@@ -37,7 +37,7 @@
         "APP-076"
       ],
       "ticket_count": 20,
-      "done_count": 16,
+      "done_count": 17,
       "blocked_count": 0
     },
     {
@@ -295,6 +295,7 @@
     }
   ],
   "ready_by_local_dependencies": [
+    "APP-014",
     "APP-015",
     "APP-016",
     "APP-026",
@@ -710,11 +711,11 @@
     {
       "id": "APP-013",
       "title": "Commit one declared internal record and recover outcome",
-      "path": "3-in-review/APP-013.md",
+      "path": "4-done/APP-013.md",
       "Field": "Value",
       "---": "---",
       "Epic": "REC",
-      "Status": "In review",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S02",
@@ -727,7 +728,7 @@
       "Depends on": "APP-012",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Claude \u2014 GenUI owner (implementation by subagents, independent review per slice)",
-      "Branch / PR": "phase-one-spikes (implementation `b07afba`, merge `ea8ba23`, review fixes after `2cf3d8f`); landed on main with PR 3 (merge 559b11b, source 7a80e30, 26 of 26 workflows passing)",
+      "Branch / PR": "Landed with PR 3 (merge 559b11b, source 7a80e30). Re-check: `pivot/app-013-recheck`",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
