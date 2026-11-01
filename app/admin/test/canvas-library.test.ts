@@ -489,3 +489,37 @@ test('/shape and /ask resolve every form of an address through one resolver; a n
   assert.ok(mine.scope?.kind === 'app' && mine.scope.works[0]?.work_id === EXPENSE_WORK && mine.question === 'how many claims');
   assert.ok(shape.resolveTarget('e').kind === 'app');
 });
+
+test('a library row keeps the canvas size apart from the pane label (APP-104)', async () => {
+  const { doc, library } = await setup();
+  const board = await import('../src/canvas/board.ts');
+  assert.deepEqual(board.cardFootprint('summary'), { width: 400, height: 250 });
+  assert.deepEqual(board.cardFootprint('timeline'), { width: 620, height: 340 });
+  assert.deepEqual(board.cardFootprint('app'), { width: 340, height: 300 });
+  assert.deepEqual(board.cardFootprint('form'), { width: 360, height: 300 });
+  assert.deepEqual(board.cardFootprint('records'), { width: 680, height: 260 });
+  assert.deepEqual(board.cardFootprint('ledger'), { width: 520, height: 280 });
+  // Pane labels, and canvas kinds the board does not size, stay the fallback.
+  for (const kind of ['number', 'chart', 'table', 'status']) {
+    assert.deepEqual(board.cardFootprint(kind), { width: 440, height: 300 }, kind);
+  }
+  const row = library.buildAppRow(doc, {
+    app: EXPENSE_APP, work: '00000000-0000-4000-8000-000000001690', number: '9', title: 'Sized', slug: '',
+    cards: [
+      { id: 'c-sized-spend', number: '9.1', title: 'Spend by vendor', kind: 'number', canvasKind: 'summary' },
+      { id: 'c-sized-when', number: '9.2', title: 'When', kind: 'chart', canvasKind: 'timeline' },
+    ],
+  }) as unknown as FakeNode;
+  const summaryRow = row.querySelectorAll('.cv-lib-card')[0]!;
+  const timelineRow = row.querySelectorAll('.cv-lib-card')[1]!;
+  assert.equal(summaryRow.dataset.canvasKind, 'summary');
+  assert.equal(summaryRow.querySelector('.cv-lib-kind')?.textContent, 'number');
+  assert.equal(timelineRow.dataset.canvasKind, 'timeline');
+  const indexed = library.indexRow(row as unknown as HTMLElement)!;
+  assert.equal(indexed.cards[0]?.kind, 'number');
+  assert.equal(indexed.cards[0]?.canvasKind, 'summary');
+  assert.equal(indexed.cards[1]?.kind, 'chart');
+  assert.equal(indexed.cards[1]?.canvasKind, 'timeline');
+  assert.deepEqual(board.cardFootprint(indexed.cards[0]!.canvasKind), { width: 400, height: 250 });
+  assert.deepEqual(board.cardFootprint(indexed.cards[1]!.canvasKind), { width: 620, height: 340 });
+});

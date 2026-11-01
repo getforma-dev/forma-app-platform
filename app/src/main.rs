@@ -1216,7 +1216,12 @@ mod tests {
                 work: spend.into(),
                 title: "Spend <Review>".into(),
                 grouping: None,
-                cards: vec![(format!("a-{spend}"), "App card".into(), "app".into())],
+                cards: vec![(
+                    format!("a-{spend}"),
+                    "App card".into(),
+                    "app".into(),
+                    "app".into(),
+                )],
             },
             canvas::LibrarySource {
                 app: app.into(),
@@ -1229,11 +1234,17 @@ mod tests {
                     "traffic".into(),
                 )),
                 cards: vec![
-                    (format!("a-{northstar}"), "App card".into(), "app".into()),
+                    (
+                        format!("a-{northstar}"),
+                        "App card".into(),
+                        "app".into(),
+                        "app".into(),
+                    ),
                     (
                         format!("c-{northstar}-total"),
                         "Total".into(),
                         "number".into(),
+                        "summary".into(),
                     ),
                 ],
             },
@@ -1382,6 +1393,9 @@ mod tests {
         assert!(security < mine);
         assert!(content.contains(&format!("id=\"lib-{northstar}\"")));
         assert!(content.contains(&format!("data-card=\"c-{northstar}-total\"")));
+        // The pane says "number". The drop preview sizes a summary, so the
+        // row keeps that canvas kind beside the label.
+        assert!(content.contains("data-canvas-kind=\"summary\""));
         assert!(
             content.contains(">1.1<")
                 && content.contains(">2.0<")

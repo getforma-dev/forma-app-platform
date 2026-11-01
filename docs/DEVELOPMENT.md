@@ -50,7 +50,7 @@ The local dev binary has no sign-in provider. `GET /workspace` still requires th
 
 - Keep model secrets in the main checkout's gitignored `.env`. `just` does **not** load or source that file. The dev server reads only the needed `ANTHROPIC_API_KEY` through `app/scripts/read_env.py` into its process environment. A worktree can resolve the main checkout's file through Git's common directory. Do not copy keys into a worktree, commands, logs or chat.
 - Without a model key, only the available deterministic/rehearsed paths work; clean-slate generation and real Ask/Shape calls need the model. Slack integration additionally needs its two secrets in the launching environment; the [Slack setup](pitch/SLACK-SETUP.md) owns that procedure.
-- `.env.dev` holds the non-secret `GENUI_DEV_PORT_BASE`. The main checkout defaults to `4000`; a worktree selects and records an available base from `4100` upward. From that base, pitch uses `+1/+2/+3`, clean uses `+10`, databases `+20/+21` and supervisor APIs `+30/+31`. Use `just status` and `just status clean` for that checkout's URLs. Set a different base before starting if needed; the launcher refuses occupied ports.
+- `.env.dev` holds the non-secret `GENUI_DEV_PORT_BASE`. The main checkout uses `4000`. A worktree with no `.env.dev` yet writes one: `4100` plus a multiple of 100 derived from the checkout path (`4100`, `4200`, … `9000`), skipping a base whose pitch, clean, database or supervisor ports are already taken. From that base, pitch uses `+1/+2/+3`, clean uses `+10`, databases `+20/+21` and supervisor APIs `+30/+31`. Use `just status` and `just status clean` for that checkout's URLs. Set a different base before starting if needed; the launcher refuses occupied ports.
 - `.cache/dev/<pitch|clean>/` holds local credentials, objects, revision caches and logs; PostgreSQL data lives in the profile's named Docker volume. Each checkout has its own Compose project and dev state. Local objects replace S3 in this loop.
 - `.cache/reports/`, `.cache/parser-target/`, `.cache/images/` and `target/` also stay per checkout. The exception is operator state: `$PRIV` resolves to the **main checkout's** `.cache/ops/beta/` through `git-common-dir`, so worktrees share one approval log and budget/window ledger. `GENUI_OPS_PRIV` is an explicit override, used by isolated operator tests; do not use it to start a second live ledger. `just deploy help` prints the selected path.
 
@@ -66,6 +66,12 @@ The local dev binary has no sign-in provider. `GET /workspace` still requires th
 | Status/logs | `just status`, `just status clean`, `just dev logs`, `just dev clean logs`; per-process files are under `.cache/dev/<profile>/logs/`. |
 | Stop/start | `just dev stop` / `just dev -d`; `just dev clean stop` / `just dev clean -d`. Stop keeps the database volume. |
 
+`just dev -d` and `just dev clean -d` print `already running` and that checkout's URLs when the profile's supervisor is already up. They do not reset the database and they do not rebuild. Reset is the separate `just dev reset -d` or `just dev clean reset -d` command, and it drops only that profile.
+
+Run `just setup` in the checkout you are about to start. A worktree does not share `app/admin/node_modules` with the main checkout. Until setup has run there, the admin process exits with `app/admin/node_modules is missing: run 'just setup'` and the supervisor keeps restarting it. The dev server also reads `.cache/parser-target/` when it starts. Run `just parser` before the first `just dev` if you will import CSV or XLSX, and `just restart` or `just restart clean` if you build the parser after the server is already up. Without it, those files are stored and not parsed.
+
+A dry-run of these local commands is in [DEVELOPMENT-DRY-RUN-2026-10-31.md](planning/DEVELOPMENT-DRY-RUN-2026-10-31.md). It did not run the delivery recipes.
+
 Tell the owner before restarting, resetting or stopping an instance they are using. Check which checkout owns the listener; do not kill another checkout's process to free a port. Use separate worktree ports for independent testing. The [pitch script](pitch/PITCH-SCRIPT.md) and [recording checklist](pitch/RECORDING.md) name exact demo words, expected outcomes and limitations.
 
 ## Before pushing
@@ -75,7 +81,7 @@ just check --list
 just check
 ```
 
-`check` runs formatting, clippy (including the dev feature), Rust library tests, binary SSR tests and doctests, the native HTTP/security smoke, the available MSRV check, campaign-catalog consistency, admin typecheck/build, infrastructure typecheck/tests, Python suites, schema pins, contracts, board checks and shell syntax checks. It runs the selected steps to completion and summarizes failures. Run a focused subset with names from `--list`, for example `just check fmt py-runtime py-ops board`. For rendering changes, use `just check admin test http-smoke` so the SSR tests read freshly built assets. The MSRV step reports a skip if Rust 1.85.0 is not installed; a skipped local check is not a pass. The admin build also changes the manifest watched by running dev servers.
+`check` runs formatting, clippy (including the dev feature), Rust library tests, binary SSR tests and doctests, the native HTTP/security smoke, the available MSRV check, campaign-catalog consistency, admin typecheck/build, infrastructure typecheck/tests, Python suites, schema pins, contracts (including `contracts/make_library.py --check`), board checks and shell syntax checks. `just setup` puts the validator lock and the DuckDB pin (`spikes/APP-005/requirements.lock`) in `contracts/.venv`, which that library check needs. `just check contracts` is the local form of Contract qualification. It runs the selected steps to completion and summarizes failures. Run a focused subset with names from `--list`, for example `just check fmt py-runtime py-ops board`. For rendering changes, use `just check admin test http-smoke` so the SSR tests read freshly built assets. The MSRV step reports a skip if Rust 1.85.0 is not installed; a skipped local check is not a pass. The admin build also changes the manifest watched by running dev servers.
 
 `just ci` adds the tenant schema qualifier and all campaigns marked as CI in the catalog. It is the local app-check set, not a substitute for the independent parser, published-baseline, fixture and image jobs in GitHub Actions. Inspect the exact pushed commit's workflow results before merging.
 
@@ -85,7 +91,7 @@ The workflow source is [`.github/workflows`](../.github/workflows). All twelve w
 
 | Workflow family | Investigate first |
 | --- | --- |
-| Planning / Contract | Board rendering and links; contract schemas, vectors, locks and local venv installation |
+| Planning / Contract | Board rendering and links; contract schemas, vectors, locks, the generated library (`make_library.py --check`) and local venv installation |
 | Foundation preparation | Foundation source/schema checks, confined runtime unit tests and the service image compile check; this job's AMD64 image is not the ARM64 deploy artifact |
 | Tenant foundation | Schema/role denials, identity, commands, races and queries; reproduce the failing catalog campaign |
 | Pitch campaigns | `actions`, `canvas`, `composer`, `mcp`, `pitch`, `sharing`, `slack`, `workflows`; these use synthetic/local providers without production keys |
@@ -109,7 +115,7 @@ There are ten tenant-foundation and eight pitch campaigns in the current CI cata
 
 ## Parser and release images
 
-`just parser` builds the separate parser workspace into `.cache/parser-target/`; `just parser --print-dir` reports the path. Build it before local CSV/XLSX import testing. These are local development bytes; the image stages build and qualify their own sealed parser.
+`just parser` builds the separate parser workspace into `.cache/parser-target/`; `just parser --print-dir` reports the path. Build it before local CSV/XLSX import testing, and before the dev server starts, because the server loads that directory at startup. These are local development bytes; the image stages build and qualify their own sealed parser.
 
 `just images <candidate-sha>` builds the service, qualification and operator images for **Linux ARM64**, checks all three and compares the parser manifests. Use a clean checkout at the candidate commit, already pushed and checked. The result is `.cache/images/<sha7>/build.json` plus logs/check reports, and local `genui-{service,qualification,operator}:pitch-<sha7>` tags. No image is pushed by this recipe. The later push step verifies that the local image IDs still match the qualified build record. Do not use the dirty-tree escape hatch for a deploy candidate.
 
