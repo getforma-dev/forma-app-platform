@@ -795,7 +795,7 @@ async fn context_with(
     data: &[&FileData],
 ) -> Result<storage::ComposerContext, Error> {
     let stores = state.auth.stores.as_ref().ok_or(Error::Denied)?;
-    let mut context = stores.workspace.composer_context(member).await?;
+    let mut context = stores.workspace.prepare_composer(member).await?;
     for d in data {
         if !context
             .sources

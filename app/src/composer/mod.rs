@@ -5,7 +5,7 @@
 //! **Library first.** Step 1 is one fast router call (the Haiku model by
 //! default) over the member's intent and the compact catalog of library apps
 //! the member may `discover` and `run` and can bind now
-//! (`Workspace::composer_context`). A confident choice is instantiated as a
+//! (`Workspace::prepare_composer`). A confident choice is instantiated as a
 //! new saved work of that app's newest publication, bound to the
 //! organization's registered source revisions under the member's own
 //! `source_read`: origin `retrieved`, no generation call. A medium-confidence

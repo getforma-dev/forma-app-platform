@@ -5,8 +5,7 @@
 //! (`fence_member`, as the APP-076 workspace listing) reads everything the
 //! composer needs and nothing it may not: the app the member **owns** with
 //! `edit_definition` and `run` (where a generated or adapted definition is
-//! drafted and owner-published; creating an app and granting on it stay
-//! operator actions, so a member without such an app cannot generate), the
+//! drafted and owner-published), the
 //! organization's newest `owner_publish` policy, the live source revisions
 //! the member holds `source_read` on (each as its typed input contract), and
 //! the library: every app of the organization with a publication the member
@@ -16,8 +15,10 @@
 //! revision carrying the same contract digest, a records input to a record
 //! schema with the same fields). A foreign organization's rows are
 //! unreachable (RLS); an item the member may not reach is omitted, never
-//! named. Nothing here writes: drafting, publishing and saving go through the
-//! APP-010 operations unchanged, each with its own precheck and fence.
+//! named. `composer_context` only reads. `prepare_composer` additionally creates
+//! the APP-145 authoring shell when none is eligible, and is called only from
+//! an explicit compose. Drafting, publishing and saving still go through the
+//! APP-010 operations, each with its own precheck and fence.
 use super::{
     authorization::{Action, Resource, Transaction},
     definitions::{confirm_identity, stored_content},
@@ -245,6 +246,20 @@ impl Workspace {
     /// refusal is `Denied` (the route answers the uniform 404); a store
     /// failure is `Unavailable`.
     pub async fn composer_context(&self, request: &TrustedRequest) -> Result<ComposerContext> {
+        self.composer_context_inner(request, false).await
+    }
+
+    /// Prepares an explicit compose, creating the member's APP-145 authoring
+    /// shell when needed. Read-only listings must use `composer_context`.
+    pub async fn prepare_composer(&self, request: &TrustedRequest) -> Result<ComposerContext> {
+        self.composer_context_inner(request, true).await
+    }
+
+    async fn composer_context_inner(
+        &self,
+        request: &TrustedRequest,
+        create_shell: bool,
+    ) -> Result<ComposerContext> {
         let cap = Instant::now() + CONTEXT_DEADLINE;
         let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
         let result = async {
@@ -264,6 +279,21 @@ impl Workspace {
                 .iter()
                 .filter_map(|entry| entry.get("definition_digest")?.as_str().map(str::to_owned))
                 .collect();
+            // Serialize the whole authoring choice, not only the insert. A
+            // queued first compose may resume after the earlier shell has
+            // already been published; the SQL helper only reuses unpublished
+            // shells, so the full choose_authoring read must happen after this
+            // lock. The helper's acquisition on this backend is reentrant.
+            if create_shell {
+                let lock = format!("genui:authoring-shell:{org}:{principal}");
+                permit.transaction().query(
+                    "SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1::text,0))",
+                    &[&lock],
+                ).await?;
+                // Membership cannot change under the held fence, but the
+                // entitlement's wall clock can pass while this lock queues.
+                permit.recheck_entitlement().await?;
+            }
             let mut candidates = Vec::new();
             let owned = permit.transaction().query("SELECT a.app_id::text, (SELECT p.definition_digest::text FROM genui.publications p WHERE p.organization_id=a.organization_id AND p.app_id=a.app_id ORDER BY p.publication_sequence DESC LIMIT 1) FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.owner_principal_id=$2::text::uuid ORDER BY a.app_id", &[org,principal]).await?;
             for row in &owned {
@@ -275,7 +305,7 @@ impl Workspace {
             }
             let mut authoring = choose_authoring(&candidates, &sidecar).map(|app| AuthoringApp { app });
             // The one ADR-007 D7.3 exception: this fence may create the shell.
-            if authoring.is_none() {
+            if create_shell && authoring.is_none() {
                 let created = permit.transaction().query(
                     "SELECT genui_private.ensure_authoring_shell($1::text::uuid,$2::text::uuid)::text",
                     &[org, principal],

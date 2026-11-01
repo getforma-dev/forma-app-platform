@@ -619,7 +619,66 @@ async fn campaign() {
         scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{BARE}'")).await,
         0
     );
-    let first = stores.workspace.composer_context(&bare).await.unwrap();
+    let before_listing = footprint(&fixture).await;
+    let listed = stores.workspace.composer_context(&bare).await.unwrap();
+    assert!(listed.authoring.is_none());
+    assert_eq!(
+        footprint(&fixture).await,
+        before_listing,
+        "read-only command discovery must not create an app, grant or audit row"
+    );
+    // Hold the shell lock until both preparations are observed waiting on it.
+    // They must not try to upgrade the member fence to FOR UPDATE, and the
+    // second waiter must reuse the first transaction's shell after it commits.
+    let holder = fixture.operator().await;
+    let lock = format!("genui:authoring-shell:{ORG}:{BARE}");
+    holder
+        .client
+        .query_one(
+            "SELECT pg_advisory_lock(hashtextextended($1::text,0))::text",
+            &[&lock],
+        )
+        .await
+        .unwrap();
+    let pending = async {
+        tokio::join!(
+            stores.workspace.prepare_composer(&bare),
+            stores.workspace.prepare_composer(&bare)
+        )
+    };
+    tokio::pin!(pending);
+    let mut waiting = 0_i64;
+    for _ in 0..40 {
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(10), &mut pending)
+                .await
+                .is_err(),
+            "both first composes wait for the shell lock"
+        );
+        waiting = holder.client.query_one(
+            "SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted AND database=(SELECT oid FROM pg_database WHERE datname='genui')", &[])
+            .await.unwrap().get(0);
+        if waiting == 2 {
+            break;
+        }
+    }
+    assert_eq!(waiting, 2, "two first composes reached the shell lock");
+    holder
+        .client
+        .query_one(
+            "SELECT pg_advisory_unlock(hashtextextended($1::text,0))::text",
+            &[&lock],
+        )
+        .await
+        .unwrap();
+    let (first, concurrent) = pending.await;
+    let first = first.unwrap();
+    assert_eq!(
+        first.authoring,
+        concurrent.unwrap().authoring,
+        "overlapping first composes return the same shell without deadlock"
+    );
+    drop(holder);
     let shell = first
         .authoring
         .as_ref()
@@ -804,8 +863,82 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "APP-145: an active member who owns no app composes once and receives one empty shell (edit_definition, run, discover, one permission.granted naming that app); a second compose reuses it; a hostile reply is refused and does not draft; a records-only definition is admitted and published on that shell and not as a second app; a member who already owns an eligible app gains no shell and no publication policy is inserted",
+        "APP-145: read-only command discovery creates nothing; two overlapping first composes wait on the member shell lock and receive the same empty shell (edit_definition, run, discover, one permission.granted naming that app); a second compose reuses it; a hostile reply is refused and does not draft; a records-only definition is admitted and published on that shell and not as a second app; a member who already owns an eligible app gains no shell and no publication policy is inserted",
     );
+
+    // A first compose can finish publishing while another prepare is queued.
+    // Force that ordering: the holder creates the shell on its own backend
+    // (the advisory lock is reentrant), and publication uses the normal
+    // admitted draft/publish/save path. The queued context must select that
+    // now-published shell, rather than create another from a stale empty read.
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{AUTHOR}'")).await, 0);
+    let holder = fixture.operator().await;
+    let lock = format!("genui:authoring-shell:{ORG}:{AUTHOR}");
+    holder
+        .client
+        .query_one(
+            "SELECT pg_advisory_lock(hashtextextended($1::text,0))::text",
+            &[&lock],
+        )
+        .await
+        .unwrap();
+    let pending = stores.workspace.prepare_composer(&stranger);
+    tokio::pin!(pending);
+    let mut waiting = 0_i64;
+    for _ in 0..40 {
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(10), &mut pending)
+                .await
+                .is_err(),
+            "the next first compose waits for the shell lock"
+        );
+        waiting = holder.client.query_one(
+            "SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted AND database=(SELECT oid FROM pg_database WHERE datname='genui')", &[])
+            .await.unwrap().get(0);
+        if waiting == 1 {
+            break;
+        }
+    }
+    assert_eq!(waiting, 1);
+    holder.client.batch_execute(&format!(
+        "BEGIN; SET LOCAL ROLE genui_workspace; SELECT set_config('genui.organization_id','{ORG}',true); SELECT set_config('genui.principal_id','{AUTHOR}',true); SELECT set_config('genui.membership_epoch','1',true); SELECT genui_private.ensure_authoring_shell('{ORG}','{AUTHOR}'); COMMIT;"
+    )).await.unwrap();
+    let context = stores.workspace.composer_context(&stranger).await.unwrap();
+    let published_shell = context.authoring.as_ref().unwrap().app.clone();
+    let planned = plan::plan_generated(
+        &records_only.to_string(),
+        &context.sources,
+        ORG,
+        &published_shell,
+    )
+    .unwrap();
+    crate::composer::routes::publish_planned(
+        &stores,
+        &stranger,
+        &context,
+        planned,
+        "Time off requests",
+    )
+    .await
+    .unwrap();
+    holder
+        .client
+        .query_one(
+            "SELECT pg_advisory_unlock(hashtextextended($1::text,0))::text",
+            &[&lock],
+        )
+        .await
+        .unwrap();
+    let resumed = pending.await.unwrap();
+    assert_eq!(
+        resumed.authoring.as_ref().map(|app| app.app.as_str()),
+        Some(published_shell.as_str()),
+        "a queued first compose must reuse a shell published before its lock resumes"
+    );
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{AUTHOR}'")).await, 1);
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{ORG}' AND actor_principal_id='{AUTHOR}' AND kind='permission.granted'")).await, 1);
+    drop(holder);
+    check(&mut checks, "APP-145: a queued first compose re-reads the owned apps after the shell lock, reusing a shell published while it waited; one app and one grant audit remain");
 
     // No owner_publish policy: the shell may be created and must not publish.
     fixture.sql(
@@ -828,9 +961,75 @@ async fn campaign() {
         0
     );
     let empty_member = request(&stores, EMPTY_ORG, EMPTY_MEMBER, 1);
+    // Expiry can pass while the authoring lock is queued, after the member
+    // fence's entitlement read. The first write must recheck the wall clock.
+    let holder = fixture.operator().await;
+    let lock = format!("genui:authoring-shell:{EMPTY_ORG}:{EMPTY_MEMBER}");
+    holder
+        .client
+        .query_one(
+            "SELECT pg_advisory_lock(hashtextextended($1::text,0))::text",
+            &[&lock],
+        )
+        .await
+        .unwrap();
+    let pending = stores.workspace.prepare_composer(&empty_member);
+    tokio::pin!(pending);
+    let mut waiting = 0_i64;
+    for _ in 0..40 {
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(10), &mut pending)
+                .await
+                .is_err(),
+            "the new member is queued before entitlement expiry"
+        );
+        waiting = holder.client.query_one(
+            "SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted AND database=(SELECT oid FROM pg_database WHERE datname='genui')", &[])
+            .await.unwrap().get(0);
+        if waiting == 1 {
+            break;
+        }
+    }
+    assert_eq!(waiting, 1);
+    holder.client.batch_execute(&format!("UPDATE genui.entitlements SET expires_at=starts_at+interval '1 millisecond' WHERE organization_id='{EMPTY_ORG}' AND principal_id='{EMPTY_MEMBER}'")).await.unwrap();
+    holder
+        .client
+        .query_one(
+            "SELECT pg_advisory_unlock(hashtextextended($1::text,0))::text",
+            &[&lock],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        pending.await,
+        Err(Error::Denied),
+        "expiry while queued refuses before creating a shell"
+    );
+    assert_eq!(
+        scalar(
+            &fixture,
+            &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{EMPTY_ORG}'")
+        )
+        .await,
+        0
+    );
+    assert_eq!(
+        scalar(
+            &fixture,
+            &format!(
+                "SELECT count(*) FROM genui.app_permissions WHERE organization_id='{EMPTY_ORG}'"
+            )
+        )
+        .await,
+        0
+    );
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{EMPTY_ORG}' AND kind='permission.granted'")).await, 0);
+    holder.client.batch_execute(&format!("UPDATE genui.entitlements SET expires_at='2036-10-01T00:00:00Z' WHERE organization_id='{EMPTY_ORG}' AND principal_id='{EMPTY_MEMBER}'")).await.unwrap();
+    drop(holder);
+    check(&mut checks, "APP-145: entitlement expiry while waiting for the authoring lock is rechecked before any app, permission or audit write");
     let empty_context = stores
         .workspace
-        .composer_context(&empty_member)
+        .prepare_composer(&empty_member)
         .await
         .unwrap();
     let empty_shell = empty_context

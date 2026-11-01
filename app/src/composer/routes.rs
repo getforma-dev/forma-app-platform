@@ -215,7 +215,7 @@ pub(crate) async fn compose_instant(
             Refused::ComposerUnavailable,
         ));
     }
-    let context = match stores.workspace.composer_context(member).await {
+    let context = match stores.workspace.prepare_composer(member).await {
         Ok(context) => context,
         Err(error) => return Err(refused("context_denied", None, storage_refusal(&error))),
     };

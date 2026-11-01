@@ -1,0 +1,95 @@
+{
+  "reviewed_pr": 25,
+  "base_head": "3a1784eaed978032a84d940df174ba0e729f3c3b",
+  "changes": "Reviewed follow-up to PR 25; tested source bytes are bound by the hashes below. Delivery status is tracked by the PR.",
+  "source_patch_sha256": "f071d93f4e86453bb2e57e7021d19407473bfe7d75d72da7e0ebd6a281dc53c4",
+  "source_sha256": {
+    ".dockerignore": "8180043b502fec6a353dcbf2e885d100d3562b34fbad5469061e9f68794caefd",
+    "app/operator/Dockerfile.dockerignore": "198abc318893af64e64bc66bf3a153e162544f0da89b6e32abc1adb418bbaf55",
+    "app/qualification/Dockerfile.dockerignore": "ce171360f8d2a05441aae12ac2bb0caff8e5a54a6a6d8a54f8b490dbbd5bd768",
+    "app/src/boxes/routes.rs": "6cf82227b25df140472c73159be0f2c2504d9033abe4e92491262713f0ea18e1",
+    "app/src/composer/mod.rs": "089634d67b7c89369a5782da45d64a28c55c8dc250f8f554b22e7ebc131476ba",
+    "app/src/composer/routes.rs": "be8e053d6f8d205506bc5093598f605253b52081f9e80371e5c920f96119c4a2",
+    "app/src/storage/authorization.rs": "ad51e8e54d60f7a5943a2e69e062cd87f4db731c4761b725dc206305573f4a7c",
+    "app/src/storage/composer.rs": "cb9180ab3e65b4c58dea0d8d2954777531104ca105bb97ee5a3ce4cada1b0ada",
+    "app/src/storage/composer_qualification.rs": "f5e276cbe746a594fbb7875e07d1f7a48000abd02f5ab03c2b79476e156d9f3d",
+    "app/src/storage/mcp_campaign.rs": "bb5d9a3519c06aeaef52903f536438f161b6eb8f39ac993dc3a6bf59a0c26fd5"
+  },
+  "checks": {
+    "composer": {
+      "passed": true,
+      "check_count": 12,
+      "checks": [
+        {
+          "name": "the composer context names the owned authoring app, the owner_publish policy, the two readable source revisions and the one bindable library app; a foreign organization's apps are never offered",
+          "passed": true
+        },
+        {
+          "name": "a revoked member and a principal with no row get the uniform refusal before any model call and no app row is inserted; without a key the composer answers composer_unavailable and writes nothing",
+          "passed": true
+        },
+        {
+          "name": "a high-confidence router choice saves a new work of the library app's publication bound under the member's own source_read, labeled retrieved, with work.saved and work.bound events and no generation call; the creator opens it and an ungranted teammate is denied",
+          "passed": true
+        },
+        {
+          "name": "a generated definition passes admission, is drafted on the member's owned app, owner-published (author and approver the member) and saved bound to the registered source revisions, labeled generated, with definition.drafted, publication.published, work.saved and work.bound events and no new app, permission or grant row",
+          "passed": true
+        },
+        {
+          "name": "script, grant and SQL attempts in model output are refused by admission on every attempt (codes executable_content, client_grant, executable_content), the retries carry the code alone, the member gets the neutral could_not_compose and no row is written",
+          "passed": true
+        },
+        {
+          "name": "a medium-confidence router choice becomes an adapted definition (title and description patched, re-admitted whole), owner-published on the member's app and saved, still labeled adapted from the persisted definition on reload",
+          "passed": true
+        },
+        {
+          "name": "APP-132/APP-135: a generated records-only definition (records input, filing create with initial, decision command, form and note; no source input and no data view) is admitted, drafted, owner-published and saved with one records binding and its record collection, still labeled generated from the persisted definition on reload, with no source dependency, app, permission or grant row",
+          "passed": true
+        },
+        {
+          "name": "a model failure after the router is the neutral could_not_compose with no row written; a revoked member stays refused and no row is written",
+          "passed": true
+        },
+        {
+          "name": "APP-145: read-only command discovery creates nothing; two overlapping first composes wait on the member shell lock and receive the same empty shell (edit_definition, run, discover, one permission.granted naming that app); a second compose reuses it; a hostile reply is refused and does not draft; a records-only definition is admitted and published on that shell and not as a second app; a member who already owns an eligible app gains no shell and no publication policy is inserted",
+          "passed": true
+        },
+        {
+          "name": "APP-145: a queued first compose re-reads the owned apps after the shell lock, reusing a shell published while it waited; one app and one grant audit remain",
+          "passed": true
+        },
+        {
+          "name": "APP-145: entitlement expiry while waiting for the authoring lock is rechecked before any app, permission or audit write",
+          "passed": true
+        },
+        {
+          "name": "APP-145: an organization with no owner_publish policy still refuses no_owner_publish_policy; the shell is created and nothing is drafted or published",
+          "passed": true
+        }
+      ]
+    },
+    "mcp": {
+      "passed": true,
+      "check_count": 12
+    },
+    "postgres": {
+      "passed": true,
+      "check_count": 36,
+      "scope": "Before final prepare-lock/entitlement changes; unchanged migration/catalog bytes."
+    },
+    "review-schema": {
+      "passed": true,
+      "check_count": 378
+    }
+  },
+  "final_normal_tests": {
+    "library": 346,
+    "binary_ssr": 7,
+    "doctests": 3,
+    "ignored_campaigns": 31
+  },
+  "hosted_acceptance": false,
+  "remote_ci_at_evidence_capture": "Not rerun; inspect PR 25 for subsequent exact-head results."
+}
