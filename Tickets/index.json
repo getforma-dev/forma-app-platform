@@ -2980,7 +2980,7 @@
       "Depends on": "APP-012, APP-074",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "`forma-pitch-mvp`, branch `pivot/pitch-mvp` (from `phase-one-spikes` 21199f4); no PR",
+      "Branch / PR": "`pivot/app-091-join` records the join. The clone is `pivot/pitch-mvp`",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
