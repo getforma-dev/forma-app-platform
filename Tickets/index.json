@@ -4517,7 +4517,7 @@
       "Depends on": "APP-074, APP-095, APP-144",
       "External dependencies": "None",
       "Assignee": "Codex \u2014 GenUI",
-      "Branch / PR": "codex/app-sharing-2026-11-01; isolated forma-sharing-20261101 worktree from pivot/pitch-mvp 1b2f21f.",
+      "Branch / PR": "[PR 30](https://github.com/getforma-dev/forma-app-platform/pull/30), `codex/app-sharing-2026-11-01`; isolated worktree from `pivot/pitch-mvp` 1b2f21f.",
       "Team": "GenUI",
       "Blocked by": "None \u2014 implementation authorized by current user direction; historical predecessor completion gates remain open.",
       "Unblock evidence": "Local PostgreSQL, production HTTP routes with synthetic provider contracts, browser evidence and independent Tier A review are recorded under evidence/APP-154. Historical predecessor gates and the hosted APP-139/140 trial remain open.",
