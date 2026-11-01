@@ -14,17 +14,16 @@ ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_che
 ALTER TABLE genui_meta.schema_migrations DROP CONSTRAINT schema_migrations_version_check,
  ADD CONSTRAINT schema_migrations_version_check CHECK (version BETWEEN 1 AND 16);
 
--- The definer runs as genui_admit, which could already write permissions and
--- the admission chain (share_work) but not an app row. It could not read
--- publications or spaces; the unpublished check and the space pick need those
--- columns, and nothing else on those tables.
-GRANT INSERT ON genui.apps TO genui_admit;
+-- genui_admit could write permissions and the admission chain, not an app
+-- row, and could not read the unpublished check or the space pick. Column
+-- grants only: a table INSERT would fail the closed grant set.
+GRANT INSERT(organization_id,app_id,space_id,owner_principal_id) ON genui.apps TO genui_admit;
 GRANT SELECT(organization_id,app_id) ON genui.publications TO genui_admit;
 GRANT SELECT(organization_id,space_id) ON genui.spaces TO genui_admit;
 
 CREATE FUNCTION genui_private.ensure_authoring_shell(p_org uuid, p_principal uuid)
  RETURNS uuid
- LANGUAGE plpgsql SECURITY DEFINER VOLATILE PARALLEL UNSAFE
+ LANGUAGE plpgsql SECURITY DEFINER STRICT VOLATILE PARALLEL UNSAFE
  SET search_path=pg_catalog,pg_temp AS $$
 DECLARE o_status text; m_status text; m_epoch bigint; v_app uuid; v_space uuid;
  v_seq bigint; v_prev text; v_event uuid; v_at timestamptz; v_body text; v_hash text; v_digest text;
@@ -36,9 +35,13 @@ BEGIN
  SELECT o.status INTO o_status FROM genui.organizations o WHERE o.organization_id=p_org FOR SHARE;
  IF NOT FOUND OR o_status<>'active' THEN RETURN NULL; END IF;
  SELECT m.status,m.membership_epoch INTO m_status,m_epoch FROM genui.memberships m
-  WHERE m.organization_id=p_org AND m.principal_id=p_principal FOR UPDATE;
+  WHERE m.organization_id=p_org AND m.principal_id=p_principal FOR SHARE;
  IF NOT FOUND OR m_status<>'active'
   OR m_epoch::text IS DISTINCT FROM current_setting('genui.membership_epoch',true) THEN RETURN NULL; END IF;
+ -- The fence already holds FOR SHARE on this membership. FOR UPDATE here
+ -- deadlocks a second first compose. This lock serializes the insert; the
+ -- waiter re-reads under READ COMMITTED.
+ PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('genui:authoring-shell:'||p_org::text||':'||p_principal::text,0));
  SELECT a.app_id INTO v_app FROM genui.apps a
   WHERE a.organization_id=p_org AND a.owner_principal_id=p_principal
    AND NOT EXISTS (SELECT 1 FROM genui.publications p WHERE p.organization_id=a.organization_id AND p.app_id=a.app_id)

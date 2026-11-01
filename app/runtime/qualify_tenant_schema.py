@@ -54,6 +54,9 @@ ADMIT_FUNCTIONS = {
     # limited to the principal's rows by member_cards_principal).
     'steward_card': ('p_org uuid, p_actor uuid, p_card uuid, p_remove boolean',
                      'TABLE(app_id uuid, work_id uuid, changed boolean)'),
+    # Migration 0016 (APP-145): the tenth definer; one empty authoring shell
+    # when the member owns no eligible app.
+    'ensure_authoring_shell': ('p_org uuid, p_principal uuid', 'uuid'),
 }
 # Relations migration 0003 adds to genui (D7.3: each states RLS, FORCE and tenant_scope).
 ADMISSION_TABLES = ('access_codes','audit_events','audit_heads','code_grant_templates','code_redemptions',
@@ -132,6 +135,10 @@ ADMIT_GRANTS = set().union(
     _columns('member_cards','SELECT','organization_id','card_id','kind','app_id','work_id','everyone','removed_at'),
     _columns('member_cards','UPDATE','everyone','updated_at','removed_at'),
     _columns('apps','SELECT','organization_id','app_id','owner_principal_id'),
+    # 0016 (APP-145): the shell insert and the two reads it needs.
+    _columns('apps','INSERT','organization_id','app_id','space_id','owner_principal_id'),
+    _columns('publications','SELECT','organization_id','app_id'),
+    _columns('spaces','SELECT','organization_id','space_id'),
     _columns('organization_permissions','SELECT','organization_id','principal_id','permission'),
 )
 
@@ -475,7 +482,7 @@ def admission_checks(pg, passed, denied):
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND a.privilege_type='EXECUTE' AND a.grantee<>p.proowner""").fetchall())
         assert executes=={('lock_member_authority',r) for r in ('genui_workspace','genui_control','genui_data')}|{('lock_work_revision','genui_data')}|{
             (name,'genui_workspace') for name in ADMIT_FUNCTIONS},executes
-    passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns plus 0006 session columns plus 0007 command columns (D7.3); EXECUTE on the six functions is genui_workspace only',
+    passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns plus 0006 session columns plus 0007 command columns (D7.3); EXECUTE on the admit functions is genui_workspace only',
            admit_grant_count=len(ADMIT_GRANTS),definition_work_grant_count=len(DEFINITION_WORK_GRANTS),session_grant_count=len(SESSION_GRANTS),
            command_grant_count=len(COMMAND_GRANTS))
 
@@ -499,7 +506,7 @@ def admission_checks(pg, passed, denied):
         writes=[r[0] for r in functions if re.search(r'\b(update|insert\s+into|delete\s+from)\s+genui\.organizations\b',r[7],re.I)]
         assert writes==[] and all(re.search(r'genui\.organizations\s+o\s+where\s+o\.organization_id\s*=\s*p_org\s+for\s+share',r[7],re.I)
                                   for r in functions if r[0] not in ('resolve_code','resolve_handle')),writes
-    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; nine exact STRICT VOLATILE definers (six of D7.1, the 0008 share_work, the 0011 register_box_source and the 0015 steward_card) with fixed search_path and no organizations write',
+    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; ten exact STRICT VOLATILE definers (six of D7.1, the 0008 share_work, the 0011 register_box_source, the 0015 steward_card and the 0016 ensure_authoring_shell) with fixed search_path and no organizations write',
            incoming=[list(r) for r in incoming])
 
     # --- RESTRICTIVE audit bindings: INSERT holders equal policy targets (D7.8) ---

@@ -274,10 +274,7 @@ impl Workspace {
                 candidates.push(AuthoringCandidate { app, newest, granted });
             }
             let mut authoring = choose_authoring(&candidates, &sidecar).map(|app| AuthoringApp { app });
-            // APP-145: a member who owns no eligible app gets one empty shell
-            // in this same fenced transaction. The function refuses anyone
-            // the session settings do not name. It does not add a publication
-            // policy. A second compose finds the shell above and does not call.
+            // The one ADR-007 D7.3 exception: this fence may create the shell.
             if authoring.is_none() {
                 let created = permit.transaction().query(
                     "SELECT genui_private.ensure_authoring_shell($1::text::uuid,$2::text::uuid)::text",
