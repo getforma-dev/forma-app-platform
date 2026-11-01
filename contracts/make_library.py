@@ -1035,25 +1035,40 @@ def build():
     return files
 
 
+def differences(files, library=LIBRARY):
+    """Paths under `library` whose bytes are not this generator's output.
+
+    A missing or different bundle, catalog or CSV is named, and so is a file
+    the generator does not produce. The committed tree is not written.
+    """
+    stale = []
+    for relative, data in files.items():
+        path = library / relative
+        if not path.is_file() or path.read_bytes() != data:
+            stale.append(relative)
+    if library.is_dir():
+        existing = {str(path.relative_to(library)) for path in library.rglob("*") if path.is_file()}
+        stale.extend(sorted(existing - set(files)))
+    return stale
+
+
 def main(argv=None):
     check = "--check" in (argv or sys.argv[1:])
     files = build()
-    stale = []
-    for relative, data in files.items():
-        path = LIBRARY / relative
-        if check:
-            if not path.exists() or path.read_bytes() != data:
-                stale.append(relative)
-            continue
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
     if check:
-        existing = {str(p.relative_to(LIBRARY)) for p in LIBRARY.rglob("*") if p.is_file()}
-        stale.extend(sorted(existing - set(files)))
+        stale = differences(files)
         if stale:
+            print("library fixtures differ from contracts/make_library.py:", file=sys.stderr)
+            for relative in stale:
+                print(f"  contracts/fixtures/library/{relative}", file=sys.stderr)
             print(json.dumps({"stale": stale}), file=sys.stderr)
             return 1
-    print(json.dumps({"files": len(files), "apps": sum(1 for n in files if n.endswith(".json") and n != "catalog.json")}))
+    else:
+        for relative, data in files.items():
+            path = LIBRARY / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+    print(json.dumps({"files": len(files), "apps": sum(1 for name in files if name.endswith(".json") and name != "catalog.json")}))
     return 0
 
 

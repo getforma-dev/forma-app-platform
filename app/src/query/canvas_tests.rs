@@ -414,6 +414,7 @@ fn the_library_pane_groups_numbers_and_counts() {
                         format!("c-{work}-{index}"),
                         format!("Card {index}"),
                         "number".into(),
+                        "summary".into(),
                     )
                 })
                 .collect(),
@@ -456,6 +457,28 @@ fn the_library_pane_groups_numbers_and_counts() {
     assert_eq!(finance.apps[1].slug, "/expense");
     assert_eq!(finance.apps[1].cards[1].number, "2.1");
     assert_eq!(finance.apps[1].cards[1].id, "c-w-claims-1");
+    // The pane label collapses summary into "number". The fourth field is the
+    // size the board uses, and the pane must keep both.
+    assert_eq!(
+        (
+            finance.apps[1].cards[1].kind.as_str(),
+            finance.apps[1].cards[1].canvas_kind.as_str()
+        ),
+        ("number", "summary")
+    );
+    assert_eq!(
+        super::library_card("c-when".into(), "When".into(), "timeline"),
+        (
+            "c-when".into(),
+            "When".into(),
+            "chart".into(),
+            "timeline".into()
+        )
+    );
+    assert_eq!(
+        super::library_card("f-new".into(), "New claim".into(), "form").2,
+        "form"
+    );
     // ops.* and operations.* are one category, in sidecar order.
     let operations: Vec<&str> = library[2].apps.iter().map(|a| a.title.as_str()).collect();
     assert_eq!(operations, ["Incidents", "Inventory"]);
