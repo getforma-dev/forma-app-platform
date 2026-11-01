@@ -153,3 +153,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 150 | [APP-150: Favorite sections, and a way to go to one](0-backlog/APP-150.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-142 |
 | 151 | [APP-151: Middle-click zooms into focus, then Tab moves through the app](0-backlog/APP-151.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-106, APP-142 |
 | 152 | [APP-152: An API bank, and an easy way to add an API](0-backlog/APP-152.md) | [PH08](phases/PH08.md) | S14 | AI | P2 | L | Backlog | APP-093, APP-104 |
+| 153 | [APP-153: Spike — why the library pane has four tabs](0-backlog/APP-153.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-112, APP-122 |

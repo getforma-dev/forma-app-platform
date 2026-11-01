@@ -36,3 +36,4 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 144 | [APP-144: Open an app as a page and use it there](../0-backlog/APP-144.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-142, APP-093 |
 | 150 | [APP-150: Favorite sections, and a way to go to one](../0-backlog/APP-150.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-142 |
 | 151 | [APP-151: Middle-click zooms into focus, then Tab moves through the app](../0-backlog/APP-151.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-106, APP-142 |
+| 153 | [APP-153: Spike — why the library pane has four tabs](../0-backlog/APP-153.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-112, APP-122 |
