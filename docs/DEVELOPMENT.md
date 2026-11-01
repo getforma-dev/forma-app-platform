@@ -44,6 +44,8 @@ The main checkout's defaults are:
 
 `just dev` without `-d` runs in the foreground (a TUI in a terminal). The first build can take minutes. Pitch starts with the synthetic Northstar scenario and 20 library apps. A newly reset clean instance has no apps or records and demo mode is off; its data persists after you start using it. Each browser gets its own persona session. These loopback listeners mint sign-in locally; they do not test the hosted fAuth flow.
 
+The pitch profile is the test sandbox. Diego, Sarah, Priya, and the seeded library stay on `127.0.0.1:4001`–`4003` for local testing. That profile is not what gets deployed. The pinned local twin of the AWS trial is the main checkout's clean profile, `127.0.0.1:4010`. It is the empty-customer world Victor demos from, and the world a new user and the panel sign in to. A worktree's clean port is a disposable copy, not that twin. APP-140 holds the rule.
+
 The local dev binary has no sign-in provider. `GET /workspace` still requires the cookie's organization to be bound in the closed registry (the fixture issuer) before it looks up the minted session. A records-only work page offers its record links and the canvas instead of the source-query form.
 
 ### Configuration and state

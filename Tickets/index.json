@@ -288,9 +288,10 @@
         "APP-136",
         "APP-137",
         "APP-138",
-        "APP-139"
+        "APP-139",
+        "APP-140"
       ],
-      "ticket_count": 48,
+      "ticket_count": 49,
       "done_count": 1,
       "blocked_count": 0
     }
@@ -4363,6 +4364,34 @@
         "APP-074",
         "APP-093",
         "APP-095"
+      ]
+    },
+    {
+      "id": "APP-140",
+      "title": "Clean trial twin and panel accounts, with the sandbox kept off AWS",
+      "path": "0-backlog/APP-140.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "FND",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Chore",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "140",
+      "Size": "M",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: the Diego/Sarah canvas is the test sandbox and is not deployed. The demo and the panel use a clean world, pinned locally at 127.0.0.1:4010, matching the AWS trial. Record: [first-run](../../docs/planning/first-run/README.md).",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-139",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "`pivot/app-140-clean-twin` records the rule. The accounts and any live correction are not started.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-139"
       ]
     }
   ]

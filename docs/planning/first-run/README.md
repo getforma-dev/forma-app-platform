@@ -18,6 +18,12 @@ This note classifies the board. It does not move tickets, close a phase, or dele
 
 A generated or rule-built definition is published onto an app the member already owns, with `edit_definition` and `run` (`app/src/storage/composer.rs`, `choose_authoring`). The clean dev stand creates that shell with `create-app` before the persona signs in (`app/src/dev/db.rs`). An invitation does not. A new member of an empty organization therefore has no authoring app, and compose answers `no_authoring_app` (`app/src/boxes/routes.rs`). That is the first slice of APP-139. It is not a new permission model, a server-side layout store, or a second demo mode.
 
+## Two machines, not one canvas
+
+The pitch profile on the main checkout (`127.0.0.1:4001`–`4003`, Diego, Sarah, Priya, the seeded library) is the test sandbox. It stays for development. It is not deployed.
+
+The local twin of the AWS trial is the main checkout's clean profile, `127.0.0.1:4010`. That port is the empty world. Victor records the demo there. A new user and each panelist sign in on the same kind of world, on the live site that this port matches. A worktree clean port is not that twin. APP-140 is the ticket.
+
 ## Pile A — keep
 
 The product a new user needs. These stay where they are until their own acceptance is met.
