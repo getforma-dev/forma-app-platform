@@ -20,7 +20,7 @@ A generated or rule-built definition is published onto an app the member already
 
 ## Two machines, not one canvas
 
-The pitch profile on the main checkout (`127.0.0.1:4001`–`4003`, Diego, Sarah, Priya, the seeded library) is the test sandbox. It stays for development. It is not deployed.
+The pitch profile on the main checkout (`127.0.0.1:4001`–`4003`, Diego, Sarah, Priya, the seeded library) is the test sandbox. It stays for development. It must not be what AWS serves. On 2026-11-01 a read-only check found that `https://beta.getforma.dev` is still that sandbox: demo mode on, Northstar, task definition revision 12, and the Northstar sign-in alias. Nothing was changed. APP-140 holds the reading and the still-open correction.
 
 The local twin of the AWS trial is the main checkout's clean profile, `127.0.0.1:4010`. That port is the empty world. Victor records the demo there. A new user and each panelist sign in on the same kind of world, on the live site that this port matches. A worktree clean port is not that twin. APP-140 is the ticket.
 

@@ -4386,7 +4386,7 @@
       "Depends on": "APP-139",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "`pivot/app-140-clean-twin` records the rule. The accounts and any live correction are not started.",
+      "Branch / PR": "Rule merged in PR 18 (`3eef703`). The 2026-11-01 live read is `pivot/app-140-live-read`.",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
