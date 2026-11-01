@@ -23,7 +23,7 @@ Run from the main checkout, in this order:
 3. **Don't** run `just dev clean seed-library` for the pitch: it installs the 20 template apps, and the new-customer story is gone. Use it only to show templates on the clean instance (after it and a reload, `/expenses` places the Expenses app there, verified).
 4. `just status` and `just status clean`: both running, the URLs as above.
 5. Open the three windows (Chrome, 1440×900, zoom 100%), and reload each one after any reset.
-6. Sarah's window: type `/expenses` and Enter, so the Expenses app is on her canvas. Her canvas only updates live for an app that is on it (pitfall 5).
+6. Sarah's window: type `/expenses` and Enter before Diego files, so Expenses is already on her canvas. On `af63feb` a card placed at that moment did not show the new claim within 20 seconds. If the row is missing, reload her window (shot 8 and the fallback).
 7. Diego's and Alex's windows: empty canvases (the "From idea to working app." page). If Diego's is not empty, Library → Remove on each app.
 8. Finder: `docs/pitch/folder-fixture/` open, `q3_pipeline.csv` ready to drag.
 9. Optional, for the ⏱ shots: ⋯ → **Show timings**, or `/canvas#timing=1` *(not re-run today)*.
@@ -72,7 +72,7 @@ Core shots 1–14: about 3 min 45 s before editing.
 2. **Generated provenance while the app is on the canvas** reads "Generated for your request (typed definition, admitted)." A reload of that placed app was **not completed** on `af63feb` (a new browser does not restore local layout, and `/vendor-contracts` did not place it). Do not tell the old "reload turns it into Seeded definition" story, and do not promise the reload until it has been checked. Keeping Alex's window open through beat 1 avoids the question.
 3. **An approval step on this vendor app was not reproduced.** The form was only **Add contract**. There was no "waiting for your approval" and no Expire or Cancel on the vendor card. One run is not a guarantee. Don't comment on an approval UI that is not there.
 4. **A money field in a generated form takes minor units** *(not re-run on af63feb)*. The earlier observation stands as a reason beat 1 has no money field: typing `7200` stored $72.00. Do not add a money field to the sentence to "make it richer."
-5. **"The share with Sarah Chen was refused; the record is filed."** appears after every claim Diego files on the dev stand. The Expenses work is the library's seeded work; `grant-library-access` already gives Sarah read and write on it, and Diego isn't its creator, so the share is refused (see the note in `app/src/dev/seed.rs`). Sarah sees the claim anyway, but only if Expenses is already on her canvas (checklist step 6). Don't read the line aloud.
+5. **"The share with Sarah Chen was refused; the record is filed."** appears after every claim Diego files on the dev stand. The Expenses work is the library's seeded work; `grant-library-access` already gives Sarah read and write on it, and Diego isn't its creator, so the share is refused (see the note in `app/src/dev/seed.rs`). Do not expect the new row to appear by itself. On `af63feb` a freshly placed Expenses card did not show the follow-up claim within 20 seconds; a reload did (shot 8). Place Expenses before Diego files, and reload Sarah's window if the row is missing. Don't read the share line aloud.
 6. **Diego sees Approve and Reject on his own claims.** Clicking one is refused by the server (`refused_by_schema`, verified). Don't click them in Diego's window.
 7. **Rehearsed Ask ignores conditions it doesn't model** (demo organization only, APP-098; *(not re-run on af63feb)*). The earlier run of "? @expenses which claims over $100 are still waiting for approval?" answered with every waiting claim, including the $42.50 one. Use only the exact questions above. A question that starts with *why*, *explain*, *summarize* or *describe* goes to the model; the summarize sentence did so on `af63feb`.
 8. **`/expenses $86 Nobu, Sarah approves` is not rehearsed**: it goes to the model (2.3 s) and files category "other". The long rehearsed sentence files "meals".
@@ -88,7 +88,7 @@ Inside the demo organization (windows B and C), these answer from rehearsed path
 
 - Rehearsed paths are canned only in the demo organization (`GENUI_DEMO_ORGANIZATIONS`); window A (demo off) has none. Every shortcut is in APP-098.
 - Everything after a parse is real in every window: the draft, the confirm, the audited commit, the permissions, the live update and the receipts.
-- Release and onboarding still owe what APP-135 finds: pitfalls 1–4 above are real-customer issues, not demo staging.
+- Release and onboarding still owe the open APP-135 register. Pitfalls 1–3 were not reproduced as customer defects on `af63feb` and must not be told as current failures. Pitfall 4 was not re-run. Do not describe those four as confirmed real-customer issues.
 
 ## Retakes and resets
 
