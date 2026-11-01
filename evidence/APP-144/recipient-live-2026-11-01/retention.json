@@ -1,0 +1,23 @@
+{
+  "retained_on": "2026-11-01",
+  "source_reports_directory": "app144-recipient-live",
+  "artifacts_sha256": {
+    "README.md": "22c0d10b3673d57cd5d5bd582af0006bfec136cddf35bcde54a45c51f4dab01e",
+    "report.json": "3f3a2a9e8efad1321881c2c8b144da9fb0c4b1ede3bbc411c57f72934c398539",
+    "command-live.json": "35c9c93009ba325dc2941d3929f6d25e737d88e95497c20c558c97f08fa1c7f6",
+    "revoke-live.json": "a5081958b57aea4ee70f80e72306b8e909bf66f492a9ba9b5fa5f2579a0a1cea",
+    "exact-command-receipt.json": "a1de1e30d3f7654ba9f3065b480fda5cd8b73c16af783ce0f42a8038544b61cc",
+    "browser.mjs": "3017bd652a43bef6eb5cdad38e414deae5d86770b1219ea369dd7d31fa918eaf",
+    "finish.mjs": "e02f5ed0784d8c2b4bb82f0aca6b895ea5c4f33669b376e892e2e847a19ebb22",
+    "widget.mjs": "085129c473fe8f021d185707b15f45698392be3c4bfbea132195f923c91d446e",
+    "recipient-live.png": "c8098d7119fd189c91416e18ad11c663e74f0a1deec957fcfc0e61345ff778b8",
+    "connected-live.png": "0d633b294ef56d0ff657a15f0375a2ca2ba0a3e7077a5d1242a6c6022855e3f6",
+    "recipient-offline.png": "6ccbfda6d012b3e55d1b8c4918f9c8eb5c1c13ff13987aff56a77eba1d30ec2e",
+    "connected-offline.png": "0dc20606c4be5ef6482b7c64652089f8d3c3a730216c62c009e5fb130d1796c2",
+    "recipient-revoked.png": "6ccbfda6d012b3e55d1b8c4918f9c8eb5c1c13ff13987aff56a77eba1d30ec2e",
+    "connected-revoked.png": "ac375969987b422ea65cbd39235e7ba0960a25584d99fb5af5a17d314a2e2333",
+    "widget-no-document.png": "c29a6fd34a1dfceb6a5e035152782e26c2f2ddc53b83d669a691643fb89165f8"
+  },
+  "screenshot_review": "All retained PNGs visually inspected: synthetic fixture names and data only; no visible email addresses, cookies, tokens or credentials.",
+  "limits": "Local synthetic identities. README may be edited for spacing and reproduction notes; original hashes are retained here. Scripts require their own disposable test share and local fixture setup; no hosted execution is authorized by these artifacts."
+}

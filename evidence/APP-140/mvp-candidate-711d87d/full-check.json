@@ -1,0 +1,30 @@
+{
+  "candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "command": "just check",
+  "exit_code": 0,
+  "exit_code_basis": "Execution owner observed exit 0; original tool session 15784. This retained summary extracts the complete final all-ok section.",
+  "log_sha256": "f78e1a2da26953495989ee0ddda60fcecc669a34221ca58cee863d8c1b27c53f",
+  "steps": [
+    "fmt (2s)",
+    "admin (8s)",
+    "clippy (15s)",
+    "clippy-dev (17s)",
+    "test (8s)",
+    "http-smoke (1s)",
+    "msrv (7s)",
+    "catalog (0s)",
+    "infra (8s)",
+    "py-scripts (6s)",
+    "py-runtime (209s)",
+    "shared-broker (11s)",
+    "py-qualification (1s)",
+    "py-app-scripts (1s)",
+    "py-ops (3s)",
+    "py-infra (4s)",
+    "schema-pins (0s)",
+    "contracts (5s)",
+    "board (0s)",
+    "bash-n (0s)"
+  ],
+  "scope": "Local source checks. Hosted acceptance is separate."
+}

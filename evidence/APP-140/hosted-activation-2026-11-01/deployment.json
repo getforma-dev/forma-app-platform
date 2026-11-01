@@ -1,0 +1,222 @@
+{
+  "scope": "Sanitized actual clean beta deployment. No owner/guest product acceptance claimed.",
+  "observed_at_utc": "2026-11-01T20:15:07.581503+00:00",
+  "window_prefix": "1608eea9",
+  "candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "merge_sha": "6c308f1a9c7db08d019332bb14b9b235db650362",
+  "activated_at_utc": "2026-11-01T20:13:41Z",
+  "git_tag": {
+    "name": "beta/20261101-711d87d",
+    "object_sha": "e40306141461a5d3610e1d19ca9a2e9330cbdeea",
+    "target_commit_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+    "pushed": true
+  },
+  "schema": 18,
+  "snapshot_available_before_migration": true,
+  "services": [
+    {
+      "role": "application",
+      "task_definition_revision": 13,
+      "desired": 1,
+      "running": 1,
+      "pending": 0,
+      "deployments": [
+        {
+          "status": "PRIMARY",
+          "rolloutState": "COMPLETED",
+          "desiredCount": 1,
+          "runningCount": 1,
+          "pendingCount": 0
+        }
+      ]
+    },
+    {
+      "role": "broker",
+      "task_definition_revision": 1,
+      "desired": 1,
+      "running": 1,
+      "pending": 0,
+      "deployments": [
+        {
+          "status": "PRIMARY",
+          "rolloutState": "COMPLETED",
+          "desiredCount": 1,
+          "runningCount": 1,
+          "pendingCount": 0
+        }
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "task_definition_revision": 13,
+      "status": "RUNNING",
+      "health": "HEALTHY",
+      "containers": [
+        {
+          "name": "workspace",
+          "lastStatus": "RUNNING",
+          "healthStatus": "HEALTHY",
+          "imageDigest": "sha256:6d3f93f1ebd71c673a793faac8350efec00aef6f6e7ac6bcad86ed8369591362"
+        }
+      ]
+    },
+    {
+      "task_definition_revision": 1,
+      "status": "RUNNING",
+      "health": "HEALTHY",
+      "containers": [
+        {
+          "name": "broker",
+          "lastStatus": "RUNNING",
+          "healthStatus": "HEALTHY",
+          "imageDigest": "sha256:5b02040c4b359aeb405ced0b3f14b5644b33b131b3f98e9a4d797b0b657ab2cf"
+        }
+      ]
+    }
+  ],
+  "qualified_images_match": true,
+  "public_health_status": 200,
+  "auth_entry_status": 200,
+  "anonymous_canvas_status": 404,
+  "operator_steps": [
+    {
+      "step": "baseline13",
+      "results": [
+        {
+          "status": "STOPPED",
+          "container_exits": [
+            0
+          ]
+        }
+      ],
+      "safe_result_fields": [
+        {
+          "catalog_version": 13,
+          "command": "verify-catalog",
+          "read_only": true
+        }
+      ]
+    },
+    {
+      "step": "migrate",
+      "results": [
+        {
+          "status": "STOPPED",
+          "container_exits": [
+            0
+          ]
+        }
+      ],
+      "safe_result_fields": [
+        {
+          "database_version": 18,
+          "command": "migrate"
+        }
+      ]
+    },
+    {
+      "step": "verify-catalog",
+      "results": [
+        {
+          "status": "STOPPED",
+          "container_exits": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "step": "migrate-repeat",
+      "results": [
+        {
+          "status": "STOPPED",
+          "container_exits": [
+            0
+          ]
+        }
+      ],
+      "safe_result_fields": [
+        {
+          "database_version": 18,
+          "command": "migrate"
+        }
+      ]
+    },
+    {
+      "step": "verify-catalog-repeat",
+      "results": [
+        {
+          "status": "STOPPED",
+          "container_exits": [
+            0
+          ]
+        }
+      ],
+      "safe_result_fields": [
+        {
+          "catalog_version": 18,
+          "command": "verify-catalog",
+          "read_only": true
+        }
+      ]
+    },
+    {
+      "step": "provision-clean",
+      "results": [
+        {
+          "status": "STOPPED",
+          "container_exits": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "step": "verify-clean",
+      "results": [
+        {
+          "status": "STOPPED",
+          "container_exits": [
+            0
+          ]
+        }
+      ],
+      "safe_result_fields": [
+        {
+          "verified": true,
+          "command_outcomes": 0,
+          "next_commit_sequence": 1
+        }
+      ]
+    },
+    {
+      "step": "issue-owner",
+      "results": [
+        {
+          "status": "STOPPED",
+          "container_exits": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "step": "list-owner",
+      "results": [
+        {
+          "status": "STOPPED",
+          "container_exits": [
+            0
+          ]
+        }
+      ]
+    }
+  ],
+  "provider_users_after_owner_invitation_before_registration": {
+    "observed_at_utc": "2026-11-01T20:08:24.815257+00:00",
+    "user_count": 0,
+    "after_confirmed_owner_invitation": true
+  },
+  "acceptance_limit": "Owner and guest registration/sign-in, app creation, real recipient acceptance/live update and recording are separate later stages."
+}

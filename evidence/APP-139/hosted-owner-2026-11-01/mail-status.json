@@ -1,0 +1,9 @@
+{
+  "checked_at": "2026-11-01T20:26:05.532572+00:00",
+  "guest_ses_status": "Pending",
+  "production_access": false,
+  "sending_enabled": true,
+  "owner_provider_verified": true,
+  "guest_account_created": false,
+  "resend_provider_switch": false
+}

@@ -1,0 +1,83 @@
+{
+  "source_head": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "scope": "Owned local7601/7603/7604 synthetic member and account-only guest. Actual command, storage, share authority, browser reconnect and revoke; no hosted signup or synthetic provider claim.",
+  "started_at": "2026-11-01T19:32:05.799Z",
+  "checks": [
+    "Unrelated member work and shared JSON reads match missing-resource uniform404; account-only guest gets404 for /w and /workspace; member document rejects query strings. Share HTML intentionally remains a neutral sign-in landing, not protected content.",
+    "A real owner native-form command committed once; existing open guest full document and connected app showed identical saved values and record receipt metadata without reload, preserving admitted part order/notes and view-only controls.",
+    "Browser network emulation offline removed protected values/title from both surfaces within5s. Reconnect performed fresh successful authority reads before restoring identical row/receipt content and retained connected placement."
+  ],
+  "errors": [],
+  "timings": {
+    "command_http_ms": 229,
+    "recipient_record_after_http_ms": 2300,
+    "connected_record_after_http_ms": 3305,
+    "offline_document_mask_ms": 2,
+    "offline_connected_mask_ms": 2,
+    "reconnect_both_visible_ms": 2429
+  },
+  "refusals": {
+    "stranger_work": 404,
+    "missing_work": 404,
+    "stranger_share_json": 404,
+    "missing_share_json": 404,
+    "guest_member_work": 404,
+    "guest_workspace": 404,
+    "query_string": 404
+  },
+  "record": {
+    "id": "rec-ed4f4977-a2e1-4645-bed0-9c3834efbd66",
+    "version": "1",
+    "committed_at": "2026-11-01T19:32:12Z",
+    "commit_sequence": "17",
+    "cells": [
+      {
+        "id": "title",
+        "raw": "",
+        "text": "Live shared request 1793561532095"
+      },
+      {
+        "id": "author",
+        "raw": "",
+        "text": "Synthetic author"
+      },
+      {
+        "id": "status",
+        "raw": "",
+        "text": "to_read"
+      },
+      {
+        "id": "filed_by",
+        "raw": "",
+        "text": "Diego Ramos"
+      }
+    ],
+    "audit_event_id": "3c5e0b32-c981-47df-b727-6b5b89ee336c"
+  },
+  "parts": [
+    {
+      "id": "add_book_form",
+      "title": "Add a book",
+      "class": "document-part document-column-0 document-width-12 document-row-1",
+      "text": "",
+      "is_note": false,
+      "is_form": true,
+      "view_ids": []
+    },
+    {
+      "id": "how_it_works",
+      "title": "How it works",
+      "class": "document-part document-column-0 document-width-12 document-row-2",
+      "text": "Enter a title and author to add a book. Each entry starts with status to_read. The records card below shows every book with its receipt.",
+      "is_note": true,
+      "is_form": false,
+      "view_ids": []
+    }
+  ],
+  "receipt_scope": "This records-only app displays real row revision/committed_at/commit_sequence, compared exactly with the member row and audited command outcome. It has no governed query-result receipt; no placeholder receipt was added. Source-query receipt rendering remains covered by APP144 library/native evidence.",
+  "reconnect_authority_successes": 4,
+  "passed": false,
+  "failure": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n0 !== 1\n",
+  "revoked_during_run": false,
+  "finished_at": "2026-11-01T19:32:19.314Z"
+}

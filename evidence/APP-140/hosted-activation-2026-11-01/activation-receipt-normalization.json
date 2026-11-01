@@ -1,0 +1,8 @@
+{
+  "passed": true,
+  "observed_at_utc": "2026-11-01T20:13:32.153264+00:00",
+  "raw_sha256": "801e87e5a262f286adc72501539c042dd1852c20b4a698c3575c25dfdf85898a",
+  "normalized_sha256": "f9c7a03fa3656b1d9fb4150b5f727c1e400ad06ec7db65395fd2a1ebcb425243",
+  "remote_mutation": false,
+  "services_reconciled_desired_one": 2
+}

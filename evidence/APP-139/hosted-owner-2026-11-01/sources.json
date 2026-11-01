@@ -1,0 +1,33 @@
+{
+  "scope": "Hashes of private original receipts and inspected images. Authentication URLs/tokens, private handles/emails, cookies, credentials and raw video remain outside Git. Seven retained screenshots were visually inspected. The share screenshot replaces only the recipient label in the browser DOM with [Recipient email redacted], with no server change; its redaction receipt is retained. Prior unredacted or unsuccessfully masked share captures remain private.",
+  "sha256": {
+    "owner-register-result.json": "c295614551ded488277cf87e0ea17252a993b1877e08ea8ba32a9196d9bb7eaf",
+    "owner-verify-result.json": "a3541e718f6a5c0420863c92d62c86e0f59241730e722aa092bd6091e5ca9a53",
+    "owner-signin-result.json": "083b78e9b36c7a2d2653e630a10bfe66ff033d42619d4e38aa560d0d76ca4a63",
+    "owner-create/sanitized-click-log.json": "c3e3bc778b58bf864b7550eedd08116cafae36a409faadfd0682c48c89422c33",
+    "owner-record/sanitized-click-log.json": "5f0cc37b52c37b727121217009f0a231df442d55eaec97266be644c6232a38a2",
+    "owner-share/sanitized-click-log.json": "d06a5fd300223524f684f6349fe77e5a11bff3d404d34013c8e3029c2454bfac",
+    "owner-ask/result.json": "9050dd8c57167001e0fbbe2af7c12260f3bd8d8207e03f5a42d3a5584a94ff52",
+    "owner-share/persisted-share-proof.json": "b9b95607eae875280eca45c076cdb6764a04fbe2c2a37630d308700dc4a41b6a",
+    "owner-share/first-attempt-precondition-failure.json": "aa548048992ff0b8367ba809247ee5c32ff1897f42a1127cd76310d0939bffba",
+    "owner-share/second-attempt-selector-failure.json": "9ee535746f66b918175d18179b4852f87fcbc9fe062f254f3c030de7d3439b3c",
+    "owner-share/read-only-diagnostic-final.json": "870a1aaaebd23875da0a8c0adfb09c076743dcbb5482b0ce7bbfe86d6a491d98",
+    "owner-share/selector-readonly-proof.json": "438ca86a43b454ca6e8b57c0a41d0b099d8823eb2bb642c859f8c16f27431534",
+    "owner-record/exact-command-receipt.json": "c75ea75761ddd47b1f3939e447bd002c2e399488368460df8bce001313cc1b70",
+    "owner-ask/private-response.json": "400e17dbd8811bc7cf0ffa2bb3903de66b9261bc1c7d85500934b2111ceb450e",
+    "owner-ask/private-before-listing.json": "d7119671a9bd029d890b5c487da07947aca7f3b42de0318bdf717b179aecf8f5",
+    "owner-ask/private-after-listing.json": "d7119671a9bd029d890b5c487da07947aca7f3b42de0318bdf717b179aecf8f5",
+    "owner-create-model-correlation.json": "21cf658deac5e95b2915b55fde02327325d6761597c529096d9bcdc74fe545ac",
+    "provider-owner-aggregate-20261101T201710Z.json": "06c325d0a637844d3c0457eb12c64dc578ebae45300e114349f6b2ef19a4c166",
+    "owner-create/empty-canvas.png": "a90179243e7a28beb292b476bed9ca437d691761ef7d3daf62443596f5a3e9e6",
+    "owner-create/customize-template.png": "0d9a5f6351daaa0c2bca8795eedec0cf8d2a9b03c0a0d55b4b8d457f8a6a572f",
+    "owner-create/created-on-canvas.png": "3adc70db5d0a6d2320ead92ca118009e5c12854509fdcddd7d630308dbd54bf5",
+    "owner-create/empty-admitted-document.png": "025ee7e2b479befa65afde8bf03a06a05bd3c46ba22c26a59129eec1ad9ee57e",
+    "owner-record/first-record-saved.png": "9e00015263a31913b68b13b16b1e02d7e0d7903011737c6e5e951268d6d7c588",
+    "owner-ask/private-answer.png": "2c9ae326155177f3fe48c47b5eb978bcf8fa57b27a4cf028de39fd01dc7dea1e",
+    "hosted-rehearsal/owner-share/named-private-share-public.png": "40eddd273ef81ec25a26f1cc1550999851c0ca1e4ac64e80d87efa461dab7115",
+    "hosted-rehearsal/owner-share/screenshot-redaction.json": "a08301a4af224494e3ca1fd68b4b0576e62a59aaae37383d8dde247170f930fd",
+    "app140-audit/owner-ask-model-sanitized.json": "ed792ccb64233ac3feebe4330cca751e133ae2808818484e0dbdc720f96e05d6",
+    "app140-audit/mail-current-status.json": "8f0da3568f549f3f769639f26389808ff1d3a6d4bb8e836cd6ef690f986448fd"
+  }
+}

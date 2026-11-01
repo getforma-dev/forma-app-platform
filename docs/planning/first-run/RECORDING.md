@@ -1,6 +1,6 @@
 # Clean-user recording outline — maximum 180 seconds
 
-November 1 direction; this is a proposed capture plan, **not a successful rehearsal**. The product path and recipient signup still need APP-139/140 acceptance. Keep the old pitch scripts as historical evidence. Read [the review](../PIVOT-REVIEW-2026-11-01.md) before choosing a build.
+November 1 direction; this is a capture plan, **not a completed three-minute rehearsal**. The [real hosted owner portion](../../../evidence/APP-139/hosted-owner-2026-11-01/README.md) passed admission, provider verification/sign-in, empty-workspace creation, a committed record, a pending share and contextual Ask. New-recipient signup and the complete recorded path still need APP-139/140 acceptance. Keep the old pitch scripts as historical evidence. Read [the review](../PIVOT-REVIEW-2026-11-01.md) before choosing a build.
 
 ## One story
 
@@ -32,4 +32,4 @@ Total: 180 seconds, including generation and signup. These are budgets, not meas
 - Record commit/image/schema identity, route/action outcomes and measured times in a sanitized click log. Exclude cookies, tokens, invitation codes, credentials and private provider data.
 - APP-140 owns the clean local/live match. The main checkout's 4010 uses a persona login and does not prove hosted authentication. Persona footage is local interaction evidence only and cannot qualify the complete journey, even with disclosure. The take must use an actual verified provider signup/sign-in and resulting app session, without a pre-created authoring shell. Configure that real path in the intended recording environment before the take. A worktree check is disposable evidence, not the owner's recording environment.
 
-Do not call this outline passed until the clean path has actually completed. The November 1 record of beta still describes the sandbox; a new deployment and real-provider trial need their own evidence.
+Do not call this outline passed until the entire clean path and timed take have completed. [Clean beta](../../../evidence/APP-140/hosted-activation-2026-11-01/README.md) now runs candidate `711d87d`, schema 18, application TD 13 and broker TD 1; the genuine owner portion has its own retained evidence. At 20:26:05 UTC the recipient remained SES-verification Pending with no guest account, so real recipient signup/acceptance, connected live behavior and the final take remain open. The staged owner actions do not constitute the timed recording, and neither hosted success nor local persona interaction alone closes the pinned-twin/real-identity recording requirements.

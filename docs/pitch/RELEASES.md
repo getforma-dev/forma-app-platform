@@ -26,3 +26,4 @@ Each window superseded the one in the row above it (the recorded chain `88d1b19d
 
 | Activated (UTC) | Candidate | Tag | Window | Task definition | Schema | Service digest | Qualification digest | Operator digest | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-01 20:13:41 | `711d87d` | `beta/20261101-711d87d` | `1608eea9` | TD:13 | 18 | `sha256:6d3f93f1ebd71c673a793faac8350efec00aef6f6e7ac6bcad86ed8369591362` | `sha256:abba554d213803d31abb1d44f7d31a0ff7803324949e49fa79e982c20ef29886` | `sha256:5b02040c4b359aeb405ced0b3f14b5644b33b131b3f98e9a4d797b0b657ab2cf` | via `just deploy` |

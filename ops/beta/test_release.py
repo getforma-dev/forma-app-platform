@@ -133,9 +133,19 @@ class ReleaseRecordTests(unittest.TestCase):
 
     def test_the_committed_releases_file_has_the_table(self):
         text = (HERE.parents[1] / "docs/pitch/RELEASES.md").read_text()
-        self.assertIn(release.TABLE_HEADER, text)
-        self.assertTrue(text.rstrip("\n").endswith("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"),
-                        "rows are appended after the release table, which must end the file")
+        lines = text.splitlines()
+        self.assertEqual(lines.count(release.TABLE_HEADER), 1)
+        columns = len(release.TABLE_HEADER.strip("|").split("|"))
+        table = [line for line in lines[lines.index(release.TABLE_HEADER) + 1:] if line.strip()]
+        self.assertTrue(table, "the release table must have a separator")
+        self.assertEqual(table[0], "| " + " | ".join(["---"] * columns) + " |")
+        # The table stays last in the document, but real activations append rows.
+        for number, row in enumerate(table[1:], 1):
+            with self.subTest(row=number):
+                self.assertTrue(row.startswith("|") and row.endswith("|"), "release table must end the file")
+                cells = [cell.strip() for cell in row[1:-1].split("|")]
+                self.assertEqual(len(cells), columns, "release row must have every column")
+                self.assertTrue(all(cells), "release row must not contain empty cells")
 
 
 AWS = r'''#!/bin/bash

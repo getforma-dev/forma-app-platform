@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "records_before": 1,
+  "records_after": 1,
+  "full_authorized_listing_unchanged": true,
+  "publication_and_work_pin_unchanged": true,
+  "receipt_matches_actual_record": true,
+  "before_sha256": "d7119671a9bd029d890b5c487da07947aca7f3b42de0318bdf717b179aecf8f5",
+  "after_sha256": "d7119671a9bd029d890b5c487da07947aca7f3b42de0318bdf717b179aecf8f5"
+}

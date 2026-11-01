@@ -1,0 +1,813 @@
+{
+  "candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "observed_at_utc": "2026-11-01T19:38:50.465171+00:00",
+  "all_match_expected": true,
+  "source_receipt_sha256": "d2a6ca89988721e241c116779e6e7eac33e327b1210f1d4d1a8660304998ce31",
+  "scope": "Read-only extraction of completed ECR scans for the three candidate ARM64 children. No registry URL, account identifier, runtime configuration or operator state retained.",
+  "images": [
+    {
+      "image": "service",
+      "top_digest": "sha256:6d3f93f1ebd71c673a793faac8350efec00aef6f6e7ac6bcad86ed8369591362",
+      "linux_arm64_digest": "sha256:d6016fe41d82a73a605c71006ebc9e45535442a033349c20dd0512752d12b26d",
+      "old_counts": {
+        "HIGH": 25,
+        "MEDIUM": 19,
+        "LOW": 5
+      },
+      "new_counts": {
+        "HIGH": 11,
+        "MEDIUM": 10,
+        "LOW": 3
+      },
+      "comparison_matches_expected": true,
+      "removed_count": 25,
+      "remaining_count": 24,
+      "introduced_count": 0,
+      "expected_fixes_still_present_count": 0,
+      "removed": [
+        [
+          "CVE-2025-15281",
+          "glibc"
+        ],
+        [
+          "CVE-2025-6297",
+          "dpkg"
+        ],
+        [
+          "CVE-2026-0861",
+          "glibc"
+        ],
+        [
+          "CVE-2026-0915",
+          "glibc"
+        ],
+        [
+          "CVE-2026-103111",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-2219",
+          "dpkg"
+        ],
+        [
+          "CVE-2026-29111",
+          "systemd"
+        ],
+        [
+          "CVE-2026-34743",
+          "xz-utils"
+        ],
+        [
+          "CVE-2026-40225",
+          "systemd"
+        ],
+        [
+          "CVE-2026-40226",
+          "systemd"
+        ],
+        [
+          "CVE-2026-40355",
+          "krb5"
+        ],
+        [
+          "CVE-2026-40356",
+          "krb5"
+        ],
+        [
+          "CVE-2026-4046",
+          "glibc"
+        ],
+        [
+          "CVE-2026-4105",
+          "systemd"
+        ],
+        [
+          "CVE-2026-41989",
+          "libgcrypt20"
+        ],
+        [
+          "CVE-2026-4437",
+          "glibc"
+        ],
+        [
+          "CVE-2026-4438",
+          "glibc"
+        ],
+        [
+          "CVE-2026-4878",
+          "libcap2"
+        ],
+        [
+          "CVE-2026-5958",
+          "sed"
+        ],
+        [
+          "CVE-2026-86145",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89156",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89157",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89158",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89160",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89161",
+          "pcre2"
+        ]
+      ],
+      "remaining": [
+        {
+          "cve": "CVE-2026-119371",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119372",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119373",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119374",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119375",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119376",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119377",
+          "package": "sqlite3",
+          "severity": "LOW",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119378",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119379",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119586",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119591",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-13595",
+          "package": "util-linux",
+          "severity": "MEDIUM",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-53613",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-53615",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-76642",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-78408",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-78410",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-84243",
+          "package": "glibc",
+          "severity": "HIGH",
+          "installed_source_version": "2.36-9+deb12u14"
+        },
+        {
+          "cve": "CVE-2026-85091",
+          "package": "zlib",
+          "severity": "HIGH",
+          "installed_source_version": "1.2.13.dfsg-1"
+        },
+        {
+          "cve": "CVE-2026-85231",
+          "package": "libtirpc",
+          "severity": "MEDIUM",
+          "installed_source_version": "1.3.3+ds-1"
+        },
+        {
+          "cve": "CVE-2026-85977",
+          "package": "libtirpc",
+          "severity": "MEDIUM",
+          "installed_source_version": "1.3.3+ds-1"
+        },
+        {
+          "cve": "CVE-2026-86805",
+          "package": "glibc",
+          "severity": "MEDIUM",
+          "installed_source_version": "2.36-9+deb12u14"
+        },
+        {
+          "cve": "CVE-2026-95818",
+          "package": "glibc",
+          "severity": "LOW",
+          "installed_source_version": "2.36-9+deb12u14"
+        },
+        {
+          "cve": "CVE-2026-97399",
+          "package": "glibc",
+          "severity": "LOW",
+          "installed_source_version": "2.36-9+deb12u14"
+        }
+      ]
+    },
+    {
+      "image": "qualification",
+      "top_digest": "sha256:abba554d213803d31abb1d44f7d31a0ff7803324949e49fa79e982c20ef29886",
+      "linux_arm64_digest": "sha256:6eaf29aea94210eed0fd1c8349fa1584655c7fb41f164b8be51069aca70fb7da",
+      "old_counts": {
+        "HIGH": 25,
+        "MEDIUM": 19,
+        "LOW": 5
+      },
+      "new_counts": {
+        "HIGH": 11,
+        "MEDIUM": 10,
+        "LOW": 3
+      },
+      "comparison_matches_expected": true,
+      "removed_count": 25,
+      "remaining_count": 24,
+      "introduced_count": 0,
+      "expected_fixes_still_present_count": 0,
+      "removed": [
+        [
+          "CVE-2025-15281",
+          "glibc"
+        ],
+        [
+          "CVE-2025-6297",
+          "dpkg"
+        ],
+        [
+          "CVE-2026-0861",
+          "glibc"
+        ],
+        [
+          "CVE-2026-0915",
+          "glibc"
+        ],
+        [
+          "CVE-2026-103111",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-2219",
+          "dpkg"
+        ],
+        [
+          "CVE-2026-29111",
+          "systemd"
+        ],
+        [
+          "CVE-2026-34743",
+          "xz-utils"
+        ],
+        [
+          "CVE-2026-40225",
+          "systemd"
+        ],
+        [
+          "CVE-2026-40226",
+          "systemd"
+        ],
+        [
+          "CVE-2026-40355",
+          "krb5"
+        ],
+        [
+          "CVE-2026-40356",
+          "krb5"
+        ],
+        [
+          "CVE-2026-4046",
+          "glibc"
+        ],
+        [
+          "CVE-2026-4105",
+          "systemd"
+        ],
+        [
+          "CVE-2026-41989",
+          "libgcrypt20"
+        ],
+        [
+          "CVE-2026-4437",
+          "glibc"
+        ],
+        [
+          "CVE-2026-4438",
+          "glibc"
+        ],
+        [
+          "CVE-2026-4878",
+          "libcap2"
+        ],
+        [
+          "CVE-2026-5958",
+          "sed"
+        ],
+        [
+          "CVE-2026-86145",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89156",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89157",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89158",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89160",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89161",
+          "pcre2"
+        ]
+      ],
+      "remaining": [
+        {
+          "cve": "CVE-2026-119371",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119372",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119373",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119374",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119375",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119376",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119377",
+          "package": "sqlite3",
+          "severity": "LOW",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119378",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119379",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119586",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119591",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-13595",
+          "package": "util-linux",
+          "severity": "MEDIUM",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-53613",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-53615",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-76642",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-78408",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-78410",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-84243",
+          "package": "glibc",
+          "severity": "HIGH",
+          "installed_source_version": "2.36-9+deb12u14"
+        },
+        {
+          "cve": "CVE-2026-85091",
+          "package": "zlib",
+          "severity": "HIGH",
+          "installed_source_version": "1.2.13.dfsg-1"
+        },
+        {
+          "cve": "CVE-2026-85231",
+          "package": "libtirpc",
+          "severity": "MEDIUM",
+          "installed_source_version": "1.3.3+ds-1"
+        },
+        {
+          "cve": "CVE-2026-85977",
+          "package": "libtirpc",
+          "severity": "MEDIUM",
+          "installed_source_version": "1.3.3+ds-1"
+        },
+        {
+          "cve": "CVE-2026-86805",
+          "package": "glibc",
+          "severity": "MEDIUM",
+          "installed_source_version": "2.36-9+deb12u14"
+        },
+        {
+          "cve": "CVE-2026-95818",
+          "package": "glibc",
+          "severity": "LOW",
+          "installed_source_version": "2.36-9+deb12u14"
+        },
+        {
+          "cve": "CVE-2026-97399",
+          "package": "glibc",
+          "severity": "LOW",
+          "installed_source_version": "2.36-9+deb12u14"
+        }
+      ]
+    },
+    {
+      "image": "operator",
+      "top_digest": "sha256:5b02040c4b359aeb405ced0b3f14b5644b33b131b3f98e9a4d797b0b657ab2cf",
+      "linux_arm64_digest": "sha256:a6b8eb6645d46e6ecccd2598719a9bdb98ca5b68c35fde3975d74991b189573a",
+      "old_counts": {
+        "HIGH": 25,
+        "MEDIUM": 19,
+        "LOW": 5
+      },
+      "new_counts": {
+        "HIGH": 11,
+        "MEDIUM": 10,
+        "LOW": 3
+      },
+      "comparison_matches_expected": true,
+      "removed_count": 25,
+      "remaining_count": 24,
+      "introduced_count": 0,
+      "expected_fixes_still_present_count": 0,
+      "removed": [
+        [
+          "CVE-2025-15281",
+          "glibc"
+        ],
+        [
+          "CVE-2025-6297",
+          "dpkg"
+        ],
+        [
+          "CVE-2026-0861",
+          "glibc"
+        ],
+        [
+          "CVE-2026-0915",
+          "glibc"
+        ],
+        [
+          "CVE-2026-103111",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-2219",
+          "dpkg"
+        ],
+        [
+          "CVE-2026-29111",
+          "systemd"
+        ],
+        [
+          "CVE-2026-34743",
+          "xz-utils"
+        ],
+        [
+          "CVE-2026-40225",
+          "systemd"
+        ],
+        [
+          "CVE-2026-40226",
+          "systemd"
+        ],
+        [
+          "CVE-2026-40355",
+          "krb5"
+        ],
+        [
+          "CVE-2026-40356",
+          "krb5"
+        ],
+        [
+          "CVE-2026-4046",
+          "glibc"
+        ],
+        [
+          "CVE-2026-4105",
+          "systemd"
+        ],
+        [
+          "CVE-2026-41989",
+          "libgcrypt20"
+        ],
+        [
+          "CVE-2026-4437",
+          "glibc"
+        ],
+        [
+          "CVE-2026-4438",
+          "glibc"
+        ],
+        [
+          "CVE-2026-4878",
+          "libcap2"
+        ],
+        [
+          "CVE-2026-5958",
+          "sed"
+        ],
+        [
+          "CVE-2026-86145",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89156",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89157",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89158",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89160",
+          "pcre2"
+        ],
+        [
+          "CVE-2026-89161",
+          "pcre2"
+        ]
+      ],
+      "remaining": [
+        {
+          "cve": "CVE-2026-119371",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119372",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119373",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119374",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119375",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119376",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119377",
+          "package": "sqlite3",
+          "severity": "LOW",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119378",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119379",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119586",
+          "package": "sqlite3",
+          "severity": "HIGH",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-119591",
+          "package": "sqlite3",
+          "severity": "MEDIUM",
+          "installed_source_version": "3.40.1-2+deb12u2"
+        },
+        {
+          "cve": "CVE-2026-13595",
+          "package": "util-linux",
+          "severity": "MEDIUM",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-53613",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-53615",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-76642",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-78408",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-78410",
+          "package": "util-linux",
+          "severity": "HIGH",
+          "installed_source_version": "2.38.1-5+deb12u3"
+        },
+        {
+          "cve": "CVE-2026-84243",
+          "package": "glibc",
+          "severity": "HIGH",
+          "installed_source_version": "2.36-9+deb12u14"
+        },
+        {
+          "cve": "CVE-2026-85091",
+          "package": "zlib",
+          "severity": "HIGH",
+          "installed_source_version": "1.2.13.dfsg-1"
+        },
+        {
+          "cve": "CVE-2026-85231",
+          "package": "libtirpc",
+          "severity": "MEDIUM",
+          "installed_source_version": "1.3.3+ds-1"
+        },
+        {
+          "cve": "CVE-2026-85977",
+          "package": "libtirpc",
+          "severity": "MEDIUM",
+          "installed_source_version": "1.3.3+ds-1"
+        },
+        {
+          "cve": "CVE-2026-86805",
+          "package": "glibc",
+          "severity": "MEDIUM",
+          "installed_source_version": "2.36-9+deb12u14"
+        },
+        {
+          "cve": "CVE-2026-95818",
+          "package": "glibc",
+          "severity": "LOW",
+          "installed_source_version": "2.36-9+deb12u14"
+        },
+        {
+          "cve": "CVE-2026-97399",
+          "package": "glibc",
+          "severity": "LOW",
+          "installed_source_version": "2.36-9+deb12u14"
+        }
+      ]
+    }
+  ]
+}
