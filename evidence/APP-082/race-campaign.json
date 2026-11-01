@@ -1,0 +1,70 @@
+{
+  "checks": [
+    {
+      "name": "concurrent last slot (observed lock wait): the signup callback holds the code row before commit; the waiting POST /invite/validate is the neutral refusal, performs no PAR and no second create; exactly one pending admission is then admitted, and a later validate stays refused",
+      "passed": true
+    },
+    {
+      "name": "identical retries (observed lock wait): two verified sign-ins of one pending identity return one stored admission, one principal, one entitlement and one admission.redeemed; each completion mints its own session",
+      "passed": true
+    },
+    {
+      "name": "expired entitlement is not revived: a sign-in stopped after the member fence, before the entitlement re-read, is denied once the expiry is committed; the existing sessions are the uniform 404, a later sign-in stays denied, and no entitlement row is added",
+      "passed": true
+    },
+    {
+      "name": "entitlement revocation racing a sign-in (observed lock wait): the operator waits on the member fence until the mint commits, then the new session and the earlier session are the uniform 404 and a later sign-in is denied without a new entitlement",
+      "passed": true
+    },
+    {
+      "name": "admission-first: code revocation waits on the code row until the sign-in commits; the admission stands, the code is then revoked, and a later sign-in replays the stored admission without a second slot",
+      "passed": true
+    },
+    {
+      "name": "revocation-first (observed lock wait): the verified sign-in waits behind the code-row update and is denied with no principal, membership or entitlement; the pending admission is denied_for_reconciliation and a later sign-in stays denied",
+      "passed": true
+    },
+    {
+      "name": "create dropped before a response is unknown, not sent again; reconcile inside the grace leaves it unknown and, after the row is aged, records failed by inspection with no second POST; public validate is the neutral refusal and mints nothing",
+      "passed": true
+    },
+    {
+      "name": "create timeout: one POST, an unknown outcome inside the client deadline, no capability; reconcile does not judge it inside the grace and afterwards confirms the invitation by inspection and revokes it (the token was lost) without a second create; public validate mints nothing",
+      "passed": true
+    },
+    {
+      "name": "revoke timeout: the local code stays revoked and the capability is gone when the remote answer is unknown; the verified sign-in mints nothing; reconcile retries the revocation to confirmed without a second create, and the sign-in stays denied",
+      "passed": true
+    },
+    {
+      "name": "signup after local expiry is denied and recorded for reconciliation, with no principal or entitlement; an outstanding signup callback after a competing fixture admission takes the last slot is denied, with no live session, principal, membership, entitlement, or second redeemed slot. record_pending_admission returns exhausted without a denied_for_reconciliation row; that audit belongs to admit_redemption when a pending admission already exists",
+      "passed": true
+    },
+    {
+      "name": "remote revocation propagation: reconcile records the provider's revoked invitation, removes the capability and does not create another; the code stays active and public validate mints nothing",
+      "passed": true
+    },
+    {
+      "name": "restart/reopen: a replaced Auth and router in this same process, on the same stores, admits no earlier session, completes no earlier pre-login flow and rejects the earlier synchronizer token; the pending identity can resend from a fresh page; a current member signs in again; a revoked member stays denied; an unspent code still validates from the capability directory. This is auth-memory and CSRF replacement, not an operating-system process or storage-pool restart",
+      "passed": true
+    }
+  ],
+  "dispatch": {
+    "exchange": 26,
+    "par": 28,
+    "provider_creates": 13,
+    "register": 9
+  },
+  "hosted_acceptance": false,
+  "limits": [
+    "The provider is the cfg(test) synthetic loopback issuer plus app/runtime/fake_fauth.py. No deployed fAuth, mail, browser or AWS call.",
+    "Races stop on the cfg(test) admission checkpoints or on a PostgreSQL lock wait (pg_stat_activity). The provider deadline is the create/revoke timeout itself.",
+    "One server-only invitation is single-use and email-bound, so two subjects do not both complete hosted registration on one code. The outstanding callback is prepared while the code is valid; a fixture admission then takes the last slot; the original callback is completed after that. The replaced Auth in the restart check is the same process and the same stores.",
+    "Raw codes and invitation tokens are not written to this report."
+  ],
+  "managed_acceptance": false,
+  "passed": true,
+  "schema_version": 1,
+  "scope": "APP-082 route-level invitation races and provider faults on the local PostgreSQL TLS fixture with the synthetic issuer and loopback fAuth stand-in",
+  "server_version": "16.13 (Debian 16.13-1.pgdg13+1)"
+}

@@ -587,6 +587,12 @@ impl Workspace {
             let mut pending: Option<(String, i64)> = None;
             if let Some(reservation) = &flow.reservation {
                 let rows = transaction.query("SELECT pending_admission_id::text,floor(extract(epoch FROM expires_at))::bigint,outcome FROM genui_private.record_pending_admission($1::text::uuid,$2::text::uuid,$3,$4,$5)", &[&organization,&reservation,&nonmember.issuer,&nonmember.provider_tenant,&nonmember.provider_subject]).await?;
+                // APP-082: the signup callback holds the code row here (the
+                // definer took FOR UPDATE). The test executable can stop on
+                // that lock so a second public request is observed waiting,
+                // instead of racing by the clock. Production builds omit it.
+                #[cfg(test)]
+                transaction.lease.checkpoint("pending").await;
                 let row = rows.first().ok_or(Error::Denied)?;
                 let id = optional(row, 0)?;
                 let at: Option<i64> = row.try_get(1).map_err(|_| Error::Unavailable)?;
