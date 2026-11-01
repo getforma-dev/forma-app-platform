@@ -129,27 +129,30 @@ pub struct LibraryAppProps {
 
 /// One card row: the canvas card id (`c-{work}-{view}`, `f-…`, `r-…`, `l-…`,
 /// `a-{work}`), its number, title and kind (number, chart, table, records,
-/// form, ledger, app).
+/// form, ledger, app). `canvas_kind` is the size the board uses (summary,
+/// timeline, …). The pane kind collapses some of those, so the drop preview
+/// cannot recover the size from `kind` alone.
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct LibraryCardProps {
     pub id: String,
     pub number: String,
     pub title: String,
     pub kind: String,
+    pub canvas_kind: String,
     pub search: String,
 }
 
 /// What the pane is built from for one work: its listing entry, the
 /// library sidecar's grouping when it is a library app
 /// (`composer::matcher::library_grouping`), and its card rows in canvas order
-/// as `(id, title, kind)`.
+/// as `(id, title, pane kind, canvas kind)`.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct LibrarySource {
     pub app: String,
     pub work: String,
     pub title: String,
     pub grouping: Option<(usize, String, String, String)>,
-    pub cards: Vec<(String, String, String)>,
+    pub cards: Vec<(String, String, String, String)>,
 }
 
 /// The library categories in pane order: capability prefix → title.
@@ -162,6 +165,17 @@ const CATEGORIES: &[(&str, &str)] = &[
     ("support", "Support"),
     ("people", "People"),
 ];
+
+/// Pane label plus the canvas size kind. `app`, `form`, `records` and
+/// `ledger` use the same word in both places. A view uses `card_kind` for
+/// the pane and keeps its own kind for the board.
+fn library_card(id: String, title: String, canvas_kind: &str) -> (String, String, String, String) {
+    let pane = match canvas_kind {
+        "app" | "form" | "records" | "ledger" => canvas_kind,
+        other => card_kind(other),
+    };
+    (id, title, pane.to_owned(), canvas_kind.to_owned())
+}
 
 /// A view kind as the pane names it.
 pub fn card_kind(view_kind: &str) -> &'static str {
@@ -226,7 +240,7 @@ pub fn library(sources: Vec<LibrarySource>) -> Vec<LibraryCategoryProps> {
             .cards
             .iter()
             .enumerate()
-            .map(|(index, (card, title, kind))| {
+            .map(|(index, (card, title, kind, canvas_kind))| {
                 let number = format!("{number}.{index}");
                 LibraryCardProps {
                     id: card.clone(),
@@ -234,6 +248,7 @@ pub fn library(sources: Vec<LibrarySource>) -> Vec<LibraryCategoryProps> {
                     number,
                     title: title.clone(),
                     kind: kind.clone(),
+                    canvas_kind: canvas_kind.clone(),
                 }
             })
             .collect();
@@ -1177,29 +1192,33 @@ async fn read_works(
 /// form per collection for a writer, the records cards and the ledger.
 fn library_source(listed: &OpenableWork, read: &WorkRead) -> LibrarySource {
     let (app, work) = (listed.app.as_str(), listed.work.as_str());
-    let mut cards = vec![(format!("a-{work}"), "App card".to_owned(), "app".to_owned())];
+    let mut cards = vec![library_card(
+        format!("a-{work}"),
+        "App card".to_owned(),
+        "app",
+    )];
     for view in &read.outline.views {
-        cards.push((
+        cards.push(library_card(
             format!("c-{work}-{}", view.id),
             display::label(&view.title),
-            card_kind(&view.kind).to_owned(),
+            &view.kind,
         ));
     }
     if listed.can_write {
         for (collection, schema) in &listed.collections {
-            cards.push((
+            cards.push(library_card(
                 format!("f-{work}-{collection}"),
                 format!("New {schema} record"),
-                "form".to_owned(),
+                "form",
             ));
         }
     }
     if let Some(listing) = &read.listing {
         for card in records_cards(app, work, listing, "") {
-            cards.push((card.id, card.title, "records".to_owned()));
+            cards.push(library_card(card.id, card.title, "records"));
         }
         for card in super::canvas_ledger::ledger_cards(app, work, listing) {
-            cards.push((card.id, card.title, "ledger".to_owned()));
+            cards.push(library_card(card.id, card.title, "ledger"));
         }
     }
     // The library's own seeded work stands for the library app; a work the
