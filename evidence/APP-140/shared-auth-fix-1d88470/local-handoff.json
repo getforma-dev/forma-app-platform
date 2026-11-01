@@ -1,0 +1,61 @@
+{
+  "candidate_sha": "1d884707223765c782fc16ab00ec1c89f771ec24",
+  "local_only": true,
+  "source_clean": true,
+  "all_checks_passed": true,
+  "images": {
+    "service": {
+      "reference": "genui-service:pitch-1d88470",
+      "id": "sha256:e86e338bd55eaf50f3244a727ec1f86bf6e88f76dd75d8d8fb1b7e6d6088d8d6",
+      "size_bytes": 542747961,
+      "architecture": "arm64",
+      "created_at_utc": "2026-11-01T21:18:56Z"
+    },
+    "qualification": {
+      "reference": "genui-qualification:pitch-1d88470",
+      "id": "sha256:89c833dddc68575e19595b1b0f785875de4f4e7f5f04a3b0545df5e7798e6141",
+      "size_bytes": 620405991,
+      "architecture": "arm64",
+      "created_at_utc": "2026-11-01T21:20:03Z"
+    },
+    "operator": {
+      "reference": "genui-operator:pitch-1d88470",
+      "id": "sha256:7756df219fe58c6b69e8108ef2f990817143105a94d24f85b3cf6f3f15396b56",
+      "size_bytes": 513992925,
+      "architecture": "arm64",
+      "created_at_utc": "2026-11-01T19:24:27Z"
+    }
+  },
+  "package_pins_each": 18,
+  "package_readback_matches_build": true,
+  "parser_identity": {
+    "guest_sha256": "a1d3bb3716b1b64c675c1b679369d4b325f1c727e5207c51581b454f81c64774",
+    "host_sha256": "44672951f0b266309f507b477eadf094193e44f1609b7303166426d01ba82934",
+    "source": {
+      "cargo_lock_sha256": "d26fc437c35691f64c1e1d47e398148f30a886782812bb4cd2bc75066c3c5f2f",
+      "rust_toolchain": "1.93.1",
+      "rustc": {
+        "LLVM version": "21.1.8",
+        "commit-hash": "01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf",
+        "host": "aarch64-unknown-linux-gnu",
+        "release": "1.93.1"
+      },
+      "source_files": 102,
+      "sources_sha256": "8971131071475adc792392c4813a869c2e7b141d34b8b50011da6301424bde61",
+      "vendor_provenance_sha256": "5259d9a04cb06b892c19fa17a0c99b0951a40484ae1c25ea98332a12bcf20e1a"
+    }
+  },
+  "parser_identity_unchanged_from_711d87d": true,
+  "receipts_sha256": {
+    "build.json": "7f36ca3dd1de2ba45194e90d4a08acb65fd8a06fd1dfe17c628aa0665b76e0df",
+    "runtime-package-readback.json": "f9afaba3c5de2cd1276d29b3c7c6437382a4b7c3a35d111f4ae3c211801b79ee",
+    "service-qualify.json": "010bf395f6e9a259c059e790552c18e14a0ac55786226992703197b9755899b8",
+    "qualification-image-check.json": "8e73584f5cf31b326d63f3def46e92651e774497f7521ec3327ed8c11248ee78",
+    "operator-image-check.json": "4d437e2026e6d87382b555801bfb4c6e31840edb1c9bcf80555c2345199ba260"
+  },
+  "limits": [
+    "These are local image/config digests, not ECR OCI index or platform-manifest digests.",
+    "No AWS push, new scan, budget reservation or deployment was performed.",
+    "Hosted guest signup is not yet retried."
+  ]
+}

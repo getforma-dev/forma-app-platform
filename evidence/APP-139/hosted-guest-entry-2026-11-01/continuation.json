@@ -1,0 +1,448 @@
+{
+  "schema_version": 1,
+  "scope": "Observed hosted repair continuation through guest registration pending product email verification; not completed recipient acceptance.",
+  "runtime_candidate_sha": "1d884707223765c782fc16ab00ec1c89f771ec24",
+  "original_work_creation_candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "request_instrumentation": "Issued requests, failed requests and response events are separate counters. The legacy field named requests supplies response events. Counts include application and provider assets; they are not counts of accounts or invitations.",
+  "owner_fresh_signin": {
+    "started_at_utc": "2026-11-01T21:54:23.533Z",
+    "finished_at_utc": "2026-11-01T21:54:26.146Z",
+    "passed": true,
+    "result": "verified_member_signed_in",
+    "final_page_class": "owner_workspace",
+    "issued_request_count": 18,
+    "failed_request_count": 0,
+    "response_event_count": 18,
+    "browser_security_error_count": 0,
+    "page_error_count": 0,
+    "issued_requests_by_class": [
+      {
+        "method": "GET",
+        "path_class": "application_asset",
+        "count": 4
+      },
+      {
+        "method": "GET",
+        "path_class": "member_authentication_callback",
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "member_signin_entry",
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "owner_workspace",
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_asset",
+        "count": 7
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_authorize",
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_signin_page",
+        "count": 1
+      },
+      {
+        "method": "POST",
+        "path_class": "member_signin_entry",
+        "count": 1
+      },
+      {
+        "method": "POST",
+        "path_class": "provider_login",
+        "count": 1
+      }
+    ],
+    "response_events_by_class": [
+      {
+        "method": "GET",
+        "path_class": "application_asset",
+        "status": 200,
+        "count": 3
+      },
+      {
+        "method": "GET",
+        "path_class": "application_asset",
+        "status": 304,
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "member_authentication_callback",
+        "status": 303,
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "member_signin_entry",
+        "status": 200,
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "owner_workspace",
+        "status": 200,
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_asset",
+        "status": 200,
+        "count": 7
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_authorize",
+        "status": 307,
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_signin_page",
+        "status": 200,
+        "count": 1
+      },
+      {
+        "method": "POST",
+        "path_class": "member_signin_entry",
+        "status": 303,
+        "count": 1
+      },
+      {
+        "method": "POST",
+        "path_class": "provider_login",
+        "status": 200,
+        "count": 1
+      }
+    ],
+    "navigation_and_form_response_events": [
+      {
+        "method": "GET",
+        "path_class": "member_signin_entry",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path_class": "member_signin_entry",
+        "status": 303
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_authorize",
+        "status": 307
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_signin_page",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path_class": "provider_login",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path_class": "member_authentication_callback",
+        "status": 303
+      },
+      {
+        "method": "GET",
+        "path_class": "owner_workspace",
+        "status": 200
+      }
+    ],
+    "private_source": {
+      "basename": "owner-signin-after-csp-fix-result.json",
+      "bytes": 5664,
+      "sha256": "b7f03135cee4792a605eaa69612a7e3c5d8f8cac41dc0fb6993c6c8eced7bbaf"
+    }
+  },
+  "retained_state": {
+    "started_at_utc": "2026-11-01T21:54:33.722Z",
+    "finished_at_utc": "2026-11-01T21:54:36.613Z",
+    "passed": true,
+    "record_count": 1,
+    "share_count": 1,
+    "share_status": "pending",
+    "unexpected_application_write_requests": 0,
+    "page_error_count": 0,
+    "harness_assertions": {
+      "exact_record_listing_values_versions_commit_metadata_and_publication_pins_unchanged": true,
+      "original_named_share_target_and_canvas_permission_unchanged": true,
+      "original_work_state_bytes_unchanged": true
+    },
+    "original_work_state_sha256": "93540e52871494e08dcb19169576b666a64ad23cdf0356e1dfb3dbda39f5f123",
+    "private_source": {
+      "basename": "retained-state-after-csp-fix.json",
+      "bytes": 898,
+      "sha256": "21806b8540f77ce8b49833201523535604f0ef58b6f06209e17acb776b24d4df"
+    }
+  },
+  "hosted_entry_policy": {
+    "started_at_utc": "2026-11-01T21:55:13.808154+00:00",
+    "finished_at_utc": "2026-11-01T21:55:13.940240+00:00",
+    "status": 200,
+    "cache_control": "no-store",
+    "path_class": "exact_shared_app_entry",
+    "form_action_self_present": true,
+    "form_action_exact_configured_provider_origin_present": true,
+    "form_action_contains_wildcard": false,
+    "native_signup_and_signin_present": true,
+    "sent_cookies": false,
+    "followed_redirects": false,
+    "post_submitted": false,
+    "tls_verification_enabled": true,
+    "preceding_probe": {
+      "result": "local_python_CA_verification_failed",
+      "application_http_response_obtained": false,
+      "successful_followup": "system_curl_with_certificate_verification"
+    },
+    "private_headers_sha256": "0d86f1a8324da67ae714ee517e50877d450e3838c3db25a405a01b4f2cd339ed",
+    "private_body_sha256": "2631c6e5008c98f9a82cf0b62360793640df350ae85ffd0d4058f5c5ae096a9d",
+    "private_source": {
+      "basename": "guest-entry-after-csp-fix-report.json",
+      "bytes": 854,
+      "sha256": "c18454d29ac677bf21bd64decc7ee4c21e2657c21e942efa6d3ace0ffe2f8a5c"
+    }
+  },
+  "guest_registration": {
+    "started_at_utc": "2026-11-01T21:55:19.968Z",
+    "finished_at_utc": "2026-11-01T21:55:22.797Z",
+    "passed": true,
+    "result": "registered_pending_email_verification",
+    "final_page_class": "exact_shared_app_entry",
+    "issued_request_count": 22,
+    "failed_request_count": 0,
+    "response_event_count": 22,
+    "browser_security_error_count": 0,
+    "page_error_count": 0,
+    "issued_requests_by_class": [
+      {
+        "method": "GET",
+        "path_class": "application_asset",
+        "count": 8
+      },
+      {
+        "method": "GET",
+        "path_class": "exact_shared_app_entry",
+        "count": 2
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_asset",
+        "count": 7
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_authorize",
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_signin_page",
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "shared_authentication_callback",
+        "count": 1
+      },
+      {
+        "method": "POST",
+        "path_class": "provider_registration",
+        "count": 1
+      },
+      {
+        "method": "POST",
+        "path_class": "shared_authentication_start",
+        "count": 1
+      }
+    ],
+    "response_events_by_class": [
+      {
+        "method": "GET",
+        "path_class": "application_asset",
+        "status": 200,
+        "count": 7
+      },
+      {
+        "method": "GET",
+        "path_class": "application_asset",
+        "status": 304,
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "exact_shared_app_entry",
+        "status": 200,
+        "count": 2
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_asset",
+        "status": 200,
+        "count": 7
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_authorize",
+        "status": 307,
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_signin_page",
+        "status": 200,
+        "count": 1
+      },
+      {
+        "method": "GET",
+        "path_class": "shared_authentication_callback",
+        "status": 303,
+        "count": 1
+      },
+      {
+        "method": "POST",
+        "path_class": "provider_registration",
+        "status": 201,
+        "count": 1
+      },
+      {
+        "method": "POST",
+        "path_class": "shared_authentication_start",
+        "status": 303,
+        "count": 1
+      }
+    ],
+    "navigation_and_form_response_events": [
+      {
+        "method": "GET",
+        "path_class": "exact_shared_app_entry",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path_class": "shared_authentication_start",
+        "status": 303
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_authorize",
+        "status": 307
+      },
+      {
+        "method": "GET",
+        "path_class": "provider_signin_page",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path_class": "provider_registration",
+        "status": 201
+      },
+      {
+        "method": "GET",
+        "path_class": "shared_authentication_callback",
+        "status": 303
+      },
+      {
+        "method": "GET",
+        "path_class": "exact_shared_app_entry",
+        "status": 200
+      }
+    ],
+    "private_source": {
+      "basename": "guest-register-after-csp-fix-result.json",
+      "bytes": 7357,
+      "sha256": "3af035c9ffab5d3410663ac71a29c5037049ad29b53745c22822ef5d8a9ecc6d"
+    }
+  },
+  "provider_reconciliation": {
+    "observed_at_utc": "2026-11-01T21:57:42.513337+00:00",
+    "remote_mutations_performed": false,
+    "provider_tenant_exact_match": true,
+    "provider_user_count": 2,
+    "provider_verified_user_count": 1,
+    "guest_account_count": 1,
+    "guest_account_created_at_utc": "2026-11-01T21:55:22.319826+00:00",
+    "guest_email_verified": false,
+    "provider_invitation_count": 2,
+    "guest_invitation_count": 1,
+    "guest_provider_invitation_status": "accepted",
+    "guest_provider_invitation_created_at_utc": "2026-11-01T20:57:53.161345+00:00",
+    "guest_provider_invitation_expires_at_utc": "2026-11-04T20:57:53.148617+00:00",
+    "broker_guest_entry_count": 2,
+    "all_guest_broker_entries_issued": true,
+    "all_guest_broker_entries_have_capability": true,
+    "invitation_continuity": {
+      "provider_total_unchanged": true,
+      "guest_invitation_count_remains_one": true,
+      "original_created_expiry_role_unchanged": true,
+      "original_broker_entry_metadata_preserved": true,
+      "all_broker_entries_reference_the_one_provider_invitation": true,
+      "distinct_provider_invitation_ids_referenced": 1,
+      "additional_idempotency_cache_aliases": 1,
+      "duplicate_provider_invitation_observed": false
+    },
+    "exact_shared_client": {
+      "matches_deployed_auth_config": true,
+      "distinct_from_member_client": true,
+      "redirect_uri_exact": true
+    },
+    "mail_delivery_proven": false,
+    "database_membership_or_grant_query_performed": false,
+    "interpretation_correction": {
+      "initial_single_broker_entry_predicate_too_strict": true,
+      "two_cache_aliases_reference_one_current_provider_invitation": true,
+      "new_remote_read_for_interpretation": false,
+      "both_receipts_preserved": true,
+      "prior_receipt": {
+        "basename": "guest-post-registration-reconciliation-20261101T215742Z.json",
+        "bytes": 4425,
+        "sha256": "0cfa8da59bec3e52444c38ea613de3bf96f3e99da615e23c68682e36be93f811"
+      },
+      "broker_alias_source": {
+        "path": "app/operator/shared_invite_broker.py",
+        "sha256": "d4a098758f95e649d04a86be1dfc9140380ec85afd2bf306b45c7528d73171ea",
+        "lines": "177\u2013191"
+      }
+    },
+    "limits": [
+      "Provider invitation accepted describes registration, not explicit acceptance of the private app share.",
+      "Current broker aliases reference the one current provider invitation. Historical continuity is supported by matching original timestamps/role and broker metadata; the earlier sanitized receipt did not retain the original invitation ID for direct comparison.",
+      "The latest application-share read in this packet predates registration and found pending. No subsequent explicit app acceptance is established.",
+      "No mail delivery, verified guest session or exhaustive database membership/resource-grant absence is established."
+    ],
+    "private_source": {
+      "basename": "guest-post-registration-interpretation-20261101T215742Z.json",
+      "bytes": 5512,
+      "sha256": "62c76726e0dcd30da1833e2a1ef251bac3c9f64d674f6f44649f03137a6886e7"
+    }
+  },
+  "pending_acceptance": [
+    "Recipient product-email verification",
+    "Fresh verified guest sign-in",
+    "Explicit exact-app acceptance",
+    "Connected-app placement",
+    "Real hosted recipient live update",
+    "Hosted revocation and reconnect",
+    "Complete narrated recording"
+  ],
+  "limits": [
+    "Registration returned to the exact shared app with verification pending; it does not establish a verified guest session or accepted guest access.",
+    "The successful header GET is separate from the real browser registration. The preceding local Python CA failure is not an application HTTP failure.",
+    "Application/browser observations do not prove absence of organization memberships or resource grants in the database.",
+    "No provider account/invitation inventory counts are inferred from HTTP event counts.",
+    "This continuation preserves the earlier interruption and its response-only instrumentation limits. No generic component/action feature is claimed."
+  ]
+}

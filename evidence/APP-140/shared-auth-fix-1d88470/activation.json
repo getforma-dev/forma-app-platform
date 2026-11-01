@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "candidate_sha": "1d884707223765c782fc16ab00ec1c89f771ec24",
+  "source_merge_commit_sha": "9c3b635fbd0ec36346672191de58a354f317422b",
+  "scope": "Actual healthy deployment handoff; genuine guest registration and the product journey are not established by these deployment checks.",
+  "execution": {
+    "recorded_at_utc": "2026-11-01T21:51:46Z",
+    "stack_status": "UPDATE_COMPLETE",
+    "exact_reviewed_parameters_match": true,
+    "retained_outputs_unchanged": true,
+    "both_services_observed_stopped_after_change_set": {
+      "observed_at_utc": "2026-11-01T21:51:48.189253+00:00",
+      "desired_running_pending": [
+        0,
+        0,
+        0
+      ]
+    },
+    "six_registered_definitions_match_reviewed_arm64_images": true
+  },
+  "activation": {
+    "requested_at_utc": "2026-11-01T21:52:31Z",
+    "request_receipt_status": "activation_requested_not_healthy",
+    "healthy_activation_recorded_at_utc": "2026-11-01T21:53:16Z",
+    "separate_scope_health_observed_at_utc": "2026-11-01T21:53:19.887152+00:00",
+    "services": [
+      {
+        "role": "application",
+        "task_definition_revision": 14,
+        "desired": 1,
+        "running": 1,
+        "pending": 0
+      },
+      {
+        "role": "shared_invitation_broker",
+        "task_definition_revision": 2,
+        "desired": 1,
+        "running": 1,
+        "pending": 0
+      }
+    ],
+    "request_receipt_alone_is_not_health_proof": true
+  },
+  "verification": {
+    "observed_at_utc": "2026-11-01T21:53:20Z",
+    "all_five_surface_probes_passed": true,
+    "checks": {
+      "live": true,
+      "canvas": true,
+      "entry": true,
+      "mcp": true,
+      "slack": true
+    },
+    "anonymous_canvas_probe_requires_denial": true,
+    "tls_verified_readiness": {
+      "observed_at_utc": "2026-11-01T21:54:05.756811+00:00",
+      "status": 200,
+      "tls_verified": true
+    }
+  },
+  "release_tag": {
+    "name": "beta/20261101-1d88470",
+    "annotated_tag_object_sha": "f035a9b4256f017a50b02478bfdb1b484d538c30",
+    "peeled_source_sha": "1d884707223765c782fc16ab00ec1c89f771ec24",
+    "remote_ref_and_peel_independently_verified": true,
+    "verification_command": "git ls-remote origin refs/tags/beta/20261101-1d88470 refs/tags/beta/20261101-1d88470^{}"
+  },
+  "schema_and_operations": {
+    "catalog_version": 18,
+    "prior_direct_catalog_verification": {
+      "catalog_version": 18,
+      "observed_at_utc": "2026-11-01T20:02:54.176000Z"
+    },
+    "new_direct_catalog_query_performed": false,
+    "new_deployment_runtime_readiness_passed": true,
+    "migrations_run": 0,
+    "operator_tasks_run": 0,
+    "delivery_changed_provider_or_invitation_or_configuration_secret": false,
+    "scope_of_no_mutation_claim": "This deployment operation; it does not describe later user sign-in or guest acceptance operations."
+  },
+  "shutdown_schedules": {
+    "count": 2,
+    "enabled": true,
+    "expires_at_utc": "2026-11-30T18:00:00Z",
+    "target_desired_count": 0,
+    "billing_cap": false
+  },
+  "projection": {
+    "month": "2026-11",
+    "currency": "USD",
+    "genui_total_cents": 16982,
+    "project_total_cents": 20782,
+    "headroom_cents": 18,
+    "ledger_sha256_at_handoff": "a2abf0ff7fba6a6e9060248c45bb824e23f7523b2f53ed3d9f868c8fca040df3"
+  },
+  "generated_releases_row": {
+    "utf8_bytes_with_newline": 336,
+    "sha256_with_newline": "e28c3596ea0f382a9dada48774d86850cf8d500bf3b020ca7cfc44886f546bb7",
+    "utf8_bytes_without_newline": 335,
+    "sha256_without_newline": "ea9b8e880b8c63437a17ff025d44c88910aa83795bb3a94a74e523408061bb8d"
+  },
+  "sources": [
+    {
+      "role": "operator delivery handoff",
+      "name": "delivery-handoff.json",
+      "bytes": 4834,
+      "sha256": "cc9089ae89651981ff29a8eba4136db875804da9ee4a8b1a1b2b97b7e3d03717"
+    },
+    {
+      "role": "actual deployment receipt: release.json",
+      "name": "release.json",
+      "bytes": 3963,
+      "sha256": "c494a520d11ef98eb624238c653eb463a2054fd953d67340bed1bf3d91a04279"
+    },
+    {
+      "role": "actual deployment receipt: activation.json",
+      "name": "activation.json",
+      "bytes": 4022,
+      "sha256": "58417e9c784cce6051c7a435e2abd36c7b33764b1cea501f7fa0fa80cf7c3fec"
+    },
+    {
+      "role": "actual deployment receipt: activation-receipt.json",
+      "name": "activation-receipt.json",
+      "bytes": 1057,
+      "sha256": "ffd72450c15a5ca5ebb4083ead2d3f4a46e021992e7a1165fdf2392bd27d4ee1"
+    },
+    {
+      "role": "actual deployment receipt: deployed-scope-stopped.json",
+      "name": "deployed-scope-stopped.json",
+      "bytes": 5979,
+      "sha256": "e939c49142ab99b28108092ed87a83a7edbbfe5ae04f97a5e17b8f08ab79dec6"
+    },
+    {
+      "role": "actual deployment receipt: deployed-scope-healthy.json",
+      "name": "deployed-scope-healthy.json",
+      "bytes": 5979,
+      "sha256": "521cd673c1b46cb17098db7ee12715c18b22e0f89e24659f2f8381d09854eb54"
+    },
+    {
+      "role": "actual deployment receipt: broker-health.json",
+      "name": "broker-health.json",
+      "bytes": 44,
+      "sha256": "22e8f87536f5c3e2a00a67dae2ee3fc9fd771f9186e0686c2c54aeba55f53113"
+    },
+    {
+      "role": "actual deployment receipt: ready-probe.json",
+      "name": "ready-probe.json",
+      "bytes": 150,
+      "sha256": "4de0174694a973896e5659b191d0f5881a526a728aa82c9280b7e95c7e2bcf5c"
+    },
+    {
+      "role": "actual deployment receipt: verify-command.out",
+      "name": "verify-command.out",
+      "bytes": 862,
+      "sha256": "19b56d7a4c787b8114aa4413b31855dc8ab9f167447391446c57d653aa6b6762"
+    },
+    {
+      "role": "actual deployment receipt: registry-scan-comparison.json",
+      "name": "registry-scan-comparison.json",
+      "bytes": 5155,
+      "sha256": "c8ee9c4cc2745f9ee2e57809fabb40a7379644dcae40bd0987d1cce8ea89ae34"
+    },
+    {
+      "role": "actual deployment receipt: services-stopped-before-cfn.json",
+      "name": "services-stopped-before-cfn.json",
+      "bytes": 47254,
+      "sha256": "b732b26d1834d57992d814cb932f5fd72fd4cf2c3949ff2f2f54fb71fe970926"
+    },
+    {
+      "role": "actual deployment receipt: change-set-describe.json",
+      "name": "change-set-describe.json",
+      "bytes": 17186,
+      "sha256": "56f0f4231c920c0be14a71eff307f3f831fdb061614b414a631b83d0a6a3e1ca"
+    },
+    {
+      "role": "actual deployment receipt: receipt.json",
+      "name": "receipt.json",
+      "bytes": 2845,
+      "sha256": "9965099afa97f3a983d2cecb7db7b50c81d0b297aa5758e41c900e3789d8ef8d"
+    },
+    {
+      "role": "five surface verification results",
+      "name": "verify.json",
+      "bytes": 83,
+      "sha256": "e683e0092ec84f84bd7445d153c08a4596b34f585001d21e38b4c4c260129fc9"
+    },
+    {
+      "role": "observed stack after execution",
+      "name": "stack-after.json",
+      "bytes": 13999,
+      "sha256": "b785db009a03afa7505df95ad391a1b3e840f7dd0b1ff9d74545ff77ddec4780"
+    },
+    {
+      "role": "previous direct catalog verification log",
+      "name": "run-verify-catalog-repeat-1.log.json",
+      "bytes": 412,
+      "sha256": "e45188f121625102c701553dd2ff6ee3126e490c23d81e67b099bc654c2f631b"
+    },
+    {
+      "role": "previous read-only catalog verification successful task exit",
+      "name": "run-verify-catalog-repeat-1.stopped.json",
+      "bytes": 4834,
+      "sha256": "07c64cbf0082862e304a5f90458fe0b6a487ea5c4c7def289b03ad1242448a98"
+    }
+  ],
+  "limits": [
+    "The preparation and local-image receipts remain historical records; this separate receipt establishes the later healthy delivery.",
+    "Catalog 18 was directly queried at the retained earlier timestamp. No new direct database catalog query or migration was performed for this auth-only deployment; new runtime readiness is separately observed.",
+    "Five surface probes include expected anonymous denials; they do not imply every route returned 200 or establish signed-in product acceptance.",
+    "Healthy services and readiness do not prove exhaustive absence of guest database memberships or grants.",
+    "Genuine guest registration, acceptance, linked-canvas updates and revoke checks remain uncompleted in this handoff.",
+    "Each image retains 24 previously reviewed vendor-open scan findings; the actual registry scan receipt records their exact unchanged sets."
+  ]
+}

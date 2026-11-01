@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "candidate_sha": "1d884707223765c782fc16ab00ec1c89f771ec24",
+  "scope": "Prepared and independently reviewed deployment plan; this artifact records the pre-execution review and does not establish activation.",
+  "reviewed_change_set": {
+    "status_at_review": "CREATE_COMPLETE",
+    "execution_status_at_review": "AVAILABLE",
+    "acceptable": true,
+    "findings": [],
+    "resource_count": 105,
+    "parsed_template_identical_to_previous_live_template": true,
+    "template_sha256": "2c16f0e73805207487f4703f86c3c64ab0aae672d49ced8e2ee4eb0f03121aab",
+    "previous_template_sha256": "f3e495b071a0c520eb5edac50d8315ee45500962351c1aeae307d4c1c7694c58",
+    "changed_parameters": [
+      "DeploymentExpiresAtUtc",
+      "ImageDigest",
+      "OperatorImageDigest",
+      "QualificationImageDigest"
+    ],
+    "image_parameters_match_registry_scans_receipt": true,
+    "bootstrap_version_uses_previous_value": true,
+    "provider_organization_ingress_tls_parameters_unchanged": true,
+    "changes": [
+      {
+        "action": "Modify",
+        "logical_id": "DeploymentExpiry",
+        "replacement": "False",
+        "type": "AWS::Scheduler::Schedule"
+      },
+      {
+        "action": "Modify",
+        "logical_id": "MigrationTask69EAEF9D",
+        "replacement": "True",
+        "type": "AWS::ECS::TaskDefinition"
+      },
+      {
+        "action": "Modify",
+        "logical_id": "OperatorTask534EBA45",
+        "replacement": "True",
+        "type": "AWS::ECS::TaskDefinition"
+      },
+      {
+        "action": "Modify",
+        "logical_id": "QualificationTask4466B6E0",
+        "replacement": "True",
+        "type": "AWS::ECS::TaskDefinition"
+      },
+      {
+        "action": "Modify",
+        "logical_id": "RollbackTask61F9D6F3",
+        "replacement": "True",
+        "type": "AWS::ECS::TaskDefinition"
+      },
+      {
+        "action": "Modify",
+        "logical_id": "ServiceD69D759B",
+        "replacement": "False",
+        "type": "AWS::ECS::Service"
+      },
+      {
+        "action": "Modify",
+        "logical_id": "SharedBrokerExpiryA72A7DBC",
+        "replacement": "False",
+        "type": "AWS::Scheduler::Schedule"
+      },
+      {
+        "action": "Modify",
+        "logical_id": "SharedBrokerService019117DA",
+        "replacement": "False",
+        "type": "AWS::ECS::Service"
+      },
+      {
+        "action": "Modify",
+        "logical_id": "SharedBrokerTaskBF1F905C",
+        "replacement": "True",
+        "type": "AWS::ECS::TaskDefinition"
+      },
+      {
+        "action": "Modify",
+        "logical_id": "Task79114B6B",
+        "replacement": "True",
+        "type": "AWS::ECS::TaskDefinition"
+      }
+    ],
+    "summary": {
+      "modify": 10,
+      "add": 0,
+      "remove": 0,
+      "task_definition_replacements": 6,
+      "in_place_service_updates": 2,
+      "in_place_expiry_schedule_updates": 2
+    }
+  },
+  "schema": {
+    "previous_verified_catalog_version": 18,
+    "candidate_catalog_version": 18,
+    "migration_directory_changes_from_previous_candidate": 0,
+    "migrations_required_by_this_source_change": false,
+    "migration_or_runtime_schema_readback_claimed_by_this_receipt": false
+  },
+  "operating_plan": {
+    "name": "always-on-beta",
+    "expires_at_utc": "2026-11-30T18:00:00Z",
+    "desired_count_parameter_at_review": 0,
+    "extra_task_hours_reserved": 2
+  },
+  "projection": {
+    "month": "2026-11",
+    "currency": "USD",
+    "genui_total_cents": 16982,
+    "project_total_cents": 20782,
+    "genui_allocation_cents": 17000,
+    "project_budget_cents": 20800,
+    "genui_headroom_cents": 18,
+    "project_headroom_cents": 18,
+    "retained_core_full_month_cents": 5434,
+    "all_window_compute_reservations_cents": 10048,
+    "variable_reserve_cents": 1500,
+    "auth_spent_or_reserved_cents": 3800,
+    "actual_billing_cap": false
+  },
+  "ledger_reconciliation": {
+    "observed_at_utc": "2026-11-01T21:42:56.044917+00:00",
+    "prior_windows_preserved": 13,
+    "prior_money_fields_preserved": true,
+    "new_reserved_windows": 1,
+    "reviewed_reconciliation_fields": [
+      "months.2026-11.reconciled_at_utc",
+      "months.2026-11.basis"
+    ],
+    "active_prior_window_only_supersession_fields_changed": true,
+    "before_sha256": "18903f3dca2877996de2dd15b1a25716d5599552ba0022be6e953f7ff1cd4239",
+    "after_reconciliation_sha256": "920074826a88efd2deb635f7b3d96d96f5519798af3fbba1f0ce9c2bc425b878",
+    "failed_windows_and_known_spending_not_reset": true
+  },
+  "sources": [
+    {
+      "role": "reviewed budget reservation",
+      "name": "receipt.json",
+      "bytes": 2845,
+      "sha256": "9965099afa97f3a983d2cecb7db7b50c81d0b297aa5758e41c900e3789d8ef8d"
+    },
+    {
+      "role": "exact requested parameters",
+      "name": "change-set-request.json",
+      "bytes": 2576,
+      "sha256": "147d17f9ff4ac42531fdd477e35802591fd203b904ceeb0c0df4bc80cdc3d49a"
+    },
+    {
+      "role": "actual prepared CloudFormation changes",
+      "name": "change-set-describe.json",
+      "bytes": 17186,
+      "sha256": "56f0f4231c920c0be14a71eff307f3f831fdb061614b414a631b83d0a6a3e1ca"
+    },
+    {
+      "role": "automatic review of actual changes",
+      "name": "change-set-review.json",
+      "bytes": 1588,
+      "sha256": "181d4a01ea86be5c00db937a3470308f4c4067a96a2a8240658c478bc2751111"
+    },
+    {
+      "role": "candidate template",
+      "name": "template.json",
+      "bytes": 179133,
+      "sha256": "2c16f0e73805207487f4703f86c3c64ab0aae672d49ced8e2ee4eb0f03121aab"
+    },
+    {
+      "role": "previous live template",
+      "name": "template-before.json",
+      "bytes": 358834,
+      "sha256": "f3e495b071a0c520eb5edac50d8315ee45500962351c1aeae307d4c1c7694c58"
+    },
+    {
+      "role": "previous observed parameters",
+      "name": "stack-before.json",
+      "bytes": 13999,
+      "sha256": "ceb6c41d8c177cd4042a0c67e6443fae6d2f8daa588aaf79101d30f6a589fee0"
+    },
+    {
+      "role": "reviewed ledger reconciliation",
+      "name": "ledger-reconciliation.json",
+      "bytes": 519,
+      "sha256": "eb9b3326b22c972dc50f6451ecf416ce5f12e150942f30c3c5c919390aac6beb"
+    },
+    {
+      "role": "preserved ledger before reconciliation",
+      "name": "ledger-before-reviewed-reconciliation.json",
+      "bytes": 11630,
+      "sha256": "18903f3dca2877996de2dd15b1a25716d5599552ba0022be6e953f7ff1cd4239"
+    },
+    {
+      "role": "reviewed deployment input including extra task reservation",
+      "name": "deployment-input.json",
+      "bytes": 1443,
+      "sha256": "94fc7e0e6decc2d86761334e34c52df1396777bab537e71855da0814d57a1661"
+    }
+  ],
+  "limits": [
+    "This is a preparation receipt. Execution, activation, service health and genuine hosted guest acceptance require subsequent actual receipts.",
+    "Task-definition replacement registers new revisions; this review does not claim that these revisions are running.",
+    "The budget projection retains known reservations and 18 cents of remaining headroom. It is not an observed bill, billing cap or guarantee that scheduler shutdown will occur on time.",
+    "Existing saved work, records and pending invitations must be preserved; no reset, seed, membership creation or schema migration is established by this receipt."
+  ]
+}
