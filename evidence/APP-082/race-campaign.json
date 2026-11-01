@@ -37,7 +37,7 @@
       "passed": true
     },
     {
-      "name": "signup after local expiry is denied and recorded for reconciliation, with no principal or entitlement; signup after exhaustion is the neutral refusal and does not add a principal or a slot",
+      "name": "signup after local expiry is denied and recorded for reconciliation, with no principal or entitlement; an outstanding signup callback after a competing fixture admission takes the last slot is denied, with no live session, principal, membership, entitlement, or second redeemed slot. record_pending_admission returns exhausted without a denied_for_reconciliation row; that audit belongs to admit_redemption when a pending admission already exists",
       "passed": true
     },
     {
@@ -45,13 +45,13 @@
       "passed": true
     },
     {
-      "name": "restart/reopen: a new process admits no earlier session, completes no earlier pre-login flow and rejects the earlier synchronizer token; the pending identity can resend from a fresh page; a current member signs in again; a revoked member stays denied; an unspent code still validates from the capability directory",
+      "name": "restart/reopen: a replaced Auth and router in this same process, on the same stores, admits no earlier session, completes no earlier pre-login flow and rejects the earlier synchronizer token; the pending identity can resend from a fresh page; a current member signs in again; a revoked member stays denied; an unspent code still validates from the capability directory. This is auth-memory and CSRF replacement, not an operating-system process or storage-pool restart",
       "passed": true
     }
   ],
   "dispatch": {
-    "exchange": 27,
-    "par": 29,
+    "exchange": 26,
+    "par": 28,
     "provider_creates": 13,
     "register": 9
   },
@@ -59,7 +59,7 @@
   "limits": [
     "The provider is the cfg(test) synthetic loopback issuer plus app/runtime/fake_fauth.py. No deployed fAuth, mail, browser or AWS call.",
     "Races stop on the cfg(test) admission checkpoints or on a PostgreSQL lock wait (pg_stat_activity). The provider deadline is the create/revoke timeout itself.",
-    "One server-only invitation is single-use and email-bound, so two subjects do not both complete hosted registration on one code. The public last slot is the signup callback against a second POST /invite/validate.",
+    "One server-only invitation is single-use and email-bound, so two subjects do not both complete hosted registration on one code. The outstanding callback is prepared while the code is valid; a fixture admission then takes the last slot; the original callback is completed after that. The replaced Auth in the restart check is the same process and the same stores.",
     "Raw codes and invitation tokens are not written to this report."
   ],
   "managed_acceptance": false,

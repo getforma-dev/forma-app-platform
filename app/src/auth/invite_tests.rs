@@ -20,8 +20,8 @@ use crate::{
     http::{self, proxy::TrustedProxies},
     storage::{
         admission_qualification::{
-            accepted, cli_command, lock_wait, operator, operator_with, paused, wait, FakeProvider,
-            FakeSecret,
+            accepted, cli_command, consume_last_slot, lock_wait, operator, operator_with, paused,
+            wait, FakeProvider, FakeSecret,
         },
         code_digest,
         qualification::{fixture_python, Fixture},
@@ -2934,33 +2934,64 @@ async fn race_campaign() {
         audits(&c, &expired_code.id, "admission.denied_for_reconciliation").await,
         1
     );
+    // The handoff is prepared while the code is still valid. A competing
+    // fixture admission then takes the last slot. The original callback is
+    // what must be refused. A fresh validate after exhaustion is a different
+    // boundary and is not this check.
     let exhausted = c.issue(ORG, true);
     remember(&mut secrets, &exhausted);
     let exhausted_subject = subject_for(7);
-    c.auth.limits.clear();
-    {
-        let mut browser = c.browser(&next_peer());
-        let pending = c.signup(&mut browser, &exhausted, &exhausted_subject).await;
-        assert_eq!(pending.location(), "/auth/pending");
-        c.issuer.set_verified(&exhausted_subject, true);
-        let arrived = c
-            .sign_in(&mut browser, NORTHSTAR_HANDLE, &exhausted_subject)
-            .await;
-        assert_eq!(arrived.location(), "/workspace", "{}", arrived.body);
-    }
-    assert_eq!(code_status(&c, &exhausted.id).await, "exhausted");
-    c.auth.limits.clear();
     let mut exhausted_browser = c.browser(&next_peer());
-    let exhausted_reply = c.validate(&mut exhausted_browser, &exhausted.raw).await;
+    c.auth.limits.clear();
+    let entry = c.validate(&mut exhausted_browser, &exhausted.raw).await;
+    assert_eq!(entry.status, StatusCode::SEE_OTHER, "{}", entry.body);
+    let exhausted_query = c
+        .issuer
+        .register(&entry.location(), &exhausted_subject, &exhausted.email)
+        .expect("hosted registration");
+    assert_eq!(redeemed(&c, &exhausted.id).await, 0);
+    let slot_taker = consume_last_slot(
+        &c.stores,
+        ORG,
+        &exhausted.digest,
+        ISSUER,
+        NORTHSTAR_TENANT,
+        "a82-slot",
+    )
+    .await;
+    assert_eq!(code_status(&c, &exhausted.id).await, "exhausted");
+    assert_eq!(redeemed(&c, &exhausted.id).await, 1);
+    c.auth.limits.clear();
+    let exhausted_reply = exhausted_browser
+        .get(&c.app, &format!("/auth/callback?{exhausted_query}"))
+        .await;
     assert!(
-        neutral_refusal(&exhausted_reply),
-        "{} {}",
+        denied_page(&exhausted_reply),
+        "callback after exhaustion {}: {}",
         exhausted_reply.status,
         exhausted_reply.body
     );
-    assert_eq!(principals(&c, &exhausted_subject).await, 1);
+    assert!(no_live_session(&exhausted_reply));
+    assert_eq!(principals(&c, &exhausted_subject).await, 0);
+    assert_eq!(active_entitlements(&c, &exhausted_subject).await, 0);
+    assert_eq!(
+        c.scalar(&format!("SELECT count(*) FROM genui.memberships m JOIN genui.principals p ON p.organization_id=m.organization_id AND p.principal_id=m.principal_id WHERE p.provider_subject='{exhausted_subject}'")).await,
+        0
+    );
+    // record_pending_admission returns exhausted before it writes a pending
+    // row, so this callback is not the admit_redemption path that marks a
+    // pending admission denied_for_reconciliation. The storage campaign
+    // records that same early return. The slot taken above is the only
+    // admission.redeemed.
+    assert_eq!(denied_pending(&c, &exhausted_subject).await, 0);
+    assert_eq!(
+        audits(&c, &exhausted.id, "admission.denied_for_reconciliation").await,
+        0
+    );
+    assert_eq!(audits(&c, &exhausted.id, "admission.redeemed").await, 1);
+    assert_eq!(principals(&c, &slot_taker).await, 1);
     assert_eq!(redeemed(&c, &exhausted.id).await, 1);
-    notes.record("signup after local expiry is denied and recorded for reconciliation, with no principal or entitlement; signup after exhaustion is the neutral refusal and does not add a principal or a slot");
+    notes.record("signup after local expiry is denied and recorded for reconciliation, with no principal or entitlement; an outstanding signup callback after a competing fixture admission takes the last slot is denied, with no live session, principal, membership, entitlement, or second redeemed slot. record_pending_admission returns exhausted without a denied_for_reconciliation row; that audit belongs to admit_redemption when a pending admission already exists");
 
     // --- 10. Remote revocation propagates through reconcile.
     let drifted = c.issue(ORG, true);
@@ -3105,7 +3136,7 @@ async fn race_campaign() {
         "{}",
         fresh_reply.body
     );
-    notes.record("restart/reopen: a new process admits no earlier session, completes no earlier pre-login flow and rejects the earlier synchronizer token; the pending identity can resend from a fresh page; a current member signs in again; a revoked member stays denied; an unspent code still validates from the capability directory");
+    notes.record("restart/reopen: a replaced Auth and router in this same process, on the same stores, admits no earlier session, completes no earlier pre-login flow and rejects the earlier synchronizer token; the pending identity can resend from a fresh page; a current member signs in again; a revoked member stays denied; an unspent code still validates from the capability directory. This is auth-memory and CSRF replacement, not an operating-system process or storage-pool restart");
 
     let report = json!({
         "schema_version": 1,
@@ -3124,7 +3155,7 @@ async fn race_campaign() {
         "limits": [
             "The provider is the cfg(test) synthetic loopback issuer plus app/runtime/fake_fauth.py. No deployed fAuth, mail, browser or AWS call.",
             "Races stop on the cfg(test) admission checkpoints or on a PostgreSQL lock wait (pg_stat_activity). The provider deadline is the create/revoke timeout itself.",
-            "One server-only invitation is single-use and email-bound, so two subjects do not both complete hosted registration on one code. The public last slot is the signup callback against a second POST /invite/validate.",
+            "One server-only invitation is single-use and email-bound, so two subjects do not both complete hosted registration on one code. The outstanding callback is prepared while the code is valid; a fixture admission then takes the last slot; the original callback is completed after that. The replaced Auth in the restart check is the same process and the same stores.",
             "Raw codes and invitation tokens are not written to this report."
         ]
     });
