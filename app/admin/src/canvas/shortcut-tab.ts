@@ -24,7 +24,7 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
   ['Place', [
     ['An app for a request', 'Type it in plain words in the bar', 'Enter'],
     ['A whole app', 'Library → Apps → Add', '/app expenses · /expenses'],
-    ['A card', 'Library → expand an app → Add', '/card expenses.ledger · /card 3.2'],
+    ['A card', 'Library → expand an app → Add, or drag the card onto the canvas', '/card expenses.ledger · /card 3.2'],
     ['A widget', 'Library → Widgets → Add, or say “show the weather in Austin”', '/widget weather Austin · /weather'],
     ['A note', '⋯ → New note, or Library → Widgets → Note', '/widget note text · /note'],
     ['A folder', '+ Folder in the toolbar, Library → Widgets → Folder, drop files on the canvas, or Drop files or upload on an empty canvas', '/folder'],

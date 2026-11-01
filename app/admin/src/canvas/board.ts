@@ -38,6 +38,10 @@ type Group = {
 
 const WIDTH: Record<string, number> = { app: 340, summary: 400, timeline: 620, form: 360, records: 680, ledger: 520 };
 const HEIGHT: Record<string, number> = { app: 300, summary: 250, timeline: 340, form: 300, records: 260, ledger: 280 };
+/** The size a card asks the canvas for, before its result changes the height. */
+export function cardFootprint(kind: string): { width: number; height: number } {
+  return { width: WIDTH[kind] ?? 440, height: HEIGHT[kind] ?? 300 };
+}
 /** The gap between cards in a row, in a fan and in a frame (board, `stacks.ts`, `unite.ts`). */
 export const GAP = 28;
 /** A stack's width, and the column a fanned or broken-apart card takes (`stacks.ts`, `unite.ts`). */
@@ -806,7 +810,12 @@ function runCards(group: Group, cards: HTMLElement[]): void {
  * new cards animate into place, run through the governed query route, and
  * the camera goes to the first. Returns a status line.
  */
-export async function addCards(app: string, work: string, ids: string[] | null, options: { keep?: boolean; focus?: boolean } = {}): Promise<string> {
+export async function addCards(
+  app: string,
+  work: string,
+  ids: string[] | null,
+  options: { keep?: boolean; focus?: boolean; at?: { x: number; y: number } } = {},
+): Promise<string> {
   if (!canvas || !host || !isUuid(app) || !isUuid(work)) return 'Nothing was placed.';
   let group = groups.get(work);
   if (!group) {
@@ -826,11 +835,17 @@ export async function addCards(app: string, work: string, ids: string[] | null, 
   // A card in a stack or a unite frame is on the board already (APP-106).
   const rowY = group.items.length ? Math.min(...group.items.map((item) => Number(item.dataset.canvasY ?? 0))) : nextRow();
   let x = group.items.reduce((right, item) => Math.max(right, Number(item.dataset.canvasX ?? 0) + item.offsetWidth + GAP), ORIGIN);
+  // A library drop names the world point. It is an arrangement, so the group
+  // keeps that point (the re-flow would otherwise put the card back in a row)
+  // and the existing layout save writes it.
+  const dropped = options.at && Number.isFinite(options.at.x) && Number.isFinite(options.at.y) ? options.at : null;
   wanted.forEach((card) => {
     const id = card.dataset.card ?? '';
     if (stackHooks.has(id) || uniteHooks.has(id)) return;
-    const item = mountCard(group!, card, { x, y: rowY }, fresh.length);
+    const exact = Boolean(dropped && fresh.length === 0);
+    const item = mountCard(group!, card, exact && dropped ? dropped : { x, y: rowY }, fresh.length, false, exact);
     if (!item) return;
+    if (exact) group!.pinned = true;
     x += (WIDTH[card.dataset.kind ?? ''] ?? 440) + GAP;
     fresh.push(card);
   });
@@ -842,7 +857,7 @@ export async function addCards(app: string, work: string, ids: string[] | null, 
     updateSummary();
     saveSoon();
   }
-  if (first && options.focus !== false) {
+  if (first && options.focus !== false && !dropped) {
     // After the re-flow has placed it.
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (!canvas || !first.isConnected) return;

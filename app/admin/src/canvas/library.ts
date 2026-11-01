@@ -20,7 +20,8 @@
 // (`setAppPlacer`). The pane itself (open, close, tabs) is `pane.ts`.
 // Placing goes through the board (`addCards`), which fetches a work through
 // the group route (re-authorized) and runs its views through the governed
-// query route; nothing here reads data.
+// query route; nothing here reads data. A desktop drag of one card
+// (`library-drag.ts`) uses that same path and puts the card at the drop.
 //
 // Titles are text nodes; ids are the server's card ids.
 //
@@ -31,7 +32,8 @@
 // The commands are loaded at start, so labels and the app card's address
 // chip show without opening the pane.
 import { addressChip, aliasNote, decorateAppCard, decorateAppCards } from './address-chip';
-import { activeCanvasItem, addCards, boardWorks, CANVAS_CHANGED, isOnBoard, removeCards } from './board';
+import { activeCanvasItem, addCards, boardWorks, CANVAS_CHANGED, canvasApi, cardFootprint, isOnBoard, removeCards } from './board';
+import { bindLibraryDrag } from './library-drag';
 import { addressList, addressText, allAddresses, appForm, cardLabel, onAddressesChange, WIDGET_KINDS, type Address, type WidgetName } from './command-registry';
 import { insertCommand, startCommandSheet } from './command-sheet';
 import { startShortcutTab } from './shortcut-tab';
@@ -971,4 +973,22 @@ export function startLibrary(document_: Document): void {
     return true;
   });
   syncLibrary();
+  bindLibraryDrag(document_, {
+    cardFrom(row) {
+      if (row.dataset.note || row.dataset.folder || row.classList.contains('cv-lib-new')) return null;
+      for (const app of apps) {
+        const card = app.cards.find((candidate) => candidate.row === row);
+        if (!card) continue;
+        return {
+          id: card.id, title: card.title, number: card.number, kind: card.kind, app: app.app, work: app.work,
+        };
+      }
+      return null;
+    },
+    onBoard: (id) => isOnBoard(id),
+    place: (card, at) => { void addCards(card.app, card.work, [card.id], { focus: false, at }); },
+    camera: () => canvasApi()?.getCamera() ?? null,
+    viewport: () => document_.querySelector<HTMLElement>('[data-forma-canvas-viewport]'),
+    footprint: cardFootprint,
+  });
 }

@@ -716,7 +716,7 @@ function Canvas(props: CanvasProps) {
           <div class="cv-lib-search">
             <input id="cv-lib-search" type="search" placeholder="Search by name, /address or number, e.g. 3.2" aria-label="Search the library" autocomplete="off" />
           </div>
-          <p class="cv-lib-hint">Add brings an app, a card or a widget onto the canvas; Remove takes it off. Use an app’s address shown below to tell that app something.</p>
+          <p class="cv-lib-hint">Drag a card onto the canvas, or use Add. Remove takes it off. Use an app’s address shown below to tell that app something.</p>
           <div class="cv-lib-list" data-lib-list>
             {createList(() => props.library, category => category.id, category => (
               <section class="cv-lib-cat" data-category={category.id} aria-label={category.title}>
