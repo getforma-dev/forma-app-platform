@@ -1846,7 +1846,12 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
 .cv-canvas [data-forma-canvas] .cv-unite-head[data-canvas-drag-handle] { cursor: grab; }
 .cv-unite .cv-card.is-flying { z-index: 2; box-shadow: var(--cv-shadow-lift); }
 .cv-unite.is-single { padding: 10px 12px 14px; }
-.cv-unite.is-single .cv-unite-head { flex-wrap: wrap; }
+.cv-unite.is-single .cv-unite-head { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 0.5rem; }
+.cv-unite.is-single .cv-unite-heading { grid-column: 2 / 4; }
+.cv-unite.is-single .cv-unite-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-unite.is-single .cv-unite-count { grid-column: 1 / 3; }
+.cv-unite.is-single .cv-unite-actions { grid-column: 3; }
+.cv-unite.is-single .cv-unite-actions button { white-space: nowrap; }
 .cv-canvas [data-forma-canvas] .widget-instance.is-selected > .cv-unite,
 .cv-canvas [data-forma-canvas] .widget-instance.is-active > .cv-unite {
   border-color: var(--cv-accent);

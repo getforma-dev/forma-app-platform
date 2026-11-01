@@ -136,7 +136,7 @@ function buildFrame(document_: Document, work: string, title: string, origins: s
   const head = el(document_, 'header', { class: 'cv-unite-head', 'data-canvas-drag-handle': '' },
     el(document_, 'span', { class: 'cv-unite-mark', 'aria-hidden': 'true' }),
     el(document_, 'div', { class: 'cv-unite-heading' },
-      el(document_, 'h2', { class: 'cv-unite-title' }, title),
+      el(document_, 'h2', { class: 'cv-unite-title', title }, title),
       el(document_, 'p', { class: 'cv-origins cv-unite-origins', 'aria-label': 'How this app was assembled' },
         ...origins.map((text) => el(document_, 'span', { class: 'cv-origin', 'data-origin': originKind(text) }, text)))),
     el(document_, 'span', { class: 'cv-unite-count', 'data-unite-count': '' }),
@@ -160,23 +160,30 @@ function fill(root: HTMLElement, cards: HTMLElement[]): { order: HTMLElement[]; 
   slot('kpi').replaceChildren(...kpi);
   slot('main').replaceChildren(...main);
   slot('side').replaceChildren(...side);
-  const single = phone();
-  const both = main.length > 0 && side.length > 0;
+  const width = phone() ? PHONE : main.length && side.length ? WIDE : NARROW;
+  layoutPage(root, width);
+  const count = root.querySelector('[data-unite-count]');
+  if (count) count.textContent = `${cards.length} ${cards.length === 1 ? 'part' : 'parts'}`;
+  return { order: [...kpi, ...main, ...side], width };
+}
+
+/** Reflow the existing parts when this page narrows, independently of the browser. */
+function layoutPage(root: HTMLElement, width: number): void {
+  const has = (slot: string) => Boolean(root.querySelector(`[data-slot="${slot}"]`)?.childElementCount);
+  const single = width <= NARROW;
+  const both = has('main') && has('side');
   const grid = root.querySelector<HTMLElement>('.cv-unite-grid')!;
   const columns = !single && both;
   grid.style.gridTemplateColumns = columns ? 'minmax(0, 1.55fr) minmax(0, 1fr)' : 'minmax(0, 1fr)';
   const rows: string[] = [];
-  if (kpi.length) rows.push(columns ? '"kpi kpi"' : '"kpi"');
+  if (has('kpi')) rows.push(columns ? '"kpi kpi"' : '"kpi"');
   if (columns) rows.push('"main side"');
   else {
-    if (main.length) rows.push('"main"');
-    if (side.length) rows.push('"side"');
+    if (has('main')) rows.push('"main"');
+    if (has('side')) rows.push('"side"');
   }
   grid.style.gridTemplateAreas = rows.join(' ');
   root.classList.toggle('is-single', single);
-  const count = root.querySelector('[data-unite-count]');
-  if (count) count.textContent = `${cards.length} ${cards.length === 1 ? 'part' : 'parts'}`;
-  return { order: [...kpi, ...main, ...side], width: single ? PHONE : columns ? WIDE : NARROW };
 }
 
 /** A card's box in world coordinates, measured through the canvas item that holds it. */
@@ -271,7 +278,11 @@ function applySize(item: HTMLElement, width: number, height: number): void {
   canvas.resizeItem(item, size.width, size.height);
   item.style.height = `${Math.round(size.height)}px`;
   item.style.overflow = 'hidden';
-  item.querySelector('.cv-unite')?.classList.add('is-sized');
+  const root = item.querySelector<HTMLElement>('.cv-unite');
+  if (root) {
+    root.classList.add('is-sized');
+    layoutPage(root, size.width);
+  }
 }
 
 /** Corner drag. The press stays here so the page header does not start a move. */
@@ -381,6 +392,12 @@ async function toggleShare(button: HTMLElement): Promise<void> {
   closeShareMenus();
   const menu = el(documentRef, 'div', { class: 'cv-unite-share', role: 'menu', 'aria-label': 'Share this app' });
   actions.append(menu);
+  // A short page clips its children. Keep the member list in the remaining
+  // page space and let it scroll, including at the minimum window size.
+  const bounds = frame.root.getBoundingClientRect();
+  const scale = bounds.width / frame.root.offsetWidth || 1;
+  const room = (bounds.bottom - menu.getBoundingClientRect().top) / scale - 12;
+  menu.style.maxHeight = `${Math.max(48, Math.min(240, room))}px`;
   const members = await loadMembers();
   if (!menu.isConnected || !documentRef) return;
   if (members === null) {
@@ -467,7 +484,12 @@ export async function unite(app: string, work: string, restore?: { at: Spot; pre
   item.classList.add('cv-item', 'cv-item-unite');
   item.dataset.unite = work;
   canvas.mountItem(item, at, { focus: false });
-  if (restore?.width !== undefined && restore.height !== undefined) applySize(item, restore.width, restore.height);
+  // A tall app must keep its resize handle reachable; its parts scroll in
+  // the page from the first open, not only after the first corner drag.
+  const viewport = viewportWorld();
+  applySize(item,
+    restore?.width ?? Math.min(width, viewport.width * 0.8),
+    restore?.height ?? Math.min(item.offsetHeight, viewport.height * 0.6));
   for (const restoreScroll of scrolls) restoreScroll();
   const frame: Frame = { work, app, title: group.title, cards: order.map((card) => card.dataset.card ?? ''), item, root, previous };
   frames.set(work, frame);
